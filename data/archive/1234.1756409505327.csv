@@ -1,0 +1,4 @@
+BoxID,ItemUUID,MaterialNumber,Description,Condition,Qty,WmsLink,AttributesJson,AddedAt,Location,BoxNotes,ItemNotes
+BOX-2025-0001,11111111-aaaa-bbbb-cccc-000000000001,A-1001,Blue Widget,Good,5,https://wms.example/items/A-1001,,"2025-08-28",Shelf-A1,"Fragile",""
+BOX-2025-0001,11111111-aaaa-bbbb-cccc-000000000002,A-1002,Red Widget,Fair,2,https://wms.example/items/A-1002,,"2025-08-28",Shelf-A1,"Fragile","Has scratch"
+BOX-2025-0001,11111111-aaaa-bbbb-cccc-000000000003,A-1003,Green Widget,Good,1,https://wms.example/items/A-1003,,"2025-08-28",Shelf-A1,"Fragile",""

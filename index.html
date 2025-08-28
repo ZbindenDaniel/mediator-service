@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mediator • Warehouse</title>
+<style>
+  :root { --w: 860px; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 16px; line-height: 1.45; }
+  .wrap { max-width: var(--w); margin: 0 auto; }
+  h1 { margin: 0 0 12px; }
+  h2 { margin: 24px 0 8px; }
+  input, button, textarea, select { font: inherit; padding: 8px; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; max-width: var(--w); }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 10px 0; }
+  .muted { color: #666; font-size: .95em; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .list { display: grid; gap: 8px; }
+  .boxlink { text-decoration: none; color: inherit; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f1f1f1; font-size: .9em; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .row-2 { grid-template-columns: 1fr; } }
+  .ok { color: #0a7e07; }
+  .err { color: #b00020; }
+</style>
+<div class="wrap">
+  <h1>Mediator</h1>
+  <p class="muted">Search items, locate boxes, paste CSV to import. Scan a box label to place it.</p>
+
+  <h2>Search by Material Number</h2>
+  <div class="row">
+    <input id="mat" placeholder="e.g. A-12345" />
+    <button id="btnSearch">Search</button>
+  </div>
+  <div id="searchOut" class="list"></div>
+
+  <h2>Boxes</h2>
+  <div class="card">
+    <button id="btnRefreshBoxes">Refresh list</button>
+    <div id="boxesOut" class="list" style="margin-top:8px;"></div>
+  </div>
+
+  <h2>Quick CSV Import (optional)</h2>
+  <div class="card">
+    <p class="muted">Paste CSV exported from your ODS (headers must match). File is stored into <span class="mono">data/inbox/</span> and ingested.</p>
+    <div class="row-2">
+      <textarea id="csv" rows="10" placeholder="BoxID,ItemUUID,MaterialNumber,Description,Condition,Qty,WmsLink,AttributesJson,AddedAt,Location"></textarea>
+      <div>
+        <label>Filename (stored in inbox)</label><br/>
+        <input id="csvName" placeholder="items_upload.csv" value="items_upload.csv" /><br/><br/>
+        <button id="btnUpload">Import CSV</button>
+        <div id="csvStatus" class="muted" style="margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="muted">Health: <span id="health">checking…</span></p>
+</div>
+
+<script>
+async function health() {
+  try {
+    const r = await fetch('/');
+    document.getElementById('health').textContent = r.ok ? 'OK' : ('HTTP ' + r.status);
+    document.getElementById('health').className = r.ok ? 'ok' : 'err';
+  } catch (e) {
+    document.getElementById('health').textContent = 'unreachable';
+    document.getElementById('health').className = 'err';
+  }
+}
+
+async function search() {
+  const q = document.getElementById('mat').value.trim();
+  const out = document.getElementById('searchOut');
+  out.innerHTML = '';
+  if (!q) return;
+  const r = await fetch('/api/search?material=' + encodeURIComponent(q));
+  const data = await r.json();
+  if (!data.items || !data.items.length) {
+    out.innerHTML = '<div class="muted">No items found.</div>'; return;
+  }
+  out.innerHTML = data.items.map(it => `
+    <div class="card">
+      <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${it.ItemUUID.slice(-6).toUpperCase()}</span></div>
+      <div class="muted">${it.Description || ''}</div>
+      <div>Box: <a class="boxlink mono" href="/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
+    </div>`).join('');
+}
+
+async function listBoxes() {
+  const r = await fetch('/api/boxes');
+  const arr = await r.json();
+  const el = document.getElementById('boxesOut');
+  if (!arr.length) { el.innerHTML = '<div class="muted">No boxes yet.</div>'; return; }
+  el.innerHTML = arr.map(b => `
+    <div class="card">
+      <div><a class="boxlink" href="/box/${encodeURIComponent(b.BoxID)}"><b>${b.BoxID}</b></a></div>
+      <div class="muted">Location: ${b.Location || '(unset)'} · Updated: ${b.UpdatedAt || ''}</div>
+    </div>`).join('');
+}
+
+async function uploadCsv() {
+  const csv = document.getElementById('csv').value;
+  const name = document.getElementById('csvName').value.trim() || 'items_upload.csv';
+  const status = document.getElementById('csvStatus');
+  status.textContent = 'Uploading…';
+  try {
+    const r = await fetch('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'X-Filename': name },
+      body: csv
+    });
+    const data = await r.json();
+    status.textContent = r.ok ? `OK: ${data.message}` : `Error: ${data.error || r.status}`;
+    listBoxes();
+  } catch (e) {
+    status.textContent = 'Failed: ' + e.message;
+  }
+}
+
+document.getElementById('btnSearch').addEventListener('click', search);
+document.getElementById('btnRefreshBoxes').addEventListener('click', listBoxes);
+document.getElementById('btnUpload').addEventListener('click', uploadCsv);
+document.getElementById('mat').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+
+health(); listBoxes();
+</script>
