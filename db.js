@@ -98,5 +98,15 @@ module.exports = {
   updateLabelJobStatus: db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`),
   logEvent: db.prepare(`INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta) VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)`),
   listEventsForBox: db.prepare(`SELECT * FROM events WHERE EntityType='Box' AND EntityId=? ORDER BY Id DESC LIMIT 200`),
-  listEventsForItem: db.prepare(`SELECT * FROM events WHERE EntityType='Item' AND EntityId=? ORDER BY Id DESC LIMIT 200`)
+  listEventsForItem: db.prepare(`SELECT * FROM events WHERE EntityType='Item' AND EntityId=? ORDER BY Id DESC LIMIT 200`),
+
+  listRecentEvents: db.prepare(`SELECT Id, CreatedAt, Actor, EntityType, EntityId, Event, Meta
+                                FROM events ORDER BY Id DESC LIMIT 15`),
+                                
+  countBoxes: db.prepare(`SELECT COUNT(*) as c FROM boxes`),
+  countItems: db.prepare(`SELECT COUNT(*) as c FROM items`),
+  countItemsNoWms: db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`),
+
+  listRecentBoxes: db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 8`)
+
 };

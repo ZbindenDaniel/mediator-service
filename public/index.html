@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mediator • Warehouse</title>
+<style>
+  :root { --w: 1100px; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; color: #111; }
+  a { color: inherit; text-decoration: none; }
+  header { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #eee; z-index: 10; }
+  .nav { max-width: var(--w); margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
+  .brand { font-weight: 700; letter-spacing: .3px; }
+  .navlinks { display: flex; gap: 12px; margin-left: auto; }
+  .wrap { max-width: var(--w); margin: 0 auto; padding: 16px; }
+  h1 { margin: 12px 0 8px; font-size: 22px; }
+  h2 { margin: 18px 0 8px; font-size: 18px; }
+  .grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px; }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+  .card { border: 1px solid #e6e6e6; border-radius: 12px; padding: 12px; background: #fff; }
+  .muted { color: #666; font-size: .95em; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  input, button, textarea, select { font: inherit; padding: 8px 10px; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .row-3 { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+  .btn { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; cursor: pointer; }
+  .btn:hover { background: #f2f2f2; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f5f5f7; font-size: .85em; }
+  .list { display: grid; gap: 8px; }
+  .item { display: grid; gap: 6px; }
+  .ok { color: #0a7e07; }
+  .err { color: #b00020; }
+  .inline { display: inline-flex; gap: 8px; align-items: center; }
+  .kbd { padding: 2px 6px; border: 1px solid #ccc; border-radius: 6px; background: #f8f8f8; font-size: .85em; }
+</style>
+
+<header>
+  <div class="nav">
+    <div class="brand"><a href="/">Mediator</a></div>
+    <nav class="navlinks">
+      <a href="#find">Find</a>
+      <a href="#boxes">Boxes</a>
+      <a href="#activity">Activity</a>
+      <a href="#import">Import</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <h1>Overview</h1>
+  <div class="grid">
+    <div class="card">
+  <h2>Navigation & Overview</h2>
+  <ul>
+    <li><a href="/">🏠 Landing</a> — this page</li>
+    <li><a href="/api/overview">📊 API: Overview</a> — counts, recent boxes & activity (JSON)</li>
+    <li><a href="/api/boxes">📦 API: List Boxes</a></li>
+    <li><a href="/api/search?material=A-1001">🔍 API: Search Items (by material)</a></li>
+    <li><a href="/api/items/ITEM-UUID-HERE">📄 API: Item detail (replace UUID)</a></li>
+    <li><a href="/api/export/wms">⬇️ API: Export snapshot for WMS</a></li>
+    <li><a href="/box/BOX-ID-HERE">📍 Box placement page (replace BoxID)</a></li>
+    <li><a href="/ui/box/BOX-ID-HERE">🧭 UI Action View for Box (replace BoxID)</a></li>
+    <li><a href="/ui/item/ITEM-UUID-HERE">🧭 UI Action View for Item (replace UUID)</a></li>
+    <li><a href="/qr/ITEM-UUID-HERE">🔗 QR redirect (to WMS if link exists)</a></li>
+  </ul>
+  <p class="muted">Replace <code>BOX-ID-HERE</code> or <code>ITEM-UUID-HERE</code> with real values from your database or CSV imports.</p>
+</div>
+
+    <div class="card">
+      <h2 id="find">Find items</h2>
+      <div class="row">
+        <input id="mat" placeholder="Material number e.g. A-12345" autofocus />
+        <button class="btn" id="btnSearch">Search</button>
+      </div>
+      <div class="row-3" style="margin-top:8px">
+        <input id="goId" placeholder="BOX-2025-0001 or Item UUID" />
+        <select id="goType">
+          <option value="box">Box</option>
+          <option value="item">Item</option>
+        </select>
+        <button class="btn" id="btnOpen">Open</button>
+      </div>
+      <div id="searchOut" class="list" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Stats</h2>
+      <div id="stats" class="list">
+        <div class="muted">Loading…</div>
+      </div>
+      <div style="margin-top:6px" class="muted">Health: <span id="health">checking…</span></div>
+    </div>
+
+    <div class="card">
+      <h2 id="boxes">Recent boxes</h2>
+      <div id="boxesOut" class="list"><div class="muted">Loading…</div></div>
+    </div>
+
+    <div class="card">
+      <h2 id="activity">Recent activity</h2>
+      <div id="eventsOut" class="list"><div class="muted">Loading…</div></div>
+    </div>
+
+    <div class="card" id="import">
+      <h2>Quick CSV import</h2>
+      <p class="muted">Paste CSV from ODS export. It’s saved into <span class="mono">data/inbox/</span> and ingested automatically.</p>
+      <div class="row-3">
+        <input id="csvName" placeholder="items_upload.csv" value="items_upload.csv" />
+        <span></span>
+        <button class="btn" id="btnUpload">Import CSV</button>
+      </div>
+      <textarea id="csv" rows="8" placeholder="BoxID,ItemUUID,MaterialNumber,Description,Condition,Qty,WmsLink,AttributesJson,AddedAt,Location"></textarea>
+      <div id="csvStatus" class="muted" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>Shortcuts</h2>
+      <div class="inline"><span class="kbd">/</span> focus search</div>
+      <div class="inline"><span class="kbd">Enter</span> run search / open</div>
+      <div class="inline"><span class="kbd">b</span> open Box view field</div>
+      <div class="inline"><span class="kbd">i</span> open Item view field</div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function health() {
+  try {
+    const r = await fetch('/');
+    document.getElementById('health').textContent = r.ok ? 'OK' : ('HTTP ' + r.status);
+    document.getElementById('health').className = r.ok ? 'ok' : 'err';
+  } catch (e) {
+    document.getElementById('health').textContent = 'unreachable';
+    document.getElementById('health').className = 'err';
+  }
+}
+
+async function overview() {
+  try {
+    const r = await fetch('/api/overview');
+    const d = await r.json();
+
+    // stats
+    const s = document.getElementById('stats');
+    s.innerHTML = `
+      <div>Total boxes: <b>${d.counts.boxes}</b></div>
+      <div>Total items: <b>${d.counts.items}</b></div>
+      <div>Items without WMS link: <b>${d.counts.itemsNoWms}</b></div>
+    `;
+
+    // boxes
+    const b = document.getElementById('boxesOut');
+    b.innerHTML = (d.recentBoxes && d.recentBoxes.length)
+      ? d.recentBoxes.map(x => `
+        <div class="item">
+          <div><a href="/ui/box/${encodeURIComponent(x.BoxID)}"><b>${x.BoxID}</b></a></div>
+          <div class="muted">Location: ${x.Location || '(unset)'} · Updated: ${x.UpdatedAt || ''}</div>
+        </div>`).join('')
+      : '<div class="muted">No boxes yet.</div>';
+
+    // events
+    const ev = document.getElementById('eventsOut');
+    ev.innerHTML = (d.recentEvents && d.recentEvents.length)
+      ? d.recentEvents.map(e =>
+        `<div class="item">
+           <div><span class="pill">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
+           <div>${e.CreatedAt} — ${e.Event} ${e.Actor ? 'by '+e.Actor : ''}</div>
+         </div>`).join('')
+      : '<div class="muted">No recent activity.</div>';
+  } catch (e) {
+    document.getElementById('stats').innerHTML = '<div class="muted">Failed to load overview</div>';
+    document.getElementById('boxesOut').innerHTML = '';
+    document.getElementById('eventsOut').innerHTML = '';
+  }
+}
+
+async function search() {
+  const q = document.getElementById('mat').value.trim();
+  const out = document.getElementById('searchOut');
+  out.innerHTML = '';
+  if (!q) return;
+  const r = await fetch('/api/search?material=' + encodeURIComponent(q));
+  const data = await r.json();
+  if (!data.items || !data.items.length) {
+    out.innerHTML = '<div class="muted">No items found.</div>'; return;
+  }
+  out.innerHTML = data.items.map(it => `
+    <div class="card">
+      <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${(it.ItemUUID||'').slice(-6).toUpperCase()}</span></div>
+      <div class="muted">${it.Description || ''}</div>
+      <div>Box: <a class="mono" href="/ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
+      <div><a class="mono" href="/ui/item/${encodeURIComponent(it.ItemUUID)}">Open item →</a></div>
+    </div>`).join('');
+}
+
+async function uploadCsv() {
+  const csv = document.getElementById('csv').value;
+  const name = document.getElementById('csvName').value.trim() || 'items_upload.csv';
+  const status = document.getElementById('csvStatus');
+  status.textContent = 'Uploading…';
+  try {
+    const r = await fetch('/api/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'X-Filename': name },
+      body: csv
+    });
+    const data = await r.json();
+    status.textContent = r.ok ? `OK: ${data.message}` : `Error: ${data.error || r.status}`;
+    overview();
+  } catch (e) {
+    status.textContent = 'Failed: ' + e.message;
+  }
+}
+
+function openEntity() {
+  const id = document.getElementById('goId').value.trim();
+  const t  = document.getElementById('goType').value;
+  if (id) location.href = '/ui/' + t + '/' + encodeURIComponent(id);
+}
+
+document.getElementById('btnSearch').addEventListener('click', search);
+document.getElementById('btnUpload').addEventListener('click', uploadCsv);
+document.getElementById('btnOpen').addEventListener('click', openEntity);
+
+// Shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+    e.preventDefault(); document.getElementById('mat').focus();
+  }
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('mat')) search();
+  if (e.key === 'b') { document.getElementById('goType').value = 'box'; document.getElementById('goId').focus(); }
+  if (e.key === 'i') { document.getElementById('goType').value = 'item'; document.getElementById('goId').focus(); }
+});
+
+health(); overview();
+</script>
