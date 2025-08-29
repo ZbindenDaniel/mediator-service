@@ -7,15 +7,19 @@ module.exports = {
 
   view: (entity) => {
     if (entity.type === "Box") {
-      const href = `ui/box/${encodeURIComponent(entity.id)}`;
+      const href = `${encodeURIComponent(entity.id)}`;
       return `
-        <a href="${href}" style="display:block">
-          <div class="card" style="cursor:pointer">
-            <h3>Relocate / Place Box</h3>
-            <p class="muted">Open the placement page to set or update the box location.</p>
-            <div class="muted mono">${href}</div>
-          </div>
-        </a>
+       <div class="card">
+        <a id="relocate"></a>
+        <h3><a href="#relocate">Relocate Box</a></h3>
+        <form method="post" action="/ui/api/box/${encodeURIComponent(entity.id)}/move">
+          <label>Ort</label>
+          <input name="toBoxId" placeholder="A-01-02" required />
+          <label>Your name</label>
+          <input name="actor" placeholder="Initials or name" />
+          <div style="margin-top:8px"><button type="submit">Move</button></div>
+        </form>
+      </div>
       `;
     }
 

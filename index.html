@@ -117,10 +117,10 @@ async function uploadCsv() {
   }
 }
 
-document.getElementById('btnSearch').addEventListener('click', search);
-document.getElementById('btnRefreshBoxes').addEventListener('click', listBoxes);
-document.getElementById('btnUpload').addEventListener('click', uploadCsv);
-document.getElementById('mat').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+document.getElementById('btnSearch')?.addEventListener('click', search);
+document.getElementById('btnRefreshBoxes')?.addEventListener('click', listBoxes);
+document.getElementById('btnUpload')?.addEventListener('click', uploadCsv);
+document.getElementById('mat')?.addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
 
 health(); listBoxes();
 </script>

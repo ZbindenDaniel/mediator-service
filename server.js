@@ -115,73 +115,6 @@ const server = http.createServer((req, res) => {
         }
     }
 
-    /* ------------------- Dynamic Action View (/ui) ----------------- */
-    if (url.pathname.startsWith("/ui/")) {
-        const parts = url.pathname.split("/").filter(Boolean); // [ 'ui', 'box'|'item', ':id' ]
-        const kind = (parts[1] || "").toLowerCase();
-        const id = decodeURIComponent(parts.slice(2).join("/"));
-        let entity = null;
-
-        if (kind === "box") {
-            const box = getBox.get(id);
-            if (!box) { res.writeHead(404); return res.end("Box not found"); }
-            const boxItems = itemsByBox.all(box.BoxID); // ← add items for box
-            entity = { type: "Box", id: box.BoxID, data: box, items: boxItems };
-        } else if (kind === "item") {
-            const item = getItem.get(id);
-            if (!item) { res.writeHead(404); return res.end("Item not found"); }
-            entity = { type: "Item", id: item.ItemUUID, data: item };
-        } else {
-            res.writeHead(400); return res.end("Bad entity type");
-        }
-
-        if (kind === "box") {
-            const box = getBox.get(id);
-            if (!box) {
-                res.writeHead(404);
-                return res.end("Box not found");
-            }
-            entity = { type: "Box", id: box.BoxID, data: box };
-        } else if (kind === "item") {
-            const item = getItem.get(id);
-            if (!item) {
-                res.writeHead(404);
-                return res.end("Item not found");
-            }
-            entity = { type: "Item", id: item.ItemUUID, data: item };
-        } else {
-            res.writeHead(400);
-            return res.end("Bad entity type");
-        }
-
-        const available = actions.filter(a => {
-            try { return typeof a.appliesTo === "function" ? a.appliesTo(entity) : true; }
-            catch { return false; }
-        });
-
-        const cards = available.map(a => {
-            try { return `<a id="act-${a.key}"></a>${a.view(entity)}`; }
-            catch (e) {
-                return `<div class="card"><h3>${a.label}</h3><p class="muted">Render error: ${e.message}</p></div>`;
-            }
-        }).join("");
-
-        const body = `
-  <h1>${entity.type}: <span class="mono">${entity.id}</span></h1>
-  ${cards}
-  <a class="linkcard" href="/"><div class="card">← Home</div></a>
-`;
-        const html = `<!doctype html>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${entity.type} ${entity.id}</title>
-<link rel="stylesheet" href="/styles.css" />
-<body class="mobile"><div class="container stack">${body}</div></body>`;
-
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        return res.end(html);
-
-    }
-
     // Daten Eingabe (mobile + desktop)
     if (url.pathname === "/ui/import" && req.method === "GET") {
         const p = path.join(__dirname, "public", "import.html");
@@ -251,7 +184,7 @@ const server = http.createServer((req, res) => {
 
     }
 
-     /* --------------- UI action form endpoints (/ui/api) ------------ */
+    /* --------------- UI action form endpoints (/ui/api) ------------ */
     // Edit (box/item)
     if (url.pathname.match(/^\/ui\/api\/(box|item)\/[^/]+\/edit$/) && req.method === "POST") {
         const [, , type, rawId] = url.pathname.split("/");
@@ -298,13 +231,18 @@ const server = http.createServer((req, res) => {
     }
 
     // single entry (Form-POST, urlencoded)
-    if (url.pathname === "/ui/api/eingabe/item" && req.method === "POST") {
+    if (url.pathname === "/ui/api/import/item" && req.method === "POST") {
         let body = ""; req.on("data", c => body += c);
         req.on("end", () => {
             const p = new URLSearchParams(body);
             const BoxID = (p.get("BoxID") || "").trim();
-            const ItemUUID = (p.get("ItemUUID") || "").trim();
-            if (!BoxID || !ItemUUID) return sendJson(res, 400, { error: "BoxID und ItemUUID sind erforderlich." });
+            let ItemUUID = (p.get("ItemUUID") || "").trim();
+            if (!BoxID) return sendJson(res, 400, { error: "BoxID ist erforderlich." });
+            if (!ItemUUID) {
+                try { ItemUUID = require("crypto").randomUUID(); }
+                catch { return sendJson(res, 400, { error: "ItemUUID fehlt und konnte nicht generiert werden." }); }
+            }
+
 
             const now = new Date().toISOString();
             const data = {
@@ -395,7 +333,56 @@ const server = http.createServer((req, res) => {
         });
         return;
     }
-    
+
+    /* ------------------- Dynamic Action View (/ui) ----------------- */
+    if (url.pathname.startsWith("/ui/")) {
+        const parts = url.pathname.split("/").filter(Boolean); // [ 'ui', 'box'|'item', ':id' ]
+        const kind = (parts[1] || "").toLowerCase();
+        const id = decodeURIComponent(parts.slice(2).join("/"));
+        let entity = null;
+
+        if (kind === "box") {
+            const box = getBox.get(id);
+            if (!box) { res.writeHead(404); return res.end("Box not found"); }
+            const boxItems = itemsByBox.all(box.BoxID); // ← add items for box
+            entity = { type: "Box", id: box.BoxID, data: box, items: boxItems };
+        } else if (kind === "item") {
+            const item = getItem.get(id);
+            if (!item) { res.writeHead(404); return res.end("Item not found"); }
+            entity = { type: "Item", id: item.ItemUUID, data: item };
+        }
+        else {
+            res.writeHead(400); return res.end("Bad entity type");
+        }
+
+        const available = actions.filter(a => {
+            try { return typeof a.appliesTo === "function" ? a.appliesTo(entity) : true; }
+            catch { return false; }
+        });
+
+        const cards = available.map(a => {
+            try { return `<a id="act-${a.key}"></a>${a.view(entity)}`; }
+            catch (e) {
+                return `<div class="card"><h3>${a.label}</h3><p class="muted">Render error: ${e.message}</p></div>`;
+            }
+        }).join("");
+
+        const body = `
+  <h1>${entity.type}: <span class="mono">${entity.id}</span></h1>
+  ${cards}
+  <a class="linkcard" href="/"><div class="card">← Home</div></a>
+`;
+        const html = `<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${entity.type} ${entity.id}</title>
+<link rel="stylesheet" href="/styles.css" />
+<body class="mobile"><div class="container stack">${body}</div></body>`;
+
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        return res.end(html);
+
+    }
+
     /*---------------------------------------------------------------------------* 
     /*----------------------------   API   --------------------------------------* 
     /*---------------------------------------------------------------------------* 
@@ -434,7 +421,7 @@ const server = http.createServer((req, res) => {
         });
         return;
     }
-    
+
     /* ---------------------- CSV import via HTTP ------------------- */
     // Headers: Content-Type: text/plain, X-Filename: name.csv
     if (url.pathname === "/api/import" && req.method === "POST") {

@@ -1,4 +1,5 @@
 <!doctype html>
+<html lang="de">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Daten Eingabe</title>
@@ -7,18 +8,22 @@
   <div class="container stack">
     <h1>Daten Eingabe</h1>
 
-    <!-- Einzelnes Teil -->
+    <!-- Single item entry -->
     <div class="card stack">
       <h2>Einzelnes Teil erfassen</h2>
-      <form id="formOne" class="stack" method="post" action="/ui/api/eingabe/item">
+      <form id="oneForm" class="stack" method="post" action="/ui/api/import/item" autocomplete="off" novalidate>
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
           <div>
             <label>Box-ID *</label>
-            <input name="BoxID" placeholder="BOX-2025-0001" required />
+            <input name="BoxID" placeholder="BOX-2025-0001" required autocapitalize="characters" />
           </div>
           <div>
-            <label>Item-UUID *</label>
-            <input name="ItemUUID" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required />
+            <label>Item-UUID</label>
+            <div class="row">
+              <input id="uuidField" name="ItemUUID" placeholder="leer lassen oder generieren" inputmode="text" />
+              <button class="btn" type="button" id="btnGen">UUID</button>
+            </div>
+            <div class="muted" style="margin-top:4px">Leer lassen → UUID wird automatisch generiert.</div>
           </div>
         </div>
 
@@ -29,7 +34,7 @@
           </div>
           <div>
             <label>Menge</label>
-            <input name="Qty" type="number" inputmode="numeric" value="1" />
+            <input name="Qty" type="number" inputmode="numeric" value="1" min="0" />
           </div>
         </div>
 
@@ -41,7 +46,7 @@
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
           <div>
             <label>Zustand</label>
-            <input name="Condition" placeholder="Gut/Fair/Schlecht" />
+            <input name="Condition" placeholder="Gut / Fair / Schlecht" />
           </div>
           <div>
             <label>Lagerort (optional)</label>
@@ -51,7 +56,7 @@
 
         <div>
           <label>WMS-Link (optional)</label>
-          <input name="WmsLink" placeholder="https://wms/..." />
+          <input name="WmsLink" placeholder="https://wms/..." inputmode="url" />
         </div>
 
         <div>
@@ -65,7 +70,7 @@
         </div>
 
         <div class="row">
-          <input name="AddedAt" placeholder="YYYY-MM-DD" />
+          <input name="AddedAt" placeholder="YYYY-MM-DD" inputmode="numeric" />
           <button class="btn-primary" type="submit">Speichern</button>
         </div>
 
@@ -73,20 +78,25 @@
       </form>
     </div>
 
-    <!-- CSV-Upload -->
+    <!-- CSV upload -->
     <div class="card stack">
       <h2>CSV-Datei hochladen</h2>
       <p class="muted">Die Datei wird validiert und danach importiert.</p>
       <input id="csvFile" type="file" accept=".csv,text/csv" />
-      <div class="row">
+      <div class="row" style="margin-top:8px">
         <input id="csvName" placeholder="Dateiname im Inbox, z.B. eingabe.csv" value="eingabe.csv" />
-        <button id="btnValidate" class="btn">Validieren</button>
+        <button id="btnValidate" class="btn" type="button">Validieren</button>
       </div>
-      <div id="valOut" class="muted"></div>
+      <div id="valOut" class="muted" style="white-space:pre-wrap;margin-top:6px;"></div>
       <div class="row">
         <div></div>
-        <button id="btnImport" class="btn-primary" disabled>Jetzt importieren</button>
+        <button id="btnImport" class="btn-primary" type="button" disabled>Jetzt importieren</button>
       </div>
+      <div class="muted" style="margin-top:6px">
+        Erwartete Spalten: <span class="mono">BoxID, ItemUUID, MaterialNumber, Description, Condition, Qty, WmsLink, AttributesJson, AddedAt, Location, ItemNotes</span>
+      </div>
+      <!-- Future: Vorlage herunterladen -->
+      <!-- <a class="linkcard" href="/api/template/csv"><div class="card">Vorlage herunterladen</div></a> -->
     </div>
 
     <a class="linkcard" href="/"><div class="card">← Zur Übersicht</div></a>
@@ -95,21 +105,39 @@
 <script>
 const $ = (s)=>document.querySelector(s);
 
-async function postForm(url, form) {
-  const body = new URLSearchParams(new FormData(form));
-  const r = await fetch(url, { method:'POST', body });
-  const j = await r.json().catch(()=>({}));
-  return { ok:r.ok, data:j };
+// UUID generation (client-side convenience)
+function generateUuid() {
+  try {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    // Fallback: RFC4122 v4-ish
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === "x" ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  } catch { return ""; }
 }
 
-$('#formOne').addEventListener('submit', async (e)=>{
+$('#btnGen').addEventListener('click', () => {
+  const v = generateUuid();
+  if (v) { $('#uuidField').value = v; }
+});
+
+// Single item submit (keeps big targets, minimal feedback text)
+$('#oneForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = $('#oneStatus');
   status.textContent = 'Speichern…';
-  const res = await postForm('/ui/api/eingabe/item', e.target);
-  status.textContent = res.ok ? 'Gespeichert.' : ('Fehler: ' + (res.data.error || 'Unbekannt'));
-  if (res.ok && res.data && res.data.item) {
-    status.innerHTML += ' <a href="/ui/item/'+encodeURIComponent(res.data.item.ItemUUID)+'">Item öffnen →</a>';
+  const body = new URLSearchParams(new FormData(e.target));
+  // If UUID empty, let server generate; do not force on client
+  const r = await fetch('/ui/api/import/item', { method:'POST', body });
+  const j = await r.json().catch(()=>({}));
+  if (r.ok) {
+    status.innerHTML = 'Gespeichert. <a href="/ui/item/'+encodeURIComponent(j.item.ItemUUID)+'">Item öffnen →</a>';
+    // Keep values for fast multi-entry except UUID; clear it
+    $('#uuidField').value = '';
+  } else {
+    status.textContent = 'Fehler: ' + (j.error || 'Unbekannt');
   }
 });
 
@@ -128,10 +156,10 @@ $('#btnValidate').addEventListener('click', async ()=>{
   const r = await fetch('/api/validate-csv', { method:'POST', headers:{'Content-Type':'text/plain'}, body: txt });
   const j = await r.json().catch(()=>({}));
   if (r.ok) {
-    out.innerHTML = 'OK: '+j.rows+' Zeilen, '+j.items+' Items, Boxen: '+j.boxes.join(', ');
+    out.textContent = 'OK: ' + j.rows + ' Zeilen, ' + j.items + ' Items, Boxen: ' + (j.boxes||[]).join(', ');
     $('#btnImport').disabled = false;
   } else {
-    out.innerHTML = 'Fehler: '+(j.error||('HTTP '+r.status)) + (j.details ? '<br><pre>'+j.details+'</pre>' : '');
+    out.textContent = 'Fehler: ' + (j.error || ('HTTP ' + r.status)) + (j.details ? '\n' + j.details : '');
   }
 });
 

@@ -64,12 +64,12 @@
     </div>
 
     <div class="card" id="import">
-      <a class="linkcard" href="/ui/import">
-        <div class="card">
-          <h2>Daten Eingabe</h2>
-          <p class="muted">Einzelnes Teil erfassen oder CSV-Datei hochladen.</p>
-        </div>
-      </a>
+     <a class="linkcard" href="/ui/import">
+  <div class="card">
+    <h2>Daten Eingabe</h2>
+    <p class="muted">Einzelnes Teil erfassen oder CSV-Datei hochladen.</p>
+  </div>
+</a>
     </div>
 
     <!-- <div class="card">
@@ -111,6 +111,7 @@
   async function overview() {
     try {
       const r = await fetch('/api/overview');
+      console.log(r)
       const d = await r.json();
 
       // stats
