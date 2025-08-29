@@ -7,7 +7,7 @@ module.exports = {
 
   view: (entity) => {
     if (entity.type === "Box") {
-      const href = `/box/${encodeURIComponent(entity.id)}`;
+      const href = `ui/box/${encodeURIComponent(entity.id)}`;
       return `
         <a href="${href}" style="display:block">
           <div class="card" style="cursor:pointer">

@@ -1,0 +1,148 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Daten Eingabe</title>
+<link rel="stylesheet" href="/styles.css" />
+<body class="mobile">
+  <div class="container stack">
+    <h1>Daten Eingabe</h1>
+
+    <!-- Einzelnes Teil -->
+    <div class="card stack">
+      <h2>Einzelnes Teil erfassen</h2>
+      <form id="formOne" class="stack" method="post" action="/ui/api/eingabe/item">
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label>Box-ID *</label>
+            <input name="BoxID" placeholder="BOX-2025-0001" required />
+          </div>
+          <div>
+            <label>Item-UUID *</label>
+            <input name="ItemUUID" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required />
+          </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label>Materialnummer</label>
+            <input name="MaterialNumber" placeholder="z.B. A-12345" />
+          </div>
+          <div>
+            <label>Menge</label>
+            <input name="Qty" type="number" inputmode="numeric" value="1" />
+          </div>
+        </div>
+
+        <div>
+          <label>Beschreibung</label>
+          <input name="Description" placeholder="Kurzbeschreibung" />
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label>Zustand</label>
+            <input name="Condition" placeholder="Gut/Fair/Schlecht" />
+          </div>
+          <div>
+            <label>Lagerort (optional)</label>
+            <input name="Location" placeholder="Regal/Bin" />
+          </div>
+        </div>
+
+        <div>
+          <label>WMS-Link (optional)</label>
+          <input name="WmsLink" placeholder="https://wms/..." />
+        </div>
+
+        <div>
+          <label>Attribute (JSON, optional)</label>
+          <input name="AttributesJson" placeholder='{"farbe":"blau"}' />
+        </div>
+
+        <div>
+          <label>Notiz (optional)</label>
+          <textarea name="ItemNotes" rows="2"></textarea>
+        </div>
+
+        <div class="row">
+          <input name="AddedAt" placeholder="YYYY-MM-DD" />
+          <button class="btn-primary" type="submit">Speichern</button>
+        </div>
+
+        <div id="oneStatus" class="muted"></div>
+      </form>
+    </div>
+
+    <!-- CSV-Upload -->
+    <div class="card stack">
+      <h2>CSV-Datei hochladen</h2>
+      <p class="muted">Die Datei wird validiert und danach importiert.</p>
+      <input id="csvFile" type="file" accept=".csv,text/csv" />
+      <div class="row">
+        <input id="csvName" placeholder="Dateiname im Inbox, z.B. eingabe.csv" value="eingabe.csv" />
+        <button id="btnValidate" class="btn">Validieren</button>
+      </div>
+      <div id="valOut" class="muted"></div>
+      <div class="row">
+        <div></div>
+        <button id="btnImport" class="btn-primary" disabled>Jetzt importieren</button>
+      </div>
+    </div>
+
+    <a class="linkcard" href="/"><div class="card">← Zur Übersicht</div></a>
+  </div>
+
+<script>
+const $ = (s)=>document.querySelector(s);
+
+async function postForm(url, form) {
+  const body = new URLSearchParams(new FormData(form));
+  const r = await fetch(url, { method:'POST', body });
+  const j = await r.json().catch(()=>({}));
+  return { ok:r.ok, data:j };
+}
+
+$('#formOne').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const status = $('#oneStatus');
+  status.textContent = 'Speichern…';
+  const res = await postForm('/ui/api/eingabe/item', e.target);
+  status.textContent = res.ok ? 'Gespeichert.' : ('Fehler: ' + (res.data.error || 'Unbekannt'));
+  if (res.ok && res.data && res.data.item) {
+    status.innerHTML += ' <a href="/ui/item/'+encodeURIComponent(res.data.item.ItemUUID)+'">Item öffnen →</a>';
+  }
+});
+
+// CSV validate then import
+let lastCsvText = '', lastCsvName = 'eingabe.csv';
+
+$('#btnValidate').addEventListener('click', async ()=>{
+  const f = $('#csvFile').files[0];
+  const out = $('#valOut');
+  $('#btnImport').disabled = true;
+  if (!f) { out.textContent = 'Bitte eine CSV-Datei wählen.'; return; }
+  lastCsvName = $('#csvName').value.trim() || f.name || 'eingabe.csv';
+  const txt = await f.text();
+  lastCsvText = txt;
+  out.textContent = 'Validiere…';
+  const r = await fetch('/api/validate-csv', { method:'POST', headers:{'Content-Type':'text/plain'}, body: txt });
+  const j = await r.json().catch(()=>({}));
+  if (r.ok) {
+    out.innerHTML = 'OK: '+j.rows+' Zeilen, '+j.items+' Items, Boxen: '+j.boxes.join(', ');
+    $('#btnImport').disabled = false;
+  } else {
+    out.innerHTML = 'Fehler: '+(j.error||('HTTP '+r.status)) + (j.details ? '<br><pre>'+j.details+'</pre>' : '');
+  }
+});
+
+$('#btnImport').addEventListener('click', async ()=>{
+  const out = $('#valOut');
+  if (!lastCsvText) { out.textContent = 'Bitte zuerst validieren.'; return; }
+  out.textContent = 'Importiere…';
+  const r = await fetch('/api/import', { method:'POST', headers:{'Content-Type':'text/plain','X-Filename': lastCsvName}, body: lastCsvText });
+  const j = await r.json().catch(()=>({}));
+  out.textContent = r.ok ? ('Import OK: ' + (j.message || '')) : ('Fehler: ' + (j.error || ''));
+});
+</script>
+</body>
+</html>

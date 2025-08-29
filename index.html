@@ -82,7 +82,7 @@ async function search() {
     <div class="card">
       <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${it.ItemUUID.slice(-6).toUpperCase()}</span></div>
       <div class="muted">${it.Description || ''}</div>
-      <div>Box: <a class="boxlink mono" href="/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
+      <div>Box: <a class="boxlink mono" href="ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
     </div>`).join('');
 }
 
