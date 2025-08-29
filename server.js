@@ -24,12 +24,15 @@ const {
     countItemsNoWms,
     listRecentBoxes
 } = require("./db");
-const { zplForItem, sendZpl } = require("./print");
+const { zplForItem, zplForBox, sendZpl } = require("./print");
+const { pdfForBox, pdfForItem } = require("./labelpdf");
 
 const actions = loadActions();
 
 fs.mkdirSync(INBOX_DIR, { recursive: true });
 fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
+const PREVIEW_DIR = path.join(__dirname, "public", "prints");
+fs.mkdirSync(PREVIEW_DIR, { recursive: true });
 
 /* ----------------------- CSV watcher / ingestion ----------------------- */
 
@@ -87,7 +90,7 @@ function sendJson(res, status, body) {
     res.end(JSON.stringify(body));
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     // Static files from /public (styles, icons)
@@ -101,6 +104,19 @@ const server = http.createServer((req, res) => {
             res.writeHead(404); return res.end("Not found");
         }
     }
+
+    if (url.pathname.startsWith("/prints/") && req.method === "GET") {
+        const p = path.join(__dirname, "public", url.pathname);
+        try {
+            if (!p.startsWith(path.join(__dirname, "public", "prints"))) throw new Error("bad path");
+            if (fs.existsSync(p)) {
+                res.writeHead(200, { "Content-Type": "application/pdf" });
+                return res.end(fs.readFileSync(p));
+            }
+        } catch { }
+        res.writeHead(404); return res.end("Not found");
+    }
+
 
     /* -------- Landing (serve public/index.html if present) -------- */
     if (url.pathname === "/" && req.method === "GET") {
@@ -557,7 +573,7 @@ const server = http.createServer((req, res) => {
     }
 
     // Move item between boxes
-    if (url.pathname.match(/^\/api\/items\/[^/]+\/move$/) && req.method === "POST") {
+    if (url.pathname.match(/^\/api\/item\/[^/]+\/move$/) && req.method === "POST") {
         const uuid = decodeURIComponent(url.pathname.split("/")[3]);
         const item = getItem.get(uuid);
         if (!item) return sendJson(res, 404, { error: "not found" });
@@ -608,6 +624,59 @@ const server = http.createServer((req, res) => {
         const recentEvents = listRecentEvents.all();
         return sendJson(res, 200, { counts, recentBoxes, recentEvents });
     }
+
+    // GET /api/test — send a test label or write preview PDF if not configured
+    if (url.pathname === "/api/test" && req.method === "GET") {
+        const zpl = `^XA
+^CI28
+^PW600^LL300
+^FO30,30^A0N,48,48^FDTEST LABEL^FS
+^FO30,100^A0N,32,32^FDMediator Print OK^FS
+^FO30,160^BQN,2,6^FDLA,http://localhost:${HTTP_PORT}/^FS
+^XZ`;
+        try {
+            const result = await sendZpl(zpl);
+            if (result.sent) {
+                logEvent.run({ Actor: null, EntityType: "System", EntityId: "Printer", Event: "TestPrinted", Meta: null });
+                return sendJson(res, 200, { ok: true, sent: true });
+            }
+            // fallback preview
+            const out = path.join(PREVIEW_DIR, `test-${Date.now()}.pdf`);
+            await pdfForBox({ boxId: "TEST", location: "", url: `http://localhost:${HTTP_PORT}/`, outPath: out });
+            const rel = `/prints/${path.basename(out)}`;
+            logEvent.run({ Actor: null, EntityType: "System", EntityId: "Printer", Event: "TestPreviewSaved", Meta: JSON.stringify({ file: rel }) });
+            return sendJson(res, 200, { ok: false, sent: false, previewUrl: rel, reason: result.reason || "not_configured" });
+        } catch (e) {
+            return sendJson(res, 500, { ok: false, error: e.message });
+        }
+    }
+
+    // POST/GET /api/print/box/:boxId — send box label or create preview PDF
+    if (url.pathname.startsWith("/api/print/box/") && (req.method === "POST" || req.method === "GET")) {
+        const boxId = decodeURIComponent(url.pathname.replace("/api/print/box/", ""));
+        const box = getBox.get(boxId);
+        if (!box) return sendJson(res, 404, { error: "box not found" });
+
+        try {
+            const zpl = zplForBox({ boxId: box.BoxID, location: box.Location || "" });
+            const result = await sendZpl(zpl);
+
+            if (result.sent) {
+                logEvent.run({ Actor: null, EntityType: "Box", EntityId: box.BoxID, Event: "PrintSent", Meta: JSON.stringify({ transport: "tcp" }) });
+                return sendJson(res, 200, { ok: true, sent: true });
+            }
+            // Fallback to PDF preview
+            const urlToUi = `http://localhost:${HTTP_PORT}/ui/box/${encodeURIComponent(box.BoxID)}`;
+            const out = path.join(PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, "_"));
+            await pdfForBox({ boxId: box.BoxID, location: box.Location || "", url: urlToUi, outPath: out });
+            const rel = `/prints/${path.basename(out)}`;
+            logEvent.run({ Actor: null, EntityType: "Box", EntityId: box.BoxID, Event: "PrintPreviewSaved", Meta: JSON.stringify({ file: rel }) });
+            return sendJson(res, 200, { ok: false, sent: false, previewUrl: rel, reason: result.reason || "not_configured" });
+        } catch (e) {
+            return sendJson(res, 500, { ok: false, error: e.message });
+        }
+    }
+
 
     /* ----------------------- Not found fallback -------------------- */
     res.writeHead(404);

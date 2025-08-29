@@ -8,4 +8,7 @@ bugs & UX
 - 'Find Items': combine inputs and search buttons for a cleaner look
 - 'Find Items': automatically determine if searched value is box or item
 - 'Stats': Add printer connectivity (red/green circle), remove health state
-- 
+- the endpoint to move a box does not exist.
+- moving an item does not work. api seems broken
+- the view 'ui/item' should display the box the item is in in the header as well
+- view 'ui/item': 

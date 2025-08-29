@@ -5,5 +5,6 @@ module.exports = {
   ARCHIVE_DIR: process.env.ARCHIVE_DIR || "./data/archive",
   PRINTER_HOST: process.env.PRINTER_HOST || "",
   PRINTER_PORT: parseInt(process.env.PRINTER_PORT || "9100", 10),
-  BASE_QR_URL: process.env.BASE_QR_URL || "http://localhost:8080/qr"
+  BASE_QR_URL: process.env.BASE_QR_URL || "http://localhost:8080/qr",
+  BASE_UI_URL: process.env.BASE_UI_URL || "http://localhost:8080/ui"  // ← NEW, used for box QR
 };
