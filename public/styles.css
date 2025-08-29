@@ -232,6 +232,12 @@ button:focus {
     font-size: 1.05rem
 }
 
+/* Make .row and .row-3 stack on small screens */
+@media (max-width: 540px){
+  .row{ grid-template-columns: 1fr; }
+  .row-3{ grid-template-columns: 1fr; }
+}
+
 /* Responsive upgrades for desktop landing */
 @media (min-width: 960px) {
     .landing-grid {

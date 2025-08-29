@@ -2,37 +2,39 @@
 
 ## Short term
 - CSV template download
-  - Add endpoint `GET /api/template/csv` that returns a header-only CSV (optionally with 1–2 example rows).
-  - Link it from `/ui/import` as “Vorlage herunterladen”.
+  - Endpoint `GET /api/template/csv` returns header-only CSV (optionally 1–2 demo rows).
+  - Link on `/ui/import` as “Vorlage herunterladen”.
 
 - Label queueing rules
-  - Decide: queue label for (a) every imported item, (b) only new items, or (c) only when a checkbox is ticked in the form.
-  - Implement at:
-    - Single item: in `/ui/api/import/item` after upsert -> `queueLabel.run(ItemUUID)`
-    - CSV import: in `ops/30-queue-label.js` (already queues) or behind a flag.
+  - Decide when to queue labels: (a) every import, (b) only new items, (c) user toggle.
+  - Implement:
+    - Single item: after upsert in `/ui/api/import/item` → `queueLabel.run(ItemUUID)` (guarded by flag or checkbox).
+    - CSV import: via `ops/30-queue-label.js` or flag.
 
 - Field help / validation hints (DE)
-  - Show small helper text for UUID, AttributesJson (JSON), and WMS link formats.
+  - Small helper text for JSON formats (if reintroduced), WMS URL format, and Materialnummer conventions.
 
-## Medium term
-- Roles / auth
-  - Simple shared secret or local IP allowlist for write operations.
-  - CSRF token for form posts.
+- Search UX
+  - “Find” should also match by `BoxID`, `Description` (partial), with pagination.
 
-- History visibility
-  - Show recent events directly on `/ui/item/:uuid` and `/ui/box/:id`.
+- Events in UI
+  - Show recent events inline on `/ui/item/:uuid` and `/ui/box/:id`.
 
-- Better search
-  - Add search by description / BoxID with `LIKE` and simple pagination.
-
-- Export formats
-  - Add `text/csv` export in addition to JSON at `/api/export/wms`.
+- CSV export for WMS
+  - Add `text/csv` download in addition to JSON at `/api/export/wms`.
 
 - Settings
-  - UI to set `BASE_QR_URL`, printer host/port, and toggle auto-queue labels.
+  - Simple config UI to set `BASE_QR_URL`, printer host/port, and toggle “auto queue label”.
 
-## Long term
+## Medium term
+- Auth / roles
+  - Shared secret or IP allowlist for write endpoints; CSRF token for forms.
+
 - Schema evolution
-  - Migrations (keeping data), versioned attributes.
+  - Lightweight migrations and versioned attributes.
+
 - Bulk edits
-  - Web UI to move many items between boxes.
+  - Move many items between boxes in one action.
+
+## Done
+- Auto-generate UUID server-side if missing (and client-side helper on `/ui/import`).

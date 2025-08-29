@@ -12,22 +12,21 @@
     <div class="card stack">
       <h2>Einzelnes Teil erfassen</h2>
       <form id="oneForm" class="stack" method="post" action="/ui/api/import/item" autocomplete="off" novalidate>
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+        <div class="row">
           <div>
             <label>Box-ID *</label>
             <input name="BoxID" placeholder="BOX-2025-0001" required autocapitalize="characters" />
           </div>
           <div>
-            <label>Item-UUID</label>
+            <label>Item-UUID (leer = auto)</label>
             <div class="row">
-              <input id="uuidField" name="ItemUUID" placeholder="leer lassen oder generieren" inputmode="text" />
+              <input id="uuidField" name="ItemUUID" placeholder="leer lassen oder UUID einfügen" />
               <button class="btn" type="button" id="btnGen">UUID</button>
             </div>
-            <div class="muted" style="margin-top:4px">Leer lassen → UUID wird automatisch generiert.</div>
           </div>
         </div>
 
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+        <div class="row">
           <div>
             <label>Materialnummer</label>
             <input name="MaterialNumber" placeholder="z.B. A-12345" />
@@ -43,34 +42,13 @@
           <input name="Description" placeholder="Kurzbeschreibung" />
         </div>
 
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label>Zustand</label>
-            <input name="Condition" placeholder="Gut / Fair / Schlecht" />
-          </div>
-          <div>
-            <label>Lagerort (optional)</label>
-            <input name="Location" placeholder="Regal/Bin" />
-          </div>
-        </div>
-
-        <div>
-          <label>WMS-Link (optional)</label>
-          <input name="WmsLink" placeholder="https://wms/..." inputmode="url" />
-        </div>
-
-        <div>
-          <label>Attribute (JSON, optional)</label>
-          <input name="AttributesJson" placeholder='{"farbe":"blau"}' />
-        </div>
-
         <div>
           <label>Notiz (optional)</label>
           <textarea name="ItemNotes" rows="2"></textarea>
         </div>
 
         <div class="row">
-          <input name="AddedAt" placeholder="YYYY-MM-DD" inputmode="numeric" />
+          <div></div>
           <button class="btn-primary" type="submit">Speichern</button>
         </div>
 
@@ -93,84 +71,82 @@
         <button id="btnImport" class="btn-primary" type="button" disabled>Jetzt importieren</button>
       </div>
       <div class="muted" style="margin-top:6px">
-        Erwartete Spalten: <span class="mono">BoxID, ItemUUID, MaterialNumber, Description, Condition, Qty, WmsLink, AttributesJson, AddedAt, Location, ItemNotes</span>
+        Erwartete Spalten (mindestens): <span class="mono">BoxID, ItemUUID, MaterialNumber, Description, Qty, ItemNotes</span>
       </div>
-      <!-- Future: Vorlage herunterladen -->
-      <!-- <a class="linkcard" href="/api/template/csv"><div class="card">Vorlage herunterladen</div></a> -->
     </div>
 
     <a class="linkcard" href="/"><div class="card">← Zur Übersicht</div></a>
   </div>
 
 <script>
-const $ = (s)=>document.querySelector(s);
+(function(){
+  const $ = (s)=>document.querySelector(s);
 
-// UUID generation (client-side convenience)
-function generateUuid() {
-  try {
-    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    // Fallback: RFC4122 v4-ish
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-      const r = (Math.random() * 16) | 0;
-      const v = c === "x" ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  } catch { return ""; }
-}
-
-$('#btnGen').addEventListener('click', () => {
-  const v = generateUuid();
-  if (v) { $('#uuidField').value = v; }
-});
-
-// Single item submit (keeps big targets, minimal feedback text)
-$('#oneForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const status = $('#oneStatus');
-  status.textContent = 'Speichern…';
-  const body = new URLSearchParams(new FormData(e.target));
-  // If UUID empty, let server generate; do not force on client
-  const r = await fetch('/ui/api/import/item', { method:'POST', body });
-  const j = await r.json().catch(()=>({}));
-  if (r.ok) {
-    status.innerHTML = 'Gespeichert. <a href="/ui/item/'+encodeURIComponent(j.item.ItemUUID)+'">Item öffnen →</a>';
-    // Keep values for fast multi-entry except UUID; clear it
-    $('#uuidField').value = '';
-  } else {
-    status.textContent = 'Fehler: ' + (j.error || 'Unbekannt');
+  function generateUuid() {
+    try {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+        const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
+      });
+    } catch { return ""; }
   }
-});
 
-// CSV validate then import
-let lastCsvText = '', lastCsvName = 'eingabe.csv';
+  // UUID helper
+  const btnGen = $('#btnGen');
+  if (btnGen) btnGen.addEventListener('click', () => {
+    const v = generateUuid();
+    if (v) { $('#uuidField').value = v; }
+  });
 
-$('#btnValidate').addEventListener('click', async ()=>{
-  const f = $('#csvFile').files[0];
-  const out = $('#valOut');
-  $('#btnImport').disabled = true;
-  if (!f) { out.textContent = 'Bitte eine CSV-Datei wählen.'; return; }
-  lastCsvName = $('#csvName').value.trim() || f.name || 'eingabe.csv';
-  const txt = await f.text();
-  lastCsvText = txt;
-  out.textContent = 'Validiere…';
-  const r = await fetch('/api/validate-csv', { method:'POST', headers:{'Content-Type':'text/plain'}, body: txt });
-  const j = await r.json().catch(()=>({}));
-  if (r.ok) {
-    out.textContent = 'OK: ' + j.rows + ' Zeilen, ' + j.items + ' Items, Boxen: ' + (j.boxes||[]).join(', ');
-    $('#btnImport').disabled = false;
-  } else {
-    out.textContent = 'Fehler: ' + (j.error || ('HTTP ' + r.status)) + (j.details ? '\n' + j.details : '');
-  }
-});
+  // Single item submit
+  const oneForm = $('#oneForm');
+  if (oneForm) oneForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = $('#oneStatus'); status.textContent = 'Speichern…';
+    const body = new URLSearchParams(new FormData(e.target));
+    const r = await fetch('/ui/api/import/item', { method:'POST', body });
+    const j = await r.json().catch(()=>({}));
+    if (r.ok) {
+      status.innerHTML = 'Gespeichert. <a href="/ui/item/'+encodeURIComponent(j.item.ItemUUID)+'">Item öffnen →</a>';
+      $('#uuidField').value = ''; // clear for next entry
+    } else {
+      status.textContent = 'Fehler: ' + (j.error || 'Unbekannt');
+    }
+  });
 
-$('#btnImport').addEventListener('click', async ()=>{
-  const out = $('#valOut');
-  if (!lastCsvText) { out.textContent = 'Bitte zuerst validieren.'; return; }
-  out.textContent = 'Importiere…';
-  const r = await fetch('/api/import', { method:'POST', headers:{'Content-Type':'text/plain','X-Filename': lastCsvName}, body: lastCsvText });
-  const j = await r.json().catch(()=>({}));
-  out.textContent = r.ok ? ('Import OK: ' + (j.message || '')) : ('Fehler: ' + (j.error || ''));
-});
+  // CSV validate → required before import
+  let validatedOk = false, lastCsvText = '', lastCsvName = 'eingabe.csv';
+
+  const btnValidate = $('#btnValidate');
+  if (btnValidate) btnValidate.addEventListener('click', async ()=>{
+    const file = $('#csvFile').files[0];
+    const out = $('#valOut'); const btnImport = $('#btnImport');
+    validatedOk = false; btnImport.disabled = true;
+    if (!file) { out.textContent = 'Bitte eine CSV-Datei wählen.'; return; }
+    lastCsvName = ($('#csvName').value || file.name || 'eingabe.csv').trim();
+    lastCsvText = await file.text();
+    out.textContent = 'Validiere…';
+    const r = await fetch('/api/validate-csv', { method:'POST', headers:{'Content-Type':'text/plain'}, body: lastCsvText });
+    const j = await r.json().catch(()=>({}));
+    if (r.ok) {
+      out.textContent = 'OK: ' + j.rows + ' Zeilen, ' + j.items + ' Items, Boxen: ' + (j.boxes||[]).join(', ');
+      validatedOk = true; btnImport.disabled = false;
+    } else {
+      out.textContent = 'Fehler: ' + (j.error || ('HTTP ' + r.status)) + (j.details ? '\n' + j.details : '');
+    }
+  });
+
+  const btnImport = $('#btnImport');
+  if (btnImport) btnImport.addEventListener('click', async ()=>{
+    const out = $('#valOut');
+    if (!validatedOk) { out.textContent = 'Bitte zuerst validieren.'; return; }
+    if (!lastCsvText) { out.textContent = 'Keine Datei in Arbeit.'; return; }
+    out.textContent = 'Importiere…';
+    const r = await fetch('/api/import', { method:'POST', headers:{'Content-Type':'text/plain','X-Filename': lastCsvName}, body: lastCsvText });
+    const j = await r.json().catch(()=>({}));
+    out.textContent = r.ok ? ('Import OK: ' + (j.message || '')) : ('Fehler: ' + (j.error || ''));
+  });
+})();
 </script>
 </body>
 </html>

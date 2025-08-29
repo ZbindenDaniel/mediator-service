@@ -97,116 +97,86 @@
 </div>
 
 <script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+
   async function health() {
+    const el = $('health'); if (!el) return;
     try {
       const r = await fetch('/');
-      document.getElementById('health').textContent = r.ok ? 'OK' : ('HTTP ' + r.status);
-      document.getElementById('health').className = r.ok ? 'ok' : 'err';
-    } catch (e) {
-      document.getElementById('health').textContent = 'unreachable';
-      document.getElementById('health').className = 'err';
-    }
+      el.textContent = r.ok ? 'OK' : ('HTTP ' + r.status);
+      el.className = r.ok ? 'ok' : 'err';
+    } catch { el.textContent = 'unreachable'; el.className = 'err'; }
   }
 
   async function overview() {
+    const statsEl = $('stats'), boxesEl = $('boxesOut'), evEl = $('eventsOut');
+    if (!statsEl || !boxesEl || !evEl) return;
     try {
       const r = await fetch('/api/overview');
-      console.log(r)
       const d = await r.json();
-
-      // stats
-      const s = document.getElementById('stats');
-      s.innerHTML = `
-      <div>Total boxes: <b>${d.counts.boxes}</b></div>
-      <div>Total items: <b>${d.counts.items}</b></div>
-      <div>Items without WMS link: <b>${d.counts.itemsNoWms}</b></div>
-    `;
-
-      // boxes
-      const b = document.getElementById('boxesOut');
-      b.innerHTML = (d.recentBoxes && d.recentBoxes.length)
+      statsEl.innerHTML = `
+        <div>Total boxes: <b>${d.counts.boxes}</b></div>
+        <div>Total items: <b>${d.counts.items}</b></div>
+        <div>Items ohne WMS-Link: <b>${d.counts.itemsNoWms}</b></div>
+      `;
+      boxesEl.innerHTML = (d.recentBoxes||[]).length
         ? d.recentBoxes.map(x => `
-        <div class="item">
-          <div><a href="/ui/box/${encodeURIComponent(x.BoxID)}"><b>${x.BoxID}</b></a></div>
-          <div class="muted">Location: ${x.Location || '(unset)'} · Updated: ${x.UpdatedAt || ''}</div>
-        </div>`).join('')
+            <div class="card">
+              <div><a href="/ui/box/${encodeURIComponent(x.BoxID)}"><b>${x.BoxID}</b></a></div>
+              <div class="muted">Location: ${x.Location || '(unset)'} · Updated: ${x.UpdatedAt || ''}</div>
+            </div>`).join('')
         : '<div class="muted">No boxes yet.</div>';
-
-      // events
-      const ev = document.getElementById('eventsOut');
-      ev.innerHTML = (d.recentEvents && d.recentEvents.length)
-        ? d.recentEvents.map(e =>
-          `<div class="item">
-           <div><span class="pill">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
-           <div>${e.CreatedAt} — ${e.Event} ${e.Actor ? 'by ' + e.Actor : ''}</div>
-         </div>`).join('')
+      evEl.innerHTML = (d.recentEvents||[]).length
+        ? d.recentEvents.map(e => `
+            <div class="card">
+              <div><span class="pill">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
+              <div>${e.CreatedAt} — ${e.Event} ${e.Actor ? 'by '+e.Actor : ''}</div>
+            </div>`).join('')
         : '<div class="muted">No recent activity.</div>';
-    } catch (e) {
-      document.getElementById('stats').innerHTML = '<div class="muted">Failed to load overview</div>';
-      document.getElementById('boxesOut').innerHTML = '';
-      document.getElementById('eventsOut').innerHTML = '';
+    } catch {
+      statsEl.innerHTML = '<div class="muted">Failed to load overview</div>';
+      boxesEl.innerHTML = '';
+      evEl.innerHTML = '';
     }
   }
 
   async function search() {
-    const q = document.getElementById('mat').value.trim();
-    const out = document.getElementById('searchOut');
+    const input = $('mat'), out = $('searchOut');
+    if (!input || !out) return;
+    const q = input.value.trim();
     out.innerHTML = '';
     if (!q) return;
     const r = await fetch('/api/search?material=' + encodeURIComponent(q));
     const data = await r.json();
-    if (!data.items || !data.items.length) {
-      out.innerHTML = '<div class="muted">No items found.</div>'; return;
-    }
-    out.innerHTML = data.items.map(it => `
-    <div class="card">
-      <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${(it.ItemUUID || '').slice(-6).toUpperCase()}</span></div>
-      <div class="muted">${it.Description || ''}</div>
-      <div>Box: <a class="mono" href="/ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
-      <div><a class="mono" href="/ui/item/${encodeURIComponent(it.ItemUUID)}">Open item →</a></div>
-    </div>`).join('');
+    out.innerHTML = (data.items||[]).length
+      ? data.items.map(it => `
+          <div class="card">
+            <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${(it.ItemUUID||'').slice(-6).toUpperCase()}</span></div>
+            <div class="muted">${it.Description || ''}</div>
+            <div>Box: <a class="mono" href="/ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
+            <div><a class="mono" href="/ui/item/${encodeURIComponent(it.ItemUUID)}">Open item →</a></div>
+          </div>`).join('')
+      : '<div class="muted">No items found.</div>';
   }
 
-  async function uploadCsv() {
-    const csv = document.getElementById('csv').value;
-    const name = document.getElementById('csvName').value.trim() || 'items_upload.csv';
-    const status = document.getElementById('csvStatus');
-    status.textContent = 'Uploading…';
-    try {
-      const r = await fetch('/api/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain', 'X-Filename': name },
-        body: csv
-      });
-      const data = await r.json();
-      status.textContent = r.ok ? `OK: ${data.message}` : `Error: ${data.error || r.status}`;
-      overview();
-    } catch (e) {
-      status.textContent = 'Failed: ' + e.message;
-    }
-  }
+  // Bind safely (only if elements exist)
+  const btnSearch = $('btnSearch');
+  if (btnSearch) btnSearch.addEventListener('click', search);
+  const mat = $('mat');
+  if (mat) mat.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
 
-  function openEntity() {
-    const id = document.getElementById('goId').value.trim();
-    const t = document.getElementById('goType').value;
-    if (id) location.href = '/ui/' + t + '/' + encodeURIComponent(id);
-  }
-
-  document.getElementById('btnSearch').addEventListener('click', search);
-  document.getElementById('btnUpload').addEventListener('click', uploadCsv);
-  document.getElementById('btnOpen').addEventListener('click', openEntity);
-
-  // Shortcuts
+  // Shortcuts only if inputs exist
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-      e.preventDefault(); document.getElementById('mat').focus();
+      if (mat) { e.preventDefault(); mat.focus(); }
     }
-    if (e.key === 'Enter' && document.activeElement === document.getElementById('mat')) search();
-    if (e.key === 'b') { document.getElementById('goType').value = 'box'; document.getElementById('goId').focus(); }
-    if (e.key === 'i') { document.getElementById('goType').value = 'item'; document.getElementById('goId').focus(); }
+    if (e.key === 'Enter' && document.activeElement === mat) search();
   });
 
   health(); overview();
+})();
 </script>
+
 
 </html>
