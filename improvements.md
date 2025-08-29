@@ -1,6 +1,5 @@
 # Improvements backlog
 
-## Short term
 - CSV template download
   - Endpoint `GET /api/template/csv` returns header-only CSV (optionally 1–2 demo rows).
   - Link on `/ui/import` as “Vorlage herunterladen”.
@@ -22,19 +21,7 @@
 
 - CSV export for WMS
   - Add `text/csv` download in addition to JSON at `/api/export/wms`.
+  - backup database to CSV file
 
 - Settings
   - Simple config UI to set `BASE_QR_URL`, printer host/port, and toggle “auto queue label”.
-
-## Medium term
-- Auth / roles
-  - Shared secret or IP allowlist for write endpoints; CSRF token for forms.
-
-- Schema evolution
-  - Lightweight migrations and versioned attributes.
-
-- Bulk edits
-  - Move many items between boxes in one action.
-
-## Done
-- Auto-generate UUID server-side if missing (and client-side helper on `/ui/import`).

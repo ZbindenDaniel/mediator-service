@@ -5,18 +5,6 @@
 <title>Mediator • Warehouse</title>
 <link rel="stylesheet" href="/styles.css" />
 
-<header class="header">
-  <div class="nav">
-    <div class="brand"><a href="/">Mediator</a></div>
-    <nav style="margin-left:auto;display:flex;gap:12px">
-      <a href="#find">Find</a>
-      <a href="#boxes">Boxes</a>
-      <a href="#activity">Activity</a>
-      <a href="#import">Import</a>
-    </nav>
-  </div>
-</header>
-
 <div class="container">
   <h1>Overview</h1>
   <div class="grid landing-grid">
@@ -38,38 +26,29 @@
         database or CSV imports.</p>
     </div>
 
-    <div class="card">
-      <h2 id="find">Find items</h2>
-      <div class="row">
-        <input id="mat" placeholder="Material number e.g. A-12345" autofocus />
-        <button class="btn" id="btnSearch">Search</button>
-      </div>
-      <div class="row-3">
-        <input id="goId" placeholder="BOX-2025-0001 or Item UUID" />
-        <select id="goType">
-          <option value="box">Box</option>
-          <option value="item">Item</option>
-        </select>
-        <button class="btn" id="btnOpen">Open</button>
-      </div>
-      <div id="searchOut" class="list"></div>
-    </div>
+    <div class="card" id="find">
+  <h2>Find items</h2>
+  <div class="row">
+    <input id="q" placeholder="Material, BOX-…, oder UUID" autofocus />
+    <button class="btn" id="btnGo">Suchen</button>
+  </div>
+  <div id="findOut" class="list" style="margin-top:10px"></div>
+</div>
 
     <div class="card">
       <h2>Stats</h2>
-      <div id="stats" class="list">
-        <div class="muted">Loading…</div>
-      </div>
+      <div id="stats" class="list"></div>
+      <div class="muted">Drucker: <span id="printerDot"></span></div>
       <div class="muted">Health: <span id="health">checking…</span></div>
     </div>
 
     <div class="card" id="import">
-     <a class="linkcard" href="/ui/import">
-  <div class="card">
-    <h2>Daten Eingabe</h2>
-    <p class="muted">Einzelnes Teil erfassen oder CSV-Datei hochladen.</p>
-  </div>
-</a>
+      <a class="linkcard" href="/ui/import">
+        <div class="card">
+          <h2>Daten Eingabe</h2>
+          <p class="muted">Einzelnes Teil erfassen oder CSV-Datei hochladen.</p>
+        </div>
+      </a>
     </div>
 
     <!-- <div class="card">
@@ -96,19 +75,21 @@
   </div>
 </div>
 
-<script>
-(function(){
-  function $(id){ return document.getElementById(id); }
+<!-- ----------------------- SCRIPT --------------------------- -->
 
-  async function health() {
-    const el = $('health'); if (!el) return;
-    try {
-      const r = await fetch('/');
-      el.textContent = r.ok ? 'OK' : ('HTTP ' + r.status);
-      el.className = r.ok ? 'ok' : 'err';
-    } catch { el.textContent = 'unreachable'; el.className = 'err'; }
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+
+  // ----- Helpers for "Find items"
+  function looksLikeUuid(s) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+  }
+  function looksLikeBox(s) {
+    return /^BOX[-\s_]\d{4}[-\s_]\d{3,}$/i.test(s);
   }
 
+  // ----- Overview data (stats, boxes, events)
   async function overview() {
     const statsEl = $('stats'), boxesEl = $('boxesOut'), evEl = $('eventsOut');
     if (!statsEl || !boxesEl || !evEl) return;
@@ -120,14 +101,14 @@
         <div>Total items: <b>${d.counts.items}</b></div>
         <div>Items ohne WMS-Link: <b>${d.counts.itemsNoWms}</b></div>
       `;
-      boxesEl.innerHTML = (d.recentBoxes||[]).length
+      boxesEl.innerHTML = (d.recentBoxes || []).length
         ? d.recentBoxes.map(x => `
             <div class="card">
               <div><a href="/ui/box/${encodeURIComponent(x.BoxID)}"><b>${x.BoxID}</b></a></div>
               <div class="muted">Location: ${x.Location || '(unset)'} · Updated: ${x.UpdatedAt || ''}</div>
             </div>`).join('')
         : '<div class="muted">No boxes yet.</div>';
-      evEl.innerHTML = (d.recentEvents||[]).length
+      evEl.innerHTML = (d.recentEvents || []).length
         ? d.recentEvents.map(e => `
             <div class="card">
               <div><span class="pill">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
@@ -141,18 +122,44 @@
     }
   }
 
-  async function search() {
-    const input = $('mat'), out = $('searchOut');
+  // ----- Printer connectivity dot
+  async function printer() {
+    const dot = $('printerDot');
+    if (!dot) return;
+    try {
+      const r = await fetch('/api/printer/status');
+      const j = await r.json();
+      dot.style.background = (r.ok && j.ok) ? '#1cbc2c' : '#d22';
+      dot.title = j.ok ? 'connected' : (j.reason || 'not connected');
+    } catch {
+      dot.style.background = '#d22';
+      dot.title = 'unreachable';
+    }
+  }
+
+  // ----- Find logic (single input, auto-detect)
+  async function runFind() {
+    const input = $('q');
+    const out = $('findOut');
     if (!input || !out) return;
-    const q = input.value.trim();
+    const v = (input.value || '').trim();
     out.innerHTML = '';
-    if (!q) return;
-    const r = await fetch('/api/search?material=' + encodeURIComponent(q));
+    if (!v) return;
+
+    if (looksLikeUuid(v)) { location.href = '/ui/item/' + encodeURIComponent(v); return; }
+    if (looksLikeBox(v))  {
+      const norm = v.toUpperCase().replace(/\s|_/g, '-');
+      location.href = '/ui/box/' + encodeURIComponent(norm);
+      return;
+    }
+
+    // Fallback: material search
+    const r = await fetch('/api/search?material=' + encodeURIComponent(v));
     const data = await r.json();
-    out.innerHTML = (data.items||[]).length
+    out.innerHTML = (data.items || []).length
       ? data.items.map(it => `
           <div class="card">
-            <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${(it.ItemUUID||'').slice(-6).toUpperCase()}</span></div>
+            <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${(it.ItemUUID || '').slice(-6).toUpperCase()}</span></div>
             <div class="muted">${it.Description || ''}</div>
             <div>Box: <a class="mono" href="/ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
             <div><a class="mono" href="/ui/item/${encodeURIComponent(it.ItemUUID)}">Open item →</a></div>
@@ -160,23 +167,26 @@
       : '<div class="muted">No items found.</div>';
   }
 
-  // Bind safely (only if elements exist)
-  const btnSearch = $('btnSearch');
-  if (btnSearch) btnSearch.addEventListener('click', search);
-  const mat = $('mat');
-  if (mat) mat.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+  // ----- Bindings (guarded)
+  const btnGo = $('btnGo');
+  if (btnGo) btnGo.addEventListener('click', runFind);
+  const q = $('q');
+  if (q) q.addEventListener('keydown', (e) => { if (e.key === 'Enter') runFind(); });
 
-  // Shortcuts only if inputs exist
+  // Keyboard shortcut to focus search
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-      if (mat) { e.preventDefault(); mat.focus(); }
+      if (q) { e.preventDefault(); q.focus(); }
     }
-    if (e.key === 'Enter' && document.activeElement === mat) search();
+    if (e.key === 'Enter' && document.activeElement === q) runFind();
   });
 
-  health(); overview();
+  // Initial load
+  overview();
+  printer();
 })();
 </script>
+
 
 
 </html>

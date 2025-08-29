@@ -4,7 +4,7 @@ const path = require("path");
 const http = require("http");
 const chokidar = require("chokidar");
 const { loadActions } = require("./actions");
-const { HTTP_PORT, INBOX_DIR, ARCHIVE_DIR } = require("./config");
+const { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR } = require("./config");
 const { ingestCsvFile } = require("./importer");
 const {
     db,
@@ -24,7 +24,7 @@ const {
     countItemsNoWms,
     listRecentBoxes
 } = require("./db");
-const { zplForItem, zplForBox, sendZpl } = require("./print");
+const { zplForItem, zplForBox, sendZpl, testPrinterConnection } = require("./print");
 const { pdfForBox, pdfForItem } = require("./labelpdf");
 
 const actions = loadActions();
@@ -160,7 +160,7 @@ const server = http.createServer(async (req, res) => {
 <body class="mobile">
   <div class="container stack">
     <h1>Box <span class="mono">${box.BoxID}</span></h1>
-    <form class="card stack" method="post" action="/api/boxes/${encodeURIComponent(box.BoxID)}/place">
+<form class="card stack" method="post" action="/api/boxes/${encodeURIComponent(box.BoxID)}/move" onsubmit="this.querySelector('button[type=submit]').disabled=true">
       <div>
         <h2>Set location</h2>
         <label>Location</label>
@@ -301,49 +301,20 @@ const server = http.createServer(async (req, res) => {
     // Relocate (item) from UI
     if (url.pathname.match(/^\/ui\/api\/item\/[^/]+\/move$/) && req.method === "POST") {
         const uuid = decodeURIComponent(url.pathname.split("/")[4]);
-        let body = "";
-        req.on("data", (c) => (body += c));
+        let body = ""; req.on("data", c => body += c);
         req.on("end", () => {
-            // Accept urlencoded OR JSON
-            let toBoxId = "",
-                actor = "";
-            try {
-                const p = new URLSearchParams(body);
-                toBoxId = (p.get("toBoxId") || "").trim();
-                actor = (p.get("actor") || "").trim();
-            } catch { }
-            if (!toBoxId) {
-                try {
-                    const j = JSON.parse(body || "{}");
-                    toBoxId = j.toBoxId || "";
-                    actor = j.actor || "";
-                } catch { }
-            }
-            if (!toBoxId) {
-                res.writeHead(400);
-                return res.end("toBoxId required");
-            }
+            const p = new URLSearchParams(body);
+            const toBoxId = (p.get("toBoxId") || "").trim();
+            const actor = (p.get("actor") || "").trim();
+            if (!toBoxId || !actor) { res.writeHead(400); return res.end("toBoxId and actor are required"); }
+
             const item = getItem.get(uuid);
-            if (!item) {
-                res.writeHead(404);
-                return res.end("item not found");
-            }
+            if (!item) { res.writeHead(404); return res.end("item not found"); }
             const dest = getBox.get(toBoxId);
-            if (!dest) {
-                res.writeHead(404);
-                return res.end("destination box not found");
-            }
-            db.prepare(`UPDATE items SET BoxID=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(
-                toBoxId,
-                uuid
-            );
-            logEvent.run({
-                Actor: actor || null,
-                EntityType: "Item",
-                EntityId: uuid,
-                Event: "Moved",
-                Meta: JSON.stringify({ from: item.BoxID, to: toBoxId })
-            });
+            if (!dest) { res.writeHead(404); return res.end("destination box not found"); }
+
+            db.prepare(`UPDATE items SET BoxID=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(toBoxId, uuid);
+            logEvent.run({ Actor: actor, EntityType: "Item", EntityId: uuid, Event: "Moved", Meta: JSON.stringify({ from: item.BoxID, to: toBoxId }) });
             res.writeHead(302, { Location: `/ui/item/${encodeURIComponent(uuid)}#act-relocate` });
             res.end();
         });
@@ -362,10 +333,12 @@ const server = http.createServer(async (req, res) => {
             if (!box) { res.writeHead(404); return res.end("Box not found"); }
             const boxItems = itemsByBox.all(box.BoxID); // ← add items for box
             entity = { type: "Box", id: box.BoxID, data: box, items: boxItems };
-        } else if (kind === "item") {
+        }
+        else if (kind === "item") {
             const item = getItem.get(id);
             if (!item) { res.writeHead(404); return res.end("Item not found"); }
-            entity = { type: "Item", id: item.ItemUUID, data: item };
+            const box = getBox.get(item.BoxID);
+            entity = { type: "Item", id: item.ItemUUID, data: item, box };
         }
         else {
             res.writeHead(400); return res.end("Bad entity type");
@@ -383,8 +356,12 @@ const server = http.createServer(async (req, res) => {
             }
         }).join("");
 
+        const header = entity.type === "Item"
+            ? `<h1>Item: <span class="mono">${entity.id}</span> <span class="muted">· Box:</span> <a class="mono" href="/ui/box/${encodeURIComponent(entity.data.BoxID)}">${entity.data.BoxID}</a></h1>`
+            : `<h1>Box: <span class="mono">${entity.id}</span></h1>`;
+
         const body = `
-  <h1>${entity.type}: <span class="mono">${entity.id}</span></h1>
+  ${header}
   ${cards}
   <a class="linkcard" href="/"><div class="card">← Home</div></a>
 `;
@@ -404,36 +381,23 @@ const server = http.createServer(async (req, res) => {
     /*---------------------------------------------------------------------------* 
 
     /* ------------------- Place box (set location) ----------------- */
-    if (url.pathname.match(/^\/api\/boxes\/[^/]+\/place$/) && req.method === "POST") {
+    if (url.pathname.match(/^\/api\/boxes\/[^/]+\/move$/) && req.method === "POST") {
         const id = decodeURIComponent(url.pathname.split("/")[3]);
         const box = getBox.get(id);
-        if (!box) {
-            res.writeHead(404);
-            return res.end("Box not found");
-        }
-        let body = "";
-        req.on("data", (c) => (body += c));
+        if (!box) return sendJson(res, 404, { error: "box not found" });
+
+        let body = ""; req.on("data", c => body += c);
         req.on("end", () => {
-            const params = new URLSearchParams(body);
-            const location = (params.get("location") || "").trim();
-            const actor = (params.get("actor") || "").trim();
-            const notes = (params.get("notes") || "").trim();
+            const p = new URLSearchParams(body);
+            const location = (p.get("location") || "").trim();
+            const actor = (p.get("actor") || "").trim();
+            const notes = (p.get("notes") || "").trim();
+            if (!location || !actor) return sendJson(res, 400, { error: "location and actor are required" });
 
-            db.prepare(
-                `UPDATE boxes SET Location=?, BoxNotes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`
-            ).run(location, notes, actor, id);
-
-            const meta = JSON.stringify({ location, notes });
-            logEvent.run({
-                Actor: actor || null,
-                EntityType: "Box",
-                EntityId: id,
-                Event: "Placed",
-                Meta: meta
-            });
-
-            res.writeHead(302, { Location: `/box/${encodeURIComponent(id)}` });
-            res.end();
+            db.prepare(`UPDATE boxes SET Location=?, BoxNotes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`)
+                .run(location, notes, actor, id);
+            logEvent.run({ Actor: actor, EntityType: "Box", EntityId: id, Event: "Moved", Meta: JSON.stringify({ location, notes }) });
+            return sendJson(res, 200, { ok: true });
         });
         return;
     }
@@ -573,31 +537,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Move item between boxes
-    if (url.pathname.match(/^\/api\/item\/[^/]+\/move$/) && req.method === "POST") {
+    if (url.pathname.match(/^\/api\/items\/[^/]+\/move$/) && req.method === "POST") {
         const uuid = decodeURIComponent(url.pathname.split("/")[3]);
         const item = getItem.get(uuid);
         if (!item) return sendJson(res, 404, { error: "not found" });
 
-        let body = "";
-        req.on("data", (c) => (body += c));
+        let body = ""; req.on("data", c => body += c);
         req.on("end", () => {
-            const { toBoxId, actor } = JSON.parse(body || "{}");
-            if (!toBoxId) return sendJson(res, 400, { error: "toBoxId required" });
+            let toBoxId = "", actor = "";
+            try { const j = JSON.parse(body || "{}"); toBoxId = (j.toBoxId || "").trim(); actor = (j.actor || "").trim(); } catch { }
+            if (!toBoxId || !actor) return sendJson(res, 400, { error: "toBoxId and actor are required" });
             const dest = getBox.get(toBoxId);
             if (!dest) return sendJson(res, 404, { error: "destination box not found" });
 
-            db.prepare(`UPDATE items SET BoxID=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(
-                toBoxId,
-                uuid
-            );
-            logEvent.run({
-                Actor: actor || null,
-                EntityType: "Item",
-                EntityId: uuid,
-                Event: "Moved",
-                Meta: JSON.stringify({ from: item.BoxID, to: toBoxId })
-            });
-            sendJson(res, 200, { ok: true });
+            db.prepare(`UPDATE items SET BoxID=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(toBoxId, uuid);
+            logEvent.run({ Actor: actor, EntityType: "Item", EntityId: uuid, Event: "Moved", Meta: JSON.stringify({ from: item.BoxID, to: toBoxId }) });
+            return sendJson(res, 200, { ok: true });
         });
         return;
     }
@@ -625,6 +580,12 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { counts, recentBoxes, recentEvents });
     }
 
+    // Printer status
+    if (url.pathname === "/api/printer/status" && req.method === "GET") {
+        const status = await testPrinterConnection();
+        return sendJson(res, 200, status);
+    }
+
     // GET /api/test — send a test label or write preview PDF if not configured
     if (url.pathname === "/api/test" && req.method === "GET") {
         const zpl = `^XA
@@ -632,7 +593,7 @@ const server = http.createServer(async (req, res) => {
 ^PW600^LL300
 ^FO30,30^A0N,48,48^FDTEST LABEL^FS
 ^FO30,100^A0N,32,32^FDMediator Print OK^FS
-^FO30,160^BQN,2,6^FDLA,http://localhost:${HTTP_PORT}/^FS
+^FO30,160^BQN,2,6^FDLA,${HOSTNAME}:${HTTP_PORT}/^FS
 ^XZ`;
         try {
             const result = await sendZpl(zpl);
@@ -642,7 +603,7 @@ const server = http.createServer(async (req, res) => {
             }
             // fallback preview
             const out = path.join(PREVIEW_DIR, `test-${Date.now()}.pdf`);
-            await pdfForBox({ boxId: "TEST", location: "", url: `http://localhost:${HTTP_PORT}/`, outPath: out });
+            await pdfForBox({ boxId: "TEST", location: "", url: `${HOSTNAME}:${HTTP_PORT}/`, outPath: out });
             const rel = `/prints/${path.basename(out)}`;
             logEvent.run({ Actor: null, EntityType: "System", EntityId: "Printer", Event: "TestPreviewSaved", Meta: JSON.stringify({ file: rel }) });
             return sendJson(res, 200, { ok: false, sent: false, previewUrl: rel, reason: result.reason || "not_configured" });
@@ -666,7 +627,7 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 200, { ok: true, sent: true });
             }
             // Fallback to PDF preview
-            const urlToUi = `http://localhost:${HTTP_PORT}/ui/box/${encodeURIComponent(box.BoxID)}`;
+            const urlToUi = `${HOSTNAME}:${HTTP_PORT}/ui/box/${encodeURIComponent(box.BoxID)}`;
             const out = path.join(PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, "_"));
             await pdfForBox({ boxId: box.BoxID, location: box.Location || "", url: urlToUi, outPath: out });
             const rel = `/prints/${path.basename(out)}`;
@@ -686,6 +647,6 @@ const server = http.createServer(async (req, res) => {
 /* ----------------------------- Start ----------------------------- */
 
 server.listen(HTTP_PORT, () => {
-    console.log(`HTTP on http://localhost:${HTTP_PORT}`);
+    console.log(`HTTP on ${HOSTNAME}:${HTTP_PORT}`);
     console.log(`Watching CSV inbox: ${path.resolve(INBOX_DIR)}`);
 });

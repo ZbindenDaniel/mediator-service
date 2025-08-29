@@ -108,7 +108,7 @@
     const j = await r.json().catch(()=>({}));
     if (r.ok) {
       status.innerHTML = 'Gespeichert. <a href="/ui/item/'+encodeURIComponent(j.item.ItemUUID)+'">Item öffnen →</a>';
-      $('#uuidField').value = ''; // clear for next entry
+      oneForm.reset();
     } else {
       status.textContent = 'Fehler: ' + (j.error || 'Unbekannt');
     }

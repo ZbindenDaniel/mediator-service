@@ -42,4 +42,14 @@ function sendZpl(zpl) {
   });
 }
 
-module.exports = { zplForItem, zplForBox, sendZpl };
+function testPrinterConnection() {
+  return new Promise((resolve) => {
+    if (!PRINTER_HOST || !PRINTER_PORT) return resolve({ ok: false, reason: "not_configured" });
+    const socket = net.createConnection({ host: PRINTER_HOST, port: PRINTER_PORT }, () => {
+      socket.end(); resolve({ ok: true });
+    });
+    socket.on("error", (err) => resolve({ ok: false, reason: err.message || "socket_error" }));
+  });
+}
+module.exports = { zplForItem, zplForBox, sendZpl, testPrinterConnection };
+
