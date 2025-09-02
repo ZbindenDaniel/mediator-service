@@ -638,7 +638,6 @@ const server = http.createServer(async (req, res) => {
         }
     }
 
-
     /* ----------------------- Not found fallback -------------------- */
     res.writeHead(404);
     res.end("Not found");
