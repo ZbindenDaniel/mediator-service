@@ -5,8 +5,10 @@
 <title>Daten Eingabe</title>
 <link rel="stylesheet" href="/styles.css" />
 <body class="mobile">
-  <div class="container stack">
+  <div class="container item stack">
     <h1>Daten Eingabe</h1>
+
+        <a class="linkcard" href="/"><div class="card">← Zur Übersicht</div></a>
 
     <!-- Single item entry -->
     <div class="card stack">
@@ -15,21 +17,18 @@
         <div class="row">
           <div>
             <label>Box-ID *</label>
-            <input name="BoxID" placeholder="BOX-2025-0001" required autocapitalize="characters" />
+            <input id="BoxID" name="BoxID" placeholder="Eine neue Box wird angelegt" readonly />
           </div>
           <div>
-            <label>Item-UUID (leer = auto)</label>
-            <div class="row">
-              <input id="uuidField" name="ItemUUID" placeholder="leer lassen oder UUID einfügen" />
-              <button class="btn" type="button" id="btnGen">UUID</button>
-            </div>
+            <input id="uuidField" name="ItemUUID" hidden />
           </div>
         </div>
-
+        
         <div class="row">
           <div>
-            <label>Materialnummer</label>
-            <input name="MaterialNumber" placeholder="z.B. A-12345" />
+            <label>Materialnummer*</label>
+            <input id="MatNo" name="MaterialNumber" placeholder="0012345" required/>
+            <button class="btn" type="button" id="btnIdGen">neu?</button>
           </div>
           <div>
             <label>Menge</label>
@@ -38,12 +37,12 @@
         </div>
 
         <div>
-          <label>Beschreibung</label>
-          <input name="Description" placeholder="Kurzbeschreibung" />
+          <label>Geräte-Name*</label>
+          <input name="Description" placeholder="z.B. Hp ProBook 6550" required />
         </div>
 
         <div>
-          <label>Notiz (optional)</label>
+          <label>Notiz</label>
           <textarea name="ItemNotes" rows="2"></textarea>
         </div>
 
@@ -74,29 +73,42 @@
         Erwartete Spalten (mindestens): <span class="mono">BoxID, ItemUUID, MaterialNumber, Description, Qty, ItemNotes</span>
       </div>
     </div>
-
-    <a class="linkcard" href="/"><div class="card">← Zur Übersicht</div></a>
   </div>
 
 <script>
 (function(){
   const $ = (s)=>document.querySelector(s);
 
-  function generateUuid() {
-    try {
-      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-        const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
-      });
-    } catch { return ""; }
+  // Extract 'box' query param and set BoxID input
+  const params = new URLSearchParams(window.location.search);
+  const boxId = params.get('box');
+  if (boxId && $('#BoxID')) {
+    $('#BoxID').value = boxId;
+  }
+  // Show/hide "Eine neue Box wird angelegt" hint
+  // const newBoxHint = $('#newBoxHint');
+  // if (newBoxHint) {
+  //   if (boxId) {
+  //     newBoxHint.style.display = 'none';
+  //   } else {
+  //     newBoxHint.style.display = '';
+  //   }
+  // }
+
+  function getnewItemNumber() {
+    return '00356';// try {
+
   }
 
   // UUID helper
-  const btnGen = $('#btnGen');
-  if (btnGen) btnGen.addEventListener('click', () => {
-    const v = generateUuid();
-    if (v) { $('#uuidField').value = v; }
+  const btnIdGen = $('#btnIdGen');
+  if (btnIdGen) btnIdGen.addEventListener('click', () => {
+    const v = getnewItemNumber();
+    if (v) { $('#MatNo').value = v;
+      btnIdGen.setAttribute("disabled", true);
+     }
   });
+
 
   // Single item submit
   const oneForm = $('#oneForm');
@@ -109,6 +121,10 @@
     if (r.ok) {
       status.innerHTML = 'Gespeichert. <a href="/ui/item/'+encodeURIComponent(j.item.ItemUUID)+'">Item öffnen →</a>';
       oneForm.reset();
+      // Redirect after 1 second (optional: adjust delay or remove setTimeout for instant redirect)
+      setTimeout(() => {
+        window.location.href = '/ui/box/' + encodeURIComponent(j.item.BoxID);
+      }, 1000);
     } else {
       status.textContent = 'Fehler: ' + (j.error || 'Unbekannt');
     }

@@ -91,6 +91,38 @@ function sendJson(res, status, body) {
 }
 
 const server = http.createServer(async (req, res) => {
+    // Username check for UI requests
+    if (req.url.startsWith("/ui/")) {
+        // Inject username check script for HTML responses
+        res.oldWrite = res.write;
+        res.oldEnd = res.end;
+        let htmlBuffer = "";
+        res.write = function(chunk) {
+            htmlBuffer += chunk.toString();
+        };
+        res.end = function(chunk) {
+            if (chunk) htmlBuffer += chunk.toString();
+            // Only inject if it's HTML and has <body>
+            if (htmlBuffer.includes("<body")) {
+                htmlBuffer = htmlBuffer.replace(
+                    "<body",
+                    `<body><script>
+                    (function(){
+                        try {
+                            var u = localStorage.getItem('username');
+                            if (!u) {
+                                u = prompt('Bitte geben Sie Ihren Benutzernamen ein:');
+                                if (u) localStorage.setItem('username', u);
+                            }
+                        } catch(e){}
+                    })();
+                    </script>`
+                );
+            }
+            res.oldEnd(htmlBuffer);
+        };
+    }
+
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     // Static files from /public (styles, icons)
@@ -157,8 +189,7 @@ const server = http.createServer(async (req, res) => {
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${box.BoxID} · Place Box</title>
 <link rel="stylesheet" href="/styles.css" />
-<body class="mobile">
-  <div class="container stack">
+  <div class="container box stack">
     <h1>Box <span class="mono">${box.BoxID}</span></h1>
 <form class="card stack" method="post" action="/api/boxes/${encodeURIComponent(box.BoxID)}/move" onsubmit="this.querySelector('button[type=submit]').disabled=true">
       <div>
@@ -177,11 +208,11 @@ const server = http.createServer(async (req, res) => {
     </form>
 
     <div class="card">
-      <h2>Recent activity</h2>
+      <h2>vergangene Aktionen</h2>
       <div class="stack">
         ${events.map(e =>
             `<div>
-             <div class="muted">${e.CreatedAt}</div>
+             <div class="muted">${e.CreatedAt | date}</div>
              <div>${e.Event} ${e.Actor ? 'by ' + e.Actor : ''} ${e.Meta ? '— ' + e.Meta : ''}</div>
            </div>`).join('')}
       </div>
@@ -194,7 +225,7 @@ const server = http.createServer(async (req, res) => {
       </div>
     </a>
   </div>
-</body>`;
+`;
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         return res.end(html);
 
@@ -203,7 +234,7 @@ const server = http.createServer(async (req, res) => {
     /* --------------- UI action form endpoints (/ui/api) ------------ */
     // Edit (box/item)
     if (url.pathname.match(/^\/ui\/api\/(box|item)\/[^/]+\/edit$/) && req.method === "POST") {
-        const [, , type, rawId] = url.pathname.split("/");
+        const [ , , , type, rawId,] = url.pathname.split("/");
         const id = decodeURIComponent(rawId);
         let body = "";
         req.on("data", (c) => (body += c));
@@ -251,11 +282,24 @@ const server = http.createServer(async (req, res) => {
         let body = ""; req.on("data", c => body += c);
         req.on("end", () => {
             const p = new URLSearchParams(body);
-            const BoxID = (p.get("BoxID") || "").trim();
+            let BoxID = (p.get("BoxID") || "").trim();
+            if (!BoxID) {
+                try {
+                    BoxID = "B-xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+                        const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
+                    }); 
+                }
+                catch(ex) { return sendJson(res, 400, { error: "BoxID fehlt und konnte nicht generiert werden.", ex:ex }); }
+            }
             let ItemUUID = (p.get("ItemUUID") || "").trim();
             if (!BoxID) return sendJson(res, 400, { error: "BoxID ist erforderlich." });
             if (!ItemUUID) {
-                try { ItemUUID = require("crypto").randomUUID(); }
+                try {
+
+                    ItemUUID = "I-xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+                        const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
+                    }); 
+                }
                 catch { return sendJson(res, 400, { error: "ItemUUID fehlt und konnte nicht generiert werden." }); }
             }
 
@@ -369,7 +413,7 @@ const server = http.createServer(async (req, res) => {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${entity.type} ${entity.id}</title>
 <link rel="stylesheet" href="/styles.css" />
-<body class="mobile"><div class="container stack">${body}</div></body>`;
+<div class="container ${kind} stack">${body}</div>`;
 
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         return res.end(html);
@@ -510,31 +554,31 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { item, box, events: listEventsForItem.all(uuid) });
     }
 
-    // Update item note
-    if (url.pathname.match(/^\/api\/items\/[^/]+\/note$/) && req.method === "POST") {
-        const uuid = decodeURIComponent(url.pathname.split("/")[3]);
-        const item = getItem.get(uuid);
-        if (!item) return sendJson(res, 404, { error: "not found" });
+    // // Update item note
+    // if (url.pathname.match(/^\/api\/items\/[^/]+\/note$/) && req.method === "POST") {
+    //     const uuid = decodeURIComponent(url.pathname.split("/")[3]);
+    //     const item = getItem.get(uuid);
+    //     if (!item) return sendJson(res, 404, { error: "not found" });
 
-        let body = "";
-        req.on("data", (c) => (body += c));
-        req.on("end", () => {
-            const { note, actor } = JSON.parse(body || "{}");
-            db.prepare(`UPDATE items SET ItemNotes=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(
-                note || "",
-                uuid
-            );
-            logEvent.run({
-                Actor: actor || null,
-                EntityType: "Item",
-                EntityId: uuid,
-                Event: "Note",
-                Meta: JSON.stringify({ note })
-            });
-            sendJson(res, 200, { ok: true });
-        });
-        return;
-    }
+    //     let body = "";
+    //     req.on("data", (c) => (body += c));
+    //     req.on("end", () => {
+    //         const { note, actor } = JSON.parse(body || "{}");
+    //         db.prepare(`UPDATE items SET ItemNotes=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(
+    //             note || "",
+    //             uuid
+    //         );
+    //         logEvent.run({
+    //             Actor: actor || null,
+    //             EntityType: "Item",
+    //             EntityId: uuid,
+    //             Event: "Note",
+    //             Meta: JSON.stringify({ note })
+    //         });
+    //         sendJson(res, 200, { ok: true });
+    //     });
+    //     return;
+    // }
 
     // Move item between boxes
     if (url.pathname.match(/^\/api\/items\/[^/]+\/move$/) && req.method === "POST") {

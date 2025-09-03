@@ -35,7 +35,7 @@ npm i zod fastify-type-provider-zod
 * `routes.js` — maps all existing `/api/*` and `/ui/*` handlers into Fastify routes.
 * `server-fastify.js` — starts the Fastify app (replaces `server.js` when we flip).
 * `schemas.js` — Zod schemas for endpoint inputs (start with the critical ones).
-* (Tailwind path B) `tailwind.config.js`, `assets/tailwind.css` → compiled to `public/styles.css`.
+* (Tailwind path B) `tailwind.config.js`, `assets/tailwind.css` → compiled to `public/styles.scss`.
 
 ---
 
@@ -62,18 +62,18 @@ Mirror existing behavior:
 * `POST /api/print/box/:boxId` — print box (or preview).
 * `GET /prints/*` — serve PDF previews (static).
 
-> Keep `/public` served by `@fastify/static`; remove ad-hoc fs reads for `/styles.css` and `/prints/*`.
+> Keep `/public` served by `@fastify/static`; remove ad-hoc fs reads for `/styles.scss` and `/prints/*`.
 
 ---
 
 ## 4) Tailwind adoption plan (pick B now; C later if needed)
 
 **A. CDN (trial only):** Skip for production (no purge).
-**B. Standalone CLI (recommended first):** No bundler; compile to `public/styles.css`.
+**B. Standalone CLI (recommended first):** No bundler; compile to `public/styles.scss`.
 
 * `tailwind.config.js` → `content: ["./public/**/*.html", "./actions/**/*.js"]`
 * `assets/tailwind.css` with `@tailwind base; @tailwind components; @tailwind utilities;`
-* Compile: `./tailwindcss -i ./assets/tailwind.css -o ./public/styles.css --min`
+* Compile: `./tailwindcss -i ./assets/tailwind.css -o ./public/styles.scss --min`
   **C. Node package:** `npm i -D tailwindcss` and add an npm script; same inputs/outputs as B.
 
 Adopt gradually: replace bespoke classes with Tailwind utilities for forms, grids, buttons, spacing. Keep existing CSS until parity.

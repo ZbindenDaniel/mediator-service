@@ -5,15 +5,15 @@
 <title>Mediator • Warehouse</title>
 <link rel="stylesheet" href="/styles.css" />
 
-<div class="container">
+<div class="container overview">
   <h1>Overview</h1>
   <div class="grid landing-grid">
 
     <div class="card" id="import">
       <a class="linkcard" href="/ui/import">
         <div class="card">
-          <h2>Daten Eingabe</h2>
-          <p class="muted">Einzelnes Teil erfassen oder CSV-Datei hochladen.</p>
+          <h2>Erfassen</h2>
+          <p class="muted">Neue Box anlegen und Artikel erfassen</p>
         </div>
       </a>
     </div>
@@ -72,7 +72,7 @@
     <div class="card">
       <h2 id="activity">Recent activity</h2>
       <div id="eventsOut" class="list">
-        <button class="btn" id="btnActivity">Öffnen</button>
+        <!-- <button class="btn" id="btnActivity">Öffnen</button> -->
       </div>
     </div>
   </div>
@@ -116,7 +116,7 @@
         evEl.innerHTML = (d.recentEvents || []).length
           ? d.recentEvents.map(e => `
             <div class="card">
-              <div><span class="pill">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
+              <div><span class="pill ${e.EntityType}">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
               <div>${e.CreatedAt} — ${e.Event} ${e.Actor ? 'by ' + e.Actor : ''}</div>
             </div>
             <div class="spacer"></div>`).join('')
@@ -165,7 +165,7 @@
       out.innerHTML = (data.items || []).length
         ? data.items.map(it => `
           <div class="card">
-            <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill mono">${(it.ItemUUID || '').slice(-6).toUpperCase()}</span></div>
+            <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill  mono">${(it.ItemUUID || '').slice(-6).toUpperCase()}</span></div>
             <div class="muted">${it.Description || ''}</div>
             <div>Box: <a class="mono" href="/ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
           </div>`).join('')

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "prestart": "sass public/styles.scss public/styles.css",
     "start": "node server.js"
   },
   "dependencies": {

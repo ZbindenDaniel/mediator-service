@@ -10,14 +10,20 @@ module.exports = {
       const href = `${encodeURIComponent(entity.id)}`;
       return `
        <div class="card">
-        <a id="relocate"></a>
+        <h3>Box verschieben</h3>
         <form method="post" action="/api/box/${encodeURIComponent(entity.id)}/move">
           <label>Ort</label>
           <input name="toBoxId" placeholder="A-01-02" required />
-          <label>Your name</label>
-          <input name="actor" placeholder="Initials or name" />
-          <div style="margin-top:8px"><button type="submit">Move</button></div>
+          <label>Person</label>
+          <input name="actor" id="relocateActor" readonly />
+          <div style="margin-top:8px"><button type="submit">Verschieben</button></div>
         </form>
+        <script>
+      (function(){
+        var a = document.getElementById('relocateActor');
+        try { var u = localStorage.getItem('username'); if (u && a) a.value = u; } catch(e){}
+      })();
+    </script>
       </div>
       `;
     }
@@ -25,14 +31,14 @@ module.exports = {
     // Item relocate (keep inline form)
     return `
   <div class="card">
-    <h3>Relocate Item</h3>
+    <h3>Artikel verschieben</h3>
     <form method="post" action="/ui/api/item/${encodeURIComponent(entity.id)}/move"
           onsubmit="this.querySelector('button[type=submit]').disabled=true; localStorage.setItem('username', this.actor.value)">
-      <label>Destination BoxID</label>
+      <label>Ziel BoxID</label>
       <input name="toBoxId" required placeholder="BOX-YYYY-NNNN" />
-      <label>Your name</label>
-      <input name="actor" id="relocateActor" required />
-      <div style="margin-top:8px"><button type="submit">Move</button></div>
+      <label>Person</label>
+      <input name="actor" id="relocateActor" readonly />
+      <div style="margin-top:8px"><button type="submit">Verschieben</button></div>
     </form>
     <script>
       (function(){
