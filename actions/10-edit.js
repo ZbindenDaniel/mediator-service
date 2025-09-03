@@ -40,6 +40,9 @@ module.exports = {
           <h3>Edit items in this box</h3>
           <p class="muted">Open an item to change qty, description, condition or notes.</p>
           ${list}
+          <div>
+          <button>ADD</button>
+          </div>
         </div>
       `;
     }

@@ -99,6 +99,11 @@ div {
     padding: calc(var(--pad) + 2px);
 }
 
+.spacer{
+    height: 20px;
+    width: 100%;
+}
+
 /* Inputs & tap targets: min-height 44px (Apple HIG) */
 input,
 textarea,

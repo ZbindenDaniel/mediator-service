@@ -8,6 +8,16 @@
 <div class="container">
   <h1>Overview</h1>
   <div class="grid landing-grid">
+
+    <div class="card" id="import">
+      <a class="linkcard" href="/ui/import">
+        <div class="card">
+          <h2>Daten Eingabe</h2>
+          <p class="muted">Einzelnes Teil erfassen oder CSV-Datei hochladen.</p>
+        </div>
+      </a>
+    </div>
+
     <!-- <div class="card">
       <h2>Navigation & Overview</h2>
       <ul>
@@ -42,14 +52,7 @@
       <div class="muted">Health: <span id="health">checking…</span></div>
     </div>
 
-    <div class="card" id="import">
-      <a class="linkcard" href="/ui/import">
-        <div class="card">
-          <h2>Daten Eingabe</h2>
-          <p class="muted">Einzelnes Teil erfassen oder CSV-Datei hochladen.</p>
-        </div>
-      </a>
-    </div>
+
 
     <!-- <div class="card">
       <h2>Shortcuts</h2>
@@ -69,7 +72,7 @@
     <div class="card">
       <h2 id="activity">Recent activity</h2>
       <div id="eventsOut" class="list">
-        <div class="muted">Loading…</div>
+        <button class="btn" id="btnActivity">Öffnen</button>
       </div>
     </div>
   </div>
@@ -91,13 +94,13 @@
 
     // ----- Overview data (stats, boxes, events)
     async function overview() {
-      const statsEl = $('stats'), boxesEl = $('boxesOut'), evEl = $('eventsOut');
+      const statsEl = $('stats'), boxesEl = $('boxesOut');evEl = $('eventsOut');
       if (!statsEl || !boxesEl || !evEl) return;
       try {
         const r = await fetch('/api/overview');
         const d = await r.json();
         statsEl.innerHTML = `
-        <div>Total boxes$$$$$: <b>${d.counts.boxes}</b></div>
+        <div>Total boxes <b>${d.counts.boxes}</b></div>
         <div>Total items: <b>${d.counts.items}</b></div>
         <div>Items ohne WMS-Link: <b>${d.counts.itemsNoWms}</b></div>
       `;
@@ -107,14 +110,16 @@
         <div class="card">
               <div><b>${x.BoxID}</b></div>
               <div class="muted">Location: ${x.Location || '(unset)'} · Updated: ${x.UpdatedAt || ''}</div>
-            </div>`).join('')
-          : '<div class="muted">No boxes yet.</div></a>';
+            </div></a>
+            <div class="spacer"></div>`).join('')
+          : '<div class="muted">No boxes yet.</div>';
         evEl.innerHTML = (d.recentEvents || []).length
           ? d.recentEvents.map(e => `
             <div class="card">
               <div><span class="pill">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
               <div>${e.CreatedAt} — ${e.Event} ${e.Actor ? 'by ' + e.Actor : ''}</div>
-            </div>`).join('')
+            </div>
+            <div class="spacer"></div>`).join('')
           : '<div class="muted">No recent activity.</div>';
       } catch {
         statsEl.innerHTML = '<div class="muted">Failed to load overview</div>';
