@@ -28,7 +28,7 @@ function loadActions() {
         return normalizeAction({
           key: path.basename(f, ".js"),
           label: `Broken: ${f}`,
-          view: () => `<div class="card"><h3>${f}</h3><p class="muted">Failed to load: ${e.message}</p></div>`
+          view: () => `<div class="card"><h3>${f}</h3><p class="muted">Failed to load: </p></div>`
         }, f);
       }
     })

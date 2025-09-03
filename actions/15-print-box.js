@@ -3,7 +3,7 @@ module.exports = {
   key: "print-box",
   label: "Print label",
   order: 15,
-  appliesTo: (entity) => entity.type === "Box",
+  appliesTo: (entity) => entity.type === "Box", Here we need one for Items
   view: (entity) => {
     const id = encodeURIComponent(entity.id);
     const statusId = `printBoxMsg-${id}`;

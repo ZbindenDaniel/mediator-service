@@ -28,7 +28,7 @@ module.exports = {
             <a class="linkcard" href="/ui/item/${encodeURIComponent(it.ItemUUID)}#act-edit">
               <div class="card" style="margin:6px 0">
                 <div><b>${esc(it.MaterialNumber) || "(no material)"}</b>
-                    · <span class="pill ${e.EntityType} mono">${esc((it.ItemUUID || "").slice(-6).toUpperCase())}</span></div>
+                    · <span class="pill ${it.EntityType} mono">${esc((it.ItemUUID || "").slice(-6).toUpperCase())}</span></div>
                 <div class="muted">${esc(it.Description) || ""}</div>
                 <div class="muted">Qty: ${it.Qty ?? 0} · Cond: ${esc(it.Condition) || ""}</div>
               </div>

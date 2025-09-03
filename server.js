@@ -396,6 +396,7 @@ const server = http.createServer(async (req, res) => {
         const cards = available.map(a => {
             try { return `<a id="act-${a.key}"></a>${a.view(entity)}`; }
             catch (e) {
+                console.error(e)
                 return `<div class="card"><h3>${a.label}</h3><p class="muted">Render error: ${e.message}</p></div>`;
             }
         }).join("");

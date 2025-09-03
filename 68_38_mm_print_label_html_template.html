@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>68×38 mm Print Label</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* --- Physical size and print controls --- */
+    @page { size: 68mm 38mm; margin: 0; }
+    html, body { height: 100%; }
+    body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    /* --- Label canvas --- */
+    .label {
+      width: 68mm;              /* exact label width */
+      height: 38mm;             /* exact label height */
+      box-sizing: border-box;
+      padding: 2mm;             /* safe printable inset */
+      display: flex;
+      justify-content: space-between;
+      gap: 2mm;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      border: 2px solid black;
+    }
+
+    .left {
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-rows: auto 1fr auto auto;
+      row-gap: 0.8mm;
+      min-width: 0; /* allow text to wrap */
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 2mm;
+      min-height: 9mm;
+    }
+    .brand img#logo { height: 8mm; max-width: 32mm; object-fit: contain; }
+    .brand .company { font-weight: 700; font-size: 3.2mm; line-height: 1.1; letter-spacing: 0.1mm; }
+
+    .material {
+      font-weight: 800;
+      font-size: 6mm;
+      line-height: 1;
+      letter-spacing: 0.3mm;
+      white-space: nowrap;
+    }
+
+    .location {
+      font-family: "Courier New", Courier, monospace; /* keeps A-00-00 aligned */
+      font-size: 5mm;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .date { font-size: 3mm; opacity: 0.9; }
+
+    .right {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32mm; /* column reserved for QR */
+    }
+
+    .qrcode {
+      width: 30mm; height: 30mm; /* square QR area */
+      image-rendering: pixelated; image-rendering: crisp-edges;
+      border: 0;
+    }
+
+    /* Screen-only helpers */
+    .controls { margin: 10px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .controls button { padding: 6px 10px; font-size: 14px; }
+    @media print {
+      .controls { display: none; }
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Screen-only helper (hidden on print) -->
+  <div class="controls">
+    <button onclick="window.print()">Drucken</button>
+  </div>
+
+  <!-- Label content -->
+  <div class="label" role="figure" aria-label="68 by 38 millimeter stock label">
+    <div class="left">
+      <div class="brand">
+        <img id="logo" alt="Company Logo" />
+        <div class="company" id="company">Example Co.</div>
+      </div>
+
+      <div class="material" id="material">001254789</div>
+      <div class="location" id="location">A-00-00</div>
+      <div class="date">Gedruckt am: <span id="printDate">—</span></div>
+    </div>
+
+    <div class="right">
+      <!-- Default uses a hosted QR image for simplicity; swap to an offline generator if needed -->
+      <img id="qrcodeImg" class="qrcode" alt="QR code" />
+    </div>
+  </div>
+
+  <script>
+    // --- Helpers ---
+    const mmToPx = (mm) => Math.round((mm * 96) / 25.4); // CSS px at 96 DPI
+    const params = new URLSearchParams(location.search);
+    const get = (k, fallback = "") => (params.get(k) ?? fallback);
+
+    // --- Inputs (can be passed via URL, e.g., ?material=001254789&location=A-12-34&company=ACME%20AG&logo=logo.png&qr=custom) ---
+    const data = {
+      material: get("material", "001254789"),
+      location: get("location", "A-00-00"),
+      company:  get("company", "Example Co."),
+      logoSrc:  get("logo", "data:image/svg+xml;utf8,"
+        + encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='240' height='80'>`
+          + `<rect width='100%' height='100%' fill='#eeeeee'/>`
+          + `<text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'`
+          + ` font-family='Arial, Helvetica, sans-serif' font-size='28' fill='#555'>YOUR LOGO</text>`
+          + `</svg>`)
+      ),
+      // By default encode Material|Location; override with ?qr=...
+      qrText:   get("qr")
+    };
+
+    // --- Populate UI ---
+    document.getElementById("material").textContent = data.material;
+    document.getElementById("location").textContent = data.location;
+    document.getElementById("company").textContent  = data.company;
+    document.getElementById("logo").src             = data.logoSrc;
+
+    // Print date (YYYY-MM-DD); can be overridden via ?date=YYYY-MM-DD
+    const dateOverride = get("date");
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm   = String(today.getMonth() + 1).padStart(2, "0");
+    const dd   = String(today.getDate()).padStart(2, "0");
+    document.getElementById("printDate").textContent = dateOverride || `${dd}-${mm}-${yyyy}`;
+
+    // --- QR code (hosted image approach; requires internet) ---
+    (function setQr() {
+      const qrPayload = data.qrText || `${data.material}|${data.location}`;
+      const sizePx = mmToPx(30); // match CSS 30mm square
+      const url = `https://api.qrserver.com/v1/create-qr-code/?size=${sizePx}x${sizePx}&margin=0&data=${encodeURIComponent(qrPayload)}`;
+      const img = document.getElementById("qrcodeImg");
+      img.width = sizePx; img.height = sizePx; // helps some print drivers
+      img.src = url;
+      img.onerror = () => { img.alt = "QR failed to load"; };
+    })();
+  </script>
+
+  <!--
+    ========================= Offline QR (optional) =========================
+    If your printers are offline, replace the <img id="qrcodeImg"> above with a
+    <div id="qrcodeDiv" class="qrcode"></div> and include an in-page QR library
+    such as qrcode.min.js (e.g., davidshimjs/qrcodejs). Then do:
+
+      new QRCode(document.getElementById('qrcodeDiv'), {
+        text: data.qrText || `${data.material}|${data.location}`,
+        width: mmToPx(30), height: mmToPx(30),
+        margin: 0, correctLevel: QRCode.CorrectLevel.M
+      });
+
+    ========================================================================
+  -->
+</body>
+</html>
