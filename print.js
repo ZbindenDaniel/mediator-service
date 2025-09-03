@@ -1,5 +1,6 @@
 // print.js
 const net = require("net");
+const { exec } = require("child_process");
 const { PRINTER_HOST, PRINTER_PORT, BASE_QR_URL, BASE_UI_URL } = require("./config");
 
 // unchanged
@@ -28,17 +29,17 @@ function zplForBox({ boxId, location }) {
 ^XZ`;
 }
 
-// return {sent:boolean, reason?:string}
 function sendZpl(zpl) {
-  return new Promise((resolve, reject) => {
-    if (!PRINTER_HOST || !PRINTER_PORT) {
-      return resolve({ sent: false, reason: "not_configured" });
-    }
-    const socket = net.createConnection({ host: PRINTER_HOST, port: PRINTER_PORT }, () => {
-      socket.write(zpl, "utf8", () => socket.end());
+  return new Promise((resolve) => {
+    const printProcess = exec(`lp -d GeBE_USB_Printer_A8`, (error, stdout, stderr) => {
+      if (error) {
+        return resolve({ sent: false, reason: stderr || error.message });
+      }
+      resolve({ sent: true });
     });
-    socket.on("error", (err) => resolve({ sent: false, reason: err.message || "socket_error" }));
-    socket.on("close", () => resolve({ sent: true }));
+
+    printProcess.stdin.write(zpl);
+    printProcess.stdin.end();
   });
 }
 

@@ -11,7 +11,6 @@ module.exports = {
       return `
        <div class="card">
         <a id="relocate"></a>
-        <h3><a href="#relocate">Relocate Box</a></h3>
         <form method="post" action="/api/box/${encodeURIComponent(entity.id)}/move">
           <label>Ort</label>
           <input name="toBoxId" placeholder="A-01-02" required />

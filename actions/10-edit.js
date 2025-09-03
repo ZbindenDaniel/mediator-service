@@ -24,13 +24,14 @@ module.exports = {
 
       const list = items.length
         ? items.map(it => `
+                <a class="linkcard" href="/ui/item/${encodeURIComponent(it.ItemUUID)}#act-edit">
             <div class="card" style="margin:6px 0">
               <div><b>${esc(it.MaterialNumber) || "(no material)"}</b>
                   · <span class="pill mono">${esc((it.ItemUUID || "").slice(-6).toUpperCase())}</span></div>
               <div class="muted">${esc(it.Description) || ""}</div>
               <div class="muted">Qty: ${it.Qty ?? 0} · Cond: ${esc(it.Condition) || ""}</div>
-              <div><a class="mono" href="/ui/item/${encodeURIComponent(it.ItemUUID)}#act-edit">Open item →</a></div>
             </div>
+            </a>
           `).join("")
         : `<div class="muted">This box has no items (yet).</div>`;
 
@@ -56,7 +57,7 @@ module.exports = {
           <label>Condition</label>
           <input name="Condition" value="${esc(d.Condition) || ""}" />
           <label>Qty</label>
-          <input name="Qty" value="${Number.isFinite(d.Qty) ? d.Qty : (parseInt(d.Qty || "0",10)||0)}" />
+          <input name="Qty" value="${Number.isFinite(d.Qty) ? d.Qty : (parseInt(d.Qty || "0", 10) || 0)}" />
           <label>ItemNotes</label>
           <textarea name="ItemNotes" rows="3">${esc(d.ItemNotes) || ""}</textarea>
           <div style="margin-top:8px"><button type="submit">Save</button></div>
