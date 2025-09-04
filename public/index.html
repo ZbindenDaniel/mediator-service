@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Mediator • Warehouse</title>
+<title>Mediator • Lager</title>
 <link rel="stylesheet" href="/styles.css" />
 
 <div class="container overview">
-  <h1>Overview</h1>
+  <h1>Übersicht</h1>
   <div class="grid landing-grid">
 
     <div class="card" id="import">
@@ -18,26 +18,8 @@
       </a>
     </div>
 
-    <!-- <div class="card">
-      <h2>Navigation & Overview</h2>
-      <ul>
-        <li><a href="/">🏠 Landing</a> — this page</li>
-        <li><a href="/api/overview">📊 API: Overview</a> — counts, recent boxes & activity (JSON)</li>
-        <li><a href="/api/boxes">📦 API: List Boxes</a></li>
-        <li><a href="/api/search?material=A-1001">🔍 API: Search Items (by material)</a></li>
-        <li><a href="/api/items/ITEM-UUID-HERE">📄 API: Item detail (replace UUID)</a></li>
-        <li><a href="/api/export/wms">⬇️ API: Export snapshot for WMS</a></li>
-        <li><a href="ui/box/BOX-ID-HERE">📍 Box placement page (replace BoxID)</a></li>
-        <li><a href="/ui/box/BOX-ID-HERE">🧭 UI Action View for Box (replace BoxID)</a></li>
-        <li><a href="/ui/item/ITEM-UUID-HERE">🧭 UI Action View for Item (replace UUID)</a></li>
-        <li><a href="/qr/ITEM-UUID-HERE">🔗 QR redirect (to WMS if link exists)</a></li>
-      </ul>
-      <p class="muted">Replace <code>BOX-ID-HERE</code> or <code>ITEM-UUID-HERE</code> with real values from your
-        database or CSV imports.</p>
-    </div> -->
-
     <div class="card" id="find">
-      <h2>Find items</h2>
+      <h2>Artikel finden</h2>
       <div class="row">
         <input id="q" placeholder="Material, BOX-…, oder UUID" autofocus />
         <button class="btn" id="btnGo">Suchen</button>
@@ -46,31 +28,21 @@
     </div>
 
     <div class="card">
-      <h2>Stats</h2>
+      <h2>Statistiken</h2>
       <div id="stats" class="list"></div>
       <div class="muted">Drucker: <span id="printerDot"></span></div>
-      <div class="muted">Health: <span id="health">checking…</span></div>
+      <div class="muted">Status: <span id="health">prüfe…</span></div>
     </div>
 
-
-
-    <!-- <div class="card">
-      <h2>Shortcuts</h2>
-      <div class="inline"><span class="kbd">/</span> focus search</div>
-      <div class="inline"><span class="kbd">Enter</span> run search / open</div>
-      <div class="inline"><span class="kbd">b</span> open Box view field</div>
-      <div class="inline"><span class="kbd">i</span> open Item view field</div>
-    </div> -->
-
     <div class="card">
-      <h2 id="boxes">Recent boxes</h2>
+      <h2 id="boxes">Letzte Boxen</h2>
       <div id="boxesOut" class="list">
-        <div class="muted">Loading…</div>
+        <div class="muted">Lädt…</div>
       </div>
     </div>
 
     <div class="card">
-      <h2 id="activity">Recent activity</h2>
+      <h2 id="activity">Letzte Aktivitäten</h2>
       <div id="eventsOut" class="list">
         <!-- <button class="btn" id="btnActivity">Öffnen</button> -->
       </div>
@@ -100,19 +72,19 @@
         const r = await fetch('/api/overview');
         const d = await r.json();
         statsEl.innerHTML = `
-        <div>Total boxes <b>${d.counts.boxes}</b></div>
-        <div>Total items: <b>${d.counts.items}</b></div>
-        <div>Items ohne WMS-Link: <b>${d.counts.itemsNoWms}</b></div>
+        <div>Boxen gesamt <b>${d.counts.boxes}</b></div>
+        <div>Artikel gesamt: <b>${d.counts.items}</b></div>
+        <div>Artikel ohne WMS-Link: <b>${d.counts.itemsNoWms}</b></div>
       `;
         boxesEl.innerHTML = (d.recentBoxes || []).length
           ? d.recentBoxes.map(x => `
               <a class="linkcard" href="/ui/box/${encodeURIComponent(x.BoxID)}">    
         <div class="card">
               <div><b>${x.BoxID}</b></div>
-              <div class="muted">Location: ${x.Location || '(unset)'} · Updated: ${x.UpdatedAt || ''}</div>
+              <div class="muted">Standort: ${x.Location || '(nicht gesetzt)'} · Aktualisiert: ${x.UpdatedAt || ''}</div>
             </div></a>
             <div class="spacer"></div>`).join('')
-          : '<div class="muted">No boxes yet.</div>';
+          : '<div class="muted">Noch keine Boxen.</div>';
         evEl.innerHTML = (d.recentEvents || []).length
           ? d.recentEvents.map(e => `
             <div class="card">
@@ -121,18 +93,18 @@
                 <br>
                 <b class="mono">${e.EntityId}</b>
               </div>
-              <div>${formatDate(e.CreatedAt)} — ${e.Event} ${e.Actor ? 'by ' + e.Actor : ''}</div>
+              <div>${formatDate(e.CreatedAt)} — ${e.Event} ${e.Actor ? 'von ' + e.Actor : ''}</div>
             </div>
             <div class="spacer"></div>`).join('')
-          : '<div class="muted">No recent activity.</div>';
+          : '<div class="muted">Keine aktuellen Aktivitäten.</div>';
       } catch {
-        statsEl.innerHTML = '<div class="muted">Failed to load overview</div>';
+        statsEl.innerHTML = '<div class="muted">Übersicht konnte nicht geladen werden</div>';
         boxesEl.innerHTML = '';
         evEl.innerHTML = '';
       }
     }
 
-    // ----- Printer connectivity dot
+    // ----- Drucker-Status
     async function printer() {
       const dot = $('printerDot');
       if (!dot) return;
@@ -140,10 +112,10 @@
         const r = await fetch('/api/printer/status');
         const j = await r.json();
         dot.style.background = (r.ok && j.ok) ? '#1cbc2c' : '#d22';
-        dot.title = j.ok ? 'connected' : (j.reason || 'not connected');
+        dot.title = j.ok ? 'verbunden' : (j.reason || 'nicht verbunden');
       } catch {
         dot.style.background = '#d22';
-        dot.title = 'unreachable';
+        dot.title = 'nicht erreichbar';
       }
     }
 
@@ -170,14 +142,14 @@
         ? data.items.map(it => `
           <div class="card">
             <div>
-              <b>${it.MaterialNumber || '(no material)'}</b>
+              <b>${it.MaterialNumber || '(kein Artikel)'}</b>
               <br>
               <span class="pill  mono">${(it.ItemUUID || '').slice(-6).toUpperCase()}</span>
             </div>
             <div class="muted">${it.Description || ''}</div>
             <div>Box: <a class="mono" href="/ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
           </div>`).join('')
-        : '<div class="muted">No items found.</div>';
+        : '<div class="muted">Keine Artikel gefunden.</div>';
     }
 
     // ----- Bindings (guarded)
