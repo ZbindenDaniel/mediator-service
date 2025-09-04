@@ -79,8 +79,8 @@
 </div>
 
 <!-- ----------------------- SCRIPT --------------------------- -->
-
 <script>
+
   (function () {
     function $(id) { return document.getElementById(id); }
 
@@ -94,7 +94,7 @@
 
     // ----- Overview data (stats, boxes, events)
     async function overview() {
-      const statsEl = $('stats'), boxesEl = $('boxesOut');evEl = $('eventsOut');
+      const statsEl = $('stats'), boxesEl = $('boxesOut'); evEl = $('eventsOut');
       if (!statsEl || !boxesEl || !evEl) return;
       try {
         const r = await fetch('/api/overview');
@@ -116,8 +116,12 @@
         evEl.innerHTML = (d.recentEvents || []).length
           ? d.recentEvents.map(e => `
             <div class="card">
-              <div><span class="pill ${e.EntityType}">${e.EntityType}</span> <b class="mono">${e.EntityId}</b></div>
-              <div>${e.CreatedAt} — ${e.Event} ${e.Actor ? 'by ' + e.Actor : ''}</div>
+              <div>
+                <span class="pill ${e.EntityType}">${e.EntityType}</span>
+                <br>
+                <b class="mono">${e.EntityId}</b>
+              </div>
+              <div>${formatDate(e.CreatedAt)} — ${e.Event} ${e.Actor ? 'by ' + e.Actor : ''}</div>
             </div>
             <div class="spacer"></div>`).join('')
           : '<div class="muted">No recent activity.</div>';
@@ -165,7 +169,11 @@
       out.innerHTML = (data.items || []).length
         ? data.items.map(it => `
           <div class="card">
-            <div><b>${it.MaterialNumber || '(no material)'}</b> · <span class="pill  mono">${(it.ItemUUID || '').slice(-6).toUpperCase()}</span></div>
+            <div>
+              <b>${it.MaterialNumber || '(no material)'}</b>
+              <br>
+              <span class="pill  mono">${(it.ItemUUID || '').slice(-6).toUpperCase()}</span>
+            </div>
             <div class="muted">${it.Description || ''}</div>
             <div>Box: <a class="mono" href="/ui/box/${encodeURIComponent(it.BoxID)}">${it.BoxID}</a></div>
           </div>`).join('')
@@ -190,6 +198,11 @@
     overview();
     printer();
   })();
+
+  function formatDate(s) {
+    const d = new Date(s);
+    return d.toLocaleString(); // or customize as needed
+  }
 </script>
 
 

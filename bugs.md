@@ -8,3 +8,6 @@ bugs & UX
 - edit item restrict
 - relocate with dropdown or searchable
 - relocate remove Name
+
+- Delete item
+- validate item

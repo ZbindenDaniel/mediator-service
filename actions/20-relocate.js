@@ -14,8 +14,7 @@ module.exports = {
         <form method="post" action="/api/box/${encodeURIComponent(entity.id)}/move">
           <label>Ort</label>
           <input name="toBoxId" placeholder="A-01-02" required />
-          <label>Person</label>
-          <input name="actor" id="relocateActor" readonly />
+          <input name="actor" id="relocateActor" readonly hidden />
           <div style="margin-top:8px"><button type="submit">Verschieben</button></div>
         </form>
         <script>
@@ -36,8 +35,7 @@ module.exports = {
           onsubmit="this.querySelector('button[type=submit]').disabled=true; localStorage.setItem('username', this.actor.value)">
       <label>Ziel BoxID</label>
       <input name="toBoxId" required placeholder="BOX-YYYY-NNNN" />
-      <label>Person</label>
-      <input name="actor" id="relocateActor" readonly />
+      <input name="actor" id="relocateActor" readonly hidden/>
       <div style="margin-top:8px"><button type="submit">Verschieben</button></div>
     </form>
     <script>

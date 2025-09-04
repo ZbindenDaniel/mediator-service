@@ -27,8 +27,10 @@ module.exports = {
         ? items.map(it => `
             <a class="linkcard" href="/ui/item/${encodeURIComponent(it.ItemUUID)}#act-edit">
               <div class="card" style="margin:6px 0">
-                <div><b>${esc(it.MaterialNumber) || "(no material)"}</b>
-                    · <span class="pill ${it.EntityType} mono">${esc((it.ItemUUID || "").slice(-6).toUpperCase())}</span></div>
+                <div>
+                  <b>${esc(it.MaterialNumber) || "(no material)"}</b>
+                  <span class="pill ${it.EntityType} mono">${esc((it.ItemUUID || "").slice(-6).toUpperCase())}</span>
+                </div>
                 <div class="muted">${esc(it.Description) || ""}</div>
                 <div class="muted">Qty: ${it.Qty ?? 0} · Cond: ${esc(it.Condition) || ""}</div>
               </div>
@@ -56,15 +58,28 @@ module.exports = {
       <div class="card">
         <h3>Edit Item</h3>
         <form method="post" action="/ui/api/item/${encodeURIComponent(entity.id)}/edit">
+          <div class="row">
           <label>Artikelnummer</label>
           <input name="MaterialNumber" value="${esc(d.MaterialNumber) || ""}" />
+          </div>
+          <div class="row">
           <label>Geräte-Name</label>
           <input name="Description" value="${esc(d.Description) || ""}" required />
+          </div>
+          <div class="row">
           <label>Menge</label>
           <input name="Qty" value="${Number.isFinite(d.Qty) ? d.Qty : (parseInt(d.Qty || "0", 10) || 0)}" />
+          </div>
+          <div class="row">
           <label>Notiz</label>
           <textarea name="ItemNotes" rows="3">${esc(d.ItemNotes) || ""}</textarea>
-          <div style="margin-top:8px"><button type="submit">Save</button></div>
+          </div>
+          <div class="row">
+          <div style="margin-top:8px">
+          <button type="submit">Speichern</button>
+          <button type="">Löschen</button>
+          </div>
+          </div>
         </form>
       </div>
     `;

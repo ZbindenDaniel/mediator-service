@@ -4,7 +4,7 @@
   /* desktop container width */
   --radius: 14px;
   /* card/button radius */
-  --pad: 14px;
+  --pad: 10px;
   /* base pad */
   --fg: #0a0a0a;
   /* text */
@@ -114,6 +114,11 @@ div {
   display: flex;
 }
 
+.view-heading {
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+}
+
 #btnAddItem {
   margin: auto;
   margin-top: 30px;
@@ -123,6 +128,10 @@ div {
 }
 
 #BoxID {
+  width: 100%;
+}
+
+.combined-input {
   width: 100%;
 }
 
@@ -169,6 +178,7 @@ button:focus {
 /* Little helpers */
 .mono {
   font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 13px;
 }
 
 .muted {

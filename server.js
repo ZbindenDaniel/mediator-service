@@ -26,6 +26,7 @@ const {
 } = require("./db");
 const { zplForItem, zplForBox, sendZpl, testPrinterConnection } = require("./print");
 const { pdfForBox, pdfForItem } = require("./labelpdf");
+const { EVENT_LABELS, eventLabel } = require("./eventLabels");
 
 const actions = loadActions();
 
@@ -33,6 +34,8 @@ fs.mkdirSync(INBOX_DIR, { recursive: true });
 fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
 const PREVIEW_DIR = path.join(__dirname, "public", "prints");
 fs.mkdirSync(PREVIEW_DIR, { recursive: true });
+
+
 
 /* ----------------------- CSV watcher / ingestion ----------------------- */
 
@@ -105,7 +108,7 @@ const server = http.createServer(async (req, res) => {
             // Only inject if it's HTML and has <body>
             if (htmlBuffer.includes("<body")) {
                 htmlBuffer = htmlBuffer.replace(
-                    "<body",
+                    "<body>",
                     `<body><script>
                     (function(){
                         try {
@@ -213,7 +216,7 @@ const server = http.createServer(async (req, res) => {
         ${events.map(e =>
             `<div>
              <div class="muted">${e.CreatedAt | date}</div>
-             <div>${e.Event} ${e.Actor ? 'by ' + e.Actor : ''} ${e.Meta ? '— ' + e.Meta : ''}</div>
+             <div>${eventLabel(e.Event)}${e.Actor ? ' von ' + e.Actor : ''}${e.Meta ? ' — ' + e.Meta : ''}</div>
            </div>`).join('')}
       </div>
     </div>
@@ -402,8 +405,13 @@ const server = http.createServer(async (req, res) => {
         }).join("");
 
         const header = entity.type === "Item"
-            ? `<h1>Item: <span class="mono">${entity.id}</span> <span class="muted">· Box:</span> <a class="mono" href="/ui/box/${encodeURIComponent(entity.data.BoxID)}">${entity.data.BoxID}</a></h1>`
-            : `<h1>Box: <span class="mono">${entity.id}</span></h1>`;
+            ? `<div class="view-heading">
+            <div>Item:</div>
+            <span class="mono">${entity.id}</span>
+            <div class="">in Box:</div>
+            <a class="mono" href="/ui/box/${encodeURIComponent(entity.data.BoxID)}">${entity.data.BoxID}</a></div>`
+            : `
+            <div class="view-heading">Box: <span class="mono">${entity.id}</span></div>`;
 
         const body = `
   ${header}
