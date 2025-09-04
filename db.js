@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS boxes (
   Location TEXT,
   CreatedAt TEXT,
   Notes TEXT,
-  BoxNotes TEXT,
   PlacedBy TEXT,
   PlacedAt TEXT,
   UpdatedAt TEXT NOT NULL
@@ -23,20 +22,36 @@ CREATE TABLE IF NOT EXISTS boxes (
 CREATE TABLE IF NOT EXISTS items (
   ItemUUID TEXT PRIMARY KEY,
   BoxID TEXT NOT NULL,
-  MaterialNumber TEXT,
-  Description TEXT,
-  Condition TEXT,
-  Qty INTEGER,
-  WmsLink TEXT,
-  AttributesJson TEXT,
-  AddedAt TEXT,
   Location TEXT,
-  ItemNotes TEXT,
   UpdatedAt TEXT NOT NULL,
+
+  Datum_erfasst TEXT,
+  Artikel_Nummer TEXT,
+  Grafikname TEXT,
+  Artikelbeschreibung TEXT,
+  Auf_Lager INTEGER,
+  Verkaufspreis REAL,
+  Kurzbeschreibung TEXT,
+  Langtext TEXT,
+  Hersteller TEXT,
+  Länge_mm INTEGER,
+  Breite_mm INTEGER,
+  Höhe_mm INTEGER,
+  Gewicht_kg REAL,
+  Hauptkategorien_A TEXT,
+  Unterkategorien_A TEXT,
+  Hauptkategorien_B TEXT,
+  Unterkategorien_B TEXT,
+  Veröffentlicht_Status TEXT,
+  Shopartikel INTEGER,
+  Artikeltyp TEXT,
+  Einheit TEXT,
+  WmsLink TEXT,
+
   FOREIGN KEY(BoxID) REFERENCES boxes(BoxID)
 );
 
-CREATE INDEX IF NOT EXISTS idx_items_mat ON items(MaterialNumber);
+CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
 CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
 
 CREATE TABLE IF NOT EXISTS label_queue (
@@ -61,36 +76,61 @@ CREATE TABLE IF NOT EXISTS events (
 module.exports = {
   db,
   upsertBox: db.prepare(`
-    INSERT INTO boxes (BoxID, Location, CreatedAt, Notes, BoxNotes, PlacedBy, PlacedAt, UpdatedAt)
-    VALUES (@BoxID,@Location,@CreatedAt,@Notes,@BoxNotes,@PlacedBy,@PlacedAt,@UpdatedAt)
+    INSERT INTO boxes (BoxID, Location, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
+    VALUES (@BoxID, @Location, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
     ON CONFLICT(BoxID) DO UPDATE SET
       Location=excluded.Location,
       CreatedAt=COALESCE(excluded.CreatedAt, boxes.CreatedAt),
       Notes=COALESCE(excluded.Notes, boxes.Notes),
-      BoxNotes=COALESCE(excluded.BoxNotes, boxes.BoxNotes),
       PlacedBy=COALESCE(excluded.PlacedBy, boxes.PlacedBy),
       PlacedAt=COALESCE(excluded.PlacedAt, boxes.PlacedAt),
       UpdatedAt=excluded.UpdatedAt
   `),
   upsertItem: db.prepare(`
-    INSERT INTO items (ItemUUID, BoxID, MaterialNumber, Description, Condition, Qty, WmsLink, AttributesJson, AddedAt, Location, ItemNotes, UpdatedAt)
-    VALUES (@ItemUUID,@BoxID,@MaterialNumber,@Description,@Condition,@Qty,@WmsLink,@AttributesJson,@AddedAt,@Location,@ItemNotes,@UpdatedAt)
+    INSERT INTO items (
+      ItemUUID, BoxID, Location, UpdatedAt,
+      Datum_erfasst, Artikel_Nummer, Grafikname, Artikelbeschreibung, Auf_Lager, Verkaufspreis,
+      Kurzbeschreibung, Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
+      Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
+      Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, WmsLink
+    )
+    VALUES (
+      @ItemUUID, @BoxID, @Location, @UpdatedAt,
+      @Datum_erfasst, @Artikel_Nummer, @Grafikname, @Artikelbeschreibung, @Auf_Lager, @Verkaufspreis,
+      @Kurzbeschreibung, @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
+      @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
+      @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @WmsLink
+    )
     ON CONFLICT(ItemUUID) DO UPDATE SET
       BoxID=excluded.BoxID,
-      MaterialNumber=excluded.MaterialNumber,
-      Description=excluded.Description,
-      Condition=excluded.Condition,
-      Qty=excluded.Qty,
-      WmsLink=excluded.WmsLink,
-      AttributesJson=excluded.AttributesJson,
-      AddedAt=COALESCE(excluded.AddedAt, items.AddedAt),
       Location=excluded.Location,
-      ItemNotes=COALESCE(excluded.ItemNotes, items.ItemNotes),
-      UpdatedAt=excluded.UpdatedAt
+      UpdatedAt=excluded.UpdatedAt,
+      Datum_erfasst=excluded.Datum_erfasst,
+      Artikel_Nummer=excluded.Artikel_Nummer,
+      Grafikname=excluded.Grafikname,
+      Artikelbeschreibung=excluded.Artikelbeschreibung,
+      Auf_Lager=excluded.Auf_Lager,
+      Verkaufspreis=excluded.Verkaufspreis,
+      Kurzbeschreibung=excluded.Kurzbeschreibung,
+      Langtext=excluded.Langtext,
+      Hersteller=excluded.Hersteller,
+      Länge_mm=excluded.Länge_mm,
+      Breite_mm=excluded.Breite_mm,
+      Höhe_mm=excluded.Höhe_mm,
+      Gewicht_kg=excluded.Gewicht_kg,
+      Hauptkategorien_A=excluded.Hauptkategorien_A,
+      Unterkategorien_A=excluded.Unterkategorien_A,
+      Hauptkategorien_B=excluded.Hauptkategorien_B,
+      Unterkategorien_B=excluded.Unterkategorien_B,
+      Veröffentlicht_Status=excluded.Veröffentlicht_Status,
+      Shopartikel=excluded.Shopartikel,
+      Artikeltyp=excluded.Artikeltyp,
+      Einheit=excluded.Einheit,
+      WmsLink=excluded.WmsLink
   `),
   queueLabel: db.prepare(`INSERT INTO label_queue (ItemUUID, CreatedAt) VALUES (?, datetime('now'))`),
   getItem: db.prepare(`SELECT * FROM items WHERE ItemUUID = ?`),
-  findByMaterial: db.prepare(`SELECT * FROM items WHERE MaterialNumber = ? ORDER BY UpdatedAt DESC`),
+  findByMaterial: db.prepare(`SELECT * FROM items WHERE Artikel_Nummer = ? ORDER BY UpdatedAt DESC`),
   itemsByBox: db.prepare(`SELECT * FROM items WHERE BoxID = ? ORDER BY ItemUUID`),
   getBox: db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`),
   listBoxes: db.prepare(`SELECT * FROM boxes ORDER BY BoxID`),
@@ -107,6 +147,12 @@ module.exports = {
   countItems: db.prepare(`SELECT COUNT(*) as c FROM items`),
   countItemsNoWms: db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`),
 
-  listRecentBoxes: db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 8`)
+  listRecentBoxes: db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 8`),
+  getMaxArtikelNummer: db.prepare(`
+    SELECT Artikel_Nummer FROM items
+    WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''
+    ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
+    LIMIT 1
+  `),
 
 };

@@ -9,6 +9,8 @@ const { ingestCsvFile } = require("./importer");
 const {
     db,
     getItem,
+    upsertBox,
+    upsertItem,
     findByMaterial,
     itemsByBox,
     getBox,
@@ -74,8 +76,9 @@ async function runPrintWorker() {
             updateLabelJobStatus.run("Error", "item not found", job.Id);
             return;
         }
+        // Update to use Artikel_Nummer instead of MaterialNumber
         const zpl = zplForItem({
-            materialNumber: item.MaterialNumber,
+            artikelNummer: item.Artikel_Nummer,
             itemUUID: item.ItemUUID
         });
         await sendZpl(zpl);
@@ -100,10 +103,10 @@ const server = http.createServer(async (req, res) => {
         res.oldWrite = res.write;
         res.oldEnd = res.end;
         let htmlBuffer = "";
-        res.write = function(chunk) {
+        res.write = function (chunk) {
             htmlBuffer += chunk.toString();
         };
-        res.end = function(chunk) {
+        res.end = function (chunk) {
             if (chunk) htmlBuffer += chunk.toString();
             // Only inject if it's HTML and has <body>
             if (htmlBuffer.includes("<body")) {
@@ -206,7 +209,7 @@ const server = http.createServer(async (req, res) => {
       </div>
       <div>
         <label>Notes</label>
-        <textarea name="notes" rows="3">${box.BoxNotes || ''}</textarea>
+        <textarea name="notes" rows="3">${box.Notes || ''}</textarea>
       </div>
     </form>
 
@@ -237,7 +240,7 @@ const server = http.createServer(async (req, res) => {
     /* --------------- UI action form endpoints (/ui/api) ------------ */
     // Edit (box/item)
     if (url.pathname.match(/^\/ui\/api\/(box|item)\/[^/]+\/edit$/) && req.method === "POST") {
-        const [ , , , type, rawId,] = url.pathname.split("/");
+        const [, , , type, rawId,] = url.pathname.split("/");
         const id = decodeURIComponent(rawId);
         let body = "";
         req.on("data", (c) => (body += c));
@@ -245,33 +248,65 @@ const server = http.createServer(async (req, res) => {
             const p = new URLSearchParams(body);
             if (type === "box") {
                 const loc = (p.get("Location") || "").trim();
-                const notes = (p.get("BoxNotes") || "").trim();
-                db.prepare(`UPDATE boxes SET Location=?, BoxNotes=?, UpdatedAt=datetime('now') WHERE BoxID=?`)
+                const notes = (p.get("Notes") || "").trim();
+                db.prepare(`UPDATE boxes SET Location=?, Notes=?, UpdatedAt=datetime('now') WHERE BoxID=?`)
                     .run(loc, notes, id);
                 logEvent.run({
                     Actor: null,
                     EntityType: "Box",
                     EntityId: id,
                     Event: "Edit",
-                    Meta: JSON.stringify({ Location: loc, BoxNotes: notes })
+                    Meta: JSON.stringify({ Location: loc, Notes: notes })
                 });
                 res.writeHead(302, { Location: `/ui/box/${encodeURIComponent(id)}#act-edit` });
                 return res.end();
             } else {
-                const mat = (p.get("MaterialNumber") || "").trim();
-                const desc = (p.get("Description") || "").trim();
-                const cond = (p.get("Condition") || "").trim();
-                const qty = parseInt((p.get("Qty") || "0").trim(), 10) || 0;
-                const note = (p.get("ItemNotes") || "").trim();
-                db.prepare(
-                    `UPDATE items SET MaterialNumber=?, Description=?, Condition=?, Qty=?, ItemNotes=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`
-                ).run(mat, desc, cond, qty, note, id);
+                // Update to new item fields                
+                // Map form fields to new DB structure
+                const now = new Date().toISOString();
+                console.error('Continue here')
+                const data = {
+                    BoxID: p.get("BoxID"),
+                    ItemUUID: p.get("ItemUUID"),
+                    Location: (p.get("Location") || "").trim(),
+                    UpdatedAt: now,
+
+                    Datum_erfasst: (p.get("Datum_erfasst") || "").trim(),
+                    Artikel_Nummer: (p.get("Artikel_Nummer") || "").trim(),
+                    Grafikname: (p.get("Grafikname") || "").trim(),
+                    Artikelbeschreibung: (p.get("Artikelbeschreibung") || "").trim(),
+                    Auf_Lager: parseInt((p.get("Auf_Lager") || "1").trim(), 10) || 1,
+                    Verkaufspreis: parseFloat((p.get("Verkaufspreis") || "0").replace(",", ".").trim()) || 0,
+                    Kurzbeschreibung: (p.get("Kurzbeschreibung") || "").trim(),
+                    Langtext: (p.get("Langtext") || "").trim(),
+                    Hersteller: (p.get("Hersteller") || "").trim(),
+                    Länge_mm: parseInt((p.get("Länge_mm") || "").trim(), 10) || null,
+                    Breite_mm: parseInt((p.get("Breite_mm") || "").trim(), 10) || null,
+                    Höhe_mm: parseInt((p.get("Höhe_mm") || "").trim(), 10) || null,
+                    Gewicht_kg: parseFloat((p.get("Gewicht_kg") || "").replace(",", ".").trim()) || null,
+                    Hauptkategorien_A: (p.get("Hauptkategorien_A") || "").trim(),
+                    Unterkategorien_A: (p.get("Unterkategorien_A") || "").trim(),
+                    Hauptkategorien_B: (p.get("Hauptkategorien_B") || "").trim(),
+                    Unterkategorien_B: (p.get("Unterkategorien_B") || "").trim(),
+                    Veröffentlicht_Status: (p.get("Veröffentlicht_Status") || "").trim(),
+                    Shopartikel: parseInt((p.get("Shopartikel") || "0").trim(), 10) || 0,
+                    Artikeltyp: (p.get("Artikeltyp") || "").trim(),
+                    Einheit: (p.get("Einheit") || "").trim(),
+                    WmsLink: (p.get("WmsLink") || "").trim()
+                };
+
+                // upsert item
+                upsertItem.run(data);
+
+                // db.prepare(
+                //     `UPDATE items SET Artikel_Nummer=?, Artikelbeschreibung=?, Auf_Lager=?, Kurzbeschreibung=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`
+                // ).run(artikelNummer, artikelbeschreibung, aufLager, kurzbeschreibung, id);
                 logEvent.run({
                     Actor: null,
                     EntityType: "Item",
                     EntityId: id,
                     Event: "Edit",
-                    Meta: JSON.stringify({ MaterialNumber: mat, Qty: qty })
+                    Meta: JSON.stringify({ Artikel_Nummer: data.Artikel_Nummer, Auf_Lager: data.Auf_Lager })
                 });
                 res.writeHead(302, { Location: `/ui/item/${encodeURIComponent(id)}#act-edit` });
                 return res.end();
@@ -290,53 +325,67 @@ const server = http.createServer(async (req, res) => {
                 try {
                     BoxID = "B-xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
                         const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
-                    }); 
+                    });
                 }
-                catch(ex) { return sendJson(res, 400, { error: "BoxID fehlt und konnte nicht generiert werden.", ex:ex }); }
+                catch (ex) { return sendJson(res, 400, { error: "BoxID fehlt und konnte nicht generiert werden.", ex: ex }); }
             }
             let ItemUUID = (p.get("ItemUUID") || "").trim();
             if (!BoxID) return sendJson(res, 400, { error: "BoxID ist erforderlich." });
             if (!ItemUUID) {
                 try {
-
                     ItemUUID = "I-xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
                         const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
-                    }); 
+                    });
                 }
                 catch { return sendJson(res, 400, { error: "ItemUUID fehlt und konnte nicht generiert werden." }); }
             }
 
-
             const now = new Date().toISOString();
+
+            // Map form fields to new DB structure
             const data = {
                 BoxID,
                 ItemUUID,
-                MaterialNumber: (p.get("MaterialNumber") || "").trim(),
-                Description: (p.get("Description") || "").trim(),
-                Condition: (p.get("Condition") || "").trim(),
-                Qty: parseInt((p.get("Qty") || "1").trim(), 10) || 1,
-                WmsLink: (p.get("WmsLink") || "").trim(),
-                AttributesJson: (p.get("AttributesJson") || "").trim(),
-                AddedAt: (p.get("AddedAt") || "").trim(),
                 Location: (p.get("Location") || "").trim(),
-                ItemNotes: (p.get("ItemNotes") || "").trim()
+                UpdatedAt: now,
+
+                Datum_erfasst: (p.get("Datum_erfasst") || "").trim(),
+                Artikel_Nummer: (p.get("Artikel_Nummer") || "").trim(),
+                Grafikname: (p.get("Grafikname") || "").trim(),
+                Artikelbeschreibung: (p.get("Artikelbeschreibung") || "").trim(),
+                Auf_Lager: parseInt((p.get("Auf_Lager") || "1").trim(), 10) || 1,
+                Verkaufspreis: parseFloat((p.get("Verkaufspreis") || "0").replace(",", ".").trim()) || 0,
+                Kurzbeschreibung: (p.get("Kurzbeschreibung") || "").trim(),
+                Langtext: (p.get("Langtext") || "").trim(),
+                Hersteller: (p.get("Hersteller") || "").trim(),
+                Länge_mm: parseInt((p.get("Länge_mm") || "").trim(), 10) || null,
+                Breite_mm: parseInt((p.get("Breite_mm") || "").trim(), 10) || null,
+                Höhe_mm: parseInt((p.get("Höhe_mm") || "").trim(), 10) || null,
+                Gewicht_kg: parseFloat((p.get("Gewicht_kg") || "").replace(",", ".").trim()) || null,
+                Hauptkategorien_A: (p.get("Hauptkategorien_A") || "").trim(),
+                Unterkategorien_A: (p.get("Unterkategorien_A") || "").trim(),
+                Hauptkategorien_B: (p.get("Hauptkategorien_B") || "").trim(),
+                Unterkategorien_B: (p.get("Unterkategorien_B") || "").trim(),
+                Veröffentlicht_Status: (p.get("Veröffentlicht_Status") || "").trim(),
+                Shopartikel: parseInt((p.get("Shopartikel") || "0").trim(), 10) || 0,
+                Artikeltyp: (p.get("Artikeltyp") || "").trim(),
+                Einheit: (p.get("Einheit") || "").trim(),
+                WmsLink: (p.get("WmsLink") || "").trim()
             };
 
-            // upsert box + item
-            db.prepare(`INSERT INTO boxes (BoxID, Location, CreatedAt, Notes, BoxNotes, PlacedBy, PlacedAt, UpdatedAt)
-                VALUES (?, ?, ?, NULL, NULL, NULL, NULL, ?)
-                ON CONFLICT(BoxID) DO UPDATE SET Location=excluded.Location, UpdatedAt=excluded.UpdatedAt`)
-                .run(BoxID, data.Location || "", data.AddedAt || "", now);
+            // upsert box
+            upsertBox.run({
+                BoxID,
+                Location: data.Location,
+                CreatedAt: now,
+                Notes: null,
+                PlacedBy: null,
+                PlacedAt: null,
+                UpdatedAt: now
+            });
 
-            db.prepare(`INSERT INTO items (ItemUUID, BoxID, MaterialNumber, Description, Condition, Qty, WmsLink, AttributesJson, AddedAt, Location, ItemNotes, UpdatedAt)
-                VALUES (@ItemUUID,@BoxID,@MaterialNumber,@Description,@Condition,@Qty,@WmsLink,@AttributesJson,@AddedAt,@Location,@ItemNotes,@UpdatedAt)
-                ON CONFLICT(ItemUUID) DO UPDATE SET
-                  BoxID=excluded.BoxID, MaterialNumber=excluded.MaterialNumber, Description=excluded.Description,
-                  Condition=excluded.Condition, Qty=excluded.Qty, WmsLink=excluded.WmsLink,
-                  AttributesJson=excluded.AttributesJson, AddedAt=COALESCE(excluded.AddedAt, items.AddedAt),
-                  Location=excluded.Location, ItemNotes=COALESCE(excluded.ItemNotes, items.ItemNotes),
-                  UpdatedAt=excluded.UpdatedAt`)
-                .run({ ...data, UpdatedAt: now });
+            // upsert item
+            upsertItem.run(data);
 
             logEvent.run({ Actor: null, EntityType: "Item", EntityId: ItemUUID, Event: "ManualCreateOrUpdate", Meta: JSON.stringify({ BoxID }) });
 
@@ -447,7 +496,7 @@ const server = http.createServer(async (req, res) => {
             const notes = (p.get("notes") || "").trim();
             if (!location || !actor) return sendJson(res, 400, { error: "location and actor are required" });
 
-            db.prepare(`UPDATE boxes SET Location=?, BoxNotes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`)
+            db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`)
                 .run(location, notes, actor, id);
             logEvent.run({ Actor: actor, EntityType: "Box", EntityId: id, Event: "Moved", Meta: JSON.stringify({ location, notes }) });
             return sendJson(res, 200, { ok: true });
@@ -489,8 +538,8 @@ const server = http.createServer(async (req, res) => {
                         .on("end", () => resolve(arr));
                 });
 
-                // basic header/field checks
-                const required = ["BoxID", "ItemUUID"];
+                // Update required fields to match new schema
+                const required = ["BoxID", "ItemUUID", "Artikel_Nummer", "Artikelbeschreibung"];
                 const bad = [];
                 const boxes = new Set();
                 rows.forEach((r, i) => {
@@ -498,12 +547,6 @@ const server = http.createServer(async (req, res) => {
                         if (!r[k] || String(r[k]).trim() === "") bad.push(`Zeile ${i + 2}: Feld ${k} fehlt`);
                     });
                     if (r.BoxID) boxes.add(String(r.BoxID).trim());
-                    // JSON check (optional)
-                    if (r.AttributesJson && r.AttributesJson.trim()) {
-                        try { JSON.parse(r.AttributesJson); } catch (e) {
-                            bad.push(`Zeile ${i + 2}: AttributesJson ist kein gültiges JSON`);
-                        }
-                    }
                 });
 
                 if (bad.length) return sendJson(res, 400, { error: "Validierung fehlgeschlagen", details: bad.slice(0, 10).join("\n") });
@@ -515,7 +558,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    /* ------------------------ QR redirect (item) ------------------- */
+    // Relocate (item) from QR code
     // if (url.pathname.startsWith("/qr/")) {
     //     const uuid = decodeURIComponent(url.pathname.slice(4));
     //     const item = getItem.get(uuid);
@@ -614,7 +657,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/export/wms" && req.method === "GET") {
         const rows = db
             .prepare(
-                `SELECT i.ItemUUID, i.MaterialNumber, i.Qty, i.BoxID, b.Location, i.WmsLink
+                `SELECT i.ItemUUID, i.Artikel_Nummer, i.Auf_Lager, i.BoxID, b.Location, i.WmsLink
          FROM items i JOIN boxes b ON b.BoxID = i.BoxID`
             )
             .all();
@@ -688,6 +731,22 @@ const server = http.createServer(async (req, res) => {
             return sendJson(res, 200, { ok: false, sent: false, previewUrl: rel, reason: result.reason || "not_configured" });
         } catch (e) {
             return sendJson(res, 500, { ok: false, error: e.message });
+        }
+    }
+
+    // API endpoint: Get new (next) Material Number
+    if (url.pathname === "/api/getNewMaterialNumber" && req.method === "GET") {
+        try {
+            const row = db.getMaxArtikelNummer;
+            let max = 0;
+            if (row && row.Artikel_Nummer) {
+                max = parseInt(row.Artikel_Nummer, 10) || 0;
+            }
+            // Increment for next number, pad to 5 digits (adjust as needed)
+            const next = String(max + 1).padStart(5, "0");
+            return sendJson(res, 200, { nextArtikelNummer: next });
+        } catch (e) {
+            return sendJson(res, 500, { error: e.message });
         }
     }
 
