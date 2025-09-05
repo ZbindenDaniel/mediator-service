@@ -1,0 +1,13 @@
+declare module 'react';
+declare module 'react-dom';
+declare module 'react-router-dom';
+declare module 'chokidar';
+declare module 'better-sqlite3';
+declare module 'csv-parse';
+declare module 'pdfkit';
+declare module 'qrcode';
+declare module 'fs';
+declare module 'path';
+declare module 'http';
+declare var process: any;
+declare var __dirname: string;

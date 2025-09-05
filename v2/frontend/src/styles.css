@@ -1,0 +1,60 @@
+/* Global styles for v2 frontend */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+
+.header {
+  background: #222;
+  color: #fff;
+  padding: 1rem;
+}
+
+.header nav a {
+  color: #fff;
+  margin-right: 1rem;
+}
+
+.layout main {
+  padding: 1rem;
+}
+
+.box-list ul,
+.box-detail ul,
+.item-detail ul {
+  list-style: none;
+  padding: 0;
+}
+
+.box-list li,
+.box-detail li,
+.item-detail li {
+  margin-bottom: 0.5rem;
+}
+
+.events li {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.import-page form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+button {
+  cursor: pointer;
+}

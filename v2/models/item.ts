@@ -1,0 +1,29 @@
+export interface Item {
+  ItemUUID: string;
+  BoxID: string;
+  Location?: string;
+  UpdatedAt: string;
+  Datum_erfasst?: string;
+  Artikel_Nummer?: string;
+  Grafikname?: string;
+  Artikelbeschreibung?: string;
+  Auf_Lager?: number;
+  Verkaufspreis?: number;
+  Kurzbeschreibung?: string;
+  Langtext?: string;
+  Hersteller?: string;
+  Länge_mm?: number;
+  Breite_mm?: number;
+  Höhe_mm?: number;
+  Gewicht_kg?: number;
+  Hauptkategorien_A?: string;
+  Unterkategorien_A?: string;
+  Hauptkategorien_B?: string;
+  Unterkategorien_B?: string;
+  Veröffentlicht_Status?: string;
+  Shopartikel?: number;
+  Artikeltyp?: string;
+  Einheit?: string;
+  WmsLink?: string;
+  EntityType?: string;
+}

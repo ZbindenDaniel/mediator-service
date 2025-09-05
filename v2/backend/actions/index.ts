@@ -1,0 +1,51 @@
+import fs from 'fs';
+import path from 'path';
+import { Entity } from '../../models';
+import type { IncomingMessage, ServerResponse } from 'http';
+
+export interface Action {
+  key: string;
+  label: string;
+  order: number;
+  appliesTo: (entity: Entity) => boolean;
+  view: (entity: Entity) => string;
+  matches?: (path: string, method: string) => boolean;
+  handle?: (req: IncomingMessage, res: ServerResponse, ctx: any) => Promise<void> | void;
+}
+
+function normalizeAction(mod: any, filename: string): Action {
+  const a = (mod && typeof mod === 'object') ? mod : {};
+  const key = typeof a.key === 'string' ? a.key : path.basename(filename, path.extname(filename));
+  const label = typeof a.label === 'string' ? a.label : key;
+  const order = Number.isFinite(a.order) ? a.order : 100;
+  const appliesTo = typeof a.appliesTo === 'function' ? a.appliesTo : () => true;
+  const view = typeof a.view === 'function'
+    ? a.view
+    : (entity: Entity) => `<div class="card"><h3>${label}</h3><p class="muted">No view implemented for ${key}.</p></div>`;
+  const matches = typeof a.matches === 'function' ? a.matches : () => false;
+  const handle = typeof a.handle === 'function' ? a.handle : async () => {};
+  return { key, label, order, appliesTo, view, matches, handle };
+}
+
+export function loadActions(): Action[] {
+  const dir = __dirname;
+  return fs.readdirSync(dir)
+    .filter(f => (f.endsWith('.ts') || f.endsWith('.js')) && !f.startsWith('index.'))
+    .map(f => {
+      const full = path.join(dir, f);
+      try {
+        const mod = require(full);
+        return normalizeAction(mod.default ?? mod, f);
+      } catch (e) {
+        console.error('Failed to load action', f, e);
+        return normalizeAction({
+          key: path.basename(f, path.extname(f)),
+          label: `Broken: ${f}`,
+          view: () => `<div class="card"><h3>${f}</h3><p class="muted">Failed to load.</p></div>`
+        }, f);
+      }
+    })
+    .sort((a, b) => (a.order || 100) - (b.order || 100));
+}
+
+export default { loadActions };

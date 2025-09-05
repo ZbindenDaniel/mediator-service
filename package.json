@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "prestart": "sass public/styles.scss public/styles.css",
-    "start": "node server.js"
+    "prebuild": "sass v2/frontend/public/styles.scss v2/frontend/public/styles.css",
+    "build": "tsc -p tsconfig.json && npm run bundle",
+    "bundle": "node v2/frontend/build.js",
+    "prestart": "npm run build",
+    "start": "node dist/v2/backend/server.js",
+    "test": "npm run build && node dist/test/event-labels.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.0",
@@ -13,6 +17,18 @@
     "npm": "^11.5.2",
     "pdfkit": "^0.17.1",
     "qrcode": "^1.5.4",
-    "sass": "^1.92.0"
+    "sass": "^1.92.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/react-router-dom": "^5.3.3",
+    "esbuild": "^0.20.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
   }
 }
