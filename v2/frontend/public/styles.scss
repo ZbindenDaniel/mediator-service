@@ -1,4 +1,3 @@
-
 $base-color: #8ab4f8;
 $item-color: aquamarine;
 $box-color: rgb(221, 60, 114);
@@ -23,6 +22,12 @@ $box-color: rgb(221, 60, 114);
     /* borders */
     --acc: #1a73e8;
     /* accent */
+}
+
+.share-tech-mono-regular {
+    font-family: "Share Tech Mono", monospace;
+    font-weight: 400;
+    font-style: normal;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -54,6 +59,35 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
+/* Header (desktop landing) */
+.header {
+    // position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    z-index: 10;
+    // color: #fff;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.header .left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header .user {
+    font-weight: bold;
+}
+
+.header nav a {
+    color: #fff;
+    margin-right: 1rem;
+}
+
 /* Typography: big & legible for mobile/warehouse */
 h1 {
     font-size: 1.4rem;
@@ -82,15 +116,17 @@ div {
     margin: 0 auto;
     padding: var(--pad);
     width: 100;
-    
-    &.overview{
-            background-color: $base-color;
+
+    &.overview {
+        background-color: $base-color;
     }
-    &.box{
-            background-color: $box-color;
+
+    &.box {
+        background-color: $box-color;
     }
-    &.item{
-            background-color: $item-color;
+
+    &.item {
+        background-color: $item-color;
     }
 }
 
@@ -113,35 +149,34 @@ div {
     padding: calc(var(--pad) + 2px);
 }
 
-.spacer{
+.spacer {
     height: 20px;
     width: 100%;
 }
 
-.btn-container{
+.btn-container {
     display: flex;
 }
 
-.view-heading{
+.view-heading {
     font-size: 1.2rem;
     margin-bottom: 10px;
 }
 
-#btnAddItem{
+#btnAddItem {
     margin: auto;
     margin-top: 30px;
-    
-    button
-    {
+
+    button {
         border-radius: 50%;
     }
 }
 
-#BoxID{
+#BoxID {
     width: 100%;
 }
 
-.combined-input{
+.combined-input {
 
     width: 100%;
 }
@@ -212,8 +247,14 @@ button:focus {
     display: inline-block;
     padding: 3px 10px;
     border-radius: 999px;
-    &.Item{background: $item-color}
-    &.Box{background: $box-color}
+
+    &.Item {
+        background: $item-color
+    }
+
+    &.Box {
+        background: $box-color
+    }
 }
 
 .linkcard {
@@ -224,15 +265,6 @@ button:focus {
 
 .linkcard:hover .card {
     border-color: var(--acc)
-}
-
-/* Header (desktop landing) */
-.header {
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    border-bottom: 1px solid var(--line);
-    z-index: 10
 }
 
 .nav {
@@ -281,9 +313,14 @@ button:focus {
 }
 
 /* Make .row and .row-3 stack on small screens */
-@media (max-width: 540px){
-  .row{ grid-template-columns: 1fr; }
-  .row-3{ grid-template-columns: 1fr; }
+@media (max-width: 540px) {
+    .row {
+        grid-template-columns: 1fr;
+    }
+
+    .row-3 {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Responsive upgrades for desktop landing */

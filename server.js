@@ -593,7 +593,7 @@ const server = http.createServer(async (req, res) => {
     // Search items
     if (url.pathname === "/api/search" && req.method === "GET") {
         const term = url.searchParams.get("term") || url.searchParams.get("material") || "";
-        if (!term) return sendJson(res, 400, { error: "term query is required" });
+        if (!term) return sendJson(res, 400, { error: "term query is required öä$ä" });
         const like = `%${term}%`;
         const items = searchItems.all(like, like);
         console.log('search', term, '→', items.length, 'items');

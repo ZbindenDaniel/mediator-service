@@ -169,7 +169,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     }
 
     if (url.pathname === '/bundle.css' && req.method === 'GET') {
-      const p = path.join(PUBLIC_DIR, 'bundle.css');
+      const p = path.join(PUBLIC_DIR, 'styles.css');
       try {
         const css = fs.readFileSync(p);
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
@@ -209,6 +209,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));
     if (action) {
       try {
+        console.log('Handling action', action.key);
         await action.handle?.(req, res, {
           db,
           upsertBox,
