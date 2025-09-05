@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import ImportCard from './ImportCard';
+import CreateItemCard from './CreateItemCard';
 import SearchCard from './SearchCard';
 import StatsCard from './StatsCard';
 import RecentBoxesCard from './RecentBoxesCard';
 import RecentEventsCard from './RecentEventsCard';
+import ImportCard from './ImportCard';
 import type { Box, EventLog } from '../../../models';
 
 interface OverviewCounts {
@@ -68,11 +69,12 @@ export default function LandingPage() {
     <div className="container overview">
       <h1>Übersicht</h1>
       <div className="grid landing-grid">
-        <ImportCard />
+        <CreateItemCard />
         <SearchCard />
         <StatsCard counts={overview?.counts} printerOk={printerOk} health={health} />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <RecentEventsCard events={overview?.recentEvents || []} />
+        <ImportCard />
       </div>
     </div>
   );

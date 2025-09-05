@@ -4,7 +4,6 @@ import Layout from './Layout';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
-import ImportPage from './ImportPage';
 import LandingPage from './LandingPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
@@ -40,7 +39,6 @@ export default function App() {
           <Route path="/items/new" element={<ItemCreate />} />
           <Route path="/items/:itemId" element={<ItemRoute />} />
           <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
-          <Route path="/import" element={<ImportPage />} />
         </Routes>
       </Layout>
     </Router>

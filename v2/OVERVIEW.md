@@ -22,20 +22,19 @@ This document outlines the planned structure for the refactored mediator service
   - **public/** – static assets served by the backend (`index.html`, `bundle.js`, `styles.css`)
   - **src/** – React source code bundled with `esbuild`
     - **components/** – UI components (`Layout`, `Header`, `App`)
-      - `BoxList` – lists boxes via `GET /api/boxes`
+      - `LandingPage` – overview with search, stats, and recent activity
       - `BoxDetail` – shows box items and history via `GET /api/boxes/:id`
       - `ItemDetail` – item view using `GET /api/items/:uuid`
       - `ItemEdit` – edit item data via `PUT /api/items/:uuid`
-      - `ImportPage` – CSV upload through `/api/import`
+      - `ImportCard` – CSV upload card using `/api/import`
       - `PrintLabelButton` – triggers `/api/print/box/:id` or `/api/print/item/:id`
     - **styles.css** – centralised styling for components
     - **index.tsx** – application entrypoint
     - Routes handled with `react-router-dom`
-      - `/` → `BoxList`
+      - `/` → `LandingPage`
       - `/boxes/:boxId` → `BoxDetail`
       - `/items/:itemId` → `ItemDetail`
       - `/items/:itemId/edit` → `ItemEdit`
-      - `/import` → `ImportPage`
 
 The legacy JavaScript implementation remains at the project root. New code in `v2` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 

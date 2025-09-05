@@ -1,16 +1,28 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 
-/** Card linking to the import page */
+/** Card handling CSV import */
 export default function ImportCard() {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    console.log('Selected import file', file?.name);
+  }
+
+  function handleSubmit() {
+    console.log('Submitting CSV import');
+  }
+
   return (
-    <div className="card" id="import">
-      <Link className="linkcard" to="/import">
-        <div className="card">
-          <h2>Erfassen</h2>
-          <p className="muted">Neue Box anlegen und Artikel erfassen</p>
-        </div>
-      </Link>
+    <div className="card" id="csv-import">
+      <h2>CSV Import</h2>
+      <form
+        method="post"
+        action="/api/import"
+        encType="multipart/form-data"
+        onSubmit={handleSubmit}
+      >
+        <input type="file" name="file" accept=".csv" onChange={handleFileChange} />
+        <button type="submit">Upload</button>
+      </form>
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 
 function looksLikeUuid(s: string) {
@@ -10,29 +9,49 @@ function looksLikeBox(s: string) {
   return /^BOX[-\s_]\d{4}[-\s_]\d{3,}$/i.test(s);
 }
 
+type SearchResult = { type: 'box'; id: string } | { type: 'item'; item: Item };
+
 export default function SearchCard() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Item[]>([]);
-  const navigate = useNavigate();
+  const [results, setResults] = useState<SearchResult[]>([]);
 
   async function runFind() {
     const v = query.trim();
     setResults([]);
     if (!v) return;
-    if (looksLikeUuid(v)) { navigate(`/items/${encodeURIComponent(v)}`); return; }
-    if (looksLikeBox(v)) {
+    const next: SearchResult[] = [];
+    if (looksLikeUuid(v)) {
+      try {
+        const r = await fetch(`/api/items/${encodeURIComponent(v)}`);
+        if (!r.ok) {
+          console.error('UUID search HTTP error', r.status);
+        } else {
+          const item = await r.json();
+          next.push({ type: 'item', item });
+          console.log('UUID search found item');
+        }
+      } catch (err) {
+        console.error('UUID search failed', err);
+      }
+    } else if (looksLikeBox(v)) {
       const norm = v.toUpperCase().replace(/\s|_/g, '-');
-      navigate(`/boxes/${encodeURIComponent(norm)}`);
-      return;
+      next.push({ type: 'box', id: norm });
+      console.log('Box search detected', norm);
+    } else {
+      try {
+        const r = await fetch('/api/search?material=' + encodeURIComponent(v));
+        if (!r.ok) {
+          console.error('Material search HTTP error', r.status);
+        } else {
+          const data = await r.json();
+          (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
+          console.log('Material search returned', (data.items || []).length, 'items');
+        }
+      } catch (err) {
+        console.error('Material search failed', err);
+      }
     }
-    try {
-      const r = await fetch('/api/search?material=' + encodeURIComponent(v));
-      const data = await r.json();
-      setResults(data.items || []);
-      console.log('Material search returned', (data.items || []).length, 'items');
-    } catch (err) {
-      console.error('Material search failed', err);
-    }
+    setResults(next);
   }
 
   return (
@@ -49,14 +68,18 @@ export default function SearchCard() {
         <button className="btn" onClick={runFind}>Suchen</button>
       </div>
       <div className="list" style={{ marginTop: '10px' }}>
-        {results.map(it => (
-          <div className="card" key={it.ItemUUID}>
+        {results.map((res, idx) => res.type === 'box' ? (
+          <div className="card" key={`b-${idx}`}>
+            <div>Box: <a className="mono" href={`/boxes/${encodeURIComponent(res.id)}`}>{res.id}</a></div>
+          </div>
+        ) : (
+          <div className="card" key={res.item.ItemUUID}>
             <div>
-              <b>{it.Artikel_Nummer || '(kein Artikel)'}</b><br />
-              <span className="pill mono">{(it.ItemUUID || '').slice(-6).toUpperCase()}</span>
+              <b><a href={`/items/${encodeURIComponent(res.item.ItemUUID)}`}>{res.item.Artikel_Nummer || '(kein Artikel)'}</a></b><br />
+              <span className="pill mono">{(res.item.ItemUUID || '').slice(-6).toUpperCase()}</span>
             </div>
-            <div className="muted">{it.Artikelbeschreibung || ''}</div>
-            <div>Box: <a className="mono" href={`/boxes/${encodeURIComponent(it.BoxID)}`}>{it.BoxID}</a></div>
+            <div className="muted">{res.item.Artikelbeschreibung || ''}</div>
+            <div>Box: <a className="mono" href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>{res.item.BoxID}</a></div>
           </div>
         ))}
       </div>
