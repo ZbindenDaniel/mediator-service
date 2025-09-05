@@ -26,8 +26,8 @@ export default function SearchCard() {
         if (!r.ok) {
           console.error('UUID search HTTP error', r.status);
         } else {
-          const item = await r.json();
-          next.push({ type: 'item', item });
+          const data = await r.json();
+          next.push({ type: 'item', item: data.item || data });
           console.log('UUID search found item');
         }
       } catch (err) {

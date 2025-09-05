@@ -131,9 +131,9 @@ type ActionContext = {
   countItems: typeof countItems;
   countItemsNoWms: typeof countItemsNoWms;
   listRecentBoxes: typeof listRecentBoxes;
+  INBOX_DIR: typeof INBOX_DIR;
 };
-
-const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
+export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     if (!req.url) return sendJson(res, 400, { error: 'Bad request' });
@@ -235,7 +235,8 @@ const server = http.createServer(async (req: IncomingMessage, res: ServerRespons
           countBoxes,
           countItems,
           countItemsNoWms,
-          listRecentBoxes
+          listRecentBoxes,
+          INBOX_DIR
         });
       } catch (err) {
         console.error('Action handler failed', err);
@@ -251,10 +252,12 @@ const server = http.createServer(async (req: IncomingMessage, res: ServerRespons
   }
 });
 
-try {
-  server.listen(HTTP_PORT, () => {
-    console.log(`Server running at ${HOSTNAME}:${HTTP_PORT}`);
-  });
-} catch (err) {
-  console.error('Failed to start server', err);
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    server.listen(HTTP_PORT, () => {
+      console.log(`Server running at ${HOSTNAME}:${HTTP_PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to start server', err);
+  }
 }
