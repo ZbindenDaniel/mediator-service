@@ -6,12 +6,13 @@ This document outlines the planned structure for the refactored mediator service
 - **models/** – shared TypeScript interfaces for core entities (Box, Item, EventLog, ...)
 - **backend/** – Node.js/TypeScript API and workers
   - **actions/** – request handlers and business logic loaded dynamically
-    - `10-edit` – renders edit forms for boxes and items
-    - `15-print-label` – enqueue label jobs
-    - `20-relocate` – moves boxes or items to a different location
-    - `30-kivi` – links to external Kivi app
-    - `35-shop` – links items to the online shop
-    - `40-save-item` – GET/PUT handler for fetching and updating items
+    - `edit` – renders edit forms for boxes and items
+    - `print-label` – enqueue label jobs
+    - `move-box` / `move-item` – move boxes to new locations or items between boxes
+    - `kivi` – links to external Kivi app
+    - `shop` – links items to the online shop
+    - `save-item` – GET/PUT handler for fetching and updating items
+    - `overview`, `printer-status`, `health`, `box-detail`, `search`, `import-item`, `csv-import`, `material-number`
   - **ops/** – reusable operation helpers written in TypeScript
   - **config.ts** – centralized configuration
   - **db.ts** – database initialization and access
@@ -19,7 +20,7 @@ This document outlines the planned structure for the refactored mediator service
 
 ## Frontend
 - **frontend/** – React application
-  - **public/** – static assets served by the backend (`index.html`, `bundle.js`, `styles.css`)
+  - **public/** – static assets served by the backend (`index.html`, `bundle.js`, `bundle.css`)
   - **src/** – React source code bundled with `esbuild`
     - **components/** – UI components (`Layout`, `Header`, `App`)
       - `LandingPage` – overview with search, stats, and recent activity

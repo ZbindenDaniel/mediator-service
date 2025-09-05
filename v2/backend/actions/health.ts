@@ -7,21 +7,19 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action: Action = {
-  key: 'printer-status',
-  label: 'Printer status',
-  order: 51,
+  key: 'health',
+  label: 'Health',
   appliesTo: () => false,
-  matches: (path, method) => path === '/api/printer/status' && method === 'GET',
-  async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
+  matches: (path, method) => path === '/api/health' && method === 'GET',
+  async handle(_req: IncomingMessage, res: ServerResponse) {
     try {
-      const ok = await ctx.testPrinterConnection();
-      sendJson(res, 200, { ok });
+      sendJson(res, 200, { ok: true });
     } catch (err) {
-      console.error('Printer status failed', err);
+      console.error('Health endpoint failed', err);
       sendJson(res, 500, { ok: false, error: (err as Error).message });
     }
   },
-  view: () => '<div class="card"><p class="muted">Printer status API</p></div>'
+  view: () => '<div class="card"><p class="muted">Health API</p></div>'
 };
 
 export default action;

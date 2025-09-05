@@ -9,7 +9,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const action: Action = {
   key: 'overview',
   label: 'Overview',
-  order: 50,
   appliesTo: () => false,
   matches: (path, method) => path === '/api/overview' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {

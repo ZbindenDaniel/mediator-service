@@ -45,6 +45,12 @@ test('health endpoint works', async () => {
   expect(j.ok).toBe(true);
 });
 
+test('getNewMaterialNumber returns a number', async () => {
+  const r = await fetch(baseUrl + '/api/getNewMaterialNumber');
+  const j = await r.json();
+  expect(j.nextArtikelNummer).toMatch(/^\d{5}$/);
+});
+
 test('create item and retrieve via box and search', async () => {
   const res = await postForm('/ui/api/import/item', {
     BoxID: 'BOX-0000-0001',

@@ -10,7 +10,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const action: Action = {
   key: 'save-item',
   label: 'Save item',
-  order: 40,
   appliesTo: (entity) => entity.type === 'Item',
   matches: (path, method) => /^\/api\/items\/[^/]+$/.test(path) && ['GET', 'PUT'].includes(method),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {

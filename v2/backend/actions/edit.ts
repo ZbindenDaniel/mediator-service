@@ -16,7 +16,6 @@ function esc(s: string = ''): string {
 const action = {
   key: 'edit',
   label: 'Edit',
-  order: 10,
   appliesTo: () => true,
 
   view: (entity: Entity): string => {

@@ -3,7 +3,6 @@ import { Entity } from '../../models';
 const action = {
   key: 'shop',
   label: 'Shop',
-  order: 35,
   appliesTo: (e: Entity) => e.type === 'Item',
   view: (entity: Entity & { MaterialNumber?: string }): string => {
     const href = `https://shop.revamp-it.ch/search?search=${encodeURIComponent(entity.MaterialNumber || '')}`;

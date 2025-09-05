@@ -9,7 +9,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const action: Action = {
   key: 'box-detail',
   label: 'Box detail',
-  order: 53,
   appliesTo: () => false,
   matches: (path, method) => /^\/api\/boxes\/[^/]+$/.test(path) && method === 'GET',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {

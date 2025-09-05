@@ -4,7 +4,6 @@ import type { Action } from './index';
 const action: Action = {
   key: 'print-label',
   label: 'Print label',
-  order: 15,
   appliesTo: (entity: Entity) => entity.type === 'Box' || entity.type === 'Item',
   view: (entity: Entity) => {
     const id = encodeURIComponent(entity.id);

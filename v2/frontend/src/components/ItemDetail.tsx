@@ -34,10 +34,44 @@ export default function ItemDetail({ itemId }: Props) {
       {item ? (
         <>
           <h2>Item {item.ItemUUID}</h2>
-          {item.Artikel_Nummer && (
-            <p><strong>Material:</strong> {item.Artikel_Nummer}</p>
-          )}
-          {item.Artikelbeschreibung && <p>{item.Artikelbeschreibung}</p>}
+          <table className="details">
+            <tbody>
+              {([
+                ['ItemUUID', item.ItemUUID],
+                ['BoxID', item.BoxID],
+                ['Location', item.Location],
+                ['UpdatedAt', item.UpdatedAt],
+                ['Datum_erfasst', item.Datum_erfasst],
+                ['Artikel_Nummer', item.Artikel_Nummer],
+                ['Grafikname', item.Grafikname],
+                ['Artikelbeschreibung', item.Artikelbeschreibung],
+                ['Auf_Lager', item.Auf_Lager],
+                ['Verkaufspreis', item.Verkaufspreis],
+                ['Kurzbeschreibung', item.Kurzbeschreibung],
+                ['Langtext', item.Langtext],
+                ['Hersteller', item.Hersteller],
+                ['Länge_mm', item.Länge_mm],
+                ['Breite_mm', item.Breite_mm],
+                ['Höhe_mm', item.Höhe_mm],
+                ['Gewicht_kg', item.Gewicht_kg],
+                ['Hauptkategorien_A', item.Hauptkategorien_A],
+                ['Unterkategorien_A', item.Unterkategorien_A],
+                ['Hauptkategorien_B', item.Hauptkategorien_B],
+                ['Unterkategorien_B', item.Unterkategorien_B],
+                ['Veröffentlicht_Status', item.Veröffentlicht_Status],
+                ['Shopartikel', item.Shopartikel],
+                ['Artikeltyp', item.Artikeltyp],
+                ['Einheit', item.Einheit],
+                ['WmsLink', item.WmsLink],
+                ['EntityType', item.EntityType]
+              ] as [string, any][]).map(([k, v]) => (
+                <tr key={k}>
+                  <th>{k}</th>
+                  <td>{v ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <PrintLabelButton itemId={item.ItemUUID} />
           <div>
             <Link to={`/items/${encodeURIComponent(item.ItemUUID)}/edit`}>Edit</Link>

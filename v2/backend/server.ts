@@ -24,7 +24,8 @@ import {
   countBoxes,
   countItems,
   countItemsNoWms,
-  listRecentBoxes
+  listRecentBoxes,
+  getMaxArtikelNummer
 } from './db';
 import type { Item, LabelJob } from './db';
 import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
@@ -182,8 +183,8 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
       }
     }
 
-    if (url.pathname === '/styles.css' && req.method === 'GET') {
-      const p = path.join(PUBLIC_DIR, 'styles.css');
+    if (url.pathname === '/bundle.css' && req.method === 'GET') {
+      const p = path.join(PUBLIC_DIR, 'bundle.css');
       try {
         const css = fs.readFileSync(p);
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
@@ -236,6 +237,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           countItems,
           countItemsNoWms,
           listRecentBoxes,
+          getMaxArtikelNummer,
           INBOX_DIR
         });
       } catch (err) {

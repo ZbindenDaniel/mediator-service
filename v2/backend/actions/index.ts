@@ -6,7 +6,6 @@ import type { IncomingMessage, ServerResponse } from 'http';
 export interface Action {
   key: string;
   label: string;
-  order: number;
   appliesTo: (entity: Entity) => boolean;
   view: (entity: Entity) => string;
   matches?: (path: string, method: string) => boolean;
@@ -17,14 +16,13 @@ function normalizeAction(mod: any, filename: string): Action {
   const a = (mod && typeof mod === 'object') ? mod : {};
   const key = typeof a.key === 'string' ? a.key : path.basename(filename, path.extname(filename));
   const label = typeof a.label === 'string' ? a.label : key;
-  const order = Number.isFinite(a.order) ? a.order : 100;
   const appliesTo = typeof a.appliesTo === 'function' ? a.appliesTo : () => true;
   const view = typeof a.view === 'function'
     ? a.view
     : (entity: Entity) => `<div class="card"><h3>${label}</h3><p class="muted">No view implemented for ${key}.</p></div>`;
   const matches = typeof a.matches === 'function' ? a.matches : () => false;
   const handle = typeof a.handle === 'function' ? a.handle : async () => {};
-  return { key, label, order, appliesTo, view, matches, handle };
+  return { key, label, appliesTo, view, matches, handle };
 }
 
 export function loadActions(): Action[] {
@@ -45,7 +43,7 @@ export function loadActions(): Action[] {
         }, f);
       }
     })
-    .sort((a, b) => (a.order || 100) - (b.order || 100));
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export default { loadActions };

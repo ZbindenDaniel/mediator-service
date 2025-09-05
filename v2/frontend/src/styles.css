@@ -58,3 +58,46 @@ body {
 button {
   cursor: pointer;
 }
+
+.item-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.card {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.landing-grid {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+.details th {
+  text-align: left;
+  padding-right: 0.5rem;
+}
+
+.details td {
+  padding: 0.25rem 0;
+}
+
+.relocate-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}

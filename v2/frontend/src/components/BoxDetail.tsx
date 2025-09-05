@@ -36,8 +36,24 @@ export default function BoxDetail({ boxId }: Props) {
       {box ? (
         <>
           <h2>Box {box.BoxID}</h2>
-          {box.Location && <p><strong>Location:</strong> {box.Location}</p>}
-          {box.Notes && <p><strong>Notes:</strong> {box.Notes}</p>}
+          <table className="details">
+            <tbody>
+              {([
+                ['BoxID', box.BoxID],
+                ['Location', box.Location],
+                ['Notes', box.Notes],
+                ['PlacedBy', box.PlacedBy],
+                ['PlacedAt', box.PlacedAt],
+                ['CreatedAt', box.CreatedAt],
+                ['UpdatedAt', box.UpdatedAt]
+              ] as [string, any][]).map(([k, v]) => (
+                <tr key={k}>
+                  <th>{k}</th>
+                  <td>{v ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <PrintLabelButton boxId={box.BoxID} />
         </>
       ) : (

@@ -14,7 +14,6 @@ function genId(prefix: string): string {
 const action: Action = {
   key: 'import-item',
   label: 'Import item',
-  order: 55,
   appliesTo: () => false,
   matches: (path, method) => path === '/ui/api/import/item' && method === 'POST',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {

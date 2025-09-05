@@ -3,7 +3,6 @@ import { Entity } from '../../models';
 const action = {
   key: 'kivi',
   label: 'Kivi',
-  order: 30,
   appliesTo: () => true,
   view: (entity: Entity): string => {
     const q = encodeURIComponent(entity.id);

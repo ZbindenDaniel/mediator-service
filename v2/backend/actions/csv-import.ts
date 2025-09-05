@@ -11,7 +11,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const action: Action = {
   key: 'csv-import',
   label: 'CSV import',
-  order: 56,
   appliesTo: () => false,
   matches: (path, method) => path === '/api/import' && method === 'POST',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
