@@ -14,7 +14,7 @@ const action: Action = {
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const url = new URL(req.url || '', 'http://localhost');
-      const term = url.searchParams.get('term') || '';
+      const term = url.searchParams.get('term') || url.searchParams.get('material') || '';
       if (!term) return sendJson(res, 400, { error: 'term query is required' });
       const like = `%${term}%`;
       const items = ctx.db

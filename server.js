@@ -11,7 +11,6 @@ const {
     getItem,
     upsertBox,
     upsertItem,
-    findByMaterial,
     itemsByBox,
     getBox,
     listBoxes,
@@ -24,7 +23,8 @@ const {
     countBoxes,
     countItems,
     countItemsNoWms,
-    listRecentBoxes
+    listRecentBoxes,
+    searchItems
 } = require("./db");
 const { zplForItem, zplForBox, sendZpl, testPrinterConnection } = require("./print");
 const { pdfForBox, pdfForItem } = require("./labelpdf");
@@ -590,11 +590,14 @@ const server = http.createServer(async (req, res) => {
         });
     }
 
-    // Search by material
+    // Search items
     if (url.pathname === "/api/search" && req.method === "GET") {
-        const material = url.searchParams.get("material") || "";
-        if (!material) return sendJson(res, 400, { error: "material query is required" });
-        return sendJson(res, 200, { items: findByMaterial.all(material) });
+        const term = url.searchParams.get("term") || url.searchParams.get("material") || "";
+        if (!term) return sendJson(res, 400, { error: "term query is required" });
+        const like = `%${term}%`;
+        const items = searchItems.all(like, like);
+        console.log('search', term, '→', items.length, 'items');
+        return sendJson(res, 200, { items });
     }
 
     // Item detail

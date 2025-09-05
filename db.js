@@ -154,5 +154,6 @@ module.exports = {
     ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
     LIMIT 1
   `),
+  searchItems: db.prepare(`SELECT * FROM items WHERE Artikel_Nummer LIKE ? OR Artikelbeschreibung LIKE ?`),
 
 };

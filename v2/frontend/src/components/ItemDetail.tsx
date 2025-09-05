@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog } from '../../../models';
+import { formatDateTime } from '../lib/format';
 
 interface Props {
   itemId: string;
@@ -41,8 +42,8 @@ export default function ItemDetail({ itemId }: Props) {
                 ['ItemUUID', item.ItemUUID],
                 ['BoxID', item.BoxID],
                 ['Location', item.Location],
-                ['UpdatedAt', item.UpdatedAt],
-                ['Datum_erfasst', item.Datum_erfasst],
+                ['UpdatedAt', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
+                ['Datum_erfasst', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
                 ['Artikel_Nummer', item.Artikel_Nummer],
                 ['Grafikname', item.Grafikname],
                 ['Artikelbeschreibung', item.Artikelbeschreibung],
@@ -68,7 +69,7 @@ export default function ItemDetail({ itemId }: Props) {
               ] as [string, any][]).map(([k, v]) => (
                 <tr key={k}>
                   <th>{k}</th>
-                  <td>{v ?? ''}</td>
+                  <td>{k === 'BoxID' ? <Link to={`/boxes/${encodeURIComponent(String(v))}`}>{v}</Link> : v ?? ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -87,7 +88,7 @@ export default function ItemDetail({ itemId }: Props) {
       <ul className="events">
         {events.map((ev) => (
           <li key={ev.Id}>
-            {ev.CreatedAt}: {ev.Event}
+            {formatDateTime(ev.CreatedAt)}: {ev.Event}
           </li>
         ))}
       </ul>

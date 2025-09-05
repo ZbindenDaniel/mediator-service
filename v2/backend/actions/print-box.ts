@@ -21,22 +21,21 @@ const action: Action = {
       const box = ctx.getBox.get(id);
       if (!box) return sendJson(res, 404, { error: 'box not found' });
       const zpl = ctx.zplForBox({ boxId: box.BoxID, location: box.Location || '' });
-      const result = await ctx.sendZpl(zpl);
-      if (result.sent) {
-        ctx.logEvent.run({ Actor: null, EntityType: 'Box', EntityId: box.BoxID, Event: 'PrintSent', Meta: JSON.stringify({ transport: 'tcp' }) });
-        return sendJson(res, 200, { sent: true });
-      }
+      let previewUrl = '';
       try {
         const urlToUi = `${HOSTNAME}:${HTTP_PORT}/boxes/${encodeURIComponent(box.BoxID)}`;
         const out = path.join(ctx.PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, '_'));
         await ctx.pdfForBox({ boxId: box.BoxID, location: box.Location || '', url: urlToUi, outPath: out });
-        const rel = `/prints/${path.basename(out)}`;
-        ctx.logEvent.run({ Actor: null, EntityType: 'Box', EntityId: box.BoxID, Event: 'PrintPreviewSaved', Meta: JSON.stringify({ file: rel }) });
-        return sendJson(res, 200, { sent: false, previewUrl: rel, reason: result.reason });
+        previewUrl = `/prints/${path.basename(out)}`;
+        ctx.logEvent.run({ Actor: null, EntityType: 'Box', EntityId: box.BoxID, Event: 'PrintPreviewSaved', Meta: JSON.stringify({ file: previewUrl }) });
       } catch (err) {
         console.error('Preview generation failed', err);
-        return sendJson(res, 200, { sent: false, reason: result.reason || 'preview_failed' });
       }
+      const result = await ctx.sendZpl(zpl);
+      if (result.sent) {
+        ctx.logEvent.run({ Actor: null, EntityType: 'Box', EntityId: box.BoxID, Event: 'PrintSent', Meta: JSON.stringify({ transport: 'tcp' }) });
+      }
+      return sendJson(res, 200, { sent: !!result.sent, previewUrl, reason: result.reason });
     } catch (err) {
       console.error('Print box failed', err);
       sendJson(res, 500, { error: (err as Error).message });

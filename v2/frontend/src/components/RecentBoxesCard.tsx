@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import type { Box } from '../../../models';
+import { formatDateTime } from '../lib/format';
 
 interface Props {
   boxes: Box[];
@@ -17,7 +18,7 @@ export default function RecentBoxesCard({ boxes }: Props) {
               <Link className="linkcard" to={`/boxes/${encodeURIComponent(b.BoxID)}`}>
                 <div className="card">
                   <div><b>{b.BoxID}</b></div>
-                  <div className="muted">Standort: {b.Location || '(nicht gesetzt)'} · Aktualisiert: {b.UpdatedAt || ''}</div>
+                  <div className="muted">Standort: {b.Location || '(nicht gesetzt)'} · Aktualisiert: {b.UpdatedAt ? formatDateTime(b.UpdatedAt) : ''}</div>
                 </div>
               </Link>
               <div className="spacer"></div>

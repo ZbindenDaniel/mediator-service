@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getUser } from '../lib/user';
 
 interface Props {
   boxId: string;
@@ -8,7 +9,6 @@ const LOC_RE = /^[A-Z]-\d{2}-\d{2}$/;
 
 export default function RelocateBoxCard({ boxId }: Props) {
   const [location, setLocation] = useState('');
-  const [actor, setActor] = useState('');
   const [status, setStatus] = useState('');
 
   async function handle(e: React.FormEvent) {
@@ -21,7 +21,7 @@ export default function RelocateBoxCard({ boxId }: Props) {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location: location.trim().toUpperCase(), actor })
+        body: JSON.stringify({ location: location.trim().toUpperCase(), actor: getUser() })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -43,10 +43,6 @@ export default function RelocateBoxCard({ boxId }: Props) {
         <label>
           Neuer Ort
           <input value={location} onChange={e => setLocation(e.target.value)} required />
-        </label>
-        <label>
-          Nutzer
-          <input value={actor} onChange={e => setActor(e.target.value)} required />
         </label>
         <button type="submit">Verschieben</button>
         {status && <div>{status}</div>}

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { EventLog } from '../../../models';
+import { formatDateTime } from '../lib/format';
 
 interface Props {
   events: EventLog[];
@@ -19,7 +20,7 @@ export default function RecentEventsCard({ events }: Props) {
                   <br />
                   <b className="mono">{e.EntityId}</b>
                 </div>
-                <div>{formatDate(e.CreatedAt)} — {e.Event}{e.Actor ? ` von ${e.Actor}` : ''}</div>
+                <div>{formatDateTime(e.CreatedAt)} — {e.Event}{e.Actor ? ` von ${e.Actor}` : ''}</div>
               </div>
               <div className="spacer"></div>
             </React.Fragment>
@@ -32,7 +33,4 @@ export default function RecentEventsCard({ events }: Props) {
   );
 }
 
-function formatDate(s: string) {
-  const d = new Date(s);
-  return d.toLocaleString();
-}
+// formatting handled by formatDateTime util

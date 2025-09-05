@@ -7,6 +7,7 @@ interface Props {
 
 export default function PrintLabelButton({ boxId, itemId }: Props) {
   const [status, setStatus] = useState('');
+  const [preview, setPreview] = useState('');
 
   async function handleClick() {
     try {
@@ -17,11 +18,8 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
       const res = await fetch(url, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        if (data.previewUrl) {
-          setStatus('Preview ready');
-        } else {
-          setStatus('Sent to printer');
-        }
+        setPreview(data.previewUrl || '');
+        setStatus(data.sent ? 'Gesendet an Drucker' : 'Vorschau bereit');
       } else {
         setStatus('Error: ' + (data.error || res.status));
       }
@@ -34,7 +32,9 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
   return (
     <div>
       <button className="btn" onClick={handleClick}>Print Label</button>
-      {status && <div>{status}</div>}
+      {status && <div>{status}{preview && (
+        <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
+      )}</div>}
     </div>
   );
 }

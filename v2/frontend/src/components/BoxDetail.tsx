@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import type { Box, Item, EventLog } from '../../../models';
+import { formatDateTime } from '../lib/format';
 
 interface Props {
   boxId: string;
@@ -44,9 +45,9 @@ export default function BoxDetail({ boxId }: Props) {
                 ['Location', box.Location],
                 ['Notes', box.Notes],
                 ['PlacedBy', box.PlacedBy],
-                ['PlacedAt', box.PlacedAt],
-                ['CreatedAt', box.CreatedAt],
-                ['UpdatedAt', box.UpdatedAt]
+                ['PlacedAt', box.PlacedAt ? formatDateTime(box.PlacedAt) : ''],
+                ['CreatedAt', box.CreatedAt ? formatDateTime(box.CreatedAt) : ''],
+                ['UpdatedAt', box.UpdatedAt ? formatDateTime(box.UpdatedAt) : '']
               ] as [string, any][]).map(([k, v]) => (
                 <tr key={k}>
                   <th>{k}</th>
@@ -62,7 +63,7 @@ export default function BoxDetail({ boxId }: Props) {
         <p>Loading...</p>
       )}
 
-      <h3>Items</h3>
+      <h3>Items <Link to={`/items/new?box=${encodeURIComponent(boxId)}`}>Neu</Link></h3>
       <ul>
         {items.map((it) => (
           <li key={it.ItemUUID}>
@@ -77,7 +78,7 @@ export default function BoxDetail({ boxId }: Props) {
       <ul className="events">
         {events.map((ev) => (
           <li key={ev.Id}>
-            {ev.CreatedAt}: {ev.Event}
+            {formatDateTime(ev.CreatedAt)}: {ev.Event}
           </li>
         ))}
       </ul>
