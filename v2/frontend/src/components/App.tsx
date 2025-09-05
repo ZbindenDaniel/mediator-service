@@ -1,11 +1,13 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
 import Layout from './Layout';
-import BoxList from './BoxList';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
 import ImportPage from './ImportPage';
+import LandingPage from './LandingPage';
+import BoxEdit from './BoxEdit';
+import ItemCreate from './ItemCreate';
 
 function BoxRoute() {
   const { boxId } = useParams();
@@ -22,13 +24,20 @@ function ItemEditRoute() {
   return itemId ? <ItemEdit itemId={itemId} /> : <div>Missing item</div>;
 }
 
+function BoxEditRoute() {
+  const { boxId } = useParams();
+  return boxId ? <BoxEdit boxId={boxId} /> : <div>Missing box</div>;
+}
+
 export default function App() {
   return (
     <Router>
       <Layout>
         <Routes>
-          <Route path="/" element={<BoxList />} />
+          <Route path="/" element={<LandingPage />} />
           <Route path="/boxes/:boxId" element={<BoxRoute />} />
+          <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />
+          <Route path="/items/new" element={<ItemCreate />} />
           <Route path="/items/:itemId" element={<ItemRoute />} />
           <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
           <Route path="/import" element={<ImportPage />} />

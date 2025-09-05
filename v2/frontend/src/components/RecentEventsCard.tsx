@@ -1,0 +1,38 @@
+import React from 'react';
+import type { EventLog } from '../../../models';
+
+interface Props {
+  events: EventLog[];
+}
+
+export default function RecentEventsCard({ events }: Props) {
+  return (
+    <div className="card">
+      <h2 id="activity">Letzte Aktivitäten</h2>
+      <div id="eventsOut" className="list">
+        {events.length ? (
+          events.map(e => (
+            <React.Fragment key={e.Id}>
+              <div className="card">
+                <div>
+                  <span className={`pill ${e.EntityType}`}>{e.EntityType}</span>
+                  <br />
+                  <b className="mono">{e.EntityId}</b>
+                </div>
+                <div>{formatDate(e.CreatedAt)} — {e.Event}{e.Actor ? ` von ${e.Actor}` : ''}</div>
+              </div>
+              <div className="spacer"></div>
+            </React.Fragment>
+          ))
+        ) : (
+          <div className="muted">Keine aktuellen Aktivitäten.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatDate(s: string) {
+  const d = new Date(s);
+  return d.toLocaleString();
+}
