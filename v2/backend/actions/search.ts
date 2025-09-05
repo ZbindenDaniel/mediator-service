@@ -14,9 +14,13 @@ const action: Action = {
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const url = new URL(req.url || '', 'http://localhost');
-      const material = url.searchParams.get('material') || '';
-      if (!material) return sendJson(res, 400, { error: 'material query is required' });
-      const items = ctx.findByMaterial.all(material);
+      const term = url.searchParams.get('term') || '';
+      if (!term) return sendJson(res, 400, { error: 'term query is required' });
+      const like = `%${term}%`;
+      const items = ctx.db
+        .prepare('SELECT * FROM items WHERE Artikel_Nummer LIKE ? OR Artikelbeschreibung LIKE ?')
+        .all(like, like);
+      console.log('search', term, '→', items.length, 'items');
       sendJson(res, 200, { items });
     } catch (err) {
       console.error('Search failed', err);

@@ -15,7 +15,7 @@ const action: Action = {
   key: 'import-item',
   label: 'Import item',
   appliesTo: () => false,
-  matches: (path, method) => path === '/ui/api/import/item' && method === 'POST',
+  matches: (path, method) => path === '/api/import/item' && method === 'POST',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       let raw = '';

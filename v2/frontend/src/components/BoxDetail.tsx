@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
+import RelocateBoxCard from './RelocateBoxCard';
 import type { Box, Item, EventLog } from '../../../models';
 
 interface Props {
@@ -55,6 +56,7 @@ export default function BoxDetail({ boxId }: Props) {
             </tbody>
           </table>
           <PrintLabelButton boxId={box.BoxID} />
+          <RelocateBoxCard boxId={box.BoxID} />
         </>
       ) : (
         <p>Loading...</p>

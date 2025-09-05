@@ -39,16 +39,16 @@ export default function SearchCard() {
       console.log('Box search detected', norm);
     } else {
       try {
-        const r = await fetch('/api/search?material=' + encodeURIComponent(v));
+        const r = await fetch('/api/search?term=' + encodeURIComponent(v));
         if (!r.ok) {
-          console.error('Material search HTTP error', r.status);
+          console.error('Search HTTP error', r.status);
         } else {
           const data = await r.json();
           (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
-          console.log('Material search returned', (data.items || []).length, 'items');
+          console.log('Search returned', (data.items || []).length, 'items');
         }
       } catch (err) {
-        console.error('Material search failed', err);
+        console.error('Search failed', err);
       }
     }
     setResults(next);

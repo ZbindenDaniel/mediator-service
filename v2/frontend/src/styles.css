@@ -101,3 +101,40 @@ button {
   flex-direction: column;
   gap: 0.5rem;
 }
+
+.container {
+  padding: 1rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.list .card {
+  margin-bottom: 0.5rem;
+}
+
+.muted {
+  color: #555;
+}
+
+.btn {
+  cursor: pointer;
+}
+
+.pill {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #eee;
+}
+
+.mono {
+  font-family: monospace;
+}
+
+.linkcard {
+  text-decoration: none;
+  color: inherit;
+}

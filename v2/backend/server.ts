@@ -38,6 +38,7 @@ const actions = loadActions();
 const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
 const REPO_PUBLIC = path.join(__dirname, '../../..', 'v2', 'frontend', 'public');
 export let PUBLIC_DIR = DIST_PUBLIC;
+export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
 
 try {
   fs.mkdirSync(INBOX_DIR, { recursive: true });
@@ -48,7 +49,7 @@ try {
     : fs.existsSync(path.join(REPO_PUBLIC, 'index.html'))
     ? REPO_PUBLIC
     : DIST_PUBLIC;
-  const PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
+  PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
   fs.mkdirSync(PREVIEW_DIR, { recursive: true });
 } catch (err) {
   console.error('Failed to initialise directories', err);
@@ -133,29 +134,13 @@ type ActionContext = {
   countItemsNoWms: typeof countItemsNoWms;
   listRecentBoxes: typeof listRecentBoxes;
   INBOX_DIR: typeof INBOX_DIR;
+  PUBLIC_DIR: typeof PUBLIC_DIR;
+  PREVIEW_DIR: typeof PREVIEW_DIR;
 };
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     if (!req.url) return sendJson(res, 400, { error: 'Bad request' });
-    if (req.url.startsWith('/ui/')) {
-      (res as any).oldWrite = res.write;
-      (res as any).oldEnd = res.end;
-      let htmlBuffer = '';
-      res.write = function (chunk: any) {
-        htmlBuffer += chunk.toString();
-      } as any;
-      res.end = function (chunk: any) {
-        if (chunk) htmlBuffer += chunk.toString();
-        if (htmlBuffer.includes('<body')) {
-          htmlBuffer = htmlBuffer.replace(
-            '<body>',
-            `<body><script>(function(){ try { var u = localStorage.getItem('username'); if (!u) { u = prompt('Bitte geben Sie Ihren Benutzernamen ein:'); if (u) localStorage.setItem('username', u); } } catch(e){} })();</script>`
-          );
-        }
-        return (res as any).oldEnd(htmlBuffer);
-      } as any;
-    }
 
     const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -238,7 +223,9 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           countItemsNoWms,
           listRecentBoxes,
           getMaxArtikelNummer,
-          INBOX_DIR
+          INBOX_DIR,
+          PUBLIC_DIR,
+          PREVIEW_DIR
         });
       } catch (err) {
         console.error('Action handler failed', err);

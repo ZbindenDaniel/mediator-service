@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 
+const LOC_RE = /^[A-Z]-\d{2}-\d{2}$/;
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -22,10 +24,11 @@ const action: Action = {
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const location = (data.location || '').trim();
+      const location = (data.location || '').trim().toUpperCase();
       const actor = (data.actor || '').trim();
       const notes = (data.notes || '').trim();
       if (!location || !actor) return sendJson(res, 400, { error: 'location and actor are required' });
+      if (!LOC_RE.test(location)) return sendJson(res, 400, { error: 'invalid location format' });
       ctx.db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(location, notes, actor, id);
       ctx.logEvent.run({ Actor: actor, EntityType: 'Box', EntityId: id, Event: 'Moved', Meta: JSON.stringify({ location, notes }) });
       sendJson(res, 200, { ok: true });

@@ -33,7 +33,7 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
 
   return (
     <div>
-      <button onClick={handleClick}>Print Label</button>
+      <button className="btn" onClick={handleClick}>Print Label</button>
       {status && <div>{status}</div>}
     </div>
   );

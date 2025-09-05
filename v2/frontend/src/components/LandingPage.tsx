@@ -5,7 +5,6 @@ import StatsCard from './StatsCard';
 import RecentBoxesCard from './RecentBoxesCard';
 import RecentEventsCard from './RecentEventsCard';
 import ImportCard from './ImportCard';
-import RelocateCard from './RelocateCard';
 import type { Box, EventLog } from '../../../models';
 
 interface OverviewCounts {
@@ -76,7 +75,6 @@ export default function LandingPage() {
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <RecentEventsCard events={overview?.recentEvents || []} />
         <ImportCard />
-        <RelocateCard />
       </div>
     </div>
   );

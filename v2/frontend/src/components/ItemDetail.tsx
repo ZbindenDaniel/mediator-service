@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
+import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog } from '../../../models';
 
 interface Props {
@@ -73,6 +74,7 @@ export default function ItemDetail({ itemId }: Props) {
             </tbody>
           </table>
           <PrintLabelButton itemId={item.ItemUUID} />
+          <RelocateItemCard itemId={item.ItemUUID} />
           <div>
             <Link to={`/items/${encodeURIComponent(item.ItemUUID)}/edit`}>Edit</Link>
           </div>
