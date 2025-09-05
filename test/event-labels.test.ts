@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { eventLabel } from '../backend/event-labels';
+import { eventLabel } from '../models/event-labels';
 
 assert.strictEqual(eventLabel('Edit'), 'Bearbeitet');
 assert.strictEqual(eventLabel('UnknownEvent'), 'UnknownEvent');

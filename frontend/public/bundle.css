@@ -82,13 +82,6 @@ button {
 .landing-grid {
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
 }
-.details th {
-  text-align: left;
-  padding-right: 0.5rem;
-}
-.details td {
-  padding: 0.25rem 0;
-}
 .relocate-card form {
   display: flex;
   flex-direction: column;

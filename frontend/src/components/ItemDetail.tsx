@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog } from '../../../models';
@@ -12,6 +12,7 @@ interface Props {
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function load() {
@@ -38,50 +39,53 @@ export default function ItemDetail({ itemId }: Props) {
           <>
             <div className="card">
               <h2>Item</h2>
-              <table className="details">
-                <tbody>
-                  {([
-                    ['Box', <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>Box</Link>],
-                    ['Location', item.Location],
-                    ['UpdatedAt', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
-                    ['Datum_erfasst', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
-                    ['Artikel_Nummer', item.Artikel_Nummer],
-                    ['Grafikname', item.Grafikname],
-                    ['Artikelbeschreibung', item.Artikelbeschreibung],
-                    ['Auf_Lager', item.Auf_Lager],
-                    ['Verkaufspreis', item.Verkaufspreis],
-                    ['Kurzbeschreibung', item.Kurzbeschreibung],
-                    ['Langtext', item.Langtext],
-                    ['Hersteller', item.Hersteller],
-                    ['Länge_mm', item.Länge_mm],
-                    ['Breite_mm', item.Breite_mm],
-                    ['Höhe_mm', item.Höhe_mm],
-                    ['Gewicht_kg', item.Gewicht_kg],
-                    ['Hauptkategorien_A', item.Hauptkategorien_A],
-                    ['Unterkategorien_A', item.Unterkategorien_A],
-                    ['Hauptkategorien_B', item.Hauptkategorien_B],
-                    ['Unterkategorien_B', item.Unterkategorien_B],
-                    ['Veröffentlicht_Status', item.Veröffentlicht_Status],
-                    ['Shopartikel', item.Shopartikel],
-                    ['Artikeltyp', item.Artikeltyp],
-                    ['Einheit', item.Einheit],
-                    ['WmsLink', item.WmsLink]
-                  ] as [string, any][]).map(([k, v]) => (
-                    <tr key={k}>
-                      <th>{k}</th>
-                      <td>{v ?? ''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div>
-                <Link to={`/items/${encodeURIComponent(item.ItemUUID)}/edit`}>Edit</Link>
+              <div className='row'>
+
+                <table className="details">
+                  <tbody>
+                    {([
+                      ['Artikelbeschreibung', item.Artikelbeschreibung],
+                      ['Artikel_Nummer', item.Artikel_Nummer],
+                      ['Location', item.Location],
+                      ['Anzahl', item.Auf_Lager],
+                      ['Box', <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>Box</Link>],
+                      ['Kurzbeschreibung', item.Kurzbeschreibung],
+                      ['Datum_erfasst', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
+                      ['UpdatedAt', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
+                      // ['Grafikname', item.Grafikname],
+                      ['Verkaufspreis', item.Verkaufspreis],
+                      ['Langtext', item.Langtext],
+                      ['Hersteller', item.Hersteller],
+                      ['Länge_mm', item.Länge_mm],
+                      ['Breite_mm', item.Breite_mm],
+                      ['Höhe_mm', item.Höhe_mm],
+                      ['Gewicht_kg', item.Gewicht_kg],
+                      // ['Hauptkategorien_A', item.Hauptkategorien_A],
+                      // ['Unterkategorien_A', item.Unterkategorien_A],
+                      // ['Hauptkategorien_B', item.Hauptkategorien_B],
+                      // ['Unterkategorien_B', item.Unterkategorien_B],
+                      // ['Veröffentlicht_Status', item.Veröffentlicht_Status],
+                      // ['Shopartikel', item.Shopartikel],
+                      // ['Artikeltyp', item.Artikeltyp],
+                      ['Einheit', item.Einheit],
+                      ['WmsLink', item.WmsLink]
+                    ] as [string, any][]).map(([k, v]) => (
+                      <tr key={k}>
+                        <th>{k}</th>
+                        <td>{v ?? ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className='row'>
+                <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
               </div>
             </div>
 
-              <PrintLabelButton itemId={item.ItemUUID} />
-
             <RelocateItemCard itemId={item.ItemUUID} />
+
+            <PrintLabelButton itemId={item.ItemUUID} />
 
             <div className="card">
               <h3>Events</h3>

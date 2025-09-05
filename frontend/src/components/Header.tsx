@@ -17,9 +17,9 @@ export default function Header() {
     <header className="header">
       <div className="left">
         <nav>
-          <Link to="/">Home</Link>
+            <button type="button" onClick={() => window.history.back()}>⬅️</button>
         </nav>
-        <h1>rrrevamp</h1>
+        <h1>rrrevamp_____</h1>
       </div>
       <div className="user">{user}</div>
     </header>

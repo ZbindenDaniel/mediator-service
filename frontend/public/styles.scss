@@ -6,7 +6,7 @@ $box-color: rgb(221, 60, 114);
 :root {
     --maxw: 1100px;
     /* desktop container width */
-    --radius: 14px;
+    --radius: 26px;
     /* card/button radius */
     --pad: 10px;
     /* base pad */
@@ -22,24 +22,22 @@ $box-color: rgb(221, 60, 114);
     /* borders */
     --acc: #1a73e8;
     /* accent */
-}
 
-.share-tech-mono-regular {
-    font-family: "Share Tech Mono", monospace;
+    font-family: "Share Tech Mono", monospace !important;
     font-weight: 400;
     font-style: normal;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --fg: #e8eaed;
-        --muted: #9aa0a6;
-        --bg: #101114;
-        --card: #8b8b8b;
-        --line: #2a2c32;
-        // --acc: #8ab4f8;
-    }
-}
+// @media (prefers-color-scheme: dark) {
+//     :root {
+//         --fg: #e8eaed;
+//         --muted: #9aa0a6;
+//         --bg: #101114;
+//         --card: #8b8b8b;
+//         --line: #2a2c32;
+//         // --acc: #8ab4f8;
+//     }
+// }
 
 * {
     box-sizing: border-box
@@ -54,7 +52,7 @@ body {
     margin: 0;
     background: var(--bg);
     color: var(--fg);
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    // font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.45;
     -webkit-text-size-adjust: 100%;
 }
@@ -84,8 +82,14 @@ body {
 }
 
 .header nav a {
-    color: #fff;
-    margin-right: 1rem;
+color: var(--fg);
+  margin-right: 1rem;
+  font-size: 22px;
+  font-weight: bolder;
+  text-decoration: none;
+  border: 1px solid --muted;
+  border-radius: 50%;
+  padding: 5px 8px;
 }
 
 /* Typography: big & legible for mobile/warehouse */
@@ -142,6 +146,15 @@ div {
     gap: 12px
 }
 
+.details th {
+    text-align: left;
+    padding-right: 0.5rem;
+}
+
+.details td {
+    padding: 0.25rem 0;
+}
+
 .card {
     background: var(--card);
     border: 1px solid var(--line);
@@ -177,8 +190,9 @@ div {
 }
 
 .combined-input {
-
     width: 100%;
+    display: flex;
+    justify-content: space-between;
 }
 
 /* Inputs & tap targets: min-height 44px (Apple HIG) */
@@ -234,7 +248,8 @@ button:focus {
 .row {
     display: grid;
     grid-template-columns: 1fr auto;
-    gap: 10px
+    gap: 10px;
+    padding: 5px 0px;
 }
 
 .row-3 {

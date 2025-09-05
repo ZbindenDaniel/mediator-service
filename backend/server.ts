@@ -30,7 +30,7 @@ import {
 import type { Item, LabelJob } from './db';
 import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
-import { EVENT_LABELS, eventLabel } from './event-labels';
+import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 
 const actions = loadActions();
 

@@ -52,7 +52,7 @@ const action = {
 
       return `
         <div class="card">
-          <h3>Items in dieser Box bearbeiten</h3>
+          <h3>Artikel in dieser Box bearbeiten</h3>
           <p class="muted">Öffne ein Item, um Felder wie Artikelnummer, Beschreibung oder Lagerbestand zu ändern.</p>
           ${list}
           <div class="btn-container">

@@ -12,8 +12,6 @@ const action: Action = {
   appliesTo: () => false,
   matches: (path, method) => path === '/api/search' && method === 'GET',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
-    sendJson(res, 407, { });
-    return;
     try {
       const url = new URL(req.url || '', 'http://localhost');
       const term =

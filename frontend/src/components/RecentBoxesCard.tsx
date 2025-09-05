@@ -17,8 +17,8 @@ export default function RecentBoxesCard({ boxes }: Props) {
             <React.Fragment key={b.BoxID}>
               <Link className="linkcard" to={`/boxes/${encodeURIComponent(b.BoxID)}`}>
                 <div className="card">
-                  <div><b>{b.BoxID}</b></div>
-                  <div className="muted">Standort: {b.Location || '(nicht gesetzt)'} · Aktualisiert: {b.UpdatedAt ? formatDateTime(b.UpdatedAt) : ''}</div>
+                  <div><b>Standort: {b.Location || '(nicht gesetzt)'}</b></div>
+                  <div className="muted">Aktualisiert: {b.UpdatedAt ? formatDateTime(b.UpdatedAt) : ''}</div>
                 </div>
               </Link>
               <div className="spacer"></div>

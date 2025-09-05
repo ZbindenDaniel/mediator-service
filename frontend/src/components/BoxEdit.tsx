@@ -28,7 +28,7 @@ export default function BoxEdit({ boxId }: Props) {
 
   return (
     <div className="box-edit">
-      <h2>Items in dieser Box bearbeiten</h2>
+      <h2>Artikel in dieser Box bearbeiten</h2>
       {items.length ? (
         items.map((it) => (
           <Link

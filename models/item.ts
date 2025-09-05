@@ -26,4 +26,7 @@ export interface Item {
   Einheit?: string;
   WmsLink?: string;
   EntityType?: string;
+  picture1?: File | null;
+  picture2?: File | null;
+  picture3?: File | null;
 }

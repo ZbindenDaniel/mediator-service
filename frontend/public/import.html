@@ -235,7 +235,7 @@
       const r = await fetch('/api/validate-csv', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: lastCsvText });
       const j = await r.json().catch(() => ({}));
       if (r.ok) {
-        out.textContent = 'OK: ' + j.rows + ' Zeilen, ' + j.items + ' Items, Boxen: ' + (j.boxes || []).join(', ');
+        out.textContent = 'OK: ' + j.rows + ' Zeilen, ' + j.items + ' Artikel, Boxen: ' + (j.boxes || []).join(', ');
         validatedOk = true; btnImport.disabled = false;
       } else {
         out.textContent = 'Fehler: ' + (j.error || ('HTTP ' + r.status)) + (j.details ? '\n' + j.details : '');

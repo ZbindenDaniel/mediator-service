@@ -67,8 +67,16 @@ export default function ImportCard() {
     <div className="card" id="csv-import">
       <h2>CSV Import</h2>
       <form onSubmit={valid ? handleUpload : handleValidate}>
-        <input type="file" name="file" accept=".csv" onChange={handleFileChange} />
-        {valid ? <button type="submit" disabled={!file}>Upload</button> : <button type="submit" disabled={!file}>Validate</button>}
+        <div className='row'>
+          <input type="file" name="file" accept=".csv" onChange={handleFileChange} />
+        </div>
+        <div className='row'>
+          {valid === true && <div className="success">Validierung erfolgreich</div>}
+          {valid === false && <div className="error">Validierung fehlgeschlagen</div>}
+        </div>
+        <div className='row'>
+          {valid ? <button type="submit" disabled={!file}>Upload</button> : <button type="submit" disabled={!file}>Validieren</button>}
+        </div>
       </form>
       {errors.length > 0 && (
         <ul className="muted">

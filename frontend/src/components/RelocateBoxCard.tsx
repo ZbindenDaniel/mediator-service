@@ -42,12 +42,22 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
     <div className="card relocate-card">
       <h3>Box umlagern</h3>
       <form onSubmit={handle}>
-        <label>
-          Neuer Ort
-          <input value={location} onChange={e => setLocation(e.target.value)} required />
-        </label>
-        <button type="submit">Verschieben</button>
-        {status && <div>{status}</div>}
+        <div className='container'>
+          <div className='row'>
+            <label>
+              Neuer Ort
+            </label>
+            <input value={location} placeholder='A-01-01' onChange={e => setLocation(e.target.value)} required />
+          </div>
+
+          <div className='row'>
+            <button type="submit">Verschieben</button>
+          </div>
+
+          <div className='row'>
+            {status && <div>{status}</div>}
+          </div>
+        </div>
       </form>
     </div>
   );

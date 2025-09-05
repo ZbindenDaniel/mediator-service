@@ -43,6 +43,18 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
       <div className="card">
         <form onSubmit={handleSubmit} className="item-form">
           <input value={form.BoxID || ''} readOnly hidden />
+
+          <div className="row">
+            <label>
+              Artikelbeschreibung*
+            </label>
+            <input
+              value={form.Artikelbeschreibung || ''}
+              onChange={(e) => update('Artikelbeschreibung', e.target.value)}
+              required
+            />
+          </div>
+
           <div className="row">
             {form.ItemUUID && <label>
               Box-ID
@@ -63,14 +75,6 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
                 )}
               </div>
             </label>
-            <label>
-              Artikelbeschreibung*
-            </label>
-            <input
-              value={form.Artikelbeschreibung || ''}
-              onChange={(e) => update('Artikelbeschreibung', e.target.value)}
-              required
-            />
           </div>
 
           <div className="row">
@@ -82,19 +86,6 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               value={form.Auf_Lager ?? 0}
               onChange={(e) => update('Auf_Lager', parseInt(e.target.value, 10) || 0)}
               required
-            />
-          </div>
-
-          <div className="row">
-            <label>
-              Verkaufspreis (CHF)
-            </label>
-
-            <input
-              type="number"
-              step="0.01"
-              value={form.Verkaufspreis ?? 0}
-              onChange={(e) => update('Verkaufspreis', parseFloat(e.target.value) || 0)}
             />
           </div>
 
@@ -169,6 +160,21 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               onChange={(e) => update('Gewicht_kg', parseFloat(e.target.value) || 0)}
             />
           </div>
+
+          <div className="row">
+            <label>
+              Verkaufspreis (CHF)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={form.Verkaufspreis ?? 0}
+              onChange={(e) => update('Verkaufspreis', parseFloat(e.target.value) || 0)}
+            />
+          </div>
+
+          <hr></hr>
+
           <div className="row">
             <label>
               Hauptkategorien A
@@ -205,6 +211,9 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               onChange={(e) => update('Unterkategorien_B', e.target.value)}
             />
           </div>
+
+          <hr></hr>
+          {/* 
           <div className="row">
             <label>
               Veröffentlicht Status
@@ -226,6 +235,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               onChange={(e) => update('Shopartikel', parseInt(e.target.value, 10) || 0)}
             />
           </div>
+          
           <div className="row">
             <label>
               Artikeltyp
@@ -234,7 +244,8 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               value={form.Artikeltyp || ''}
               onChange={(e) => update('Artikeltyp', e.target.value)}
             />
-          </div>
+          </div> */}
+
           <div className="row">
             <label>
               Einheit
@@ -244,16 +255,68 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               onChange={(e) => update('Einheit', e.target.value)}
             />
           </div>
+
           <div className="row">
             <label>
-              WMS Link
+              Kivi-Link
             </label>
             <input
               value={form.WmsLink || ''}
               onChange={(e) => update('WmsLink', e.target.value)}
             />
           </div>
-          <button type="submit">{submitLabel}</button>
+
+          {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
+          <div className="row">
+            <label>
+              Foto 1*
+            </label>
+            <input
+              type="file"
+              id="picture1"
+              name="picture1"
+              accept="image/*"
+              capture="environment"
+              required
+              onChange={(e) => update('picture1', e.target.files?.[0] || null)}
+            />
+          </div>
+
+          {form.picture1 && (
+            <div className="row">
+              <label>
+                Foto 2
+              </label>
+              <input
+                type="file"
+                id="picture2"
+                name="picture2"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => update('picture2', e.target.files?.[0] || null)}
+              />
+            </div>
+          )}
+
+          {form.picture2 && (
+            <div className="row">
+              <label>
+                Foto 3
+              </label>
+              <input
+                type="file"
+                id="picture3"
+                name="picture3"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => update('picture3', e.target.files?.[0] || null)}
+              />
+            </div>
+          )}
+
+          <div className="row">
+            <button type="submit">{submitLabel}</button>
+          </div>
         </form >
       </div>
     </div>

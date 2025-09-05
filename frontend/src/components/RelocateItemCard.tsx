@@ -55,19 +55,35 @@ export default function RelocateItemCard({ itemId }: Props) {
 
   return (
     <div className="card relocate-card">
-      <h3>Item umlagern</h3>
+      <h3>Artikel umlagern</h3>
       <form onSubmit={handle}>
-        <label>
-          Ziel BoxID
-          <input list="box-suggest" value={boxId} onChange={e => setBoxId(e.target.value)} required />
-          <datalist id="box-suggest">
-            {suggestions.map(b => (
-              <option key={b.BoxID} value={b.BoxID}>{b.Location}</option>
-            ))}
-          </datalist>
-        </label>
-        <button type="submit">Verschieben</button>
-        {status && <div>{status}</div>}
+        <div className='container'>
+          <div className='row'>
+            <label>
+              Ziel BoxID
+            </label>
+          </div>
+
+          <div className='row'>
+            <input list="box-suggest" value={boxId} onChange={e => setBoxId(e.target.value)} required />
+          </div>
+
+          <div className='row'>
+            <datalist id="box-suggest">
+              {suggestions.map(b => (
+                <option key={b.BoxID} value={b.BoxID}>{b.Location}</option>
+              ))}
+            </datalist>
+          </div>
+
+          <div className='row'>
+            <button type="submit">Verschieben</button>
+          </div>
+          
+          <div className='row'>
+            {status && <div>{status}</div>}
+          </div>
+        </div>
       </form>
     </div>
   );
