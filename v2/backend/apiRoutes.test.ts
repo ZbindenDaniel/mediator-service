@@ -56,7 +56,9 @@ test('create item and retrieve via box and search', async () => {
     BoxID: 'BOX-0000-0001',
     ItemUUID: 'I-0000-0001',
     Artikel_Nummer: '1000',
-    Artikelbeschreibung: 'Test Item'
+    Artikelbeschreibung: 'Test Item',
+    Location: 'A-01-01',
+    actor: 'tester'
   });
   expect(res.status).toBe(200);
   const created = await res.json();
@@ -77,6 +79,11 @@ test('create item and retrieve via box and search', async () => {
   const searchPart = await fetch(baseUrl + '/api/search?term=Test');
   const searchPartData = await searchPart.json();
   expect(searchPartData.items.length).toBe(1);
+
+  const searchLoc = await fetch(baseUrl + '/api/search?term=A-01');
+  const searchLocData = await searchLoc.json();
+  expect(searchLocData.items.length).toBe(1);
+  expect(searchLocData.boxes.length).toBe(1);
 
   const printBox = await fetch(baseUrl + '/api/print/box/BOX-0000-0001', { method: 'POST' });
   expect(printBox.status).toBe(200);
@@ -101,4 +108,12 @@ test('create item and retrieve via box and search', async () => {
     body: JSON.stringify({ Artikelbeschreibung: 'Updated', actor: 'tester' })
   });
   expect(saveOk.status).toBe(200);
+
+  const csvData = fs.readFileSync(path.join(__dirname, 'tets.csv'));
+  const csvRes = await fetch(baseUrl + '/api/import', {
+    method: 'POST',
+    headers: { 'x-filename': 'tets.csv' },
+    body: csvData
+  });
+  expect(csvRes.status).toBe(200);
 });

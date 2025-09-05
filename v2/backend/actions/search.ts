@@ -14,12 +14,25 @@ const action: Action = {
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const url = new URL(req.url || '', 'http://localhost');
-      const term = url.searchParams.get('term') || url.searchParams.get('q') || url.searchParams.get('material') || '';
+      const term =
+        url.searchParams.get('term') ||
+        url.searchParams.get('q') ||
+        url.searchParams.get('material') ||
+        '';
       if (!term) return sendJson(res, 400, { error: 'query term is required' });
       const like = `%${term}%`;
       const items = ctx.db
-        .prepare('SELECT * FROM items WHERE Artikel_Nummer LIKE ? OR Artikelbeschreibung LIKE ?')
-        .all(like, like);
+        .prepare(
+          `SELECT i.*, COALESCE(i.Location, b.Location) AS Location
+           FROM items i
+           LEFT JOIN boxes b ON i.BoxID = b.BoxID
+           WHERE i.ItemUUID LIKE ?
+              OR i.Artikel_Nummer LIKE ?
+              OR i.Artikelbeschreibung LIKE ?
+              OR i.BoxID LIKE ?
+              OR b.Location LIKE ?`
+        )
+        .all(like, like, like, like, like);
       const boxes = ctx.db
         .prepare('SELECT BoxID, Location FROM boxes WHERE BoxID LIKE ? OR Location LIKE ?')
         .all(like, like);

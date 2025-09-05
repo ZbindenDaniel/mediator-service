@@ -42,12 +42,11 @@ export default function BoxDetail({ boxId }: Props) {
       {box ? (
         <>
           <div className="card">
-            <h2>Box {box.BoxID}</h2>
+            <h2>Box {box.Location || ''}</h2>
             {!box.Location && <div className="warning">Box hat keinen Standort!</div>}
             <table className="details">
               <tbody>
                 {([
-                  ['BoxID', box.BoxID],
                   ['Location', box.Location],
                   ['Notes', (
                     <form onSubmit={async e => {

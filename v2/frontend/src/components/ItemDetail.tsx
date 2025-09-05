@@ -36,12 +36,11 @@ export default function ItemDetail({ itemId }: Props) {
       {item ? (
         <>
           <div className="card">
-            <h2>Item {item.ItemUUID}</h2>
+            <h2>Item</h2>
             <table className="details">
               <tbody>
                 {([
-                  ['ItemUUID', item.ItemUUID],
-                  ['BoxID', item.BoxID],
+                  ['Box', <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>Box</Link>],
                   ['Location', item.Location],
                   ['UpdatedAt', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
                   ['Datum_erfasst', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
@@ -65,12 +64,11 @@ export default function ItemDetail({ itemId }: Props) {
                   ['Shopartikel', item.Shopartikel],
                   ['Artikeltyp', item.Artikeltyp],
                   ['Einheit', item.Einheit],
-                  ['WmsLink', item.WmsLink],
-                  ['EntityType', item.EntityType]
+                  ['WmsLink', item.WmsLink]
                 ] as [string, any][]).map(([k, v]) => (
                   <tr key={k}>
                     <th>{k}</th>
-                    <td>{k === 'BoxID' ? <Link to={`/boxes/${encodeURIComponent(String(v))}`}>{v}</Link> : v ?? ''}</td>
+                    <td>{v ?? ''}</td>
                   </tr>
                 ))}
               </tbody>
