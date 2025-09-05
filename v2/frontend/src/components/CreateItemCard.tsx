@@ -6,7 +6,7 @@ export default function CreateItemCard() {
   return (
     <div className="card" id="create-item">
       <Link className="linkcard" to="/items/new">
-        <div className="card">
+        <div>
           <h2>Erfassen</h2>
           <p className="muted">Neue Box anlegen und Artikel erfassen</p>
         </div>

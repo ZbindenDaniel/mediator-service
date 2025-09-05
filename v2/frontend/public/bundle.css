@@ -101,6 +101,18 @@ button {
   display: flex;
   gap: 0.5rem;
 }
+.row.between {
+  justify-content: space-between;
+  align-items: center;
+}
+.item-cards {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.item-card {
+  padding: 0.5rem;
+}
 .list .card {
   margin-bottom: 0.5rem;
 }

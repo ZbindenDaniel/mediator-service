@@ -32,73 +32,72 @@ export default function ItemDetail({ itemId }: Props) {
   }, [itemId]);
 
   return (
-    <div className="container item-detail">
-      {item ? (
-        <>
-          <div className="card">
-            <h2>Item</h2>
-            <table className="details">
-              <tbody>
-                {([
-                  ['Box', <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>Box</Link>],
-                  ['Location', item.Location],
-                  ['UpdatedAt', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
-                  ['Datum_erfasst', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
-                  ['Artikel_Nummer', item.Artikel_Nummer],
-                  ['Grafikname', item.Grafikname],
-                  ['Artikelbeschreibung', item.Artikelbeschreibung],
-                  ['Auf_Lager', item.Auf_Lager],
-                  ['Verkaufspreis', item.Verkaufspreis],
-                  ['Kurzbeschreibung', item.Kurzbeschreibung],
-                  ['Langtext', item.Langtext],
-                  ['Hersteller', item.Hersteller],
-                  ['Länge_mm', item.Länge_mm],
-                  ['Breite_mm', item.Breite_mm],
-                  ['Höhe_mm', item.Höhe_mm],
-                  ['Gewicht_kg', item.Gewicht_kg],
-                  ['Hauptkategorien_A', item.Hauptkategorien_A],
-                  ['Unterkategorien_A', item.Unterkategorien_A],
-                  ['Hauptkategorien_B', item.Hauptkategorien_B],
-                  ['Unterkategorien_B', item.Unterkategorien_B],
-                  ['Veröffentlicht_Status', item.Veröffentlicht_Status],
-                  ['Shopartikel', item.Shopartikel],
-                  ['Artikeltyp', item.Artikeltyp],
-                  ['Einheit', item.Einheit],
-                  ['WmsLink', item.WmsLink]
-                ] as [string, any][]).map(([k, v]) => (
-                  <tr key={k}>
-                    <th>{k}</th>
-                    <td>{v ?? ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div>
-              <Link to={`/items/${encodeURIComponent(item.ItemUUID)}/edit`}>Edit</Link>
+    <div className="container item">
+      <div className="grid landing-grid">
+        {item ? (
+          <>
+            <div className="card">
+              <h2>Item</h2>
+              <table className="details">
+                <tbody>
+                  {([
+                    ['Box', <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>Box</Link>],
+                    ['Location', item.Location],
+                    ['UpdatedAt', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
+                    ['Datum_erfasst', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
+                    ['Artikel_Nummer', item.Artikel_Nummer],
+                    ['Grafikname', item.Grafikname],
+                    ['Artikelbeschreibung', item.Artikelbeschreibung],
+                    ['Auf_Lager', item.Auf_Lager],
+                    ['Verkaufspreis', item.Verkaufspreis],
+                    ['Kurzbeschreibung', item.Kurzbeschreibung],
+                    ['Langtext', item.Langtext],
+                    ['Hersteller', item.Hersteller],
+                    ['Länge_mm', item.Länge_mm],
+                    ['Breite_mm', item.Breite_mm],
+                    ['Höhe_mm', item.Höhe_mm],
+                    ['Gewicht_kg', item.Gewicht_kg],
+                    ['Hauptkategorien_A', item.Hauptkategorien_A],
+                    ['Unterkategorien_A', item.Unterkategorien_A],
+                    ['Hauptkategorien_B', item.Hauptkategorien_B],
+                    ['Unterkategorien_B', item.Unterkategorien_B],
+                    ['Veröffentlicht_Status', item.Veröffentlicht_Status],
+                    ['Shopartikel', item.Shopartikel],
+                    ['Artikeltyp', item.Artikeltyp],
+                    ['Einheit', item.Einheit],
+                    ['WmsLink', item.WmsLink]
+                  ] as [string, any][]).map(([k, v]) => (
+                    <tr key={k}>
+                      <th>{k}</th>
+                      <td>{v ?? ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div>
+                <Link to={`/items/${encodeURIComponent(item.ItemUUID)}/edit`}>Edit</Link>
+              </div>
             </div>
-          </div>
 
-          <div className="card linkcard">
-            <h3>Label drucken</h3>
-            <PrintLabelButton itemId={item.ItemUUID} />
-          </div>
+              <PrintLabelButton itemId={item.ItemUUID} />
 
-          <RelocateItemCard itemId={item.ItemUUID} />
+            <RelocateItemCard itemId={item.ItemUUID} />
 
-          <div className="card">
-            <h3>Events</h3>
-            <ul className="events">
-              {events.map((ev) => (
-                <li key={ev.Id}>
-                  {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor + ' ' : ''}{ev.Event}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      ) : (
-        <p>Loading...</p>
-      )}
+            <div className="card">
+              <h3>Events</h3>
+              <ul className="events">
+                {events.map((ev) => (
+                  <li key={ev.Id}>
+                    {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor + ' ' : ''}{ev.Event}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        ) : (
+          <p>Loading...</p>
+        )}
+      </div>
     </div>
   );
 }

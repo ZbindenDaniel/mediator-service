@@ -39,7 +39,8 @@ export default function BoxDetail({ boxId }: Props) {
   }, [boxId]);
 
   return (
-    <div className="container box-detail">
+    <div className="container box">
+      <div className="grid landing-grid">
       {box ? (
         <>
           <div className="card">
@@ -89,10 +90,7 @@ export default function BoxDetail({ boxId }: Props) {
             </form>
           </div>
 
-          <div className="card linkcard">
-            <h3>Label drucken</h3>
             <PrintLabelButton boxId={box.BoxID} />
-          </div>
 
           <RelocateBoxCard boxId={box.BoxID} onMoved={load} />
 
@@ -126,6 +124,7 @@ export default function BoxDetail({ boxId }: Props) {
       ) : (
         <p>Loading...</p>
       )}
+    </div>
     </div>
   );
 }

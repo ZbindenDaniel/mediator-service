@@ -33,14 +33,12 @@ body {
 }
 
 .box-list ul,
-.box-detail ul,
 .item-detail ul {
   list-style: none;
   padding: 0;
 }
 
 .box-list li,
-.box-detail li,
 .item-detail li {
   margin-bottom: 0.5rem;
 }
@@ -89,6 +87,11 @@ button {
   border-radius: 4px;
   padding: 1rem;
   background: #fff;
+  padding-bottom: 20px;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+
 }
 
 .grid {
@@ -163,6 +166,7 @@ button {
 }
 
 .linkcard {
+
   text-decoration: none;
   color: inherit;
 }
@@ -173,4 +177,3 @@ button {
   padding: 0.5rem;
   margin-bottom: 0.5rem;
 }
-

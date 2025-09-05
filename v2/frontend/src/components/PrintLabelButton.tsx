@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 interface Props {
   boxId?: string;
@@ -31,10 +32,14 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
 
   return (
     <div>
-      <button className="btn" onClick={handleClick}>Print Label</button>
-      {status && <div>{status}{preview && (
-        <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
-      )}</div>}
+      <div className="card linkcard">
+        <Link className="linkcard" onClick={handleClick} to={''}>
+          <h3>Label drucken</h3>
+        </Link>
+        {status && <div>{status}{preview && (
+          <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
+        )}</div>}
+      </div>
     </div>
   );
 }

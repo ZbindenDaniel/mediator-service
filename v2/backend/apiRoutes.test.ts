@@ -109,10 +109,10 @@ test('create item and retrieve via box and search', async () => {
   });
   expect(saveOk.status).toBe(200);
 
-  const csvData = fs.readFileSync(path.join(__dirname, 'tets.csv'));
+  const csvData = fs.readFileSync(path.join(__dirname, 'test.csv'));
   const csvRes = await fetch(baseUrl + '/api/import', {
     method: 'POST',
-    headers: { 'x-filename': 'tets.csv' },
+    headers: { 'x-filename': 'test.csv' },
     body: csvData
   });
   expect(csvRes.status).toBe(200);
