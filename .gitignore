@@ -1,12 +1,12 @@
 node_modules/
 public/prints/
-v2/frontend/public/prints/
-v2/frontend/public/bundle.js
+frontend/public/prints/
+frontend/public/bundle.js
 dist/
 
 # Ignore generated styles and drivers
 public/styles.css
 public/styles.css.map
-v2/frontend/public/styles.css
-v2/frontend/public/styles.css.map
+frontend/public/styles.css
+frontend/public/styles.css.map
 

@@ -19,7 +19,7 @@ export default function Header() {
         <nav>
           <Link to="/">Home</Link>
         </nav>
-        <h1>Mediator Service v2</h1>
+        <h1>rrrevamp</h1>
       </div>
       <div className="user">{user}</div>
     </header>

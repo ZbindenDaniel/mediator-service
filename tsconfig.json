@@ -12,5 +12,5 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["v2/backend/**/*", "v2/models/**/*", "v2/types/**/*", "test/**/*"]
+  "include": ["backend/**/*", "models/**/*", "types/**/*", "test/**/*"]
 }

@@ -34,9 +34,9 @@ import { EVENT_LABELS, eventLabel } from './event-labels';
 
 const actions = loadActions();
 
-// public directory selection: prefer dist/public, fall back to repo v2/frontend/public
+// public directory selection: prefer dist/public, fall back to repo frontend/public
 const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
-const REPO_PUBLIC = path.join(__dirname, '../../..', 'v2', 'frontend', 'public');
+const REPO_PUBLIC = path.join(__dirname, '../../..', 'frontend', 'public');
 export let PUBLIC_DIR = DIST_PUBLIC;
 export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
 

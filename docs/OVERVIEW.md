@@ -1,4 +1,4 @@
-# v2 Architecture Overview
+# Architecture Overview
 
 This document outlines the planned structure for the refactored mediator service. The goal is to clearly separate data models, application logic, and presentation.
 
@@ -37,7 +37,7 @@ This document outlines the planned structure for the refactored mediator service
       - `/items/:itemId` → `ItemDetail`
       - `/items/:itemId/edit` → `ItemEdit`
 
-The legacy JavaScript implementation remains at the project root. New code in `v2` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
+The legacy JavaScript implementation remains at the project root. New code in `/` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 
 ## Legacy comparison
 - The old project provided search and placement pages as standalone HTML; these are not yet recreated in the React frontend.

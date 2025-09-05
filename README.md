@@ -1,19 +1,16 @@
-a small service to map items to the boxes their stored in and the location they're placed.
-the workflow is very basic: items are created according to a predefined scheme. items are either placed on a new or existing box. boxes are linked to a location.
-when creating a box a label with key values and a qr code is printed to allow for inspection of a boxes content.
+# Mediator Service
 
-## Development notes
+This folder hosts the work-in-progress restructuring of the mediator service.
+A component-based frontend (React) is introduced to separate data structures,
+logic and presentation. The backend is split from the frontend to clarify
+responsibilities.
 
-- The server serves frontend static files from `dist/v2/frontend/public` when running the compiled build. During development, if `dist/v2/frontend/public/index.html` is missing the server will fall back to the workspace `v2/frontend/public` directory.
+## Layout
 
-- The `build` script (see `package.json`) compiles TypeScript, bundles the frontend, and copies `v2/frontend/public` into `dist/v2/frontend/public` so the compiled server can run without requiring manual copying.
-
-Quick commands:
-
-```bash
-# build (compiles TS, bundles frontend, copies public into dist)
-npm --workspace mediator-service run build
-
-# start
-npm --workspace mediator-service start
 ```
+  backend/   # Node.js API and workers
+  frontend/  # React application and static assets
+```
+
+Existing modules from the legacy project are being moved into these folders.
+More migration steps will follow.
