@@ -9,10 +9,9 @@ function loadOps(): Op[] {
   try {
     const dir = path.join(__dirname, 'ops');
     const entries = fs.readdirSync(dir);
-    const files = [
-      ...entries.filter((f) => f.endsWith('.ts')).sort(),
-      ...entries.filter((f) => f.endsWith('.js')).sort(),
-    ];
+    const files = entries
+      .filter((f) => /\d+-.*\.(ts|js)$/.test(f))
+      .sort();
 
     const seen = new Set<string>();
     const modules: Op[] = [];
@@ -20,8 +19,15 @@ function loadOps(): Op[] {
       const base = f.replace(/\.(ts|js)$/, '');
       if (seen.has(base)) continue;
       seen.add(base);
-      const mod = require(path.join(dir, f));
-      modules.push((mod.default || mod) as Op);
+      try {
+        const mod = require(path.join(dir, f));
+        const op = (mod.default || mod) as Partial<Op>;
+        if (op && typeof op.apply === 'function') {
+          modules.push(op as Op);
+        }
+      } catch (err) {
+        console.error('Failed to load op', f, err);
+      }
     }
     return modules;
   } catch (err) {

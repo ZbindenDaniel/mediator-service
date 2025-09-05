@@ -73,19 +73,24 @@ export default function ItemDetail({ itemId }: Props) {
                 ))}
               </tbody>
             </table>
-            <PrintLabelButton itemId={item.ItemUUID} />
-            <RelocateItemCard itemId={item.ItemUUID} />
             <div>
               <Link to={`/items/${encodeURIComponent(item.ItemUUID)}/edit`}>Edit</Link>
             </div>
           </div>
+
+          <div className="card linkcard">
+            <h3>Label drucken</h3>
+            <PrintLabelButton itemId={item.ItemUUID} />
+          </div>
+
+          <RelocateItemCard itemId={item.ItemUUID} />
 
           <div className="card">
             <h3>Events</h3>
             <ul className="events">
               {events.map((ev) => (
                 <li key={ev.Id}>
-                  {formatDateTime(ev.CreatedAt)}: {ev.Event}
+                  {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor + ' ' : ''}{ev.Event}
                 </li>
               ))}
             </ul>

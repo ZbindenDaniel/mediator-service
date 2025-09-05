@@ -3,11 +3,12 @@ import { getUser } from '../lib/user';
 
 interface Props {
   boxId: string;
+  onMoved?: () => void;
 }
 
 const LOC_RE = /^[A-Z]-\d{2}-\d{2}$/;
 
-export default function RelocateBoxCard({ boxId }: Props) {
+export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   const [location, setLocation] = useState('');
   const [status, setStatus] = useState('');
 
@@ -26,6 +27,7 @@ export default function RelocateBoxCard({ boxId }: Props) {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setStatus('Box verschoben');
+        onMoved?.();
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
       }
