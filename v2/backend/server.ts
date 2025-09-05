@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import http, { IncomingMessage, ServerResponse } from 'http';
+import http from 'http';
+import type { IncomingMessage, ServerResponse } from 'http';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
 import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR } from './config';
@@ -32,10 +33,21 @@ import { EVENT_LABELS, eventLabel } from './event-labels';
 
 const actions = loadActions();
 
+// public directory selection: prefer dist/public, fall back to repo v2/frontend/public
+const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
+const REPO_PUBLIC = path.join(__dirname, '../../..', 'v2', 'frontend', 'public');
+export let PUBLIC_DIR = DIST_PUBLIC;
+
 try {
   fs.mkdirSync(INBOX_DIR, { recursive: true });
   fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
-  const PREVIEW_DIR = path.join(__dirname, '../frontend/public', 'prints');
+  // set PUBLIC_DIR at runtime depending on where index.html exists
+  PUBLIC_DIR = fs.existsSync(path.join(DIST_PUBLIC, 'index.html'))
+    ? DIST_PUBLIC
+    : fs.existsSync(path.join(REPO_PUBLIC, 'index.html'))
+    ? REPO_PUBLIC
+    : DIST_PUBLIC;
+  const PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
   fs.mkdirSync(PREVIEW_DIR, { recursive: true });
 } catch (err) {
   console.error('Failed to initialise directories', err);
@@ -94,6 +106,33 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+type ActionContext = {
+  db: typeof db;
+  upsertBox: typeof upsertBox;
+  upsertItem: typeof upsertItem;
+  findByMaterial: typeof findByMaterial;
+  itemsByBox: typeof itemsByBox;
+  getBox: typeof getBox;
+  listBoxes: typeof listBoxes;
+  getItem: typeof getItem;
+  pdfForBox: typeof pdfForBox;
+  pdfForItem: typeof pdfForItem;
+  zplForItem: typeof zplForItem;
+  zplForBox: typeof zplForBox;
+  sendZpl: typeof sendZpl;
+  testPrinterConnection: typeof testPrinterConnection;
+  EVENT_LABELS: typeof EVENT_LABELS;
+  eventLabel: typeof eventLabel;
+  logEvent: typeof logEvent;
+  listEventsForBox: typeof listEventsForBox;
+  listEventsForItem: typeof listEventsForItem;
+  listRecentEvents: typeof listRecentEvents;
+  countBoxes: typeof countBoxes;
+  countItems: typeof countItems;
+  countItemsNoWms: typeof countItemsNoWms;
+  listRecentBoxes: typeof listRecentBoxes;
+};
+
 const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -120,7 +159,7 @@ const server = http.createServer(async (req: IncomingMessage, res: ServerRespons
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     if (url.pathname === '/' && req.method === 'GET') {
-      const p = path.join(__dirname, '../frontend/public', 'index.html');
+      const p = path.join(PUBLIC_DIR, 'index.html');
       try {
         const html = fs.readFileSync(p);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -132,7 +171,7 @@ const server = http.createServer(async (req: IncomingMessage, res: ServerRespons
     }
 
     if (url.pathname === '/bundle.js' && req.method === 'GET') {
-      const p = path.join(__dirname, '../frontend/public', 'bundle.js');
+      const p = path.join(PUBLIC_DIR, 'bundle.js');
       try {
         const js = fs.readFileSync(p);
         res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
@@ -144,7 +183,7 @@ const server = http.createServer(async (req: IncomingMessage, res: ServerRespons
     }
 
     if (url.pathname === '/styles.css' && req.method === 'GET') {
-      const p = path.join(__dirname, '../frontend/public', 'styles.css');
+      const p = path.join(PUBLIC_DIR, 'styles.css');
       try {
         const css = fs.readFileSync(p);
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
@@ -155,9 +194,9 @@ const server = http.createServer(async (req: IncomingMessage, res: ServerRespons
     }
 
     if (url.pathname.startsWith('/prints/') && req.method === 'GET') {
-      const p = path.join(__dirname, '../frontend/public', url.pathname);
+      const p = path.join(PUBLIC_DIR, url.pathname);
       try {
-        if (!p.startsWith(path.join(__dirname, '../frontend/public', 'prints'))) throw new Error('bad path');
+        if (!p.startsWith(path.join(PUBLIC_DIR, 'prints'))) throw new Error('bad path');
         if (fs.existsSync(p)) {
           res.writeHead(200, { 'Content-Type': 'application/pdf' });
           return res.end(fs.readFileSync(p));

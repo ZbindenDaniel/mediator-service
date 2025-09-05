@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/styles.css"],
+  "sourcesContent": ["/* Global styles for v2 frontend */\nbody {\n  margin: 0;\n  font-family: Arial, sans-serif;\n}\n\n.header {\n  background: #222;\n  color: #fff;\n  padding: 1rem;\n}\n\n.header nav a {\n  color: #fff;\n  margin-right: 1rem;\n}\n\n.layout main {\n  padding: 1rem;\n}\n\n.box-list ul,\n.box-detail ul,\n.item-detail ul {\n  list-style: none;\n  padding: 0;\n}\n\n.box-list li,\n.box-detail li,\n.item-detail li {\n  margin-bottom: 0.5rem;\n}\n\n.events li {\n  font-size: 0.9rem;\n  color: #555;\n}\n\n.import-page form {\n  display: flex;\n  flex-direction: column;\n  gap: 0.5rem;\n}\n\n.item-edit {\n  display: flex;\n  flex-direction: column;\n  gap: 0.5rem;\n}\n\n.item-edit label {\n  display: flex;\n  flex-direction: column;\n  gap: 0.25rem;\n}\n\nbutton {\n  cursor: pointer;\n}\n"],
+  "mappings": ";AACA;AACE,UAAQ;AACR,eAAa,KAAK,EAAE;AACtB;AAEA,CAAC;AACC,cAAY;AACZ,SAAO;AACP,WAAS;AACX;AAEA,CANC,OAMO,IAAI;AACV,SAAO;AACP,gBAAc;AAChB;AAEA,CAAC,OAAO;AACN,WAAS;AACX;AAEA,CAAC,SAAS;AACV,CAAC,WAAW;AACZ,CAAC,YAAY;AACX,cAAY;AACZ,WAAS;AACX;AAEA,CAPC,SAOS;AACV,CAPC,WAOW;AACZ,CAPC,YAOY;AACX,iBAAe;AACjB;AAEA,CAAC,OAAO;AACN,aAAW;AACX,SAAO;AACT;AAEA,CAAC,YAAY;AACX,WAAS;AACT,kBAAgB;AAChB,OAAK;AACP;AAEA,CAAC;AACC,WAAS;AACT,kBAAgB;AAChB,OAAK;AACP;AAEA,CANC,UAMU;AACT,WAAS;AACT,kBAAgB;AAChB,OAAK;AACP;AAEA;AACE,UAAQ;AACV;",
+  "names": []
+}
