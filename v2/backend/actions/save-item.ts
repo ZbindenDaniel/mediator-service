@@ -34,6 +34,8 @@ const action: Action = {
       let raw = '';
       for await (const chunk of req) raw += chunk;
       const data = raw ? JSON.parse(raw) : {};
+      const actor = (data.actor || '').trim();
+      if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const existing = ctx.getItem.get(itemId) || {};
       const item: Item = {
         ...existing,
@@ -44,7 +46,7 @@ const action: Action = {
       };
       ctx.upsertItem.run(item);
       ctx.logEvent.run({
-        Actor: data.actor || 'system',
+        Actor: actor,
         EntityType: 'Item',
         EntityId: itemId,
         Event: 'updated',

@@ -45,7 +45,8 @@ export default function SearchCard() {
         } else {
           const data = await r.json();
           (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
-          console.log('Search returned', (data.items || []).length, 'items');
+          (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID }));
+          console.log('Search returned', (data.items || []).length, 'items', (data.boxes || []).length, 'boxes');
         }
       } catch (err) {
         console.error('Search failed', err);

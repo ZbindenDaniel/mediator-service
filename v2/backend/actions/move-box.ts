@@ -24,13 +24,14 @@ const action: Action = {
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const location = (data.location || '').trim().toUpperCase();
       const actor = (data.actor || '').trim();
+      if (!actor) return sendJson(res, 400, { error: 'actor is required' });
+      const locationRaw = (data.location ?? box.Location ?? '').toString().trim().toUpperCase();
       const notes = (data.notes || '').trim();
-      if (!location || !actor) return sendJson(res, 400, { error: 'location and actor are required' });
-      if (!LOC_RE.test(location)) return sendJson(res, 400, { error: 'invalid location format' });
-      ctx.db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(location, notes, actor, id);
-      ctx.logEvent.run({ Actor: actor, EntityType: 'Box', EntityId: id, Event: 'Moved', Meta: JSON.stringify({ location, notes }) });
+      if (!locationRaw) return sendJson(res, 400, { error: 'location is required' });
+      if (!LOC_RE.test(locationRaw)) return sendJson(res, 400, { error: 'invalid location format' });
+      ctx.db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(locationRaw, notes, actor, id);
+      ctx.logEvent.run({ Actor: actor, EntityType: 'Box', EntityId: id, Event: 'Moved', Meta: JSON.stringify({ location: locationRaw, notes }) });
       sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error('Move box failed', err);

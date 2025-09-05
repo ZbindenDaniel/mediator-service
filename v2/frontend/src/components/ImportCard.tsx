@@ -3,16 +3,46 @@ import React, { useState } from 'react';
 /** Card handling CSV import */
 export default function ImportCard() {
   const [file, setFile] = useState<File | null>(null);
+  const [valid, setValid] = useState<boolean | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
     setFile(f);
+    setValid(null);
+    setErrors([]);
     console.log('Selected import file', f?.name);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleValidate(e: React.FormEvent) {
     e.preventDefault();
     if (!file) return;
+    try {
+      const text = await file.text();
+      const res = await fetch('/api/import/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: text
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setValid(true);
+        setErrors([]);
+        console.log('CSV validation ok');
+      } else {
+        setValid(false);
+        setErrors((data.errors || []).map((e: any) => JSON.stringify(e)));
+        console.error('CSV validation failed');
+      }
+    } catch (err) {
+      console.error('CSV validation failed', err);
+      setValid(false);
+    }
+  }
+
+  async function handleUpload(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file || !valid) return;
     try {
       const text = await file.text();
       const res = await fetch('/api/import', {
@@ -36,10 +66,17 @@ export default function ImportCard() {
   return (
     <div className="card" id="csv-import">
       <h2>CSV Import</h2>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={valid ? handleUpload : handleValidate}>
         <input type="file" name="file" accept=".csv" onChange={handleFileChange} />
-        <button type="submit" disabled={!file}>Upload</button>
+        {valid ? <button type="submit" disabled={!file}>Upload</button> : <button type="submit" disabled={!file}>Validate</button>}
       </form>
+      {errors.length > 0 && (
+        <ul className="muted">
+          {errors.map((e, i) => (
+            <li key={i}>{e}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

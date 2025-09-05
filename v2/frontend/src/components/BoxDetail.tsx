@@ -4,6 +4,7 @@ import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import type { Box, Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
+import { getUser } from '../lib/user';
 
 interface Props {
   boxId: string;
@@ -13,6 +14,8 @@ export default function BoxDetail({ boxId }: Props) {
   const [box, setBox] = useState<Box | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
+  const [note, setNote] = useState('');
+  const [noteStatus, setNoteStatus] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -21,6 +24,7 @@ export default function BoxDetail({ boxId }: Props) {
         if (res.ok) {
           const data = await res.json();
           setBox(data.box);
+          setNote(data.box?.Notes || '');
           setItems(data.items || []);
           setEvents(data.events || []);
         } else {
@@ -38,12 +42,37 @@ export default function BoxDetail({ boxId }: Props) {
       {box ? (
         <>
           <h2>Box {box.BoxID}</h2>
+          {!box.Location && <div className="warning">Box hat keinen Standort!</div>}
           <table className="details">
             <tbody>
               {([
                 ['BoxID', box.BoxID],
                 ['Location', box.Location],
-                ['Notes', box.Notes],
+                ['Notes', (
+                  <form onSubmit={async e => {
+                    e.preventDefault();
+                    try {
+                      const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ notes: note, location: box.Location, actor: getUser() })
+                      });
+                      if (res.ok) {
+                        setBox(b => b ? { ...b, Notes: note } : b);
+                        setNoteStatus('gespeichert');
+                      } else {
+                        setNoteStatus('Fehler');
+                      }
+                    } catch (err) {
+                      console.error('Note save failed', err);
+                      setNoteStatus('Fehler');
+                    }
+                  }}>
+                    <input value={note} onChange={e => setNote(e.target.value)} />
+                    <button type="submit">Speichern</button>
+                    {noteStatus && <span className="muted"> {noteStatus}</span>}
+                  </form>
+                )],
                 ['PlacedBy', box.PlacedBy],
                 ['PlacedAt', box.PlacedAt ? formatDateTime(box.PlacedAt) : ''],
                 ['CreatedAt', box.CreatedAt ? formatDateTime(box.CreatedAt) : ''],

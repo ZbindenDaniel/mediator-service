@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
+import { getUser } from '../lib/user';
 
 export default function ItemCreate() {
   const navigate = useNavigate();
@@ -10,20 +11,21 @@ export default function ItemCreate() {
 
   async function handleSubmit(data: Partial<Item>) {
     const p = new URLSearchParams();
-    Object.entries({ ...data, BoxID: boxId || data.BoxID || '' }).forEach(([k, v]) => {
+    Object.entries({ ...data, BoxID: boxId || data.BoxID || '', actor: getUser() }).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') {
         p.append(k, String(v));
       }
     });
     try {
-      const res = await fetch('/ui/api/import/item', {
+      const res = await fetch('/api/import/item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: p.toString()
       });
       if (res.ok) {
         const j = await res.json();
-        navigate(`/items/${encodeURIComponent(j.item.ItemUUID)}`);
+        alert('Box erstellt. Bitte platzieren!');
+        navigate(`/boxes/${encodeURIComponent(j.item.BoxID)}`);
       } else {
         console.error('Failed to create item', res.status);
       }

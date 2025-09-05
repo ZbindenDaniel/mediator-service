@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
+import { getUser } from '../lib/user';
 
 interface Props {
   itemId: string;
@@ -33,7 +34,7 @@ export default function ItemEdit({ itemId }: Props) {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify({ ...data, actor: getUser() })
       });
       if (res.ok) {
         navigate(`/items/${encodeURIComponent(itemId)}`);

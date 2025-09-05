@@ -151,3 +151,10 @@ button {
   text-decoration: none;
   color: inherit;
 }
+
+.warning {
+  background: #ffe0e0;
+  border: 1px solid #f00;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}

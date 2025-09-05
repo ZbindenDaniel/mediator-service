@@ -193,6 +193,18 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
       res.writeHead(404); return res.end('Not found');
     }
 
+    if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
+      const p = path.join(PUBLIC_DIR, 'index.html');
+      try {
+        const html = fs.readFileSync(p);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(html);
+      } catch (err) {
+        console.error('Failed to serve SPA fallback', err);
+        res.writeHead(404); return res.end('Not found');
+      }
+    }
+
     // Remaining request handling delegated to actions
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));
     if (action) {

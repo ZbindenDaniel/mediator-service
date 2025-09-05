@@ -70,6 +70,9 @@ test('create item and retrieve via box and search', async () => {
   const searchData = await searchRes.json();
   expect(Array.isArray(searchData.items)).toBe(true);
   expect(searchData.items.length).toBe(1);
+  const searchBox = await fetch(baseUrl + '/api/search?term=BOX-0000');
+  const searchBoxData = await searchBox.json();
+  expect((searchBoxData.boxes || []).length).toBe(1);
 
   const searchPart = await fetch(baseUrl + '/api/search?term=Test');
   const searchPartData = await searchPart.json();
@@ -79,4 +82,23 @@ test('create item and retrieve via box and search', async () => {
   expect(printBox.status).toBe(200);
   const printItem = await fetch(baseUrl + '/api/print/item/I-0000-0001', { method: 'POST' });
   expect(printItem.status).toBe(200);
+
+  const badCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'foo,bar\n1,2' });
+  expect(badCsv.status).toBe(400);
+  const goodCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'ItemUUID,BoxID\na,b' });
+  expect(goodCsv.status).toBe(200);
+
+  const saveBad = await fetch(baseUrl + '/api/items/I-0000-0001', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Artikelbeschreibung: 'x' })
+  });
+  expect(saveBad.status).toBe(400);
+
+  const saveOk = await fetch(baseUrl + '/api/items/I-0000-0001', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Artikelbeschreibung: 'Updated', actor: 'tester' })
+  });
+  expect(saveOk.status).toBe(200);
 });

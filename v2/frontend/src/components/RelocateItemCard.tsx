@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getUser } from '../lib/user';
 
 interface Props {
@@ -7,7 +7,25 @@ interface Props {
 
 export default function RelocateItemCard({ itemId }: Props) {
   const [boxId, setBoxId] = useState('');
+  const [suggestions, setSuggestions] = useState<{ BoxID: string; Location: string }[]>([]);
   const [status, setStatus] = useState('');
+
+  useEffect(() => {
+    const v = boxId.trim();
+    if (v.length < 2) { setSuggestions([]); return; }
+    const ctrl = new AbortController();
+    async function search() {
+      try {
+        const r = await fetch('/api/search?term=' + encodeURIComponent(v), { signal: ctrl.signal });
+        const data = await r.json().catch(() => ({}));
+        setSuggestions(data.boxes || []);
+      } catch (err) {
+        if ((err as any).name !== 'AbortError') console.error('box search failed', err);
+      }
+    }
+    search();
+    return () => ctrl.abort();
+  }, [boxId]);
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
@@ -41,7 +59,12 @@ export default function RelocateItemCard({ itemId }: Props) {
       <form onSubmit={handle}>
         <label>
           Ziel BoxID
-          <input value={boxId} onChange={e => setBoxId(e.target.value)} required />
+          <input list="box-suggest" value={boxId} onChange={e => setBoxId(e.target.value)} required />
+          <datalist id="box-suggest">
+            {suggestions.map(b => (
+              <option key={b.BoxID} value={b.BoxID}>{b.Location}</option>
+            ))}
+          </datalist>
         </label>
         <button type="submit">Verschieben</button>
         {status && <div>{status}</div>}

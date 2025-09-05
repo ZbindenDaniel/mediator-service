@@ -21,6 +21,8 @@ const action: Action = {
       let raw = '';
       for await (const chunk of req) raw += chunk;
       const p = new URLSearchParams(raw);
+      const actor = (p.get('actor') || '').trim();
+      if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       let BoxID = (p.get('BoxID') || '').trim();
       if (!BoxID) BoxID = genId('B');
       let ItemUUID = (p.get('ItemUUID') || '').trim();
@@ -65,7 +67,7 @@ const action: Action = {
         UpdatedAt: now
       });
       ctx.upsertItem.run(data);
-      ctx.logEvent.run({ Actor: null, EntityType: 'Item', EntityId: ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID }) });
+      ctx.logEvent.run({ Actor: actor, EntityType: 'Item', EntityId: ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID }) });
       sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
     } catch (err) {
       console.error('Import item failed', err);
