@@ -25,7 +25,10 @@ import {
   countItems,
   countItemsNoWms,
   listRecentBoxes,
-  getMaxArtikelNummer
+  getMaxArtikelNummer,
+  decrementItemStock,
+  deleteItem,
+  deleteBox
 } from './db';
 import type { Item, LabelJob } from './db';
 import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
@@ -117,6 +120,9 @@ type ActionContext = {
   getBox: typeof getBox;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
+  decrementItemStock: typeof decrementItemStock;
+  deleteItem: typeof deleteItem;
+  deleteBox: typeof deleteBox;
   pdfForBox: typeof pdfForBox;
   pdfForItem: typeof pdfForItem;
   zplForItem: typeof zplForItem;
@@ -219,6 +225,9 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getBox,
           listBoxes,
           getItem,
+          decrementItemStock,
+          deleteItem,
+          deleteBox,
           pdfForBox,
           pdfForItem,
           zplForItem,

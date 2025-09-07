@@ -30,8 +30,11 @@ const action: Action = {
       const notes = (data.notes || '').trim();
       if (!locationRaw) return sendJson(res, 400, { error: 'location is required' });
       if (!LOC_RE.test(locationRaw)) return sendJson(res, 400, { error: 'invalid location format' });
-      ctx.db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(locationRaw, notes, actor, id);
-      ctx.logEvent.run({ Actor: actor, EntityType: 'Box', EntityId: id, Event: 'Moved', Meta: JSON.stringify({ location: locationRaw, notes }) });
+      const txn = ctx.db.transaction((boxId: string, loc: string, note: string, a: string) => {
+        ctx.db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(loc, note, a, boxId);
+        ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Moved', Meta: JSON.stringify({ location: loc, notes: note }) });
+      });
+      txn(id, locationRaw, notes, actor);
       sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error('Move box failed', err);

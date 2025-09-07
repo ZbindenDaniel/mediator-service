@@ -18,6 +18,42 @@ export default function BoxDetail({ boxId }: Props) {
   const [note, setNote] = useState('');
   const [noteStatus, setNoteStatus] = useState('');
   const navigate = useNavigate();
+
+  async function handleDeleteBox() {
+    if (!box) return;
+    if (!window.confirm('Box wirklich löschen?')) return;
+    try {
+      const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: getUser(), confirm: true })
+      });
+      if (res.ok) {
+        navigate('/');
+      } else {
+        console.error('Failed to delete box', res.status);
+      }
+    } catch (err) {
+      console.error('Failed to delete box', err);
+    }
+  }
+
+  async function removeItem(itemId: string) {
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: getUser() })
+      });
+      if (res.ok) {
+        load();
+      } else {
+        console.error('Failed to remove item', res.status);
+      }
+    } catch (err) {
+      console.error('Failed to remove item', err);
+    }
+  }
   async function load() {
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}`);
@@ -46,7 +82,7 @@ export default function BoxDetail({ boxId }: Props) {
           <>
             <div className="card">
               <h2>Box {box.Location || ''}</h2>
-              
+
               <table className="details">
                 <tbody>
                   {([
@@ -62,6 +98,9 @@ export default function BoxDetail({ boxId }: Props) {
                   ))}
                 </tbody>
               </table>
+              <div className='row'>
+                <button type="button" className="btn danger" onClick={handleDeleteBox}>Löschen</button>
+              </div>
             </div>
 
             <RelocateBoxCard boxId={box.BoxID} onMoved={load} />
@@ -113,11 +152,14 @@ export default function BoxDetail({ boxId }: Props) {
                 <div className='row'>
                   <div className="item-cards">
                     {items.map((it) => (
-                      <Link key={it.ItemUUID} to={`/items/${encodeURIComponent(it.ItemUUID)}`} className="card item-card linkcard">
-                        <div className="mono">{it.Artikel_Nummer || it.ItemUUID}</div>
-                        <div>{it.Artikelbeschreibung}</div>
-                        <div className="muted">Auf Lager: {it.Auf_Lager}</div>
-                      </Link>
+                      <div key={it.ItemUUID} className="card item-card">
+                        <Link to={`/items/${encodeURIComponent(it.ItemUUID)}`} className="linkcard">
+                          <div className="mono">{it.Artikel_Nummer || it.ItemUUID}</div>
+                          <div>{it.Artikelbeschreibung}</div>
+                          <div className="muted">Auf Lager: {it.Auf_Lager}</div>
+                        </Link>
+                        <button type="button" className="btn" onClick={() => removeItem(it.ItemUUID)}>Entnehmen</button>
+                      </div>
                     ))}
                   </div>
                 </div>

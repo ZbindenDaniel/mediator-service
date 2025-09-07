@@ -4,6 +4,7 @@ import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
+import { getUser } from '../lib/user';
 
 interface Props {
   itemId: string;
@@ -31,6 +32,29 @@ export default function ItemDetail({ itemId }: Props) {
     }
     load();
   }, [itemId]);
+
+  async function handleDelete() {
+    if (!item) return;
+    if (!window.confirm('Item wirklich löschen?')) return;
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: getUser(), confirm: true })
+      });
+      if (res.ok) {
+        if (item.BoxID) {
+          navigate(`/boxes/${encodeURIComponent(String(item.BoxID))}`);
+        } else {
+          navigate('/');
+        }
+      } else {
+        console.error('Failed to delete item', res.status);
+      }
+    } catch (err) {
+      console.error('Failed to delete item', err);
+    }
+  }
 
   return (
     <div className="container item">
@@ -80,6 +104,7 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
               <div className='row'>
                 <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
+                <button type="button" className="btn danger" onClick={handleDelete}>Löschen</button>
               </div>
             </div>
 

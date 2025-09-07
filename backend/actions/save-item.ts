@@ -44,15 +44,18 @@ const action: Action = {
         BoxID: data.BoxID ?? existing.BoxID ?? '',
         UpdatedAt: new Date().toISOString()
       };
-      ctx.upsertItem.run(item);
-      ctx.logEvent.run({
-        Actor: actor,
-        EntityType: 'Item',
-        EntityId: itemId,
-        Event: 'updated',
-        Meta: null
-      });
-      sendJson(res, 200, { ok: true });
+        const txn = ctx.db.transaction((it: Item, a: string) => {
+          ctx.upsertItem.run(it);
+          ctx.logEvent.run({
+            Actor: a,
+            EntityType: 'Item',
+            EntityId: it.ItemUUID,
+            Event: 'updated',
+            Meta: null
+          });
+        });
+        txn(item, actor);
+        sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error('Save item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

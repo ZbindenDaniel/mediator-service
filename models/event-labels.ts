@@ -7,6 +7,8 @@ export const EVENT_LABELS: Record<string, string> = {
   TestPrinted: 'Testdruck gesendet',
   TestPreviewSaved: 'Testvorschau gespeichert',
   Note: 'Notiz',
+  Removed: 'Entfernt',
+  Deleted: 'Gelöscht',
   // Add more as needed
 };
 

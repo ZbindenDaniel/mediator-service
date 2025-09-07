@@ -81,12 +81,16 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
             <label>
               Anzahl*
             </label>
-            <input
-              type="number"
-              value={form.Auf_Lager ?? 0}
-              onChange={(e) => update('Auf_Lager', parseInt(e.target.value, 10) || 0)}
-              required
-            />
+            {isNew ? (
+              <input
+                type="number"
+                value={form.Auf_Lager ?? 0}
+                onChange={(e) => update('Auf_Lager', parseInt(e.target.value, 10) || 0)}
+                required
+              />
+            ) : (
+              <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
+            )}
           </div>
 
           <div className="row">

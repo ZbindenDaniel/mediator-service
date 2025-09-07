@@ -57,18 +57,21 @@ const action: Action = {
         WmsLink: (p.get('WmsLink') || '').trim(),
       };
 
-      ctx.upsertBox.run({
-        BoxID,
-        Location: data.Location,
-        CreatedAt: now,
-        Notes: null,
-        PlacedBy: null,
-        PlacedAt: null,
-        UpdatedAt: now
-      });
-      ctx.upsertItem.run(data);
-      ctx.logEvent.run({ Actor: actor, EntityType: 'Item', EntityId: ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID }) });
-      sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
+        const txn = ctx.db.transaction((boxId: string, itemData: any, a: string) => {
+          ctx.upsertBox.run({
+            BoxID: boxId,
+            Location: itemData.Location,
+            CreatedAt: now,
+            Notes: null,
+            PlacedBy: null,
+            PlacedAt: null,
+            UpdatedAt: now
+          });
+          ctx.upsertItem.run(itemData);
+          ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
+        });
+        txn(BoxID, { ...data, ItemUUID }, actor);
+        sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
     } catch (err) {
       console.error('Import item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

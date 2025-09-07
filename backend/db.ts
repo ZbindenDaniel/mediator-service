@@ -154,6 +154,16 @@ export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
+export const decrementItemStock = db.prepare(
+  `UPDATE items
+   SET Auf_Lager = Auf_Lager - 1,
+       BoxID = CASE WHEN Auf_Lager - 1 <= 0 THEN '' ELSE BoxID END,
+       Location = CASE WHEN Auf_Lager - 1 <= 0 THEN '' ELSE Location END,
+       UpdatedAt = datetime('now')
+   WHERE ItemUUID = ? AND Auf_Lager > 0`
+);
+export const deleteItem = db.prepare(`DELETE FROM items WHERE ItemUUID = ?`);
+export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
 export const logEvent = db.prepare(`INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta) VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)`);
 export const listEventsForBox = db.prepare(`SELECT * FROM events WHERE EntityType='Box' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
 export const listEventsForItem = db.prepare(`SELECT * FROM events WHERE EntityType='Item' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
