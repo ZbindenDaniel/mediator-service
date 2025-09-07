@@ -54,3 +54,4 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.
 - Wrapped removal and deletion in database transactions and added unit tests to verify item stock and box deletion logic.
 - Extended existing move and save/import actions to use database transactions for atomic updates and event logging.
+- Introduced a CSV export endpoint with date filters for item data.

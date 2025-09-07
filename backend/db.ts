@@ -179,5 +179,12 @@ export const getMaxArtikelNummer = db.prepare(`
     LIMIT 1
   `);
 
+export const listItemsForExport = db.prepare(
+  `SELECT * FROM items
+   WHERE (@createdAfter IS NULL OR Datum_erfasst >= @createdAfter)
+     AND (@updatedAfter IS NULL OR UpdatedAt >= @updatedAfter)
+   ORDER BY Datum_erfasst`
+);
+
 export type { Box, Item, LabelJob, EventLog };
 

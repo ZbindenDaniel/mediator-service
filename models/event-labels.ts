@@ -9,6 +9,7 @@ export const EVENT_LABELS: Record<string, string> = {
   Note: 'Notiz',
   Removed: 'Entfernt',
   Deleted: 'Gelöscht',
+  Exported: 'Exportiert',
   // Add more as needed
 };
 
