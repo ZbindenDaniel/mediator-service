@@ -66,3 +66,5 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Persisted up to three item images to `media/{ItemId}` and stored the first image path in `Grafikname`.
 - Warn users when deleting a non-empty Behälter and translate UI text from "Box" to "Behälter" throughout.
 - Statistics now show "Artikel ohne Behälter" and list pages use `dd.MM.yyyy` dates.
+- Item details now show the creator and current stock, remove the Standort field, and events list include article numbers and descriptions.
+- Images persist across item edits with `{Artikelnummer}-{imgNumber}` naming, and item models no longer carry picture fields.

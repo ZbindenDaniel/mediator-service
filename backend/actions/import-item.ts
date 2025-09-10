@@ -50,13 +50,14 @@ const action: Action = {
       try {
         const dir = path.join(__dirname, '../../media', ItemUUID);
         fs.mkdirSync(dir, { recursive: true });
+        const artNr = (p.get('Artikel_Nummer') || '').trim() || ItemUUID;
         images.forEach((img, idx) => {
           if (!img) return;
           const m = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
           if (!m) return;
           const ext = m[1].split('/')[1];
           const buf = Buffer.from(m[2], 'base64');
-          const file = `${ItemUUID}-${idx + 1}.${ext}`;
+          const file = `${artNr}-${idx + 1}.${ext}`;
           fs.writeFileSync(path.join(dir, file), buf);
           if (!firstImage) firstImage = `/media/${ItemUUID}/${file}`;
         });

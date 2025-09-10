@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
 
+interface ItemFormData extends Item {
+  picture1?: string | null;
+  picture2?: string | null;
+  picture3?: string | null;
+}
+
 interface Props {
-  item: Partial<Item>;
-  onSubmit: (data: Partial<Item>) => Promise<void>;
+  item: Partial<ItemFormData>;
+  onSubmit: (data: Partial<ItemFormData>) => Promise<void>;
   submitLabel: string;
   isNew?: boolean;
 }
 
 export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }: Props) {
-  const [form, setForm] = useState<Partial<Item>>({ ...item });
+  const [form, setForm] = useState<Partial<ItemFormData>>({ ...item });
 
-  function update<K extends keyof Item>(key: K, value: Item[K]) {
+  function update<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 

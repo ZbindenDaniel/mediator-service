@@ -62,15 +62,15 @@ export default function ItemDetail({ itemId }: Props) {
         {item ? (
           <>
             <div className="card">
-              <h2>Artikel</h2>
+              <h2>Artikel <span className="muted">({item.Auf_Lager ?? 0})</span></h2>
               <div className='row'>
 
                 <table className="details">
                   <tbody>
                     {([
+                      ['Erstellt von', events.length ? events[events.length - 1].Actor : ''],
                       ['Artikelbeschreibung', item.Artikelbeschreibung],
                       ['Artikelnummer', item.Artikel_Nummer],
-                      ['Standort', item.Location],
                       ['Anzahl', item.Auf_Lager],
                       ['Behälter', item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : ''],
                       ['Kurzbeschreibung', item.Kurzbeschreibung],
@@ -124,7 +124,7 @@ export default function ItemDetail({ itemId }: Props) {
             <PrintLabelButton itemId={item.ItemUUID} />
 
             <div className="card">
-              <h3>Events</h3>
+              <h3>Aktivitäten</h3>
               <ul className="events">
                 {events.map((ev) => (
                   <li key={ev.Id}>

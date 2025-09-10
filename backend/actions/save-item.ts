@@ -43,6 +43,7 @@ const action: Action = {
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
         const dir = path.join(__dirname, '../../media', itemId);
+        const artNr = data.Artikel_Nummer || existing.Artikel_Nummer || itemId;
         if (imgs.some((i: string) => i)) fs.mkdirSync(dir, { recursive: true });
         imgs.forEach((img: string, idx: number) => {
           if (!img) return;
@@ -50,7 +51,7 @@ const action: Action = {
           if (!m) return;
           const ext = m[1].split('/')[1];
           const buf = Buffer.from(m[2], 'base64');
-          const file = `${itemId}-${idx + 1}.${ext}`;
+          const file = `${artNr}-${idx + 1}.${ext}`;
           fs.writeFileSync(path.join(dir, file), buf);
           if (idx === 0) grafik = `/media/${itemId}/${file}`;
         });

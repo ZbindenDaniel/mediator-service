@@ -6,4 +6,6 @@ export interface EventLog {
   EntityId: string;
   Event: string;
   Meta?: string | null;
+  Artikelbeschreibung?: string | null;
+  Artikel_Nummer?: string | null;
 }

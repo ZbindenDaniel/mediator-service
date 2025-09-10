@@ -197,7 +197,7 @@ export default function BoxDetail({ boxId }: Props) {
             </div>
 
             <div className="card">
-              <h3>Events</h3>
+              <h3>Aktivitäten</h3>
               <ul className="events">
                 {events.map((ev) => (
                   <li key={ev.Id}>

@@ -173,7 +173,12 @@ export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
 export const logEvent = db.prepare(`INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta) VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)`);
 export const listEventsForBox = db.prepare(`SELECT * FROM events WHERE EntityType='Box' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
 export const listEventsForItem = db.prepare(`SELECT * FROM events WHERE EntityType='Item' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
-export const listRecentEvents = db.prepare(`SELECT Id, CreatedAt, Actor, EntityType, EntityId, Event, Meta FROM events ORDER BY Id DESC LIMIT 15`);
+export const listRecentEvents = db.prepare(`
+  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Meta,
+         i.Artikelbeschreibung, i.Artikel_Nummer
+  FROM events e
+  LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
+  ORDER BY e.Id DESC LIMIT 15`);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoWms = db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`);

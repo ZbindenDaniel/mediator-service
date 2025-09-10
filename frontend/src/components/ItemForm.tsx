@@ -2,17 +2,23 @@ import React, { useState } from 'react';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
 
+interface ItemFormData extends Item {
+  picture1?: string | null;
+  picture2?: string | null;
+  picture3?: string | null;
+}
+
 interface Props {
-  item: Partial<Item>;
-  onSubmit: (data: Partial<Item>) => Promise<void>;
+  item: Partial<ItemFormData>;
+  onSubmit: (data: Partial<ItemFormData>) => Promise<void>;
   submitLabel: string;
   isNew?: boolean;
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) {
-  const [form, setForm] = useState<Partial<Item>>({ ...item });
+  const [form, setForm] = useState<Partial<ItemFormData>>({ ...item });
 
-  function update<K extends keyof Item>(key: K, value: Item[K]) {
+  function update<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
@@ -319,7 +325,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
           {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
           <div className="row">
             <label>
-              Foto 1*
+              Foto 1{isNew ? '*' : ''}
             </label>
             <input
               type="file"
@@ -327,7 +333,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               name="picture1"
               accept="image/*"
               capture="environment"
-              required
+              required={isNew}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
