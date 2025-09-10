@@ -1,6 +1,6 @@
 import React from 'react';
 import type { EventLog } from '../../../models';
-import { formatDateTime } from '../lib/format';
+import { formatDate } from '../lib/format';
 import { eventLabel } from '../../../models/event-labels';
 interface Props {
   events: EventLog[];
@@ -19,7 +19,7 @@ export default function RecentEventsCard({ events }: Props) {
                   <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Box' : 'Artikel'}</span>
                   <br />
                 </div>
-                <div>{formatDateTime(e.CreatedAt)} </div>
+                <div>{formatDate(e.CreatedAt)} </div>
                 <div> {eventLabel(e.Event)}{e.Actor ? ` von ${e.Actor}` : ''}</div>
               </div>
               <div className="spacer"></div>
@@ -33,4 +33,4 @@ export default function RecentEventsCard({ events }: Props) {
   );
 }
 
-// formatting handled by formatDateTime util
+// formatting handled by formatDate util

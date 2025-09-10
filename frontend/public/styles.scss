@@ -362,7 +362,9 @@ button:focus {
 .modal {
     max-width: 400px;
     width: 100%;
-    color: var(--text);
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--line);
 }
 
 .modal .results {

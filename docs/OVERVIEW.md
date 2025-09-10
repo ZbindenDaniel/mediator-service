@@ -42,6 +42,9 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 ## Next steps
 - None
 
+## Known issues
+- Tests and builds require the `sass` CLI; missing or partially installed `sass` leads to `sh: 1: sass: not found`. Registry restrictions may prevent installing the dependency.
+
 ## Recent changes
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.
@@ -53,3 +56,4 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Confirmed inventory adjustments, styled item lists for mobile, added filter for unplaced items, and disabled UI during CSV uploads with automatic reload.
 - CSV validation now reports the number of parsed items and boxes.
 - Styled the AddItemToBoxDialog modal using shared card classes for a consistent look.
+- Reintroduced Box IDs on overview and box detail cards, aligned CSV export columns with import format, restyled the add-item dialog text color, and switched list views to short `ddMMyyyy` dates.

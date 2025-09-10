@@ -70,7 +70,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
           {results.map(it => (
             <div key={it.ItemUUID} className="card result">
               <div><b>{it.Artikel_Nummer || it.ItemUUID}</b></div>
-              <div className="muted">{it.Artikelbeschreibung}</div>
+              <div>{it.Artikelbeschreibung}</div>
               <button className="btn" onClick={() => addToBox(it)}>Auswählen</button>
             </div>
           ))}

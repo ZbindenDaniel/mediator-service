@@ -83,7 +83,7 @@ export default function BoxDetail({ boxId }: Props) {
         {box ? (
           <>
             <div className="card">
-              <h2>Box {box.Location || ''}</h2>
+              <h2><span className="mono">{box.BoxID}</span>{box.Location ? ` – ${box.Location}` : ''}</h2>
 
               <table className="details">
                 <tbody>
@@ -156,6 +156,7 @@ export default function BoxDetail({ boxId }: Props) {
                     {items.map((it) => (
                       <div key={it.ItemUUID} className="card item-card">
                         <Link to={`/items/${encodeURIComponent(it.ItemUUID)}`} className="linkcard">
+                          <div className="mono">{it.BoxID || ''}</div>
                           <div className="mono">{it.Artikel_Nummer || it.ItemUUID}</div>
                           <div>{it.Artikelbeschreibung}</div>
                           <div className="muted">Auf Lager: {it.Auf_Lager}</div>

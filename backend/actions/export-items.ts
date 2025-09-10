@@ -6,32 +6,61 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const germanFields = [
-  'Datum_erfasst',
-  'Artikel_Nummer',
-  'Grafikname',
+const importFields = [
+  'Datum erfasst',
+  'Artikel-Nummer',
+  'Grafikname(n)',
   'Artikelbeschreibung',
   'Auf_Lager',
   'Verkaufspreis',
   'Kurzbeschreibung',
   'Langtext',
   'Hersteller',
-  'Länge_mm',
-  'Breite_mm',
-  'Höhe_mm',
-  'Gewicht_kg',
-  'Hauptkategorien_A',
-  'Unterkategorien_A',
-  'Hauptkategorien_B',
-  'Unterkategorien_B',
+  'Länge(mm)',
+  'Breite(mm)',
+  'Höhe(mm)',
+  'Gewicht(kg)',
+  'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+  'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+  'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+  'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
   'Veröffentlicht_Status',
   'Shopartikel',
   'Artikeltyp',
   'Einheit'
 ];
 
-const extraFields = ['ItemUUID', 'BoxID', 'Location', 'UpdatedAt', 'WmsLink'];
-const columns = [...germanFields, ...extraFields];
+const extraFields = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt', 'WmsLink'];
+const columns = [...importFields, ...extraFields];
+
+const fieldMap: Record<string, string> = {
+  'Datum erfasst': 'Datum_erfasst',
+  'Artikel-Nummer': 'Artikel_Nummer',
+  'Grafikname(n)': 'Grafikname',
+  'Artikelbeschreibung': 'Artikelbeschreibung',
+  'Auf_Lager': 'Auf_Lager',
+  'Verkaufspreis': 'Verkaufspreis',
+  'Kurzbeschreibung': 'Kurzbeschreibung',
+  'Langtext': 'Langtext',
+  'Hersteller': 'Hersteller',
+  'Länge(mm)': 'Länge_mm',
+  'Breite(mm)': 'Breite_mm',
+  'Höhe(mm)': 'Höhe_mm',
+  'Gewicht(kg)': 'Gewicht_kg',
+  'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)': 'Hauptkategorien_A',
+  'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)': 'Unterkategorien_A',
+  'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)': 'Hauptkategorien_B',
+  'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)': 'Unterkategorien_B',
+  'Veröffentlicht_Status': 'Veröffentlicht_Status',
+  'Shopartikel': 'Shopartikel',
+  'Artikeltyp': 'Artikeltyp',
+  'Einheit': 'Einheit',
+  itemUUID: 'ItemUUID',
+  BoxID: 'BoxID',
+  Location: 'Location',
+  UpdatedAt: 'UpdatedAt',
+  WmsLink: 'WmsLink'
+};
 
 function toCsvValue(val: any): string {
   if (val === null || val === undefined) return '';
@@ -68,7 +97,7 @@ const action: Action = {
       });
       log(items, actor);
       const header = columns.join(',');
-      const lines = items.map((row: any) => columns.map((c) => toCsvValue(row[c])).join(','));
+      const lines = items.map((row: any) => columns.map((c) => toCsvValue(row[fieldMap[c]])).join(','));
       const csv = [header, ...lines].join('\n');
       res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8' });
       res.end(csv);
