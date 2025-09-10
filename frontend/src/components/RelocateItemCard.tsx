@@ -50,18 +50,19 @@ export default function RelocateItemCard({ itemId }: Props) {
 
   async function handleCreateBox() {
     try {
-      const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}`, {
+      const res = await fetch(`/api/boxes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actor: getUser() })
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
+      if (res.ok && data.id) {
+        setBoxId(data.id);
         setStatus('Box erstellt. Bitte platzieren!');
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
       }
-      console.log('create box', res.status);
+      console.log('create box', res.status, data.id);
     } catch (err) {
       console.error('Create box failed', err);
       setStatus('Box anlegen fehlgeschlagen');

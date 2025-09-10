@@ -178,6 +178,7 @@ export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoWms = db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`);
 export const listRecentBoxes = db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 8`);
+export const getMaxBoxId = db.prepare(`SELECT BoxID FROM boxes ORDER BY BoxID DESC LIMIT 1`);
 export const getMaxArtikelNummer = db.prepare(`
     SELECT Artikel_Nummer FROM items
     WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''

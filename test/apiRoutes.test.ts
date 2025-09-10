@@ -134,16 +134,18 @@ test('create box separately and move item', async () => {
     body: JSON.stringify({ toBoxId: 'BOX-0000-9999', actor: 'tester' })
   });
   expect(moveFail.status).toBe(404);
-  const createBox = await fetch(baseUrl + '/api/boxes/BOX-0000-9999', {
+  const createBox = await fetch(baseUrl + '/api/boxes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actor: 'tester' })
   });
   expect(createBox.status).toBe(200);
+  const createData = await createBox.json();
+  expect(createData.id).toMatch(/^BOX-\d{4}-\d{4}$/);
   const moveOk = await fetch(baseUrl + '/api/items/I-0000-0002/move', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ toBoxId: 'BOX-0000-9999', actor: 'tester' })
+    body: JSON.stringify({ toBoxId: createData.id, actor: 'tester' })
   });
   expect(moveOk.status).toBe(200);
 });

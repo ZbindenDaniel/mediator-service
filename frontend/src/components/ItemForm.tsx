@@ -111,9 +111,9 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               />
             ) : (
               <div className="combined-input">
-                <button type="button" onClick={() => changeStock('add')}>+</button>
-                <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
                 <button type="button" onClick={() => changeStock('remove')}>-</button>
+                <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
+                <button type="button" onClick={() => changeStock('add')}>+</button>
               </div>
             )}
           </div>

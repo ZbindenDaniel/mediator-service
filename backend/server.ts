@@ -25,6 +25,7 @@ import {
   countItems,
   countItemsNoWms,
   listRecentBoxes,
+  getMaxBoxId,
   getMaxArtikelNummer,
   listItemsForExport,
   decrementItemStock,
@@ -142,6 +143,8 @@ type ActionContext = {
   countItems: typeof countItems;
   countItemsNoWms: typeof countItemsNoWms;
   listRecentBoxes: typeof listRecentBoxes;
+  getMaxBoxId: typeof getMaxBoxId;
+  getMaxArtikelNummer: typeof getMaxArtikelNummer;
   listItemsForExport: typeof listItemsForExport;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
@@ -249,6 +252,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           countItems,
           countItemsNoWms,
           listRecentBoxes,
+          getMaxBoxId,
           getMaxArtikelNummer,
           listItemsForExport,
           INBOX_DIR,
