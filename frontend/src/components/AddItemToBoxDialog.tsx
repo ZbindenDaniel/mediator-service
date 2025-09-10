@@ -17,6 +17,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
     setResults([]);
     if (!term) return;
     try {
+      console.log('Searching items for', term);
       const r = await fetch('/api/search?term=' + encodeURIComponent(term));
       if (!r.ok) {
         console.error('search failed', r.status);
@@ -53,8 +54,8 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   }
 
   return (
-    <div className="overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="card" style={{ maxWidth: '400px', width: '100%' }}>
+    <div className="overlay">
+      <div className="card modal">
         <h3>Artikel suchen</h3>
         <div className="row">
           <input
@@ -65,16 +66,16 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
           />
           <button className="btn" onClick={runSearch}>Suchen</button>
         </div>
-        <div className="list" style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '10px' }}>
+        <div className="results">
           {results.map(it => (
-            <div key={it.ItemUUID} className="card" style={{ marginBottom: '6px' }}>
+            <div key={it.ItemUUID} className="card result">
               <div><b>{it.Artikel_Nummer || it.ItemUUID}</b></div>
               <div className="muted">{it.Artikelbeschreibung}</div>
               <button className="btn" onClick={() => addToBox(it)}>Auswählen</button>
             </div>
           ))}
         </div>
-        <div className="row" style={{ marginTop: '10px' }}>
+        <div className="row mt-10">
           <button className="btn" onClick={onClose}>Abbrechen</button>
         </div>
       </div>

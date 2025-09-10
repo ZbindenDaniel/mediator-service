@@ -40,9 +40,7 @@ This document outlines the structure for the mediator service. The goal is to cl
 The legacy JavaScript implementation remains at the project root. New code in `/` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 
 ## Next steps
-- Smaller import changes:
-  - The CSV validation shall return the number of boxes and item parsed.
-
+- None
 
 ## Recent changes
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
@@ -53,3 +51,5 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Box and item IDs now follow the `B-ddMMyy-####` / `I-ddMMyy-####` pattern.
 - Added an API and React page to list all items, linked from the search card.
 - Confirmed inventory adjustments, styled item lists for mobile, added filter for unplaced items, and disabled UI during CSV uploads with automatic reload.
+- CSV validation now reports the number of parsed items and boxes.
+- Styled the AddItemToBoxDialog modal using shared card classes for a consistent look.

@@ -359,6 +359,26 @@ button:focus {
     font-size: 1.2rem;
 }
 
+.modal {
+    max-width: 400px;
+    width: 100%;
+    color: var(--text);
+}
+
+.modal .results {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 10px;
+}
+
+.modal .result {
+    margin-bottom: 6px;
+}
+
+.mt-10 {
+    margin-top: 10px;
+}
+
 /* Mobile scan pages: slightly larger base */
 .mobile .container {
     padding: 16px;

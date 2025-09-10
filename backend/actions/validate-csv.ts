@@ -24,11 +24,21 @@ const action: Action = {
       let body = '';
       for await (const chunk of req) body += chunk;
       const records = parse(body, { columns: true, skip_empty_lines: true });
+      const boxes = new Set<string>();
       const errors = records
-        .map((row: any, idx: number) => ({ row: idx + 1, errors: validateRow(row) }))
+        .map((row: any, idx: number) => {
+          if (row.BoxID) boxes.add(String(row.BoxID));
+          return { row: idx + 1, errors: validateRow(row) };
+        })
         .filter((r: any) => r.errors.length);
-      if (errors.length) return sendJson(res, 400, { ok: false, errors });
-      return sendJson(res, 200, { ok: true });
+      const itemCount = records.length;
+      const boxCount = boxes.size;
+      if (errors.length) {
+        console.error('CSV validation found errors', errors);
+        return sendJson(res, 400, { ok: false, errors, itemCount, boxCount });
+      }
+      console.log('CSV validation parsed', itemCount, 'items', boxCount, 'boxes');
+      return sendJson(res, 200, { ok: true, itemCount, boxCount });
     } catch (err) {
       console.error('CSV validation failed', err);
       return sendJson(res, 500, { error: (err as Error).message });

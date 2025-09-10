@@ -110,6 +110,9 @@ test('create item and retrieve via box and search', async () => {
   expect(badCsv.status).toBe(400);
   const goodCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'ItemUUID,BoxID\na,b' });
   expect(goodCsv.status).toBe(200);
+  const goodData = await goodCsv.json();
+  expect(goodData.itemCount).toBe(1);
+  expect(goodData.boxCount).toBe(1);
 
   const saveBad = await fetch(baseUrl + `/api/items/${itemId(1)}`, {
     method: 'PUT',
