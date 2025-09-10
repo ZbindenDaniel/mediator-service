@@ -21,12 +21,17 @@ const action: Action = {
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const last = ctx.getMaxBoxId.get() as { BoxID: string } | undefined;
       let seq = 0;
-      if (last?.BoxID && /^BOX-\d{4}-\d{4}$/.test(last.BoxID)) {
-        seq = parseInt(last.BoxID.slice(4).replace('-', ''), 10);
+      if (last?.BoxID) {
+        const m = last.BoxID.match(/^B-\d{6}-(\d+)$/);
+        if (m) seq = parseInt(m[1], 10);
       }
+      const nowDate = new Date();
+      const dd = String(nowDate.getDate()).padStart(2, '0');
+      const mm = String(nowDate.getMonth() + 1).padStart(2, '0');
+      const yy = String(nowDate.getFullYear()).slice(-2);
       const idNum = seq + 1;
-      const id = `BOX-${idNum.toString().padStart(8, '0').replace(/(\d{4})(\d{4})/, '$1-$2')}`;
-      const now = new Date().toISOString();
+      const id = `B-${dd}${mm}${yy}-${idNum.toString().padStart(4, '0')}`;
+      const now = nowDate.toISOString();
       const txn = ctx.db.transaction((boxId: string, a: string) => {
         ctx.upsertBox.run({
           BoxID: boxId,

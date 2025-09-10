@@ -26,8 +26,10 @@ import {
   countItemsNoWms,
   listRecentBoxes,
   getMaxBoxId,
+  getMaxItemUUID,
   getMaxArtikelNummer,
   listItemsForExport,
+  listItems,
   decrementItemStock,
   incrementItemStock,
   deleteItem,
@@ -127,6 +129,7 @@ type ActionContext = {
   incrementItemStock: typeof incrementItemStock;
   deleteItem: typeof deleteItem;
   deleteBox: typeof deleteBox;
+  listItems: typeof listItems;
   pdfForBox: typeof pdfForBox;
   pdfForItem: typeof pdfForItem;
   zplForItem: typeof zplForItem;
@@ -144,6 +147,7 @@ type ActionContext = {
   countItemsNoWms: typeof countItemsNoWms;
   listRecentBoxes: typeof listRecentBoxes;
   getMaxBoxId: typeof getMaxBoxId;
+  getMaxItemUUID: typeof getMaxItemUUID;
   getMaxArtikelNummer: typeof getMaxArtikelNummer;
   listItemsForExport: typeof listItemsForExport;
   INBOX_DIR: typeof INBOX_DIR;
@@ -236,6 +240,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           incrementItemStock,
           deleteItem,
           deleteBox,
+          listItems,
           pdfForBox,
           pdfForItem,
           zplForItem,
@@ -253,6 +258,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           countItemsNoWms,
           listRecentBoxes,
           getMaxBoxId,
+          getMaxItemUUID,
           getMaxArtikelNummer,
           listItemsForExport,
           INBOX_DIR,

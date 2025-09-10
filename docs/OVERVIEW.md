@@ -40,10 +40,6 @@ This document outlines the structure for the mediator service. The goal is to cl
 The legacy JavaScript implementation remains at the project root. New code in `/` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 
 ## Next steps
-- Create an 'item-list' component which displays items in a table format with the following properties:
-  ItemUUID( hidden), BoxID, Location, UpdatedAt, Artikel_Nummer
-- Add the ability to create a new Box in 'RelocateItemCard' update the action 'move-items' accordingly. for this also check 'ItemCreate.tsx'
-- The ItemEdit component needs a change: The Property 'Anzahl' shall be extended with two buttons '+' & '-'. The functionality for '-' already exists, 'remove-item' & 'decrementItemStock'. for the '+' we need similar functionality. The goal is to have controlled movements of stock.
 - The class 'Item.ts' needs better types:
   - UpdatedAt:Date
   - Datum_erfasst:Date
@@ -62,3 +58,5 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Wrapped removal and deletion in database transactions and added unit tests to verify item stock and box deletion logic.
 - Extended existing move and save/import actions to use database transactions for atomic updates and event logging.
 - Introduced a CSV export endpoint with date filters for item data.
+- Box and item IDs now follow the `B-ddMMyy-####` / `I-ddMMyy-####` pattern.
+- Added an API and React page to list all items, linked from the search card.

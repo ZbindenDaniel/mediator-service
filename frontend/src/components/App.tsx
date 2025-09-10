@@ -7,6 +7,7 @@ import ItemEdit from './ItemEdit';
 import LandingPage from './LandingPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
+import ItemListPage from './ItemListPage';
 
 function BoxRoute() {
   const { boxId } = useParams();
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/boxes/:boxId" element={<BoxRoute />} />
           <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />
+          <Route path="/items" element={<ItemListPage />} />
           <Route path="/items/new" element={<ItemCreate />} />
           <Route path="/items/:itemId" element={<ItemRoute />} />
           <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />

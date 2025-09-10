@@ -1,14 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { randomUUID } from 'crypto';
 import type { Action } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
-}
-
-function genId(prefix: string): string {
-  return `${prefix}-${randomUUID()}`;
 }
 
 const action: Action = {
@@ -23,11 +18,31 @@ const action: Action = {
       const p = new URLSearchParams(raw);
       const actor = (p.get('actor') || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
+      const nowDate = new Date();
+      const dd = String(nowDate.getDate()).padStart(2, '0');
+      const mm = String(nowDate.getMonth() + 1).padStart(2, '0');
+      const yy = String(nowDate.getFullYear()).slice(-2);
       let BoxID = (p.get('BoxID') || null);
-      if (!BoxID) BoxID = genId('B');
+      if (!BoxID) {
+        const lastBox = ctx.getMaxBoxId.get() as { BoxID: string } | undefined;
+        let bSeq = 0;
+        if (lastBox?.BoxID) {
+          const m = lastBox.BoxID.match(/^B-\d{6}-(\d+)$/);
+          if (m) bSeq = parseInt(m[1], 10);
+        }
+        BoxID = `B-${dd}${mm}${yy}-${(bSeq + 1).toString().padStart(4, '0')}`;
+      }
       let ItemUUID = (p.get('ItemUUID') || '').trim();
-      if (!ItemUUID) ItemUUID = genId('I');
-      const now = new Date().toISOString();
+      if (!ItemUUID) {
+        const lastItem = ctx.getMaxItemUUID.get() as { ItemUUID: string } | undefined;
+        let iSeq = 0;
+        if (lastItem?.ItemUUID) {
+          const m = lastItem.ItemUUID.match(/^I-\d{6}-(\d+)$/);
+          if (m) iSeq = parseInt(m[1], 10);
+        }
+        ItemUUID = `I-${dd}${mm}${yy}-${(iSeq + 1).toString().padStart(4, '0')}`;
+      }
+      const now = nowDate.toISOString();
       const data = {
         BoxID,
         ItemUUID,

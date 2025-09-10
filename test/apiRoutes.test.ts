@@ -11,6 +11,22 @@ const { server } = require('./server');
 
 let baseUrl = '';
 
+const today = (() => {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}${mm}${yy}`;
+})();
+
+function boxId(n: number) {
+  return `B-${today}-${n.toString().padStart(4, '0')}`;
+}
+
+function itemId(n: number) {
+  return `I-${today}-${n.toString().padStart(4, '0')}`;
+}
+
 beforeAll((done) => {
   server.listen(0, () => {
     const addr = server.address();
@@ -53,8 +69,8 @@ test('getNewMaterialNumber returns a number', async () => {
 
 test('create item and retrieve via box and search', async () => {
   const res = await postForm('/api/import/item', {
-    BoxID: 'BOX-0000-0001',
-    ItemUUID: 'I-0000-0001',
+    BoxID: boxId(1),
+    ItemUUID: itemId(1),
     Artikel_Nummer: '1000',
     Artikelbeschreibung: 'Test Item',
     Location: 'A-01-01',
@@ -64,7 +80,7 @@ test('create item and retrieve via box and search', async () => {
   const created = await res.json();
   expect(created.ok).toBe(true);
 
-  const boxRes = await fetch(baseUrl + '/api/boxes/BOX-0000-0001');
+  const boxRes = await fetch(baseUrl + `/api/boxes/${boxId(1)}`);
   const boxData = await boxRes.json();
   expect(boxData.items.length).toBe(1);
 
@@ -72,7 +88,7 @@ test('create item and retrieve via box and search', async () => {
   const searchData = await searchRes.json();
   expect(Array.isArray(searchData.items)).toBe(true);
   expect(searchData.items.length).toBe(1);
-  const searchBox = await fetch(baseUrl + '/api/search?term=BOX-0000');
+  const searchBox = await fetch(baseUrl + `/api/search?term=${boxId(1).slice(0,8)}`);
   const searchBoxData = await searchBox.json();
   expect((searchBoxData.boxes || []).length).toBe(1);
 
@@ -85,9 +101,9 @@ test('create item and retrieve via box and search', async () => {
   expect(searchLocData.items.length).toBe(1);
   expect(searchLocData.boxes.length).toBe(1);
 
-  const printBox = await fetch(baseUrl + '/api/print/box/BOX-0000-0001', { method: 'POST' });
+  const printBox = await fetch(baseUrl + `/api/print/box/${boxId(1)}`, { method: 'POST' });
   expect(printBox.status).toBe(200);
-  const printItem = await fetch(baseUrl + '/api/print/item/I-0000-0001', { method: 'POST' });
+  const printItem = await fetch(baseUrl + `/api/print/item/${itemId(1)}`, { method: 'POST' });
   expect(printItem.status).toBe(200);
 
   const badCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'foo,bar\n1,2' });
@@ -95,14 +111,14 @@ test('create item and retrieve via box and search', async () => {
   const goodCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'ItemUUID,BoxID\na,b' });
   expect(goodCsv.status).toBe(200);
 
-  const saveBad = await fetch(baseUrl + '/api/items/I-0000-0001', {
+  const saveBad = await fetch(baseUrl + `/api/items/${itemId(1)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ Artikelbeschreibung: 'x' })
   });
   expect(saveBad.status).toBe(400);
 
-  const saveOk = await fetch(baseUrl + '/api/items/I-0000-0001', {
+  const saveOk = await fetch(baseUrl + `/api/items/${itemId(1)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ Artikelbeschreibung: 'Updated', actor: 'tester' })
@@ -120,18 +136,18 @@ test('create item and retrieve via box and search', async () => {
 
 test('create box separately and move item', async () => {
   const res = await postForm('/api/import/item', {
-    BoxID: 'BOX-0000-0002',
-    ItemUUID: 'I-0000-0002',
+    BoxID: boxId(2),
+    ItemUUID: itemId(2),
     Artikel_Nummer: '1001',
     Artikelbeschreibung: 'Item Zwei',
     Location: 'A-01-02',
     actor: 'tester'
   });
   expect(res.status).toBe(200);
-  const moveFail = await fetch(baseUrl + '/api/items/I-0000-0002/move', {
+  const moveFail = await fetch(baseUrl + `/api/items/${itemId(2)}/move`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ toBoxId: 'BOX-0000-9999', actor: 'tester' })
+    body: JSON.stringify({ toBoxId: 'B-000000-9999', actor: 'tester' })
   });
   expect(moveFail.status).toBe(404);
   const createBox = await fetch(baseUrl + '/api/boxes', {
@@ -141,8 +157,8 @@ test('create box separately and move item', async () => {
   });
   expect(createBox.status).toBe(200);
   const createData = await createBox.json();
-  expect(createData.id).toMatch(/^BOX-\d{4}-\d{4}$/);
-  const moveOk = await fetch(baseUrl + '/api/items/I-0000-0002/move', {
+  expect(createData.id).toMatch(/^B-\d{6}-\d{4}$/);
+  const moveOk = await fetch(baseUrl + `/api/items/${itemId(2)}/move`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ toBoxId: createData.id, actor: 'tester' })
@@ -152,15 +168,15 @@ test('create box separately and move item', async () => {
 
 test('increment and decrement item stock', async () => {
   const res = await postForm('/api/import/item', {
-    BoxID: 'BOX-0000-0003',
-    ItemUUID: 'I-0000-0003',
+    BoxID: boxId(3),
+    ItemUUID: itemId(3),
     Artikel_Nummer: '1002',
     Artikelbeschreibung: 'Stock Item',
     Location: 'A-01-03',
     actor: 'tester'
   });
   expect(res.status).toBe(200);
-  const add = await fetch(baseUrl + '/api/items/I-0000-0003/add', {
+  const add = await fetch(baseUrl + `/api/items/${itemId(3)}/add`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actor: 'tester' })
@@ -168,7 +184,7 @@ test('increment and decrement item stock', async () => {
   expect(add.status).toBe(200);
   const addData = await add.json();
   expect(addData.quantity).toBe(2);
-  const remove = await fetch(baseUrl + '/api/items/I-0000-0003/remove', {
+  const remove = await fetch(baseUrl + `/api/items/${itemId(3)}/remove`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actor: 'tester' })
@@ -176,4 +192,11 @@ test('increment and decrement item stock', async () => {
   expect(remove.status).toBe(200);
   const removeData = await remove.json();
   expect(removeData.quantity).toBe(1);
+});
+
+test('list items returns data', async () => {
+  const r = await fetch(baseUrl + '/api/items');
+  const j = await r.json();
+  expect(Array.isArray(j.items)).toBe(true);
+  expect(j.items.length).toBeGreaterThan(0);
 });

@@ -37,11 +37,12 @@ export default function SearchCard() {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Material, BOX-…, oder UUID"
+          placeholder="Material, B-…, oder UUID"
           onKeyDown={e => { if (e.key === 'Enter') runFind(); }}
           autoFocus
         />
         <button className="btn" onClick={runFind}>Suchen</button>
+        <a className="btn" href="/items" style={{ marginLeft: '10px' }}>Alle Artikel</a>
       </div>
       <div className="list" style={{ marginTop: '10px' }}>
         {results.map((res, idx) =>
