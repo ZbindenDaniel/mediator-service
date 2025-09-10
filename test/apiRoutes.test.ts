@@ -117,3 +117,33 @@ test('create item and retrieve via box and search', async () => {
   });
   expect(csvRes.status).toBe(200);
 });
+
+test('create box separately and move item', async () => {
+  const res = await postForm('/api/import/item', {
+    BoxID: 'BOX-0000-0002',
+    ItemUUID: 'I-0000-0002',
+    Artikel_Nummer: '1001',
+    Artikelbeschreibung: 'Item Zwei',
+    Location: 'A-01-02',
+    actor: 'tester'
+  });
+  expect(res.status).toBe(200);
+  const moveFail = await fetch(baseUrl + '/api/items/I-0000-0002/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ toBoxId: 'BOX-0000-9999', actor: 'tester' })
+  });
+  expect(moveFail.status).toBe(404);
+  const createBox = await fetch(baseUrl + '/api/boxes/BOX-0000-9999', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor: 'tester' })
+  });
+  expect(createBox.status).toBe(200);
+  const moveOk = await fetch(baseUrl + '/api/items/I-0000-0002/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ toBoxId: 'BOX-0000-9999', actor: 'tester' })
+  });
+  expect(moveOk.status).toBe(200);
+});

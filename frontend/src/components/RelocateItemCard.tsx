@@ -30,11 +30,6 @@ export default function RelocateItemCard({ itemId }: Props) {
   async function handle(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const check = await fetch(`/api/boxes/${encodeURIComponent(boxId)}`);
-      if (!check.ok) {
-        setStatus('Box existiert nicht');
-        return;
-      }
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,6 +45,26 @@ export default function RelocateItemCard({ itemId }: Props) {
     } catch (err) {
       console.error('Relocate item failed', err);
       setStatus('Verschieben fehlgeschlagen');
+    }
+  }
+
+  async function handleCreateBox() {
+    try {
+      const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: getUser() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setStatus('Box erstellt. Bitte platzieren!');
+      } else {
+        setStatus('Fehler: ' + (data.error || res.status));
+      }
+      console.log('create box', res.status);
+    } catch (err) {
+      console.error('Create box failed', err);
+      setStatus('Box anlegen fehlgeschlagen');
     }
   }
 
@@ -78,6 +93,7 @@ export default function RelocateItemCard({ itemId }: Props) {
 
           <div className='row'>
             <button type="submit">Verschieben</button>
+            <button type="button" onClick={handleCreateBox}>Box anlegen</button>
           </div>
           
           <div className='row'>
