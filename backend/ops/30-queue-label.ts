@@ -3,6 +3,7 @@ import { Op } from './types';
 export const name = 'queue-label';
 
 export const apply: Op['apply'] = (row, ctx) => {
+    return { ok: true, row }; // DO not print labels for now
   try {
     ctx.log('[queue-label] enqueuing', row);
     ctx.queueLabel(row.itemUUID);

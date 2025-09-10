@@ -50,7 +50,10 @@ The legacy JavaScript implementation remains at the project root. New code in `/
   - Hauptkategorie_A/Hauptkategorie_B: number (will be mapped to a lookup table 'mainCategories)
   - Unterkategorie_A/Unterkategorie_B: number (will be mapped to a lookup table 'subCategories)
   Veröffentlicht_Status: bool (mapped from yes/no)
-
+- Smaller IMport changes:
+  - WHen uploading a file the entire window has to be inactive so the user can't do other things while uploading.
+  - The CSV validation shall return the number of boxes and item parsed.
+  - When a file is uploaded a reload is triggered.
 
 
 ## Recent changes
