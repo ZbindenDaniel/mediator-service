@@ -57,7 +57,7 @@ export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }:
 
           <div className="row">
             {form.ItemUUID && <label>
-              Box-ID
+              Behälter-ID
             </label>}
             {form.ItemUUID && <input type="hidden" value={form.ItemUUID} />}
 
@@ -108,7 +108,16 @@ export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }:
               accept="image/*"
               capture="environment"
               required
-              onChange={(e) => update('picture1', e.target.files?.[0] || null)}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = () => update('picture1', reader.result as string);
+                  reader.readAsDataURL(file);
+                } else {
+                  update('picture1', null as any);
+                }
+              }}
             />
           </div>
 
@@ -123,7 +132,16 @@ export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }:
                 name="picture2"
                 accept="image/*"
                 capture="environment"
-                onChange={(e) => update('picture2', e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => update('picture2', reader.result as string);
+                    reader.readAsDataURL(file);
+                  } else {
+                    update('picture2', null as any);
+                  }
+                }}
               />
             </div>
           )}
@@ -139,7 +157,16 @@ export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }:
                 name="picture3"
                 accept="image/*"
                 capture="environment"
-                onChange={(e) => update('picture3', e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = () => update('picture3', reader.result as string);
+                    reader.readAsDataURL(file);
+                  } else {
+                    update('picture3', null as any);
+                  }
+                }}
               />
             </div>
           )}

@@ -3,7 +3,7 @@ import React from 'react';
 interface Counts {
   boxes: number;
   items: number;
-  itemsNoWms: number;
+  itemsNoBox: number;
 }
 
 interface Props {
@@ -18,9 +18,9 @@ export default function StatsCard({ counts, printerOk, health }: Props) {
       <h2>Statistiken</h2>
       {counts ? (
         <div id="stats" className="list">
-          <div>Boxen gesamt <b>{counts.boxes}</b></div>
+          <div>Behälter gesamt <b>{counts.boxes}</b></div>
           <div>Artikel gesamt: <b>{counts.items}</b></div>
-          <div>Artikel ohne WMS-Link: <b>{counts.itemsNoWms}</b></div>
+          <div>Artikel ohne Behälter: <b>{counts.itemsNoBox}</b></div>
         </div>
       ) : (
         <div className="muted">Übersicht konnte nicht geladen werden</div>

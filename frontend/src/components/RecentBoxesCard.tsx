@@ -10,7 +10,7 @@ interface Props {
 export default function RecentBoxesCard({ boxes }: Props) {
   return (
     <div className="card">
-      <h2 id="boxes">Letzte Boxen</h2>
+      <h2 id="boxes">Letzte Behälter</h2>
       <div id="boxesOut" className="list">
         {boxes.length ? (
           boxes.map(b => (
@@ -26,7 +26,7 @@ export default function RecentBoxesCard({ boxes }: Props) {
             </React.Fragment>
           ))
         ) : (
-          <div className="muted">Noch keine Boxen.</div>
+          <div className="muted">Noch keine Behälter.</div>
         )}
       </div>
     </div>

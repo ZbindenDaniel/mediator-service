@@ -24,6 +24,7 @@ import {
   countBoxes,
   countItems,
   countItemsNoWms,
+  countItemsNoBox,
   listRecentBoxes,
   getMaxBoxId,
   getMaxItemId,
@@ -47,6 +48,7 @@ const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
 const REPO_PUBLIC = path.join(__dirname, '../../..', 'frontend', 'public');
 export let PUBLIC_DIR = DIST_PUBLIC;
 export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
+export const MEDIA_DIR = path.join(__dirname, '../../media');
 
 try {
   fs.mkdirSync(INBOX_DIR, { recursive: true });
@@ -59,6 +61,7 @@ try {
     : DIST_PUBLIC;
   PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
   fs.mkdirSync(PREVIEW_DIR, { recursive: true });
+  fs.mkdirSync(MEDIA_DIR, { recursive: true });
 } catch (err) {
   console.error('Failed to initialise directories', err);
 }
@@ -145,6 +148,7 @@ type ActionContext = {
   countBoxes: typeof countBoxes;
   countItems: typeof countItems;
   countItemsNoWms: typeof countItemsNoWms;
+  countItemsNoBox: typeof countItemsNoBox;
   listRecentBoxes: typeof listRecentBoxes;
   getMaxBoxId: typeof getMaxBoxId;
   getMaxItemId: typeof getMaxItemId;
@@ -160,8 +164,6 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     if (!req.url) return sendJson(res, 400, { error: 'Bad request' });
 
     const url = new URL(req.url, `http://${req.headers.host}`);
-    // TODO: enforce authentication/authorization and add rate limiting for API requests
-
     if (url.pathname === '/' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
@@ -211,6 +213,25 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
       res.writeHead(404); return res.end('Not found');
     }
 
+    if (url.pathname.startsWith('/media/') && req.method === 'GET') {
+      const p = path.join(MEDIA_DIR, url.pathname.slice('/media/'.length));
+      try {
+        if (!p.startsWith(MEDIA_DIR)) throw new Error('bad path');
+        const data = fs.readFileSync(p);
+        const ext = path.extname(p).toLowerCase();
+        const ct = ext === '.png'
+          ? 'image/png'
+          : ext === '.jpg' || ext === '.jpeg'
+          ? 'image/jpeg'
+          : 'application/octet-stream';
+        res.writeHead(200, { 'Content-Type': ct });
+        return res.end(data);
+      } catch (err) {
+        console.error('Failed to serve media', err);
+        res.writeHead(404); return res.end('Not found');
+      }
+    }
+
     if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
@@ -256,7 +277,8 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           listRecentEvents,
           countBoxes,
           countItems,
-          countItemsNoWms,
+  countItemsNoWms,
+  countItemsNoBox,
           listRecentBoxes,
           getMaxBoxId,
           getMaxItemId,

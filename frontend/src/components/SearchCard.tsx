@@ -23,7 +23,7 @@ export default function SearchCard() {
       const next: SearchResult[] = [];
       (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
       (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, location: b.Location }));
-      console.log('Search returned', (data.items || []).length, 'items', (data.boxes || []).length, 'boxes');
+      console.log('Search returned', (data.items || []).length, 'items', (data.boxes || []).length, 'behälter');
       setResults(next);
     } catch (err) {
       console.error('Search failed', err);
@@ -49,7 +49,7 @@ export default function SearchCard() {
           res.type === 'box' ? (
             <div className="card" key={`b-${idx}`}>
               <div>
-                Box: <a href={`/boxes/${encodeURIComponent(res.id)}`}>{res.location || 'Box'}</a>
+                Behälter: <a href={`/boxes/${encodeURIComponent(res.id)}`}>{res.location || 'Behälter'}</a>
               </div>
             </div>
           ) : (
@@ -68,7 +68,7 @@ export default function SearchCard() {
               <div className="muted">{res.item.Artikelbeschreibung || ''}</div>
               {res.item.BoxID && (
                 <div>
-                  Box: <a href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>{res.item.Location}</a>
+                  Behälter: <a href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>{res.item.Location}</a>
                 </div>
               )}
             </div>

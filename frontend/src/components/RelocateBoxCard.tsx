@@ -26,7 +26,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setStatus('Box verschoben');
+        setStatus('Behälter verschoben');
         onMoved?.();
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
@@ -40,7 +40,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
 
   return (
     <div className="card relocate-card">
-      <h3>Box umlagern</h3>
+      <h3>Behälter umlagern</h3>
       <form onSubmit={handle}>
         <div className='container'>
           <div className='row'>

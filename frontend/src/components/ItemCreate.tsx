@@ -25,7 +25,7 @@ export default function ItemCreate() {
       });
       if (res.ok) {
         const j = await res.json();
-        alert('Box erstellt. Bitte platzieren!');
+        alert('Behälter erstellt. Bitte platzieren!');
         navigate(`/boxes/${encodeURIComponent(j.item.BoxID)}`);
       } else {
         console.error('Failed to create item', res.status);

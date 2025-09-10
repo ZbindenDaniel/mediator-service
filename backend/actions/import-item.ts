@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import fs from 'fs';
+import path from 'path';
 import type { Action } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -43,6 +45,24 @@ const action: Action = {
         ItemUUID = `I-${dd}${mm}${yy}-${(iSeq + 1).toString().padStart(4, '0')}`;
       }
       const now = nowDate.toISOString();
+      const images = [p.get('picture1') || '', p.get('picture2') || '', p.get('picture3') || ''];
+      let firstImage = '';
+      try {
+        const dir = path.join(__dirname, '../../media', ItemUUID);
+        fs.mkdirSync(dir, { recursive: true });
+        images.forEach((img, idx) => {
+          if (!img) return;
+          const m = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+          if (!m) return;
+          const ext = m[1].split('/')[1];
+          const buf = Buffer.from(m[2], 'base64');
+          const file = `${ItemUUID}-${idx + 1}.${ext}`;
+          fs.writeFileSync(path.join(dir, file), buf);
+          if (!firstImage) firstImage = `/media/${ItemUUID}/${file}`;
+        });
+      } catch (e) {
+        console.error('Failed to save images', e);
+      }
       const data = {
         BoxID,
         ItemUUID,
@@ -50,7 +70,7 @@ const action: Action = {
         UpdatedAt: nowDate,
         Datum_erfasst: (p.get('Datum_erfasst') || '').trim() ? new Date((p.get('Datum_erfasst') || '').trim()) : undefined,
         Artikel_Nummer: (p.get('Artikel_Nummer') || '').trim(),
-        Grafikname: (p.get('Grafikname') || '').trim(),
+        Grafikname: firstImage,
         Artikelbeschreibung: (p.get('Artikelbeschreibung') || '').trim(),
         Auf_Lager: parseInt((p.get('Auf_Lager') || '1').trim(), 10) || 1,
         Verkaufspreis: parseFloat((p.get('Verkaufspreis') || '0').replace(',', '.').trim()) || 0,

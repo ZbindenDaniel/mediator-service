@@ -33,7 +33,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   async function addToBox(item: Item) {
     try {
       if (item.BoxID && item.BoxID !== boxId) {
-        const ok = window.confirm(`Item ist bereits in Box ${item.BoxID}. Verschieben?`);
+        const ok = window.confirm(`Artikel ist bereits in Behälter ${item.BoxID}. Verschieben?`);
         if (!ok) return;
       }
       const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/move`, {

@@ -15,7 +15,7 @@ export default function ItemList({ items }: Props) {
             <th className="col-id" style={{ display: 'none' }}>Id</th>
             <th className="col-select"></th>
             <th className="col-desc">Artikelbeschreibung</th>
-            <th className="col-location">Box</th>
+            <th className="col-location">Behälter</th>
             <th className="col-link"></th>
           </tr>
         </thead>

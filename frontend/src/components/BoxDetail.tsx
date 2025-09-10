@@ -23,7 +23,7 @@ export default function BoxDetail({ boxId }: Props) {
 
   async function handleDeleteBox() {
     if (!box) return;
-    if (!window.confirm('Box wirklich löschen?')) return;
+    if (!window.confirm('Behälter wirklich löschen?')) return;
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/delete`, {
         method: 'POST',
@@ -33,6 +33,8 @@ export default function BoxDetail({ boxId }: Props) {
       if (res.ok) {
         navigate('/');
       } else {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error === 'box not empty' ? 'Behälter enthält noch Artikel' : 'Löschen fehlgeschlagen');
         console.error('Failed to delete box', res.status);
       }
     } catch (err) {

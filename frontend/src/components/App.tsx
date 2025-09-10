@@ -11,7 +11,7 @@ import ItemListPage from './ItemListPage';
 
 function BoxRoute() {
   const { boxId } = useParams();
-  return boxId ? <BoxDetail boxId={boxId} /> : <div>Missing box</div>;
+  return boxId ? <BoxDetail boxId={boxId} /> : <div>Behälter fehlt</div>;
 }
 
 function ItemRoute() {
@@ -26,7 +26,7 @@ function ItemEditRoute() {
 
 function BoxEditRoute() {
   const { boxId } = useParams();
-  return boxId ? <BoxEdit boxId={boxId} /> : <div>Missing box</div>;
+  return boxId ? <BoxEdit boxId={boxId} /> : <div>Behälter fehlt</div>;
 }
 
 export default function App() {

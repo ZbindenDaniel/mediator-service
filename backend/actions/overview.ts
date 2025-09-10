@@ -16,7 +16,7 @@ const action: Action = {
       const counts = {
         boxes: ctx.countBoxes.get().c || 0,
         items: ctx.countItems.get().c || 0,
-        itemsNoWms: ctx.countItemsNoWms.get().c || 0
+        itemsNoBox: ctx.countItemsNoBox.get().c || 0
       };
       const recentBoxes = ctx.listRecentBoxes.all();
       const recentEvents = ctx.listRecentEvents.all();

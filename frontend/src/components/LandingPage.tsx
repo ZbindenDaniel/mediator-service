@@ -10,7 +10,7 @@ import type { Box, EventLog } from '../../../models';
 interface OverviewCounts {
   boxes: number;
   items: number;
-  itemsNoWms: number;
+  itemsNoBox: number;
 }
 
 interface OverviewData {

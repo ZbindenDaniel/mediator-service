@@ -37,7 +37,7 @@ export default function RelocateItemCard({ itemId }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setStatus('Item verschoben');
+        setStatus('Artikel verschoben');
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
       }
@@ -58,14 +58,14 @@ export default function RelocateItemCard({ itemId }: Props) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.id) {
         setBoxId(data.id);
-        setStatus('Box erstellt. Bitte platzieren!');
+        setStatus('Behälter erstellt. Bitte platzieren!');
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
       }
       console.log('create box', res.status, data.id);
     } catch (err) {
       console.error('Create box failed', err);
-      setStatus('Box anlegen fehlgeschlagen');
+      setStatus('Behälter anlegen fehlgeschlagen');
     }
   }
 
@@ -76,7 +76,7 @@ export default function RelocateItemCard({ itemId }: Props) {
         <div className='container'>
           <div className='row'>
             <label>
-              Ziel BoxID
+              Ziel Behälter-ID
             </label>
           </div>
 
@@ -94,7 +94,7 @@ export default function RelocateItemCard({ itemId }: Props) {
 
           <div className='row'>
             <button type="submit">Verschieben</button>
-            <button type="button" onClick={handleCreateBox}>Box anlegen</button>
+            <button type="button" onClick={handleCreateBox}>Behälter anlegen</button>
           </div>
           
           <div className='row'>

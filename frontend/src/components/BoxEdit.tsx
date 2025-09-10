@@ -28,7 +28,7 @@ export default function BoxEdit({ boxId }: Props) {
 
   return (
     <div className="box-edit">
-      <h2>Artikel in dieser Box bearbeiten</h2>
+      <h2>Artikel in diesem Behälter bearbeiten</h2>
       {items.length ? (
         items.map((it) => (
           <Link
@@ -49,7 +49,7 @@ export default function BoxEdit({ boxId }: Props) {
           </Link>
         ))
       ) : (
-        <div className="muted">Diese Box enthält noch keine Artikel.</div>
+        <div className="muted">Dieser Behälter enthält noch keine Artikel.</div>
       )}
       <div className="btn-container">
         <Link className="btn" to={`/items/new?box=${encodeURIComponent(boxId)}`}>

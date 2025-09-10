@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import fs from 'fs';
+import path from 'path';
 import { Item } from '../../models';
 import type { Action } from './index';
 
@@ -37,9 +39,29 @@ const action: Action = {
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const existing = ctx.getItem.get(itemId) || {};
+      let grafik = existing.Grafikname || '';
+      try {
+        const imgs = [data.picture1, data.picture2, data.picture3];
+        const dir = path.join(__dirname, '../../media', itemId);
+        if (imgs.some((i: string) => i)) fs.mkdirSync(dir, { recursive: true });
+        imgs.forEach((img: string, idx: number) => {
+          if (!img) return;
+          const m = (img as string).match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+          if (!m) return;
+          const ext = m[1].split('/')[1];
+          const buf = Buffer.from(m[2], 'base64');
+          const file = `${itemId}-${idx + 1}.${ext}`;
+          fs.writeFileSync(path.join(dir, file), buf);
+          if (idx === 0) grafik = `/media/${itemId}/${file}`;
+        });
+      } catch (e) {
+        console.error('Failed to save item images', e);
+      }
+      const { picture1, picture2, picture3, ...rest } = data;
       const item: Item = {
         ...existing,
-        ...data,
+        ...rest,
+        Grafikname: grafik,
         ItemUUID: itemId,
         BoxID: data.BoxID ?? existing.BoxID ?? '',
         UpdatedAt: new Date()

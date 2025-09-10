@@ -46,7 +46,6 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Tests and builds require the `sass` CLI; missing or partially installed `sass` leads to `sh: 1: sass: not found`. Registry restrictions may prevent installing the dependency.
 
 ## Possible features
-- Protect backend endpoints with authentication and rate limiting to prevent unauthorized or abusive access.
 - Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
 - Replace shell `exec` in the printing helper with a safer spawn approach and validate printer commands.
 - Enforce size limits and validate content for uploaded CSV files prior to writing them to disk.
@@ -63,4 +62,7 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Confirmed inventory adjustments, styled item lists for mobile, added filter for unplaced items, and disabled UI during CSV uploads with automatic reload.
 - CSV validation now reports the number of parsed items and boxes.
 - Styled the AddItemToBoxDialog modal using shared card classes for a consistent look.
-- Reintroduced Box IDs on overview and box detail cards, aligned CSV export columns with import format, restyled the add-item dialog text color, and switched list views to short `ddMMyyyy` dates.
+- Reintroduced Box IDs on overview and box detail cards, aligned CSV export columns with import format, restyled the add-item dialog text color, and switched list views to short `dd.MM.yyyy` dates.
+- Persisted up to three item images to `media/{ItemId}` and stored the first image path in `Grafikname`.
+- Warn users when deleting a non-empty Behälter and translate UI text from "Box" to "Behälter" throughout.
+- Statistics now show "Artikel ohne Behälter" and list pages use `dd.MM.yyyy` dates.

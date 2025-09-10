@@ -18,7 +18,7 @@ export function formatDate(s: string | Date): string {
     if (isNaN(d.getTime())) return String(s);
     return d.toLocaleDateString('de-CH', {
       day: '2-digit', month: '2-digit', year: 'numeric'
-    }).replace(/\./g, '');
+    });
   } catch (err) {
     console.error('Failed to format date', err);
     return String(s);

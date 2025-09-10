@@ -16,7 +16,7 @@ export default function RecentEventsCard({ events }: Props) {
             <React.Fragment key={e.Id}>
               <div className="card">
                 <div>
-                  <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Box' : 'Artikel'}</span>
+                  <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Behälter' : 'Artikel'}</span>
                   <br />
                 </div>
                 <div>{formatDate(e.CreatedAt)} </div>

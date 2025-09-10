@@ -8,7 +8,7 @@ export default function CreateItemCard() {
       <Link className="linkcard" to="/items/new">
         <div>
           <h2>Erfassen</h2>
-          <p className="muted">Neue Box anlegen und Artikel erfassen</p>
+          <p className="muted">Neuen Behälter anlegen und Artikel erfassen</p>
         </div>
       </Link>
     </div>
