@@ -77,19 +77,24 @@ body {
     gap: 1rem;
 }
 
+#homelink {
+    text-decoration: none;
+    color: var(--fg);
+}
+
 .header .user {
     font-weight: bold;
 }
 
 .header nav a {
-color: var(--fg);
-  margin-right: 1rem;
-  font-size: 22px;
-  font-weight: bolder;
-  text-decoration: none;
-  border: 1px solid --muted;
-  border-radius: 50%;
-  padding: 5px 8px;
+    color: var(--fg);
+    margin-right: 1rem;
+    font-size: 22px;
+    font-weight: bolder;
+    text-decoration: none;
+    border: 1px solid --muted;
+    border-radius: 50%;
+    padding: 5px 8px;
 }
 
 /* Typography: big & legible for mobile/warehouse */
@@ -246,10 +251,14 @@ button:focus {
 }
 
 .row {
-    display: grid;
+    display: flex;
     grid-template-columns: 1fr auto;
     gap: 10px;
     padding: 5px 0px;
+    width: 100%;
+    max-width: 460px;
+    justify-content: space-between;
+    flex-direction: column;
 }
 
 .row-3 {

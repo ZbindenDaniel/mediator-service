@@ -3,11 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
 import { getUser } from '../lib/user';
+import ItemForm_Agentic from './ItemForm_agentic';
 
 export default function ItemCreate() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const boxId = params.get('box') || '';
+  const boxId = params.get('box') || null;
 
   async function handleSubmit(data: Partial<Item>) {
     const p = new URLSearchParams();
@@ -34,5 +35,5 @@ export default function ItemCreate() {
     }
   }
 
-  return <ItemForm item={{ BoxID: boxId }} onSubmit={handleSubmit} submitLabel="Speichern" isNew />;
+  return <ItemForm_Agentic item={{ BoxID: boxId }} onSubmit={handleSubmit} submitLabel="Speichern" isNew />;
 }

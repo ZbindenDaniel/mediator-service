@@ -4,10 +4,10 @@ export const name = 'map-wms';
 
 export const apply: Op['apply'] = (row, ctx) => {
   try {
-    ctx.log('[map-wms] processing', row.MaterialNumber);
-    row.MaterialNumber = (row.MaterialNumber || '').trim();
-    if (!row.WmsLink && row.MaterialNumber) {
-      row.WmsLink = `https://wms.example/items/${encodeURIComponent(row.MaterialNumber)}`;
+    ctx.log('[map-wms] processing', row);
+    row['Artikel-Nummer'] = (row['Artikel-Nummer'] || '').trim();
+    if (!row.WmsLink && row['Artikel-Nummer']) {
+      row.WmsLink = `https://wms.example/items/${encodeURIComponent(row['Artikel-Nummer'])}`;
     }
     return { ok: true, row };
   } catch (err) {

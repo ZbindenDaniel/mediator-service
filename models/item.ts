@@ -1,6 +1,6 @@
 export interface Item {
   ItemUUID: string;
-  BoxID: string;
+  BoxID: string | null;
   Location?: string;
   UpdatedAt: string;
   Datum_erfasst?: string;

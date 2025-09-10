@@ -9,8 +9,8 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 function validateRow(row: Record<string, any>): string[] {
   const errors: string[] = [];
-  if (!row.ItemUUID) errors.push('ItemUUID missing');
-  if (!row.BoxID) errors.push('BoxID missing');
+  // if (!row.ItemUUID) errors.push('ItemUUID missing');
+  // if (!row.BoxID) errors.push('BoxID missing');
   return errors;
 }
 

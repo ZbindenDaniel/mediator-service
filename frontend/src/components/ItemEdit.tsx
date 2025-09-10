@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
 import { getUser } from '../lib/user';
+import ItemForm_Agentic from './ItemForm_agentic';
 
 interface Props {
   itemId: string;
@@ -48,5 +49,5 @@ export default function ItemEdit({ itemId }: Props) {
 
   if (!item) return <p>Loading...</p>;
 
-  return <ItemForm item={item} onSubmit={handleSubmit} submitLabel="Speichern" />;
+  return <ItemForm_Agentic item={item} onSubmit={handleSubmit} submitLabel="Speichern" />;
 }

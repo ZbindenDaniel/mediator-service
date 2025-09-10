@@ -71,7 +71,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
     for (const r of records) {
       const row = normalize(r);
       const final = applyOps(row);
-
+      if (final.BoxID) {
       const box: Box = {
         BoxID: final.BoxID,
         Location: final.Location || '',
@@ -82,34 +82,34 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         UpdatedAt: now,
       };
       upsertBox.run(box);
-
+    }
       const item: Item = {
-        ItemUUID: final.ItemUUID,
-        BoxID: final.BoxID,
+        ItemUUID: final.itemUUID,
+        BoxID: final.BoxID || null,
         Location: final.Location || '',
         UpdatedAt: now,
-        Datum_erfasst: final.Datum_erfasst || '',
-        Artikel_Nummer: final.Artikel_Nummer || '',
-        Grafikname: final.Grafikname || '',
-        Artikelbeschreibung: final.Artikelbeschreibung || '',
-        Auf_Lager: parseInt(final.Auf_Lager || final.Qty || '0', 10) || 0,
-        Verkaufspreis: parseFloat(final.Verkaufspreis || '0') || 0,
-        Kurzbeschreibung: final.Kurzbeschreibung || '',
-        Langtext: final.Langtext || '',
-        Hersteller: final.Hersteller || '',
-        Länge_mm: parseInt(final.Länge_mm || '0', 10) || 0,
-        Breite_mm: parseInt(final.Breite_mm || '0', 10) || 0,
-        Höhe_mm: parseInt(final.Höhe_mm || '0', 10) || 0,
-        Gewicht_kg: parseFloat(final.Gewicht_kg || '0') || 0,
-        Hauptkategorien_A: final.Hauptkategorien_A || '',
-        Unterkategorien_A: final.Unterkategorien_A || '',
-        Hauptkategorien_B: final.Hauptkategorien_B || '',
-        Unterkategorien_B: final.Unterkategorien_B || '',
-        Veröffentlicht_Status: final.Veröffentlicht_Status || '',
-        Shopartikel: parseInt(final.Shopartikel || '0', 10) || 0,
-        Artikeltyp: final.Artikeltyp || '',
-        Einheit: final.Einheit || '',
-        WmsLink: final.WmsLink || '',
+        Datum_erfasst: final['Datum erfasst'] || '',
+        Artikel_Nummer: final['Artikel-Nummer'] || '',
+        Grafikname: final['Grafikname(n)'] || '',
+        Artikelbeschreibung: final['Artikelbeschreibung'] || '',
+        Auf_Lager: parseInt(final['Auf_Lager'] || final['Qty'] || '0', 10) || 0,
+        Verkaufspreis: parseFloat(final['Verkaufspreis'] || '0') || 0,
+        Kurzbeschreibung: final['Kurzbeschreibung'] || '',
+        Langtext: final['Langtext'] || '',
+        Hersteller: final['Hersteller'] || '',
+        Länge_mm: parseInt(final['Länge(mm)'] || '0', 10) || 0,
+        Breite_mm: parseInt(final['Breite(mm)'] || '0', 10) || 0,
+        Höhe_mm: parseInt(final['Höhe(mm)'] || '0', 10) || 0,
+        Gewicht_kg: parseFloat(final['Gewicht(kg)'] || '0') || 0,
+        Hauptkategorien_A: final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '',
+        Unterkategorien_A: final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '',
+        Hauptkategorien_B: final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '',
+        Unterkategorien_B: final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '',
+        Veröffentlicht_Status: final['Veröffentlicht_Status'] || '',
+        Shopartikel: parseInt(final['Shopartikel'] || '0', 10) || 0,
+        Artikeltyp: final['Artikeltyp'] || '',
+        Einheit: final['Einheit'] || '',
+        WmsLink: final['WmsLink'] || '',
       };
       upsertItem.run(item);
 

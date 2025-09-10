@@ -1,4 +1,5 @@
 node_modules/
+node_modules/*
 public/prints/
 frontend/public/prints/
 frontend/public/bundle.js
@@ -9,4 +10,3 @@ public/styles.css
 public/styles.css.map
 frontend/public/styles.css
 frontend/public/styles.css.map
-

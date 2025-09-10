@@ -22,7 +22,7 @@ const action: Action = {
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const toBoxId = (data.toBoxId || '').trim();
+      const toBoxId = (data.toBoxId || null);
       const actor = (data.actor || '').trim();
       if (!toBoxId || !actor) return sendJson(res, 400, { error: 'toBoxId and actor are required' });
       const dest = ctx.getBox.get(toBoxId);

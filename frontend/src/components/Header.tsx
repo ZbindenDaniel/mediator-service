@@ -19,7 +19,7 @@ export default function Header() {
         <nav>
             <button type="button" onClick={() => window.history.back()}>⬅️</button>
         </nav>
-        <h1>rrrevamp_____</h1>
+        <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
       </div>
       <div className="user">{user}</div>
     </header>

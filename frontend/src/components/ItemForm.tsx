@@ -62,19 +62,19 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
             {form.ItemUUID && <input type="hidden" value={form.ItemUUID} />}
             <label>
               Artikelnummer*
-              <div className="combined-input">
-                <input
-                  value={form.Artikel_Nummer || ''}
-                  onChange={(e) => update('Artikel_Nummer', e.target.value)}
-                  required
-                />
-                {isNew && (
-                  <button type="button" onClick={generateMaterialNumber}>
-                    neu?
-                  </button>
-                )}
-              </div>
             </label>
+            <div className="combined-input">
+              <input
+                value={form.Artikel_Nummer || ''}
+                onChange={(e) => update('Artikel_Nummer', e.target.value)}
+                required
+              />
+              {isNew && (
+                <button type="button" onClick={generateMaterialNumber}>
+                  neu?
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="row">

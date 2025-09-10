@@ -23,7 +23,7 @@ const action: Action = {
       const p = new URLSearchParams(raw);
       const actor = (p.get('actor') || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
-      let BoxID = (p.get('BoxID') || '').trim();
+      let BoxID = (p.get('BoxID') || null);
       if (!BoxID) BoxID = genId('B');
       let ItemUUID = (p.get('ItemUUID') || '').trim();
       if (!ItemUUID) ItemUUID = genId('I');
