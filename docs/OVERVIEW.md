@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document outlines the planned structure for the refactored mediator service. The goal is to clearly separate data models, application logic, and presentation.
+This document outlines the structure for the mediator service. The goal is to clearly separate data models, application logic, and presentation.
 
 ## Backend
 - **models/** – shared TypeScript interfaces for core entities (Box, Item, EventLog, ...)
@@ -39,15 +39,19 @@ This document outlines the planned structure for the refactored mediator service
 
 The legacy JavaScript implementation remains at the project root. New code in `/` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 
-## Legacy comparison
-- The old project provided search and placement pages as standalone HTML; these are not yet recreated in the React frontend.
-- Existing CSV import and label workflows have been ported, but comprehensive box validation and authentication remain pending.
-
 ## Next steps
-- Extend edit flows to boxes and add validation
-- Install real `@types` and React packages to replace local shims and enable successful bundling
-- Reintroduce search and placement flows from the legacy UI
-- Expand the automated test suite beyond the initial unit test
+- Create an 'item-list' component which displays items in a table format with the following properties:
+  ItemUUID( hidden), BoxID, Location, UpdatedAt, Artikel_Nummer
+- Add the ability to create a new Box in 'RelocateItemCard' update the action 'move-items' accordingly. for this also check 'ItemCreate.tsx'
+- The ItemEdit component needs a change: The Property 'Anzahl' shall be extended with two buttons '+' & '-'. The functionality for '-' already exists, 'remove-item' & 'decrementItemStock'. for the '+' we need similar functionality. The goal is to have controlled movements of stock.
+- The class 'Item.ts' needs better types:
+  - UpdatedAt:Date
+  - Datum_erfasst:Date
+  - Hauptkategorie_A/Hauptkategorie_B: number (will be mapped to a lookup table 'mainCategories)
+  - Unterkategorie_A/Unterkategorie_B: number (will be mapped to a lookup table 'subCategories)
+  Veröffentlicht_Status: bool (mapped from yes/no)
+
+
 
 ## Recent changes
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.

@@ -15,6 +15,7 @@ const action: Action = {
     try {
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/move$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
+      // TODO: allow for new Box creation
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
       const item = ctx.getItem.get(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });

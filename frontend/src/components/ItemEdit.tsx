@@ -49,5 +49,5 @@ export default function ItemEdit({ itemId }: Props) {
 
   if (!item) return <p>Loading...</p>;
 
-  return <ItemForm_Agentic item={item} onSubmit={handleSubmit} submitLabel="Speichern" />;
+  return <ItemForm item={item} onSubmit={handleSubmit} submitLabel="Speichern" />;
 }
