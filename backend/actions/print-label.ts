@@ -26,6 +26,7 @@ const action: Action = {
             if (r.ok && j.sent) {
               el.textContent = 'Gesendet an Drucker.';
             } else if (r.ok && j.previewUrl) {
+              // TODO: sanitize previewUrl before injecting to avoid XSS
               el.innerHTML = 'Kein Drucker konfiguriert. Vorschau erstellt: ' +
                 '<a class="mono" href="'+j.previewUrl+'" target="_blank" rel="noopener">PDF öffnen</a>';
             } else {

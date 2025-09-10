@@ -45,6 +45,13 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 ## Known issues
 - Tests and builds require the `sass` CLI; missing or partially installed `sass` leads to `sh: 1: sass: not found`. Registry restrictions may prevent installing the dependency.
 
+## Possible features
+- Protect backend endpoints with authentication and rate limiting to prevent unauthorized or abusive access.
+- Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
+- Replace shell `exec` in the printing helper with a safer spawn approach and validate printer commands.
+- Enforce size limits and validate content for uploaded CSV files prior to writing them to disk.
+- Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
+
 ## Recent changes
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.

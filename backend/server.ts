@@ -160,6 +160,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     if (!req.url) return sendJson(res, 400, { error: 'Bad request' });
 
     const url = new URL(req.url, `http://${req.headers.host}`);
+    // TODO: enforce authentication/authorization and add rate limiting for API requests
 
     if (url.pathname === '/' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'index.html');

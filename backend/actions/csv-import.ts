@@ -18,6 +18,7 @@ const action: Action = {
       let name = (req.headers['x-filename'] || 'upload.csv').toString().replace(/[^\w.\-]/g, '_');
       if (!name.toLowerCase().endsWith('.csv')) name += '.csv';
       const tmpPath = path.join(ctx.INBOX_DIR, `${Date.now()}_${name}`);
+      // TODO: enforce file size limits and validate CSV content before writing
       let body = '';
       for await (const chunk of req) body += chunk;
       try {
