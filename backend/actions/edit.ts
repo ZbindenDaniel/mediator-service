@@ -128,23 +128,23 @@ const action = {
           </div>
           <div class="row">
             <label>Hauptkategorien A</label>
-            <input name="Hauptkategorien_A" value="${esc(d.Hauptkategorien_A) || ''}" />
+            <input name="Hauptkategorien_A" value="${esc(String(d.Hauptkategorien_A ?? '')) || ''}" />
           </div>
           <div class="row">
             <label>Unterkategorien A</label>
-            <input name="Unterkategorien_A" value="${esc(d.Unterkategorien_A) || ''}" />
+            <input name="Unterkategorien_A" value="${esc(String(d.Unterkategorien_A ?? '')) || ''}" />
           </div>
           <div class="row">
             <label>Hauptkategorien B</label>
-            <input name="Hauptkategorien_B" value="${esc(d.Hauptkategorien_B) || ''}" />
+            <input name="Hauptkategorien_B" value="${esc(String(d.Hauptkategorien_B ?? '')) || ''}" />
           </div>
           <div class="row">
             <label>Unterkategorien B</label>
-            <input name="Unterkategorien_B" value="${esc(d.Unterkategorien_B) || ''}" />
+            <input name="Unterkategorien_B" value="${esc(String(d.Unterkategorien_B ?? '')) || ''}" />
           </div>
           <div class="row">
             <label>Veröffentlicht Status</label>
-            <input name="Veröffentlicht_Status" value="${esc(d.Veröffentlicht_Status) || ''}" />
+            <input name="Veröffentlicht_Status" value="${esc(d.Veröffentlicht_Status ? 'yes' : 'no')}" />
           </div>
           <div class="row">
             <label>Shopartikel</label>

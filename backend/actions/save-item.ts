@@ -42,10 +42,20 @@ const action: Action = {
         ...data,
         ItemUUID: itemId,
         BoxID: data.BoxID ?? existing.BoxID ?? '',
-        UpdatedAt: new Date().toISOString()
+        UpdatedAt: new Date()
       };
         const txn = ctx.db.transaction((it: Item, a: string) => {
-          ctx.upsertItem.run(it);
+          ctx.upsertItem.run({
+            ...it,
+            UpdatedAt: it.UpdatedAt.toISOString(),
+            Datum_erfasst: it.Datum_erfasst ? it.Datum_erfasst.toISOString() : null,
+            Veröffentlicht_Status:
+              typeof it.Veröffentlicht_Status === 'boolean'
+                ? it.Veröffentlicht_Status
+                  ? 'yes'
+                  : 'no'
+                : it.Veröffentlicht_Status
+          });
           ctx.logEvent.run({
             Actor: a,
             EntityType: 'Item',

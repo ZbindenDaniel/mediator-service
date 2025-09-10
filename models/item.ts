@@ -2,8 +2,8 @@ export interface Item {
   ItemUUID: string;
   BoxID: string | null;
   Location?: string;
-  UpdatedAt: string;
-  Datum_erfasst?: string;
+  UpdatedAt: Date;
+  Datum_erfasst?: Date;
   Artikel_Nummer?: string;
   Grafikname?: string;
   Artikelbeschreibung?: string;
@@ -16,11 +16,11 @@ export interface Item {
   Breite_mm?: number;
   Höhe_mm?: number;
   Gewicht_kg?: number;
-  Hauptkategorien_A?: string;
-  Unterkategorien_A?: string;
-  Hauptkategorien_B?: string;
-  Unterkategorien_B?: string;
-  Veröffentlicht_Status?: string;
+  Hauptkategorien_A?: number;
+  Unterkategorien_A?: number;
+  Hauptkategorien_B?: number;
+  Unterkategorien_B?: number;
+  Veröffentlicht_Status?: boolean;
   Shopartikel?: number;
   Artikeltyp?: string;
   Einheit?: string;

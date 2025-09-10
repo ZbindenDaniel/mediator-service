@@ -34,7 +34,7 @@ const action: Action = {
       }
       let ItemUUID = (p.get('ItemUUID') || '').trim();
       if (!ItemUUID) {
-        const lastItem = ctx.getMaxItemUUID.get() as { ItemUUID: string } | undefined;
+        const lastItem = ctx.getMaxItemId.get() as { ItemUUID: string } | undefined;
         let iSeq = 0;
         if (lastItem?.ItemUUID) {
           const m = lastItem.ItemUUID.match(/^I-\d{6}-(\d+)$/);
@@ -47,8 +47,8 @@ const action: Action = {
         BoxID,
         ItemUUID,
         Location: (p.get('Location') || '').trim(),
-        UpdatedAt: now,
-        Datum_erfasst: (p.get('Datum_erfasst') || '').trim(),
+        UpdatedAt: nowDate,
+        Datum_erfasst: (p.get('Datum_erfasst') || '').trim() ? new Date((p.get('Datum_erfasst') || '').trim()) : undefined,
         Artikel_Nummer: (p.get('Artikel_Nummer') || '').trim(),
         Grafikname: (p.get('Grafikname') || '').trim(),
         Artikelbeschreibung: (p.get('Artikelbeschreibung') || '').trim(),
@@ -61,11 +61,11 @@ const action: Action = {
         Breite_mm: parseInt((p.get('Breite_mm') || '').trim(), 10) || null,
         Höhe_mm: parseInt((p.get('Höhe_mm') || '').trim(), 10) || null,
         Gewicht_kg: parseFloat((p.get('Gewicht_kg') || '').replace(',', '.').trim()) || null,
-        Hauptkategorien_A: (p.get('Hauptkategorien_A') || '').trim(),
-        Unterkategorien_A: (p.get('Unterkategorien_A') || '').trim(),
-        Hauptkategorien_B: (p.get('Hauptkategorien_B') || '').trim(),
-        Unterkategorien_B: (p.get('Unterkategorien_B') || '').trim(),
-        Veröffentlicht_Status: (p.get('Veröffentlicht_Status') || '').trim(),
+        Hauptkategorien_A: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Hauptkategorien_A') || '').trim()),
+        Unterkategorien_A: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Unterkategorien_A') || '').trim()),
+        Hauptkategorien_B: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Hauptkategorien_B') || '').trim()),
+        Unterkategorien_B: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Unterkategorien_B') || '').trim()),
+        Veröffentlicht_Status: ['yes','ja','true','1'].includes((p.get('Veröffentlicht_Status') || '').trim().toLowerCase()),
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
         Einheit: (p.get('Einheit') || '').trim(),
@@ -82,7 +82,12 @@ const action: Action = {
             PlacedAt: null,
             UpdatedAt: now
           });
-          ctx.upsertItem.run(itemData);
+          ctx.upsertItem.run({
+            ...itemData,
+            UpdatedAt: itemData.UpdatedAt.toISOString(),
+            Datum_erfasst: itemData.Datum_erfasst ? itemData.Datum_erfasst.toISOString() : null,
+            Veröffentlicht_Status: itemData.Veröffentlicht_Status ? 'yes' : 'no'
+          });
           ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
         });
         txn(BoxID, { ...data, ItemUUID }, actor);

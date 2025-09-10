@@ -63,7 +63,8 @@ function applyOps(row: Record<string, string>): Record<string, string> {
 export async function ingestCsvFile(absPath: string): Promise<{ count: number; boxes: string[] }> {
   console.log(`Ingesting CSV file: ${absPath}`);
   try {
-    const now = new Date().toISOString();
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
     const records = await readCsv(absPath);
     let count = 0;
     const boxesTouched = new Set<string>();
@@ -83,12 +84,16 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
       };
       upsertBox.run(box);
     }
+      const hkA = parseInt(final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
+      const ukA = parseInt(final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
+      const hkB = parseInt(final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
+      const ukB = parseInt(final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const item: Item = {
         ItemUUID: final.itemUUID,
         BoxID: final.BoxID || null,
         Location: final.Location || '',
-        UpdatedAt: now,
-        Datum_erfasst: final['Datum erfasst'] || '',
+        UpdatedAt: nowDate,
+        Datum_erfasst: final['Datum erfasst'] ? new Date(final['Datum erfasst']) : undefined,
         Artikel_Nummer: final['Artikel-Nummer'] || '',
         Grafikname: final['Grafikname(n)'] || '',
         Artikelbeschreibung: final['Artikelbeschreibung'] || '',
@@ -101,17 +106,22 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Breite_mm: parseInt(final['Breite(mm)'] || '0', 10) || 0,
         Höhe_mm: parseInt(final['Höhe(mm)'] || '0', 10) || 0,
         Gewicht_kg: parseFloat(final['Gewicht(kg)'] || '0') || 0,
-        Hauptkategorien_A: final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '',
-        Unterkategorien_A: final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '',
-        Hauptkategorien_B: final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '',
-        Unterkategorien_B: final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '',
-        Veröffentlicht_Status: final['Veröffentlicht_Status'] || '',
+        Hauptkategorien_A: Number.isFinite(hkA) ? hkA : undefined,
+        Unterkategorien_A: Number.isFinite(ukA) ? ukA : undefined,
+        Hauptkategorien_B: Number.isFinite(hkB) ? hkB : undefined,
+        Unterkategorien_B: Number.isFinite(ukB) ? ukB : undefined,
+        Veröffentlicht_Status: ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase()),
         Shopartikel: parseInt(final['Shopartikel'] || '0', 10) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
         Einheit: final['Einheit'] || '',
         WmsLink: final['WmsLink'] || '',
       };
-      upsertItem.run(item);
+      upsertItem.run({
+        ...item,
+        UpdatedAt: now,
+        Datum_erfasst: item.Datum_erfasst ? item.Datum_erfasst.toISOString() : null,
+        Veröffentlicht_Status: item.Veröffentlicht_Status ? 'yes' : 'no'
+      });
 
       boxesTouched.add(final.BoxID);
       count++;

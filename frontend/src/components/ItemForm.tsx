@@ -208,9 +208,13 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
             <label>
               Hauptkategorien A
             </label>
-            <input
-              value={form.Hauptkategorien_A || ''}
-              onChange={(e) => update('Hauptkategorien_A', e.target.value)}
+              <input
+              type="number"
+              value={form.Hauptkategorien_A?.toString() || ''}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                update('Hauptkategorien_A', Number.isNaN(n) ? undefined : n);
+              }}
             />
           </div>
           <div className="row">
@@ -218,17 +222,25 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               Unterkategorien A
             </label>
             <input
-              value={form.Unterkategorien_A || ''}
-              onChange={(e) => update('Unterkategorien_A', e.target.value)}
+              type="number"
+              value={form.Unterkategorien_A?.toString() || ''}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                update('Unterkategorien_A', Number.isNaN(n) ? undefined : n);
+              }}
             />
           </div>
           <div className="row">
             <label>
               Hauptkategorien B
             </label>
-            <input
-              value={form.Hauptkategorien_B || ''}
-              onChange={(e) => update('Hauptkategorien_B', e.target.value)}
+              <input
+              type="number"
+              value={form.Hauptkategorien_B?.toString() || ''}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                update('Hauptkategorien_B', Number.isNaN(n) ? undefined : n);
+              }}
             />
           </div>
           <div className="row">
@@ -236,8 +248,12 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               Unterkategorien B
             </label>
             <input
-              value={form.Unterkategorien_B || ''}
-              onChange={(e) => update('Unterkategorien_B', e.target.value)}
+              type="number"
+              value={form.Unterkategorien_B?.toString() || ''}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                update('Unterkategorien_B', Number.isNaN(n) ? undefined : n);
+              }}
             />
           </div>
 
