@@ -5,6 +5,7 @@ export default function ImportCard() {
   const [file, setFile] = useState<File | null>(null);
   const [valid, setValid] = useState<boolean | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
@@ -43,6 +44,7 @@ export default function ImportCard() {
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     if (!file || !valid) return;
+    setUploading(true);
     try {
       const text = await file.text();
       const res = await fetch('/api/import', {
@@ -55,16 +57,20 @@ export default function ImportCard() {
       });
       if (res.ok) {
         console.log('CSV uploaded');
+        window.location.reload();
       } else {
         console.error('CSV upload HTTP error', res.status);
       }
     } catch (err) {
       console.error('CSV upload failed', err);
+    } finally {
+      setUploading(false);
     }
   }
 
   return (
     <div className="card" id="csv-import">
+      {uploading && <div className="overlay">Upload läuft...</div>}
       <h2>CSV Import</h2>
       <form onSubmit={valid ? handleUpload : handleValidate}>
         <div className='row'>

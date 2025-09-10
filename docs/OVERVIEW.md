@@ -40,16 +40,8 @@ This document outlines the structure for the mediator service. The goal is to cl
 The legacy JavaScript implementation remains at the project root. New code in `/` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 
 ## Next steps
-- The class 'Item.ts' needs better types:
-  - UpdatedAt:Date
-  - Datum_erfasst:Date
-  - Hauptkategorie_A/Hauptkategorie_B: number (will be mapped to a lookup table 'mainCategories)
-  - Unterkategorie_A/Unterkategorie_B: number (will be mapped to a lookup table 'subCategories)
-  Veröffentlicht_Status: bool (mapped from yes/no)
-- Smaller IMport changes:
-  - WHen uploading a file the entire window has to be inactive so the user can't do other things while uploading.
+- Smaller import changes:
   - The CSV validation shall return the number of boxes and item parsed.
-  - When a file is uploaded a reload is triggered.
 
 
 ## Recent changes
@@ -60,3 +52,4 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Introduced a CSV export endpoint with date filters for item data.
 - Box and item IDs now follow the `B-ddMMyy-####` / `I-ddMMyy-####` pattern.
 - Added an API and React page to list all items, linked from the search card.
+- Confirmed inventory adjustments, styled item lists for mobile, added filter for unplaced items, and disabled UI during CSV uploads with automatic reload.

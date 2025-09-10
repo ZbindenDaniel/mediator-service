@@ -4,6 +4,7 @@ import type { Item } from '../../../models';
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [showUnplaced, setShowUnplaced] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -23,10 +24,22 @@ export default function ItemListPage() {
     load();
   }, []);
 
+  const filtered = showUnplaced ? items.filter((it) => !it.BoxID) : items;
+
   return (
     <div className="card">
       <h2>Alle Artikel</h2>
-      <ItemList items={items} />
+      <div className="filter-bar">
+        <label>
+          <input
+            type="checkbox"
+            checked={showUnplaced}
+            onChange={(e) => setShowUnplaced(e.target.checked)}
+          />
+          Unplatzierte Artikel
+        </label>
+      </div>
+      <ItemList items={filtered} />
     </div>
   );
 }

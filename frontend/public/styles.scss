@@ -315,6 +315,50 @@ button:focus {
     background: #f2f4f7
 }
 
+/* Item list */
+.item-list-wrapper {
+    overflow-x: auto;
+}
+
+.item-list {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.item-list th,
+.item-list td {
+    padding: 8px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+}
+
+@media (max-width: 600px) {
+    .item-list th,
+    .item-list td {
+        padding: 6px 4px;
+        font-size: 0.85rem;
+    }
+}
+
+.filter-bar {
+    margin-bottom: 10px;
+}
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 1.2rem;
+}
+
 /* Mobile scan pages: slightly larger base */
 .mobile .container {
     padding: 16px;

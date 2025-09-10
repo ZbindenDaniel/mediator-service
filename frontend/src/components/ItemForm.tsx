@@ -41,6 +41,8 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
 
   async function changeStock(op: 'add' | 'remove') {
     if (!form.ItemUUID) return;
+    const ok = window.confirm(`Bestand ${op === 'add' ? 'erhöhen' : 'verringern'}?`);
+    if (!ok) return;
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(form.ItemUUID)}/${op}`, {
         method: 'POST',
