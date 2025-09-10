@@ -52,6 +52,9 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
       if (res.ok) {
         const j = await res.json();
         update('Auf_Lager', j.quantity);
+        if (op === 'remove' && j.boxId === null) {
+          update('BoxID', null as any);
+        }
         console.log(`Stock ${op === 'add' ? 'increased' : 'decreased'} for ${form.ItemUUID}`);
       } else {
         console.error(`Failed to ${op} stock`, res.status);

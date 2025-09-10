@@ -45,7 +45,8 @@ const action: Action = {
         return updated;
       });
       const updated = txn(uuid, actor);
-      sendJson(res, 200, { ok: true, quantity: updated?.Auf_Lager ?? 0 });
+      console.log('Removed item', uuid, 'new qty', updated?.Auf_Lager);
+      sendJson(res, 200, { ok: true, quantity: updated?.Auf_Lager ?? 0, boxId: updated?.BoxID ?? null });
     } catch (err) {
       console.error('Remove item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

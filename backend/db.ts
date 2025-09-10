@@ -157,8 +157,8 @@ export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = 
 export const decrementItemStock = db.prepare(
   `UPDATE items
    SET Auf_Lager = Auf_Lager - 1,
-       BoxID = CASE WHEN Auf_Lager - 1 <= 0 THEN '' ELSE BoxID END,
-       Location = CASE WHEN Auf_Lager - 1 <= 0 THEN '' ELSE Location END,
+       BoxID = CASE WHEN Auf_Lager - 1 <= 0 THEN NULL ELSE BoxID END,
+       Location = CASE WHEN Auf_Lager - 1 <= 0 THEN NULL ELSE Location END,
        UpdatedAt = datetime('now')
    WHERE ItemUUID = ? AND Auf_Lager > 0`
 );

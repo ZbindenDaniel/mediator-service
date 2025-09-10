@@ -192,6 +192,17 @@ test('increment and decrement item stock', async () => {
   expect(remove.status).toBe(200);
   const removeData = await remove.json();
   expect(removeData.quantity).toBe(1);
+  const remove2 = await fetch(baseUrl + `/api/items/${itemId(3)}/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor: 'tester' })
+  });
+  expect(remove2.status).toBe(200);
+  const removeData2 = await remove2.json();
+  expect(removeData2.quantity).toBe(0);
+  const detail = await fetch(baseUrl + `/api/items/${itemId(3)}`);
+  const detailData = await detail.json();
+  expect(detailData.item.BoxID).toBeNull();
 });
 
 test('list items returns data', async () => {

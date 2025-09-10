@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
+import AddItemToBoxDialog from './AddItemToBoxDialog';
 import type { Box, Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
-import{ eventLabel } from '../../../models/event-labels';
+import { eventLabel } from '../../../models/event-labels';
 
 interface Props {
   boxId: string;
@@ -17,6 +18,7 @@ export default function BoxDetail({ boxId }: Props) {
   const [events, setEvents] = useState<EventLog[]>([]);
   const [note, setNote] = useState('');
   const [noteStatus, setNoteStatus] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
   const navigate = useNavigate();
 
   async function handleDeleteBox() {
@@ -165,8 +167,29 @@ export default function BoxDetail({ boxId }: Props) {
                 </div>
 
                 <div className='row'>
-                  <button type="button" className="btn" onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}>+</button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}
+                  >
+                    neu
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setShowAdd(true)}
+                    style={{ marginLeft: '6px' }}
+                  >
+                    hinzufügen
+                  </button>
                 </div>
+                {showAdd && (
+                  <AddItemToBoxDialog
+                    boxId={boxId}
+                    onAdded={load}
+                    onClose={() => setShowAdd(false)}
+                  />
+                )}
               </div>
             </div>
 
