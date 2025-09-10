@@ -28,6 +28,7 @@ import {
   getMaxArtikelNummer,
   listItemsForExport,
   decrementItemStock,
+  incrementItemStock,
   deleteItem,
   deleteBox
 } from './db';
@@ -122,6 +123,7 @@ type ActionContext = {
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
   decrementItemStock: typeof decrementItemStock;
+  incrementItemStock: typeof incrementItemStock;
   deleteItem: typeof deleteItem;
   deleteBox: typeof deleteBox;
   pdfForBox: typeof pdfForBox;
@@ -228,6 +230,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           listBoxes,
           getItem,
           decrementItemStock,
+          incrementItemStock,
           deleteItem,
           deleteBox,
           pdfForBox,

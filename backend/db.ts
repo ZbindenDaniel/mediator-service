@@ -162,6 +162,12 @@ export const decrementItemStock = db.prepare(
        UpdatedAt = datetime('now')
    WHERE ItemUUID = ? AND Auf_Lager > 0`
 );
+export const incrementItemStock = db.prepare(
+  `UPDATE items
+   SET Auf_Lager = Auf_Lager + 1,
+       UpdatedAt = datetime('now')
+   WHERE ItemUUID = ?`
+);
 export const deleteItem = db.prepare(`DELETE FROM items WHERE ItemUUID = ?`);
 export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
 export const logEvent = db.prepare(`INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta) VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)`);

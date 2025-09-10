@@ -147,3 +147,31 @@ test('create box separately and move item', async () => {
   });
   expect(moveOk.status).toBe(200);
 });
+
+test('increment and decrement item stock', async () => {
+  const res = await postForm('/api/import/item', {
+    BoxID: 'BOX-0000-0003',
+    ItemUUID: 'I-0000-0003',
+    Artikel_Nummer: '1002',
+    Artikelbeschreibung: 'Stock Item',
+    Location: 'A-01-03',
+    actor: 'tester'
+  });
+  expect(res.status).toBe(200);
+  const add = await fetch(baseUrl + '/api/items/I-0000-0003/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor: 'tester' })
+  });
+  expect(add.status).toBe(200);
+  const addData = await add.json();
+  expect(addData.quantity).toBe(2);
+  const remove = await fetch(baseUrl + '/api/items/I-0000-0003/remove', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor: 'tester' })
+  });
+  expect(remove.status).toBe(200);
+  const removeData = await remove.json();
+  expect(removeData.quantity).toBe(1);
+});

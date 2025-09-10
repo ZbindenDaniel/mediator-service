@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
+import { getUser } from '../lib/user';
 
 interface Props {
   item: Partial<Item>;
@@ -35,6 +36,26 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
       }
     } catch (err) {
       console.error('Failed to get material number', err);
+    }
+  }
+
+  async function changeStock(op: 'add' | 'remove') {
+    if (!form.ItemUUID) return;
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(form.ItemUUID)}/${op}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: getUser() })
+      });
+      if (res.ok) {
+        const j = await res.json();
+        update('Auf_Lager', j.quantity);
+        console.log(`Stock ${op === 'add' ? 'increased' : 'decreased'} for ${form.ItemUUID}`);
+      } else {
+        console.error(`Failed to ${op} stock`, res.status);
+      }
+    } catch (err) {
+      console.error(`Failed to ${op} stock`, err);
     }
   }
 
@@ -89,7 +110,11 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
                 required
               />
             ) : (
-              <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
+              <div className="combined-input">
+                <button type="button" onClick={() => changeStock('add')}>+</button>
+                <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
+                <button type="button" onClick={() => changeStock('remove')}>-</button>
+              </div>
             )}
           </div>
 
