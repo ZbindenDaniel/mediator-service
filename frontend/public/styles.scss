@@ -57,6 +57,19 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
+textarea {
+    resize: vertical;
+    min-height: 80px;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    min-height: 44px;
+    width: 100%;
+}
+
 /* Header (desktop landing) */
 .header {
     // position: sticky;
@@ -75,6 +88,19 @@ body {
     display: flex;
     align-items: center;
     gap: 1rem;
+}
+
+#header-back-button
+{
+    font-size: 22px;
+    font-weight: bolder;
+    text-decoration: none;
+    // border: 1px solid --muted;
+    border-radius: 50%;
+    padding: 4px 12px;
+    background: transparent;
+    color: var(--fg);
+    cursor: pointer;
 }
 
 #homelink {
@@ -125,6 +151,7 @@ div {
     margin: 0 auto;
     padding: var(--pad);
     width: 100;
+    min-height: 100%;
 
     &.overview {
         background-color: $base-color;
@@ -221,6 +248,7 @@ button {
 
 button a {
     text-decoration: none;
+    color: inherit
 }
 
 button:hover {
@@ -430,5 +458,43 @@ button:focus {
         scroll-behavior: auto;
         transition: none !important;
         animation: none !important
+    }
+}
+
+.details .responsive-row {
+    display: table-row;
+}
+
+.details .responsive-th,
+.details .responsive-td {
+    padding: 8px 6px;
+    font-size: 1rem;
+    word-break: break-word;
+}
+
+@media (max-width: 600px) {
+    .details {
+        width: 100%;
+        display: block;
+    }
+    .details tbody,
+    .details tr {
+        display: block;
+        width: 100%;
+    }
+    .details .responsive-row {
+        display: flex;
+        flex-direction: column;
+        border-bottom: 1px solid var(--line);
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+    }
+    .details .responsive-th {
+        font-weight: bold;
+        color: var(--muted);
+        padding-bottom: 2px;
+    }
+    .details .responsive-td {
+        padding-left: 0;
     }
 }

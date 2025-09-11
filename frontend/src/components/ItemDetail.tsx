@@ -5,6 +5,7 @@ import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
+import { eventLabel } from '../../../models/event-labels';
 
 interface Props {
   itemId: string;
@@ -62,11 +63,11 @@ export default function ItemDetail({ itemId }: Props) {
         {item ? (
           <>
             <div className="card">
-              <h2>Artikel <span className="muted">({item.Auf_Lager ?? 0})</span></h2>
+              <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
               <div className='row'>
 
                 <table className="details">
-                  <tbody>
+                    <tbody>
                     {([
                       ['Erstellt von', events.length ? events[events.length - 1].Actor : ''],
                       ['Artikelbeschreibung', item.Artikelbeschreibung],
@@ -84,14 +85,14 @@ export default function ItemDetail({ itemId }: Props) {
                       ['Höhe (mm)', item.Höhe_mm],
                       ['Gewicht (kg)', item.Gewicht_kg],
                       ['Einheit', item.Einheit],
-                      ['Kivi-Link', item.WmsLink]
+                      // ['Kivi-Link', item.WmsLink]
                     ] as [string, any][]).map(([k, v]) => (
-                      <tr key={k}>
-                        <th>{k}</th>
-                        <td>{v ?? ''}</td>
+                      <tr key={k} className="responsive-row">
+                      <th className="responsive-th">{k}</th>
+                      <td className="responsive-td">{v ?? ''}</td>
                       </tr>
                     ))}
-                  </tbody>
+                    </tbody>
                 </table>
               </div>
               <div className='row'>
@@ -128,7 +129,7 @@ export default function ItemDetail({ itemId }: Props) {
               <ul className="events">
                 {events.map((ev) => (
                   <li key={ev.Id}>
-                    {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor + ' ' : ''}{ev.Event}
+                    {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor : 'wer?'}{' hat ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>

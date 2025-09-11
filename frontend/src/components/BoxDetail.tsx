@@ -85,15 +85,13 @@ export default function BoxDetail({ boxId }: Props) {
         {box ? (
           <>
             <div className="card">
-              <h2><span className="mono">{box.BoxID}</span>{box.Location ? ` – ${box.Location}` : ''}</h2>
-
+              <h2 className='mono'>{box.BoxID}</h2>
               <table className="details">
                 <tbody>
                   {([
                     ['Standort', box.Location ?? 'kein Standort!'],
-                    ['Platziert von', box.PlacedBy ?? 'Niemandem!'],
-                    // ['', box.CreatedAt ? formatDateTime(box.CreatedAt) : ''],
-                    ['Platziert am', box.PlacedAt ? formatDateTime(box.PlacedAt) : '']
+                    ['Platziert am', box.PlacedAt ? formatDateTime(box.PlacedAt) : ''],
+                    ['Platziert von', box.PlacedBy ?? 'Niemandem!']
                   ] as [string, any][]).map(([k, v]) => (
                     <tr key={k}>
                       <th>{k}</th>
@@ -110,45 +108,46 @@ export default function BoxDetail({ boxId }: Props) {
             <RelocateBoxCard boxId={box.BoxID} onMoved={load} />
 
             {box.Location && (
-              <PrintLabelButton boxId={box.BoxID} />
-            )}
-
-            <div className="card">
-              <h3>Notizen</h3>
-              <form onSubmit={async e => {
-                e.preventDefault();
-                try {
-                  const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ notes: note, location: box.Location, actor: getUser() })
-                  });
-                  if (res.ok) {
-                    setBox(b => b ? { ...b, Notes: note } : b);
-                    setNoteStatus('gespeichert');
-                  } else {
+              <><PrintLabelButton boxId={box.BoxID} /><div className="card">
+                <h3>Notizen</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  try {
+                    const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ notes: note, location: box.Location, actor: getUser() })
+                    });
+                    if (res.ok) {
+                      setBox(b => b ? { ...b, Notes: note } : b);
+                      setNoteStatus('gespeichert');
+                    } else {
+                      setNoteStatus('Fehler');
+                    }
+                  } catch (err) {
+                    console.error('Note save failed', err);
                     setNoteStatus('Fehler');
                   }
-                } catch (err) {
-                  console.error('Note save failed', err);
-                  setNoteStatus('Fehler');
-                }
-              }}>
-                <div className='container'>
-                  <div className='row'>
-                    <textarea value={note} onChange={e => setNote(e.target.value)} />
-                  </div>
+                } }>
+                  <div className='container'>
+                    <div className='row'>
+                      <textarea
+                        value={note}
+                        onChange={e => setNote(e.target.value)}
+                        rows={Math.max(3, note.split('\n').length)} />
+                    </div>
 
-                  <div className='row'>
-                    <button type="submit">Speichern</button>
-                  </div>
+                    <div className='row'>
+                      <button type="submit">Speichern</button>
+                    </div>
 
-                  <div className='row'>
-                    {noteStatus && <span className="muted"> {noteStatus}</span>}
+                    <div className='row'>
+                      {noteStatus && <span className="muted"> {noteStatus}</span>}
+                    </div>
                   </div>
-                </div>
-              </form>
-            </div>
+                </form>
+              </div></>
+            )}
 
             <div className="card">
               <h3>Artikel</h3>
@@ -163,7 +162,9 @@ export default function BoxDetail({ boxId }: Props) {
                           <div>{it.Artikelbeschreibung}</div>
                           <div className="muted">Auf Lager: {it.Auf_Lager}</div>
                         </Link>
-                        <button type="button" className="btn" onClick={() => removeItem(it.ItemUUID)}>Entnehmen</button>
+                        <div className='row'>
+                          <button type="button" className="btn" onClick={() => removeItem(it.ItemUUID)}>Entnehmen</button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -201,7 +202,7 @@ export default function BoxDetail({ boxId }: Props) {
               <ul className="events">
                 {events.map((ev) => (
                   <li key={ev.Id}>
-                    {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor : 'wer?'}{' hat '+eventLabel(ev.Event)}
+                    {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor : 'wer?'}{' hat ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>

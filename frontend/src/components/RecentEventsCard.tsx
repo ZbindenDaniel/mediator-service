@@ -21,11 +21,9 @@ export default function RecentEventsCard({ events }: Props) {
                 </div>
                 <div>{formatDate(e.CreatedAt)} </div>
                 <div> {eventLabel(e.Event)}{e.Actor ? ` von ${e.Actor}` : ''}</div>
-                {e.Artikel_Nummer && (
                   <div className="muted">
-                    {e.Artikel_Nummer}{e.Artikelbeschreibung ? ` – ${e.Artikelbeschreibung}` : ''}
+                    {e.EntityId}
                   </div>
-                )}
               </div>
               <div className="spacer"></div>
             </React.Fragment>
