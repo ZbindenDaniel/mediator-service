@@ -42,7 +42,7 @@ export default function SearchCard() {
           autoFocus
         />
         <button className="btn" onClick={runFind}>Suchen</button>
-        <a className="btn" href="/items" style={{ marginLeft: '10px' }}>Alle Artikel</a>
+        <a className="button" href="/items"><button>Alle Artikel</button></a>
       </div>
       <div className="list" style={{ marginTop: '10px' }}>
         {results.map((res, idx) =>

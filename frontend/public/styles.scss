@@ -216,7 +216,11 @@ button {
 
 button {
     background: #f6f7f9;
-    cursor: pointer
+    cursor: pointer;
+}
+
+button a {
+    text-decoration: none;
 }
 
 button:hover {

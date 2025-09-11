@@ -40,7 +40,12 @@ This document outlines the structure for the mediator service. The goal is to cl
 The legacy JavaScript implementation remains at the project root. New code in `/` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 
 ## Next steps
-- None
+- Enable switch from agentic to manual edit via button. Very simple link button from ItemForm_Agentic to ItemForm.
+- Move of items and boxes triggers reload
+- images need to be persisted
+- Kurzbeschreibung needs better layout.
+- 'entnehmen' has no confimration. It should have
+- On double click on the usernam it should be possible to change the user name.
 
 ## Known issues
 - Tests and builds require the `sass` CLI; missing or partially installed `sass` leads to `sh: 1: sass: not found`. Registry restrictions may prevent installing the dependency.

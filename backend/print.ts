@@ -39,7 +39,7 @@ export function zplForBox({ boxId, location }: BoxLabelParams): string {
 export function sendZpl(zpl: string): Promise<{ sent: boolean; reason?: string }> {
   return new Promise((resolve) => {
     // TODO: replace exec with spawn and validate printer command to avoid injection
-    const printProcess = exec(`lp -d GeBE_USB_Printer_A8`, (error, stdout, stderr) => {
+    const printProcess = exec(`lp -d ${PRINTER_HOST}`, (error, stdout, stderr) => {
       if (error) {
         console.error('Print command failed', error);
         return resolve({ sent: false, reason: stderr || error.message });
