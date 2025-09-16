@@ -18,6 +18,9 @@ export default function ItemCreate() {
       }
     });
     try {
+
+      // TODO: here we need to make an API cal to the ai-flow-service with the information we already have of the item
+
       const res = await fetch('/api/import/item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

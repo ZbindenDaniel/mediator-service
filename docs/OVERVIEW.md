@@ -46,6 +46,11 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Kurzbeschreibung needs better layout.
 - 'entnehmen' has no confimration. It should have
 - On double click on the usernam it should be possible to change the user name.
+- When creating an item we need to make an API call to the ai-flowService 'run'
+- 
+
+
+
 
 ## Known issues
 - Tests and builds require the `sass` CLI; missing or partially installed `sass` leads to `sh: 1: sass: not found`. Registry restrictions may prevent installing the dependency.

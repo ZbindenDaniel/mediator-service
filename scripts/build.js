@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const src = path.join(__dirname, '..', 'frontend', 'public');
-const dest = path.join(__dirname, '..', 'dist', 'frontend', 'public');
+const src = path.join(__dirname, '..', 'v2', 'frontend', 'public');
+const dest = path.join(__dirname, '..', 'dist', 'v2', 'frontend', 'public');
 
 if (fs.existsSync(src)) {
   fs.mkdirSync(dest, { recursive: true });
