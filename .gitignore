@@ -1,0 +1,15 @@
+node_modules/
+node_modules/*
+public/prints/
+frontend/public/prints/
+frontend/public/build.js
+frontend/public/bundle.js
+frontend/public/bundle.js.map
+frontend/public/styles.css
+frontend/public/styles.css.map
+dist/
+
+public/styles.css
+public/styles.css.map
+media/
+README.md

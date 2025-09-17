@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Daten Eingabe</title>
+<link rel="stylesheet" href="/bundle.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+
+<body class="share-tech-mono-regular">
+  <div class="mobile container item stack">
+    <h1>Daten Eingabe</h1>
+
+    <a class="linkcard" href="/">
+      <div class="card">← Zur Übersicht</div>
+    </a>
+
+    <!-- Single item entry -->
+    <div class="card stack">
+      <h2>Einzelnes Teil erfassen</h2>
+      <form id="oneForm" class="stack" method="post" action="/ui/api/import/item" autocomplete="off">
+        <div>
+          <label>Box-ID *</label>
+          <input id="BoxID" name="BoxID" placeholder="Eine neue Box wird angelegt" readonly />
+        </div>
+        <div class="row">
+          <input id="uuidField" name="ItemUUID" hidden />
+        </div>
+
+        <div class="row">
+          <label>Artikelnummer*</label>
+          <div class="combined-input">
+            <input id="Artikel_Nummer" name="Artikel_Nummer" placeholder="0012345" required />
+            <button class="btn" type="button" id="btnIdGen">neu?</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>Artikelbeschreibung*</label>
+          <input name="Artikelbeschreibung" placeholder="z.B. HP ProBook 6550" required />
+        </div>
+
+        <div class="row">
+          <label>Anzahl</label>
+          <input name="Auf_Lager" type="number" inputmode="numeric" value="1" min="0" />
+        </div>
+
+        <div class="row">
+          <label>Verkaufspreis (CHF)</label>
+          <input name="Verkaufspreis" type="number" step="0.01" min="0" />
+        </div>
+
+        <div class="row">
+          <label>Kurzbeschreibung</label>
+          <input name="Kurzbeschreibung" />
+        </div>
+
+        <div class="row">
+          <label>Langtext</label>
+          <textarea name="Langtext" rows="2"></textarea>
+        </div>
+
+        <div class="row">
+          <label>Hersteller</label>
+          <input name="Hersteller" />
+        </div>
+
+        <div class="row">
+          <label>Länge (mm)</label>
+          <input name="Länge_mm" type="number" min="0" />
+        </div>
+        <div class="row">
+          <label>Breite (mm)</label>
+          <input name="Breite_mm" type="number" min="0" />
+        </div>
+        <div class="row">
+          <label>Höhe (mm)</label>
+          <input name="Höhe_mm" type="number" min="0" />
+        </div>
+        <div class="row">
+          <label>Gewicht (kg)</label>
+          <input name="Gewicht_kg" type="number" step="0.01" min="0" />
+        </div>
+
+        <div class="row">
+          <label>Hauptkategorien A</label>
+          <input name="Hauptkategorien_A" />
+        </div>
+        <div class="row">
+          <label>Unterkategorien A</label>
+          <input name="Unterkategorien_A" />
+        </div>
+        <div class="row">
+          <label>Hauptkategorien B</label>
+          <input name="Hauptkategorien_B" />
+        </div>
+        <div class="row">
+          <label>Unterkategorien B</label>
+          <input name="Unterkategorien_B" />
+        </div>
+
+        <div class="row">
+          <label>Notiz</label>
+          <textarea name="ItemNotes" rows="2"></textarea>
+        </div>
+
+         <div class="row">
+          <label>Fotos</label>
+          <input name="itemPic" type="file" id="itemPic" accept="image/*" capture="camera">
+        </div>
+
+        <div class="row">
+          <div></div>
+          <button class="btn-primary" type="submit">Speichern</button>
+        </div>
+
+        <div id="oneStatus" class="muted"></div>
+      </form>
+
+
+    </div>
+
+    <!-- CSV upload -->
+    <div class="card stack">
+      <h2>CSV-Datei hochladen</h2>
+      <p class="muted">Die Datei wird validiert und danach importiert.</p>
+      <input id="csvFile" type="file" accept=".csv,text/csv" />
+      <div class="row" style="margin-top:8px">
+        <input id="csvName" placeholder="Dateiname im Inbox, z.B. eingabe.csv" value="eingabe.csv" />
+        <button id="btnValidate" class="btn" type="button">Validieren</button>
+      </div>
+      <div id="valOut" class="muted" style="white-space:pre-wrap;margin-top:6px;"></div>
+      <div class="row">
+        <div></div>
+        <button id="btnImport" class="btn-primary" type="button" disabled>Jetzt importieren</button>
+      </div>
+      <div class="muted" style="margin-top:6px">
+        Erwartete Spalten (mindestens): <span class="mono">BoxID, ItemUUID, MaterialNumber, Description, Qty,
+          ItemNotes</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const $ = (s) => document.querySelector(s);
+
+    // Extract 'box' query param and set BoxID input
+    const params = new URLSearchParams(window.location.search);
+    const boxId = params.get('box');
+    if (boxId && $('#BoxID')) {
+      $('#BoxID').value = boxId;
+    }
+
+    async function getnewItemNumber() {
+      try {
+        const r = await fetch('/api/getNewMaterialNumber');
+        const j = await r.json();
+        return j.nextArtikelNummer || '';
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // Artikelnummer generator
+    const btnIdGen = $('#btnIdGen');
+    if (btnIdGen) btnIdGen.addEventListener('click', async () => {
+      const v = await getnewItemNumber();
+      if (v) {
+        $('#Artikel_Nummer').value = v;
+        btnIdGen.setAttribute("disabled", true);
+      }
+    });
+
+
+    // Single item submit
+    const oneForm = $('#oneForm');
+    if (oneForm) oneForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      // Built-in validation
+      if (!oneForm.checkValidity()) {
+        oneForm.reportValidity();
+        return;
+      }
+
+      // Custom validation
+      // const desc = oneForm.elements['Description'].value.trim();
+      // const matNo = oneForm.elements['MaterialNumber'].value.trim();
+      const status = $('#oneStatus');
+
+      // Geräte-Name: at least 10 characters
+      // if (desc.length < 10) {
+      //   status.textContent = 'Geräte-Name muss mindestens 10 Zeichen lang sein.';
+      //   oneForm.elements['Description'].focus();
+      //   return;
+      // }
+
+      // // Materialnummer: numbers only
+      // if (!/^\d+$/.test(matNo)) {
+      //   status.textContent = 'Materialnummer darf nur Zahlen enthalten.';
+      //   oneForm.elements['MaterialNumber'].focus();
+      //   return;
+      // }
+
+      status.textContent = 'Speichern…';
+      const body = new URLSearchParams(new FormData(e.target));
+      const r = await fetch('/ui/api/import/item', { method: 'POST', body });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        status.innerHTML = 'Gespeichert. <a href="/ui/item/' + encodeURIComponent(j.item.ItemUUID) + '">Item öffnen →</a>';
+        oneForm.reset();
+        setTimeout(() => {
+          window.location.href = '/ui/box/' + encodeURIComponent(j.item.BoxID);
+        }, 1000);
+      } else {
+        status.textContent = 'Fehler: ' + (j.error || 'Unbekannt');
+      }
+    });
+
+    // CSV validate → required before import
+    let validatedOk = false, lastCsvText = '', lastCsvName = 'eingabe.csv';
+
+    const btnValidate = $('#btnValidate');
+    if (btnValidate) btnValidate.addEventListener('click', async () => {
+      const file = $('#csvFile').files[0];
+      const out = $('#valOut'); const btnImport = $('#btnImport');
+      validatedOk = false; btnImport.disabled = true;
+      if (!file) { out.textContent = 'Bitte eine CSV-Datei wählen.'; return; }
+      lastCsvName = ($('#csvName').value || file.name || 'eingabe.csv').trim();
+      lastCsvText = await file.text();
+      out.textContent = 'Validiere…';
+      const r = await fetch('/api/validate-csv', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: lastCsvText });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        out.textContent = 'OK: ' + j.rows + ' Zeilen, ' + j.items + ' Artikel, Boxen: ' + (j.boxes || []).join(', ');
+        validatedOk = true; btnImport.disabled = false;
+      } else {
+        out.textContent = 'Fehler: ' + (j.error || ('HTTP ' + r.status)) + (j.details ? '\n' + j.details : '');
+      }
+    });
+
+    const btnImport = $('#btnImport');
+    if (btnImport) btnImport.addEventListener('click', async () => {
+      const out = $('#valOut');
+      if (!validatedOk) { out.textContent = 'Bitte zuerst validieren.'; return; }
+      if (!lastCsvText) { out.textContent = 'Keine Datei in Arbeit.'; return; }
+      out.textContent = 'Importiere…';
+      const r = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-Filename': lastCsvName }, body: lastCsvText });
+      const j = await r.json().catch(() => ({}));
+      out.textContent = r.ok ? ('Import OK: ' + (j.message || '')) : ('Fehler: ' + (j.error || ''));
+    });
+  })();
+  </script>
+</body>
+
+</html>
