@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "prebuild": "sass v2/frontend/public/styles.scss v2/frontend/public/styles.css",
+    "prebuild": "sass frontend/public/styles.scss frontend/public/styles.css",
     "build": "tsc -p tsconfig.json && npm run bundle && node scripts/build.js",
-    "bundle": "node v2/frontend/bundle.js",
+    "bundle": "node frontend/bundle.js",
     "prestart": "npm run build",
-    "start": "node dist/v2/backend/server.js",
+    "start": "node dist/backend/server.js",
     "test": "npm run build && jest --colors"
   },
   "dependencies": {
