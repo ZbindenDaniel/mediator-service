@@ -15,6 +15,9 @@ import {
   itemsByBox,
   getBox,
   listBoxes,
+  upsertAgenticRun,
+  getAgenticRun,
+  updateAgenticRunStatus,
   nextLabelJob,
   updateLabelJobStatus,
   logEvent,
@@ -132,6 +135,9 @@ type ActionContext = {
   incrementItemStock: typeof incrementItemStock;
   deleteItem: typeof deleteItem;
   deleteBox: typeof deleteBox;
+  upsertAgenticRun: typeof upsertAgenticRun;
+  getAgenticRun: typeof getAgenticRun;
+  updateAgenticRunStatus: typeof updateAgenticRunStatus;
   listItems: typeof listItems;
   pdfForBox: typeof pdfForBox;
   pdfForItem: typeof pdfForItem;
@@ -257,6 +263,9 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           itemsByBox,
           getBox,
           listBoxes,
+          upsertAgenticRun,
+          getAgenticRun,
+          updateAgenticRunStatus,
           getItem,
           decrementItemStock,
           incrementItemStock,

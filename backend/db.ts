@@ -62,6 +62,20 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
 CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
 
+CREATE TABLE IF NOT EXISTS agentic_runs (
+  ItemUUID TEXT PRIMARY KEY,
+  SearchQuery TEXT,
+  Status TEXT NOT NULL,
+  StartedAt TEXT,
+  CompletedAt TEXT,
+  LastError TEXT,
+  ResultPayload TEXT,
+  NeedsReview INTEGER NOT NULL DEFAULT 0,
+  ReviewedBy TEXT,
+  ReviewedAt TEXT,
+  FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS label_queue (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
   ItemUUID TEXT NOT NULL,
@@ -152,6 +166,43 @@ export const findByMaterial = db.prepare(`SELECT * FROM items WHERE Artikel_Numm
 export const itemsByBox = db.prepare(`SELECT * FROM items WHERE BoxID = ? ORDER BY ItemUUID`);
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
+export const upsertAgenticRun = db.prepare(
+  `
+    INSERT INTO agentic_runs (
+      ItemUUID, SearchQuery, Status, StartedAt, CompletedAt, LastError,
+      ResultPayload, NeedsReview, ReviewedBy, ReviewedAt
+    )
+    VALUES (
+      @ItemUUID, @SearchQuery, @Status, @StartedAt, @CompletedAt, @LastError,
+      @ResultPayload, @NeedsReview, @ReviewedBy, @ReviewedAt
+    )
+    ON CONFLICT(ItemUUID) DO UPDATE SET
+      SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
+      Status=excluded.Status,
+      StartedAt=COALESCE(excluded.StartedAt, agentic_runs.StartedAt),
+      CompletedAt=excluded.CompletedAt,
+      LastError=excluded.LastError,
+      ResultPayload=excluded.ResultPayload,
+      NeedsReview=COALESCE(excluded.NeedsReview, agentic_runs.NeedsReview),
+      ReviewedBy=excluded.ReviewedBy,
+      ReviewedAt=excluded.ReviewedAt
+  `
+);
+export const getAgenticRun = db.prepare(`SELECT * FROM agentic_runs WHERE ItemUUID = ?`);
+export const updateAgenticRunStatus = db.prepare(
+  `
+    UPDATE agentic_runs
+       SET Status=@Status,
+           StartedAt=@StartedAt,
+           CompletedAt=@CompletedAt,
+           LastError=@LastError,
+           ResultPayload=@ResultPayload,
+           NeedsReview=@NeedsReview,
+           ReviewedBy=@ReviewedBy,
+           ReviewedAt=@ReviewedAt
+     WHERE ItemUUID=@ItemUUID
+  `
+);
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
 export const decrementItemStock = db.prepare(
@@ -210,6 +261,19 @@ export const listItemsForExport = db.prepare(
      AND (@updatedAfter IS NULL OR UpdatedAt >= @updatedAfter)
    ORDER BY Datum_erfasst`
 );
+
+export interface AgenticRun {
+  ItemUUID: string;
+  SearchQuery: string | null;
+  Status: string;
+  StartedAt: string | null;
+  CompletedAt: string | null;
+  LastError: string | null;
+  ResultPayload: string | null;
+  NeedsReview: number;
+  ReviewedBy: string | null;
+  ReviewedAt: string | null;
+}
 
 export type { Box, Item, LabelJob, EventLog };
 

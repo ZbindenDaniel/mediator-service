@@ -93,7 +93,11 @@ const action: Action = {
         WmsLink: (p.get('WmsLink') || '').trim(),
       };
 
-        const txn = ctx.db.transaction((boxId: string, itemData: any, a: string) => {
+      const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();
+      const requestedStatus = (p.get('agenticStatus') || 'queued').trim().toLowerCase();
+      const agenticStatus = ['queued', 'running'].includes(requestedStatus) ? requestedStatus : 'queued';
+
+        const txn = ctx.db.transaction((boxId: string, itemData: any, a: string, search: string, status: string) => {
           ctx.upsertBox.run({
             BoxID: boxId,
             Location: itemData.Location,
@@ -109,9 +113,28 @@ const action: Action = {
             Datum_erfasst: itemData.Datum_erfasst ? itemData.Datum_erfasst.toISOString() : null,
             Veröffentlicht_Status: itemData.Veröffentlicht_Status ? 'yes' : 'no'
           });
+          ctx.upsertAgenticRun.run({
+            ItemUUID: itemData.ItemUUID,
+            SearchQuery: search || null,
+            Status: status,
+            StartedAt: status === 'running' ? now : null,
+            CompletedAt: null,
+            LastError: null,
+            ResultPayload: null,
+            NeedsReview: 0,
+            ReviewedBy: null,
+            ReviewedAt: null
+          });
           ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
+          ctx.logEvent.run({
+            Actor: a,
+            EntityType: 'Item',
+            EntityId: itemData.ItemUUID,
+            Event: 'AgenticSearchQueued',
+            Meta: JSON.stringify({ SearchQuery: search, Status: status })
+          });
         });
-        txn(BoxID, { ...data, ItemUUID }, actor);
+        txn(BoxID, { ...data, ItemUUID }, actor, agenticSearchQuery, agenticStatus);
         sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
     } catch (err) {
       console.error('Import item failed', err);
