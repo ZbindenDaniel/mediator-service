@@ -79,7 +79,32 @@ CREATE TABLE IF NOT EXISTS events (
   Event TEXT NOT NULL,
   Meta TEXT
 );
+`);
+} catch (err) {
+  console.error('Failed to create schema', err);
+  throw err;
+}
 
+const AGENTIC_RUNS_COLUMNS = [
+  'Id',
+  'ItemUUID',
+  'Status',
+  'TriggeredAt',
+  'StartedAt',
+  'CompletedAt',
+  'FailedAt',
+  'Summary',
+  'NeedsReview',
+  'ReviewedBy',
+  'ReviewedAt',
+  'ReviewDecision',
+  'ReviewNotes'
+];
+
+const LEGACY_AGENTIC_COLUMNS = ['SearchQuery', 'LastError', 'ResultPayload'];
+
+function ensureAgenticRunSchema(): void {
+  const createAgenticRunsSql = `
 CREATE TABLE IF NOT EXISTS agentic_runs (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
   ItemUUID TEXT NOT NULL UNIQUE,
@@ -98,11 +123,111 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
-`);
-} catch (err) {
-  console.error('Failed to create schema', err);
-  throw err;
+`;
+
+  let tableInfo: Array<{ name: string }> = [];
+  try {
+    tableInfo = db.prepare(`PRAGMA table_info(agentic_runs)`).all();
+  } catch (err) {
+    console.error('Failed to inspect agentic_runs schema', err);
+    throw err;
+  }
+
+  if (!tableInfo.length) {
+    try {
+      db.exec(createAgenticRunsSql);
+    } catch (err) {
+      console.error('Failed to create agentic_runs table', err);
+      throw err;
+    }
+    return;
+  }
+
+  const columnNames = new Set(tableInfo.map((column) => column.name));
+  const hasAllExpectedColumns = AGENTIC_RUNS_COLUMNS.every((column) => columnNames.has(column));
+  const hasLegacyColumns = LEGACY_AGENTIC_COLUMNS.some((column) => columnNames.has(column));
+
+  if (hasAllExpectedColumns && !hasLegacyColumns) {
+    try {
+      db.exec(createAgenticRunsSql);
+    } catch (err) {
+      console.error('Failed to ensure agentic_runs schema', err);
+      throw err;
+    }
+    return;
+  }
+
+  console.info('Migrating agentic_runs table to review workflow schema');
+
+  try {
+    db.transaction(() => {
+      db.exec(`DROP INDEX IF EXISTS idx_agentic_runs_item`);
+      db.exec(`ALTER TABLE agentic_runs RENAME TO agentic_runs_legacy`);
+
+      db.exec(createAgenticRunsSql);
+
+      const selectColumns: string[] = [];
+      selectColumns.push('ItemUUID');
+      selectColumns.push('Status');
+      if (columnNames.has('TriggeredAt')) {
+        selectColumns.push('TriggeredAt AS TriggeredAt');
+      } else if (columnNames.has('StartedAt')) {
+        selectColumns.push('StartedAt AS TriggeredAt');
+      } else {
+        selectColumns.push('NULL AS TriggeredAt');
+      }
+      selectColumns.push(columnNames.has('StartedAt') ? 'StartedAt AS StartedAt' : 'NULL AS StartedAt');
+      selectColumns.push(columnNames.has('CompletedAt') ? 'CompletedAt AS CompletedAt' : 'NULL AS CompletedAt');
+      if (columnNames.has('FailedAt')) {
+        selectColumns.push('FailedAt AS FailedAt');
+      } else if (columnNames.has('LastError')) {
+        selectColumns.push(
+          "CASE WHEN IFNULL(LastError, '') != '' THEN COALESCE(CompletedAt, StartedAt) ELSE NULL END AS FailedAt"
+        );
+      } else {
+        selectColumns.push('NULL AS FailedAt');
+      }
+      if (columnNames.has('Summary')) {
+        selectColumns.push('Summary AS Summary');
+      } else if (columnNames.has('ResultPayload')) {
+        selectColumns.push('ResultPayload AS Summary');
+      } else if (columnNames.has('LastError')) {
+        selectColumns.push('LastError AS Summary');
+      } else {
+        selectColumns.push('NULL AS Summary');
+      }
+      selectColumns.push(columnNames.has('NeedsReview') ? 'COALESCE(NeedsReview, 0) AS NeedsReview' : '0 AS NeedsReview');
+      selectColumns.push(columnNames.has('ReviewedBy') ? 'ReviewedBy AS ReviewedBy' : 'NULL AS ReviewedBy');
+      selectColumns.push(columnNames.has('ReviewedAt') ? 'ReviewedAt AS ReviewedAt' : 'NULL AS ReviewedAt');
+      selectColumns.push(columnNames.has('ReviewDecision') ? 'ReviewDecision AS ReviewDecision' : 'NULL AS ReviewDecision');
+      if (columnNames.has('ReviewNotes')) {
+        selectColumns.push('ReviewNotes AS ReviewNotes');
+      } else if (columnNames.has('LastError')) {
+        selectColumns.push('LastError AS ReviewNotes');
+      } else {
+        selectColumns.push('NULL AS ReviewNotes');
+      }
+
+      const migrateSql = `
+        INSERT INTO agentic_runs (
+          ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
+          Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
+        )
+        SELECT
+          ${selectColumns.join(',\n          ')}
+        FROM agentic_runs_legacy;
+      `;
+
+      db.exec(migrateSql);
+      db.exec('DROP TABLE agentic_runs_legacy');
+    })();
+  } catch (err) {
+    console.error('Failed to migrate agentic_runs schema', err);
+    throw err;
+  }
 }
+
+ensureAgenticRunSchema();
 
 export { db };
 
