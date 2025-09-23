@@ -115,15 +115,17 @@ const action: Action = {
           });
           ctx.upsertAgenticRun.run({
             ItemUUID: itemData.ItemUUID,
-            SearchQuery: search || null,
             Status: status,
+            TriggeredAt: now,
             StartedAt: status === 'running' ? now : null,
             CompletedAt: null,
-            LastError: null,
-            ResultPayload: null,
+            FailedAt: null,
+            Summary: null,
             NeedsReview: 0,
             ReviewedBy: null,
-            ReviewedAt: null
+            ReviewedAt: null,
+            ReviewDecision: null,
+            ReviewNotes: null
           });
           ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
           ctx.logEvent.run({

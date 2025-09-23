@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { DB_PATH } from './config';
-import { Box, Item, LabelJob, EventLog } from '../models';
+import { AgenticRun, Box, Item, LabelJob, EventLog } from '../models';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 let db: any;
@@ -61,20 +61,6 @@ CREATE TABLE IF NOT EXISTS items (
 
 CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
 CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
-
-CREATE TABLE IF NOT EXISTS agentic_runs (
-  ItemUUID TEXT PRIMARY KEY,
-  SearchQuery TEXT,
-  Status TEXT NOT NULL,
-  StartedAt TEXT,
-  CompletedAt TEXT,
-  LastError TEXT,
-  ResultPayload TEXT,
-  NeedsReview INTEGER NOT NULL DEFAULT 0,
-  ReviewedBy TEXT,
-  ReviewedAt TEXT,
-  FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
-);
 
 CREATE TABLE IF NOT EXISTS label_queue (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,37 +174,47 @@ export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
-      ItemUUID, SearchQuery, Status, StartedAt, CompletedAt, LastError,
-      ResultPayload, NeedsReview, ReviewedBy, ReviewedAt
+      ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
+      Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
     )
     VALUES (
-      @ItemUUID, @SearchQuery, @Status, @StartedAt, @CompletedAt, @LastError,
-      @ResultPayload, @NeedsReview, @ReviewedBy, @ReviewedAt
+      @ItemUUID, @Status, @TriggeredAt, @StartedAt, @CompletedAt, @FailedAt,
+      @Summary, @NeedsReview, @ReviewedBy, @ReviewedAt, @ReviewDecision, @ReviewNotes
     )
     ON CONFLICT(ItemUUID) DO UPDATE SET
-      SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
       Status=excluded.Status,
-      StartedAt=COALESCE(excluded.StartedAt, agentic_runs.StartedAt),
+      TriggeredAt=COALESCE(excluded.TriggeredAt, agentic_runs.TriggeredAt),
+      StartedAt=excluded.StartedAt,
       CompletedAt=excluded.CompletedAt,
-      LastError=excluded.LastError,
-      ResultPayload=excluded.ResultPayload,
-      NeedsReview=COALESCE(excluded.NeedsReview, agentic_runs.NeedsReview),
+      FailedAt=excluded.FailedAt,
+      Summary=excluded.Summary,
+      NeedsReview=excluded.NeedsReview,
       ReviewedBy=excluded.ReviewedBy,
-      ReviewedAt=excluded.ReviewedAt
+      ReviewedAt=excluded.ReviewedAt,
+      ReviewDecision=excluded.ReviewDecision,
+      ReviewNotes=excluded.ReviewNotes
   `
 );
-export const getAgenticRun = db.prepare(`SELECT * FROM agentic_runs WHERE ItemUUID = ?`);
+export const getAgenticRun = db.prepare(`
+  SELECT Id, ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
+         NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
+  FROM agentic_runs
+  WHERE ItemUUID = ?
+`);
 export const updateAgenticRunStatus = db.prepare(
   `
     UPDATE agentic_runs
        SET Status=@Status,
+           TriggeredAt=COALESCE(@TriggeredAt, TriggeredAt),
            StartedAt=@StartedAt,
            CompletedAt=@CompletedAt,
-           LastError=@LastError,
-           ResultPayload=@ResultPayload,
+           FailedAt=@FailedAt,
+           Summary=@Summary,
            NeedsReview=@NeedsReview,
            ReviewedBy=@ReviewedBy,
-           ReviewedAt=@ReviewedAt
+           ReviewedAt=@ReviewedAt,
+           ReviewDecision=@ReviewDecision,
+           ReviewNotes=@ReviewNotes
      WHERE ItemUUID=@ItemUUID
   `
 );
@@ -298,18 +294,5 @@ export const listItemsForExport = db.prepare(
    ORDER BY Datum_erfasst`
 );
 
-export interface AgenticRun {
-  ItemUUID: string;
-  SearchQuery: string | null;
-  Status: string;
-  StartedAt: string | null;
-  CompletedAt: string | null;
-  LastError: string | null;
-  ResultPayload: string | null;
-  NeedsReview: number;
-  ReviewedBy: string | null;
-  ReviewedAt: string | null;
-}
-
-export type { Box, Item, LabelJob, EventLog };
+export type { AgenticRun, Box, Item, LabelJob, EventLog };
 

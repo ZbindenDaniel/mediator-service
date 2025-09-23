@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import type { AgenticRun } from '../../models';
 import { AGENTIC_SHARED_SECRET } from '../config';
 
 const SHARED_SECRET_HEADER = 'x-agent-secret';
@@ -66,10 +67,18 @@ const action: Action = {
 
       const statusInput = typeof payload.status === 'string' ? payload.status.trim().toLowerCase() : 'completed';
       const agentStatus = statusInput || 'completed';
-      const startedAt = toIsoString(payload.startedAt);
+      const triggeredAtInput = toIsoString(payload.triggeredAt);
+      const startedAtInput = toIsoString(payload.startedAt);
+      const completedAtInput = toIsoString(payload.completedAt);
+      const failedAtInput = toIsoString(payload.failedAt);
       const errorMessage = typeof payload.error === 'string' ? payload.error.trim() || null : null;
       const needsReview = Boolean(payload.needsReview);
-      const resultPayload = JSON.stringify(payload);
+      const summaryInputRaw = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+      const summaryInput = summaryInputRaw ? summaryInputRaw : null;
+      const reviewDecisionRaw = typeof payload.reviewDecision === 'string' ? payload.reviewDecision.trim() : '';
+      const reviewDecisionInput = reviewDecisionRaw ? reviewDecisionRaw : null;
+      const reviewNotesRaw = typeof payload.reviewNotes === 'string' ? payload.reviewNotes.trim() : '';
+      const reviewNotesInput = reviewNotesRaw ? reviewNotesRaw : null;
       const reviewInfo = {
         ReviewedBy: payload.reviewedBy ?? null,
         ReviewedAt: toIsoString(payload.reviewedAt)
@@ -77,6 +86,13 @@ const action: Action = {
       const agenticActor = typeof payload.actor === 'string' && payload.actor ? payload.actor : 'agentic-service';
       const nowIso = new Date().toISOString();
       const eventName = errorMessage ? 'AgenticResultFailed' : 'AgenticResultReceived';
+      const FINAL_STATUSES = new Set(['completed', 'succeeded', 'failed', 'errored']);
+      const FAILURE_STATUSES = new Set(['failed', 'errored', 'error']);
+      const completionTime = completedAtInput ?? (FINAL_STATUSES.has(agentStatus) ? nowIso : null);
+      let failureTime = failedAtInput;
+      if (!failureTime && (FAILURE_STATUSES.has(agentStatus) || Boolean(errorMessage))) {
+        failureTime = completionTime ?? nowIso;
+      }
 
       const txn = ctx.db.transaction(
         (
@@ -84,20 +100,21 @@ const action: Action = {
           agenticPayload: any,
           status: string,
           now: string,
+          triggered: string | null,
           started: string | null,
           completed: string | null,
+          failed: string | null,
           errorText: string | null,
           needsHumanReview: boolean,
-          rawResult: string,
+          summary: string | null,
           actor: string,
-          review: { ReviewedBy: string | null; ReviewedAt: string | null },
-          search: string | null
+          review: { ReviewedBy: string | null; ReviewedAt: string | null; Decision: string | null; Notes: string | null }
         ) => {
           const existingItem = ctx.getItem.get(itemUUID);
           if (!existingItem) {
             throw new Error('Item not found');
           }
-          const existingRun = ctx.getAgenticRun.get(itemUUID) || {};
+          const existingRun = ctx.getAgenticRun.get(itemUUID) as AgenticRun | undefined;
           const merged: Record<string, any> = { ...existingItem };
           if (agenticPayload && typeof agenticPayload === 'object') {
             Object.entries(agenticPayload).forEach(([key, value]) => {
@@ -114,25 +131,48 @@ const action: Action = {
             Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status)
           });
 
-          const completedAt = completed;
+          const resolvedTriggeredAt = triggered ?? existingRun?.TriggeredAt ?? now;
+          let resolvedStartedAt = started ?? existingRun?.StartedAt ?? null;
+          if (!resolvedStartedAt && ['running', 'processing'].includes(status)) {
+            resolvedStartedAt = now;
+          }
+          const resolvedCompletedAt = completed ?? existingRun?.CompletedAt ?? null;
+          let resolvedFailedAt = failed ?? null;
+          if (!resolvedFailedAt && FAILURE_STATUSES.has(status)) {
+            resolvedFailedAt = resolvedCompletedAt ?? now;
+          }
+          const resolvedSummary = summary ?? errorText ?? existingRun?.Summary ?? null;
+          let resolvedReviewedBy = needsHumanReview ? null : review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
+          let resolvedReviewedAt = needsHumanReview ? null : review.ReviewedAt ?? existingRun?.ReviewedAt ?? null;
+          let resolvedReviewDecision = needsHumanReview ? null : review.Decision ?? existingRun?.ReviewDecision ?? null;
+          let resolvedReviewNotes = needsHumanReview ? null : review.Notes ?? existingRun?.ReviewNotes ?? null;
+
+          if (needsHumanReview) {
+            resolvedReviewedBy = null;
+            resolvedReviewedAt = null;
+            resolvedReviewDecision = null;
+            resolvedReviewNotes = null;
+          }
+
           const runUpdate = {
             ItemUUID: itemUUID,
             Status: status,
-            StartedAt: started || existingRun.StartedAt || now,
-            CompletedAt: completedAt,
-            LastError: errorText,
-            ResultPayload: rawResult,
+            TriggeredAt: resolvedTriggeredAt,
+            StartedAt: resolvedStartedAt,
+            CompletedAt: resolvedCompletedAt,
+            FailedAt: resolvedFailedAt,
+            Summary: resolvedSummary,
             NeedsReview: needsHumanReview ? 1 : 0,
-            ReviewedBy: needsHumanReview ? null : review.ReviewedBy ?? existingRun.ReviewedBy ?? null,
-            ReviewedAt: needsHumanReview ? null : review.ReviewedAt ?? existingRun.ReviewedAt ?? null
+            ReviewedBy: resolvedReviewedBy,
+            ReviewedAt: resolvedReviewedAt,
+            ReviewDecision: resolvedReviewDecision,
+            ReviewNotes: resolvedReviewNotes
           };
 
           const updateResult = ctx.updateAgenticRunStatus.run(runUpdate);
           if (!updateResult?.changes) {
-            ctx.upsertAgenticRun.run({
-              ...runUpdate,
-              SearchQuery: existingRun.SearchQuery ?? search
-            });
+            console.warn('Agentic run missing on status update, creating record', itemUUID);
+            ctx.upsertAgenticRun.run(runUpdate);
           }
 
           ctx.logEvent.run({
@@ -140,14 +180,16 @@ const action: Action = {
             EntityType: 'Item',
             EntityId: itemUUID,
             Event: eventName,
-            Meta: JSON.stringify({ Status: status, NeedsReview: needsHumanReview, Error: errorText })
+            Meta: JSON.stringify({
+              Status: status,
+              NeedsReview: needsHumanReview,
+              FailedAt: resolvedFailedAt,
+              Summary: resolvedSummary,
+              Error: errorText
+            })
           });
         }
       );
-
-      const completionTime = ['completed', 'succeeded', 'failed', 'errored'].includes(agentStatus)
-        ? nowIso
-        : null;
 
       try {
         txn(
@@ -155,14 +197,20 @@ const action: Action = {
           payload.item,
           agentStatus,
           nowIso,
-          startedAt,
+          triggeredAtInput,
+          startedAtInput,
           completionTime,
+          failureTime,
           errorMessage,
           needsReview,
-          resultPayload,
+          summaryInput,
           agenticActor,
-          { ReviewedBy: reviewInfo.ReviewedBy, ReviewedAt: reviewInfo.ReviewedAt },
-          typeof payload.searchQuery === 'string' ? payload.searchQuery : null
+          {
+            ReviewedBy: reviewInfo.ReviewedBy,
+            ReviewedAt: reviewInfo.ReviewedAt,
+            Decision: reviewDecisionInput,
+            Notes: reviewNotesInput
+          }
         );
       } catch (err) {
         if ((err as Error).message === 'Item not found') {
