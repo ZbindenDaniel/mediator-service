@@ -8,6 +8,8 @@ type ItemFormData = Item & {
   picture1?: string | null;
   picture2?: string | null;
   picture3?: string | null;
+  agenticStatus?: 'queued' | 'running';
+  agenticSearch?: string;
 };
 
 export default function ItemCreate() {
@@ -96,7 +98,9 @@ export default function ItemCreate() {
       Artikelbeschreibung: data.Artikelbeschreibung,
       Artikel_Nummer: data.Artikel_Nummer,
       Auf_Lager: data.Auf_Lager,
-      BoxID: data.BoxID || boxId || undefined
+      BoxID: data.BoxID || boxId || undefined,
+      agenticStatus: 'running' as const,
+      agenticSearch: data.Artikelbeschreibung
     } satisfies Partial<ItemFormData>;
 
     const p = new URLSearchParams();
@@ -125,7 +129,9 @@ export default function ItemCreate() {
         ...prev,
         ...detailPayload,
         BoxID: createdItem?.BoxID || detailPayload.BoxID,
-        ItemUUID: createdItem?.ItemUUID || prev.ItemUUID
+        ItemUUID: createdItem?.ItemUUID || prev.ItemUUID,
+        agenticStatus: 'running',
+        agenticSearch: detailPayload.agenticSearch
       }));
       setItemUUID(createdItem?.ItemUUID || itemUUID);
 
@@ -168,7 +174,9 @@ export default function ItemCreate() {
       ...baseDraft,
       ...data,
       BoxID: data.BoxID || baseDraft.BoxID,
-      ItemUUID: itemUUID || baseDraft.ItemUUID
+      ItemUUID: itemUUID || baseDraft.ItemUUID,
+      agenticStatus: 'running',
+      agenticSearch: baseDraft.agenticSearch || baseDraft.Artikelbeschreibung
     };
 
     await handleSubmit(mergedData);
