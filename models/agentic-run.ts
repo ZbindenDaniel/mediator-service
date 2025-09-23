@@ -1,6 +1,7 @@
 export interface AgenticRun {
   Id: number;
   ItemUUID: string;
+  SearchQuery: string | null;
   Status: string;
   TriggeredAt: string | null;
   StartedAt: string | null;

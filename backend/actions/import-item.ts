@@ -115,6 +115,7 @@ const action: Action = {
           });
           ctx.upsertAgenticRun.run({
             ItemUUID: itemData.ItemUUID,
+            SearchQuery: search || null,
             Status: status,
             TriggeredAt: now,
             StartedAt: status === 'running' ? now : null,
