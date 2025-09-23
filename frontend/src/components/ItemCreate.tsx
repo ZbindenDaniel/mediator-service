@@ -8,6 +8,8 @@ type ItemFormData = Item & {
   picture1?: string | null;
   picture2?: string | null;
   picture3?: string | null;
+  agenticStatus?: 'queued' | 'running';
+  agenticSearch?: string;
 };
 
 export default function ItemCreate() {
@@ -96,7 +98,9 @@ export default function ItemCreate() {
       Artikelbeschreibung: data.Artikelbeschreibung,
       Artikel_Nummer: data.Artikel_Nummer,
       Auf_Lager: data.Auf_Lager,
-      BoxID: data.BoxID || boxId || undefined
+      BoxID: data.BoxID || boxId || undefined,
+      agenticStatus: 'queued' as const,
+      agenticSearch: data.Artikelbeschreibung
     } satisfies Partial<ItemFormData>;
 
     const p = new URLSearchParams();
@@ -125,7 +129,9 @@ export default function ItemCreate() {
         ...prev,
         ...detailPayload,
         BoxID: createdItem?.BoxID || detailPayload.BoxID,
-        ItemUUID: createdItem?.ItemUUID || prev.ItemUUID
+        ItemUUID: createdItem?.ItemUUID || prev.ItemUUID,
+        agenticStatus: 'queued',
+        agenticSearch: detailPayload.agenticSearch
       }));
       setItemUUID(createdItem?.ItemUUID || itemUUID);
 
@@ -135,12 +141,20 @@ export default function ItemCreate() {
         search: searchText
       };
 
-      try {
-        if (!agenticPayload.id) {
-          console.warn('Agentic trigger skipped: missing ItemUUID');
-        } else if (!agenticPayload.search) {
-          console.warn('Agentic trigger skipped: missing search term');
-        } else {
+      setStep(2);
+
+      void (async () => {
+        try {
+          if (!agenticPayload.id) {
+            console.warn('Agentic trigger skipped: missing ItemUUID');
+            return;
+          }
+
+          if (!agenticPayload.search) {
+            console.warn('Agentic trigger skipped: missing search term');
+            return;
+          }
+
           const agenticRes = await fetch('http://localhost:3000/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -150,12 +164,10 @@ export default function ItemCreate() {
           if (!agenticRes.ok) {
             console.error('Agentic trigger failed', agenticRes.status);
           }
+        } catch (agenticErr) {
+          console.error('Agentic trigger invocation failed', agenticErr);
         }
-      } catch (agenticErr) {
-        console.error('Agentic trigger invocation failed', agenticErr);
-      }
-
-      setStep(2);
+      })();
     } catch (err) {
       console.error('Failed to submit step 1 item details', err);
       throw err;
@@ -168,7 +180,9 @@ export default function ItemCreate() {
       ...baseDraft,
       ...data,
       BoxID: data.BoxID || baseDraft.BoxID,
-      ItemUUID: itemUUID || baseDraft.ItemUUID
+      ItemUUID: itemUUID || baseDraft.ItemUUID,
+      agenticStatus: 'running',
+      agenticSearch: baseDraft.agenticSearch || baseDraft.Artikelbeschreibung
     };
 
     await handleSubmit(mergedData);

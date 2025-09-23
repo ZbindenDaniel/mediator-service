@@ -5,6 +5,8 @@ interface ItemFormData extends Item {
   picture1?: string | null;
   picture2?: string | null;
   picture3?: string | null;
+  agenticStatus?: 'queued' | 'running';
+  agenticSearch?: string;
 }
 
 interface Props {
