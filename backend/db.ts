@@ -79,6 +79,25 @@ CREATE TABLE IF NOT EXISTS events (
   Event TEXT NOT NULL,
   Meta TEXT
 );
+
+CREATE TABLE IF NOT EXISTS agentic_runs (
+  Id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ItemUUID TEXT NOT NULL UNIQUE,
+  Status TEXT NOT NULL,
+  TriggeredAt TEXT,
+  StartedAt TEXT,
+  CompletedAt TEXT,
+  FailedAt TEXT,
+  Summary TEXT,
+  NeedsReview INTEGER NOT NULL DEFAULT 0,
+  ReviewedBy TEXT,
+  ReviewedAt TEXT,
+  ReviewDecision TEXT,
+  ReviewNotes TEXT,
+  FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
 `);
 } catch (err) {
   console.error('Failed to create schema', err);
@@ -196,6 +215,23 @@ export const getMaxArtikelNummer = db.prepare(`
     ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
     LIMIT 1
   `);
+
+export const getAgenticRunForItem = db.prepare(`
+  SELECT Id, ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
+         NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
+  FROM agentic_runs
+  WHERE ItemUUID = ?
+`);
+
+export const updateAgenticReview = db.prepare(`
+  UPDATE agentic_runs
+  SET NeedsReview = @NeedsReview,
+      ReviewedBy = @ReviewedBy,
+      ReviewedAt = @ReviewedAt,
+      ReviewDecision = @ReviewDecision,
+      ReviewNotes = @ReviewNotes
+  WHERE ItemUUID = @ItemUUID
+`);
 
 export const listItems = db.prepare(
   `SELECT i.*, COALESCE(i.Location, b.Location) AS Location

@@ -25,7 +25,8 @@ const action: Action = {
         if (!item) return sendJson(res, 404, { error: 'Not found' });
         const box = ctx.getBox.get(item.BoxID);
         const events = ctx.listEventsForItem.all(itemId);
-        return sendJson(res, 200, { item, box, events });
+        const agentic = ctx.getAgenticRunForItem ? ctx.getAgenticRunForItem.get(itemId) : null;
+        return sendJson(res, 200, { item, box, events, agentic });
       } catch (err) {
         console.error('Fetch item failed', err);
         return sendJson(res, 500, { error: (err as Error).message });

@@ -311,6 +311,28 @@ button:focus {
     &.Box {
         background: $box-color
     }
+
+    &.status {
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    &.status-success {
+        background: #c8f7c5;
+    }
+
+    &.status-pending {
+        background: #fce8b2;
+    }
+
+    &.status-error {
+        background: #f6c7c7;
+    }
+
+    &.status-info {
+        background: #dbeafe;
+    }
 }
 
 .linkcard {

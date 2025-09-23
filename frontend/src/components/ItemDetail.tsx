@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
-import type { Item, EventLog } from '../../../models';
+import type { Item, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -14,6 +14,9 @@ interface Props {
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
+  const [agentic, setAgentic] = useState<AgenticRun | null>(null);
+  const [agenticError, setAgenticError] = useState<string | null>(null);
+  const [agenticActionPending, setAgenticActionPending] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,15 +27,135 @@ export default function ItemDetail({ itemId }: Props) {
           const data = await res.json();
           setItem(data.item);
           setEvents(data.events || []);
+          setAgentic(data.agentic ?? null);
+          setAgenticError(null);
         } else {
           console.error('Failed to fetch item', res.status);
+          setAgentic(null);
+          setAgenticError('Agentic-Status konnte nicht geladen werden.');
         }
       } catch (err) {
         console.error('Failed to fetch item', err);
+        setAgentic(null);
+        setAgenticError('Agentic-Status konnte nicht geladen werden.');
       }
     }
     load();
   }, [itemId]);
+
+  const agenticNeedsReview = agentic ? Number(agentic.NeedsReview) > 0 : false;
+
+  function agenticStatusDisplay(run: AgenticRun | null): {
+    label: string;
+    className: string;
+    description: string;
+  } {
+    if (!run) {
+      return {
+        label: 'Keine Daten',
+        className: 'pill status status-info',
+        description: 'Es liegen keine agentischen Ergebnisse vor.'
+      };
+    }
+    const normalized = (run.Status || '').toLowerCase();
+    let variant: 'info' | 'success' | 'error' | 'pending' = 'info';
+    let label = run.Status || 'Unbekannt';
+    let description = '';
+
+    if (run.FailedAt || ['failed', 'error'].includes(normalized)) {
+      variant = 'error';
+      label = 'Fehler';
+      description = 'Der agentische Durchlauf ist fehlgeschlagen.';
+    } else if (['running', 'processing'].includes(normalized)) {
+      variant = 'info';
+      label = 'In Arbeit';
+      description = 'Der agentische Durchlauf läuft derzeit.';
+    } else if (['pending', 'queued'].includes(normalized)) {
+      variant = 'pending';
+      label = 'Wartet';
+      description = 'Der agentische Durchlauf wartet auf Ausführung.';
+    } else if (['completed', 'done', 'success'].includes(normalized)) {
+      if (Number(run.NeedsReview) > 0) {
+        variant = 'pending';
+        label = 'Fertig (Review offen)';
+        description = 'Das Ergebnis wartet auf Freigabe.';
+      } else {
+        variant = 'success';
+        label = 'Fertig';
+        description = 'Der agentische Durchlauf wurde abgeschlossen.';
+      }
+    } else {
+      if (!label.trim()) {
+        label = 'Unbekannt';
+      }
+      description = `Status: ${label}`;
+    }
+
+    return {
+      label,
+      className: `pill status status-${variant}`,
+      description
+    };
+  }
+
+  async function handleAgenticReview(decision: 'approved' | 'rejected') {
+    if (!agentic) return;
+    const actor = getUser();
+    if (!actor) {
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
+    const confirmMessage =
+      decision === 'approved'
+        ? 'Agentisches Ergebnis freigeben?'
+        : 'Agentisches Ergebnis ablehnen?';
+    if (!window.confirm(confirmMessage)) return;
+    const noteInput = window.prompt('Notiz (optional):', '') ?? '';
+    setAgenticActionPending(true);
+    setAgenticError(null);
+    try {
+      const res = await fetch(
+        `/api/items/${encodeURIComponent(agentic.ItemUUID)}/agentic/review`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor, decision, notes: noteInput })
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setAgentic(data.agentic ?? null);
+        setAgenticError(null);
+      } else {
+        console.error('Agentic review update failed', res.status);
+        setAgenticError('Review konnte nicht gespeichert werden.');
+      }
+    } catch (err) {
+      console.error('Agentic review request failed', err);
+      setAgenticError('Review-Anfrage fehlgeschlagen.');
+    } finally {
+      setAgenticActionPending(false);
+    }
+  }
+
+  const agenticStatus = agenticStatusDisplay(agentic);
+  const agenticRows: [string, React.ReactNode][] = [];
+  if (agentic?.TriggeredAt) agenticRows.push(['Ausgelöst', formatDateTime(agentic.TriggeredAt)]);
+  if (agentic?.StartedAt) agenticRows.push(['Gestartet', formatDateTime(agentic.StartedAt)]);
+  if (agentic?.CompletedAt) agenticRows.push(['Abgeschlossen', formatDateTime(agentic.CompletedAt)]);
+  if (agentic?.FailedAt) agenticRows.push(['Fehlerzeit', formatDateTime(agentic.FailedAt)]);
+  if (agentic?.ReviewedBy)
+    agenticRows.push([
+      'Geprüft von',
+      `${agentic.ReviewedBy}${agentic.ReviewedAt ? ` (${formatDateTime(agentic.ReviewedAt)})` : ''}`
+    ]);
+  if (agentic?.ReviewDecision)
+    agenticRows.push([
+      'Entscheid',
+      agentic.ReviewDecision === 'approved' ? 'Freigegeben' : 'Abgelehnt'
+    ]);
+  if (agentic?.ReviewNotes)
+    agenticRows.push(['Notizen', agentic.ReviewNotes]);
 
   async function handleDelete() {
     if (!item) return;
@@ -118,6 +241,53 @@ export default function ItemDetail({ itemId }: Props) {
                 }}>Entnehmen</button>
                 <button type="button" className="btn danger" onClick={handleDelete}>Löschen</button>
               </div>
+            </div>
+
+            <div className="card">
+              <h3>Agentic Status</h3>
+              <div className="row">
+                <span className={agenticStatus.className}>{agenticStatus.label}</span>
+              </div>
+              <p className="muted">{agenticStatus.description}</p>
+              {agentic?.Summary ? <p>{agentic.Summary}</p> : null}
+              {agenticRows.length > 0 ? (
+                <table className="details">
+                  <tbody>
+                    {agenticRows.map(([k, v], idx) => (
+                      <tr key={`${k}-${idx}`} className="responsive-row">
+                        <th className="responsive-th">{k}</th>
+                        <td className="responsive-td">{v ?? ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
+              {agenticActionPending ? (
+                <p className="muted">Review wird gespeichert…</p>
+              ) : null}
+              {agenticError ? (
+                <p className="muted" style={{ color: '#a30000' }}>{agenticError}</p>
+              ) : null}
+              {agenticNeedsReview ? (
+                <div className='row'>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={agenticActionPending}
+                    onClick={() => handleAgenticReview('approved')}
+                  >
+                    Freigeben
+                  </button>
+                  <button
+                    type="button"
+                    className="btn danger"
+                    disabled={agenticActionPending}
+                    onClick={() => handleAgenticReview('rejected')}
+                  >
+                    Ablehnen
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             <RelocateItemCard itemId={item.ItemUUID} />
