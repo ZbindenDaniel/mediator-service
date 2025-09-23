@@ -16,6 +16,7 @@ interface Props {
 
 export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }: Props) {
   const [form, setForm] = useState<Partial<ItemFormData>>({ ...item });
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   function update<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -23,10 +24,12 @@ export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }:
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setSubmitError(null);
     try {
       await onSubmit(form);
     } catch (err) {
       console.error('Item form submit failed', err);
+      setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
     }
   }
 
@@ -180,6 +183,11 @@ export default function ItemForm_Agentic({ item, onSubmit, submitLabel, isNew }:
           <div className="row">
             <button type="submit">{submitLabel}</button>
           </div>
+          {submitError && (
+            <div className="row error">
+              <span>{submitError}</span>
+            </div>
+          )}
         </form >
       </div>
     </div>

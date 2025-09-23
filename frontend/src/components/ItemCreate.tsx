@@ -18,23 +18,58 @@ export default function ItemCreate() {
       }
     });
     try {
-
-      // TODO: here we need to make an API cal to the ai-flow-service with the information we already have of the item
-
       const res = await fetch('/api/import/item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: p.toString()
       });
-      if (res.ok) {
-        const j = await res.json();
-        alert('Behälter erstellt. Bitte platzieren!');
-        navigate(`/boxes/${encodeURIComponent(j.item.BoxID)}`);
-      } else {
+      if (!res.ok) {
         console.error('Failed to create item', res.status);
+        throw new Error(`Failed to create item. Status: ${res.status}`);
+      }
+
+      const j = await res.json();
+      const createdItem: Item | undefined = j?.item;
+
+      const searchText = createdItem?.Artikelbeschreibung || data.Artikelbeschreibung || '';
+      const agenticPayload = {
+        id: createdItem?.ItemUUID,
+        search: searchText
+      };
+
+      void (async () => {
+        try {
+          if (!agenticPayload.id) {
+            console.warn('Agentic trigger skipped: missing ItemUUID');
+            return;
+          }
+
+          if (!agenticPayload.search) {
+            console.warn('Agentic trigger skipped: missing search term');
+            return;
+          }
+
+          const agenticRes = await fetch('http://localhost:3000/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(agenticPayload)
+          });
+
+          if (!agenticRes.ok) {
+            console.error('Agentic trigger failed', agenticRes.status);
+          }
+        } catch (agenticErr) {
+          console.error('Agentic trigger invocation failed', agenticErr);
+        }
+      })();
+
+      alert('Behälter erstellt. Bitte platzieren!');
+      if (createdItem?.BoxID) {
+        navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
       }
     } catch (err) {
       console.error('Failed to create item', err);
+      throw err;
     }
   }
 
