@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS events (
 const AGENTIC_RUNS_COLUMNS = [
   'Id',
   'ItemUUID',
+  'SearchQuery',
   'Status',
   'TriggeredAt',
   'StartedAt',
@@ -108,6 +109,7 @@ function ensureAgenticRunSchema(): void {
 CREATE TABLE IF NOT EXISTS agentic_runs (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
   ItemUUID TEXT NOT NULL UNIQUE,
+  SearchQuery TEXT,
   Status TEXT NOT NULL,
   TriggeredAt TEXT,
   StartedAt TEXT,
@@ -168,6 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
 
       const selectColumns: string[] = [];
       selectColumns.push('ItemUUID');
+      selectColumns.push(columnNames.has('SearchQuery') ? 'SearchQuery AS SearchQuery' : 'NULL AS SearchQuery');
       selectColumns.push('Status');
       if (columnNames.has('TriggeredAt')) {
         selectColumns.push('TriggeredAt AS TriggeredAt');
@@ -210,7 +213,7 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
 
       const migrateSql = `
         INSERT INTO agentic_runs (
-          ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
+          ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
           Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
         )
         SELECT
@@ -299,14 +302,15 @@ export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
-      ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
+      ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
       Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
     )
     VALUES (
-      @ItemUUID, @Status, @TriggeredAt, @StartedAt, @CompletedAt, @FailedAt,
+      @ItemUUID, @SearchQuery, @Status, @TriggeredAt, @StartedAt, @CompletedAt, @FailedAt,
       @Summary, @NeedsReview, @ReviewedBy, @ReviewedAt, @ReviewDecision, @ReviewNotes
     )
     ON CONFLICT(ItemUUID) DO UPDATE SET
+      SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
       Status=excluded.Status,
       TriggeredAt=COALESCE(excluded.TriggeredAt, agentic_runs.TriggeredAt),
       StartedAt=excluded.StartedAt,
@@ -321,7 +325,7 @@ export const upsertAgenticRun = db.prepare(
   `
 );
 export const getAgenticRun = db.prepare(`
-  SELECT Id, ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
+  SELECT Id, ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
          NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
   FROM agentic_runs
   WHERE ItemUUID = ?
@@ -389,7 +393,7 @@ export const getMaxArtikelNummer = db.prepare(`
   `);
 
 export const getAgenticRunForItem = db.prepare(`
-  SELECT Id, ItemUUID, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
+  SELECT Id, ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
          NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
   FROM agentic_runs
   WHERE ItemUUID = ?

@@ -156,6 +156,7 @@ const action: Action = {
 
           const runUpdate = {
             ItemUUID: itemUUID,
+            SearchQuery: existingRun?.SearchQuery ?? null,
             Status: status,
             TriggeredAt: resolvedTriggeredAt,
             StartedAt: resolvedStartedAt,
