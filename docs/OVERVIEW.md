@@ -42,12 +42,11 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 ## Next steps
 - Enable switch from agentic to manual edit via button. Very simple link button from ItemForm_Agentic to ItemForm.
 - Move of items and boxes triggers reload
-- images need to be persisted
+- Monitor persisted image writes and `agenticSearchQuery` handling in `backend/actions/import-item.ts` for follow-up polish.
 - Kurzbeschreibung needs better layout.
 - 'entnehmen' has no confimration. It should have
 - On double click on the usernam it should be possible to change the user name.
-- When creating an item we need to make an API call to the ai-flowService 'run'
-- 
+- Continue refining the asynchronous agentic run trigger in `frontend/src/components/ItemCreate.tsx` as UX feedback arrives.
 
 
 
@@ -78,3 +77,5 @@ The legacy JavaScript implementation remains at the project root. New code in `/
 - Statistics now show "Artikel ohne Behälter" and list pages use `dd.MM.yyyy` dates.
 - Item details now show the creator and current stock, remove the Standort field, and events list include article numbers and descriptions.
 - Images persist across item edits with `{Artikelnummer}-{imgNumber}` naming, and item models no longer carry picture fields.
+- Restored agentic search-query storage using the latest `backend/db.ts` migration and the new `upsertAgenticRun` helper.
+- Updated the item creation workflow to trigger agentic runs asynchronously via `frontend/src/components/ItemCreate.tsx` while `backend/actions/import-item.ts` handles persistence and image writes.
