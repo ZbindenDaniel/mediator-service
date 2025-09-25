@@ -6,6 +6,7 @@ process.env.HTTP_PORT = '0';
 process.env.DB_PATH = path.join(__dirname, 'test-db.sqlite');
 process.env.INBOX_DIR = path.join(__dirname, 'test-inbox');
 process.env.ARCHIVE_DIR = path.join(__dirname, 'test-archive');
+process.env.AGENTIC_SHARED_SECRET = 'test-secret';
 
 const { server } = require('./server');
 
@@ -213,4 +214,68 @@ test('list items returns data', async () => {
   const j = await r.json();
   expect(Array.isArray(j.items)).toBe(true);
   expect(j.items.length).toBeGreaterThan(0);
+});
+
+test('agentic run import and status retention', async () => {
+  const agenticSearch = 'integration search query';
+  const targetItemId = itemId(9);
+  try {
+    const importRes = await postForm('/api/import/item', {
+      BoxID: boxId(9),
+      ItemUUID: targetItemId,
+      Artikel_Nummer: '2001',
+      Artikelbeschreibung: 'Agentic Item',
+      Location: 'B-02-01',
+      agenticStatus: 'running',
+      agenticSearch,
+      actor: 'tester'
+    });
+    expect(importRes.status).toBe(200);
+
+    const agenticRes = await fetch(baseUrl + `/api/items/${encodeURIComponent(targetItemId)}/agentic`);
+    expect(agenticRes.status).toBe(200);
+    const agenticData = await agenticRes.json();
+    const agenticInitial = agenticData.agentic;
+    console.log('Initial agentic run', agenticInitial);
+    expect(agenticInitial).toBeTruthy();
+    if (!agenticInitial) throw new Error('Expected agentic run to be created');
+    expect(agenticInitial.SearchQuery).toBe(agenticSearch);
+    expect(agenticInitial.Status).toBe('running');
+    expect(typeof agenticInitial.StartedAt).toBe('string');
+    expect(new Date(agenticInitial.StartedAt).toString()).not.toBe('Invalid Date');
+
+    const completionTime = new Date().toISOString();
+    const agenticUpdate = await fetch(
+      baseUrl + `/api/agentic/items/${encodeURIComponent(targetItemId)}/result`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-agent-secret': 'test-secret'
+        },
+        body: JSON.stringify({
+          status: 'completed',
+          completedAt: completionTime,
+          summary: 'Agentic processing finished',
+          item: {
+            Artikelbeschreibung: 'Agentic Item Processed'
+          }
+        })
+      }
+    );
+    expect(agenticUpdate.status).toBe(200);
+
+    const agenticAfterRes = await fetch(baseUrl + `/api/items/${encodeURIComponent(targetItemId)}/agentic`);
+    expect(agenticAfterRes.status).toBe(200);
+    const agenticAfterData = await agenticAfterRes.json();
+    const agenticAfter = agenticAfterData.agentic;
+    console.log('Agentic run after update', agenticAfter);
+    expect(agenticAfter).toBeTruthy();
+    if (!agenticAfter) throw new Error('Expected agentic run to persist after update');
+    expect(agenticAfter.SearchQuery).toBe(agenticSearch);
+    expect(agenticAfter.Status).toBe('completed');
+  } catch (err) {
+    console.error('Agentic run integration test failed', err);
+    throw err;
+  }
 });
