@@ -1,5 +1,5 @@
 const { test, expect } = require('./harness');
-const { eventLabel } = require('../dist/models/event-labels.js');
+const { eventLabel } = require('../models/event-labels.js');
 
 test('event label translations', () => {
   expect(eventLabel('Edit')).toBe('Bearbeitet');
