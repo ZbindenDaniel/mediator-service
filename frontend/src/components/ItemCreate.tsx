@@ -13,8 +13,6 @@ type ItemFormData = Item & {
   agenticSearch?: string;
 };
 
-type AgenticHealthStatus = 'unknown' | 'healthy' | 'unhealthy';
-
 type AgenticEnv = typeof globalThis & {
   AGENTIC_API_BASE?: string;
   process?: { env?: Record<string, string | undefined> };
@@ -41,7 +39,7 @@ export default function ItemCreate() {
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [itemUUID, setItemUUID] = useState<string | undefined>();
-  const [agenticHealth, setAgenticHealth] = useState<AgenticHealthStatus>('unknown');
+  const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
@@ -63,7 +61,7 @@ export default function ItemCreate() {
     async function checkAgenticHealth() {
       if (!agenticApiBase) {
         console.info('Agentic API base URL not configured. Falling back to legacy item form.');
-        setAgenticHealth('unhealthy');
+        setShouldUseAgenticForm(false);
         return;
       }
 
@@ -73,17 +71,34 @@ export default function ItemCreate() {
         if (cancelled) {
           return;
         }
-        if (response.ok) {
-          setAgenticHealth('healthy');
+        if (!response.ok) {
+          console.warn('Agentic health endpoint returned non-OK status', response.status);
+          setShouldUseAgenticForm(false);
+          return;
+        }
+
+        const body = await response
+          .json()
+          .catch((jsonError) => {
+            console.error('Failed to parse agentic health response', jsonError);
+            return null;
+          });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (body?.ok === true) {
+          setShouldUseAgenticForm(true);
           console.log('Agentic health check succeeded.');
         } else {
-          console.warn('Agentic health endpoint returned non-OK status', response.status);
-          setAgenticHealth('unhealthy');
+          console.warn('Agentic health endpoint reported unhealthy payload', body);
+          setShouldUseAgenticForm(false);
         }
       } catch (err) {
         if (!cancelled) {
           console.error('Agentic health check failed', err);
-          setAgenticHealth('unhealthy');
+          setShouldUseAgenticForm(false);
         }
       }
     }
@@ -105,8 +120,8 @@ export default function ItemCreate() {
   );
 
   async function triggerAgenticRun(agenticPayload: { id: string | undefined; search: string }, context: string) {
-    if (agenticHealth !== 'healthy') {
-      console.info(`Agentic trigger skipped (${context}): service not healthy (status: ${agenticHealth}).`);
+    if (!shouldUseAgenticForm) {
+      console.info(`Agentic trigger skipped (${context}): service not healthy.`);
       return;
     }
 
@@ -251,7 +266,7 @@ export default function ItemCreate() {
     await handleSubmit(mergedData);
   }
 
-  if (agenticHealth === 'healthy') {
+  if (shouldUseAgenticForm) {
     return (
       <ItemForm_Agentic
         draft={baseDraft}
