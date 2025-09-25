@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "prebuild": "sass frontend/public/styles.scss frontend/public/styles.css",
+    "prebuild": "node scripts/prebuild.js",
     "build": "tsc -p tsconfig.json && npm run bundle && node scripts/build.js",
     "bundle": "node frontend/bundle.js",
     "prestart": "npm run build",
     "start": "node dist/backend/server.js",
-    "test": "npm run build && jest --colors"
+    "test": "npm run prebuild && node scripts/run-tests.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.0",
@@ -28,7 +28,6 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/react-router-dom": "^5.3.3",
-    "esbuild": "^0.20.0",
     "jest": "^29.6.1",
     "ts-jest": "^29.4.1",
     "ts-node": "^10.9.2",

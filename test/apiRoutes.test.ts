@@ -1,13 +1,19 @@
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
+const path = require('path');
+const {
+  test,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  expect
+} = require('./harness');
+const { server, resetData } = require('./server');
 
 process.env.NODE_ENV = 'test';
 process.env.HTTP_PORT = '0';
 process.env.DB_PATH = path.join(__dirname, 'test-db.sqlite');
 process.env.INBOX_DIR = path.join(__dirname, 'test-inbox');
 process.env.ARCHIVE_DIR = path.join(__dirname, 'test-archive');
-
-const { server } = require('./server');
 
 let baseUrl = '';
 
@@ -19,34 +25,42 @@ const today = (() => {
   return `${dd}${mm}${yy}`;
 })();
 
-function boxId(n: number) {
-  return `B-${today}-${n.toString().padStart(4, '0')}`;
+function boxId(n) {
+  return `B-${today}-${String(n).padStart(4, '0')}`;
 }
 
-function itemId(n: number) {
-  return `I-${today}-${n.toString().padStart(4, '0')}`;
+function itemId(n) {
+  return `I-${today}-${String(n).padStart(4, '0')}`;
 }
 
-beforeAll((done) => {
-  server.listen(0, () => {
-    const addr = server.address();
-    if (typeof addr === 'object' && addr) {
-      baseUrl = `http://127.0.0.1:${addr.port}`;
-    }
-    done();
+beforeAll(async () => {
+  await new Promise((resolve) => {
+    server.listen(0, () => {
+      const addr = server.address();
+      if (typeof addr === 'object' && addr) {
+        baseUrl = `http://127.0.0.1:${addr.port}`;
+      }
+      resolve();
+    });
   });
 });
 
-afterAll((done) => {
-  server.close(() => {
-    fs.rmSync(process.env.DB_PATH!, { force: true });
-    fs.rmSync(process.env.INBOX_DIR!, { recursive: true, force: true });
-    fs.rmSync(process.env.ARCHIVE_DIR!, { recursive: true, force: true });
-    done();
+afterAll(async () => {
+  await new Promise((resolve) => {
+    server.close(() => {
+      fs.rmSync(process.env.DB_PATH, { force: true });
+      fs.rmSync(process.env.INBOX_DIR, { recursive: true, force: true });
+      fs.rmSync(process.env.ARCHIVE_DIR, { recursive: true, force: true });
+      resolve();
+    });
   });
 });
 
-async function postForm(url: string, data: Record<string, string>) {
+beforeEach(() => {
+  resetData();
+});
+
+async function postForm(url, data) {
   const body = new URLSearchParams(data).toString();
   return fetch(baseUrl + url, {
     method: 'POST',
@@ -64,7 +78,7 @@ test('health endpoint works', async () => {
 test('getNewMaterialNumber returns a number', async () => {
   const r = await fetch(baseUrl + '/api/getNewMaterialNumber');
   const j = await r.json();
-  expect(j.nextArtikelNummer).toMatch(/^\d{5}$/);
+  expect(/\d{5}/.test(j.nextArtikelNummer)).toBe(true);
 });
 
 test('create item and retrieve via box and search', async () => {
@@ -88,7 +102,7 @@ test('create item and retrieve via box and search', async () => {
   const searchData = await searchRes.json();
   expect(Array.isArray(searchData.items)).toBe(true);
   expect(searchData.items.length).toBe(1);
-  const searchBox = await fetch(baseUrl + `/api/search?term=${boxId(1).slice(0,8)}`);
+  const searchBox = await fetch(baseUrl + `/api/search?term=${boxId(1).slice(0, 8)}`);
   const searchBoxData = await searchBox.json();
   expect((searchBoxData.boxes || []).length).toBe(1);
 
@@ -160,7 +174,7 @@ test('create box separately and move item', async () => {
   });
   expect(createBox.status).toBe(200);
   const createData = await createBox.json();
-  expect(createData.id).toMatch(/^B-\d{6}-\d{4}$/);
+  expect(/B-\d{6}-\d{4}/.test(createData.id)).toBe(true);
   const moveOk = await fetch(baseUrl + `/api/items/${itemId(2)}/move`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -209,6 +223,14 @@ test('increment and decrement item stock', async () => {
 });
 
 test('list items returns data', async () => {
+  await postForm('/api/import/item', {
+    BoxID: boxId(4),
+    ItemUUID: itemId(4),
+    Artikel_Nummer: '1003',
+    Artikelbeschreibung: 'List Item',
+    Location: 'A-01-04',
+    actor: 'tester'
+  });
   const r = await fetch(baseUrl + '/api/items');
   const j = await r.json();
   expect(Array.isArray(j.items)).toBe(true);

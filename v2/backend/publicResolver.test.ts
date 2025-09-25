@@ -1,6 +1,7 @@
-import fs from 'fs';
-import path from 'path';
-import { resolvePublicDir } from './publicResolver';
+const fs = require('fs');
+const path = require('path');
+const { describe, test, beforeEach, afterAll, expect } = require('../../test/harness');
+const { resolvePublicDir } = require('../../dist/backend/publicResolver.js');
 
 const tmp = path.join(__dirname, '__tmp_public_test');
 const dist = path.join(tmp, 'dist_public');

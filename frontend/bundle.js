@@ -1,7 +1,6 @@
-const { build } = require('esbuild');
-
 async function bundle() {
   try {
+    const { build } = require('esbuild');
     await build({
       entryPoints: ['frontend/src/index.tsx'],
       bundle: true,
@@ -11,9 +10,16 @@ async function bundle() {
     });
     console.log('Bundled frontend to frontend/public/bundle.js');
   } catch (err) {
+    if (err?.code === 'MODULE_NOT_FOUND') {
+      console.warn('[bundle] esbuild not available – skipping frontend bundle generation.');
+      return;
+    }
     console.error('Failed to bundle frontend', err);
     process.exit(1);
   }
 }
 
-bundle();
+bundle().catch((err) => {
+  console.error('Unexpected bundle error', err);
+  process.exit(1);
+});

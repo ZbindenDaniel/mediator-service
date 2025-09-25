@@ -1,7 +1,7 @@
-import assert from 'node:assert';
-import { eventLabel } from '../models/event-labels';
+const { test, expect } = require('./harness');
+const { eventLabel } = require('../dist/models/event-labels.js');
 
-assert.strictEqual(eventLabel('Edit'), 'Bearbeitet');
-assert.strictEqual(eventLabel('UnknownEvent'), 'UnknownEvent');
-
-console.log('event-labels: ok');
+test('event label translations', () => {
+  expect(eventLabel('Edit')).toBe('Bearbeitet');
+  expect(eventLabel('UnknownEvent')).toBe('UnknownEvent');
+});
