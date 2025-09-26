@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import type { Box } from '../../../models';
 import { formatDate } from '../lib/format';
+import BoxColorTag from './BoxColorTag';
 
 interface Props {
   boxes: Box[];
@@ -18,7 +19,7 @@ export default function RecentBoxesCard({ boxes }: Props) {
               <Link className="linkcard" to={`/boxes/${encodeURIComponent(b.BoxID)}`}>
                 <div className="card">
                   <div className="mono">{b.BoxID}</div>
-                  <div><b>Standort: {b.Location || '(nicht gesetzt)'}</b></div>
+                  <div><b>Standort: <BoxColorTag locationKey={b.Location} /></b></div>
                   <div className="muted">Aktualisiert: {b.UpdatedAt ? formatDate(b.UpdatedAt) : ''}</div>
                 </div>
               </Link>
