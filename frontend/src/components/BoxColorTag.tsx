@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { BOX_COLORS } from '../data/boxColors';
+import { resolveBoxColorFromLocation } from '../data/boxColors';
 
 interface BoxColorTagProps {
   locationKey?: string | null;
@@ -7,21 +7,21 @@ interface BoxColorTagProps {
 }
 
 export default function BoxColorTag({ locationKey, className }: BoxColorTagProps) {
-  const normalizedKey = locationKey?.trim().toLowerCase();
+  const normalizedLocation = locationKey?.trim();
 
   const colorOption = useMemo(() => {
-    if (!normalizedKey) {
+    if (!normalizedLocation) {
       return undefined;
     }
-    try {
-      return BOX_COLORS.find((option) => option.value.toLowerCase() === normalizedKey);
-    } catch (err) {
-      console.error('Failed to resolve box color option', { locationKey, err });
-      return undefined;
-    }
-  }, [locationKey, normalizedKey]);
 
-  if (!colorOption) {
+    const resolved = resolveBoxColorFromLocation(normalizedLocation);
+    if (!resolved) {
+      console.warn('No color mapping found for location', { location: normalizedLocation });
+    }
+    return resolved;
+  }, [normalizedLocation]);
+
+  if (!normalizedLocation) {
     return <span className={className}>(nicht gesetzt)</span>;
   }
 
@@ -34,18 +34,22 @@ export default function BoxColorTag({ locationKey, className }: BoxColorTagProps
         gap: '0.5rem'
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          display: 'inline-block',
-          width: '0.75rem',
-          height: '0.75rem',
-          borderRadius: '2px',
-          backgroundColor: colorOption.hex,
-          border: '1px solid rgba(0, 0, 0, 0.2)'
-        }}
-      />
-      <span>{colorOption.label}</span>
+      {colorOption ? (
+        <span
+          aria-hidden="true"
+          style={{
+            display: 'inline-block',
+            width: '0.75rem',
+            height: '0.75rem',
+            borderRadius: '2px',
+            backgroundColor: colorOption.hex,
+            border: '1px solid rgba(0, 0, 0, 0.2)'
+          }}
+        />
+      ) : null}
+      <span>
+        {colorOption ? `${normalizedLocation} · ${colorOption.label}` : normalizedLocation}
+      </span>
     </span>
   );
 }

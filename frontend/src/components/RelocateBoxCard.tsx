@@ -9,23 +9,45 @@ interface Props {
 
 export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   const [selectedColor, setSelectedColor] = useState('');
+  const [rowSegment, setRowSegment] = useState('');
+  const [columnSegment, setColumnSegment] = useState('');
   const [status, setStatus] = useState('');
-  const colorLookup = useMemo(() => new Map(BOX_COLORS.map(color => [color.value, color])), []);
+  const colorLookup = useMemo(() => new Map(BOX_COLORS.map(color => [color.key, color])), []);
+
+  function normalizeSegment(value: string) {
+    return value.replace(/[^0-9]/g, '').slice(0, 2);
+  }
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
-    const colorKey = selectedColor.trim();
+    const colorKey = selectedColor.trim().toUpperCase();
+    const normalizedRow = normalizeSegment(rowSegment).padStart(2, '0');
+    const normalizedColumn = normalizeSegment(columnSegment).padStart(2, '0');
     const colorOption = colorLookup.get(colorKey);
+
     if (!colorOption) {
       console.warn('Invalid color selection for relocation', { boxId, colorKey });
       setStatus('Bitte eine Farbe wählen');
       return;
     }
+
+    if (!rowSegment || !columnSegment) {
+      console.warn('Missing location segment(s) for relocation', {
+        boxId,
+        rowSegment,
+        columnSegment
+      });
+      setStatus('Reihe und Spalte angeben');
+      return;
+    }
+
+    const location = `${colorKey}-${normalizedRow}-${normalizedColumn}`;
+
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location: colorOption.value, actor: getUser() })
+        body: JSON.stringify({ location, actor: getUser() })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -34,7 +56,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
       }
-      console.log('relocate box', { status: res.status, color: colorOption.value });
+      console.log('relocate box', { status: res.status, location });
     } catch (err) {
       console.error('Relocate box failed', err);
       setStatus('Verschieben fehlgeschlagen');
@@ -50,20 +72,46 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
             <label>
               Neuer Ort
             </label>
-            <select value={selectedColor} onChange={e => setSelectedColor(e.target.value)} required>
+          </div>
+          <div className='row' style={{ gap: '8px', flexWrap: 'wrap' }}>
+            <select
+              value={selectedColor}
+              onChange={e => setSelectedColor(e.target.value)}
+              required
+            >
               <option value="" disabled>
                 Farbe wählen
               </option>
               {BOX_COLORS.map(color => (
                 <option
-                  key={color.value}
-                  value={color.value}
+                  key={color.key}
+                  value={color.key}
                   style={{ backgroundColor: color.hex, color: '#fff' }}
                 >
                   {color.label}
                 </option>
               ))}
             </select>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="\\d{1,2}"
+              placeholder="Reihe"
+              value={rowSegment}
+              onChange={e => setRowSegment(normalizeSegment(e.target.value))}
+              required
+              style={{ width: '4rem' }}
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="\\d{1,2}"
+              placeholder="Spalte"
+              value={columnSegment}
+              onChange={e => setColumnSegment(normalizeSegment(e.target.value))}
+              required
+              style={{ width: '4rem' }}
+            />
           </div>
 
           <div className='row'>
