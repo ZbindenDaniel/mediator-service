@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import type { Item } from '../../../models';
+import BoxColorTag from './BoxColorTag';
 
 interface Props {
   items: Item[];
@@ -25,7 +26,7 @@ export default function ItemList({ items }: Props) {
               <td className="col-id" style={{ display: 'none' }}>{it.ItemUUID}</td>
               <td className="col-select"><input type="checkbox" /></td>
               <td className="col-desc">{it.Artikelbeschreibung}</td>
-              <td className="col-location">{it.Location || ''}</td>
+              <td className="col-location"><BoxColorTag locationKey={it.Location} /></td>
               <td className="col-link"><Link to={`/items/${encodeURIComponent(it.ItemUUID)}`}>Details</Link></td>
             </tr>
           ))}
