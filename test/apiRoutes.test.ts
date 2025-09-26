@@ -1,13 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const {
-  test,
-  beforeAll,
-  afterAll,
-  beforeEach,
-  expect
-} = require('./harness');
-const { server, resetData } = require('./server');
 
 process.env.NODE_ENV = 'test';
 process.env.HTTP_PORT = '0';
@@ -34,7 +26,7 @@ function itemId(n) {
 }
 
 beforeAll(async () => {
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     server.listen(0, () => {
       const addr = server.address();
       if (typeof addr === 'object' && addr) {
@@ -46,7 +38,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     server.close(() => {
       fs.rmSync(process.env.DB_PATH, { force: true });
       fs.rmSync(process.env.INBOX_DIR, { recursive: true, force: true });

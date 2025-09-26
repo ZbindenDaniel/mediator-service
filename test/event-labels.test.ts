@@ -1,4 +1,3 @@
-const { test, expect } = require('./harness');
 const { eventLabel } = require('../models/event-labels.js');
 
 test('event label translations', () => {
