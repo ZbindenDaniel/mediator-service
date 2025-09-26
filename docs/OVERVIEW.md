@@ -7,20 +7,21 @@ This document outlines the structure for the mediator service. The goal is to cl
 - **backend/** – Node.js/TypeScript API and workers
   - **actions/** – request handlers and business logic loaded dynamically
     - `edit` – renders edit forms for boxes and items
-    - `print-label` – enqueue label jobs
+    - `print-label` – öffnet die HTML-Vorlagen für Etiketten in einem neuen Tab
     - `move-box` / `move-item` – move boxes to new locations or items between boxes
     - `kivi` – links to external Kivi app
     - `shop` – links items to the online shop
     - `save-item` – GET/PUT handler for fetching and updating items
-    - `overview`, `printer-status`, `health`, `box-detail`, `search`, `import-item`, `csv-import`, `material-number`
+    - `overview`, `health`, `box-detail`, `search`, `import-item`, `csv-import`, `material-number`
   - **ops/** – reusable operation helpers written in TypeScript
   - **config.ts** – centralized configuration
   - **db.ts** – database initialization and access
-  - **labelpdf.ts** – generates box and item label PDFs with QR codes
+  - **print actions** liefern nur noch HTML-Vorlagen und JSON-Payloads für Etiketten
 
 ## Frontend
 - **frontend/** – React application
   - **public/** – static assets served by the backend (`index.html`, `bundle.js`, `bundle.css`)
+    - **print/** – eigenständige HTML-Templates für Box- und Artikel-Etiketten inklusive QR-Code-Rendering
   - **src/** – React source code bundled with `esbuild`
     - **components/** – UI components (`Layout`, `Header`, `App`)
       - `LandingPage` – overview with search, stats, and recent activity
@@ -28,7 +29,7 @@ This document outlines the structure for the mediator service. The goal is to cl
       - `ItemDetail` – item view using `GET /api/items/:uuid`
       - `ItemEdit` – edit item data via `PUT /api/items/:uuid`
       - `ImportCard` – CSV upload card using `/api/import`
-      - `PrintLabelButton` – triggers `/api/print/box/:id` or `/api/print/item/:id`
+      - `PrintLabelButton` – lädt den Payload aus `/api/print/box/:id` oder `/api/print/item/:id` und öffnet das entsprechende HTML-Template
     - **styles.css** – centralised styling for components
     - **index.tsx** – application entrypoint
     - Routes handled with `react-router-dom`

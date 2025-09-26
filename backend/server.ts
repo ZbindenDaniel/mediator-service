@@ -42,8 +42,6 @@ import {
   deleteBox
 } from './db';
 import type { Item, LabelJob } from './db';
-import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
-import { pdfForBox, pdfForItem } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 
 const actions = loadActions();
@@ -105,13 +103,10 @@ async function runPrintWorker(): Promise<void> {
       updateLabelJobStatus.run('Error', 'item not found', job.Id);
       return;
     }
-      const zpl = zplForItem({
-        materialNumber: item.Artikel_Nummer,
-        itemUUID: item.ItemUUID
-      });
-    await sendZpl(zpl);
-    updateLabelJobStatus.run('Done', null, job.Id);
-    console.log(`Printed label for ${item.ItemUUID}`);
+    console.warn(
+      `Label job ${job.Id} for item ${item.ItemUUID} requires manual printing; HTML templates must be used.`
+    );
+    updateLabelJobStatus.run('Error', 'manual printing required', job.Id);
   } catch (e) {
     console.error('Print worker failed', e);
     updateLabelJobStatus.run('Error', (e as Error).message, job.Id);
@@ -141,12 +136,6 @@ type ActionContext = {
   getAgenticRun: typeof getAgenticRun;
   updateAgenticRunStatus: typeof updateAgenticRunStatus;
   listItems: typeof listItems;
-  pdfForBox: typeof pdfForBox;
-  pdfForItem: typeof pdfForItem;
-  zplForItem: typeof zplForItem;
-  zplForBox: typeof zplForBox;
-  sendZpl: typeof sendZpl;
-  testPrinterConnection: typeof testPrinterConnection;
   EVENT_LABELS: typeof EVENT_LABELS;
   eventLabel: typeof eventLabel;
   logEvent: typeof logEvent;
@@ -166,7 +155,6 @@ type ActionContext = {
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
-  PREVIEW_DIR: typeof PREVIEW_DIR;
 };
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
@@ -276,12 +264,6 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           deleteItem,
           deleteBox,
           listItems,
-          pdfForBox,
-          pdfForItem,
-          zplForItem,
-          zplForBox,
-          sendZpl,
-          testPrinterConnection,
           EVENT_LABELS,
           eventLabel,
           logEvent,
@@ -300,8 +282,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getAgenticRunForItem,
           updateAgenticReview,
           INBOX_DIR,
-          PUBLIC_DIR,
-          PREVIEW_DIR
+          PUBLIC_DIR
         });
       } catch (err) {
         console.error('Action handler failed', err);

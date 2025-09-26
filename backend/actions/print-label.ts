@@ -19,16 +19,20 @@ const action: Action = {
         async function printBoxLabel(boxId, statusId) {
           const el = document.getElementById(statusId);
           if (!el) return;
-          el.textContent = 'Drucke…';
+          el.textContent = 'Bereite Etikett vor…';
           try {
             const r = await fetch('/api/print/box/' + boxId, { method: 'POST' });
             const j = await r.json().catch(()=>({}));
-            if (r.ok && j.sent) {
-              el.textContent = 'Gesendet an Drucker.';
-            } else if (r.ok && j.previewUrl) {
-              // TODO: sanitize previewUrl before injecting to avoid XSS
-              el.innerHTML = 'Kein Drucker konfiguriert. Vorschau erstellt: ' +
-                '<a class="mono" href="'+j.previewUrl+'" target="_blank" rel="noopener">PDF öffnen</a>';
+            if (r.ok && j.template && j.payload) {
+              const key = `print:payload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+              try {
+                sessionStorage.setItem(key, JSON.stringify(j.payload));
+                window.open(j.template + '?key=' + encodeURIComponent(key), '_blank', 'noopener');
+                el.textContent = 'Vorlage geöffnet.';
+              } catch (storageErr) {
+                console.error('Failed to cache print payload', storageErr);
+                el.textContent = 'Fehler: Zwischenspeichern nicht möglich';
+              }
             } else {
               el.textContent = 'Fehler: ' + (j.error || j.reason || 'unbekannt');
             }
