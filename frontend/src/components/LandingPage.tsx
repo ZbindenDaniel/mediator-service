@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import CreateItemCard from './CreateItemCard';
 import SearchCard from './SearchCard';
 import StatsCard from './StatsCard';
@@ -71,6 +72,14 @@ export default function LandingPage() {
       <div className="grid landing-grid">
         <CreateItemCard />
         <SearchCard />
+        <div className="card" id="qr-scan-card">
+          <Link className="linkcard" to="/scan">
+            <div>
+              <h2>QR-Scanner</h2>
+              <p className="muted">QR-Codes von Behältern scannen und Details sofort anzeigen</p>
+            </div>
+          </Link>
+        </div>
         <StatsCard counts={overview?.counts} printerOk={printerOk} health={health} />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <RecentEventsCard events={overview?.recentEvents || []} />

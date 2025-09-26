@@ -194,6 +194,56 @@ div {
     padding: calc(var(--pad) + 2px);
 }
 
+.qr-scanner .card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.qr-scanner .video-frame {
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qr-scanner .qr-video {
+    width: 100%;
+    height: auto;
+}
+
+.qr-scanner .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.qr-scanner .status {
+    font-weight: bold;
+}
+
+.qr-scanner .status.success {
+    color: #0f9d58;
+}
+
+.qr-scanner .status.error {
+    color: #c5221f;
+}
+
+.qr-scanner .error {
+    color: #c5221f;
+}
+
+.qr-scanner details.raw {
+    background: #f4f4f4;
+    border-radius: var(--radius);
+    padding: 8px;
+    font-family: monospace;
+}
+
 .spacer {
     height: 20px;
     width: 100%;
