@@ -6,3 +6,4 @@ export * from './entity';
 export * from './agentic-run';
 export * from './box-label-payload';
 export * from './item-label-payload';
+export * from './box-colors';

@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-
-const LOC_RE = /^[A-Z]-\d{2}-\d{2}$/;
+import { BOX_COLOR_KEY_SET } from '../../models/box-colors';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -29,7 +28,17 @@ const action: Action = {
       const locationRaw = (data.location ?? box.Location ?? '').toString().trim().toUpperCase();
       const notes = (data.notes || '').trim();
       if (!locationRaw) return sendJson(res, 400, { error: 'location is required' });
-      if (!LOC_RE.test(locationRaw)) return sendJson(res, 400, { error: 'invalid location format' });
+      const segments = locationRaw.split('-');
+      if (segments.length !== 3) {
+        return sendJson(res, 400, { error: 'location must follow <Farbe>-NN-NN' });
+      }
+      const [colorSegment, rowSegment, columnSegment] = segments;
+      if (!BOX_COLOR_KEY_SET.has(colorSegment)) {
+        return sendJson(res, 400, { error: 'location must start with a known color identifier' });
+      }
+      if (!/^\d{2}$/.test(rowSegment) || !/^\d{2}$/.test(columnSegment)) {
+        return sendJson(res, 400, { error: 'invalid location format' });
+      }
       const txn = ctx.db.transaction((boxId: string, loc: string, note: string, a: string) => {
         ctx.db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(loc, note, a, boxId);
         ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Moved', Meta: JSON.stringify({ location: loc, notes: note }) });
