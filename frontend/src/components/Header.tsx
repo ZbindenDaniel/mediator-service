@@ -18,6 +18,7 @@ export default function Header() {
       <div className="left">
         <nav>
             <button id='header-back-button' type="button" onClick={() => window.history.back()}>{String.fromCharCode(8592)}</button>
+            <Link to="/scan" className="nav-link">QR-Scanner</Link>
         </nav>
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
       </div>

@@ -1,5 +1,4 @@
 const http = require('http');
-const { URL } = require('url');
 
 const boxes = new Map();
 const items = new Map();
@@ -38,7 +37,7 @@ function formatItem(item) {
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {
-    const chunks = [];
+    const chunks: Buffer[] = [];
     req.on('data', (chunk) => chunks.push(chunk));
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', (err) => reject(err));
@@ -56,7 +55,7 @@ function generateBoxId() {
 
 async function handleImportItem(req, res) {
   const body = await parseBody(req);
-  const params = new URLSearchParams(body.toString());
+  const params = new URLSearchParams((body as Buffer).toString());
   const itemId = params.get('ItemUUID');
   const boxId = params.get('BoxID');
   if (!itemId || !boxId) {
@@ -86,7 +85,7 @@ async function handleImportItem(req, res) {
 }
 
 async function handleImportValidate(req, res) {
-  const body = await parseBody(req);
+  const body = await parseBody(req) as Buffer;
   const csv = body.toString().trim();
   const lines = csv.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) {
@@ -108,7 +107,7 @@ async function handleImportValidate(req, res) {
 }
 
 async function handleImportCsv(req, res) {
-  const body = await parseBody(req);
+  const body = (await parseBody(req)) as Buffer;
   const csv = body.toString();
   const lines = csv.split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) {
@@ -175,7 +174,7 @@ async function handleUpdateItem(req, res, itemId) {
   if (!item) {
     return sendJson(res, 404, { error: 'item not found' });
   }
-  const body = await parseBody(req);
+  const body = (await parseBody(req)) as Buffer;
   let payload;
   try {
     payload = JSON.parse(body.toString() || '{}');
@@ -196,7 +195,7 @@ async function handleMoveItem(req, res, itemId) {
   if (!item) {
     return sendJson(res, 404, { error: 'item not found' });
   }
-  const body = await parseBody(req);
+  const body = (await parseBody(req)) as Buffer;
   let payload;
   try {
     payload = JSON.parse(body.toString() || '{}');
@@ -222,7 +221,7 @@ async function handleAdjustStock(req, res, itemId, delta) {
   if (!item) {
     return sendJson(res, 404, { error: 'item not found' });
   }
-  const body = await parseBody(req);
+  const body = (await parseBody(req) as Buffer);
   let payload;
   try {
     payload = JSON.parse(body.toString() || '{}');
@@ -280,7 +279,7 @@ const server = http.createServer(async (req, res) => {
       return handleImportCsv(req, res);
     }
     if (req.method === 'GET' && pathname.startsWith('/api/boxes/')) {
-      const boxId = decodeURIComponent(pathname.split('/').pop());
+      const boxId = decodeURIComponent(pathname.split('/').pop() || '');
       return handleGetBox(res, boxId);
     }
     if (req.method === 'GET' && pathname === '/api/search') {
@@ -328,8 +327,8 @@ const server = http.createServer(async (req, res) => {
       return handleMoveItem(req, res, itemId);
     }
     if (req.method === 'POST' && pathname === '/api/boxes') {
-      const body = await parseBody(req);
-      let payload = {};
+      const body = (await parseBody(req)) as Buffer;
+      let payload: { actor?: string } = {};
       try {
         payload = JSON.parse(body.toString() || '{}');
       } catch (err) {
