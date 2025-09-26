@@ -1,4 +1,7 @@
+export {};
+
 const http = require('http');
+const { generate, renderFromMatrix } = require('qrcode');
 
 const boxes = new Map();
 const items = new Map();
@@ -42,6 +45,26 @@ function parseBody(req) {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', (err) => reject(err));
   });
+}
+
+function attachQrMetadata(payload) {
+  const base = { ...payload };
+  let qrDataUri = null;
+  let qrModules = null;
+  let qrMargin = 4;
+  try {
+    const qr = generate(JSON.stringify(base), { errorCorrectionLevel: 'M', margin: 4, scale: 8 });
+    qrModules = qr.modules;
+    qrMargin = qr.options.margin;
+    try {
+      qrDataUri = renderFromMatrix(qr.modules, qr.options);
+    } catch (err) {
+      console.error('[test server] failed to render QR data URL', err);
+    }
+  } catch (err) {
+    console.error('[test server] failed to generate QR matrix', err);
+  }
+  return { ...base, qrDataUri, qrModules, qrMargin };
 }
 
 function generateBoxId() {
@@ -297,24 +320,24 @@ const server = http.createServer(async (req, res) => {
         ensureBox(id);
         return sendJson(res, 200, {
           template: '/print/box-label.html',
-          payload: {
+          payload: attachQrMetadata({
             id,
             location: 'Testlager',
             notes: null,
             placedBy: 'SpecRunner',
             placedAt: new Date().toISOString()
-          }
+          })
         });
       }
       const fallbackBox = ensureBox('B-PRINT-0001', 'Testlager');
       return sendJson(res, 200, {
         template: '/print/item-label.html',
-        payload: {
+        payload: attachQrMetadata({
           id,
           articleNumber: '00001',
           boxId: fallbackBox.id,
           location: fallbackBox.location
-        }
+        })
       });
     }
     if (req.method === 'PUT' && pathname.startsWith('/api/items/')) {
