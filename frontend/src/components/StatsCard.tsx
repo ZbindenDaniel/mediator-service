@@ -8,11 +8,10 @@ interface Counts {
 
 interface Props {
   counts?: Counts;
-  printerOk: boolean | null;
   health: string;
 }
 
-export default function StatsCard({ counts, printerOk, health }: Props) {
+export default function StatsCard({ counts, health }: Props) {
   return (
     <div className="card">
       <h2>Statistiken</h2>
@@ -25,18 +24,6 @@ export default function StatsCard({ counts, printerOk, health }: Props) {
       ) : (
         <div className="muted">Übersicht konnte nicht geladen werden</div>
       )}
-      <div className="muted">
-        Drucker:{' '}
-        <span
-          style={{
-            display: 'inline-block',
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            background: printerOk == null ? '#999' : printerOk ? '#1cbc2c' : '#d22'
-          }}
-        ></span>
-      </div>
       <div className="muted">Status: <span>{health}</span></div>
     </div>
   );

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Artikel-Etikett</title>
+    <style>
+      :root {
+        color-scheme: only light;
+      }
+      body {
+        margin: 0;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        background: #f2f4f7;
+      }
+      .page {
+        box-sizing: border-box;
+        width: 148mm;
+        height: 105mm;
+        margin: 12mm auto;
+        padding: 14mm 18mm;
+        background: #fff;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        border-radius: 5mm;
+      }
+      header h1 {
+        font-size: 18pt;
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      header span {
+        display: block;
+        font-size: 11pt;
+        margin-top: 4px;
+        color: #475569;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 16px;
+        font-size: 11pt;
+      }
+      .meta div strong {
+        display: block;
+        font-size: 9pt;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: #6b7280;
+        margin-bottom: 2px;
+      }
+      .qr-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 20px;
+      }
+      canvas {
+        width: 150px;
+        height: 150px;
+      }
+      .error {
+        color: #b91c1c;
+        background: #fee2e2;
+        padding: 10px 14px;
+        border-radius: 4mm;
+        margin: 16px;
+        font-size: 12pt;
+      }
+      @media print {
+        body {
+          background: none;
+        }
+        .page {
+          margin: 0;
+          box-shadow: none;
+          border-radius: 0;
+        }
+        .error {
+          display: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page" id="page" hidden>
+      <header>
+        <h1 id="item-title">Artikel</h1>
+        <span id="item-subtitle"></span>
+      </header>
+      <div class="meta">
+        <div>
+          <strong>Artikelnummer</strong>
+          <span id="item-article"></span>
+        </div>
+        <div>
+          <strong>Behälter</strong>
+          <span id="item-box"></span>
+        </div>
+        <div>
+          <strong>Standort</strong>
+          <span id="item-location"></span>
+        </div>
+        <div>
+          <strong>UUID</strong>
+          <span id="item-uuid"></span>
+        </div>
+      </div>
+      <div class="qr-wrapper">
+        <div>
+          <small>Payload:</small>
+          <pre id="item-json" style="font-size: 8pt; max-width: 250px; white-space: pre-wrap;"></pre>
+        </div>
+        <canvas id="qrCanvas"></canvas>
+      </div>
+    </div>
+    <div class="error" id="error" hidden></div>
+    <script>
+      (function init() {
+        const state = { payload: null, qrReady: false };
+        const errorEl = document.getElementById('error');
+        const pageEl = document.getElementById('page');
+        const qrCanvas = document.getElementById('qrCanvas');
+
+        function showError(message) {
+          if (!errorEl) return;
+          errorEl.textContent = message;
+          errorEl.hidden = false;
+          if (pageEl) pageEl.hidden = true;
+        }
+
+        function render(payload) {
+          if (!payload || typeof payload !== 'object') {
+            showError('Kein gültiger Payload vorhanden.');
+            return;
+          }
+          try {
+            const titleEl = document.getElementById('item-title');
+            const subtitleEl = document.getElementById('item-subtitle');
+            const artEl = document.getElementById('item-article');
+            const boxEl = document.getElementById('item-box');
+            const locationEl = document.getElementById('item-location');
+            const uuidEl = document.getElementById('item-uuid');
+            const jsonEl = document.getElementById('item-json');
+
+            if (titleEl) titleEl.textContent = payload.id ? `Artikel ${payload.id.slice(-6).toUpperCase()}` : 'Artikel';
+            if (subtitleEl) subtitleEl.textContent = payload.id || '';
+            if (artEl) artEl.textContent = payload.articleNumber || '—';
+            if (boxEl) boxEl.textContent = payload.boxId || 'Nicht zugeordnet';
+            if (locationEl) locationEl.textContent = payload.location || 'Unbekannter Standort';
+            if (uuidEl) uuidEl.textContent = payload.id || '—';
+            if (jsonEl) jsonEl.textContent = JSON.stringify(payload, null, 2);
+
+            if (pageEl) pageEl.hidden = false;
+
+            const json = JSON.stringify(payload);
+            if (state.qrReady && window.QRCode && qrCanvas) {
+              window.QRCode.toCanvas(qrCanvas, json, { width: 320 }, function (err) {
+                if (err) {
+                  console.error('QR code rendering failed', err);
+                  showError('QR-Code konnte nicht generiert werden.');
+                }
+              });
+            }
+            state.payload = payload;
+          } catch (err) {
+            console.error('Render error', err);
+            showError('Vorlage konnte nicht gerendert werden.');
+          }
+        }
+
+        function tryFromStorage(key) {
+          if (!key) return false;
+          try {
+            const raw = sessionStorage.getItem(key);
+            if (!raw) {
+              showError('Kein zwischengespeicherter Payload gefunden.');
+              return true;
+            }
+            const payload = JSON.parse(raw);
+            sessionStorage.removeItem(key);
+            render(payload);
+            return true;
+          } catch (err) {
+            console.error('Failed to load payload from storage', err);
+            showError('Payload konnte nicht gelesen werden.');
+            return true;
+          }
+        }
+
+        function handleMessage(event) {
+          if (event.origin && event.origin !== window.location.origin) {
+            console.warn('Ignoring message from unexpected origin', event.origin);
+            return;
+          }
+          try {
+            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            if (data && data.payload) {
+              render(data.payload);
+            }
+          } catch (err) {
+            console.error('Failed to parse postMessage payload', err);
+            showError('Übertragene Daten ungültig.');
+          }
+        }
+
+        window.addEventListener('message', handleMessage, { once: true });
+
+        const params = new URLSearchParams(window.location.search);
+        const key = params.get('key');
+        if (!tryFromStorage(key)) {
+          console.warn('Warte auf Payload via postMessage…');
+        }
+
+        const qrScript = document.createElement('script');
+        qrScript.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';
+        qrScript.async = true;
+        qrScript.onload = function () {
+          state.qrReady = true;
+          if (state.payload) {
+            render(state.payload);
+          }
+        };
+        qrScript.onerror = function () {
+          console.error('QR library failed to load');
+          showError('QR-Bibliothek konnte nicht geladen werden.');
+        };
+        document.head.appendChild(qrScript);
+      })();
+    </script>
+  </body>
+</html>

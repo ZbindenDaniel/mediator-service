@@ -1,7 +1,6 @@
-import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import { HOSTNAME, HTTP_PORT } from '../config';
+import type { Item, ItemLabelPayload } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -18,24 +17,47 @@ const action: Action = {
       const m = req.url?.match(/^\/api\/print\/item\/([^/]+)$/);
       const id = m ? decodeURIComponent(m[1]) : '';
       if (!id) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(id);
-      if (!item) return sendJson(res, 404, { error: 'item not found' });
-      const zpl = ctx.zplForItem({ materialNumber: item.Artikel_Nummer, itemUUID: item.ItemUUID });
-      let previewUrl = '';
+      let item: Item | undefined;
       try {
-        const urlToUi = `${HOSTNAME}:${HTTP_PORT}/items/${encodeURIComponent(item.ItemUUID)}`;
-        const out = path.join(ctx.PREVIEW_DIR, `item-${item.ItemUUID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, '_'));
-        await ctx.pdfForItem({ materialNumber: item.Artikel_Nummer, itemUUID: item.ItemUUID, url: urlToUi, outPath: out });
-        previewUrl = `/prints/${path.basename(out)}`;
-        ctx.logEvent.run({ Actor: null, EntityType: 'Item', EntityId: item.ItemUUID, Event: 'PrintPreviewSaved', Meta: JSON.stringify({ file: previewUrl }) });
+        item = ctx.getItem.get(id) as Item | undefined;
       } catch (err) {
-        console.error('Preview generation failed', err);
+        console.error('Failed to load item for printing', { id, error: err });
+        return sendJson(res, 500, { error: 'failed to load item' });
       }
-      const result = await ctx.sendZpl(zpl);
-      if (result.sent) {
-        ctx.logEvent.run({ Actor: null, EntityType: 'Item', EntityId: item.ItemUUID, Event: 'PrintSent', Meta: JSON.stringify({ transport: 'tcp' }) });
+      if (!item) {
+        console.error('Item not found for printing', { id });
+        return sendJson(res, 404, { error: 'item not found' });
       }
-      return sendJson(res, 200, { sent: !!result.sent, previewUrl, reason: result.reason });
+
+      const templatePath = '/print/item-label.html';
+      try {
+        const payload: ItemLabelPayload = {
+          id: item.ItemUUID,
+          articleNumber: item.Artikel_Nummer || null,
+          boxId: item.BoxID || null,
+          location: item.Location || null
+        };
+
+        try {
+          ctx.logEvent.run({
+            Actor: null,
+            EntityType: 'Item',
+            EntityId: item.ItemUUID,
+            Event: 'PrintPayloadPrepared',
+            Meta: JSON.stringify({ template: templatePath })
+          });
+        } catch (logErr) {
+          console.error('Failed to log item print payload preparation', {
+            id: item.ItemUUID,
+            error: logErr
+          });
+        }
+
+        return sendJson(res, 200, { template: templatePath, payload });
+      } catch (err) {
+        console.error('Failed to prepare item label payload', { id: item.ItemUUID, error: err });
+        return sendJson(res, 500, { error: 'failed to prepare template' });
+      }
     } catch (err) {
       console.error('Print item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

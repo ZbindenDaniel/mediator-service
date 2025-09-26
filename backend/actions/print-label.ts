@@ -6,36 +6,68 @@ const action: Action = {
   label: 'Print label',
   appliesTo: (entity: Entity) => entity.type === 'Box' || entity.type === 'Item',
   view: (entity: Entity) => {
-    const id = encodeURIComponent(entity.id);
-    const statusId = `printBoxMsg-${id}`;
+    const encodedId = encodeURIComponent(entity.id);
+    const safeIdSegment =
+      entity.id.replace(/[^a-zA-Z0-9_-]/g, '-') || Math.random().toString(16).slice(2);
+    const statusId = `printLabelMsg-${safeIdSegment}`;
+    const heading =
+      entity.type === 'Item' ? 'Artikel-Etikett drucken' : 'Behälter-Etikett drucken';
 
     return `
-      <div class="card" style="cursor:pointer" onclick="printBoxLabel('${id}', '${statusId}')">
-        <h3>Etikette drucken</h3>
+      <div class="card" style="cursor:pointer" onclick="printEntityLabel('${entity.type}', '${encodedId}', '${statusId}')">
+        <h3>${heading}</h3>
         <div id="${statusId}" class="muted" style="margin-top:6px"></div>
       </div>
 
       <script>
-        async function printBoxLabel(boxId, statusId) {
-          const el = document.getElementById(statusId);
-          if (!el) return;
-          el.textContent = 'Drucke…';
+        window.printEntityLabel = window.printEntityLabel || async function printEntityLabel(entityType, encodedId, statusId) {
+          const statusEl = document.getElementById(statusId);
+          if (!statusEl) return;
+          statusEl.textContent = 'Bereite Etikett vor…';
+          const endpoint = entityType === 'Item' ? '/api/print/item/' : '/api/print/box/';
           try {
-            const r = await fetch('/api/print/box/' + boxId, { method: 'POST' });
-            const j = await r.json().catch(()=>({}));
-            if (r.ok && j.sent) {
-              el.textContent = 'Gesendet an Drucker.';
-            } else if (r.ok && j.previewUrl) {
-              // TODO: sanitize previewUrl before injecting to avoid XSS
-              el.innerHTML = 'Kein Drucker konfiguriert. Vorschau erstellt: ' +
-                '<a class="mono" href="'+j.previewUrl+'" target="_blank" rel="noopener">PDF öffnen</a>';
+            const res = await fetch(endpoint + encodedId, { method: 'POST' });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.template && data.payload) {
+              let key = null;
+              try {
+                key = 'print:payload:' + Date.now() + ':' + Math.random().toString(16).slice(2);
+                sessionStorage.setItem(key, JSON.stringify(data.payload));
+              } catch (storageErr) {
+                console.error('Failed to cache print payload', storageErr);
+                key = null;
+              }
+              const target = key ? data.template + '?key=' + encodeURIComponent(key) : data.template;
+              const win = window.open(target, '_blank', 'noopener');
+              if (!win) {
+                if (key) sessionStorage.removeItem(key);
+                statusEl.textContent = 'Pop-ups blockiert? Bitte erlauben, um Etikett zu öffnen.';
+                return;
+              }
+              const origin = window.location.origin;
+              const message = { payload: data.payload };
+              const post = () => {
+                if (win.closed) return;
+                try { win.postMessage(message, origin); }
+                catch (postErr) {
+                  console.error('Failed to send print payload via postMessage', postErr);
+                }
+              };
+              setTimeout(post, 100);
+              setTimeout(post, 500);
+              try { win.focus(); }
+              catch (focusErr) { console.warn('Unable to focus print window', focusErr); }
+              statusEl.textContent = key
+                ? 'Vorlage geöffnet. Bitte Druckdialog nutzen.'
+                : 'Vorlage geöffnet. Daten wurden direkt übertragen.';
             } else {
-              el.textContent = 'Fehler: ' + (j.error || j.reason || 'unbekannt');
+              statusEl.textContent = 'Fehler: ' + (data.error || data.reason || ('HTTP ' + res.status));
             }
-          } catch (e: any) {
-            el.textContent = 'Fehler: ' + e.message;
+          } catch (err) {
+            console.error('Print label failed', err);
+            statusEl.textContent = 'Fehler: ' + (err && err.message ? err.message : 'unbekannter Fehler');
           }
-        }
+        };
       </script>
     `;
   }

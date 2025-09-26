@@ -287,7 +287,35 @@ const server = http.createServer(async (req, res) => {
       return handleSearch(res, term);
     }
     if (req.method === 'POST' && pathname.startsWith('/api/print/')) {
-      return sendJson(res, 200, { ok: true });
+      const segments = pathname.split('/').filter(Boolean);
+      const type = segments[2];
+      const id = decodeURIComponent(segments[3] || '');
+      if (!id) {
+        return sendJson(res, 400, { error: 'missing id' });
+      }
+      if (type === 'box') {
+        ensureBox(id);
+        return sendJson(res, 200, {
+          template: '/print/box-label.html',
+          payload: {
+            id,
+            location: 'Testlager',
+            notes: null,
+            placedBy: 'SpecRunner',
+            placedAt: new Date().toISOString()
+          }
+        });
+      }
+      const fallbackBox = ensureBox('B-PRINT-0001', 'Testlager');
+      return sendJson(res, 200, {
+        template: '/print/item-label.html',
+        payload: {
+          id,
+          articleNumber: '00001',
+          boxId: fallbackBox.id,
+          location: fallbackBox.location
+        }
+      });
     }
     if (req.method === 'PUT' && pathname.startsWith('/api/items/')) {
       const itemId = decodeURIComponent(pathname.split('/')[3]);

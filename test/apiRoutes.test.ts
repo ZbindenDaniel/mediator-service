@@ -109,8 +109,17 @@ test('create item and retrieve via box and search', async () => {
 
   const printBox = await fetch(baseUrl + `/api/print/box/${boxId(1)}`, { method: 'POST' });
   expect(printBox.status).toBe(200);
+  const boxPayload = await printBox.json();
+  expect(boxPayload.template).toBe('/print/box-label.html');
+  expect(!!boxPayload.payload).toBe(true);
+  expect(boxPayload.payload.id).toBe(boxId(1));
+
   const printItem = await fetch(baseUrl + `/api/print/item/${itemId(1)}`, { method: 'POST' });
   expect(printItem.status).toBe(200);
+  const itemPayload = await printItem.json();
+  expect(itemPayload.template).toBe('/print/item-label.html');
+  expect(!!itemPayload.payload).toBe(true);
+  expect(itemPayload.payload.id).toBe(itemId(1));
 
   const badCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'foo,bar\n1,2' });
   expect(badCsv.status).toBe(400);

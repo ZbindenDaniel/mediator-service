@@ -8,37 +8,86 @@ interface Props {
 
 export default function PrintLabelButton({ boxId, itemId }: Props) {
   const [status, setStatus] = useState('');
-  const [preview, setPreview] = useState('');
 
-  async function handleClick() {
+  async function handleClick(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    if (!boxId && !itemId) {
+      setStatus('Keine ID angegeben.');
+      return;
+    }
     try {
-      setStatus('Printing...');
+      setStatus('Lade Etikett…');
       const url = boxId
         ? `/api/print/box/${encodeURIComponent(boxId)}`
         : `/api/print/item/${encodeURIComponent(itemId || '')}`;
       const res = await fetch(url, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setPreview(data.previewUrl || '');
-        setStatus(data.sent ? 'Gesendet an Drucker' : 'Vorschau bereit');
-      } else {
-        setStatus('Error: ' + (data.error || res.status));
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
       }
+      if (!data.template || !data.payload) {
+        throw new Error('Antwort unvollständig.');
+      }
+
+      let key: string | null = null;
+      try {
+        key = `print:payload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        sessionStorage.setItem(key, JSON.stringify(data.payload));
+      } catch (storageErr) {
+        console.error('Failed to cache print payload', storageErr);
+        key = null;
+      }
+
+      const target = key
+        ? `${data.template}?key=${encodeURIComponent(key)}`
+        : data.template;
+      const win = window.open(target, '_blank', 'noopener');
+      if (!win) {
+        if (key) {
+          sessionStorage.removeItem(key);
+        }
+        setStatus('Pop-ups blockiert? Bitte erlauben, um Etikett zu öffnen.');
+        return;
+      }
+
+      const origin = window.location.origin;
+      const message = { payload: data.payload };
+      const post = () => {
+        if (win.closed) return;
+        try {
+          win.postMessage(message, origin);
+        } catch (postErr) {
+          console.error('Failed to send print payload via postMessage', postErr);
+        }
+      };
+      setTimeout(post, 100);
+      setTimeout(post, 500);
+
+      try {
+        win.focus();
+      } catch (focusErr) {
+        console.warn('Unable to focus print window', focusErr);
+      }
+
+      setStatus(
+        key
+          ? 'Vorlage geöffnet. Bitte Druckdialog nutzen.'
+          : 'Vorlage geöffnet. Daten wurden direkt übertragen.'
+      );
     } catch (err) {
       console.error('Print failed', err);
-      setStatus('Print failed');
+      const message = err instanceof Error ? err.message : 'unbekannter Fehler';
+      setStatus(`Fehler: ${message}`);
     }
   }
 
   return (
     <div>
       <div className="card linkcard">
-        <Link className="linkcard" onClick={handleClick} to={''}>
+        <Link className="linkcard" onClick={handleClick} to="">
           <h3>Label drucken</h3>
         </Link>
-        {status && <div>{status}{preview && (
-          <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
-        )}</div>}
+        {status && <div>{status}</div>}
       </div>
     </div>
   );
