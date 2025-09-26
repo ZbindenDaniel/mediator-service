@@ -6,7 +6,15 @@ try {
 } catch (error) {
   console.warn('[run-tests] `typescript` module not found. Falling back to raw execution for .ts files.');
 }
-const { runSuite, rootSuite } = require('../test/harness');
+const harness = require('../test/harness');
+const { runSuite, rootSuite } = harness;
+
+const harnessGlobals = ['describe', 'test', 'beforeAll', 'afterAll', 'beforeEach', 'afterEach', 'expect'];
+for (const key of harnessGlobals) {
+  if (typeof harness[key] === 'function') {
+    global[key] = harness[key];
+  }
+}
 
 function transpile(module, filename) {
   try {

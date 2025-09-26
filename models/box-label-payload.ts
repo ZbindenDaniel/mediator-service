@@ -4,4 +4,7 @@ export interface BoxLabelPayload {
   notes: string | null;
   placedBy: string | null;
   placedAt: string | null;
+  qrDataUri: string | null;
+  qrModules: boolean[][] | null;
+  qrMargin: number;
 }

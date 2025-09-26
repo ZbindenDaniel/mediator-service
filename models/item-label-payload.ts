@@ -3,4 +3,7 @@ export interface ItemLabelPayload {
   articleNumber: string | null;
   boxId: string | null;
   location: string | null;
+  qrDataUri: string | null;
+  qrModules: boolean[][] | null;
+  qrMargin: number;
 }

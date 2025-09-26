@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Box, BoxLabelPayload } from '../../models';
+import { generate, renderFromMatrix } from 'qrcode';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -31,12 +32,42 @@ const action: Action = {
 
       const templatePath = '/print/box-label.html';
       try {
-        const payload: BoxLabelPayload = {
+        const payloadBase = {
           id: box.BoxID,
           location: box.Location || null,
           notes: box.Notes || null,
           placedBy: box.PlacedBy || null,
           placedAt: box.PlacedAt || null
+        } satisfies Omit<BoxLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'>;
+
+        let qrDataUri: string | null = null;
+        let qrModules: boolean[][] | null = null;
+        let qrMargin = 4;
+        const serialized = JSON.stringify(payloadBase);
+        try {
+          const qr = generate(serialized, { errorCorrectionLevel: 'M', margin: 4, scale: 8 });
+          qrModules = qr.modules;
+          qrMargin = qr.options.margin;
+          try {
+            qrDataUri = renderFromMatrix(qr.modules, qr.options);
+          } catch (qrImageErr) {
+            console.error('Failed to render QR data URI for box label', {
+              id: box.BoxID,
+              error: qrImageErr
+            });
+          }
+        } catch (qrErr) {
+          console.error('Failed to generate QR matrix for box label', {
+            id: box.BoxID,
+            error: qrErr
+          });
+        }
+
+        const payload: BoxLabelPayload = {
+          ...payloadBase,
+          qrDataUri,
+          qrModules,
+          qrMargin
         };
 
         try {

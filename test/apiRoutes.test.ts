@@ -1,5 +1,8 @@
+export {};
+
 const fs = require('fs');
 const path = require('path');
+const { server: testServer, resetData: resetTestData } = require('./server');
 
 process.env.NODE_ENV = 'test';
 process.env.HTTP_PORT = '0';
@@ -27,8 +30,8 @@ function itemId(n) {
 
 beforeAll(async () => {
   await new Promise<void>((resolve) => {
-    server.listen(0, () => {
-      const addr = server.address();
+    testServer.listen(0, () => {
+      const addr = testServer.address();
       if (typeof addr === 'object' && addr) {
         baseUrl = `http://127.0.0.1:${addr.port}`;
       }
@@ -39,7 +42,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => {
-    server.close(() => {
+    testServer.close(() => {
       fs.rmSync(process.env.DB_PATH, { force: true });
       fs.rmSync(process.env.INBOX_DIR, { recursive: true, force: true });
       fs.rmSync(process.env.ARCHIVE_DIR, { recursive: true, force: true });
@@ -49,7 +52,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  resetData();
+  resetTestData();
 });
 
 async function postForm(url, data) {
@@ -113,6 +116,9 @@ test('create item and retrieve via box and search', async () => {
   expect(boxPayload.template).toBe('/print/box-label.html');
   expect(!!boxPayload.payload).toBe(true);
   expect(boxPayload.payload.id).toBe(boxId(1));
+  expect((boxPayload.payload.qrDataUri || '').startsWith('data:image/png;base64,')).toBe(true);
+  expect(Array.isArray(boxPayload.payload.qrModules)).toBe(true);
+  expect(Number.isInteger(boxPayload.payload.qrMargin)).toBe(true);
 
   const printItem = await fetch(baseUrl + `/api/print/item/${itemId(1)}`, { method: 'POST' });
   expect(printItem.status).toBe(200);
@@ -120,6 +126,9 @@ test('create item and retrieve via box and search', async () => {
   expect(itemPayload.template).toBe('/print/item-label.html');
   expect(!!itemPayload.payload).toBe(true);
   expect(itemPayload.payload.id).toBe(itemId(1));
+  expect((itemPayload.payload.qrDataUri || '').startsWith('data:image/png;base64,')).toBe(true);
+  expect(Array.isArray(itemPayload.payload.qrModules)).toBe(true);
+  expect(Number.isInteger(itemPayload.payload.qrMargin)).toBe(true);
 
   const badCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'foo,bar\n1,2' });
   expect(badCsv.status).toBe(400);
