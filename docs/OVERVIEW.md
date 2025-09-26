@@ -13,6 +13,7 @@ This document outlines the structure for the mediator service. The goal is to cl
     - `shop` – links items to the online shop
     - `save-item` – GET/PUT handler for fetching and updating items
     - `overview`, `printer-status`, `health`, `box-detail`, `search`, `import-item`, `csv-import`, `material-number`
+    - `qr-scan` – logs QR scans and embeds the React scanner for the legacy UI
   - **ops/** – reusable operation helpers written in TypeScript
   - **config.ts** – centralized configuration
   - **db.ts** – database initialization and access
@@ -36,6 +37,7 @@ This document outlines the structure for the mediator service. The goal is to cl
       - `/boxes/:boxId` → `BoxDetail`
       - `/items/:itemId` → `ItemDetail`
       - `/items/:itemId/edit` → `ItemEdit`
+      - `/scan` → `QrScannerPage` (camera-based QR scanner that links to Behälterdetails)
 
 The legacy JavaScript implementation remains at the project root. New code in `/` uses TypeScript and a component-based approach so data structures, logic, and presentation remain decoupled.
 
