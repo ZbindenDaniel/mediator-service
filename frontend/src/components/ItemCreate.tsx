@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
+import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
 
@@ -12,25 +13,6 @@ type ItemFormData = Item & {
   agenticStatus?: 'queued' | 'running';
   agenticSearch?: string;
 };
-
-type AgenticEnv = typeof globalThis & {
-  AGENTIC_API_BASE?: string;
-  process?: { env?: Record<string, string | undefined> };
-};
-
-function resolveAgenticApiBase(): string | null {
-  try {
-    const globalScope = globalThis as AgenticEnv;
-    const candidate = globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE;
-    if (!candidate) {
-      return null;
-    }
-    return candidate.replace(/\/+$/, '');
-  } catch (err) {
-    console.error('Failed to resolve agentic API base URL', err);
-    return null;
-  }
-}
 
 export default function ItemCreate() {
   const navigate = useNavigate();
@@ -43,17 +25,7 @@ export default function ItemCreate() {
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
-  const agenticRunUrl = useMemo(() => {
-    if (!agenticApiBase) {
-      return null;
-    }
-    try {
-      return new URL('/run', agenticApiBase).toString();
-    } catch (err) {
-      console.error('Failed to construct agentic run URL', err);
-      return null;
-    }
-  }, [agenticApiBase]);
+  const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,34 +97,11 @@ export default function ItemCreate() {
       return;
     }
 
-    if (!agenticRunUrl) {
-      console.warn(`Agentic trigger skipped (${context}): run URL is not configured.`);
-      return;
-    }
-
-    try {
-      if (!agenticPayload.id) {
-        console.warn(`Agentic trigger skipped (${context}): missing ItemUUID`);
-        return;
-      }
-
-      if (!agenticPayload.search) {
-        console.warn(`Agentic trigger skipped (${context}): missing search term`);
-        return;
-      }
-
-      const agenticRes = await fetch(agenticRunUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(agenticPayload)
-      });
-
-      if (!agenticRes.ok) {
-        console.error(`Agentic trigger failed during ${context}`, agenticRes.status);
-      }
-    } catch (agenticErr) {
-      console.error(`Agentic trigger invocation failed during ${context}`, agenticErr);
-    }
+    await triggerAgenticRunRequest({
+      runUrl: agenticRunUrl,
+      payload: agenticPayload,
+      context
+    });
   }
 
   async function handleSubmit(data: Partial<ItemFormData>) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
@@ -6,6 +6,7 @@ import type { Item, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
+import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun } from '../lib/agentic';
 
 interface Props {
   itemId: string;
@@ -18,6 +19,9 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
   const navigate = useNavigate();
+
+  const agenticApiBase = useMemo(resolveAgenticApiBase, []);
+  const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
 
   useEffect(() => {
     async function load() {
@@ -44,6 +48,9 @@ export default function ItemDetail({ itemId }: Props) {
   }, [itemId]);
 
   const agenticNeedsReview = agentic ? Number(agentic.NeedsReview) > 0 : false;
+  const normalizedAgenticStatus = (agentic?.Status || '').toLowerCase();
+  const agenticHasFailure =
+    !agentic || Boolean(agentic?.FailedAt) || ['failed', 'error', 'errored'].includes(normalizedAgenticStatus);
 
   function agenticStatusDisplay(run: AgenticRun | null): {
     label: string;
@@ -133,6 +140,68 @@ export default function ItemDetail({ itemId }: Props) {
     } catch (err) {
       console.error('Agentic review request failed', err);
       setAgenticError('Review-Anfrage fehlgeschlagen.');
+    } finally {
+      setAgenticActionPending(false);
+    }
+  }
+
+  async function handleAgenticRestart() {
+    if (!item) {
+      console.warn('Agentic restart requested without loaded item data');
+      setAgenticError('Artikel konnte nicht geladen werden.');
+      return;
+    }
+
+    const actor = getUser();
+    if (!actor) {
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
+
+    setAgenticActionPending(true);
+    setAgenticError(null);
+
+    try {
+      const restartResponse = await fetch(
+        `/api/items/${encodeURIComponent(item.ItemUUID)}/agentic/restart`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor })
+        }
+      );
+
+      if (!restartResponse.ok) {
+        console.error('Agentic restart failed', restartResponse.status);
+        setAgenticError('Agentic-Neustart fehlgeschlagen.');
+        return;
+      }
+
+      const body = await restartResponse
+        .json()
+        .catch((err) => {
+          console.error('Failed to parse agentic restart response', err);
+          return null;
+        });
+
+      const refreshedRun: AgenticRun | null = body?.agentic ?? null;
+      setAgentic(refreshedRun);
+
+      if (!refreshedRun) {
+        console.warn('Agentic restart succeeded without returning a run');
+        setAgenticError('Agentic-Neustart lieferte keine Daten.');
+        return;
+      }
+
+      const searchTerm = (refreshedRun.SearchQuery ?? '').trim() || item.Artikelbeschreibung || '';
+      await triggerAgenticRun({
+        runUrl: agenticRunUrl,
+        payload: { id: refreshedRun.ItemUUID, search: searchTerm },
+        context: 'item detail restart'
+      });
+    } catch (err) {
+      console.error('Agentic restart request failed', err);
+      setAgenticError('Agentic-Neustart fehlgeschlagen.');
     } finally {
       setAgenticActionPending(false);
     }
@@ -263,10 +332,22 @@ export default function ItemDetail({ itemId }: Props) {
                 </table>
               ) : null}
               {agenticActionPending ? (
-                <p className="muted">Review wird gespeichert…</p>
+                <p className="muted">Agentic-Aktion wird ausgeführt…</p>
               ) : null}
               {agenticError ? (
                 <p className="muted" style={{ color: '#a30000' }}>{agenticError}</p>
+              ) : null}
+              {!agenticNeedsReview && agenticHasFailure ? (
+                <div className='row'>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={agenticActionPending}
+                    onClick={handleAgenticRestart}
+                  >
+                    Neu starten
+                  </button>
+                </div>
               ) : null}
               {agenticNeedsReview ? (
                 <div className='row'>
