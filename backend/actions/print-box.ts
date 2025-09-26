@@ -29,6 +29,7 @@ const action: Action = {
         return sendJson(res, 404, { error: 'box not found' });
       }
 
+      const templatePath = '/print/box-label.html';
       try {
         const payload: BoxLabelPayload = {
           id: box.BoxID,
@@ -38,15 +39,22 @@ const action: Action = {
           placedAt: box.PlacedAt || null
         };
 
-        ctx.logEvent.run({
-          Actor: null,
-          EntityType: 'Box',
-          EntityId: box.BoxID,
-          Event: 'PrintPayloadPrepared',
-          Meta: JSON.stringify({ template: '/print/box-label.html' })
-        });
+        try {
+          ctx.logEvent.run({
+            Actor: null,
+            EntityType: 'Box',
+            EntityId: box.BoxID,
+            Event: 'PrintPayloadPrepared',
+            Meta: JSON.stringify({ template: templatePath })
+          });
+        } catch (logErr) {
+          console.error('Failed to log box print payload preparation', {
+            id: box.BoxID,
+            error: logErr
+          });
+        }
 
-        return sendJson(res, 200, { template: '/print/box-label.html', payload });
+        return sendJson(res, 200, { template: templatePath, payload });
       } catch (err) {
         console.error('Failed to prepare box label payload', { id: box.BoxID, error: err });
         return sendJson(res, 500, { error: 'failed to prepare template' });

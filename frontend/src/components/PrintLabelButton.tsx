@@ -29,16 +29,51 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         throw new Error('Antwort unvollständig.');
       }
 
-      const key = `print:payload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-      sessionStorage.setItem(key, JSON.stringify(data.payload));
-      const target = `${data.template}?key=${encodeURIComponent(key)}`;
+      let key: string | null = null;
+      try {
+        key = `print:payload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+        sessionStorage.setItem(key, JSON.stringify(data.payload));
+      } catch (storageErr) {
+        console.error('Failed to cache print payload', storageErr);
+        key = null;
+      }
+
+      const target = key
+        ? `${data.template}?key=${encodeURIComponent(key)}`
+        : data.template;
       const win = window.open(target, '_blank', 'noopener');
       if (!win) {
+        if (key) {
+          sessionStorage.removeItem(key);
+        }
         setStatus('Pop-ups blockiert? Bitte erlauben, um Etikett zu öffnen.');
         return;
       }
-      win.focus();
-      setStatus('Vorlage geöffnet. Bitte Druckdialog nutzen.');
+
+      const origin = window.location.origin;
+      const message = { payload: data.payload };
+      const post = () => {
+        if (win.closed) return;
+        try {
+          win.postMessage(message, origin);
+        } catch (postErr) {
+          console.error('Failed to send print payload via postMessage', postErr);
+        }
+      };
+      setTimeout(post, 100);
+      setTimeout(post, 500);
+
+      try {
+        win.focus();
+      } catch (focusErr) {
+        console.warn('Unable to focus print window', focusErr);
+      }
+
+      setStatus(
+        key
+          ? 'Vorlage geöffnet. Bitte Druckdialog nutzen.'
+          : 'Vorlage geöffnet. Daten wurden direkt übertragen.'
+      );
     } catch (err) {
       console.error('Print failed', err);
       const message = err instanceof Error ? err.message : 'unbekannter Fehler';

@@ -190,6 +190,10 @@
         }
 
         function handleMessage(event) {
+          if (event.origin && event.origin !== window.location.origin) {
+            console.warn('Ignoring message from unexpected origin', event.origin);
+            return;
+          }
           try {
             const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
             if (data && data.payload) {
