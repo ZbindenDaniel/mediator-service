@@ -1,28 +1,31 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { getUser } from '../lib/user';
+import { BOX_COLORS } from '../data/boxColors';
 
 interface Props {
   boxId: string;
   onMoved?: () => void;
 }
 
-const LOC_RE = /^[A-Z]-\d{2}-\d{2}$/;
-
 export default function RelocateBoxCard({ boxId, onMoved }: Props) {
-  const [location, setLocation] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
   const [status, setStatus] = useState('');
+  const colorLookup = useMemo(() => new Map(BOX_COLORS.map(color => [color.value, color])), []);
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
-    if (!LOC_RE.test(location.trim().toUpperCase())) {
-      setStatus('Format z.B. A-01-01');
+    const colorKey = selectedColor.trim();
+    const colorOption = colorLookup.get(colorKey);
+    if (!colorOption) {
+      console.warn('Invalid color selection for relocation', { boxId, colorKey });
+      setStatus('Bitte eine Farbe wählen');
       return;
     }
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location: location.trim().toUpperCase(), actor: getUser() })
+        body: JSON.stringify({ location: colorOption.value, actor: getUser() })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -31,7 +34,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
       }
-      console.log('relocate box', res.status);
+      console.log('relocate box', { status: res.status, color: colorOption.value });
     } catch (err) {
       console.error('Relocate box failed', err);
       setStatus('Verschieben fehlgeschlagen');
@@ -47,7 +50,20 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
             <label>
               Neuer Ort
             </label>
-            <input value={location} placeholder='A-01-01' onChange={e => setLocation(e.target.value)} required />
+            <select value={selectedColor} onChange={e => setSelectedColor(e.target.value)} required>
+              <option value="" disabled>
+                Farbe wählen
+              </option>
+              {BOX_COLORS.map(color => (
+                <option
+                  key={color.value}
+                  value={color.value}
+                  style={{ backgroundColor: color.hex, color: '#fff' }}
+                >
+                  {color.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className='row'>
