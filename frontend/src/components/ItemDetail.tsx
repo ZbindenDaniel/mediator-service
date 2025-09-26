@@ -158,6 +158,8 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
+    const baseSearchTerm = (agentic?.SearchQuery || item.Artikelbeschreibung || '').trim();
+
     setAgenticActionPending(true);
     setAgenticError(null);
 
@@ -167,7 +169,7 @@ export default function ItemDetail({ itemId }: Props) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor })
+          body: JSON.stringify({ actor, search: baseSearchTerm })
         }
       );
 
@@ -193,10 +195,19 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
 
-      const searchTerm = (refreshedRun.SearchQuery ?? '').trim() || item.Artikelbeschreibung || '';
+      const searchTerm =
+        (refreshedRun.SearchQuery ?? '').trim() ||
+        baseSearchTerm ||
+        item.Artikelbeschreibung ||
+        '';
+      if (!searchTerm) {
+        console.warn('Agentic restart skipped: missing search term');
+        setAgenticError('Agentic-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
+        return;
+      }
       await triggerAgenticRun({
         runUrl: agenticRunUrl,
-        payload: { id: refreshedRun.ItemUUID, search: searchTerm },
+        payload: { id: refreshedRun.ItemUUID || item.ItemUUID, search: searchTerm },
         context: 'item detail restart'
       });
     } catch (err) {

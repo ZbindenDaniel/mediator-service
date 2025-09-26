@@ -49,6 +49,9 @@ const action: Action = {
       return sendJson(res, 400, { error: 'actor is required' });
     }
 
+    const providedSearch =
+      typeof payload.search === 'string' ? payload.search.trim() : '';
+
     let existingRun: AgenticRun | undefined;
     try {
       existingRun = ctx.getAgenticRunForItem.get(itemId) as AgenticRun | undefined;
@@ -57,46 +60,67 @@ const action: Action = {
       return sendJson(res, 500, { error: 'Failed to load agentic run' });
     }
 
-    if (!existingRun) {
-      console.warn('Agentic restart requested for missing run', itemId);
-      return sendJson(res, 404, { error: 'Agentic run not found' });
-    }
+    const nextSearchQuery = providedSearch || existingRun?.SearchQuery || null;
+    const hadExistingRun = Boolean(existingRun);
+    const previousStatus = existingRun?.Status ?? null;
 
-    const restartTransaction = ctx.db.transaction((itemUUID: string) => {
-      const resetStmt = ctx.db.prepare(`
-        UPDATE agentic_runs
-           SET Status='queued',
-               TriggeredAt=datetime('now'),
-               StartedAt=NULL,
-               CompletedAt=NULL,
-               FailedAt=NULL,
-               NeedsReview=0,
-               ReviewedBy=NULL,
-               ReviewedAt=NULL,
-               ReviewDecision=NULL,
-               ReviewNotes=NULL
-         WHERE ItemUUID = ?
-      `);
-      const result = resetStmt.run(itemUUID);
-      if (!result || result.changes === 0) {
-        throw new Error('No agentic run updated');
-      }
+    const restartTransaction = ctx.db.transaction(
+      (
+        itemUUID: string,
+        searchQuery: string | null,
+        hasExisting: boolean,
+        prevStatus: string | null
+      ) => {
+        if (hasExisting) {
+          const resetStmt = ctx.db.prepare(`
+            UPDATE agentic_runs
+               SET SearchQuery=?,
+                   Status='queued',
+                   TriggeredAt=datetime('now'),
+                   StartedAt=NULL,
+                   CompletedAt=NULL,
+                   FailedAt=NULL,
+                   NeedsReview=0,
+                   ReviewedBy=NULL,
+                   ReviewedAt=NULL,
+                   ReviewDecision=NULL,
+                   ReviewNotes=NULL
+             WHERE ItemUUID = ?
+          `);
+          const result = resetStmt.run(searchQuery, itemUUID);
+          if (!result || result.changes === 0) {
+            throw new Error('No agentic run updated');
+          }
+        } else {
+          const insertStmt = ctx.db.prepare(`
+            INSERT INTO agentic_runs (
+              ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
+              Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
+            )
+            VALUES (?, ?, 'queued', datetime('now'), NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL)
+          `);
+          const result = insertStmt.run(itemUUID, searchQuery);
+          if (!result || result.changes === 0) {
+            throw new Error('Failed to create agentic run');
+          }
+        }
 
-      try {
-        ctx.logEvent.run({
-          Actor: actor,
-          EntityType: 'Item',
-          EntityId: itemUUID,
-          Event: 'AgenticRunRestarted',
-          Meta: JSON.stringify({ previousStatus: existingRun?.Status ?? null })
-        });
-      } catch (logErr) {
-        console.error('Failed to log agentic restart event', logErr);
+        try {
+          ctx.logEvent.run({
+            Actor: actor,
+            EntityType: 'Item',
+            EntityId: itemUUID,
+            Event: 'AgenticRunRestarted',
+            Meta: JSON.stringify({ previousStatus: prevStatus, searchQuery, created: !hasExisting })
+          });
+        } catch (logErr) {
+          console.error('Failed to log agentic restart event', logErr);
+        }
       }
-    });
+    );
 
     try {
-      restartTransaction(itemId);
+      restartTransaction(itemId, nextSearchQuery, hadExistingRun, previousStatus);
     } catch (err) {
       console.error('Failed to reset agentic run state', err);
       return sendJson(res, 500, { error: 'Failed to restart agentic run' });
