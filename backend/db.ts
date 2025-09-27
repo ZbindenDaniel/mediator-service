@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS events (
   throw err;
 }
 
+// TODO: this can be simplified. we do not need 'summary', 'ReviewNotes' and can replace 'NeedsReview' & 'ReviewDecision' with 'ReviewState'. Also the datefields can be unified a field 'LastModified' is sufficient 
 const AGENTIC_RUNS_COLUMNS = [
   'Id',
   'ItemUUID',
@@ -102,6 +103,7 @@ const AGENTIC_RUNS_COLUMNS = [
   'ReviewNotes'
 ];
 
+// TODO: can this be removed?
 const LEGACY_AGENTIC_COLUMNS = ['SearchQuery', 'LastError', 'ResultPayload'];
 
 function ensureAgenticRunSchema(): void {
