@@ -394,6 +394,7 @@ export const getMaxArtikelNummer = db.prepare(`
     LIMIT 1
   `);
 
+// TODO: possible duplication with 'getAgenticRun'
 export const getAgenticRunForItem = db.prepare(`
   SELECT Id, ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
          NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
