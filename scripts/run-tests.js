@@ -6,6 +6,7 @@ try {
 } catch (error) {
   console.warn('[run-tests] `typescript` module not found. Falling back to raw execution for .ts files.');
 }
+const { runCLI } = require('jest');
 const harness = require('../test/harness');
 const { runSuite, rootSuite } = harness;
 
@@ -68,6 +69,19 @@ async function main() {
     require(file);
   }
   await runSuite(rootSuite);
+
+  const jestConfig = require('../jest.config.cjs');
+  const { results } = await runCLI(
+    {
+      config: JSON.stringify(jestConfig),
+      runInBand: true,
+    },
+    [process.cwd()]
+  );
+
+  if (!results.success) {
+    throw new Error('Jest tests failed');
+  }
 }
 
 main().catch((err) => {
