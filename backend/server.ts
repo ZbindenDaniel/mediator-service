@@ -4,7 +4,7 @@ import http from 'http';
 import type { IncomingMessage, ServerResponse } from 'http';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
-import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR } from './config';
+import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR, CSV_MAX_UPLOAD_BYTES } from './config';
 import { ingestCsvFile } from './importer';
 import {
   db,
@@ -155,6 +155,7 @@ type ActionContext = {
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
+  CSV_MAX_UPLOAD_BYTES: typeof CSV_MAX_UPLOAD_BYTES;
 };
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
@@ -294,7 +295,8 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getAgenticRunForItem,
           updateAgenticReview,
           INBOX_DIR,
-          PUBLIC_DIR
+          PUBLIC_DIR,
+          CSV_MAX_UPLOAD_BYTES
         });
       } catch (err) {
         console.error('Action handler failed', err);

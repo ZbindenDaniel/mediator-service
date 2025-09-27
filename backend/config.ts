@@ -10,3 +10,7 @@ export const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 export const BASE_QR_URL = process.env.BASE_QR_URL || 'http://localhost:8080/qr';
 export const BASE_UI_URL = process.env.BASE_UI_URL || 'http://localhost:8080/ui';
 export const AGENTIC_SHARED_SECRET = process.env.AGENTIC_SHARED_SECRET || '';
+export const CSV_MAX_UPLOAD_BYTES = parseInt(
+  process.env.CSV_MAX_UPLOAD_BYTES || `${5 * 1024 * 1024}`,
+  10
+);
