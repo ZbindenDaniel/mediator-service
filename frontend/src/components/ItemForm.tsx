@@ -13,9 +13,10 @@ interface Props {
   onSubmit: (data: Partial<ItemFormData>) => Promise<void>;
   submitLabel: string;
   isNew?: boolean;
+  headerContent?: React.ReactNode;
 }
 
-export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) {
+export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent }: Props) {
   const [form, setForm] = useState<Partial<ItemFormData>>({ ...item });
 
   function update<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) {
@@ -73,6 +74,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
   return (
     <div className='container item'>
       <div className="card">
+        {headerContent ? <div className="item-form__header">{headerContent}</div> : null}
         <form onSubmit={handleSubmit} className="item-form">
           <input value={form.BoxID || ''} readOnly hidden />
 
