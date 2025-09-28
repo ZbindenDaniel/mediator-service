@@ -186,7 +186,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     }
 
     if (url.pathname === '/bundle.css' && req.method === 'GET') {
-      const bundlePath = path.join(PUBLIC_DIR, 'bundle.css');
+      const bundlePath = '';// path.join(PUBLIC_DIR, 'bundle.css');
       const legacyPath = path.join(PUBLIC_DIR, 'styles.css');
       try {
         let stylesheetPath: string | undefined;

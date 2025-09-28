@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Box, BoxLabelPayload } from '../../models';
 import { buildPrintPayload } from './print-shared';
+import { generate, renderFromMatrix } from 'qrcode';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });

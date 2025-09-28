@@ -49,7 +49,7 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
   }
 
   const target = key ? `${template}?key=${encodeURIComponent(key)}` : template;
-  let popup: (Window & typeof globalThis) | null = null;
+  let popup: (Window) | null = null;
   try {
     popup = win.open(target, '_blank', 'noopener');
   } catch (openErr) {
