@@ -1,7 +1,7 @@
 /** @jest-environment jsdom */
 
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ItemForm from '../ItemForm';
 import ItemFormAgentic from '../ItemForm_agentic';
 import type { ItemFormData } from '../forms/itemFormShared';
@@ -26,6 +26,10 @@ describe('Item forms', () => {
     cleanup();
     reportValiditySpy = jest.spyOn(HTMLFormElement.prototype, 'reportValidity').mockReturnValue(true);
     window.confirm = jest.fn(() => true);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [] })
+    });
 
     class MockFileReader {
       public result: string | ArrayBuffer | null = null;
@@ -169,5 +173,100 @@ describe('Item forms', () => {
     expect(onSubmitPhotos).toHaveBeenCalledWith(
       expect.objectContaining({ picture1: expect.stringContaining('data:image/png;base64,TEST') })
     );
+  });
+
+  it('searches for similar items and allows selection in ItemForm', async () => {
+    jest.useFakeTimers();
+    const similarItem = {
+      ItemUUID: 'existing-1',
+      Artikel_Nummer: 'MAT-999',
+      Artikelbeschreibung: 'Ähnlicher Artikel',
+      BoxID: 'BOX-55'
+    } as Partial<ItemFormData>;
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [similarItem] })
+    });
+    // @ts-expect-error override for test
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <ItemForm
+          item={{}}
+          isNew
+          submitLabel="Speichern"
+          onSubmit={jest.fn()}
+        />
+      );
+
+      const descriptionInput = screen.getByLabelText('Artikelbeschreibung*') as HTMLInputElement;
+      fireEvent.change(descriptionInput, { target: { value: 'Ähnlich' } });
+
+      await act(async () => {
+        jest.runAllTimers();
+      });
+
+      expect(fetchMock).toHaveBeenCalled();
+      expect(fetchMock.mock.calls[0][0]).toBe('/api/search?term=%C3%84hnlich');
+
+      const selectButton = await screen.findByRole('button', { name: /übernehmen/i });
+      fireEvent.click(selectButton);
+
+      expect(descriptionInput.value).toBe('Ähnlicher Artikel');
+      expect((screen.getByLabelText('Artikelnummer*') as HTMLInputElement).value).toBe('MAT-999');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('renders suggestions in agentic form and selection updates fields', async () => {
+    jest.useFakeTimers();
+    const similarItem = {
+      ItemUUID: 'existing-2',
+      Artikel_Nummer: 'MAT-100',
+      Artikelbeschreibung: 'Agentic Ähnlich',
+      BoxID: 'BOX-77'
+    } as Partial<ItemFormData>;
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [similarItem] })
+    });
+    // @ts-expect-error override for test
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <ItemFormAgentic
+          draft={{}}
+          step={1}
+          isNew
+          submitLabel="Weiter"
+          onSubmitDetails={jest.fn()}
+          onSubmitPhotos={jest.fn()}
+        />
+      );
+
+      const descriptionInput = screen.getByLabelText('Artikelbeschreibung*') as HTMLInputElement;
+      fireEvent.change(descriptionInput, { target: { value: 'Agent' } });
+
+      await act(async () => {
+        jest.runAllTimers();
+      });
+
+      expect(fetchMock).toHaveBeenCalled();
+
+      const selectButton = await screen.findByRole('button', { name: /übernehmen/i });
+      fireEvent.click(selectButton);
+
+      await waitFor(() => {
+        expect((screen.getByLabelText('Artikelnummer*') as HTMLInputElement).value).toBe('MAT-100');
+      });
+      expect(descriptionInput.value).toBe('Agentic Ähnlich');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

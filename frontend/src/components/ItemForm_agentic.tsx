@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
+import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
+import { useSimilarItems } from './forms/useSimilarItems';
 
 interface Props {
   draft: Partial<ItemFormData>;
@@ -18,9 +20,29 @@ export default function ItemForm_Agentic({
   submitLabel,
   isNew
 }: Props) {
-  const { form, update, mergeForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
+  const { form, update, mergeForm, setForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const { similarItems, loading, error, hasQuery } = useSimilarItems({
+    description: form.Artikelbeschreibung,
+    currentItemUUID: form.ItemUUID
+  });
+
+  const handleSelectSimilar = (selected: typeof similarItems[number]) => {
+    try {
+      console.log('Applying similar item selection (agentic)', selected.ItemUUID);
+      setForm((prev) => {
+        const next = { ...prev, ...selected } as Partial<ItemFormData>;
+        if (isNew) {
+          delete (next as Partial<ItemFormData>).ItemUUID;
+        }
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to apply similar item selection (agentic)', err);
+    }
+  };
 
   useEffect(() => {
     mergeForm(draft);
@@ -77,6 +99,16 @@ export default function ItemForm_Agentic({
             isNew={isNew}
             onUpdate={update}
             onGenerateMaterialNumber={generateMaterialNumber}
+            descriptionSuggestions={
+              hasQuery ? (
+                <SimilarItemsPanel
+                  items={similarItems}
+                  loading={loading}
+                  error={error}
+                  onSelect={handleSelectSimilar}
+                />
+              ) : null
+            }
           />
 
           <hr></hr>

@@ -85,9 +85,10 @@ interface ItemDetailsFieldsProps {
   onUpdate: <K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => void;
   onGenerateMaterialNumber?: () => void | Promise<void>;
   onChangeStock?: (op: StockOperation) => void | Promise<void>;
+  descriptionSuggestions?: React.ReactNode;
 }
 
-export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNumber, onChangeStock }: ItemDetailsFieldsProps) {
+export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNumber, onChangeStock, descriptionSuggestions }: ItemDetailsFieldsProps) {
   const handleStock = useCallback(async (op: StockOperation) => {
     if (!onChangeStock) {
       return;
@@ -117,6 +118,8 @@ export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNum
           required
         />
       </div>
+
+      {descriptionSuggestions}
 
       <div className="row">
         {form.ItemUUID && (
