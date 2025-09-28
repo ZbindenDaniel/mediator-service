@@ -24,3 +24,13 @@ npm --workspace mediator-service run build
 # start
 npm --workspace mediator-service start
 ```
+
+## Agentic migration verification
+
+Use the verification script to ensure the agentic run schema exists and that `backend/db.ts` can be loaded without TypeScript module errors:
+
+```bash
+node scripts/verify-agentic-migration.js path/to/mediator.sqlite
+```
+
+The script registers a TypeScript loader (falling back to a lightweight transpiler) before requiring the database module, so it should no longer throw `MODULE_NOT_FOUND` for `backend/db.ts`. If the script reports missing build artifacts or schema issues, rebuild the project before retrying.
