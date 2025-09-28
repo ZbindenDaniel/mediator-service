@@ -5,14 +5,7 @@ import { getUser } from '../lib/user';
 import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
-
-type ItemFormData = Item & {
-  picture1?: string | null;
-  picture2?: string | null;
-  picture3?: string | null;
-  agenticStatus?: 'queued' | 'running';
-  agenticSearch?: string;
-};
+import type { ItemFormData } from './forms/itemFormShared';
 
 export default function ItemCreate() {
   const navigate = useNavigate();
