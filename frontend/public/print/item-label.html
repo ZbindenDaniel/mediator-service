@@ -122,7 +122,7 @@
     <div class="error" id="error" hidden></div>
     <script>
       (function init() {
-        const state = { payload: null, qrReady: false, requested: false };
+        const state = { payload: null, qrReady: false, requested: false, channel: null };
         const errorEl = document.getElementById('error');
         const pageEl = document.getElementById('page');
         const qrCanvas = document.getElementById('qrCanvas');
@@ -228,6 +228,65 @@
           }
         }
 
+        function cleanupChannel() {
+          if (!state.channel) {
+            return;
+          }
+          try {
+            state.channel.close();
+          } catch (err) {
+            console.warn('Konnte BroadcastChannel nicht schließen', err);
+          }
+          state.channel = null;
+        }
+
+        function handlePayloadEnvelope(envelope, source) {
+          if (!envelope || typeof envelope !== 'object') {
+            return false;
+          }
+          const type = typeof envelope.type === 'string' ? envelope.type : '';
+          if (type && type !== 'print:payload') {
+            if (type === 'print:request-payload') {
+              console.debug('Ignoriere Payload-Anfrage aus', source);
+            }
+            return false;
+          }
+          if ('payload' in envelope && envelope.payload) {
+            console.info('Payload über', source, 'erhalten.');
+            render(envelope.payload);
+            return true;
+          }
+          return false;
+        }
+
+        function setupBroadcastChannel(channelId) {
+          if (!channelId) {
+            return;
+          }
+          if (typeof window.BroadcastChannel !== 'function') {
+            console.warn('BroadcastChannel API nicht verfügbar, überspringe Broadcast-Fallback.');
+            return;
+          }
+          try {
+            const channel = new BroadcastChannel(channelId);
+            state.channel = channel;
+            channel.addEventListener('message', (event) => {
+              try {
+                let data = event.data;
+                if (typeof data === 'string') {
+                  data = JSON.parse(data);
+                }
+                handlePayloadEnvelope(data, 'BroadcastChannel');
+              } catch (err) {
+                console.error('Fehler beim Lesen der Broadcast-Nachricht', err);
+              }
+            });
+            console.info('BroadcastChannel für Druckvorlage verbunden.');
+          } catch (err) {
+            console.error('Konnte BroadcastChannel nicht initialisieren', err);
+          }
+        }
+
         function tryFromStorage(key) {
           if (!key) return false;
           const stores = [];
@@ -270,25 +329,38 @@
           if (state.requested) {
             return;
           }
-          if (!window.opener) {
-            console.warn('Kein opener verfügbar, kann Payload nicht anfordern.');
-            return;
+          let requested = false;
+          if (state.channel) {
+            try {
+              state.channel.postMessage({ type: 'print:request-payload' });
+              requested = true;
+              console.info('Payload via BroadcastChannel angefordert…');
+            } catch (err) {
+              console.error('Konnte Payload-Anfrage nicht über BroadcastChannel senden', err);
+            }
           }
-          let targetOrigin = '*';
-          try {
-            targetOrigin = window.location?.origin || '*';
-          } catch (originErr) {
-            console.warn('Konnte Ursprungs-URL der Druckvorlage nicht bestimmen', originErr);
+          if (window.opener) {
+            let targetOrigin = '*';
+            try {
+              targetOrigin = window.location?.origin || '*';
+            } catch (originErr) {
+              console.warn('Konnte Ursprungs-URL der Druckvorlage nicht bestimmen', originErr);
+            }
+            if (targetOrigin === 'null') {
+              targetOrigin = '*';
+            }
+            try {
+              window.opener.postMessage({ type: 'print:request-payload' }, targetOrigin);
+              requested = true;
+              console.info('Payload beim opener angefordert…');
+            } catch (err) {
+              console.error('Konnte Payload-Anfrage nicht an opener senden', err);
+            }
+          } else if (!requested) {
+            console.warn('Kein opener verfügbar, versuche Broadcast-Fallback.');
           }
-          if (targetOrigin === 'null') {
-            targetOrigin = '*';
-          }
-          try {
-            window.opener.postMessage({ type: 'print:request-payload' }, targetOrigin);
+          if (requested) {
             state.requested = true;
-            console.info('Payload beim opener angefordert…');
-          } catch (err) {
-            console.error('Konnte Payload-Anfrage nicht an opener senden', err);
           }
         }
 
@@ -302,15 +374,7 @@
             if (!data || typeof data !== 'object') {
               return;
             }
-            if ('type' in data && data.type !== 'print:payload' && data.type !== 'print:request-payload') {
-              return;
-            }
-            if (data.type === 'print:request-payload') {
-              return;
-            }
-            if ('payload' in data && data.payload) {
-              render(data.payload);
-            }
+            handlePayloadEnvelope(data, 'postMessage');
           } catch (err) {
             console.error('Failed to parse postMessage payload', err);
             showError('Übertragene Daten ungültig.');
@@ -325,6 +389,8 @@
 
         const params = new URLSearchParams(window.location.search);
         const key = params.get('key');
+        const channelId = params.get('channel');
+        setupBroadcastChannel(channelId);
         if (!tryFromStorage(key)) {
           console.warn('Warte auf Payload via postMessage…');
           requestPayload();
@@ -346,6 +412,12 @@
         } else {
           console.info('QR renderer aktiv – render erneut mit vorhandenem Payload.');
           render(state.payload);
+        }
+
+        try {
+          window.addEventListener('beforeunload', cleanupChannel);
+        } catch (err) {
+          console.warn('Konnte BroadcastChannel-Aufräumen beim Schließen nicht registrieren', err);
         }
       })();
     </script>

@@ -56,6 +56,13 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
   const random = options?.random ?? Math.random;
 
   let key: string | null = null;
+  let channelName: string | null = null;
+  try {
+    channelName = `print:channel:${now()}:${random().toString(16).slice(2)}`;
+  } catch (channelErr) {
+    logger.warn('Failed to allocate broadcast channel name for print payload', channelErr as Error);
+    channelName = null;
+  }
   if (activeStorage) {
     try {
       const serialized = JSON.stringify(payload);
@@ -67,7 +74,32 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     }
   }
 
-  const target = key ? `${template}?key=${encodeURIComponent(key)}` : template;
+  let target = template;
+  const params = new URLSearchParams();
+  if (key) {
+    params.set('key', key);
+  }
+  if (channelName) {
+    params.set('channel', channelName);
+  }
+  const query = params.toString();
+  if (query) {
+    try {
+      const targetUrl = new URL(template, win.location?.origin ?? undefined);
+      if (targetUrl.search) {
+        const existing = targetUrl.search.replace(/^\?/, '');
+        const merged = `${existing}&${query}`;
+        targetUrl.search = `?${merged}`;
+      } else {
+        targetUrl.search = `?${query}`;
+      }
+      target = targetUrl.toString();
+    } catch (urlErr) {
+      logger.warn('Failed to normalise print template URL, appending params manually', urlErr as Error);
+      const joiner = template.includes('?') ? '&' : '?';
+      target = `${template}${joiner}${query}`;
+    }
+  }
   let popup: (Window) | null = null;
   try {
     popup = win.open(target, '_blank', 'noopener');
@@ -91,6 +123,37 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
   }
 
   const message = { type: 'print:payload', payload };
+  let broadcast: BroadcastChannel | null = null;
+  if (channelName && typeof win.BroadcastChannel === 'function') {
+    try {
+      broadcast = new win.BroadcastChannel(channelName);
+    } catch (channelErr) {
+      logger.warn('Unable to open broadcast channel for print payload delivery', channelErr as Error);
+      broadcast = null;
+    }
+  } else if (channelName) {
+    logger.warn('BroadcastChannel API unavailable; relying on window messaging for print payload delivery');
+  }
+
+  const broadcastMessage = () => {
+    if (!broadcast) return;
+    try {
+      broadcast.postMessage(message);
+    } catch (broadcastErr) {
+      logger.error('Failed to publish print payload via broadcast channel', broadcastErr as Error);
+    }
+  };
+
+  const cleanupBroadcast = () => {
+    if (!broadcast) return;
+    try {
+      broadcast.close();
+    } catch (closeErr) {
+      logger.warn('Failed to close print broadcast channel', closeErr as Error);
+    }
+    broadcast = null;
+  };
+
   const post = () => {
     if (popup && popup.closed) return;
     try {
@@ -98,6 +161,7 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     } catch (postErr) {
       logger.error('Failed to send print payload via postMessage', postErr);
     }
+    broadcastMessage();
   };
 
   const handleRequest = (event: MessageEvent) => {
@@ -144,6 +208,7 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     const stopCheck = win.setInterval(() => {
       if (!popup || popup.closed) {
         cleanupRequestListener();
+        cleanupBroadcast();
         try {
           win.clearInterval(stopCheck);
         } catch (intervalErr) {
@@ -153,6 +218,23 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     }, 2000);
   } catch (intervalErr) {
     logger.warn('Unable to schedule print payload listener cleanup', intervalErr as Error);
+  }
+
+  if (broadcast) {
+    const handleBroadcast = (event: MessageEvent) => {
+      if (!event?.data || typeof event.data !== 'object') {
+        return;
+      }
+      const type = (event.data as { type?: string }).type;
+      if (type === 'print:request-payload') {
+        post();
+      }
+    };
+    try {
+      broadcast.addEventListener('message', handleBroadcast as EventListener);
+    } catch (listenErr) {
+      logger.warn('Failed to attach listener for print broadcast channel', listenErr as Error);
+    }
   }
 
   try {
