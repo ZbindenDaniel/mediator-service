@@ -229,21 +229,40 @@
 
         function tryFromStorage(key) {
           if (!key) return false;
+          const stores = [];
           try {
-            const raw = sessionStorage.getItem(key);
-            if (!raw) {
-              showError('Kein zwischengespeicherter Payload gefunden.');
+            stores.push(window.localStorage);
+          } catch (err) {
+            console.warn('Local storage lookup for print payload failed', err);
+          }
+          try {
+            stores.push(window.sessionStorage);
+          } catch (err) {
+            console.warn('Session storage lookup for print payload failed', err);
+          }
+          for (const store of stores) {
+            if (!store) continue;
+            try {
+              const raw = store.getItem(key);
+              if (!raw) {
+                continue;
+              }
+              const payload = JSON.parse(raw);
+              try {
+                store.removeItem(key);
+              } catch (removeErr) {
+                console.warn('Failed to remove cached print payload key', removeErr);
+              }
+              render(payload);
+              return true;
+            } catch (err) {
+              console.error('Failed to load payload from storage', err);
+              showError('Payload konnte nicht gelesen werden.');
               return true;
             }
-            const payload = JSON.parse(raw);
-            sessionStorage.removeItem(key);
-            render(payload);
-            return true;
-          } catch (err) {
-            console.error('Failed to load payload from storage', err);
-            showError('Payload konnte nicht gelesen werden.');
-            return true;
           }
+          console.info('Kein zwischengespeicherter Payload gefunden, erwarte postMessage…');
+          return false;
         }
 
         function handleMessage(event) {

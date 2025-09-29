@@ -19,18 +19,26 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     throw new Error('No window context available for printing');
   }
 
+  const logger = options?.logger ?? console;
+
   let storage: Storage | null | undefined = options?.storage;
+  if (storage === undefined) {
+    try {
+      storage = win.localStorage;
+    } catch (localErr) {
+      logger.warn('Local storage unavailable for print payload caching', localErr as Error);
+      storage = undefined;
+    }
+  }
+
   if (storage === undefined) {
     try {
       storage = win.sessionStorage;
     } catch (sessionErr) {
-      const warnLogger = options?.logger ?? console;
-      warnLogger.warn('Session storage unavailable for print payload caching', sessionErr as Error);
+      logger.warn('Session storage unavailable for print payload caching', sessionErr as Error);
       storage = null;
     }
   }
-
-  const logger = options?.logger ?? console;
   const activeStorage: Storage | null = storage ?? null;
   const origin = options?.origin ?? (win.location ? win.location.origin : '*');
   const now = options?.now ?? Date.now;
