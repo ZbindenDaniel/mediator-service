@@ -5,7 +5,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Mission & Scope
 - Provide API endpoints and background workers to manage boxes, items, QR scans, and CSV imports.
 - Deliver a responsive React UI that surfaces search, detail, and import tooling for logistics teams.
-- Maintain printable label templates and legacy scripts required for production operations.
+- Maintain printable label payloads and legacy scripts required for production operations.
 
 ## Current Status
 - Backend and frontend share aligned TypeScript models and rely on dynamic action loading for API routes.

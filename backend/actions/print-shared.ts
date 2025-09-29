@@ -11,7 +11,6 @@ export interface PrintLogEventRunner {
 }
 
 export interface BuildPrintPayloadOptions<PayloadBase extends Record<string, unknown>> {
-  templatePath: string;
   payloadBase: PayloadBase;
   entityType: string;
   entityId: string;
@@ -31,15 +30,10 @@ export interface PrintPayloadExtras {
   qrMargin: number;
 }
 
-export interface BuildPrintPayloadResult<PayloadBase extends Record<string, unknown>> {
-  template: string;
-  payload: PayloadBase & PrintPayloadExtras;
-}
-
 export function buildPrintPayload<PayloadBase extends Record<string, unknown>>(
   options: BuildPrintPayloadOptions<PayloadBase>
-): BuildPrintPayloadResult<PayloadBase> {
-  const { templatePath, payloadBase, entityType, entityId, labelName, logContext, logEvent } = options;
+): { format: 'inline-html'; payload: PayloadBase & PrintPayloadExtras } {
+  const { payloadBase, entityType, entityId, labelName, logContext, logEvent } = options;
   const logger = options.logger ?? console;
 
   let qrDataUri: string | null = null;
@@ -82,7 +76,7 @@ export function buildPrintPayload<PayloadBase extends Record<string, unknown>>(
       EntityType: entityType,
       EntityId: entityId,
       Event: 'PrintPayloadPrepared',
-      Meta: JSON.stringify({ template: templatePath })
+      Meta: JSON.stringify({ format: 'inline-html' })
     });
   } catch (logErr) {
     const context = logContext ?? `${labelName} preparation`;
@@ -92,8 +86,5 @@ export function buildPrintPayload<PayloadBase extends Record<string, unknown>>(
     });
   }
 
-  return {
-    template: templatePath,
-    payload
-  };
+  return { format: 'inline-html', payload };
 }

@@ -26,31 +26,16 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
       if (!res.ok) {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
-      if (!data.template || !data.payload) {
+      if (data.format && data.format !== 'inline-html') {
+        throw new Error(`Unbekanntes Druckformat: ${data.format}`);
+      }
+      if (!data.payload) {
         throw new Error('Antwort unvollständig.');
       }
 
-      // const result = openPrintLabel(data.template, data.payload);
-      // setStatus(result.status);
-      // if (!result.success) {
-      let key: string | null = null;
-      try {
-        key = `print:payload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-        sessionStorage.setItem(key, JSON.stringify(data.payload));
-      } catch (storageErr) {
-        console.error('Failed to cache print payload', storageErr);
-        key = null;
-      }
-
-      const target = key
-        ? `${data.template}?key=${encodeURIComponent(key)}`
-        : data.template;
-      const win = window.open(target);//, '_blank', 'noopener');
-      if (!win) {
-        if (key) {
-          sessionStorage.removeItem(key);
-        }
-        setStatus('Pop-ups blockiert? Bitte erlauben, um Etikett zu öffnen.');
+      const result = openPrintLabel(data.payload);
+      setStatus(result.status);
+      if (!result.success) {
         return;
       }
     } catch (err) {

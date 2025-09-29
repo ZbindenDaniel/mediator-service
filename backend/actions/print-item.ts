@@ -30,7 +30,6 @@ const action: Action = {
         return sendJson(res, 404, { error: 'item not found' });
       }
 
-      const templatePath = '/print/item-label.html';
       try {
         const payloadBase = {
           id: item.ItemUUID,
@@ -39,8 +38,7 @@ const action: Action = {
           location: item.Location || null
         } satisfies Omit<ItemLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'>;
 
-        const { template, payload } = buildPrintPayload({
-          templatePath,
+        const { format, payload } = buildPrintPayload({
           payloadBase,
           entityType: 'Item',
           entityId: item.ItemUUID,
@@ -50,10 +48,10 @@ const action: Action = {
           logger: console
         });
 
-        return sendJson(res, 200, { template, payload });
+        return sendJson(res, 200, { format, payload });
       } catch (err) {
         console.error('Failed to prepare item label payload', { id: item.ItemUUID, error: err });
-        return sendJson(res, 500, { error: 'failed to prepare template' });
+        return sendJson(res, 500, { error: 'failed to prepare print payload' });
       }
     } catch (err) {
       console.error('Print item failed', err);

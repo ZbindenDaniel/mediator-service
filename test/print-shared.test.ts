@@ -51,7 +51,6 @@ describe('buildPrintPayload', () => {
     const logEvent = createLogEventRecorder();
 
     const result = buildPrintPayload({
-      templatePath: '/print/box-label.html',
       payloadBase,
       entityType: 'Box',
       entityId: payloadBase.id,
@@ -71,7 +70,7 @@ describe('buildPrintPayload', () => {
       }
     });
 
-    expect(result.template).toBe('/print/box-label.html');
+    expect(result.format).toBe('inline-html');
     expect(result.payload.qrDataUri).toBe('data:image/png;base64,box');
     expect(result.payload.qrModules).toEqual(qrResult.modules);
     expect(result.payload.qrMargin).toBe(4);
@@ -85,7 +84,7 @@ describe('buildPrintPayload', () => {
       EntityType: 'Box',
       EntityId: payloadBase.id,
       Event: 'PrintPayloadPrepared',
-      Meta: JSON.stringify({ template: '/print/box-label.html' })
+      Meta: JSON.stringify({ format: 'inline-html' })
     });
     expect(logger.errors.length).toBe(0);
   });
@@ -106,7 +105,6 @@ describe('buildPrintPayload', () => {
 
     const logger = createLogger();
     const result = buildPrintPayload({
-      templatePath: '/print/item-label.html',
       payloadBase,
       entityType: 'Item',
       entityId: payloadBase.id,
@@ -140,7 +138,6 @@ describe('buildPrintPayload', () => {
     const logEvent = createLogEventRecorder();
 
     const result = buildPrintPayload({
-      templatePath: '/print/box-label.html',
       payloadBase,
       entityType: 'Box',
       entityId: payloadBase.id,

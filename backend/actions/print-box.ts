@@ -2,8 +2,6 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Box, BoxLabelPayload } from '../../models';
 import { buildPrintPayload } from './print-shared';
-import { generate, renderFromMatrix } from 'qrcode';
-
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -31,7 +29,6 @@ const action: Action = {
         return sendJson(res, 404, { error: 'box not found' });
       }
 
-      const templatePath = '/print/box-label.html';
       try {
         const payloadBase = {
           id: box.BoxID,
@@ -41,8 +38,7 @@ const action: Action = {
           placedAt: box.PlacedAt || null
         } satisfies Omit<BoxLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'>;
 
-        const { template, payload } = buildPrintPayload({
-          templatePath,
+        const { format, payload } = buildPrintPayload({
           payloadBase,
           entityType: 'Box',
           entityId: box.BoxID,
@@ -52,10 +48,10 @@ const action: Action = {
           logger: console
         });
 
-        return sendJson(res, 200, { template, payload });
+        return sendJson(res, 200, { format, payload });
       } catch (err) {
         console.error('Failed to prepare box label payload', { id: box.BoxID, error: err });
-        return sendJson(res, 500, { error: 'failed to prepare template' });
+        return sendJson(res, 500, { error: 'failed to prepare print payload' });
       }
     } catch (err) {
       console.error('Print box failed', err);

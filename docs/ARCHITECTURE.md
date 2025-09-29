@@ -17,7 +17,7 @@ This document details the structure and data flow of the mediator service across
 ### Responsibilities
 - Maintain transactional data integrity when moving, importing, or deleting boxes and items.
 - Persist agentic run metadata, image uploads, and QR scan events.
-- Provide HTML payloads and JSON data for printable labels while delegating rendering to frontend templates.
+- Provide JSON payloads for printable labels; the frontend renders inline preview pages without dedicated templates.
 
 ## Frontend (`frontend/`)
 
@@ -26,7 +26,7 @@ This document details the structure and data flow of the mediator service across
 - Routing handled by `react-router-dom`.
 
 ### Directory Structure
-- `public/` – static assets (`index.html`, bundled JS/CSS) plus standalone `print/` templates for box and item labels.
+- `public/` – static assets (`index.html`, bundled JS/CSS) served directly without separate print templates.
 - `src/` – React application source.
   - `components/` – UI modules such as `Layout`, `Header`, `App`, `LandingPage`, `BoxDetail`, `ItemDetail`, `ItemEdit`, `ImportCard`, `PrintLabelButton`, `QrScannerPage`, and dialogs supporting CSV import/export and agentic workflows.
   - `styles.css` – shared styling entry point.
@@ -52,4 +52,4 @@ This document details the structure and data flow of the mediator service across
 ## External Integrations
 - CSV import/export interacts with file system and database storage.
 - QR scanning leverages camera APIs within the browser and logs scans server-side.
-- Printing flows generate HTML templates consumed by external label printers.
+- Printing flows open a dynamically generated inline preview where the browser print dialog is used.
