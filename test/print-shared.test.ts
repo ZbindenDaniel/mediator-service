@@ -39,14 +39,12 @@ describe('buildPrintPayload', () => {
       placedAt: null
     };
 
-    const qrResult = {
-      modules: [[true, false]],
-      options: { margin: 4, scale: 8, ecc: 0 },
-      text: JSON.stringify(payloadBase)
-    };
+    const matrix = [
+      [true, false],
+      [false, true]
+    ];
 
-    const generateCalls: unknown[][] = [];
-    const renderCalls: unknown[][] = [];
+    const createCalls: unknown[][] = [];
     const logger = createLogger();
     const logEvent = createLogEventRecorder();
 
@@ -60,25 +58,26 @@ describe('buildPrintPayload', () => {
       logEvent,
       logger: logger.logger,
       qr: {
-        generate: (text, options) => {
-          generateCalls.push([text, options]);
-          return qrResult;
-        },
-        renderFromMatrix: (modules, options) => {
-          renderCalls.push([modules, options]);
-          return 'data:image/png;base64,box';
+        create: (text, options) => {
+          createCalls.push([text, options]);
+          return {
+            modules: {
+              size: matrix.length,
+              get: (row: number, column: number) => matrix[row][column]
+            },
+            options: { margin: 4 }
+          };
         }
       }
     });
 
     expect(result.template).toBe('/print/box-label.html');
-    expect(result.payload.qrDataUri).toBe('data:image/png;base64,box');
-    expect(result.payload.qrModules).toEqual(qrResult.modules);
+    expect(result.payload.qrDataUri).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(result.payload.qrModules).toEqual(matrix);
     expect(result.payload.qrMargin).toBe(4);
-    expect(generateCalls.length).toBe(1);
-    expect(generateCalls[0][0]).toBe(JSON.stringify(payloadBase));
-    expect(generateCalls[0][1]).toEqual({ errorCorrectionLevel: 'M', margin: 4, scale: 8 });
-    expect(renderCalls.length).toBe(1);
+    expect(createCalls.length).toBe(1);
+    expect(createCalls[0][0]).toBe(JSON.stringify(payloadBase));
+    expect(createCalls[0][1]).toEqual({ margin: 4 });
     expect(logEvent.calls.length).toBe(1);
     expect(logEvent.calls[0]).toEqual({
       Actor: null,
@@ -98,12 +97,7 @@ describe('buildPrintPayload', () => {
       location: 'L-1'
     };
 
-    const qrResult = {
-      modules: [[true]],
-      options: { margin: 2, scale: 4, ecc: 0 },
-      text: JSON.stringify(payloadBase)
-    };
-
+    const matrix = [[true]];
     const logger = createLogger();
     const result = buildPrintPayload({
       templatePath: '/print/item-label.html',
@@ -115,15 +109,20 @@ describe('buildPrintPayload', () => {
       logEvent: createLogEventRecorder(),
       logger: logger.logger,
       qr: {
-        generate: () => qrResult,
-        renderFromMatrix: () => 'data:image/png;base64,item'
+        create: () => ({
+          modules: {
+            size: matrix.length,
+            get: (row: number, column: number) => matrix[row][column]
+          },
+          options: { margin: 2 }
+        })
       }
     });
 
     expect(result.payload.id).toBe(payloadBase.id);
     expect(result.payload.articleNumber).toBe('100');
-    expect(result.payload.qrDataUri).toBe('data:image/png;base64,item');
-    expect(result.payload.qrModules).toEqual(qrResult.modules);
+    expect(result.payload.qrDataUri).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(result.payload.qrModules).toEqual(matrix);
     expect(result.payload.qrMargin).toBe(2);
   });
 
@@ -149,7 +148,7 @@ describe('buildPrintPayload', () => {
       logEvent,
       logger: logger.logger,
       qr: {
-        generate: () => {
+        create: () => {
           throw new Error('QR fail');
         }
       }
