@@ -32,7 +32,6 @@ import {
   getMaxBoxId,
   getMaxItemId,
   getMaxArtikelNummer,
-  getAgenticRunForItem,
   updateAgenticReview,
   listItems,
   decrementItemStock,
@@ -149,7 +148,6 @@ type ActionContext = {
   getMaxBoxId: typeof getMaxBoxId;
   getMaxItemId: typeof getMaxItemId;
   getMaxArtikelNummer: typeof getMaxArtikelNummer;
-  getAgenticRunForItem: typeof getAgenticRunForItem;
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
@@ -186,7 +184,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     }
 
     if (url.pathname === '/bundle.css' && req.method === 'GET') {
-      const bundlePath = path.join(PUBLIC_DIR, 'bundle.css');
+      const bundlePath = '';// path.join(PUBLIC_DIR, 'bundle.css');
       const legacyPath = path.join(PUBLIC_DIR, 'styles.css');
       try {
         let stylesheetPath: string | undefined;
@@ -241,6 +239,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     }
 
     if (url.pathname.startsWith('/media/') && req.method === 'GET') {
+      console.log('Serving media asset', url.pathname);
       const p = path.join(MEDIA_DIR, url.pathname.slice('/media/'.length));
       try {
         if (!p.startsWith(MEDIA_DIR)) throw new Error('bad path');
@@ -307,7 +306,6 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getMaxBoxId,
           getMaxItemId,
           getMaxArtikelNummer,
-          getAgenticRunForItem,
           updateAgenticReview,
           INBOX_DIR,
           PUBLIC_DIR,

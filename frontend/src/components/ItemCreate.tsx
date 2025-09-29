@@ -7,6 +7,11 @@ import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
 import type { ItemFormData } from './forms/itemFormShared';
 
+type AgenticEnv = typeof globalThis & {
+  AGENTIC_API_BASE?: string;
+  process?: { env?: Record<string, string | undefined> };
+};
+
 export default function ItemCreate() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -332,6 +337,7 @@ export default function ItemCreate() {
     await handleSubmit(mergedData);
   }
 
+  console.log(`Rendering item create form (step ${step})`, shouldUseAgenticForm);
   if (shouldUseAgenticForm) {
     return (
       <ItemForm_Agentic

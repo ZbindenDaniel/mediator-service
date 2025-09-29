@@ -7,6 +7,7 @@ import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun } from '../lib/agentic';
+import ItemMediaGallery from './ItemMediaGallery';
 
 interface Props {
   itemId: string;
@@ -18,6 +19,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
+  const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
@@ -32,25 +34,32 @@ export default function ItemDetail({ itemId }: Props) {
           setItem(data.item);
           setEvents(data.events || []);
           setAgentic(data.agentic ?? null);
+          const media = Array.isArray(data.media)
+            ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
+            : [];
+          setMediaAssets(media);
           setAgenticError(null);
         } else {
           console.error('Failed to fetch item', res.status);
           setAgentic(null);
           setAgenticError('Agentic-Status konnte nicht geladen werden.');
+          setMediaAssets([]);
         }
       } catch (err) {
         console.error('Failed to fetch item', err);
         setAgentic(null);
         setAgenticError('Agentic-Status konnte nicht geladen werden.');
+        setMediaAssets([]);
       }
     }
     load();
   }, [itemId]);
 
-  const agenticNeedsReview = agentic ? Number(agentic.NeedsReview) > 0 : false;
+  const agenticNeedsReview = agentic ? (agentic.ReviewState || '').toLowerCase() === 'pending' : false;
   const normalizedAgenticStatus = (agentic?.Status || '').toLowerCase();
-  const agenticHasFailure =
-    !agentic || Boolean(agentic?.FailedAt) || ['failed', 'error', 'errored'].includes(normalizedAgenticStatus);
+  const agenticHasFailure = !agentic
+    ? true
+    : ['failed', 'error', 'errored'].includes(normalizedAgenticStatus);
 
   function agenticStatusDisplay(run: AgenticRun | null): {
     label: string;
@@ -69,7 +78,7 @@ export default function ItemDetail({ itemId }: Props) {
     let label = run.Status || 'Unbekannt';
     let description = '';
 
-    if (run.FailedAt || ['failed', 'error'].includes(normalized)) {
+    if (['failed', 'error', 'errored'].includes(normalized)) {
       variant = 'error';
       label = 'Fehler';
       description = 'Der agentische Durchlauf ist fehlgeschlagen.';
@@ -82,10 +91,18 @@ export default function ItemDetail({ itemId }: Props) {
       label = 'Wartet';
       description = 'Der agentische Durchlauf wartet auf Ausführung.';
     } else if (['completed', 'done', 'success'].includes(normalized)) {
-      if (Number(run.NeedsReview) > 0) {
+      if ((run.ReviewState || '').toLowerCase() === 'pending') {
         variant = 'pending';
         label = 'Fertig (Review offen)';
         description = 'Das Ergebnis wartet auf Freigabe.';
+      } else if ((run.ReviewState || '').toLowerCase() === 'approved') {
+        variant = 'success';
+        label = 'Fertig (Freigegeben)';
+        description = 'Das Ergebnis wurde freigegeben.';
+      } else if ((run.ReviewState || '').toLowerCase() === 'rejected') {
+        variant = 'error';
+        label = 'Fertig (Abgelehnt)';
+        description = 'Das Ergebnis wurde abgelehnt.';
       } else {
         variant = 'success';
         label = 'Fertig';
@@ -220,22 +237,23 @@ export default function ItemDetail({ itemId }: Props) {
 
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticRows: [string, React.ReactNode][] = [];
-  if (agentic?.TriggeredAt) agenticRows.push(['Ausgelöst', formatDateTime(agentic.TriggeredAt)]);
-  if (agentic?.StartedAt) agenticRows.push(['Gestartet', formatDateTime(agentic.StartedAt)]);
-  if (agentic?.CompletedAt) agenticRows.push(['Abgeschlossen', formatDateTime(agentic.CompletedAt)]);
-  if (agentic?.FailedAt) agenticRows.push(['Fehlerzeit', formatDateTime(agentic.FailedAt)]);
-  if (agentic?.ReviewedBy)
-    agenticRows.push([
-      'Geprüft von',
-      `${agentic.ReviewedBy}${agentic.ReviewedAt ? ` (${formatDateTime(agentic.ReviewedAt)})` : ''}`
-    ]);
-  if (agentic?.ReviewDecision)
-    agenticRows.push([
-      'Entscheid',
-      agentic.ReviewDecision === 'approved' ? 'Freigegeben' : 'Abgelehnt'
-    ]);
-  if (agentic?.ReviewNotes)
-    agenticRows.push(['Notizen', agentic.ReviewNotes]);
+  if (agentic?.LastModified) {
+    agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
+  }
+  if (agentic?.ReviewState) {
+    const reviewStateNormalized = agentic.ReviewState.toLowerCase();
+    let reviewLabel = 'Nicht erforderlich';
+    if (reviewStateNormalized === 'pending') reviewLabel = 'Ausstehend';
+    else if (reviewStateNormalized === 'approved') reviewLabel = 'Freigegeben';
+    else if (reviewStateNormalized === 'rejected') reviewLabel = 'Abgelehnt';
+    else if (reviewStateNormalized && reviewStateNormalized !== 'not_required') {
+      reviewLabel = agentic.ReviewState;
+    }
+    agenticRows.push(['Review-Status', reviewLabel]);
+  }
+  if (agentic?.ReviewedBy) {
+    agenticRows.push(['Geprüft von', agentic.ReviewedBy]);
+  }
 
   async function handleDelete() {
     if (!item) return;
@@ -267,6 +285,14 @@ export default function ItemDetail({ itemId }: Props) {
           <>
             <div className="card">
               <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
+              <section className="item-media-section">
+                <h3>Medien</h3>
+                <ItemMediaGallery
+                  itemId={item.ItemUUID}
+                  grafikname={item.Grafikname}
+                  mediaAssets={mediaAssets}
+                />
+              </section>
               <div className='row'>
 
                 <table className="details">
@@ -329,7 +355,6 @@ export default function ItemDetail({ itemId }: Props) {
                 <span className={agenticStatus.className}>{agenticStatus.label}</span>
               </div>
               <p className="muted">{agenticStatus.description}</p>
-              {agentic?.Summary ? <p>{agentic.Summary}</p> : null}
               {agenticRows.length > 0 ? (
                 <table className="details">
                   <tbody>
