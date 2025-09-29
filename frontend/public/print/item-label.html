@@ -271,20 +271,13 @@
           console.warn('Warte auf Payload via postMessage…');
         }
 
-        const qrScript = document.createElement('script');
-        qrScript.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';
-        qrScript.async = true;
-        qrScript.onload = function () {
-          state.qrReady = true;
-          if (state.payload) {
-            render(state.payload);
-          }
-        };
-        qrScript.onerror = function (err) {
-          console.error('QR library failed to load in item-label', err);
-          showError('QR-Bibliothek konnte nicht geladen werden.');
-        };
-        document.head.appendChild(qrScript);
+        state.qrReady = true;
+        if (!state.payload) {
+          console.info('QR renderer initialisiert, warte auf Payload…');
+        } else {
+          console.info('QR renderer aktiv – render erneut mit vorhandenem Payload.');
+          render(state.payload);
+        }
       })();
     </script>
   </body>
