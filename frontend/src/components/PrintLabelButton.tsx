@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { openPrintLabel } from '../lib/printLabel';
 import { getUser } from '../lib/user';
 
 interface Props {
@@ -7,40 +8,17 @@ interface Props {
   itemId?: string;
 }
 
-function base64ToBlob(base64: string, contentType: string): Blob {
-  try {
-    const binary = atob(base64);
-    const length = binary.length;
-    const bytes = new Uint8Array(length);
-    for (let i = 0; i < length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return new Blob([bytes], { type: contentType });
-  } catch (err) {
-    console.error('Failed to convert base64 to Blob', err);
-    throw err;
-  }
-}
-
 export default function PrintLabelButton({ boxId, itemId }: Props) {
   const [status, setStatus] = useState('');
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [fileName, setFileName] = useState('etikett.pdf');
-
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [previewUrl]);
 
   async function handleClick(event: React.MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
     if (!boxId && !itemId) {
       setStatus('Keine ID angegeben.');
+      console.warn('Print aborted: missing id for print label button');
       return;
     }
+
     try {
       setStatus('Lade Etikett…');
       const actor = getUser().trim();
@@ -49,76 +27,72 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         setStatus('Kein Benutzername hinterlegt. Bitte im Kopfbereich doppelklicken, um ihn zu setzen.');
         return;
       }
+
       const url = boxId
         ? `/api/print/box/${encodeURIComponent(boxId)}`
         : `/api/print/item/${encodeURIComponent(itemId || '')}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-      if (typeof data.pdfBase64 !== 'string' || !data.pdfBase64.trim()) {
-        throw new Error('Antwort ohne PDF erhalten.');
-      }
 
-      const sanitizedFileName = typeof data.fileName === 'string' && data.fileName.trim()
-        ? data.fileName.trim()
-        : boxId
-        ? `box-${boxId}.pdf`
-        : itemId
-        ? `item-${itemId}.pdf`
-        : 'etikett.pdf';
-
-      let blob: Blob;
+      let response: Response;
       try {
-        blob = base64ToBlob(data.pdfBase64.trim(), 'application/pdf');
-      } catch (blobErr) {
-        throw new Error('PDF konnte nicht erstellt werden.');
-      }
-
-      const url = URL.createObjectURL(blob);
-      setPreviewUrl((prev) => {
-        if (prev) {
-          URL.revokeObjectURL(prev);
-        }
-        return url;
-      });
-      setFileName(sanitizedFileName);
-
-      const popup = window.open(url, '_blank', 'noopener');
-      if (!popup) {
-        console.warn('PDF window blocked, providing manual link instead', {
-          boxId,
-          itemId,
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor })
         });
-        setStatus('PDF erstellt. Bitte Pop-up erlauben oder Link verwenden.');
+      } catch (networkErr) {
+        console.error('Print request failed to reach server', networkErr);
+        setStatus('Server nicht erreichbar. Bitte erneut versuchen.');
         return;
       }
-      setStatus('PDF geöffnet.');
+
+      let data: any = null;
       try {
-        popup.focus();
-      } catch (focusErr) {
-        console.warn('Unable to focus PDF window', focusErr);
+        data = await response.json();
+      } catch (parseErr) {
+        console.error('Failed to parse print response JSON', parseErr);
+        setStatus('Antwort des Servers ungültig.');
+        return;
       }
-      console.info('Label PDF generated and opened', {
-        boxId,
-        itemId,
-        fileName: sanitizedFileName,
-      });
+
+      if (!response.ok) {
+        const message = typeof data?.error === 'string' && data.error.trim()
+          ? data.error.trim()
+          : `HTTP ${response.status}`;
+        setStatus(`Fehler: ${message}`);
+        console.error('Print request rejected', { boxId, itemId, status: response.status, message });
+        return;
+      }
+
+      const template = typeof data?.template === 'string' ? data.template : '';
+      if (!template) {
+        console.error('Print response missing template', { boxId, itemId, data });
+        setStatus('Vorlage fehlt in der Antwort.');
+        return;
+      }
+
+      const payload = data?.payload;
+      if (!payload || typeof payload !== 'object') {
+        console.error('Print response missing payload', { boxId, itemId, data });
+        setStatus('Payload fehlt in der Antwort.');
+        return;
+      }
+
+      try {
+        const result = openPrintLabel(template, payload);
+        setStatus(result.status);
+        if (result.success) {
+          console.info('Print template opened successfully', { boxId, itemId, template });
+        } else {
+          console.warn('Print helper reported a warning', { boxId, itemId, template, status: result.status });
+        }
+      } catch (openErr) {
+        console.error('Failed to open print template', openErr);
+        setStatus('Druckfenster konnte nicht geöffnet werden.');
+      }
     } catch (err) {
-      console.error('Print failed', err);
+      console.error('Unexpected print failure', err);
       const message = err instanceof Error ? err.message : 'unbekannter Fehler';
       setStatus(`Fehler: ${message}`);
-      setPreviewUrl((prev) => {
-        if (prev) {
-          URL.revokeObjectURL(prev);
-        }
-        return '';
-      });
     }
   }
 
@@ -128,26 +102,7 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         <Link className="linkcard" onClick={handleClick} to="">
           <h3>Label drucken</h3>
         </Link>
-        {status && (
-          <div>
-            {status}
-            {previewUrl && (
-              <>
-                {' '}
-                –{' '}
-                <a
-                  className="mono"
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener"
-                  download={fileName}
-                >
-                  PDF öffnen
-                </a>
-              </>
-            )}
-          </div>
-        )}
+        {status && <div>{status}</div>}
       </div>
     </div>
   );
