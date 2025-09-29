@@ -57,6 +57,12 @@ export default function LandingPage() {
       <div className="grid landing-grid">
         <CreateItemCard />
         <SearchCard />
+        <div className="card">
+          <Link to="/scan" className="linkcard">
+            <h3>QR-Scanner</h3>
+            <p className="muted">Sollte der Scanner nicht laden, öffne <a href="/scan" target="_blank" rel="noopener">/scan</a> in einem neuen Tab.</p>
+          </Link>
+        </div>
         <StatsCard counts={overview?.counts} health={health} />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <RecentEventsCard events={overview?.recentEvents || []} />

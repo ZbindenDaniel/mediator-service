@@ -241,6 +241,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     }
 
     if (url.pathname.startsWith('/media/') && req.method === 'GET') {
+      console.log('Serving media asset', url.pathname);
       const p = path.join(MEDIA_DIR, url.pathname.slice('/media/'.length));
       try {
         if (!p.startsWith(MEDIA_DIR)) throw new Error('bad path');
