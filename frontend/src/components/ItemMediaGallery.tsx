@@ -117,17 +117,6 @@ export default function ItemMediaGallery({
                 src={asset.src}
                 alt={`${fallbackLabel} für Artikel ${itemId}`}
                 loading="lazy"
-                onError={() => {
-                  console.error('Failed to load media asset', { itemId, src: asset.src });
-                  setFailedSources((prev) => {
-                    if (prev.has(asset.src)) {
-                      return prev;
-                    }
-                    const updated = new Set(prev);
-                    updated.add(asset.src);
-                    return updated;
-                  });
-                }}
               />
             ) : (
               <div className="item-media-gallery__fallback" role="status">

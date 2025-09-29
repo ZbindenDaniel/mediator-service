@@ -21,11 +21,7 @@ export const BOX_COLORS: ReadonlyArray<BoxColorDefinition> = [
   { key: 'E', label: 'Türkis', hex: '#2ab7ca' },
   { key: 'F', label: 'Blau', hex: '#3b82f6' },
   { key: 'G', label: 'Violett', hex: '#7e57c2' },
-  { key: 'H', label: 'Pink', hex: '#e91e63' },
-  { key: 'I', label: 'Braun', hex: '#8d6e63' },
-  { key: 'J', label: 'Grau', hex: '#607d8b' },
-  { key: 'K', label: 'Schwarz', hex: '#212121' },
-  { key: 'L', label: 'Weiß', hex: '#f5f5f5' }
+  { key: 'H', label: 'Pink', hex: '#d8698eff' },
 ] as const;
 
 export const BOX_COLOR_KEYS: ReadonlyArray<string> = BOX_COLORS.map((color) => color.key);

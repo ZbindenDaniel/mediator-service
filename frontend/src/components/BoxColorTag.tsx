@@ -8,6 +8,7 @@ interface BoxColorTagProps {
 
 export default function BoxColorTag({ locationKey, className }: BoxColorTagProps) {
   const normalizedLocation = locationKey?.trim();
+  console.log('Rendering BoxColorTag', { locationKey, normalizedLocation });
 
   const colorOption = useMemo(() => {
     if (!normalizedLocation) {
@@ -48,7 +49,7 @@ export default function BoxColorTag({ locationKey, className }: BoxColorTagProps
         />
       ) : null}
       <span>
-        {colorOption ? `${normalizedLocation} · ${colorOption.label}` : normalizedLocation}
+        {colorOption ? `${colorOption.label}` : normalizedLocation}
       </span>
     </span>
   );

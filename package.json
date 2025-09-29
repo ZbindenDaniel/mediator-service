@@ -14,8 +14,8 @@
     "better-sqlite3": "^9.4.0",
     "chokidar": "^3.6.0",
     "csv-parse": "^5.5.6",
-    "qrcode": "file:vendor/qrcode",
     "npm": "^11.5.2",
+    "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.23.0",
@@ -28,6 +28,7 @@
     "@types/react-dom": "^18.2.0",
     "@types/react-router-dom": "^5.3.3",
     "jest": "^29.6.1",
+    "jest-environment-jsdom": "^29.6.1",
     "ts-jest": "^29.4.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Box, BoxLabelPayload } from '../../models';
+import { buildPrintPayload } from './print-shared';
 import { generate, renderFromMatrix } from 'qrcode';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -40,52 +41,18 @@ const action: Action = {
           placedAt: box.PlacedAt || null
         } satisfies Omit<BoxLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'>;
 
-        let qrDataUri: string | null = null;
-        let qrModules: boolean[][] | null = null;
-        let qrMargin = 4;
-        const serialized = JSON.stringify(payloadBase);
-        try {
-          const qr = generate(serialized, { errorCorrectionLevel: 'M', margin: 4, scale: 8 });
-          qrModules = qr.modules;
-          qrMargin = qr.options.margin;
-          try {
-            qrDataUri = renderFromMatrix(qr.modules, qr.options);
-          } catch (qrImageErr) {
-            console.error('Failed to render QR data URI for box label', {
-              id: box.BoxID,
-              error: qrImageErr
-            });
-          }
-        } catch (qrErr) {
-          console.error('Failed to generate QR matrix for box label', {
-            id: box.BoxID,
-            error: qrErr
-          });
-        }
+        const { template, payload } = buildPrintPayload({
+          templatePath,
+          payloadBase,
+          entityType: 'Box',
+          entityId: box.BoxID,
+          labelName: 'box label',
+          logContext: 'box print payload preparation',
+          logEvent: ctx.logEvent,
+          logger: console
+        });
 
-        const payload: BoxLabelPayload = {
-          ...payloadBase,
-          qrDataUri,
-          qrModules,
-          qrMargin
-        };
-
-        try {
-          ctx.logEvent.run({
-            Actor: null,
-            EntityType: 'Box',
-            EntityId: box.BoxID,
-            Event: 'PrintPayloadPrepared',
-            Meta: JSON.stringify({ template: templatePath })
-          });
-        } catch (logErr) {
-          console.error('Failed to log box print payload preparation', {
-            id: box.BoxID,
-            error: logErr
-          });
-        }
-
-        return sendJson(res, 200, { template: templatePath, payload });
+        return sendJson(res, 200, { template, payload });
       } catch (err) {
         console.error('Failed to prepare box label payload', { id: box.BoxID, error: err });
         return sendJson(res, 500, { error: 'failed to prepare template' });
