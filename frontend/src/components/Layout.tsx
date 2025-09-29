@@ -1,11 +1,14 @@
-import React, { ReactNode } from 'react';
+import React from 'react';
+import { Outlet } from 'react-router-dom';
 import Header from './Header';
 
-export default function Layout({ children }: { children: ReactNode }) {
+export default function Layout() {
   return (
     <div className="layout">
       <Header />
-      <main>{children}</main>
+      <main>
+        <Outlet />
+      </main>
     </div>
   );
 }

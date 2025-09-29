@@ -47,7 +47,7 @@ const action: Action = {
         return sendJson(res, 400, { error: 'actor is required' });
       }
 
-      const templatePath = '/print/item-label.html';
+      const templatePath = `/print?type=item&id=${encodeURIComponent(item.ItemID)}`;
       try {
         const payloadBase = {
           id: item.ItemUUID,

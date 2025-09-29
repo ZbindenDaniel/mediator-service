@@ -113,7 +113,7 @@ test('create item and retrieve via box and search', async () => {
   const printBox = await fetch(baseUrl + `/api/print/box/${boxId(1)}`, { method: 'POST' });
   expect(printBox.status).toBe(200);
   const boxPayload = await printBox.json();
-  expect(boxPayload.template).toBe('/print/box-label.html');
+  expect(boxPayload.template).toBe(`/print?type=box&id=${encodeURIComponent(boxId(1))}`);
   expect(!!boxPayload.payload).toBe(true);
   expect(boxPayload.payload.id).toBe(boxId(1));
   expect((boxPayload.payload.qrDataUri || '').startsWith('data:image/png;base64,')).toBe(true);
@@ -123,7 +123,7 @@ test('create item and retrieve via box and search', async () => {
   const printItem = await fetch(baseUrl + `/api/print/item/${itemId(1)}`, { method: 'POST' });
   expect(printItem.status).toBe(200);
   const itemPayload = await printItem.json();
-  expect(itemPayload.template).toBe('/print/item-label.html');
+  expect(itemPayload.template).toBe(`/print?type=item&id=${encodeURIComponent(itemId(1))}`);
   expect(!!itemPayload.payload).toBe(true);
   expect(itemPayload.payload.id).toBe(itemId(1));
   expect((itemPayload.payload.qrDataUri || '').startsWith('data:image/png;base64,')).toBe(true);

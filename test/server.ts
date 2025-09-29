@@ -319,7 +319,7 @@ const server = http.createServer(async (req, res) => {
       if (type === 'box') {
         ensureBox(id);
         return sendJson(res, 200, {
-          template: '/print/box-label.html',
+          template: `/print?type=box&id=${encodeURIComponent(id)}`,
           payload: attachQrMetadata({
             id,
             location: 'Testlager',
@@ -331,7 +331,7 @@ const server = http.createServer(async (req, res) => {
       }
       const fallbackBox = ensureBox('B-PRINT-0001', 'Testlager');
       return sendJson(res, 200, {
-        template: '/print/item-label.html',
+        template: `/print?type=item&id=${encodeURIComponent(id)}`,
         payload: attachQrMetadata({
           id,
           articleNumber: '00001',

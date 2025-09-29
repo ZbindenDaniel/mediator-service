@@ -9,6 +9,7 @@ import QrScannerPage from './QrScannerPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
 import ItemListPage from './ItemListPage';
+import PrintLabel from './PrintLabel';
 
 function BoxRoute() {
   const { boxId } = useParams();
@@ -33,8 +34,9 @@ function BoxEditRoute() {
 export default function App() {
   return (
     <Router>
-      <Layout>
-        <Routes>
+      <Routes>
+        <Route path="/print" element={<PrintLabel />} />
+        <Route element={<Layout />}>
           <Route path="/" element={<LandingPage />} />
           <Route path="/boxes/:boxId" element={<BoxRoute />} />
           <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />
@@ -43,8 +45,8 @@ export default function App() {
           <Route path="/items/:itemId" element={<ItemRoute />} />
           <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
           <Route path="/scan" element={<QrScannerPage />} />
-        </Routes>
-      </Layout>
+        </Route>
+      </Routes>
     </Router>
   );
 }

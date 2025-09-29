@@ -49,7 +49,7 @@ describe('buildPrintPayload', () => {
     const logEvent = createLogEventRecorder();
 
     const result = buildPrintPayload({
-      templatePath: '/print/box-label.html',
+      templatePath: `/print?type=box&id=${encodeURIComponent(payloadBase.id)}`,
       payloadBase,
       entityType: 'Box',
       entityId: payloadBase.id,
@@ -71,7 +71,7 @@ describe('buildPrintPayload', () => {
       }
     });
 
-    expect(result.template).toBe('/print/box-label.html');
+    expect(result.template).toBe(`/print?type=box&id=${encodeURIComponent(payloadBase.id)}`);
     expect(result.payload.qrDataUri).toMatch(/^data:image\/svg\+xml;base64,/);
     expect(result.payload.qrModules).toEqual(matrix);
     expect(result.payload.qrMargin).toBe(4);
@@ -84,7 +84,7 @@ describe('buildPrintPayload', () => {
       EntityType: 'Box',
       EntityId: payloadBase.id,
       Event: 'PrintPayloadPrepared',
-      Meta: JSON.stringify({ template: '/print/box-label.html' })
+      Meta: JSON.stringify({ template: `/print?type=box&id=${encodeURIComponent(payloadBase.id)}` })
     });
     expect(logger.errors.length).toBe(0);
   });
@@ -100,7 +100,7 @@ describe('buildPrintPayload', () => {
     const matrix = [[true]];
     const logger = createLogger();
     const result = buildPrintPayload({
-      templatePath: '/print/item-label.html',
+      templatePath: `/print?type=item&id=${encodeURIComponent(payloadBase.id)}`,
       payloadBase,
       entityType: 'Item',
       entityId: payloadBase.id,
@@ -139,7 +139,7 @@ describe('buildPrintPayload', () => {
     const logEvent = createLogEventRecorder();
 
     const result = buildPrintPayload({
-      templatePath: '/print/box-label.html',
+      templatePath: `/print?type=box&id=${encodeURIComponent(payloadBase.id)}`,
       payloadBase,
       entityType: 'Box',
       entityId: payloadBase.id,
@@ -175,7 +175,7 @@ describe('buildPrintPayload', () => {
     const logEvent = createLogEventRecorder();
 
     buildPrintPayload({
-      templatePath: '/print/box-label.html',
+      templatePath: `/print?type=box&id=${encodeURIComponent(payloadBase.id)}`,
       payloadBase,
       entityType: 'Box',
       entityId: payloadBase.id,

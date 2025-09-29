@@ -48,7 +48,6 @@ const actions = loadActions();
 const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
 const REPO_PUBLIC = path.join(__dirname, '../../..', 'frontend', 'public');
 export let PUBLIC_DIR = DIST_PUBLIC;
-export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'print');
 export const MEDIA_DIR = path.join(__dirname, '../../media');
 
 try {
@@ -60,8 +59,6 @@ try {
     : fs.existsSync(path.join(REPO_PUBLIC, 'index.html'))
     ? REPO_PUBLIC
     : DIST_PUBLIC;
-  PREVIEW_DIR = path.join(PUBLIC_DIR, 'print');
-  fs.mkdirSync(PREVIEW_DIR, { recursive: true });
   fs.mkdirSync(MEDIA_DIR, { recursive: true });
 } catch (err) {
   console.error('Failed to initialise directories', err);
@@ -210,32 +207,6 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
         res.writeHead(500);
         return res.end('Internal error');
       }
-    }
-
-    if (url.pathname.startsWith('/print/') && req.method === 'GET') {
-      const relativePrintPath = url.pathname.slice('/print/'.length);
-      const resolvedPrintPath = path.resolve(PREVIEW_DIR, relativePrintPath);
-      try {
-        if (!resolvedPrintPath.startsWith(PREVIEW_DIR)) {
-          throw new Error(`Invalid print path resolved: ${resolvedPrintPath}`);
-        }
-        if (fs.existsSync(resolvedPrintPath) && fs.statSync(resolvedPrintPath).isFile()) {
-          const ext = path.extname(resolvedPrintPath).toLowerCase();
-          const contentType =
-            ext === '.html'
-              ? 'text/html; charset=utf-8'
-              : ext === '.pdf'
-              ? 'application/pdf'
-              : 'application/octet-stream';
-          const fileContents = fs.readFileSync(resolvedPrintPath);
-          console.log('Serving print asset', resolvedPrintPath);
-          res.writeHead(200, { 'Content-Type': contentType });
-          return res.end(fileContents);
-        }
-      } catch (err) {
-        console.error('Failed to serve print template', err);
-      }
-      res.writeHead(404); return res.end('Not found');
     }
 
     if (url.pathname.startsWith('/media/') && req.method === 'GET') {

@@ -47,7 +47,7 @@ const action: Action = {
         return sendJson(res, 400, { error: 'actor is required' });
       }
 
-      const templatePath = '/print/box-label.html';
+      const templatePath = `/print?type=box&id=${encodeURIComponent(box.BoxID)}`;
       try {
         const payloadBase = {
           id: box.BoxID,
