@@ -35,11 +35,6 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 ## box detail
 
-## Printing
-
-- the label printing does not work at all. there have been changes in the last few merges. some for better some or worse. This needs urgent fixing.
-  - when printing the label first the QR code is not rendered (JSON only) and when reloding nothing is.
-
 ## Build & Tooling
 - `sass` CLI is required for tests and builds. When unavailable the build fails with `sh: 1: sass: not found`. Registry restrictions can block installation.
 

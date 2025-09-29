@@ -37,15 +37,27 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
       if (!res.ok) {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
-      if (!data.template || !data.payload) {
-        throw new Error('Antwort unvollständig.');
+      if (typeof data.template !== 'string' || !data.template.trim()) {
+        throw new Error('Ungültige Druckvorlage.');
+      }
+      if (data.payload === undefined) {
+        throw new Error('Antwort ohne Payload erhalten.');
       }
 
-      const result = openPrintLabel(data.template, data.payload);
+      const template = data.template.trim();
+      const payload = data.payload;
+      const result = openPrintLabel(template, payload);
       setStatus(result.status);
       if (!result.success) {
         console.warn('Print window could not be opened for payload', {
-          template: data.template,
+          template,
+          boxId,
+          itemId,
+        });
+      } else {
+        console.info('Label print flow initiated', {
+          template,
+          hasPayload: Boolean(payload),
           boxId,
           itemId,
         });

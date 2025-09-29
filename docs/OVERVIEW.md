@@ -32,6 +32,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Restored the end-to-end label printing flow, ensuring payload delivery to print templates and logging actor metadata.
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.
 - Wrapped removal and deletion in database transactions and added unit tests to verify item stock and box deletion logic.
