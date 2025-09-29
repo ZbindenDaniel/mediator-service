@@ -19,6 +19,7 @@ export interface BuildPrintPayloadOptions<PayloadBase extends Record<string, unk
   logContext?: string;
   logEvent: PrintLogEventRunner;
   logger?: Pick<typeof console, 'error' | 'warn'>;
+  actor?: string | null;
   qr?: {
     generate?: typeof generate;
     renderFromMatrix?: typeof renderFromMatrix;
@@ -40,6 +41,8 @@ export function buildPrintPayload<PayloadBase extends Record<string, unknown>>(
   options: BuildPrintPayloadOptions<PayloadBase>
 ): BuildPrintPayloadResult<PayloadBase> {
   const { templatePath, payloadBase, entityType, entityId, labelName, logContext, logEvent } = options;
+  const actorInput = typeof options.actor === 'string' ? options.actor : null;
+  const actor = actorInput ? actorInput.trim() || null : null;
   const logger = options.logger ?? console;
 
   let qrDataUri: string | null = null;
@@ -78,7 +81,7 @@ export function buildPrintPayload<PayloadBase extends Record<string, unknown>>(
 
   try {
     logEvent.run({
-      Actor: null,
+      Actor: actor,
       EntityType: entityType,
       EntityId: entityId,
       Event: 'PrintPayloadPrepared',

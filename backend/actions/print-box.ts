@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Box, BoxLabelPayload } from '../../models';
 import { buildPrintPayload } from './print-shared';
-import { generate, renderFromMatrix } from 'qrcode';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -31,6 +30,23 @@ const action: Action = {
         return sendJson(res, 404, { error: 'box not found' });
       }
 
+      let rawBody = '';
+      for await (const chunk of req) rawBody += chunk;
+      let actor = '';
+      if (rawBody) {
+        try {
+          const parsed = JSON.parse(rawBody);
+          actor = typeof parsed.actor === 'string' ? parsed.actor.trim() : '';
+        } catch (parseErr) {
+          console.error('Failed to parse box print request body', { id, error: parseErr });
+          return sendJson(res, 400, { error: 'invalid request body' });
+        }
+      }
+      if (!actor) {
+        console.warn('Missing actor for box print request', { id });
+        return sendJson(res, 400, { error: 'actor is required' });
+      }
+
       const templatePath = '/print/box-label.html';
       try {
         const payloadBase = {
@@ -49,7 +65,8 @@ const action: Action = {
           labelName: 'box label',
           logContext: 'box print payload preparation',
           logEvent: ctx.logEvent,
-          logger: console
+          logger: console,
+          actor
         });
 
         return sendJson(res, 200, { template, payload });

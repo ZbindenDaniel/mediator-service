@@ -162,5 +162,33 @@ describe('buildPrintPayload', () => {
     expect(logger.errors[0][0]).toBe('Failed to generate QR matrix for box label');
     expect((logger.errors[0][1] as { id: string }).id).toBe(payloadBase.id);
     expect(logEvent.calls.length).toBe(1);
+    expect((logEvent.calls[0] as { Actor: string | null }).Actor).toBeNull();
+  });
+
+  test('logs actor when provided', () => {
+    const payloadBase: Omit<BoxLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'> = {
+      id: 'B-actor',
+      location: 'Regal 1',
+      notes: null,
+      placedBy: null,
+      placedAt: null
+    };
+    const logEvent = createLogEventRecorder();
+
+    buildPrintPayload({
+      templatePath: '/print/box-label.html',
+      payloadBase,
+      entityType: 'Box',
+      entityId: payloadBase.id,
+      labelName: 'box label',
+      logEvent,
+      actor: '  Tester  '
+    });
+
+    expect(logEvent.calls.length).toBe(1);
+    expect(logEvent.calls[0]).toMatchObject({
+      Actor: 'Tester',
+      EntityId: payloadBase.id
+    });
   });
 });

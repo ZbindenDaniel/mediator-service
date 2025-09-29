@@ -30,6 +30,23 @@ const action: Action = {
         return sendJson(res, 404, { error: 'item not found' });
       }
 
+      let rawBody = '';
+      for await (const chunk of req) rawBody += chunk;
+      let actor = '';
+      if (rawBody) {
+        try {
+          const parsed = JSON.parse(rawBody);
+          actor = typeof parsed.actor === 'string' ? parsed.actor.trim() : '';
+        } catch (parseErr) {
+          console.error('Failed to parse item print request body', { id, error: parseErr });
+          return sendJson(res, 400, { error: 'invalid request body' });
+        }
+      }
+      if (!actor) {
+        console.warn('Missing actor for item print request', { id });
+        return sendJson(res, 400, { error: 'actor is required' });
+      }
+
       const templatePath = '/print/item-label.html';
       try {
         const payloadBase = {
@@ -47,7 +64,8 @@ const action: Action = {
           labelName: 'item label',
           logContext: 'item print payload preparation',
           logEvent: ctx.logEvent,
-          logger: console
+          logger: console,
+          actor
         });
 
         return sendJson(res, 200, { template, payload });
