@@ -56,6 +56,9 @@ describe('csv-import action', () => {
     const req = createRequest([Buffer.from('ItemUUID,BoxID\n1,2\n')], { 'x-filename': 'items.csv' });
     const res = new MockResponse();
 
+    if (action.handle === undefined) {
+      throw new Error('action.handle is undefined');
+    }
     await action.handle(
       req,
       res as unknown as ServerResponse,
@@ -78,6 +81,9 @@ describe('csv-import action', () => {
     );
     const res = new MockResponse();
 
+    if (action.handle === undefined) {
+      throw new Error('action.handle is undefined');
+    }
     await action.handle(
       req,
       res as unknown as ServerResponse,
@@ -95,6 +101,9 @@ describe('csv-import action', () => {
     const req = createRequest([zipSignature], { 'x-filename': 'not-csv.csv' });
     const res = new MockResponse();
 
+    if (action.handle === undefined) {
+      throw new Error('action.handle is undefined');
+    }
     await action.handle(
       req,
       res as unknown as ServerResponse,

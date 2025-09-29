@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import type { Item } from '../../../../models';
-import { getUser } from '../lib/user';
+import { getUser } from '../../lib/user';
 
 export interface ItemFormData extends Item {
   picture1?: string | null;

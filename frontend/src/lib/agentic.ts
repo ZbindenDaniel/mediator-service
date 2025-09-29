@@ -15,17 +15,18 @@ type AgenticEnv = typeof globalThis & {
 };
 
 export function resolveAgenticApiBase(): string | null {
-  try {
-    const globalScope = globalThis as AgenticEnv;
-    const candidate = globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE;
-    if (!candidate) {
-      return null;
-    }
-    return candidate.replace(/\/+$/, '');
-  } catch (err) {
-    console.error('Failed to resolve agentic API base URL', err);
-    return null;
-  }
+  return "Http://localhost:3000";
+  // try {
+  //   const globalScope = globalThis as AgenticEnv;
+  //   const candidate = globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE;
+  //   if (!candidate) {
+  //     return null;
+  //   }
+  //   return candidate.replace(/\/+$/, '');
+  // } catch (err) {
+  //   console.error('Failed to resolve agentic API base URL', err);
+  //   return null;
+  // }
 }
 
 export function buildAgenticRunUrl(agenticApiBase: string | null): string | null {

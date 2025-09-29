@@ -8,6 +8,7 @@ interface Props {
   onSubmit: (data: Partial<ItemFormData>) => Promise<void>;
   submitLabel: string;
   isNew?: boolean;
+  headerContent?: React.ReactNode;
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) {
@@ -56,9 +57,12 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
     [update]
   );
 
+  let headerContent = 'TODO!!';
+
   return (
     <div className='container item'>
       <div className="card">
+        {headerContent ? <div className="item-form__header">{headerContent}</div> : null}
         <form onSubmit={handleSubmit} className="item-form">
           <ItemDetailsFields
             form={form}
