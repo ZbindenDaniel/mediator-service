@@ -3,15 +3,8 @@ export interface AgenticRun {
   ItemUUID: string;
   SearchQuery: string | null;
   Status: string;
-  TriggeredAt: string | null;
-  StartedAt: string | null;
-  CompletedAt: string | null;
-  FailedAt: string | null;
-  Summary: string | null;
-  NeedsReview: number;
+  LastModified: string;
+  ReviewState: string;
   ReviewedBy: string | null;
-  ReviewedAt: string | null;
-  ReviewDecision: string | null;
-  ReviewNotes: string | null;
 }
 

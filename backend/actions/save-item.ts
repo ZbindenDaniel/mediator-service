@@ -58,7 +58,7 @@ const action: Action = {
         if (!item) return sendJson(res, 404, { error: 'Not found' });
         const box = ctx.getBox.get(item.BoxID);
         const events = ctx.listEventsForItem.all(itemId);
-        const agentic = ctx.getAgenticRunForItem ? ctx.getAgenticRunForItem.get(itemId) : null;
+        const agentic = ctx.getAgenticRun ? ctx.getAgenticRun.get(itemId) : null;
         const media = collectMediaAssets(itemId, item.Grafikname);
         return sendJson(res, 200, { item, box, events, agentic, media });
       } catch (err) {

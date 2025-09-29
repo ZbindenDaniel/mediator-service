@@ -25,7 +25,7 @@ const action: Action = {
 
     if (req.method === 'GET') {
       try {
-        const run = ctx.getAgenticRunForItem.get(itemId) || null;
+        const run = ctx.getAgenticRun.get(itemId) || null;
         return sendJson(res, 200, { agentic: run });
       } catch (err) {
         console.error('Fetch agentic status failed', err);
@@ -38,7 +38,7 @@ const action: Action = {
     }
 
     try {
-      const run = ctx.getAgenticRunForItem.get(itemId);
+      const run = ctx.getAgenticRun.get(itemId);
       if (!run) {
         return sendJson(res, 404, { error: 'Agentic run not found' });
       }
@@ -68,11 +68,9 @@ const action: Action = {
       try {
         const result = ctx.updateAgenticReview.run({
           ItemUUID: itemId,
-          NeedsReview: 0,
+          ReviewState: decision,
           ReviewedBy: actor,
-          ReviewedAt: reviewedAt,
-          ReviewDecision: decision,
-          ReviewNotes: notes
+          LastModified: reviewedAt
         });
         if (!result || result.changes === 0) {
           console.error('Agentic review update had no effect for', itemId);
@@ -96,7 +94,7 @@ const action: Action = {
       }
 
       try {
-        const updated = ctx.getAgenticRunForItem.get(itemId) || null;
+        const updated = ctx.getAgenticRun.get(itemId) || null;
         return sendJson(res, 200, { agentic: updated });
       } catch (err) {
         console.error('Failed to load updated agentic status', err);
