@@ -21,6 +21,7 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
       const url = boxId
         ? `/api/print/box/${encodeURIComponent(boxId)}`
         : `/api/print/item/${encodeURIComponent(itemId || '')}`;
+      // TODO: Include actor metadata in the print request body once the backend accepts it.
       const res = await fetch(url, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -30,28 +31,14 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         throw new Error('Antwort unvollständig.');
       }
 
-      // const result = openPrintLabel(data.template, data.payload);
-      // setStatus(result.status);
-      // if (!result.success) {
-      let key: string | null = null;
-      try {
-        key = `print:payload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-        sessionStorage.setItem(key, JSON.stringify(data.payload));
-      } catch (storageErr) {
-        console.error('Failed to cache print payload', storageErr);
-        key = null;
-      }
-
-      const target = key
-        ? `${data.template}?key=${encodeURIComponent(key)}`
-        : data.template;
-      const win = window.open(target);//, '_blank', 'noopener');
-      if (!win) {
-        if (key) {
-          sessionStorage.removeItem(key);
-        }
-        setStatus('Pop-ups blockiert? Bitte erlauben, um Etikett zu öffnen.');
-        return;
+      const result = openPrintLabel(data.template, data.payload);
+      setStatus(result.status);
+      if (!result.success) {
+        console.warn('Print window could not be opened for payload', {
+          template: data.template,
+          boxId,
+          itemId,
+        });
       }
     } catch (err) {
       console.error('Print failed', err);
