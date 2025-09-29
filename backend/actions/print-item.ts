@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Item, ItemLabelPayload } from '../../models';
 import { buildPrintPayload } from './print-shared';
+import { renderItemLabelPdf } from './print-pdf';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -56,7 +57,7 @@ const action: Action = {
           location: item.Location || null
         } satisfies Omit<ItemLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'>;
 
-        const { template, payload } = buildPrintPayload({
+        const { payload } = buildPrintPayload({
           templatePath,
           payloadBase,
           entityType: 'Item',
@@ -68,7 +69,19 @@ const action: Action = {
           actor
         });
 
-        return sendJson(res, 200, { template, payload });
+        let pdfBase64: string;
+        try {
+          const pdfBuffer = renderItemLabelPdf(payload, { logger: console });
+          pdfBase64 = pdfBuffer.toString('base64');
+        } catch (pdfErr) {
+          console.error('Failed to render item label PDF', { id: item.ItemUUID, error: pdfErr });
+          return sendJson(res, 500, { error: 'failed to render pdf' });
+        }
+
+        return sendJson(res, 200, {
+          pdfBase64,
+          fileName: `item-${item.ItemUUID}.pdf`
+        });
       } catch (err) {
         console.error('Failed to prepare item label payload', { id: item.ItemUUID, error: err });
         return sendJson(res, 500, { error: 'failed to prepare template' });

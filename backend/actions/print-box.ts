@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Box, BoxLabelPayload } from '../../models';
 import { buildPrintPayload } from './print-shared';
+import { renderBoxLabelPdf } from './print-pdf';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -57,7 +58,7 @@ const action: Action = {
           placedAt: box.PlacedAt || null
         } satisfies Omit<BoxLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'>;
 
-        const { template, payload } = buildPrintPayload({
+        const { payload } = buildPrintPayload({
           templatePath,
           payloadBase,
           entityType: 'Box',
@@ -69,7 +70,19 @@ const action: Action = {
           actor
         });
 
-        return sendJson(res, 200, { template, payload });
+        let pdfBase64: string;
+        try {
+          const pdfBuffer = renderBoxLabelPdf(payload, { logger: console });
+          pdfBase64 = pdfBuffer.toString('base64');
+        } catch (pdfErr) {
+          console.error('Failed to render box label PDF', { id: box.BoxID, error: pdfErr });
+          return sendJson(res, 500, { error: 'failed to render pdf' });
+        }
+
+        return sendJson(res, 200, {
+          pdfBase64,
+          fileName: `box-${box.BoxID}.pdf`
+        });
       } catch (err) {
         console.error('Failed to prepare box label payload', { id: box.BoxID, error: err });
         return sendJson(res, 500, { error: 'failed to prepare template' });
