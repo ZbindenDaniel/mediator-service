@@ -337,6 +337,7 @@ export default function ItemCreate() {
     await handleSubmit(mergedData);
   }
 
+  console.log(`Rendering item create form (step ${step})`, shouldUseAgenticForm);
   if (shouldUseAgenticForm) {
     return (
       <ItemForm_Agentic
