@@ -1,5 +1,15 @@
 export interface AgenticRunTriggerPayload {
+  itemId?: string | null;
+  artikelbeschreibung?: string | null;
+  /**
+   * @deprecated Temporary support for legacy payloads while the UI transitions to the
+   *             new agent service contract.
+   */
   id?: string | null;
+  /**
+   * @deprecated Temporary support for legacy payloads while the UI transitions to the
+   *             new agent service contract.
+   */
   search?: string | null;
 }
 
@@ -47,26 +57,57 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
     return;
   }
 
-  const itemId = typeof payload.id === 'string' ? payload.id.trim() : '';
+  const itemIdCandidate =
+    typeof payload.itemId === 'string' && payload.itemId.trim()
+      ? payload.itemId.trim()
+      : typeof payload.id === 'string' && payload.id.trim()
+        ? payload.id.trim()
+        : '';
+
+  const artikelbeschreibungCandidate =
+    typeof payload.artikelbeschreibung === 'string' && payload.artikelbeschreibung.trim()
+      ? payload.artikelbeschreibung.trim()
+      : typeof payload.search === 'string' && payload.search.trim()
+        ? payload.search.trim()
+        : '';
+
+  if (!artikelbeschreibungCandidate) {
+    console.warn(`Agentic trigger skipped (${context}): missing Artikelbeschreibung`);
+    return;
+  }
+
+  const itemId = itemIdCandidate;
   if (!itemId) {
     console.warn(`Agentic trigger skipped (${context}): missing ItemUUID`);
     return;
   }
 
-  const search = typeof payload.search === 'string' ? payload.search : '';
-  if (!search) {
-    console.warn(`Agentic trigger skipped (${context}): missing search term`);
-    return;
-  }
-
   try {
+    const body = {
+      item: {
+        Artikelbeschreibung: artikelbeschreibungCandidate,
+        ItemUUID: itemId
+      }
+    } as const;
+
     const response = await fetch(runUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: itemId, search })
+      body: JSON.stringify(body)
     });
     if (!response.ok) {
-      console.error(`Agentic trigger failed during ${context}`, response.status);
+      let errorDetails: unknown = null;
+      try {
+        errorDetails = await response.clone().json();
+      } catch (jsonErr) {
+        try {
+          errorDetails = await response.text();
+        } catch (textErr) {
+          errorDetails = { message: 'Failed to read response body', cause: textErr };
+        }
+        console.warn(`Agentic trigger failed during ${context}: non-JSON error payload`, jsonErr);
+      }
+      console.error(`Agentic trigger failed during ${context}`, response.status, errorDetails);
     }
   } catch (err) {
     console.error(`Agentic trigger invocation failed during ${context}`, err);

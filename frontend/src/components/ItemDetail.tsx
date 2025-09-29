@@ -7,6 +7,7 @@ import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun } from '../lib/agentic';
+import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 
 interface Props {
@@ -222,9 +223,13 @@ export default function ItemDetail({ itemId }: Props) {
         setAgenticError('Agentic-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
         return;
       }
+      const triggerPayload: AgenticRunTriggerPayload = {
+        itemId: refreshedRun.ItemUUID || item.ItemUUID,
+        artikelbeschreibung: searchTerm
+      };
       await triggerAgenticRun({
         runUrl: agenticRunUrl,
-        payload: { id: refreshedRun.ItemUUID || item.ItemUUID, search: searchTerm },
+        payload: triggerPayload,
         context: 'item detail restart'
       });
     } catch (err) {
