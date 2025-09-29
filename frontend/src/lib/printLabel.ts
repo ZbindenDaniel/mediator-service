@@ -40,7 +40,18 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     }
   }
   const activeStorage: Storage | null = storage ?? null;
-  const origin = options?.origin ?? (win.location ? win.location.origin : '*');
+  let origin = options?.origin;
+  if (!origin) {
+    try {
+      origin = win.location?.origin || '*';
+    } catch (originErr) {
+      logger.warn('Unable to resolve window origin for print payload delivery', originErr as Error);
+      origin = '*';
+    }
+  }
+  if (origin === 'null') {
+    origin = '*';
+  }
   const now = options?.now ?? Date.now;
   const random = options?.random ?? Math.random;
 
@@ -79,7 +90,7 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     };
   }
 
-  const message = { payload };
+  const message = { type: 'print:payload', payload };
   const post = () => {
     if (popup && popup.closed) return;
     try {
@@ -89,9 +100,65 @@ export function openPrintLabel(template: string, payload: unknown, options?: Pri
     }
   };
 
+  const handleRequest = (event: MessageEvent) => {
+    if (!popup || popup.closed) {
+      cleanupRequestListener();
+      return;
+    }
+    if (event.source !== popup) {
+      return;
+    }
+    let data: unknown = event.data;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (parseErr) {
+        logger.warn('Ignoring non-JSON string message from print window', parseErr);
+        return;
+      }
+    }
+    if (!data || typeof data !== 'object') {
+      return;
+    }
+    const type = (data as { type?: string }).type;
+    if (type === 'print:request-payload') {
+      post();
+    }
+  };
+
+  const cleanupRequestListener = () => {
+    try {
+      win.removeEventListener('message', handleRequest as EventListener);
+    } catch (removeErr) {
+      logger.warn('Failed to detach print payload request listener', removeErr as Error);
+    }
+  };
+
+  try {
+    win.addEventListener('message', handleRequest as EventListener);
+  } catch (listenErr) {
+    logger.warn('Unable to listen for print payload requests', listenErr as Error);
+  }
+
+  try {
+    const stopCheck = win.setInterval(() => {
+      if (!popup || popup.closed) {
+        cleanupRequestListener();
+        try {
+          win.clearInterval(stopCheck);
+        } catch (intervalErr) {
+          logger.warn('Failed to clear print payload request timer', intervalErr as Error);
+        }
+      }
+    }, 2000);
+  } catch (intervalErr) {
+    logger.warn('Unable to schedule print payload listener cleanup', intervalErr as Error);
+  }
+
   try {
     win.setTimeout(post, 100);
     win.setTimeout(post, 500);
+    win.setTimeout(post, 1000);
   } catch (timerErr) {
     logger.warn('Failed to schedule print payload delivery retries', timerErr);
     post();

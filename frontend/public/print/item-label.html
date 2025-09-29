@@ -122,7 +122,7 @@
     <div class="error" id="error" hidden></div>
     <script>
       (function init() {
-        const state = { payload: null };
+        const state = { payload: null, qrReady: false, requested: false };
         const errorEl = document.getElementById('error');
         const pageEl = document.getElementById('page');
         const qrCanvas = document.getElementById('qrCanvas');
@@ -266,14 +266,49 @@
           return false;
         }
 
+        function requestPayload() {
+          if (state.requested) {
+            return;
+          }
+          if (!window.opener) {
+            console.warn('Kein opener verfügbar, kann Payload nicht anfordern.');
+            return;
+          }
+          let targetOrigin = '*';
+          try {
+            targetOrigin = window.location?.origin || '*';
+          } catch (originErr) {
+            console.warn('Konnte Ursprungs-URL der Druckvorlage nicht bestimmen', originErr);
+          }
+          if (targetOrigin === 'null') {
+            targetOrigin = '*';
+          }
+          try {
+            window.opener.postMessage({ type: 'print:request-payload' }, targetOrigin);
+            state.requested = true;
+            console.info('Payload beim opener angefordert…');
+          } catch (err) {
+            console.error('Konnte Payload-Anfrage nicht an opener senden', err);
+          }
+        }
+
         function handleMessage(event) {
-          if (event.origin && event.origin !== window.location.origin) {
+          if (event.origin && event.origin !== 'null' && event.origin !== window.location.origin) {
             console.warn('Ignoring message from unexpected origin', event.origin);
             return;
           }
           try {
-            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-            if (data && data.payload) {
+            let data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            if (!data || typeof data !== 'object') {
+              return;
+            }
+            if ('type' in data && data.type !== 'print:payload' && data.type !== 'print:request-payload') {
+              return;
+            }
+            if (data.type === 'print:request-payload') {
+              return;
+            }
+            if ('payload' in data && data.payload) {
               render(data.payload);
             }
           } catch (err) {
@@ -282,17 +317,32 @@
           }
         }
 
-        window.addEventListener('message', handleMessage, { once: true });
+        try {
+          window.addEventListener('message', handleMessage);
+        } catch (err) {
+          console.error('Konnte Listener für postMessage nicht registrieren', err);
+        }
 
         const params = new URLSearchParams(window.location.search);
         const key = params.get('key');
         if (!tryFromStorage(key)) {
           console.warn('Warte auf Payload via postMessage…');
+          requestPayload();
         }
 
         state.qrReady = true;
         if (!state.payload) {
           console.info('QR renderer initialisiert, warte auf Payload…');
+          try {
+            window.setTimeout(() => {
+              if (!state.payload) {
+                state.requested = false;
+                requestPayload();
+              }
+            }, 1000);
+          } catch (err) {
+            console.warn('Konnte erneute Payload-Anfrage nicht planen', err);
+          }
         } else {
           console.info('QR renderer aktiv – render erneut mit vorhandenem Payload.');
           render(state.payload);
