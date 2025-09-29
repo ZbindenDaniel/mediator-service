@@ -5,13 +5,11 @@ import { getUser } from '../lib/user';
 import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
+import type { ItemFormData } from './forms/itemFormShared';
 
-type ItemFormData = Item & {
-  picture1?: string | null;
-  picture2?: string | null;
-  picture3?: string | null;
-  agenticStatus?: 'queued' | 'running';
-  agenticSearch?: string;
+type AgenticEnv = typeof globalThis & {
+  AGENTIC_API_BASE?: string;
+  process?: { env?: Record<string, string | undefined> };
 };
 
 export default function ItemCreate() {

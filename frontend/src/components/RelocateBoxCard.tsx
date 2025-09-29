@@ -9,8 +9,6 @@ interface Props {
 
 export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   const [selectedColor, setSelectedColor] = useState('');
-  const [rowSegment, setRowSegment] = useState('');
-  const [columnSegment, setColumnSegment] = useState('');
   const [status, setStatus] = useState('');
   const colorLookup = useMemo(() => new Map(BOX_COLORS.map(color => [color.key, color])), []);
 
@@ -21,8 +19,6 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   async function handle(e: React.FormEvent) {
     e.preventDefault();
     const colorKey = selectedColor.trim().toUpperCase();
-    const normalizedRow = normalizeSegment(rowSegment).padStart(2, '0');
-    const normalizedColumn = normalizeSegment(columnSegment).padStart(2, '0');
     const colorOption = colorLookup.get(colorKey);
 
     if (!colorOption) {
@@ -31,17 +27,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
       return;
     }
 
-    if (!rowSegment || !columnSegment) {
-      console.warn('Missing location segment(s) for relocation', {
-        boxId,
-        rowSegment,
-        columnSegment
-      });
-      setStatus('Reihe und Spalte angeben');
-      return;
-    }
-
-    const location = `${colorKey}-${normalizedRow}-${normalizedColumn}`;
+    const location = `${colorKey}`;
 
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}/move`, {
@@ -92,27 +78,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
                 </option>
               ))}
             </select>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="\\d{1,2}"
-              placeholder="Reihe"
-              value={rowSegment}
-              onChange={e => setRowSegment(normalizeSegment(e.target.value))}
-              required
-              style={{ width: '4rem' }}
-            />
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="\\d{1,2}"
-              placeholder="Spalte"
-              value={columnSegment}
-              onChange={e => setColumnSegment(normalizeSegment(e.target.value))}
-              required
-              style={{ width: '4rem' }}
-            />
-          </div>
+           </div>
 
           <div className='row'>
             <button type="submit">Verschieben</button>

@@ -388,12 +388,5 @@ export const listItems = db.prepare(
    ORDER BY i.ItemUUID`
 );
 
-export const listItemsForExport = db.prepare(
-  `SELECT * FROM items
-   WHERE (@createdAfter IS NULL OR Datum_erfasst >= @createdAfter)
-     AND (@updatedAfter IS NULL OR UpdatedAt >= @updatedAfter)
-   ORDER BY Datum_erfasst`
-);
-
 export type { AgenticRun, Box, Item, LabelJob, EventLog };
 

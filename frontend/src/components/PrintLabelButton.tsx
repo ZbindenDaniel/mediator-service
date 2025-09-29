@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { openPrintLabel } from '../lib/printLabel';
 
 interface Props {
   boxId?: string;
@@ -29,6 +30,9 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         throw new Error('Antwort unvollständig.');
       }
 
+      // const result = openPrintLabel(data.template, data.payload);
+      // setStatus(result.status);
+      // if (!result.success) {
       let key: string | null = null;
       try {
         key = `print:payload:${Date.now()}:${Math.random().toString(16).slice(2)}`;
@@ -41,7 +45,7 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
       const target = key
         ? `${data.template}?key=${encodeURIComponent(key)}`
         : data.template;
-      const win = window.open(target, '_blank', 'noopener');
+      const win = window.open(target);//, '_blank', 'noopener');
       if (!win) {
         if (key) {
           sessionStorage.removeItem(key);
@@ -49,31 +53,6 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         setStatus('Pop-ups blockiert? Bitte erlauben, um Etikett zu öffnen.');
         return;
       }
-
-      const origin = window.location.origin;
-      const message = { payload: data.payload };
-      const post = () => {
-        if (win.closed) return;
-        try {
-          win.postMessage(message, origin);
-        } catch (postErr) {
-          console.error('Failed to send print payload via postMessage', postErr);
-        }
-      };
-      setTimeout(post, 100);
-      setTimeout(post, 500);
-
-      try {
-        win.focus();
-      } catch (focusErr) {
-        console.warn('Unable to focus print window', focusErr);
-      }
-
-      setStatus(
-        key
-          ? 'Vorlage geöffnet. Bitte Druckdialog nutzen.'
-          : 'Vorlage geöffnet. Daten wurden direkt übertragen.'
-      );
     } catch (err) {
       console.error('Print failed', err);
       const message = err instanceof Error ? err.message : 'unbekannter Fehler';

@@ -4,6 +4,7 @@ import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
 import { getUser } from '../lib/user';
 import ItemForm_Agentic from './ItemForm_agentic';
+import ItemMediaGallery from './ItemMediaGallery';
 
 interface Props {
   itemId: string;
@@ -11,6 +12,7 @@ interface Props {
 
 export default function ItemEdit({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
+  const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,11 +22,17 @@ export default function ItemEdit({ itemId }: Props) {
         if (res.ok) {
           const data = await res.json();
           setItem(data.item);
+          const media = Array.isArray(data.media)
+            ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
+            : [];
+          setMediaAssets(media);
         } else {
           console.error('Failed to load item', res.status);
+          setMediaAssets([]);
         }
       } catch (err) {
         console.error('Failed to load item', err);
+        setMediaAssets([]);
       }
     }
     load();
@@ -38,6 +46,16 @@ export default function ItemEdit({ itemId }: Props) {
         body: JSON.stringify({ ...data, actor: getUser() })
       });
       if (res.ok) {
+        const payload = await res
+          .json()
+          .catch((err) => {
+            console.error('Failed to parse save item response', err);
+            return null;
+          });
+        if (payload && Array.isArray(payload.media)) {
+          const media = payload.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '');
+          setMediaAssets(media);
+        }
         navigate(`/items/${encodeURIComponent(itemId)}`);
       } else {
         console.error('Failed to save item', res.status);
@@ -49,5 +67,12 @@ export default function ItemEdit({ itemId }: Props) {
 
   if (!item) return <p>Loading...</p>;
 
-  return <ItemForm item={item} onSubmit={handleSubmit} submitLabel="Speichern" />;
+  const gallery = (
+    <section className="item-media-section">
+      <h3>Medien</h3>
+      <ItemMediaGallery itemId={item.ItemUUID} grafikname={item.Grafikname} mediaAssets={mediaAssets} />
+    </section>
+  );
+
+  return <ItemForm item={item} onSubmit={handleSubmit} submitLabel="Speichern" headerContent={gallery} />;
 }

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Item, ItemLabelPayload } from '../../models';
-import { generate, renderFromMatrix } from 'qrcode';
+import { buildPrintPayload } from './print-shared';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -39,52 +39,18 @@ const action: Action = {
           location: item.Location || null
         } satisfies Omit<ItemLabelPayload, 'qrDataUri' | 'qrModules' | 'qrMargin'>;
 
-        let qrDataUri: string | null = null;
-        let qrModules: boolean[][] | null = null;
-        let qrMargin = 4;
-        const serialized = JSON.stringify(payloadBase);
-        try {
-          const qr = generate(serialized, { errorCorrectionLevel: 'M', margin: 4, scale: 8 });
-          qrModules = qr.modules;
-          qrMargin = qr.options.margin;
-          try {
-            qrDataUri = renderFromMatrix(qr.modules, qr.options);
-          } catch (qrImageErr) {
-            console.error('Failed to render QR data URI for item label', {
-              id: item.ItemUUID,
-              error: qrImageErr
-            });
-          }
-        } catch (qrErr) {
-          console.error('Failed to generate QR matrix for item label', {
-            id: item.ItemUUID,
-            error: qrErr
-          });
-        }
+        const { template, payload } = buildPrintPayload({
+          templatePath,
+          payloadBase,
+          entityType: 'Item',
+          entityId: item.ItemUUID,
+          labelName: 'item label',
+          logContext: 'item print payload preparation',
+          logEvent: ctx.logEvent,
+          logger: console
+        });
 
-        const payload: ItemLabelPayload = {
-          ...payloadBase,
-          qrDataUri,
-          qrModules,
-          qrMargin
-        };
-
-        try {
-          ctx.logEvent.run({
-            Actor: null,
-            EntityType: 'Item',
-            EntityId: item.ItemUUID,
-            Event: 'PrintPayloadPrepared',
-            Meta: JSON.stringify({ template: templatePath })
-          });
-        } catch (logErr) {
-          console.error('Failed to log item print payload preparation', {
-            id: item.ItemUUID,
-            error: logErr
-          });
-        }
-
-        return sendJson(res, 200, { template: templatePath, payload });
+        return sendJson(res, 200, { template, payload });
       } catch (err) {
         console.error('Failed to prepare item label payload', { id: item.ItemUUID, error: err });
         return sendJson(res, 500, { error: 'failed to prepare template' });

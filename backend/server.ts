@@ -4,7 +4,7 @@ import http from 'http';
 import type { IncomingMessage, ServerResponse } from 'http';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
-import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR } from './config';
+import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR, CSV_MAX_UPLOAD_BYTES } from './config';
 import { ingestCsvFile } from './importer';
 import {
   db,
@@ -32,7 +32,6 @@ import {
   getMaxBoxId,
   getMaxItemId,
   getMaxArtikelNummer,
-  listItemsForExport,
   updateAgenticReview,
   listItems,
   decrementItemStock,
@@ -149,10 +148,10 @@ type ActionContext = {
   getMaxBoxId: typeof getMaxBoxId;
   getMaxItemId: typeof getMaxItemId;
   getMaxArtikelNummer: typeof getMaxArtikelNummer;
-  listItemsForExport: typeof listItemsForExport;
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
+  CSV_MAX_UPLOAD_BYTES: typeof CSV_MAX_UPLOAD_BYTES;
 };
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
@@ -185,13 +184,31 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     }
 
     if (url.pathname === '/bundle.css' && req.method === 'GET') {
-      const p = path.join(PUBLIC_DIR, 'styles.css');
+      const bundlePath = '';// path.join(PUBLIC_DIR, 'bundle.css');
+      const legacyPath = path.join(PUBLIC_DIR, 'styles.css');
       try {
-        const css = fs.readFileSync(p);
+        let stylesheetPath: string | undefined;
+        if (fs.existsSync(bundlePath)) {
+          stylesheetPath = bundlePath;
+        } else if (fs.existsSync(legacyPath)) {
+          console.warn('Falling back to styles.css for /bundle.css request.');
+          stylesheetPath = legacyPath;
+        } else {
+          console.warn('No stylesheet available for /bundle.css request.');
+        }
+
+        if (!stylesheetPath) {
+          res.writeHead(404);
+          return res.end('Not found');
+        }
+
+        const css = fs.readFileSync(stylesheetPath);
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
         return res.end(css);
-      } catch {
-        res.writeHead(404); return res.end('Not found');
+      } catch (err) {
+        console.error('Failed to serve bundle.css', err);
+        res.writeHead(500);
+        return res.end('Internal error');
       }
     }
 
@@ -222,6 +239,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     }
 
     if (url.pathname.startsWith('/media/') && req.method === 'GET') {
+      console.log('Serving media asset', url.pathname);
       const p = path.join(MEDIA_DIR, url.pathname.slice('/media/'.length));
       try {
         if (!p.startsWith(MEDIA_DIR)) throw new Error('bad path');
@@ -288,10 +306,10 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getMaxBoxId,
           getMaxItemId,
           getMaxArtikelNummer,
-          listItemsForExport,
           updateAgenticReview,
           INBOX_DIR,
-          PUBLIC_DIR
+          PUBLIC_DIR,
+          CSV_MAX_UPLOAD_BYTES
         });
       } catch (err) {
         console.error('Action handler failed', err);
