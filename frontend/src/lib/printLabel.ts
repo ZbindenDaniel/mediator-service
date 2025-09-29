@@ -1,10 +1,17 @@
+import { renderFromMatrix } from 'qrcode';
 import type { BoxLabelPayload, ItemLabelPayload } from '../../../models';
+
+type RenderFromMatrix = typeof renderFromMatrix;
 
 export interface PrintLabelOptions {
   win?: Window & typeof globalThis;
   logger?: Pick<typeof console, 'error' | 'warn'>;
   title?: string;
   autoPrint?: boolean;
+  qr?: {
+    renderFromMatrix?: RenderFromMatrix;
+    scale?: number;
+  };
 }
 
 export interface PrintLabelResult {
@@ -28,6 +35,37 @@ function escapeHtml(value: string | null | undefined): string {
     .replace(/'/g, '&#39;');
 }
 
+function resolveQrSource(
+  payload: LabelPayload,
+  options: PrintLabelOptions | undefined,
+  logger: Pick<typeof console, 'error' | 'warn'>
+): { uri: string | null } {
+  if (payload.qrDataUri) {
+    return { uri: payload.qrDataUri };
+  }
+
+  if (!payload.qrModules) {
+    return { uri: null };
+  }
+
+  const render = options?.qr?.renderFromMatrix ?? renderFromMatrix;
+  const scale = options?.qr?.scale ?? 8;
+
+  try {
+    const uri = render(payload.qrModules, {
+      margin: typeof payload.qrMargin === 'number' ? payload.qrMargin : 0,
+      scale
+    });
+    if (typeof uri !== 'string' || uri.length === 0) {
+      throw new Error('renderFromMatrix returned empty result');
+    }
+    return { uri };
+  } catch (err) {
+    logger.error('Failed to render QR code via qrcode library', err);
+    return { uri: null };
+  }
+}
+
 function buildLabelHtml(payload: LabelPayload, options?: PrintLabelOptions): string {
   const isBox = isBoxPayload(payload);
   const title = options?.title ?? (isBox ? 'Behälter-Etikett' : 'Artikel-Etikett');
@@ -45,8 +83,10 @@ function buildLabelHtml(payload: LabelPayload, options?: PrintLabelOptions): str
         ['Standort', payload.location ?? '–']
       ];
 
-  const payloadScript = JSON.stringify(payload).replace(/</g, '\\u003c');
   const autoPrint = options?.autoPrint ?? true;
+  const logger = options?.logger ?? console;
+  const qr = resolveQrSource(payload, options, logger);
+  const hasQr = Boolean(qr.uri);
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -105,15 +145,23 @@ function buildLabelHtml(payload: LabelPayload, options?: PrintLabelOptions): str
         border-radius: 12px;
         padding: 12px;
       }
-      .qr img,
-      .qr canvas {
+      .qr img {
         width: 148px;
         height: 148px;
         image-rendering: pixelated;
       }
-      .qr canvas { display: none; }
       .qr[data-has-image="false"] img { display: none; }
-      .qr[data-has-image="false"] canvas { display: block; }
+      .qr-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 13px;
+        color: #1f2937;
+        width: 148px;
+        height: 148px;
+        padding: 12px;
+      }
       .footer {
         margin-top: 12px;
         font-size: 12px;
@@ -134,47 +182,16 @@ function buildLabelHtml(payload: LabelPayload, options?: PrintLabelOptions): str
         </dl>
         <div class="footer">Bitte den Druckdialog Ihres Browsers verwenden.</div>
       </div>
-      <div class="qr" data-has-image="${payload.qrDataUri ? 'true' : 'false'}">
-        <img id="qr-image" alt="QR-Code" src="${payload.qrDataUri ?? ''}" />
-        <canvas id="qr-canvas" width="160" height="160" aria-label="QR-Code"></canvas>
+      <div class="qr" data-has-image="${hasQr ? 'true' : 'false'}">
+        ${
+          hasQr
+            ? `<img id="qr-image" alt="QR-Code" src="${escapeHtml(qr.uri ?? '')}" />`
+            : '<div class="qr-placeholder">QR-Code nicht verfügbar.</div>'
+        }
       </div>
     </div>
     <script>
-      const payload = ${payloadScript};
       const autoPrint = ${autoPrint ? 'true' : 'false'};
-      const qrWrapper = document.querySelector('.qr');
-      const img = document.getElementById('qr-image');
-      const canvas = document.getElementById('qr-canvas');
-      if (!payload.qrDataUri && payload.qrModules && Array.isArray(payload.qrModules) && canvas && qrWrapper) {
-        try {
-          const scale = Math.max(2, Math.floor(140 / payload.qrModules.length));
-          const margin = Number(payload.qrMargin || 0);
-          const size = payload.qrModules.length + margin * 2;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            throw new Error('2d context unavailable');
-          }
-          canvas.width = canvas.height = size * scale;
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#000';
-          for (let y = 0; y < payload.qrModules.length; y++) {
-            for (let x = 0; x < payload.qrModules[y].length; x++) {
-              if (payload.qrModules[y][x]) {
-                ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
-              }
-            }
-          }
-          qrWrapper.setAttribute('data-has-image', 'false');
-        } catch (err) {
-          console.error('QR canvas rendering failed', err);
-          if (canvas) {
-            canvas.replaceWith(document.createTextNode('QR-Code nicht verfügbar.'));
-          }
-        }
-      } else if (!payload.qrDataUri && img) {
-        img.replaceWith(document.createTextNode('QR-Code nicht verfügbar.'));
-      }
       if (autoPrint) {
         window.addEventListener('load', () => {
           setTimeout(() => {
