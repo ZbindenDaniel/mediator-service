@@ -91,7 +91,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <tbody>
                   <tr>
                     <th>Standort</th>
-                    <td><BoxColorTag locationKey={box.Location} /></td>
+                    <td><BoxColorTag locationKey={box.Location} boxId={box.BoxID} /></td>
                   </tr>
                   <tr>
                     <th>Platziert am</th>

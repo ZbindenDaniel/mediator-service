@@ -52,7 +52,7 @@ export default function SearchCard() {
               <div>
                 Behälter:{' '}
                 <a href={`/boxes/${encodeURIComponent(res.id)}`}>
-                  <BoxColorTag locationKey={res.location} />
+                  <BoxColorTag locationKey={res.location} boxId={res.id} />
                 </a>
               </div>
             </div>
@@ -74,7 +74,7 @@ export default function SearchCard() {
                 <div>
                   Behälter:{' '}
                   <a href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>
-                    <BoxColorTag locationKey={res.item.Location} />
+                    <BoxColorTag locationKey={res.item.Location} boxId={res.item.BoxID || undefined} />
                   </a>
                 </div>
               )}

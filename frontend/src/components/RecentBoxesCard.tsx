@@ -33,7 +33,7 @@ export default function RecentBoxesCard({ boxes }: Props) {
               <Link className="linkcard" to={`/boxes/${encodeURIComponent(b.BoxID)}`}>
                 <div className="card">
                   <div className="mono">{b.BoxID}</div>
-                  <div><b>Standort: <BoxColorTag locationKey={b.Location} /></b></div>
+                  <div><b>Standort: <BoxColorTag locationKey={b.Location} boxId={b.BoxID} /></b></div>
                   <div className="muted">Aktualisiert: {b.UpdatedAt ? formatDate(b.UpdatedAt) : ''}</div>
                 </div>
               </Link>

@@ -4,11 +4,13 @@ import { resolveBoxColorFromLocation } from '../data/boxColors';
 interface BoxColorTagProps {
   locationKey?: string | null;
   className?: string;
+  boxId?: string | null;
 }
 
-export default function BoxColorTag({ locationKey, className }: BoxColorTagProps) {
+export default function BoxColorTag({ locationKey, className, boxId }: BoxColorTagProps) {
   const normalizedLocation = locationKey?.trim();
-  console.log('Rendering BoxColorTag', { locationKey, normalizedLocation });
+  const normalizedBoxId = boxId?.trim();
+  console.log('Rendering BoxColorTag', { locationKey, normalizedLocation, boxId: normalizedBoxId });
 
   const colorOption = useMemo(() => {
     if (!normalizedLocation) {
@@ -23,7 +25,7 @@ export default function BoxColorTag({ locationKey, className }: BoxColorTagProps
   }, [normalizedLocation]);
 
   if (!normalizedLocation) {
-    return <span className={className}>(nicht gesetzt)</span>;
+    return <span className={className}>{normalizedBoxId || '(nicht gesetzt)'}</span>;
   }
 
   return (
