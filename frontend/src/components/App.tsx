@@ -9,6 +9,7 @@ import QrScannerPage from './QrScannerPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
 import ItemListPage from './ItemListPage';
+import BoxListPage from './BoxListPage';
 
 function BoxRoute() {
   const { boxId } = useParams();
@@ -30,20 +31,27 @@ function BoxEditRoute() {
   return boxId ? <BoxEdit boxId={boxId} /> : <div>Behälter fehlt</div>;
 }
 
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/boxes" element={<BoxListPage />} />
+      <Route path="/boxes/:boxId" element={<BoxRoute />} />
+      <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />
+      <Route path="/items" element={<ItemListPage />} />
+      <Route path="/items/new" element={<ItemCreate />} />
+      <Route path="/items/:itemId" element={<ItemRoute />} />
+      <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
+      <Route path="/scan" element={<QrScannerPage />} />
+    </Routes>
+  );
+}
+
 export default function App() {
   return (
     <Router>
       <Layout>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/boxes/:boxId" element={<BoxRoute />} />
-          <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />
-          <Route path="/items" element={<ItemListPage />} />
-          <Route path="/items/new" element={<ItemCreate />} />
-          <Route path="/items/:itemId" element={<ItemRoute />} />
-          <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
-          <Route path="/scan" element={<QrScannerPage />} />
-        </Routes>
+        <AppRoutes />
       </Layout>
     </Router>
   );

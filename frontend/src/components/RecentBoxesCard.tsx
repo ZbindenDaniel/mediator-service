@@ -11,7 +11,21 @@ interface Props {
 export default function RecentBoxesCard({ boxes }: Props) {
   return (
     <div className="card">
-      <h2 id="boxes">Letzte Behälter</h2>
+      <div
+        className="card-header"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}
+      >
+        <h2 id="boxes">Letzte Behälter</h2>
+        <Link className="btn" to="/boxes">
+          Alle Behälter
+        </Link>
+      </div>
       <div id="boxesOut" className="list">
         {boxes.length ? (
           boxes.map(b => (
