@@ -57,12 +57,10 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
     [update]
   );
 
-  let headerContent = 'TODO!!';
 
   return (
     <div className='container item'>
       <div className="card">
-        {headerContent ? <div className="item-form__header">{headerContent}</div> : null}
         <form onSubmit={handleSubmit} className="item-form">
           <ItemDetailsFields
             form={form}
