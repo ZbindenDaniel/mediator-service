@@ -1,326 +1,86 @@
-import React, { useState } from 'react';
-import type { Item } from '../../../models';
-import { getUser } from '../lib/user';
-
-interface ItemFormData extends Item {
-  picture1?: string | null;
-  picture2?: string | null;
-  picture3?: string | null;
-}
+import React, { useMemo } from 'react';
+import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
+import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
+import { useSimilarItems } from './forms/useSimilarItems';
 
 interface Props {
   item: Partial<ItemFormData>;
   onSubmit: (data: Partial<ItemFormData>) => Promise<void>;
   submitLabel: string;
   isNew?: boolean;
+  headerContent?: React.ReactNode;
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({ ...item });
+  const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
 
-  function update<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
+  const { similarItems, loading, error, hasQuery } = useSimilarItems({
+    description: form.Artikelbeschreibung,
+    currentItemUUID: form.ItemUUID
+  });
+
+  const handleSelectSimilar = (selected: typeof similarItems[number]) => {
+    try {
+      console.log('Applying similar item selection', selected.ItemUUID);
+      setForm((prev) => {
+        const next = { ...prev, ...selected } as Partial<ItemFormData>;
+        if (isNew) {
+          delete (next as Partial<ItemFormData>).ItemUUID;
+        }
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to apply similar item selection', err);
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
+      console.log('Submitting item form', form);
       await onSubmit(form);
     } catch (err) {
       console.error('Item form submit failed', err);
     }
   }
 
-  async function generateMaterialNumber() {
-    try {
-      const res = await fetch('/api/getNewMaterialNumber');
-      if (res.ok) {
-        const j = await res.json();
-        update('Artikel_Nummer', j.nextArtikelNummer);
-      } else {
-        console.error('Failed to get material number', res.status);
-      }
-    } catch (err) {
-      console.error('Failed to get material number', err);
-    }
-  }
+  const handlePhoto1Change = useMemo(
+    () => createPhotoChangeHandler(update, 'picture1'),
+    [update]
+  );
+  const handlePhoto2Change = useMemo(
+    () => createPhotoChangeHandler(update, 'picture2'),
+    [update]
+  );
+  const handlePhoto3Change = useMemo(
+    () => createPhotoChangeHandler(update, 'picture3'),
+    [update]
+  );
 
-  async function changeStock(op: 'add' | 'remove') {
-    if (!form.ItemUUID) return;
-    const ok = window.confirm(`Bestand ${op === 'add' ? 'erhöhen' : 'verringern'}?`);
-    if (!ok) return;
-    try {
-      const res = await fetch(`/api/items/${encodeURIComponent(form.ItemUUID)}/${op}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser() })
-      });
-      if (res.ok) {
-        const j = await res.json();
-        update('Auf_Lager', j.quantity);
-        if (op === 'remove' && j.boxId === null) {
-          update('BoxID', null as any);
-        }
-        console.log(`Stock ${op === 'add' ? 'increased' : 'decreased'} for ${form.ItemUUID}`);
-      } else {
-        console.error(`Failed to ${op} stock`, res.status);
-      }
-    } catch (err) {
-      console.error(`Failed to ${op} stock`, err);
-    }
-  }
+  let headerContent = 'TODO!!';
 
   return (
     <div className='container item'>
       <div className="card">
+        {headerContent ? <div className="item-form__header">{headerContent}</div> : null}
         <form onSubmit={handleSubmit} className="item-form">
-          <input value={form.BoxID || ''} readOnly hidden />
-
-          <div className="row">
-            <label>
-              Artikelbeschreibung*
-            </label>
-            <input
-              value={form.Artikelbeschreibung || ''}
-              onChange={(e) => update('Artikelbeschreibung', e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="row">
-            {form.ItemUUID && <label>
-              Behälter-ID
-            </label>}
-            {form.ItemUUID && <input type="hidden" value={form.ItemUUID} />}
-            <label>
-              Artikelnummer*
-            </label>
-            <div className="combined-input">
-              <input
-                value={form.Artikel_Nummer || ''}
-                onChange={(e) => update('Artikel_Nummer', e.target.value)}
-                required
-              />
-              {isNew && (
-                <button type="button" onClick={generateMaterialNumber}>
-                  neu?
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="row">
-            <label>
-              Anzahl*
-            </label>
-            {isNew ? (
-              <input
-                type="number"
-                value={form.Auf_Lager ?? 0}
-                onChange={(e) => update('Auf_Lager', parseInt(e.target.value, 10) || 0)}
-                required
-              />
-            ) : (
-              <div className="combined-input">
-                <button type="button" onClick={() => changeStock('remove')}>-</button>
-                <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
-                <button type="button" onClick={() => changeStock('add')}>+</button>
-              </div>
-            )}
-          </div>
-
-          <div className="row">
-            <label>
-              Kurzbeschreibung
-            </label>
-            <input
-              value={form.Kurzbeschreibung || ''}
-              onChange={(e) => update('Kurzbeschreibung', e.target.value)}
-            />
-          </div>
-
-          <div className="row">
-            <label>
-              Langtext
-            </label>
-            <textarea
-              value={form.Langtext || ''}
-              onChange={(e) => update('Langtext', e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="row">
-            <label>
-              Hersteller
-            </label>
-            <input
-              value={form.Hersteller || ''}
-              onChange={(e) => update('Hersteller', e.target.value)}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Länge (mm)
-            </label>
-            <input
-              type="number"
-              value={form.Länge_mm ?? 0}
-              onChange={(e) => update('Länge_mm', parseInt(e.target.value, 10) || 0)}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Breite (mm)
-            </label>
-            <input
-              type="number"
-              value={form.Breite_mm ?? 0}
-              onChange={(e) => update('Breite_mm', parseInt(e.target.value, 10) || 0)}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Höhe (mm)
-            </label>
-            <input
-              type="number"
-              value={form.Höhe_mm ?? 0}
-              onChange={(e) => update('Höhe_mm', parseInt(e.target.value, 10) || 0)}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Gewicht (kg)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.Gewicht_kg ?? 0}
-              onChange={(e) => update('Gewicht_kg', parseFloat(e.target.value) || 0)}
-            />
-          </div>
-
-          <div className="row">
-            <label>
-              Verkaufspreis (CHF)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.Verkaufspreis ?? 0}
-              onChange={(e) => update('Verkaufspreis', parseFloat(e.target.value) || 0)}
-            />
-          </div>
-
-          <hr></hr>
-
-          <div className="row">
-            <label>
-              Hauptkategorien A
-            </label>
-              <input
-              type="number"
-              value={form.Hauptkategorien_A?.toString() || ''}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                update('Hauptkategorien_A', Number.isNaN(n) ? undefined : n);
-              }}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Unterkategorien A
-            </label>
-            <input
-              type="number"
-              value={form.Unterkategorien_A?.toString() || ''}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                update('Unterkategorien_A', Number.isNaN(n) ? undefined : n);
-              }}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Hauptkategorien B
-            </label>
-              <input
-              type="number"
-              value={form.Hauptkategorien_B?.toString() || ''}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                update('Hauptkategorien_B', Number.isNaN(n) ? undefined : n);
-              }}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Unterkategorien B
-            </label>
-            <input
-              type="number"
-              value={form.Unterkategorien_B?.toString() || ''}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                update('Unterkategorien_B', Number.isNaN(n) ? undefined : n);
-              }}
-            />
-          </div>
-
-          <hr></hr>
-          {/* 
-          <div className="row">
-            <label>
-              Veröffentlicht Status
-            </label>
-            <input
-              value={form.Veröffentlicht_Status || ''}
-              onChange={(e) => update('Veröffentlicht_Status', e.target.value)}
-            />
-          </div>
-          <div className="row">
-            <label>
-              Shopartikel
-            </label>
-            <input
-              type="number"
-              value={form.Shopartikel ?? 0}
-              min={0}
-              max={1}
-              onChange={(e) => update('Shopartikel', parseInt(e.target.value, 10) || 0)}
-            />
-          </div>
-          
-          <div className="row">
-            <label>
-              Artikeltyp
-            </label>
-            <input
-              value={form.Artikeltyp || ''}
-              onChange={(e) => update('Artikeltyp', e.target.value)}
-            />
-          </div> */}
-
-          <div className="row">
-            <label>
-              Einheit
-            </label>
-            <input
-              value={form.Einheit || ''}
-              onChange={(e) => update('Einheit', e.target.value)}
-            />
-          </div>
-
-          <div className="row">
-            <label>
-              Kivi-Link
-            </label>
-            <input
-              value={form.WmsLink || ''}
-              onChange={(e) => update('WmsLink', e.target.value)}
-            />
-          </div>
+          <ItemDetailsFields
+            form={form}
+            isNew={isNew}
+            onUpdate={update}
+            onGenerateMaterialNumber={generateMaterialNumber}
+            onChangeStock={!isNew ? changeStock : undefined}
+            descriptionSuggestions={
+              hasQuery ? (
+                <SimilarItemsPanel
+                  items={similarItems}
+                  loading={loading}
+                  error={error}
+                  onSelect={handleSelectSimilar}
+                />
+              ) : null
+            }
+          />
 
           {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
           <div className="row">
@@ -334,16 +94,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
               accept="image/*"
               capture="environment"
               required={isNew}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  const reader = new FileReader();
-                  reader.onload = () => update('picture1', reader.result as string);
-                  reader.readAsDataURL(file);
-                } else {
-                  update('picture1', null as any);
-                }
-              }}
+              onChange={handlePhoto1Change}
             />
           </div>
 
@@ -358,16 +109,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
                 name="picture2"
                 accept="image/*"
                 capture="environment"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = () => update('picture2', reader.result as string);
-                    reader.readAsDataURL(file);
-                  } else {
-                    update('picture2', null as any);
-                  }
-                }}
+                onChange={handlePhoto2Change}
               />
             </div>
           )}
@@ -383,16 +125,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
                 name="picture3"
                 accept="image/*"
                 capture="environment"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = () => update('picture3', reader.result as string);
-                    reader.readAsDataURL(file);
-                  } else {
-                    update('picture3', null as any);
-                  }
-                }}
+                onChange={handlePhoto3Change}
               />
             </div>
           )}

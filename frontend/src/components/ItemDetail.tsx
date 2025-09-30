@@ -20,6 +20,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
+  const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
@@ -34,16 +35,22 @@ export default function ItemDetail({ itemId }: Props) {
           setItem(data.item);
           setEvents(data.events || []);
           setAgentic(data.agentic ?? null);
+          const media = Array.isArray(data.media)
+            ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
+            : [];
+          setMediaAssets(media);
           setAgenticError(null);
         } else {
           console.error('Failed to fetch item', res.status);
           setAgentic(null);
           setAgenticError('Agentic-Status konnte nicht geladen werden.');
+          setMediaAssets([]);
         }
       } catch (err) {
         console.error('Failed to fetch item', err);
         setAgentic(null);
         setAgenticError('Agentic-Status konnte nicht geladen werden.');
+        setMediaAssets([]);
       }
     }
     load();
@@ -283,6 +290,14 @@ export default function ItemDetail({ itemId }: Props) {
           <>
             <div className="card">
               <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
+              <section className="item-media-section">
+                <h3>Medien</h3>
+                <ItemMediaGallery
+                  itemId={item.ItemUUID}
+                  grafikname={item.Grafikname}
+                  mediaAssets={mediaAssets}
+                />
+              </section>
               <div className='row'>
 
                 <table className="details">
