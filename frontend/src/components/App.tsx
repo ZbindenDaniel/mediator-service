@@ -5,6 +5,7 @@ import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
 import LandingPage from './LandingPage';
+import QrScannerPage from './QrScannerPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
 import ItemListPage from './ItemListPage';
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/items/new" element={<ItemCreate />} />
           <Route path="/items/:itemId" element={<ItemRoute />} />
           <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
+          <Route path="/scan" element={<QrScannerPage />} />
         </Routes>
       </Layout>
     </Router>
