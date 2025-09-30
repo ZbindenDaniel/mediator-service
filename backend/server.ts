@@ -52,7 +52,7 @@ const actions = loadActions();
 const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
 const REPO_PUBLIC = path.join(__dirname, '../../..', 'frontend', 'public');
 export let PUBLIC_DIR = DIST_PUBLIC;
-export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'print');
+export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
 export const MEDIA_DIR = path.join(__dirname, '../../media');
 
 try {
@@ -64,7 +64,7 @@ try {
     : fs.existsSync(path.join(REPO_PUBLIC, 'index.html'))
     ? REPO_PUBLIC
     : DIST_PUBLIC;
-  PREVIEW_DIR = path.join(PUBLIC_DIR, 'print');
+  PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
   fs.mkdirSync(PREVIEW_DIR, { recursive: true });
   fs.mkdirSync(MEDIA_DIR, { recursive: true });
 } catch (err) {
@@ -209,28 +209,16 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
       }
     }
 
-    if (url.pathname.startsWith('/print/') && req.method === 'GET') {
-      const relativePrintPath = url.pathname.slice('/print/'.length);
-      const resolvedPrintPath = path.resolve(PREVIEW_DIR, relativePrintPath);
+    if (url.pathname.startsWith('/prints/') && req.method === 'GET') {
+      const p = path.join(PUBLIC_DIR, url.pathname);
       try {
-        if (!resolvedPrintPath.startsWith(PREVIEW_DIR)) {
-          throw new Error(`Invalid print path resolved: ${resolvedPrintPath}`);
+        if (!p.startsWith(path.join(PUBLIC_DIR, 'prints'))) throw new Error('bad path');
+        if (fs.existsSync(p)) {
+          res.writeHead(200, { 'Content-Type': 'application/pdf' });
+          return res.end(fs.readFileSync(p));
         }
-        if (fs.existsSync(resolvedPrintPath) && fs.statSync(resolvedPrintPath).isFile()) {
-          const ext = path.extname(resolvedPrintPath).toLowerCase();
-          const contentType =
-            ext === '.html'
-              ? 'text/html; charset=utf-8'
-              : ext === '.pdf'
-              ? 'application/pdf'
-              : 'application/octet-stream';
-          const fileContents = fs.readFileSync(resolvedPrintPath);
-          console.log('Serving print asset', resolvedPrintPath);
-          res.writeHead(200, { 'Content-Type': contentType });
-          return res.end(fileContents);
-        }
-      } catch (err) {
-        console.error('Failed to serve print template', err);
+      } catch {
+        // fallthrough
       }
       res.writeHead(404); return res.end('Not found');
     }

@@ -119,6 +119,130 @@ export default function ItemCreate() {
     [boxId, draft, itemUUID]
   );
 
+  async function reportAgenticTriggerFailure({
+    itemId,
+    search,
+    context,
+    status,
+    responseBody,
+    error
+  }: {
+    itemId: string;
+    search: string;
+    context: string;
+    status?: number;
+    responseBody?: string | null;
+    error?: unknown;
+  }) {
+    if (!itemId) {
+      return;
+    }
+
+    const actor = getUser();
+    let errorMessage = '';
+    if (typeof error === 'string' && error.trim()) {
+      errorMessage = error.trim();
+    } else if (error instanceof Error && error.message.trim()) {
+      errorMessage = error.message.trim();
+    } else if (error && typeof error === 'object') {
+      try {
+        errorMessage = JSON.stringify(error);
+      } catch (stringifyErr) {
+        console.warn('Failed to stringify agentic trigger error details', stringifyErr);
+      }
+    }
+
+    if (!errorMessage && typeof status === 'number') {
+      errorMessage = `Agentic trigger failed with status ${status}`;
+    }
+
+    if (!errorMessage) {
+      errorMessage = 'Agentic trigger failed';
+    }
+
+    const trimmedContext = context.trim();
+    const failurePayload: Record<string, unknown> = {
+      search,
+      searchTerm: search,
+      context: trimmedContext || undefined,
+      error: errorMessage,
+      status,
+      responseBody: responseBody && responseBody.trim() ? responseBody : undefined,
+    };
+
+    if (actor) {
+      failurePayload.actor = actor;
+    }
+
+    try {
+      const failureUrl = `/api/items/${encodeURIComponent(itemId)}/agentic/trigger-failure`;
+      const res = await fetch(failureUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(failurePayload)
+      });
+
+      if (res.ok) {
+        const body = await res
+          .json()
+          .catch((jsonErr) => {
+            console.error('Failed to parse agentic failure response', jsonErr);
+            return null;
+          });
+
+        const updatedRun = body?.agentic ?? null;
+        if (updatedRun) {
+          setDraft((prev) =>
+            prev.ItemUUID === itemId
+              ? {
+                  ...prev,
+                  agenticStatus: undefined,
+                  agenticSearch: updatedRun.SearchQuery || prev.agenticSearch
+                }
+              : prev
+          );
+        } else {
+          setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+        }
+      } else {
+        console.error('Agentic failure reporting endpoint returned non-OK status', res.status);
+        setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+      }
+    } catch (failureErr) {
+      console.error('Failed to report agentic trigger failure', failureErr);
+      setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+    }
+
+    try {
+      const refreshUrl = `/api/items/${encodeURIComponent(itemId)}/agentic`;
+      const refreshRes = await fetch(refreshUrl, { method: 'GET', cache: 'reload' });
+      if (refreshRes.ok) {
+        const refreshed = await refreshRes
+          .json()
+          .catch((refreshErr) => {
+            console.error('Failed to parse refreshed agentic status', refreshErr);
+            return null;
+          });
+        const refreshedRun = refreshed?.agentic ?? null;
+        if (refreshedRun) {
+          setDraft((prev) =>
+            prev.ItemUUID === itemId
+              ? {
+                  ...prev,
+                  agenticStatus: undefined,
+                  agenticSearch: refreshedRun.SearchQuery || prev.agenticSearch
+                }
+              : prev
+          );
+        }
+      } else {
+        console.warn('Failed to refresh agentic status cache after failure', refreshRes.status);
+      }
+    } catch (refreshErr) {
+      console.warn('Agentic status refresh after failure threw an error', refreshErr);
+    }
+  }
+
   async function triggerAgenticRun(agenticPayload: { id: string | undefined; search: string }, context: string) {
     if (!shouldUseAgenticForm) {
       console.info(`Agentic trigger skipped (${context}): service not healthy.`);
@@ -149,9 +273,30 @@ export default function ItemCreate() {
 
       if (!agenticRes.ok) {
         console.error(`Agentic trigger failed during ${context}`, agenticRes.status);
+        let responseBody: string | null = null;
+        try {
+          responseBody = await agenticRes.text();
+        } catch (textErr) {
+          console.warn('Failed to read agentic trigger error response body', textErr);
+        }
+        await reportAgenticTriggerFailure({
+          itemId: agenticPayload.id,
+          search: agenticPayload.search,
+          context,
+          status: agenticRes.status,
+          responseBody,
+          error: `Agentic trigger failed with status ${agenticRes.status}`
+        });
+        return;
       }
     } catch (agenticErr) {
       console.error(`Agentic trigger invocation failed during ${context}`, agenticErr);
+      await reportAgenticTriggerFailure({
+        itemId: agenticPayload.id || '',
+        search: agenticPayload.search,
+        context,
+        error: agenticErr
+      });
     }
   }
 
