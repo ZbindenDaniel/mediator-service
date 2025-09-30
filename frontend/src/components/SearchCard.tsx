@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
+import BoxColorTag from './BoxColorTag';
 
 type SearchResult =
-  | { type: 'box'; id: string; location: string }
+  | { type: 'box'; id: string; location?: string | null }
   | { type: 'item'; item: Item };
 
 export default function SearchCard() {
@@ -49,7 +50,10 @@ export default function SearchCard() {
           res.type === 'box' ? (
             <div className="card" key={`b-${idx}`}>
               <div>
-                Behälter: <a href={`/boxes/${encodeURIComponent(res.id)}`}>{res.location || 'Behälter'}</a>
+                Behälter:{' '}
+                <a href={`/boxes/${encodeURIComponent(res.id)}`}>
+                  <BoxColorTag locationKey={res.location} />
+                </a>
               </div>
             </div>
           ) : (
@@ -68,7 +72,10 @@ export default function SearchCard() {
               <div className="muted">{res.item.Artikelbeschreibung || ''}</div>
               {res.item.BoxID && (
                 <div>
-                  Behälter: <a href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>{res.item.Location}</a>
+                  Behälter:{' '}
+                  <a href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>
+                    <BoxColorTag locationKey={res.item.Location} />
+                  </a>
                 </div>
               )}
             </div>

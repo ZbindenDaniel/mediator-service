@@ -7,6 +7,7 @@ import type { Box, Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
+import BoxColorTag from './BoxColorTag';
 
 interface Props {
   boxId: string;
@@ -88,16 +89,18 @@ export default function BoxDetail({ boxId }: Props) {
               <h2 className='mono'>{box.BoxID}</h2>
               <table className="details">
                 <tbody>
-                  {([
-                    ['Standort', box.Location ?? 'kein Standort!'],
-                    ['Platziert am', box.PlacedAt ? formatDateTime(box.PlacedAt) : ''],
-                    ['Platziert von', box.PlacedBy ?? 'Niemandem!']
-                  ] as [string, any][]).map(([k, v]) => (
-                    <tr key={k}>
-                      <th>{k}</th>
-                      <td>{v ?? ''}</td>
-                    </tr>
-                  ))}
+                  <tr>
+                    <th>Standort</th>
+                    <td><BoxColorTag locationKey={box.Location} /></td>
+                  </tr>
+                  <tr>
+                    <th>Platziert am</th>
+                    <td>{box.PlacedAt ? formatDateTime(box.PlacedAt) : ''}</td>
+                  </tr>
+                  <tr>
+                    <th>Platziert von</th>
+                    <td>{box.PlacedBy ?? 'Niemandem!'}</td>
+                  </tr>
                 </tbody>
               </table>
               <div className='row'>
