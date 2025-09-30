@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface ItemMediaGalleryProps {
   itemId: string;
@@ -99,6 +99,21 @@ export default function ItemMediaGallery({
     mediaAssets
   ]);
 
+  const handleImageError = useCallback(
+    (src: string) => () => {
+      setFailedSources((prev) => {
+        if (prev.has(src)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.add(src);
+        return next;
+      });
+      console.warn('Media asset failed to load', { itemId, src });
+    },
+    [itemId]
+  );
+
   const effectiveClassName = ['item-media-gallery', className].filter(Boolean).join(' ');
 
   if (assets.length === 0) {
@@ -117,10 +132,11 @@ export default function ItemMediaGallery({
                 src={asset.src}
                 alt={`${fallbackLabel} für Artikel ${itemId}`}
                 loading="lazy"
+                onError={handleImageError(asset.src)}
               />
             ) : (
               <div className="item-media-gallery__fallback" role="status">
-                <span>Bild konnte nicht geladen werden.</span>
+                <span>Medieninhalt konnte nicht geladen werden.</span>
                 <small className="muted">{asset.src}</small>
               </div>
             )}

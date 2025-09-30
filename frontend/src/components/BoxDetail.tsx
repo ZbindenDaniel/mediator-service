@@ -13,6 +13,10 @@ interface Props {
   boxId: string;
 }
 
+function resolveActorName(actor?: string | null): string {
+  return actor && actor.trim() ? actor : 'System';
+}
+
 export default function BoxDetail({ boxId }: Props) {
   const [box, setBox] = useState<Box | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -205,7 +209,7 @@ export default function BoxDetail({ boxId }: Props) {
               <ul className="events">
                 {events.map((ev) => (
                   <li key={ev.Id}>
-                    {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor : 'wer?'}{' hat ' + eventLabel(ev.Event)}
+                    {formatDateTime(ev.CreatedAt)}: {resolveActorName(ev.Actor)}{' hat ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>
