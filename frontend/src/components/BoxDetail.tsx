@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
@@ -83,6 +83,9 @@ export default function BoxDetail({ boxId }: Props) {
   useEffect(() => {
     load();
   }, [boxId]);
+
+  // TODO: Replace client-side slicing once the activities page provides pagination.
+  const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
   return (
     <div className="container box">
@@ -207,7 +210,7 @@ export default function BoxDetail({ boxId }: Props) {
             <div className="card">
               <h3>Aktivitäten</h3>
               <ul className="events">
-                {events.map((ev) => (
+                {displayedEvents.map((ev) => (
                   <li key={ev.Id}>
                     {formatDateTime(ev.CreatedAt)}: {resolveActorName(ev.Actor)}{' hat ' + eventLabel(ev.Event)}
                   </li>
