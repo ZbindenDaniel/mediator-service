@@ -64,10 +64,11 @@ const action: Action = {
       } catch (e) {
         console.error('Failed to save images', e);
       }
+      const requestedLocation = (p.get('Location') || '').trim();
       const data = {
         BoxID,
         ItemUUID,
-        Location: (p.get('Location') || '').trim(),
+        Location: requestedLocation,
         UpdatedAt: nowDate,
         Datum_erfasst: (p.get('Datum_erfasst') || '').trim() ? new Date((p.get('Datum_erfasst') || '').trim()) : undefined,
         Artikel_Nummer: (p.get('Artikel_Nummer') || '').trim(),
@@ -97,10 +98,38 @@ const action: Action = {
       const requestedStatus = (p.get('agenticStatus') || 'queued').trim().toLowerCase();
       const agenticStatus = ['queued', 'running'].includes(requestedStatus) ? requestedStatus : 'queued';
 
-        const txn = ctx.db.transaction((boxId: string, itemData: any, a: string, search: string, status: string) => {
+      let boxLocationToPersist: string | null = requestedLocation || null;
+      if (!requestedLocation) {
+        console.warn(
+          '[import-item] Empty Location provided for box import; attempting to preserve existing Standort',
+          { BoxID, actor }
+        );
+        try {
+          const existingBox = ctx.getBox?.get ? (ctx.getBox.get(BoxID) as { Location?: string } | undefined) : undefined;
+          if (existingBox?.Location) {
+            boxLocationToPersist = existingBox.Location;
+            console.info('[import-item] Preserved existing box Location', { BoxID, Location: existingBox.Location });
+          } else {
+            boxLocationToPersist = null;
+            console.info('[import-item] No existing Location found to preserve for box', { BoxID });
+          }
+        } catch (lookupErr) {
+          console.error('[import-item] Failed to load box while preserving Location', lookupErr);
+        }
+      }
+
+      const txn = ctx.db.transaction(
+        (
+          boxId: string,
+          itemData: any,
+          a: string,
+          search: string,
+          status: string,
+          boxLocation: string | null
+        ) => {
           ctx.upsertBox.run({
             BoxID: boxId,
-            Location: itemData.Location,
+            Location: boxLocation,
             CreatedAt: now,
             Notes: null,
             PlacedBy: null,
@@ -129,9 +158,10 @@ const action: Action = {
             Event: 'AgenticSearchQueued',
             Meta: JSON.stringify({ SearchQuery: search, Status: status })
           });
-        });
-        txn(BoxID, { ...data, ItemUUID }, actor, agenticSearchQuery, agenticStatus);
-        sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
+        }
+      );
+      txn(BoxID, { ...data, ItemUUID }, actor, agenticSearchQuery, agenticStatus, boxLocationToPersist);
+      sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
     } catch (err) {
       console.error('Import item failed', err);
       sendJson(res, 500, { error: (err as Error).message });
