@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
 import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
+import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
 
@@ -215,7 +216,7 @@ export default function ItemCreate() {
     }
   }
 
-  async function triggerAgenticRun(agenticPayload: { id: string | undefined; search: string }, context: string) {
+  async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
     if (!shouldUseAgenticForm) {
       console.info(`Agentic trigger skipped (${context}): service not healthy.`);
       return;
@@ -250,9 +251,9 @@ export default function ItemCreate() {
       const createdItem: Item | undefined = j?.item;
 
       const searchText = createdItem?.Artikelbeschreibung || data.Artikelbeschreibung || '';
-      const agenticPayload = {
-        id: createdItem?.ItemUUID,
-        search: searchText
+      const agenticPayload: AgenticRunTriggerPayload = {
+        itemId: createdItem?.ItemUUID,
+        artikelbeschreibung: searchText
       };
 
       void triggerAgenticRun(agenticPayload, 'item creation');
@@ -311,9 +312,9 @@ export default function ItemCreate() {
       setItemUUID(createdItem?.ItemUUID || itemUUID);
 
       const searchText = createdItem?.Artikelbeschreibung || detailPayload.Artikelbeschreibung || '';
-      const agenticPayload = {
-        id: createdItem?.ItemUUID,
-        search: searchText
+      const agenticPayload: AgenticRunTriggerPayload = {
+        itemId: createdItem?.ItemUUID,
+        artikelbeschreibung: searchText
       };
 
       setStep(2);
