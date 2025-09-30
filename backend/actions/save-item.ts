@@ -4,6 +4,9 @@ import path from 'path';
 import { Item } from '../../models';
 import type { Action } from './index';
 
+const MEDIA_PREFIX = '/media/';
+const MEDIA_DIR = path.join(__dirname, '../../media');
+
 function pushMedia(target: string[], value: string | null | undefined, seen: Set<string>): void {
   if (!value) return;
   const trimmed = value.trim();
@@ -13,19 +16,109 @@ function pushMedia(target: string[], value: string | null | undefined, seen: Set
   seen.add(trimmed);
 }
 
+function buildRelativePath(relative: string): string | null {
+  if (!relative) return null;
+  const normalised = path.posix.normalize(relative.replace(/\\/g, '/'));
+  if (!normalised || normalised === '.' || normalised.startsWith('..')) {
+    return null;
+  }
+  return normalised;
+}
+
+function mediaExists(relative: string): boolean {
+  try {
+    const absolute = path.join(MEDIA_DIR, relative);
+    if (!absolute.startsWith(MEDIA_DIR)) {
+      console.warn('Refused to check media path outside MEDIA_DIR', { relative });
+      return false;
+    }
+    return fs.existsSync(absolute);
+  } catch (err) {
+    console.error('Failed to check media existence', { relative, error: err });
+    return false;
+  }
+}
+
+function normaliseMediaReference(itemId: string, value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^[a-zA-Z]+:\/\//.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith(MEDIA_PREFIX)) {
+    const relativeRaw = trimmed.slice(MEDIA_PREFIX.length);
+    const relative = buildRelativePath(relativeRaw);
+    if (!relative) {
+      console.warn('Media asset discarded due to unsafe relative path', {
+        itemId,
+        candidate: trimmed
+      });
+      return null;
+    }
+    if (!mediaExists(relative)) {
+      console.warn('Media asset missing on disk', {
+        itemId,
+        candidate: trimmed,
+        attemptedPath: path.join(MEDIA_DIR, relative)
+      });
+    }
+    return `${MEDIA_PREFIX}${relative}`;
+  }
+
+  const cleaned = trimmed.replace(/^\/+/g, '').replace(/\\/g, '/');
+  const candidates: string[] = [];
+  const pushCandidate = (relative: string | null) => {
+    if (!relative) return;
+    if (!candidates.includes(relative)) {
+      candidates.push(relative);
+    }
+  };
+
+  pushCandidate(buildRelativePath(`${itemId}/${cleaned}`));
+  pushCandidate(buildRelativePath(cleaned));
+  const baseName = path.posix.basename(cleaned);
+  pushCandidate(buildRelativePath(`${itemId}/${baseName}`));
+
+  for (const relative of candidates) {
+    if (mediaExists(relative)) {
+      return `${MEDIA_PREFIX}${relative}`;
+    }
+  }
+
+  if (candidates.length > 0) {
+    console.warn('Media asset missing on disk', {
+      itemId,
+      candidate: trimmed,
+      attemptedPath: path.join(MEDIA_DIR, candidates[0])
+    });
+    return `${MEDIA_PREFIX}${candidates[0]}`;
+  }
+
+  console.warn('Media asset missing on disk', { itemId, candidate: trimmed });
+  return trimmed;
+}
+
 export function collectMediaAssets(itemId: string, primary?: string | null): string[] {
   const assets: string[] = [];
   const seen = new Set<string>();
-  pushMedia(assets, primary || '', seen);
+  const trimmedPrimary = typeof primary === 'string' ? primary.trim() : '';
+  const normalisedPrimary =
+    trimmedPrimary && trimmedPrimary.startsWith(MEDIA_PREFIX)
+      ? trimmedPrimary
+      : normaliseMediaReference(itemId, trimmedPrimary || null);
+  pushMedia(assets, normalisedPrimary || '', seen);
 
   try {
-    const dir = path.join(__dirname, '../../media', itemId);
+    const dir = path.join(MEDIA_DIR, itemId);
     if (fs.existsSync(dir)) {
       const stat = fs.statSync(dir);
       if (stat.isDirectory()) {
         const entries = fs.readdirSync(dir).sort();
         for (const entry of entries) {
-          const resolved = `/media/${itemId}/${entry}`;
+          const resolved = `${MEDIA_PREFIX}${itemId}/${entry}`;
           pushMedia(assets, resolved, seen);
         }
       }
@@ -59,8 +152,13 @@ const action: Action = {
         const box = ctx.getBox.get(item.BoxID);
         const events = ctx.listEventsForItem.all(itemId);
         const agentic = ctx.getAgenticRun ? ctx.getAgenticRun.get(itemId) : null;
-        const media = collectMediaAssets(itemId, item.Grafikname);
-        return sendJson(res, 200, { item, box, events, agentic, media });
+        const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
+        const media = collectMediaAssets(itemId, normalisedGrafikname);
+        const responseItem =
+          normalisedGrafikname && normalisedGrafikname !== item.Grafikname
+            ? { ...item, Grafikname: normalisedGrafikname }
+            : item;
+        return sendJson(res, 200, { item: responseItem, box, events, agentic, media });
       } catch (err) {
         console.error('Fetch item failed', err);
         return sendJson(res, 500, { error: (err as Error).message });
@@ -77,7 +175,7 @@ const action: Action = {
       let grafik = existing.Grafikname || '';
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
-        const dir = path.join(__dirname, '../../media', itemId);
+        const dir = path.join(MEDIA_DIR, itemId);
         const artNr = data.Artikel_Nummer || existing.Artikel_Nummer || itemId;
         if (imgs.some((i: string) => i)) fs.mkdirSync(dir, { recursive: true });
         imgs.forEach((img: string, idx: number) => {
@@ -89,7 +187,7 @@ const action: Action = {
           const file = `${artNr}-${idx + 1}.${ext}`;
           try {
             fs.writeFileSync(path.join(dir, file), buf);
-            if (idx === 0) grafik = `/media/${itemId}/${file}`;
+            if (idx === 0) grafik = `${MEDIA_PREFIX}${itemId}/${file}`;
           } catch (writeErr) {
             console.error('Failed to persist media file', {
               itemId,
@@ -101,38 +199,39 @@ const action: Action = {
       } catch (e) {
         console.error('Failed to save item images', e);
       }
+      const normalisedGrafikname = normaliseMediaReference(itemId, grafik);
       const { picture1, picture2, picture3, ...rest } = data;
       const item: Item = {
         ...existing,
         ...rest,
-        Grafikname: grafik,
+        Grafikname: normalisedGrafikname ?? undefined,
         ItemUUID: itemId,
         BoxID: data.BoxID ?? existing.BoxID ?? '',
         UpdatedAt: new Date()
       };
-        const txn = ctx.db.transaction((it: Item, a: string) => {
-          ctx.upsertItem.run({
-            ...it,
-            UpdatedAt: it.UpdatedAt.toISOString(),
-            Datum_erfasst: it.Datum_erfasst ? it.Datum_erfasst.toISOString() : null,
-            Veröffentlicht_Status:
-              typeof it.Veröffentlicht_Status === 'boolean'
-                ? it.Veröffentlicht_Status
-                  ? 'yes'
-                  : 'no'
-                : it.Veröffentlicht_Status
-          });
-          ctx.logEvent.run({
-            Actor: a,
-            EntityType: 'Item',
-            EntityId: it.ItemUUID,
-            Event: 'updated',
-            Meta: null
-          });
+      const txn = ctx.db.transaction((it: Item, a: string) => {
+        ctx.upsertItem.run({
+          ...it,
+          UpdatedAt: it.UpdatedAt.toISOString(),
+          Datum_erfasst: it.Datum_erfasst ? it.Datum_erfasst.toISOString() : null,
+          Veröffentlicht_Status:
+            typeof it.Veröffentlicht_Status === 'boolean'
+              ? it.Veröffentlicht_Status
+                ? 'yes'
+                : 'no'
+              : it.Veröffentlicht_Status
         });
-        txn(item, actor);
-        const media = collectMediaAssets(itemId, grafik);
-        sendJson(res, 200, { ok: true, media });
+        ctx.logEvent.run({
+          Actor: a,
+          EntityType: 'Item',
+          EntityId: it.ItemUUID,
+          Event: 'updated',
+          Meta: null
+        });
+      });
+      txn(item, actor);
+      const media = collectMediaAssets(itemId, normalisedGrafikname);
+      sendJson(res, 200, { ok: true, media });
     } catch (err) {
       console.error('Save item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

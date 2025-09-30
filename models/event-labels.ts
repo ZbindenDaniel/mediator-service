@@ -11,7 +11,14 @@ export const EVENT_LABELS: Record<string, string> = {
   Deleted: 'Gelöscht',
   Exported: 'Exportiert',
   Created: 'Erstellt',
-  // Add more as needed
+  AgenticRunRestarted: 'Agentic-Lauf neu gestartet',
+  AgenticTriggerFailed: 'Agentic-Auslösung fehlgeschlagen',
+  AgenticSearchQueued: 'Agentic-Suche eingereiht',
+  AgenticResultReceived: 'Agentic-Ergebnis erhalten',
+  AgenticResultFailed: 'Agentic-Ergebnis fehlgeschlagen',
+  AgenticReviewApproved: 'Agentic-Prüfung freigegeben',
+  AgenticReviewRejected: 'Agentic-Prüfung abgelehnt',
+  QrScanned: 'QR-Code gescannt'
 };
 
 export function eventLabel(eventKey: string): string {

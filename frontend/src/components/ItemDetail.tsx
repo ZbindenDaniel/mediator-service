@@ -14,6 +14,10 @@ interface Props {
   itemId: string;
 }
 
+function resolveActorName(actor?: string | null): string {
+  return actor && actor.trim() ? actor : 'System';
+}
+
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -303,7 +307,10 @@ export default function ItemDetail({ itemId }: Props) {
                 <table className="details">
                     <tbody>
                     {([
-                      ['Erstellt von', events.length ? events[events.length - 1].Actor : ''],
+                      [
+                        'Erstellt von',
+                        resolveActorName(events.length ? events[events.length - 1].Actor : null)
+                      ],
                       ['Artikelbeschreibung', item.Artikelbeschreibung],
                       ['Artikelnummer', item.Artikel_Nummer],
                       ['Anzahl', item.Auf_Lager],
@@ -421,7 +428,7 @@ export default function ItemDetail({ itemId }: Props) {
               <ul className="events">
                 {events.map((ev) => (
                   <li key={ev.Id}>
-                    {formatDateTime(ev.CreatedAt)}: {ev.Actor ? ev.Actor : 'wer?'}{' hat ' + eventLabel(ev.Event)}
+                    {formatDateTime(ev.CreatedAt)}: {resolveActorName(ev.Actor)}{' hat ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>
