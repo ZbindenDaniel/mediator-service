@@ -52,7 +52,7 @@ export interface BoxLabelOptions {
 export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
   try {
-    const doc = new PDFDocument({ size: LABEL_SIZE, margin: 32 });
+    const doc = new PDFDocument({ size: 'A6', margin: 36 });
     const stream = fs.createWriteStream(outPath);
     doc.pipe(stream);
 
@@ -65,18 +65,12 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
     const textX = doc.page.margins.left + 8;
     const textY = doc.page.margins.top + 12;
     const qrX = doc.page.margins.left + textWidth + 20;
-    const qrY = doc.page.margins.top + 20;
+    const qrY = doc.page.margins.top + 30;
 
     const frameX = doc.page.margins.left / 2;
     const frameY = doc.page.margins.top / 2;
     const frameWidth = doc.page.width - frameX * 2;
     const frameHeight = doc.page.height - frameY * 2;
-
-    doc
-      .save()
-      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
-      .fill('#f5f7fb')
-      .restore();
 
     doc
       .save()
@@ -91,27 +85,31 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
       .restore();
 
     doc
-      .lineWidth(2)
-      .strokeColor('#dce3f0')
-      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
-      .stroke();
-
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(28)
-      .fillColor('#0b1f33')
-      .text('Behälter', textX, textY, { width: textWidth });
-
-    doc
-      .moveDown(0.1)
+      .moveDown(0.2)
       .font('Helvetica')
-      .fontSize(14)
+      .fontSize(18)
       .fillColor('#1d3557')
-      .text(`Box-ID: ${boxData.id}`, { width: textWidth });
+      .text(`Box-ID: ${boxData.id}`, { width: contentWidth });
+
+       doc
+      .moveDown(1)
+      .font('Helvetica-Bold')
+      .fontSize(13)
+      .fillColor('#0b1f33')
+      .text(`Anzahl gesamt: ${formatNumber(boxData.quantity)}`, { width: textWidth });
+
+    if (typeof boxData.itemCount === 'number' && Number.isFinite(boxData.itemCount)) {
+      doc
+        .moveDown(0.4)
+        .font('Helvetica')
+        .fontSize(12)
+        .fillColor('#2f3c4f')
+        .text(`Artikelpositionen: ${NUMBER_FORMAT.format(boxData.itemCount)}`, { width: textWidth });
+    }
 
     const description = boxData.description?.trim() || '—';
     doc
-      .moveDown(0.8)
+      .moveDown(1)
       .font('Helvetica-Bold')
       .fontSize(13)
       .fillColor('#0b1f33')
@@ -122,30 +120,9 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
       .font('Helvetica')
       .fontSize(12)
       .fillColor('#2f3c4f')
-      .text(description, { width: textWidth, lineGap: 2 });
+      .text(description, { width: contentWidth, lineGap: 2 });
 
-    doc
-      .moveDown(0.8)
-      .font('Helvetica-Bold')
-      .fontSize(13)
-      .fillColor('#0b1f33')
-      .text('Anzahl gesamt', { width: textWidth });
-
-    doc
-      .moveDown(0.2)
-      .font('Helvetica')
-      .fontSize(16)
-      .fillColor('#1d3557')
-      .text(formatNumber(boxData.quantity), { width: textWidth });
-
-    if (typeof boxData.itemCount === 'number' && Number.isFinite(boxData.itemCount)) {
-      doc
-        .moveDown(0.4)
-        .font('Helvetica')
-        .fontSize(12)
-        .fillColor('#2f3c4f')
-        .text(`Artikelpositionen: ${NUMBER_FORMAT.format(boxData.itemCount)}`, { width: textWidth });
-    }
+   
 
     doc.image(qr, qrX, qrY, { fit: [qrSize, qrSize] });
 
