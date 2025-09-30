@@ -33,7 +33,6 @@ import {
   getMaxItemId,
   getMaxArtikelNummer,
   listItemsForExport,
-  getAgenticRunForItem,
   updateAgenticReview,
   listItems,
   decrementItemStock,
@@ -162,7 +161,6 @@ type ActionContext = {
   getMaxItemId: typeof getMaxItemId;
   getMaxArtikelNummer: typeof getMaxArtikelNummer;
   listItemsForExport: typeof listItemsForExport;
-  getAgenticRunForItem: typeof getAgenticRunForItem;
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
@@ -297,7 +295,6 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getMaxItemId,
           getMaxArtikelNummer,
           listItemsForExport,
-          getAgenticRunForItem,
           updateAgenticReview,
           INBOX_DIR,
           PUBLIC_DIR,

@@ -54,7 +54,7 @@ const action: Action = {
 
     let existingRun: AgenticRun | undefined;
     try {
-      existingRun = ctx.getAgenticRunForItem.get(itemId) as AgenticRun | undefined;
+      existingRun = ctx.getAgenticRun.get(itemId) as AgenticRun | undefined;
     } catch (err) {
       console.error('Failed to load existing agentic run for restart', err);
       return sendJson(res, 500, { error: 'Failed to load agentic run' });
@@ -71,35 +71,28 @@ const action: Action = {
         hasExisting: boolean,
         prevStatus: string | null
       ) => {
+        const nowIso = new Date().toISOString();
         if (hasExisting) {
-          const resetStmt = ctx.db.prepare(`
-            UPDATE agentic_runs
-               SET SearchQuery=?,
-                   Status='queued',
-                   TriggeredAt=datetime('now'),
-                   StartedAt=NULL,
-                   CompletedAt=NULL,
-                   FailedAt=NULL,
-                   NeedsReview=0,
-                   ReviewedBy=NULL,
-                   ReviewedAt=NULL,
-                   ReviewDecision=NULL,
-                   ReviewNotes=NULL
-             WHERE ItemUUID = ?
-          `);
-          const result = resetStmt.run(searchQuery, itemUUID);
+          const result = ctx.updateAgenticRunStatus.run({
+            ItemUUID: itemUUID,
+            Status: 'queued',
+            SearchQuery: searchQuery,
+            LastModified: nowIso,
+            ReviewState: 'not_required',
+            ReviewedBy: null
+          });
           if (!result || result.changes === 0) {
             throw new Error('No agentic run updated');
           }
         } else {
-          const insertStmt = ctx.db.prepare(`
-            INSERT INTO agentic_runs (
-              ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
-              Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
-            )
-            VALUES (?, ?, 'queued', datetime('now'), NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL)
-          `);
-          const result = insertStmt.run(itemUUID, searchQuery);
+          const result = ctx.upsertAgenticRun.run({
+            ItemUUID: itemUUID,
+            SearchQuery: searchQuery,
+            Status: 'queued',
+            LastModified: nowIso,
+            ReviewState: 'not_required',
+            ReviewedBy: null
+          });
           if (!result || result.changes === 0) {
             throw new Error('Failed to create agentic run');
           }
@@ -127,7 +120,7 @@ const action: Action = {
     }
 
     try {
-      const refreshed = ctx.getAgenticRunForItem.get(itemId) || null;
+      const refreshed = ctx.getAgenticRun.get(itemId) || null;
       return sendJson(res, 200, { agentic: refreshed });
     } catch (err) {
       console.error('Failed to load refreshed agentic run after restart', err);

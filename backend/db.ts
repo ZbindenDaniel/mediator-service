@@ -5,7 +5,7 @@ import { DB_PATH } from './config';
 import { AgenticRun, Box, Item, LabelJob, EventLog } from '../models';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-let db: any;
+let db: Database.Database;
 try {
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
@@ -90,37 +90,35 @@ const AGENTIC_RUNS_COLUMNS = [
   'ItemUUID',
   'SearchQuery',
   'Status',
+  'LastModified',
+  'ReviewState',
+  'ReviewedBy'
+];
+
+const LEGACY_AGENTIC_COLUMNS = [
+  'Summary',
+  'NeedsReview',
+  'ReviewedAt',
+  'ReviewDecision',
+  'ReviewNotes',
   'TriggeredAt',
   'StartedAt',
   'CompletedAt',
   'FailedAt',
-  'Summary',
-  'NeedsReview',
-  'ReviewedBy',
-  'ReviewedAt',
-  'ReviewDecision',
-  'ReviewNotes'
+  'LastError',
+  'ResultPayload'
 ];
 
-const LEGACY_AGENTIC_COLUMNS = ['SearchQuery', 'LastError', 'ResultPayload'];
-
-function ensureAgenticRunSchema(): void {
+export function ensureAgenticRunSchema(database: Database.Database = db): void {
   const createAgenticRunsSql = `
 CREATE TABLE IF NOT EXISTS agentic_runs (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
   ItemUUID TEXT NOT NULL UNIQUE,
   SearchQuery TEXT,
   Status TEXT NOT NULL,
-  TriggeredAt TEXT,
-  StartedAt TEXT,
-  CompletedAt TEXT,
-  FailedAt TEXT,
-  Summary TEXT,
-  NeedsReview INTEGER NOT NULL DEFAULT 0,
+  LastModified TEXT NOT NULL DEFAULT (datetime('now')),
+  ReviewState TEXT NOT NULL DEFAULT 'not_required',
   ReviewedBy TEXT,
-  ReviewedAt TEXT,
-  ReviewDecision TEXT,
-  ReviewNotes TEXT,
   FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -129,7 +127,7 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
 
   let tableInfo: Array<{ name: string }> = [];
   try {
-    tableInfo = db.prepare(`PRAGMA table_info(agentic_runs)`).all();
+    tableInfo = database.prepare(`PRAGMA table_info(agentic_runs)`).all();
   } catch (err) {
     console.error('Failed to inspect agentic_runs schema', err);
     throw err;
@@ -137,7 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
 
   if (!tableInfo.length) {
     try {
-      db.exec(createAgenticRunsSql);
+      database.exec(createAgenticRunsSql);
     } catch (err) {
       console.error('Failed to create agentic_runs table', err);
       throw err;
@@ -147,11 +145,11 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
 
   const columnNames = new Set(tableInfo.map((column) => column.name));
   const hasAllExpectedColumns = AGENTIC_RUNS_COLUMNS.every((column) => columnNames.has(column));
-  const hasLegacyColumns = LEGACY_AGENTIC_COLUMNS.some((column) => columnNames.has(column));
+  const stillHasLegacyColumns = LEGACY_AGENTIC_COLUMNS.some((column) => columnNames.has(column));
 
-  if (hasAllExpectedColumns && !hasLegacyColumns) {
+  if (hasAllExpectedColumns && !stillHasLegacyColumns) {
     try {
-      db.exec(createAgenticRunsSql);
+      database.exec(createAgenticRunsSql);
     } catch (err) {
       console.error('Failed to ensure agentic_runs schema', err);
       throw err;
@@ -159,70 +157,69 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
     return;
   }
 
-  console.info('Migrating agentic_runs table to review workflow schema');
+  console.info('Migrating agentic_runs table to simplified schema');
 
   try {
-    db.transaction(() => {
-      db.exec(`DROP INDEX IF EXISTS idx_agentic_runs_item`);
-      db.exec(`ALTER TABLE agentic_runs RENAME TO agentic_runs_legacy`);
+    database.transaction(() => {
+      database.exec(`DROP INDEX IF EXISTS idx_agentic_runs_item`);
+      database.exec(`ALTER TABLE agentic_runs RENAME TO agentic_runs_legacy`);
 
-      db.exec(createAgenticRunsSql);
+      database.exec(createAgenticRunsSql);
 
       const selectColumns: string[] = [];
       selectColumns.push('ItemUUID');
       selectColumns.push(columnNames.has('SearchQuery') ? 'SearchQuery AS SearchQuery' : 'NULL AS SearchQuery');
       selectColumns.push('Status');
-      if (columnNames.has('TriggeredAt')) {
-        selectColumns.push('TriggeredAt AS TriggeredAt');
-      } else if (columnNames.has('StartedAt')) {
-        selectColumns.push('StartedAt AS TriggeredAt');
-      } else {
-        selectColumns.push('NULL AS TriggeredAt');
-      }
-      selectColumns.push(columnNames.has('StartedAt') ? 'StartedAt AS StartedAt' : 'NULL AS StartedAt');
-      selectColumns.push(columnNames.has('CompletedAt') ? 'CompletedAt AS CompletedAt' : 'NULL AS CompletedAt');
-      if (columnNames.has('FailedAt')) {
-        selectColumns.push('FailedAt AS FailedAt');
-      } else if (columnNames.has('LastError')) {
+
+      if (columnNames.has('LastModified')) {
         selectColumns.push(
-          "CASE WHEN IFNULL(LastError, '') != '' THEN COALESCE(CompletedAt, StartedAt) ELSE NULL END AS FailedAt"
+          "COALESCE(LastModified, datetime('now')) AS LastModified"
         );
       } else {
-        selectColumns.push('NULL AS FailedAt');
+        const timestampColumns: string[] = [];
+        if (columnNames.has('CompletedAt')) timestampColumns.push('CompletedAt');
+        if (columnNames.has('FailedAt')) timestampColumns.push('FailedAt');
+        if (columnNames.has('StartedAt')) timestampColumns.push('StartedAt');
+        if (columnNames.has('TriggeredAt')) timestampColumns.push('TriggeredAt');
+        if (columnNames.has('ReviewedAt')) timestampColumns.push('ReviewedAt');
+        const coalesce = timestampColumns.length
+          ? `COALESCE(${timestampColumns.join(', ')}, datetime('now'))`
+          : "datetime('now')";
+        selectColumns.push(`${coalesce} AS LastModified`);
       }
-      if (columnNames.has('Summary')) {
-        selectColumns.push('Summary AS Summary');
-      } else if (columnNames.has('ResultPayload')) {
-        selectColumns.push('ResultPayload AS Summary');
-      } else if (columnNames.has('LastError')) {
-        selectColumns.push('LastError AS Summary');
+
+      if (columnNames.has('ReviewState')) {
+        selectColumns.push(
+          "CASE WHEN TRIM(IFNULL(ReviewState, '')) = '' THEN 'not_required' ELSE LOWER(ReviewState) END AS ReviewState"
+        );
+      } else if (columnNames.has('NeedsReview') || columnNames.has('ReviewDecision')) {
+        const needsReviewExpr = columnNames.has('NeedsReview') ? 'COALESCE(NeedsReview, 0)' : '0';
+        const reviewDecisionExpr = columnNames.has('ReviewDecision') ? 'LOWER(IFNULL(TRIM(ReviewDecision), \'\'))' : "''";
+        selectColumns.push(
+          `CASE
+             WHEN ${needsReviewExpr} > 0 THEN 'pending'
+             WHEN ${reviewDecisionExpr} IN ('approved', 'rejected') THEN ${reviewDecisionExpr}
+             WHEN ${reviewDecisionExpr} != '' THEN ${reviewDecisionExpr}
+             ELSE 'not_required'
+           END AS ReviewState`
+        );
       } else {
-        selectColumns.push('NULL AS Summary');
+        selectColumns.push(`'not_required' AS ReviewState`);
       }
-      selectColumns.push(columnNames.has('NeedsReview') ? 'COALESCE(NeedsReview, 0) AS NeedsReview' : '0 AS NeedsReview');
+
       selectColumns.push(columnNames.has('ReviewedBy') ? 'ReviewedBy AS ReviewedBy' : 'NULL AS ReviewedBy');
-      selectColumns.push(columnNames.has('ReviewedAt') ? 'ReviewedAt AS ReviewedAt' : 'NULL AS ReviewedAt');
-      selectColumns.push(columnNames.has('ReviewDecision') ? 'ReviewDecision AS ReviewDecision' : 'NULL AS ReviewDecision');
-      if (columnNames.has('ReviewNotes')) {
-        selectColumns.push('ReviewNotes AS ReviewNotes');
-      } else if (columnNames.has('LastError')) {
-        selectColumns.push('LastError AS ReviewNotes');
-      } else {
-        selectColumns.push('NULL AS ReviewNotes');
-      }
 
       const migrateSql = `
         INSERT INTO agentic_runs (
-          ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
-          Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
+          ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy
         )
         SELECT
           ${selectColumns.join(',\n          ')}
         FROM agentic_runs_legacy;
       `;
 
-      db.exec(migrateSql);
-      db.exec('DROP TABLE agentic_runs_legacy');
+      database.exec(migrateSql);
+      database.exec('DROP TABLE agentic_runs_legacy');
     })();
   } catch (err) {
     console.error('Failed to migrate agentic_runs schema', err);
@@ -230,7 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
   }
 }
 
-ensureAgenticRunSchema();
+ensureAgenticRunSchema(db);
 
 export { db };
 
@@ -302,31 +299,21 @@ export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
-      ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt,
-      Summary, NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
+      ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy
     )
     VALUES (
-      @ItemUUID, @SearchQuery, @Status, @TriggeredAt, @StartedAt, @CompletedAt, @FailedAt,
-      @Summary, @NeedsReview, @ReviewedBy, @ReviewedAt, @ReviewDecision, @ReviewNotes
+      @ItemUUID, @SearchQuery, @Status, @LastModified, @ReviewState, @ReviewedBy
     )
     ON CONFLICT(ItemUUID) DO UPDATE SET
       SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
       Status=excluded.Status,
-      TriggeredAt=COALESCE(excluded.TriggeredAt, agentic_runs.TriggeredAt),
-      StartedAt=excluded.StartedAt,
-      CompletedAt=excluded.CompletedAt,
-      FailedAt=excluded.FailedAt,
-      Summary=excluded.Summary,
-      NeedsReview=excluded.NeedsReview,
-      ReviewedBy=excluded.ReviewedBy,
-      ReviewedAt=excluded.ReviewedAt,
-      ReviewDecision=excluded.ReviewDecision,
-      ReviewNotes=excluded.ReviewNotes
+      LastModified=excluded.LastModified,
+      ReviewState=excluded.ReviewState,
+      ReviewedBy=excluded.ReviewedBy
   `
 );
 export const getAgenticRun = db.prepare(`
-  SELECT Id, ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
-         NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
+  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy
   FROM agentic_runs
   WHERE ItemUUID = ?
 `);
@@ -334,16 +321,10 @@ export const updateAgenticRunStatus = db.prepare(
   `
     UPDATE agentic_runs
        SET Status=@Status,
-           TriggeredAt=COALESCE(@TriggeredAt, TriggeredAt),
-           StartedAt=@StartedAt,
-           CompletedAt=@CompletedAt,
-           FailedAt=@FailedAt,
-           Summary=@Summary,
-           NeedsReview=@NeedsReview,
-           ReviewedBy=@ReviewedBy,
-           ReviewedAt=@ReviewedAt,
-           ReviewDecision=@ReviewDecision,
-           ReviewNotes=@ReviewNotes
+           SearchQuery=COALESCE(@SearchQuery, SearchQuery),
+           LastModified=@LastModified,
+           ReviewState=@ReviewState,
+           ReviewedBy=@ReviewedBy
      WHERE ItemUUID=@ItemUUID
   `
 );
@@ -392,20 +373,11 @@ export const getMaxArtikelNummer = db.prepare(`
     LIMIT 1
   `);
 
-export const getAgenticRunForItem = db.prepare(`
-  SELECT Id, ItemUUID, SearchQuery, Status, TriggeredAt, StartedAt, CompletedAt, FailedAt, Summary,
-         NeedsReview, ReviewedBy, ReviewedAt, ReviewDecision, ReviewNotes
-  FROM agentic_runs
-  WHERE ItemUUID = ?
-`);
-
 export const updateAgenticReview = db.prepare(`
   UPDATE agentic_runs
-  SET NeedsReview = @NeedsReview,
+  SET ReviewState = @ReviewState,
       ReviewedBy = @ReviewedBy,
-      ReviewedAt = @ReviewedAt,
-      ReviewDecision = @ReviewDecision,
-      ReviewNotes = @ReviewNotes
+      LastModified = @LastModified
   WHERE ItemUUID = @ItemUUID
 `);
 

@@ -88,19 +88,14 @@ const action: Action = {
         failedAt = new Date().toISOString();
       }
 
+      const nowIso = failedAt || new Date().toISOString();
       const runUpdate = {
         ItemUUID: itemId,
         Status: 'failed',
-        TriggeredAt: null,
-        StartedAt: null,
-        CompletedAt: null,
-        FailedAt: failedAt,
-        Summary: failureSummary,
-        NeedsReview: 0,
-        ReviewedBy: null,
-        ReviewedAt: null,
-        ReviewDecision: null,
-        ReviewNotes: null
+        SearchQuery: searchTerm,
+        LastModified: nowIso,
+        ReviewState: 'not_required',
+        ReviewedBy: null
       };
 
       try {
@@ -109,7 +104,6 @@ const action: Action = {
           console.warn('Agentic run missing during failure update, creating new record', itemId);
           ctx.upsertAgenticRun.run({
             ...runUpdate,
-            SearchQuery: searchTerm,
           });
         }
       } catch (updateErr) {
@@ -137,7 +131,7 @@ const action: Action = {
 
       let updatedRun: any = null;
       try {
-        updatedRun = ctx.getAgenticRunForItem.get(itemId) || null;
+        updatedRun = ctx.getAgenticRun.get(itemId) || null;
       } catch (loadErr) {
         console.error('Failed to load updated agentic run after failure', loadErr);
       }

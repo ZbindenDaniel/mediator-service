@@ -117,16 +117,9 @@ const action: Action = {
             ItemUUID: itemData.ItemUUID,
             SearchQuery: search || null,
             Status: status,
-            TriggeredAt: now,
-            StartedAt: status === 'running' ? now : null,
-            CompletedAt: null,
-            FailedAt: null,
-            Summary: null,
-            NeedsReview: 0,
-            ReviewedBy: null,
-            ReviewedAt: null,
-            ReviewDecision: null,
-            ReviewNotes: null
+            LastModified: now,
+            ReviewState: 'not_required',
+            ReviewedBy: null
           });
           ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
           ctx.logEvent.run({
