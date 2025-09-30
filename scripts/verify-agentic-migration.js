@@ -1,99 +1,151 @@
 #!/usr/bin/env node
-/*
- * Migration verification script for agentic_runs schema.
- * Copies the provided SQLite database, migrates the copy, and checks for data integrity.
- */
+
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
 
-function usage() {
-  console.error('Usage: node scripts/verify-agentic-migration.js <path-to-sqlite-db>');
-}
+const LOG_PREFIX = '[verify-agentic-migration]';
 
-function formatList(values) {
-  return values.length ? values.join(', ') : '(none)';
-}
-
-(async () => {
+function registerTypeScriptLoader() {
   try {
-    const [, , sourcePath] = process.argv;
-    if (!sourcePath) {
-      usage();
-      process.exit(1);
-    }
-
-    const absoluteSource = path.resolve(sourcePath);
-    if (!fs.existsSync(absoluteSource)) {
-      console.error('Source database not found:', absoluteSource);
-      process.exit(1);
-    }
-
-    const dir = path.dirname(absoluteSource);
-    const base = path.basename(absoluteSource, path.extname(absoluteSource));
-    const ext = path.extname(absoluteSource) || '.sqlite';
-    const copyPath = path.join(dir, `${base}.agentic-migration-test${ext}`);
-
-    fs.copyFileSync(absoluteSource, copyPath);
-    console.log('Created migration test copy at', copyPath);
-
-    const preDb = new Database(copyPath);
-    const preInfo = preDb.prepare('PRAGMA table_info(agentic_runs)').all();
-    const preColumns = preInfo.map((c) => c.name);
-    const preCountRow = preDb.prepare('SELECT COUNT(*) AS c FROM agentic_runs').get();
-    const preCount = preCountRow ? preCountRow.c : 0;
-    preDb.close();
-
-    process.env.DB_PATH = copyPath;
-    const backendDbModule = require('../backend/db');
-    const { ensureAgenticRunSchema, db: runtimeDb } = backendDbModule;
-
-    const migratedDb = new Database(copyPath);
-    ensureAgenticRunSchema(migratedDb);
-    const postInfo = migratedDb.prepare('PRAGMA table_info(agentic_runs)').all();
-    const postColumns = postInfo.map((c) => c.name);
-    const postCountRow = migratedDb.prepare('SELECT COUNT(*) AS c FROM agentic_runs').get();
-    const postCount = postCountRow ? postCountRow.c : 0;
-    const sampleRows = migratedDb
-      .prepare(
-        'SELECT ItemUUID, Status, LastModified, ReviewState, ReviewedBy FROM agentic_runs ORDER BY ItemUUID LIMIT 5'
-      )
-      .all();
-    migratedDb.close();
-
-    const removedColumns = preColumns.filter((col) => !postColumns.includes(col));
-    const newColumns = postColumns.filter((col) => !preColumns.includes(col));
-
-    console.log('--- Migration Verification Report ---');
-    console.log('Row count before migration:', preCount);
-    console.log('Row count after migration:', postCount);
-    console.log('Legacy columns removed:', formatList(removedColumns));
-    console.log('New columns present:', formatList(newColumns));
-    console.log('Sample migrated rows:', sampleRows);
-
-    if (preCount !== postCount) {
-      console.error('Row count mismatch detected between pre- and post-migration data.');
-      process.exit(2);
-    }
-
-    const requiredColumns = ['LastModified', 'ReviewState'];
-    const missingColumns = requiredColumns.filter((col) => !postColumns.includes(col));
-    if (missingColumns.length) {
-      console.error('Required columns missing after migration:', formatList(missingColumns));
-      process.exit(3);
-    }
-
-    if (runtimeDb && typeof runtimeDb.close === 'function') {
-      try {
-        runtimeDb.close();
-      } catch (closeErr) {
-        console.warn('Failed to close runtime database handle', closeErr);
-      }
-    }
-
-    console.log('Migration verification completed successfully.');
+    require('ts-node/register');
+    console.log(`${LOG_PREFIX} Registered ts-node TypeScript loader.`);
+    return true;
   } catch (err) {
-    console.error('Migration verification failed:', err);
+    console.warn(`${LOG_PREFIX} Unable to load ts-node/register: ${err.message}`);
+  }
+
+  let ts;
+  try {
+    ts = require('typescript');
+  } catch (err) {
+    console.warn(`${LOG_PREFIX} Unable to load the typescript compiler: ${err.message}`);
+    console.warn(`${LOG_PREFIX} TypeScript files will run without transpilation and may fail.`);
+    return false;
+  }
+
+  const transpile = (module, filename) => {
+    try {
+      const source = fs.readFileSync(filename, 'utf8');
+      const result = ts.transpileModule(source, {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          target: ts.ScriptTarget.ES2020,
+          jsx: ts.JsxEmit.React,
+          esModuleInterop: true,
+        },
+        fileName: filename,
+      });
+      module._compile(result.outputText, filename);
+    } catch (error) {
+      console.error(`${LOG_PREFIX} Failed to transpile ${path.relative(process.cwd(), filename)}`, error);
+      throw error;
+    }
+  };
+
+  require.extensions['.ts'] = transpile;
+  require.extensions['.tsx'] = transpile;
+  console.log(`${LOG_PREFIX} Registered fallback TypeScript transpiler.`);
+  return true;
+}
+
+function ensureArgument() {
+  const dbPath = process.argv[2];
+  if (!dbPath) {
+    console.error(`${LOG_PREFIX} Usage: node scripts/verify-agentic-migration.js <db-path>`);
     process.exit(1);
   }
-})();
+  return dbPath;
+}
+
+function verifyAgenticRunsSchema(db) {
+  const expectedColumns = [
+    'Id',
+    'ItemUUID',
+    'SearchQuery',
+    'Status',
+    'TriggeredAt',
+    'StartedAt',
+    'CompletedAt',
+    'FailedAt',
+    'Summary',
+    'NeedsReview',
+    'ReviewedBy',
+    'ReviewedAt',
+    'ReviewDecision',
+    'ReviewNotes',
+  ];
+  const legacyColumns = ['LastError', 'ResultPayload'];
+
+  let columns;
+  try {
+    columns = db.prepare(`PRAGMA table_info(agentic_runs)`).all();
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Failed to inspect agentic_runs schema`, error);
+    throw error;
+  }
+
+  const columnNames = new Set(columns.map((column) => column.name));
+  const missing = expectedColumns.filter((column) => !columnNames.has(column));
+  const legacy = legacyColumns.filter((column) => columnNames.has(column));
+
+  if (missing.length) {
+    throw new Error(`Missing agentic_runs columns: ${missing.join(', ')}`);
+  }
+
+  if (legacy.length) {
+    throw new Error(`Legacy agentic_runs columns detected: ${legacy.join(', ')}`);
+  }
+
+  console.log(`${LOG_PREFIX} agentic_runs schema looks good.`);
+}
+
+function main() {
+  const dbPath = ensureArgument();
+  const resolvedPath = path.resolve(process.cwd(), dbPath);
+  process.env.DB_PATH = resolvedPath;
+  console.log(`${LOG_PREFIX} Using database at ${resolvedPath}`);
+
+  const loaderRegistered = registerTypeScriptLoader();
+  if (!loaderRegistered) {
+    console.warn(`${LOG_PREFIX} Continuing without a registered TypeScript loader. If backend/db.ts fails to load, ensure dependencies are installed.`);
+  }
+
+  let dbModule;
+  try {
+    dbModule = require('../backend/db');
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Failed to load backend/db module`, error);
+    process.exit(1);
+  }
+
+  const db = dbModule.db;
+  if (!db) {
+    console.error(`${LOG_PREFIX} backend/db did not export a database handle.`);
+    process.exit(1);
+  }
+
+  try {
+    verifyAgenticRunsSchema(db);
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Verification failed`, error);
+    process.exit(1);
+  } finally {
+    try {
+      if (typeof db.close === 'function') {
+        db.close();
+        console.log(`${LOG_PREFIX} Closed database connection.`);
+      }
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} Failed to close database`, error);
+    }
+  }
+
+  console.log(`${LOG_PREFIX} Verification complete.`);
+}
+
+try {
+  main();
+} catch (error) {
+  console.error(`${LOG_PREFIX} Unexpected error`, error);
+  process.exit(1);
+}

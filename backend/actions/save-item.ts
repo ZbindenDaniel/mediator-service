@@ -4,6 +4,39 @@ import path from 'path';
 import { Item } from '../../models';
 import type { Action } from './index';
 
+function pushMedia(target: string[], value: string | null | undefined, seen: Set<string>): void {
+  if (!value) return;
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  if (seen.has(trimmed)) return;
+  target.push(trimmed);
+  seen.add(trimmed);
+}
+
+export function collectMediaAssets(itemId: string, primary?: string | null): string[] {
+  const assets: string[] = [];
+  const seen = new Set<string>();
+  pushMedia(assets, primary || '', seen);
+
+  try {
+    const dir = path.join(__dirname, '../../media', itemId);
+    if (fs.existsSync(dir)) {
+      const stat = fs.statSync(dir);
+      if (stat.isDirectory()) {
+        const entries = fs.readdirSync(dir).sort();
+        for (const entry of entries) {
+          const resolved = `/media/${itemId}/${entry}`;
+          pushMedia(assets, resolved, seen);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to enumerate media assets', { itemId, error: err });
+  }
+
+  return assets;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -26,7 +59,8 @@ const action: Action = {
         const box = ctx.getBox.get(item.BoxID);
         const events = ctx.listEventsForItem.all(itemId);
         const agentic = ctx.getAgenticRun ? ctx.getAgenticRun.get(itemId) : null;
-        return sendJson(res, 200, { item, box, events, agentic });
+        const media = collectMediaAssets(itemId, item.Grafikname);
+        return sendJson(res, 200, { item, box, events, agentic, media });
       } catch (err) {
         console.error('Fetch item failed', err);
         return sendJson(res, 500, { error: (err as Error).message });
@@ -53,8 +87,16 @@ const action: Action = {
           const ext = m[1].split('/')[1];
           const buf = Buffer.from(m[2], 'base64');
           const file = `${artNr}-${idx + 1}.${ext}`;
-          fs.writeFileSync(path.join(dir, file), buf);
-          if (idx === 0) grafik = `/media/${itemId}/${file}`;
+          try {
+            fs.writeFileSync(path.join(dir, file), buf);
+            if (idx === 0) grafik = `/media/${itemId}/${file}`;
+          } catch (writeErr) {
+            console.error('Failed to persist media file', {
+              itemId,
+              file,
+              error: writeErr
+            });
+          }
         });
       } catch (e) {
         console.error('Failed to save item images', e);
@@ -89,7 +131,8 @@ const action: Action = {
           });
         });
         txn(item, actor);
-        sendJson(res, 200, { ok: true });
+        const media = collectMediaAssets(itemId, grafik);
+        sendJson(res, 200, { ok: true, media });
     } catch (err) {
       console.error('Save item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

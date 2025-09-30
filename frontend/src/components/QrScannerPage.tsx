@@ -80,7 +80,7 @@ export default function QrScannerPage() {
       if (!data || typeof data !== 'object') {
         throw new Error('QR-Code enthält kein gültiges JSON-Objekt.');
       }
-      const id = typeof (data as { id?: unknown }).id === 'string' ? (data as { id?: string }).id.trim() : '';
+      const id = typeof (data as { id?: unknown }).id === 'string' ? (data as { id?: string })?.id?.trim() : '';
       if (!id) {
         throw new Error('QR-Code enthält keine gültige "id".');
       }
