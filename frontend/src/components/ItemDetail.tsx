@@ -29,6 +29,8 @@ export default function ItemDetail({ itemId }: Props) {
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
+  // TODO: Replace client-side slicing once the activities page provides pagination.
+  const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
   useEffect(() => {
     async function load() {
@@ -426,7 +428,7 @@ export default function ItemDetail({ itemId }: Props) {
             <div className="card">
               <h3>Aktivitäten</h3>
               <ul className="events">
-                {events.map((ev) => (
+                {displayedEvents.map((ev) => (
                   <li key={ev.Id}>
                     {formatDateTime(ev.CreatedAt)}: {resolveActorName(ev.Actor)}{' hat ' + eventLabel(ev.Event)}
                   </li>
