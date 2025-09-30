@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import { HOSTNAME, HTTP_PORT } from '../config';
 import type { Box, Item } from '../../models';
 import type { BoxLabelPayload } from '../labelpdf';
 
@@ -39,10 +38,9 @@ const action: Action = {
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,
-        url: `${HOSTNAME}:${HTTP_PORT}/boxes/${encodeURIComponent(box.BoxID)}`,
         location: box.Location?.trim() || null,
         description: box.Notes?.trim() || null,
-        quantity: Number.isFinite(totalQuantity) ? totalQuantity : 0,
+        quantity: Number.isFinite(totalQuantity) ? totalQuantity : null,
         itemCount: items.length
       };
 

@@ -9,16 +9,36 @@ try {
   console.error('PDF generation unavailable', err);
 }
 
+const LABEL_SIZE: [number, number] = [410, 580];
+const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
+const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');
+// TODO: Surface configurable label styling so branding can be adjusted without code changes.
+
 async function makeQrPngBuffer(text: string): Promise<Buffer> {
   if (!QRCode) throw new Error('qrcode module not available');
   return QRCode.toBuffer(text, { type: 'png', margin: 0, scale: 6 });
 }
 
+function formatNumber(value: number | null | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return NUMBER_FORMAT.format(value);
+  }
+  return '—';
+}
+
+function formatDate(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : '—';
+  }
+  return DATE_FORMAT.format(date);
+}
+
 export interface BoxLabelPayload {
   type: 'box';
   id: string;
-  url: string;
-  location: string | null;
+  location?: string | null;
   description: string | null;
   quantity: number | null;
   itemCount?: number | null;
@@ -32,7 +52,7 @@ export interface BoxLabelOptions {
 export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
   try {
-    const doc = new PDFDocument({ size: 'A5', margin: 36 });
+    const doc = new PDFDocument({ size: LABEL_SIZE, margin: 32 });
     const stream = fs.createWriteStream(outPath);
     doc.pipe(stream);
 
@@ -40,63 +60,101 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
     const qr = await makeQrPngBuffer(qrContent);
 
     const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const qrSize = Math.min(220, contentWidth * 0.4);
-    const textWidth = Math.max(contentWidth - qrSize - 24, contentWidth * 0.5);
-    const textX = doc.page.margins.left;
-    const textY = doc.page.margins.top;
-    const qrX = doc.page.margins.left + textWidth + 24;
-    const qrY = doc.page.margins.top;
+    const qrSize = Math.min(200, contentWidth * 0.42);
+    const textWidth = Math.max(contentWidth - qrSize - 28, contentWidth * 0.55);
+    const textX = doc.page.margins.left + 8;
+    const textY = doc.page.margins.top + 12;
+    const qrX = doc.page.margins.left + textWidth + 20;
+    const qrY = doc.page.margins.top + 20;
+
+    const frameX = doc.page.margins.left / 2;
+    const frameY = doc.page.margins.top / 2;
+    const frameWidth = doc.page.width - frameX * 2;
+    const frameHeight = doc.page.height - frameY * 2;
+
+    doc
+      .save()
+      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
+      .fill('#f5f7fb')
+      .restore();
+
+    doc
+      .save()
+      .roundedRect(textX - 12, textY - 18, textWidth + 24, frameHeight - 48, 12)
+      .fill('#ffffff')
+      .restore();
+
+    doc
+      .save()
+      .roundedRect(qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 12)
+      .fill('#ffffff')
+      .restore();
+
+    doc
+      .lineWidth(2)
+      .strokeColor('#dce3f0')
+      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
+      .stroke();
 
     doc
       .font('Helvetica-Bold')
-      .fontSize(26)
-      .text(`Box ${boxData.id}`, textX, textY, { width: textWidth });
+      .fontSize(28)
+      .fillColor('#0b1f33')
+      .text('Behälter', textX, textY, { width: textWidth });
 
     doc
-      .moveDown(0.3)
+      .moveDown(0.1)
       .font('Helvetica')
       .fontSize(14)
-      .fillColor('#000')
-      .text(`Location: ${boxData.location ?? '—'}`, { width: textWidth });
+      .fillColor('#1d3557')
+      .text(`Box-ID: ${boxData.id}`, { width: textWidth });
 
     const description = boxData.description?.trim() || '—';
     doc
-      .moveDown(0.3)
-      .fontSize(12)
-      .fillColor('#333')
-      .text(`Description: ${description}`, { width: textWidth });
+      .moveDown(0.8)
+      .font('Helvetica-Bold')
+      .fontSize(13)
+      .fillColor('#0b1f33')
+      .text('Beschreibung', { width: textWidth });
 
-    const quantityLabel =
-      typeof boxData.quantity === 'number' && Number.isFinite(boxData.quantity)
-        ? boxData.quantity
-        : '—';
     doc
-      .moveDown(0.3)
+      .moveDown(0.15)
+      .font('Helvetica')
       .fontSize(12)
-      .fillColor('#000')
-      .text(`Quantity: ${quantityLabel}`, { width: textWidth });
+      .fillColor('#2f3c4f')
+      .text(description, { width: textWidth, lineGap: 2 });
+
+    doc
+      .moveDown(0.8)
+      .font('Helvetica-Bold')
+      .fontSize(13)
+      .fillColor('#0b1f33')
+      .text('Anzahl gesamt', { width: textWidth });
+
+    doc
+      .moveDown(0.2)
+      .font('Helvetica')
+      .fontSize(16)
+      .fillColor('#1d3557')
+      .text(formatNumber(boxData.quantity), { width: textWidth });
 
     if (typeof boxData.itemCount === 'number' && Number.isFinite(boxData.itemCount)) {
       doc
-        .moveDown(0.2)
-        .fontSize(11)
-        .fillColor('#000')
-        .text(`Items: ${boxData.itemCount}`, { width: textWidth });
+        .moveDown(0.4)
+        .font('Helvetica')
+        .fontSize(12)
+        .fillColor('#2f3c4f')
+        .text(`Artikelpositionen: ${NUMBER_FORMAT.format(boxData.itemCount)}`, { width: textWidth });
     }
 
     doc.image(qr, qrX, qrY, { fit: [qrSize, qrSize] });
 
-    doc
-      .moveDown(0.8)
-      .fontSize(10)
-      .fillColor('#666')
-      .text(boxData.url, textX, doc.page.height - doc.page.margins.bottom - 40, {
-        width: contentWidth
-      })
-      .fillColor('#000');
     doc.end();
 
-    await new Promise<void>((res) => stream.on('finish', () => res()));
+    await new Promise<void>((resolve, reject) => {
+      stream.on('finish', () => resolve());
+      stream.on('error', (err) => reject(err));
+    });
     return outPath;
   } catch (err) {
     console.error('Failed to create box label PDF', err);
@@ -107,12 +165,13 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
 export interface ItemLabelPayload {
   type: 'item';
   id: string;
-  url: string;
   materialNumber: string | null;
-  boxId: string | null;
-  location: string | null;
+  boxId?: string | null;
+  location?: string | null;
   description: string | null;
   quantity: number | null;
+  addedAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface ItemLabelOptions {
@@ -123,7 +182,7 @@ export interface ItemLabelOptions {
 export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
   try {
-    const doc = new PDFDocument({ size: 'A5', margin: 36 });
+    const doc = new PDFDocument({ size: LABEL_SIZE, margin: 32 });
     const stream = fs.createWriteStream(outPath);
     doc.pipe(stream);
 
@@ -131,73 +190,101 @@ export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promi
     const qr = await makeQrPngBuffer(qrContent);
 
     const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const qrSize = Math.min(220, contentWidth * 0.4);
-    const textWidth = Math.max(contentWidth - qrSize - 24, contentWidth * 0.5);
-    const textX = doc.page.margins.left;
-    const textY = doc.page.margins.top;
-    const qrX = doc.page.margins.left + textWidth + 24;
-    const qrY = doc.page.margins.top;
+    const qrSize = Math.min(200, contentWidth * 0.42);
+    const textWidth = Math.max(contentWidth - qrSize - 28, contentWidth * 0.55);
+    const textX = doc.page.margins.left + 8;
+    const textY = doc.page.margins.top + 12;
+    const qrX = doc.page.margins.left + textWidth + 20;
+    const qrY = doc.page.margins.top + 20;
 
+    const frameX = doc.page.margins.left / 2;
+    const frameY = doc.page.margins.top / 2;
+    const frameWidth = doc.page.width - frameX * 2;
+    const frameHeight = doc.page.height - frameY * 2;
+
+    doc
+      .save()
+      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
+      .fill('#f5f7fb')
+      .restore();
+
+    doc
+      .save()
+      .roundedRect(textX - 12, textY - 18, textWidth + 24, frameHeight - 48, 12)
+      .fill('#ffffff')
+      .restore();
+
+    doc
+      .save()
+      .roundedRect(qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 12)
+      .fill('#ffffff')
+      .restore();
+
+    doc
+      .lineWidth(2)
+      .strokeColor('#dce3f0')
+      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
+      .stroke();
+
+    const headline = itemData.description?.trim() || 'Artikel';
     doc
       .font('Helvetica-Bold')
       .fontSize(24)
-      .text(`Material: ${itemData.materialNumber ?? '—'}`, textX, textY, { width: textWidth });
+      .fillColor('#0b1f33')
+      .text(headline, textX, textY, { width: textWidth });
 
     doc
-      .moveDown(0.3)
+      .moveDown(0.4)
       .font('Helvetica')
-      .fontSize(13)
-      .fillColor('#000')
-      .text(`Item ID: ${itemData.id}`, { width: textWidth });
+      .fontSize(14)
+      .fillColor('#1d3557')
+      .text(`Artikelnummer: ${itemData.materialNumber?.trim() || '—'}`, { width: textWidth });
 
-    if (itemData.boxId) {
+    const drawSection = (label: string, value: string, space = 0.7) => {
       doc
-        .moveDown(0.2)
+        .moveDown(space)
+        .font('Helvetica-Bold')
         .fontSize(12)
-        .fillColor('#000')
-        .text(`Box: ${itemData.boxId}`, { width: textWidth });
-    }
+        .fillColor('#0b1f33')
+        .text(label, { width: textWidth });
+
+      doc
+        .moveDown(0.15)
+        .font('Helvetica')
+        .fontSize(12)
+        .fillColor('#2f3c4f')
+        .text(value || '—', { width: textWidth, lineGap: 2 });
+    };
+
+    drawSection('Artikelbeschreibung', headline);
+    drawSection('Angelegt am', formatDate(itemData.addedAt));
+    drawSection('Geändert am', formatDate(itemData.updatedAt));
+
+    doc
+      .moveDown(0.7)
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .fillColor('#0b1f33')
+      .text('Anzahl', { width: textWidth });
 
     doc
       .moveDown(0.2)
-      .fontSize(12)
-      .fillColor('#000')
-      .text(`Location: ${itemData.location ?? '—'}`, { width: textWidth });
-
-    const description = itemData.description?.trim() || '—';
-    doc
-      .moveDown(0.3)
-      .fontSize(12)
-      .fillColor('#333')
-      .text(`Description: ${description}`, { width: textWidth });
-
-    const quantityLabel =
-      typeof itemData.quantity === 'number' && Number.isFinite(itemData.quantity)
-        ? itemData.quantity
-        : '—';
-    doc
-      .moveDown(0.3)
-      .fontSize(12)
-      .fillColor('#000')
-      .text(`Quantity: ${quantityLabel}`, { width: textWidth });
+      .font('Helvetica')
+      .fontSize(16)
+      .fillColor('#1d3557')
+      .text(formatNumber(itemData.quantity), { width: textWidth });
 
     doc.image(qr, qrX, qrY, { fit: [qrSize, qrSize] });
 
-    doc
-      .moveDown(0.8)
-      .fontSize(10)
-      .fillColor('#666')
-      .text(itemData.url, textX, doc.page.height - doc.page.margins.bottom - 40, {
-        width: contentWidth
-      })
-      .fillColor('#000');
     doc.end();
 
-    await new Promise<void>((res) => stream.on('finish', () => res()));
+    await new Promise<void>((resolve, reject) => {
+      stream.on('finish', () => resolve());
+      stream.on('error', (err) => reject(err));
+    });
     return outPath;
   } catch (err) {
     console.error('Failed to create item label PDF', err);
     throw err;
   }
 }
-

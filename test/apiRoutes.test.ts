@@ -111,7 +111,7 @@ test('create item and retrieve via box and search', async () => {
   expect(printBox.status).toBe(200);
   const boxBody = await printBox.json();
   expect(boxBody.qrPayload).toMatchObject({ id: boxId(1), type: 'box' });
-  expect(typeof boxBody.qrPayload.url).toBe('string');
+  expect(boxBody.qrPayload.url).toBeUndefined();
   expect(typeof boxBody.qrPayload.quantity).toBe('number');
   if (boxBody.previewUrl) {
     expect(boxBody.previewUrl).toMatch(/\/prints\/box-/);
@@ -120,7 +120,7 @@ test('create item and retrieve via box and search', async () => {
   expect(printItem.status).toBe(200);
   const itemBody = await printItem.json();
   expect(itemBody.qrPayload).toMatchObject({ id: itemId(1), type: 'item' });
-  expect(typeof itemBody.qrPayload.url).toBe('string');
+  expect(itemBody.qrPayload.url).toBeUndefined();
   expect(typeof itemBody.qrPayload.quantity).toBe('number');
   if (itemBody.previewUrl) {
     expect(itemBody.previewUrl).toMatch(/\/prints\/item-/);

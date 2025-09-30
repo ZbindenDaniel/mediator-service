@@ -57,6 +57,7 @@ test('print-box handler provides structured QR payload', async () => {
       quantity: 5,
       itemCount: 2
     });
+    expect(responseBody.qrPayload.url).toBeUndefined();
     expect(responseBody.previewUrl).toMatch(/\/prints\/box-BOX-1-1700000000000\.pdf/);
     expect(pdfCalls.length).toBe(1);
     expect(pdfCalls[0].boxData).toEqual(responseBody.qrPayload);
@@ -110,6 +111,9 @@ test('print-item handler provides structured QR payload', async () => {
       description: 'Widget',
       quantity: 7
     });
+    expect(typeof responseBody.qrPayload.addedAt === 'string' || responseBody.qrPayload.addedAt === null).toBe(true);
+    expect(typeof responseBody.qrPayload.updatedAt === 'string' || responseBody.qrPayload.updatedAt === null).toBe(true);
+    expect(responseBody.qrPayload.url).toBeUndefined();
     expect(responseBody.previewUrl).toMatch(/\/prints\/item-ITEM-1-1700000001000\.pdf/);
     expect(pdfCalls.length).toBe(1);
     expect(pdfCalls[0].itemData).toEqual(responseBody.qrPayload);

@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import { HOSTNAME, HTTP_PORT } from '../config';
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../labelpdf';
 
@@ -34,15 +33,22 @@ const action: Action = {
       }
 
       const description = item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim() || item.Langtext?.trim() || null;
+      const toIsoString = (value: unknown): string | null => {
+        if (!value) return null;
+        const date = value instanceof Date ? value : new Date(value as string);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+      };
+
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
-        url: `${HOSTNAME}:${HTTP_PORT}/items/${encodeURIComponent(item.ItemUUID)}`,
         materialNumber: item.Artikel_Nummer?.trim() || null,
         boxId: item.BoxID || null,
         location: item.Location?.trim() || null,
         description,
-        quantity: parsedQuantity
+        quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
+        addedAt: toIsoString(item.Datum_erfasst || item.UpdatedAt),
+        updatedAt: toIsoString(item.UpdatedAt)
       };
       let previewUrl = '';
       try {
