@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { server, resetData } = require('./server');
 
 process.env.NODE_ENV = 'test';
 process.env.HTTP_PORT = '0';

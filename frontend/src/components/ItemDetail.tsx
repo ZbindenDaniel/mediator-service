@@ -14,6 +14,85 @@ interface Props {
   itemId: string;
 }
 
+export interface AgenticStatusCardProps {
+  status: { label: string; className: string; description: string };
+  rows: [string, React.ReactNode][];
+  actionPending: boolean;
+  reviewIntent: 'approved' | 'rejected' | null;
+  error: string | null;
+  needsReview: boolean;
+  hasFailure: boolean;
+  onRestart: () => void;
+  onReview: (decision: 'approved' | 'rejected') => void;
+  onCancel: () => void;
+}
+
+export function AgenticStatusCard({
+  status,
+  rows,
+  actionPending,
+  reviewIntent,
+  error,
+  needsReview,
+  hasFailure,
+  onRestart,
+  onReview,
+  onCancel
+}: AgenticStatusCardProps) {
+  return (
+    <div className="card">
+      <h3>Agentic Status</h3>
+      <div className="row">
+        <span className={status.className}>{status.label}</span>
+      </div>
+      <p className="muted">{status.description}</p>
+      {rows.length > 0 ? (
+        <table className="details">
+          <tbody>
+            {rows.map(([k, v], idx) => (
+              <tr key={`${k}-${idx}`} className="responsive-row">
+                <th className="responsive-th">{k}</th>
+                <td className="responsive-td">{v ?? ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {actionPending ? <p className="muted">Agentic-Aktion wird ausgeführt…</p> : null}
+      {reviewIntent ? (
+        <p className="muted">
+          Review-Aktion "{reviewIntent === 'approved' ? 'Freigeben' : 'Ablehnen'}" vorbereitet.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="muted" style={{ color: '#a30000' }}>{error}</p>
+      ) : null}
+      <div className='row'>
+        <button type="button" className="btn" onClick={onCancel}>
+          Abbrechen
+        </button>
+      </div>
+      {!needsReview && hasFailure ? (
+        <div className='row'>
+          <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
+            Neu starten
+          </button>
+        </div>
+      ) : null}
+      {needsReview ? (
+        <div className='row'>
+          <button type="button" className="btn" disabled={actionPending} onClick={() => onReview('approved')}>
+            Freigeben
+          </button>
+          <button type="button" className="btn danger" disabled={actionPending} onClick={() => onReview('rejected')}>
+            Ablehnen
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
 }
@@ -24,6 +103,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
+  const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
 
@@ -46,17 +126,20 @@ export default function ItemDetail({ itemId }: Props) {
             : [];
           setMediaAssets(media);
           setAgenticError(null);
+          setAgenticReviewIntent(null);
         } else {
           console.error('Failed to fetch item', res.status);
           setAgentic(null);
           setAgenticError('Agentic-Status konnte nicht geladen werden.');
           setMediaAssets([]);
+          setAgenticReviewIntent(null);
         }
       } catch (err) {
         console.error('Failed to fetch item', err);
         setAgentic(null);
         setAgenticError('Agentic-Status konnte nicht geladen werden.');
         setMediaAssets([]);
+        setAgenticReviewIntent(null);
       }
     }
     load();
@@ -144,6 +227,7 @@ export default function ItemDetail({ itemId }: Props) {
     const noteInput = window.prompt('Notiz (optional):', '') ?? '';
     setAgenticActionPending(true);
     setAgenticError(null);
+    setAgenticReviewIntent(decision);
     try {
       const res = await fetch(
         `/api/items/${encodeURIComponent(agentic.ItemUUID)}/agentic/review`,
@@ -165,6 +249,7 @@ export default function ItemDetail({ itemId }: Props) {
       console.error('Agentic review request failed', err);
       setAgenticError('Review-Anfrage fehlgeschlagen.');
     } finally {
+      setAgenticReviewIntent(null);
       setAgenticActionPending(false);
     }
   }
@@ -186,6 +271,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     setAgenticActionPending(true);
     setAgenticError(null);
+    setAgenticReviewIntent(null);
 
     try {
       const restartResponse = await fetch(
@@ -242,7 +328,20 @@ export default function ItemDetail({ itemId }: Props) {
       console.error('Agentic restart request failed', err);
       setAgenticError('Agentic-Neustart fehlgeschlagen.');
     } finally {
+      setAgenticReviewIntent(null);
       setAgenticActionPending(false);
+    }
+  }
+
+  function handleAgenticCancel() {
+    // TODO: Replace local reset with request abort once the agentic API supports cancellation hooks.
+    try {
+      console.info('Agentic action cancelled by user');
+      setAgenticActionPending(false);
+      setAgenticError(null);
+      setAgenticReviewIntent(null);
+    } catch (err) {
+      console.error('Failed to reset agentic state', err);
     }
   }
 
@@ -363,63 +462,18 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
             </div>
 
-            <div className="card">
-              <h3>Agentic Status</h3>
-              <div className="row">
-                <span className={agenticStatus.className}>{agenticStatus.label}</span>
-              </div>
-              <p className="muted">{agenticStatus.description}</p>
-              {agenticRows.length > 0 ? (
-                <table className="details">
-                  <tbody>
-                    {agenticRows.map(([k, v], idx) => (
-                      <tr key={`${k}-${idx}`} className="responsive-row">
-                        <th className="responsive-th">{k}</th>
-                        <td className="responsive-td">{v ?? ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : null}
-              {agenticActionPending ? (
-                <p className="muted">Agentic-Aktion wird ausgeführt…</p>
-              ) : null}
-              {agenticError ? (
-                <p className="muted" style={{ color: '#a30000' }}>{agenticError}</p>
-              ) : null}
-              {!agenticNeedsReview && agenticHasFailure ? (
-                <div className='row'>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={agenticActionPending}
-                    onClick={handleAgenticRestart}
-                  >
-                    Neu starten
-                  </button>
-                </div>
-              ) : null}
-              {agenticNeedsReview ? (
-                <div className='row'>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={agenticActionPending}
-                    onClick={() => handleAgenticReview('approved')}
-                  >
-                    Freigeben
-                  </button>
-                  <button
-                    type="button"
-                    className="btn danger"
-                    disabled={agenticActionPending}
-                    onClick={() => handleAgenticReview('rejected')}
-                  >
-                    Ablehnen
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <AgenticStatusCard
+              status={agenticStatus}
+              rows={agenticRows}
+              actionPending={agenticActionPending}
+              reviewIntent={agenticReviewIntent}
+              error={agenticError}
+              needsReview={agenticNeedsReview}
+              hasFailure={agenticHasFailure}
+              onRestart={handleAgenticRestart}
+              onReview={handleAgenticReview}
+              onCancel={handleAgenticCancel}
+            />
 
             <RelocateItemCard itemId={item.ItemUUID} />
 
