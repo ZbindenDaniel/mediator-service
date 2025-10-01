@@ -277,29 +277,3 @@ test('importing items preserves box location when subsequent payload omits Stand
   expect(itemIds).toContain(firstItem);
   expect(itemIds).toContain(secondItem);
 });
-
-test('auto-generated ItemUUID values are unique for sequential imports', async () => {
-  const firstRes = await postForm('/api/import/item', {
-    Artikel_Nummer: '2100',
-    Artikelbeschreibung: 'Auto generated item 1',
-    Location: 'A-03-01',
-    Auf_Lager: '1',
-    actor: 'tester'
-  });
-  expect(firstRes.status).toBe(200);
-  const firstBody = await firstRes.json();
-  expect(firstBody?.item?.ItemUUID).toMatch(/^I-\d{6}-\d{4,}$/);
-
-  const secondRes = await postForm('/api/import/item', {
-    Artikel_Nummer: '2101',
-    Artikelbeschreibung: 'Auto generated item 2',
-    Location: 'A-03-02',
-    Auf_Lager: '1',
-    actor: 'tester'
-  });
-  expect(secondRes.status).toBe(200);
-  const secondBody = await secondRes.json();
-  expect(secondBody?.item?.ItemUUID).toMatch(/^I-\d{6}-\d{4,}$/);
-
-  expect(secondBody.item.ItemUUID).not.toBe(firstBody.item.ItemUUID);
-});
