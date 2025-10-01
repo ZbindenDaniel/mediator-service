@@ -8,6 +8,7 @@ interface Props {
 }
 
 export default function ItemList({ items }: Props) {
+  console.log(items)
   return (
     <div className="item-list-wrapper">
       <table className="item-list">
@@ -15,8 +16,9 @@ export default function ItemList({ items }: Props) {
           <tr className="item-list-header">
             <th className="col-id" style={{ display: 'none' }}>Id</th>
             <th className="col-select"></th>
-            <th className="col-desc">Artikelbeschreibung</th>
-            <th className="col-location">Behälter</th>
+            <th className="col-desc">Artikel</th>
+            <th className="col-box">Behälter</th>
+            <th className="col-location">Lagerort</th>
             <th className="col-link"></th>
           </tr>
         </thead>
@@ -26,7 +28,8 @@ export default function ItemList({ items }: Props) {
               <td className="col-id" style={{ display: 'none' }}>{it.ItemUUID}</td>
               <td className="col-select"><input type="checkbox" /></td>
               <td className="col-desc">{it.Artikelbeschreibung}</td>
-              <td className="col-location"><BoxColorTag locationKey={it.Location} /></td>
+              <td className="col-box">{it.BoxID}</td>
+              <td className="col-location"><BoxColorTag locationKey={it.BoxID} /></td>
               <td className="col-link"><Link to={`/items/${encodeURIComponent(it.ItemUUID)}`}>Details</Link></td>
             </tr>
           ))}
