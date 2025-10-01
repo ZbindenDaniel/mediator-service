@@ -12,6 +12,7 @@ interface Props {
   isNew?: boolean;
 }
 
+// TODO: Align agentic form media management with legacy flow enhancements.
 export default function ItemForm_Agentic({
   draft,
   step,
@@ -20,7 +21,15 @@ export default function ItemForm_Agentic({
   submitLabel,
   isNew
 }: Props) {
-  const { form, update, mergeForm, setForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
+  const normalisedDraft = useMemo(() => {
+    if (typeof draft.Auf_Lager !== 'number' || Number.isNaN(draft.Auf_Lager)) {
+      console.log('Seeding default stock quantity to 1 for agentic draft');
+      return { ...draft, Auf_Lager: 1 } as Partial<ItemFormData>;
+    }
+    return draft;
+  }, [draft]);
+
+  const { form, update, mergeForm, setForm, generateMaterialNumber } = useItemFormState({ initialItem: normalisedDraft });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -45,7 +54,12 @@ export default function ItemForm_Agentic({
   };
 
   useEffect(() => {
-    mergeForm(draft);
+    const shouldSeedQuantity = typeof draft.Auf_Lager !== 'number' || Number.isNaN(draft.Auf_Lager);
+    const nextDraft = shouldSeedQuantity ? { ...draft, Auf_Lager: 1 } : draft;
+    if (shouldSeedQuantity) {
+      console.log('Ensuring agentic draft maintains default stock quantity of 1');
+    }
+    mergeForm(nextDraft);
   }, [draft, mergeForm]);
 
   const handlePhoto1Change = useMemo(

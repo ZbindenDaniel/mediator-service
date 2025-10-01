@@ -8,10 +8,6 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 ## item form
 
-- when editing the existing images are not set in the Inputs. the file input should show the filename
-- 'Hauptkategorie' and 'Unterkategorie' are dropdown selections. the value lookup is missing. the Unterkategorie selection depends on the Hauptkategorie. Implement the structure with one example (Computer - Thin Client). this selection is fetched from a new file 'ItemCategories'
-- 'Anzahl' default should be 1
-
 ## item search
 
 - often times 'nicht gesetzt' is displayed but when navigating to the item a box is set. (see bug in itemList)

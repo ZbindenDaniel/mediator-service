@@ -1,6 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import type { Item } from '../../../../models';
 import { getUser } from '../../lib/user';
+import { findCategoryByValue, itemCategories } from '../../data/itemCategories';
 
 export interface ItemFormData extends Item {
   picture1?: string | null;
@@ -16,8 +17,17 @@ interface UseItemFormStateOptions {
   initialItem: Partial<ItemFormData>;
 }
 
+function createInitialFormState(initialItem: Partial<ItemFormData>) {
+  const seed: Partial<ItemFormData> = { ...initialItem };
+  if (typeof seed.Auf_Lager !== 'number' || Number.isNaN(seed.Auf_Lager)) {
+    console.log('Seeding default stock quantity to 1 for item form');
+    seed.Auf_Lager = 1;
+  }
+  return seed;
+}
+
 export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({ ...initialItem });
+  const [form, setForm] = useState<Partial<ItemFormData>>(() => createInitialFormState(initialItem));
 
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -103,6 +113,33 @@ export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNum
       console.error('Stock change handler failed', err);
     }
   }, [onChangeStock]);
+
+  const selectedCategoryA = useMemo(() => findCategoryByValue(form.Hauptkategorien_A ?? undefined), [form.Hauptkategorien_A]);
+  const selectedCategoryB = useMemo(() => findCategoryByValue(form.Hauptkategorien_B ?? undefined), [form.Hauptkategorien_B]);
+
+  const subcategoriesA = selectedCategoryA?.subcategories ?? [];
+  const subcategoriesB = selectedCategoryB?.subcategories ?? [];
+
+  const hasKnownSubcategoryA = useMemo(
+    () => subcategoriesA.some((subcategory) => subcategory.value === form.Unterkategorien_A),
+    [subcategoriesA, form.Unterkategorien_A]
+  );
+  const hasKnownSubcategoryB = useMemo(
+    () => subcategoriesB.some((subcategory) => subcategory.value === form.Unterkategorien_B),
+    [subcategoriesB, form.Unterkategorien_B]
+  );
+
+  const resolveCategoryValue = useCallback((value: string): number | undefined => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isNaN(parsed)) {
+      return undefined;
+    }
+    return parsed;
+  }, []);
 
   return (
     <>
@@ -260,53 +297,107 @@ export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNum
         <label>
           Hauptkategorien A
         </label>
-        <input
-          type="number"
+        <select
           value={form.Hauptkategorien_A?.toString() || ''}
           onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Hauptkategorien_A', Number.isNaN(n) ? undefined : n);
+            const nextValue = resolveCategoryValue(e.target.value);
+            onUpdate('Hauptkategorien_A', nextValue as ItemFormData['Hauptkategorien_A']);
+            const category = findCategoryByValue(nextValue);
+            if (!category || !category.subcategories.some((subcategory) => subcategory.value === form.Unterkategorien_A)) {
+              onUpdate('Unterkategorien_A', undefined as ItemFormData['Unterkategorien_A']);
+            }
           }}
-        />
+        >
+          <option value="">Bitte wählen…</option>
+          {!selectedCategoryA && typeof form.Hauptkategorien_A === 'number' && (
+            <option value={form.Hauptkategorien_A}>
+              Unbekannt ({form.Hauptkategorien_A})
+            </option>
+          )}
+          {itemCategories.map((category) => (
+            <option key={`haupt-a-${category.value}`} value={category.value}>
+              {category.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="row">
         <label>
           Unterkategorien A
         </label>
-        <input
-          type="number"
+        <select
           value={form.Unterkategorien_A?.toString() || ''}
           onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Unterkategorien_A', Number.isNaN(n) ? undefined : n);
+            const nextValue = resolveCategoryValue(e.target.value);
+            onUpdate('Unterkategorien_A', nextValue as ItemFormData['Unterkategorien_A']);
           }}
-        />
+          disabled={!selectedCategoryA}
+        >
+          <option value="">Bitte wählen…</option>
+          {!hasKnownSubcategoryA && typeof form.Unterkategorien_A === 'number' && (
+            <option value={form.Unterkategorien_A}>
+              Unbekannt ({form.Unterkategorien_A})
+            </option>
+          )}
+          {subcategoriesA.map((subcategory) => (
+            <option key={`unter-a-${subcategory.value}`} value={subcategory.value}>
+              {subcategory.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="row">
         <label>
           Hauptkategorien B
         </label>
-        <input
-          type="number"
+        <select
           value={form.Hauptkategorien_B?.toString() || ''}
           onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Hauptkategorien_B', Number.isNaN(n) ? undefined : n);
+            const nextValue = resolveCategoryValue(e.target.value);
+            onUpdate('Hauptkategorien_B', nextValue as ItemFormData['Hauptkategorien_B']);
+            const category = findCategoryByValue(nextValue);
+            if (!category || !category.subcategories.some((subcategory) => subcategory.value === form.Unterkategorien_B)) {
+              onUpdate('Unterkategorien_B', undefined as ItemFormData['Unterkategorien_B']);
+            }
           }}
-        />
+        >
+          <option value="">Bitte wählen…</option>
+          {!selectedCategoryB && typeof form.Hauptkategorien_B === 'number' && (
+            <option value={form.Hauptkategorien_B}>
+              Unbekannt ({form.Hauptkategorien_B})
+            </option>
+          )}
+          {itemCategories.map((category) => (
+            <option key={`haupt-b-${category.value}`} value={category.value}>
+              {category.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="row">
         <label>
           Unterkategorien B
         </label>
-        <input
-          type="number"
+        <select
           value={form.Unterkategorien_B?.toString() || ''}
           onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Unterkategorien_B', Number.isNaN(n) ? undefined : n);
+            const nextValue = resolveCategoryValue(e.target.value);
+            onUpdate('Unterkategorien_B', nextValue as ItemFormData['Unterkategorien_B']);
           }}
-        />
+          disabled={!selectedCategoryB}
+        >
+          <option value="">Bitte wählen…</option>
+          {!hasKnownSubcategoryB && typeof form.Unterkategorien_B === 'number' && (
+            <option value={form.Unterkategorien_B}>
+              Unbekannt ({form.Unterkategorien_B})
+            </option>
+          )}
+          {subcategoriesB.map((subcategory) => (
+            <option key={`unter-b-${subcategory.value}`} value={subcategory.value}>
+              {subcategory.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <hr></hr>

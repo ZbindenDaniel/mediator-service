@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
@@ -67,6 +67,34 @@ export default function ItemEdit({ itemId }: Props) {
 
   if (!item) return <p>Loading...</p>;
 
+  const existingMediaFiles = useMemo(() => {
+    try {
+      const seen = new Set<string>();
+      const filenames: string[] = [];
+      const addSource = (src: unknown) => {
+        if (typeof src !== 'string') {
+          return;
+        }
+        const trimmed = src.trim();
+        if (!trimmed) {
+          return;
+        }
+        const fileName = trimmed.split('/').pop() || trimmed;
+        if (seen.has(fileName)) {
+          return;
+        }
+        seen.add(fileName);
+        filenames.push(fileName);
+      };
+      addSource(item.Grafikname);
+      mediaAssets.forEach(addSource);
+      return filenames;
+    } catch (err) {
+      console.error('Failed to derive existing media filenames for edit form', err);
+      return [];
+    }
+  }, [item.Grafikname, mediaAssets]);
+
   const gallery = (
     <section className="item-media-section">
       <h3>Medien</h3>
@@ -74,5 +102,13 @@ export default function ItemEdit({ itemId }: Props) {
     </section>
   );
 
-  return <ItemForm item={item} onSubmit={handleSubmit} submitLabel="Speichern" headerContent={gallery} />;
+  return (
+    <ItemForm
+      item={item}
+      onSubmit={handleSubmit}
+      submitLabel="Speichern"
+      headerContent={gallery}
+      existingMediaFiles={existingMediaFiles}
+    />
+  );
 }
