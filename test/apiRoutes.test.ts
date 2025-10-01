@@ -242,3 +242,38 @@ test('list items returns data', async () => {
   expect(Array.isArray(j.items)).toBe(true);
   expect(j.items.length).toBeGreaterThan(0);
 });
+
+test('importing items preserves box location when subsequent payload omits Standort', async () => {
+  const targetBox = boxId(5);
+  const firstItem = itemId(5);
+  const secondItem = itemId(6);
+
+  const firstRes = await postForm('/api/import/item', {
+    BoxID: targetBox,
+    ItemUUID: firstItem,
+    Artikel_Nummer: '1100',
+    Artikelbeschreibung: 'First Item',
+    Location: 'A-02-01',
+    actor: 'tester'
+  });
+  expect(firstRes.status).toBe(200);
+
+  const secondRes = await postForm('/api/import/item', {
+    BoxID: targetBox,
+    ItemUUID: secondItem,
+    Artikel_Nummer: '1101',
+    Artikelbeschreibung: 'Second Item',
+    Location: '',
+    actor: 'tester'
+  });
+  expect(secondRes.status).toBe(200);
+
+  const boxRes = await fetch(baseUrl + `/api/boxes/${targetBox}`);
+  const boxData = await boxRes.json();
+  expect(boxData?.box?.Location).toBe('A-02-01');
+  expect(Array.isArray(boxData?.items)).toBe(true);
+  expect(boxData.items.length).toBe(2);
+  const itemIds = boxData.items.map((it) => it.ItemUUID).sort();
+  expect(itemIds).toContain(firstItem);
+  expect(itemIds).toContain(secondItem);
+});

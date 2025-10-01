@@ -81,14 +81,17 @@ export default function ItemCreate() {
     };
   }, [agenticApiBase]);
 
-  const baseDraft = useMemo(
-    () => ({
+  const baseDraft = useMemo(() => {
+    const derivedItemUUID = itemUUID ?? draft.ItemUUID;
+    if (!itemUUID && draft.ItemUUID) {
+      console.info('ItemCreate preserving draft ItemUUID from prior step');
+    }
+    return {
       ...draft,
       BoxID: draft.BoxID || boxId || undefined,
-      ItemUUID: itemUUID || draft.ItemUUID
-    }),
-    [boxId, draft, itemUUID]
-  );
+      ItemUUID: derivedItemUUID || undefined
+    };
+  }, [boxId, draft, itemUUID]);
 
   async function reportAgenticTriggerFailure({
     itemId,
@@ -228,8 +231,16 @@ export default function ItemCreate() {
   }
 
   async function handleSubmit(data: Partial<ItemFormData>) {
+    const payload: Record<string, unknown> = { ...data, BoxID: boxId || data.BoxID || '', actor: getUser() };
+
+    const candidateItemUUID = typeof payload['ItemUUID'] === 'string' ? payload['ItemUUID'] : undefined;
+    if (!itemUUID && !draft.ItemUUID && candidateItemUUID && candidateItemUUID.trim()) {
+      console.warn('ItemCreate dropping unexpected ItemUUID for new item creation', candidateItemUUID);
+      delete payload['ItemUUID'];
+    }
+
     const p = new URLSearchParams();
-    Object.entries({ ...data, BoxID: boxId || data.BoxID || '', actor: getUser() }).forEach(([k, v]) => {
+    Object.entries(payload).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== '') {
         p.append(k, String(v));
       }
@@ -260,6 +271,10 @@ export default function ItemCreate() {
       if (createdItem?.BoxID) {
         navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
       }
+      setItemUUID(undefined);
+      setDraft(() => ({ BoxID: createdItem?.BoxID || boxId || undefined }));
+      setStep(1);
+      console.info('ItemCreate reset draft after successful creation');
     } catch (err) {
       console.error('Failed to create item', err);
       throw err;
