@@ -12,6 +12,7 @@ export const EVENT_LABELS: Record<string, string> = {
   Exported: 'Exportiert',
   Created: 'Erstellt',
   AgenticRunRestarted: 'Agentic-Lauf neu gestartet',
+  AgenticRunCancelled: 'Agentic-Lauf abgebrochen',
   AgenticTriggerFailed: 'Agentic-Auslösung fehlgeschlagen',
   AgenticSearchQueued: 'Agentic-Suche eingereiht',
   AgenticResultReceived: 'Agentic-Ergebnis erhalten',

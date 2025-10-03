@@ -2,7 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
-import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
+import {
+  buildAgenticRunUrl,
+  persistAgenticRunCancellation,
+  resolveAgenticApiBase,
+  triggerAgenticRun as triggerAgenticRunRequest
+} from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
@@ -220,14 +225,45 @@ export default function ItemCreate() {
   async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
     if (!shouldUseAgenticForm) {
       console.info(`Agentic trigger skipped (${context}): service not healthy.`);
+      if (agenticPayload.itemId) {
+        const actor = getUser();
+        const cancelResult = await persistAgenticRunCancellation({
+          itemId: agenticPayload.itemId,
+          actor,
+          context: `${context} auto-cancel (service unhealthy)`
+        });
+        if (!cancelResult.ok) {
+          console.warn('Persisted cancellation after unhealthy service skip failed', cancelResult);
+        }
+      }
       return;
     }
 
-    await triggerAgenticRunRequest({
+    const result = await triggerAgenticRunRequest({
       runUrl: agenticRunUrl,
       payload: agenticPayload,
       context
     });
+
+    if (result.outcome !== 'triggered') {
+      console.warn('Agentic trigger did not start; attempting to persist cancellation', {
+        context,
+        result
+      });
+      if (agenticPayload.itemId) {
+        const actor = getUser();
+        const cancelResult = await persistAgenticRunCancellation({
+          itemId: agenticPayload.itemId,
+          actor,
+          context: `${context} auto-cancel`
+        });
+        if (!cancelResult.ok) {
+          console.warn('Persisted cancellation after trigger skip failed', cancelResult);
+        }
+      } else {
+        console.warn('Agentic trigger skip could not be cancelled due to missing ItemUUID');
+      }
+    }
   }
 
   async function handleSubmit(data: Partial<ItemFormData>) {

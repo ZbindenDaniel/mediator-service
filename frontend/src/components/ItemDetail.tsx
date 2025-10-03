@@ -6,12 +6,100 @@ import type { Item, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
-import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun } from '../lib/agentic';
+import {
+  buildAgenticCancelUrl,
+  buildAgenticRunUrl,
+  cancelAgenticRun,
+  persistAgenticRunCancellation,
+  resolveAgenticApiBase,
+  triggerAgenticRun
+} from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 
 interface Props {
   itemId: string;
+}
+
+export interface AgenticStatusCardProps {
+  status: { label: string; className: string; description: string };
+  rows: [string, React.ReactNode][];
+  actionPending: boolean;
+  reviewIntent: 'approved' | 'rejected' | null;
+  error: string | null;
+  needsReview: boolean;
+  hasFailure: boolean;
+  onRestart: () => void;
+  onReview: (decision: 'approved' | 'rejected') => void;
+  onCancel: () => void;
+}
+
+export function AgenticStatusCard({
+  status,
+  rows,
+  actionPending,
+  reviewIntent,
+  error,
+  needsReview,
+  hasFailure,
+  onRestart,
+  onReview,
+  onCancel
+}: AgenticStatusCardProps) {
+  return (
+    <div className="card">
+      <h3>Ki Status</h3>
+      <div className="row">
+        <span className={status.className}>{status.label}</span>
+      </div>
+      <p className="muted">{status.description}</p>
+      {rows.length > 0 ? (
+        <table className="details">
+          <tbody>
+            {rows.map(([k, v], idx) => (
+              <tr key={`${k}-${idx}`} className="responsive-row">
+                <th className="responsive-th">{k}</th>
+                <td className="responsive-td">{v ?? ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {actionPending ? <p className="muted">Agentic-Aktion wird ausgeführt…</p> : null}
+      {reviewIntent ? (
+        <p className="muted">
+          Review-Aktion "{reviewIntent === 'approved' ? 'Freigeben' : 'Ablehnen'}" vorbereitet.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="muted" style={{ color: '#a30000' }}>{error}</p>
+      ) : null}
+      { status.label != 'Abgebrochen' ?(
+        <div className='row'>
+        <button type="button" className="btn" onClick={onCancel}>
+          Abbrechen
+        </button>
+      </div>
+      ) : null}
+      {!needsReview && hasFailure ? (
+        <div className='row'>
+          <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
+            Wiederholen
+          </button>
+        </div>
+      ) : null}
+      {needsReview ? (
+        <div className='row'>
+          <button type="button" className="btn" disabled={actionPending} onClick={() => onReview('approved')}>
+            Freigeben
+          </button>
+          <button type="button" className="btn danger" disabled={actionPending} onClick={() => onReview('rejected')}>
+            Ablehnen
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function resolveActorName(actor?: string | null): string {
@@ -24,11 +112,13 @@ export default function ItemDetail({ itemId }: Props) {
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
+  const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
+  const agenticCancelUrl = useMemo(() => buildAgenticCancelUrl(agenticApiBase), [agenticApiBase]);
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
@@ -46,17 +136,20 @@ export default function ItemDetail({ itemId }: Props) {
             : [];
           setMediaAssets(media);
           setAgenticError(null);
+          setAgenticReviewIntent(null);
         } else {
           console.error('Failed to fetch item', res.status);
           setAgentic(null);
           setAgenticError('Agentic-Status konnte nicht geladen werden.');
           setMediaAssets([]);
+          setAgenticReviewIntent(null);
         }
       } catch (err) {
         console.error('Failed to fetch item', err);
         setAgentic(null);
         setAgenticError('Agentic-Status konnte nicht geladen werden.');
         setMediaAssets([]);
+        setAgenticReviewIntent(null);
       }
     }
     load();
@@ -66,7 +159,7 @@ export default function ItemDetail({ itemId }: Props) {
   const normalizedAgenticStatus = (agentic?.Status || '').toLowerCase();
   const agenticHasFailure = !agentic
     ? true
-    : ['failed', 'error', 'errored'].includes(normalizedAgenticStatus);
+    : ['failed', 'error', 'errored', 'cancelled', 'canceled'].includes(normalizedAgenticStatus);
 
   function agenticStatusDisplay(run: AgenticRun | null): {
     label: string;
@@ -97,6 +190,10 @@ export default function ItemDetail({ itemId }: Props) {
       variant = 'pending';
       label = 'Wartet';
       description = 'Der agentische Durchlauf wartet auf Ausführung.';
+    } else if (['cancelled', 'canceled'].includes(normalized)) {
+      variant = 'info';
+      label = 'Abgebrochen';
+      description = 'Der agentische Durchlauf wurde abgebrochen.';
     } else if (['completed', 'done', 'success'].includes(normalized)) {
       if ((run.ReviewState || '').toLowerCase() === 'pending') {
         variant = 'pending';
@@ -144,6 +241,7 @@ export default function ItemDetail({ itemId }: Props) {
     const noteInput = window.prompt('Notiz (optional):', '') ?? '';
     setAgenticActionPending(true);
     setAgenticError(null);
+    setAgenticReviewIntent(decision);
     try {
       const res = await fetch(
         `/api/items/${encodeURIComponent(agentic.ItemUUID)}/agentic/review`,
@@ -165,6 +263,7 @@ export default function ItemDetail({ itemId }: Props) {
       console.error('Agentic review request failed', err);
       setAgenticError('Review-Anfrage fehlgeschlagen.');
     } finally {
+      setAgenticReviewIntent(null);
       setAgenticActionPending(false);
     }
   }
@@ -186,6 +285,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     setAgenticActionPending(true);
     setAgenticError(null);
+    setAgenticReviewIntent(null);
 
     try {
       const restartResponse = await fetch(
@@ -233,17 +333,109 @@ export default function ItemDetail({ itemId }: Props) {
         itemId: refreshedRun.ItemUUID || item.ItemUUID,
         artikelbeschreibung: searchTerm
       };
-      await triggerAgenticRun({
+      const triggerResult = await triggerAgenticRun({
         runUrl: agenticRunUrl,
         payload: triggerPayload,
         context: 'item detail restart'
       });
+      if (triggerResult.outcome !== 'triggered') {
+        console.warn('Agentic restart did not trigger run; auto-cancelling', triggerResult);
+        const cancelResult = await persistAgenticRunCancellation({
+          itemId: refreshedRun.ItemUUID || item.ItemUUID,
+          actor,
+          context: 'item detail restart auto-cancel'
+        });
+        if (cancelResult.ok && cancelResult.agentic) {
+          setAgentic(cancelResult.agentic);
+        }
+        const baseMessage =
+          triggerResult.outcome === 'skipped' && triggerResult.reason === 'run-url-missing'
+            ? 'Agentic-Konfiguration fehlt. Durchlauf wurde abgebrochen.'
+            : 'Agentic-Neustart konnte nicht gestartet werden. Durchlauf wurde abgebrochen.';
+        if (!cancelResult.ok) {
+          setAgenticError(`${baseMessage} (Abbruch konnte nicht gespeichert werden.)`);
+        } else {
+          setAgenticError(baseMessage);
+        }
+        return;
+      }
     } catch (err) {
       console.error('Agentic restart request failed', err);
       setAgenticError('Agentic-Neustart fehlgeschlagen.');
     } finally {
+      setAgenticReviewIntent(null);
       setAgenticActionPending(false);
     }
+  }
+
+  async function handleAgenticCancel() {
+    if (!agentic) {
+      console.warn('Agentic cancel requested without run data');
+      setAgenticError('Kein agentischer Durchlauf vorhanden.');
+      return;
+    }
+
+    const actor = getUser();
+    if (!actor) {
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
+
+    if (!window.confirm('Agentischen Durchlauf abbrechen?')) {
+      return;
+    }
+
+    console.info('Agentic action cancellation requested', agentic.ItemUUID);
+
+    setAgenticActionPending(true);
+    setAgenticReviewIntent(null);
+    setAgenticError(null);
+
+    let updatedRun: AgenticRun | null = agentic;
+    let finalError: string | null = null;
+
+    const persistence = await persistAgenticRunCancellation({
+      itemId: agentic.ItemUUID,
+      actor,
+      context: 'item detail cancel persistence'
+    });
+
+    if (persistence.ok) {
+      if (persistence.agentic) {
+        updatedRun = persistence.agentic;
+      }
+    } else if (persistence.status === 404) {
+      finalError = 'Kein laufender agentischer Durchlauf gefunden.';
+    } else if (persistence.status === 0) {
+      finalError = 'Agentic-Abbruch fehlgeschlagen.';
+    } else {
+      finalError = 'Agentic-Abbruch konnte nicht gespeichert werden.';
+    }
+
+    if (agenticCancelUrl) {
+      try {
+        await cancelAgenticRun({
+          cancelUrl: agenticCancelUrl,
+          itemId: agentic.ItemUUID,
+          actor,
+          context: 'item detail cancel'
+        });
+      } catch (err) {
+        console.error('Agentic external cancel failed', err);
+        if (!finalError) {
+          finalError = 'Agentic-Abbruch konnte extern nicht gestoppt werden.';
+        }
+      }
+    } else {
+      console.warn('Agentic cancel URL not configured; external cancellation skipped.');
+    }
+
+    if (updatedRun) {
+      setAgentic(updatedRun);
+    }
+    setAgenticReviewIntent(null);
+    setAgenticError(finalError);
+    setAgenticActionPending(false);
   }
 
   const agenticStatus = agenticStatusDisplay(agentic);
@@ -363,63 +555,18 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
             </div>
 
-            <div className="card">
-              <h3>Agentic Status</h3>
-              <div className="row">
-                <span className={agenticStatus.className}>{agenticStatus.label}</span>
-              </div>
-              <p className="muted">{agenticStatus.description}</p>
-              {agenticRows.length > 0 ? (
-                <table className="details">
-                  <tbody>
-                    {agenticRows.map(([k, v], idx) => (
-                      <tr key={`${k}-${idx}`} className="responsive-row">
-                        <th className="responsive-th">{k}</th>
-                        <td className="responsive-td">{v ?? ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : null}
-              {agenticActionPending ? (
-                <p className="muted">Agentic-Aktion wird ausgeführt…</p>
-              ) : null}
-              {agenticError ? (
-                <p className="muted" style={{ color: '#a30000' }}>{agenticError}</p>
-              ) : null}
-              {!agenticNeedsReview && agenticHasFailure ? (
-                <div className='row'>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={agenticActionPending}
-                    onClick={handleAgenticRestart}
-                  >
-                    Neu starten
-                  </button>
-                </div>
-              ) : null}
-              {agenticNeedsReview ? (
-                <div className='row'>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={agenticActionPending}
-                    onClick={() => handleAgenticReview('approved')}
-                  >
-                    Freigeben
-                  </button>
-                  <button
-                    type="button"
-                    className="btn danger"
-                    disabled={agenticActionPending}
-                    onClick={() => handleAgenticReview('rejected')}
-                  >
-                    Ablehnen
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <AgenticStatusCard
+              status={agenticStatus}
+              rows={agenticRows}
+              actionPending={agenticActionPending}
+              reviewIntent={agenticReviewIntent}
+              error={agenticError}
+              needsReview={agenticNeedsReview}
+              hasFailure={agenticHasFailure}
+              onRestart={handleAgenticRestart}
+              onReview={handleAgenticReview}
+              onCancel={handleAgenticCancel}
+            />
 
             <RelocateItemCard itemId={item.ItemUUID} />
 
