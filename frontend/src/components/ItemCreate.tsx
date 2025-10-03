@@ -33,6 +33,31 @@ export default function ItemCreate() {
 
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
 
+  const fetchNextArtikelNummer = useCallback(async () => {
+    try {
+      console.log('Requesting new Artikelnummer for item creation');
+      const response = await fetch('/api/getNewMaterialNumber', { method: 'GET' });
+      if (!response.ok) {
+        console.error('Failed to fetch new Artikelnummer', response.status);
+        throw new Error(`Artikelnummer konnte nicht geladen werden (Status ${response.status}).`);
+      }
+      const payload = await response
+        .json()
+        .catch((err) => {
+          console.error('Failed to parse Artikelnummer response', err);
+          return null;
+        });
+      const next = typeof payload?.nextArtikelNummer === 'string' ? payload.nextArtikelNummer.trim() : '';
+      if (!next) {
+        throw new Error('Antwort enthielt keine gültige Artikelnummer.');
+      }
+      return next;
+    } catch (err) {
+      console.error('Failed to retrieve new Artikelnummer', err);
+      throw err;
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -377,12 +402,17 @@ export default function ItemCreate() {
       return;
     }
     try {
+      let artikelNummer = (basicInfo.Artikel_Nummer || '').trim() || (item.Artikel_Nummer || '').trim();
+      if (!artikelNummer) {
+        artikelNummer = await fetchNextArtikelNummer();
+      }
+      setBasicInfo((prev) => ({ ...prev, Artikel_Nummer: artikelNummer }));
       const clone: Partial<ItemFormData> = {
         ...item,
         ...basicInfo,
         BoxID: basicInfo.BoxID || item.BoxID || boxId || undefined,
         Artikelbeschreibung: basicInfo.Artikelbeschreibung || item.Artikelbeschreibung,
-        Artikel_Nummer: basicInfo.Artikel_Nummer || item.Artikel_Nummer,
+        Artikel_Nummer: artikelNummer,
         Auf_Lager: basicInfo.Auf_Lager ?? item.Auf_Lager,
         picture1: basicInfo.picture1 || item.picture1,
         picture2: basicInfo.picture2 || item.picture2,
@@ -398,6 +428,11 @@ export default function ItemCreate() {
       });
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
+      try {
+        alert('Artikel konnte nicht aus dem Duplikat erstellt werden. Bitte erneut versuchen.');
+      } catch (alertErr) {
+        console.warn('Failed to alert duplicate creation failure', alertErr);
+      }
     }
   };
 
@@ -408,10 +443,16 @@ export default function ItemCreate() {
     }
     console.log('No duplicate selected, creating item directly');
     try {
+      let artikelNummer = (basicInfo.Artikel_Nummer || '').trim();
+      if (!artikelNummer) {
+        artikelNummer = await fetchNextArtikelNummer();
+        setBasicInfo((prev) => ({ ...prev, Artikel_Nummer: artikelNummer }));
+      }
       const payload: Partial<ItemFormData> = {
         ...basicInfo,
         BoxID: basicInfo.BoxID || boxId || undefined,
         Artikelbeschreibung: basicInfo.Artikelbeschreibung,
+        Artikel_Nummer: artikelNummer,
         Auf_Lager: basicInfo.Auf_Lager,
         picture1: basicInfo.picture1,
         picture2: basicInfo.picture2,
@@ -423,6 +464,11 @@ export default function ItemCreate() {
       });
     } catch (err) {
       console.error('Failed to create item after skipping duplicates', err);
+      try {
+        alert('Artikel konnte nicht erstellt werden. Bitte erneut versuchen.');
+      } catch (alertErr) {
+        console.warn('Failed to alert manual creation failure', alertErr);
+      }
     }
   };
 
