@@ -10,6 +10,7 @@ export function resolveBoxColorFromLocation(location?: string | null): BoxColorO
   }
 
   try {
+    // TODO; this is very wrong. The box Id has nothing todo with the colorKey. Here we have to load the box and get the color/location from there
     const colorKey = location.split('-')[0]?.trim().toUpperCase();
     if (!colorKey) {
       return undefined;
