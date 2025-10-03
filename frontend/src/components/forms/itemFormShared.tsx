@@ -10,6 +10,9 @@ export interface ItemFormData extends Item {
   agenticSearch?: string;
 }
 
+export type LockedFieldMode = 'readonly' | 'hidden';
+export type LockedFieldConfig = Partial<Record<keyof ItemFormData, LockedFieldMode>>;
+
 export type StockOperation = 'add' | 'remove';
 
 interface UseItemFormStateOptions {
@@ -86,9 +89,22 @@ interface ItemDetailsFieldsProps {
   onGenerateMaterialNumber?: () => void | Promise<void>;
   onChangeStock?: (op: StockOperation) => void | Promise<void>;
   descriptionSuggestions?: React.ReactNode;
+  lockedFields?: LockedFieldConfig;
 }
 
-export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNumber, onChangeStock, descriptionSuggestions }: ItemDetailsFieldsProps) {
+function isFieldLocked(lockedFields: LockedFieldConfig | undefined, field: keyof ItemFormData, mode: LockedFieldMode) {
+  return lockedFields?.[field] === mode;
+}
+
+export function ItemDetailsFields({
+  form,
+  isNew,
+  onUpdate,
+  onGenerateMaterialNumber,
+  onChangeStock,
+  descriptionSuggestions,
+  lockedFields
+}: ItemDetailsFieldsProps) {
   const handleStock = useCallback(async (op: StockOperation) => {
     if (!onChangeStock) {
       return;
@@ -104,22 +120,36 @@ export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNum
     }
   }, [onChangeStock]);
 
+  const descriptionLockHidden = isFieldLocked(lockedFields, 'Artikelbeschreibung', 'hidden');
+  const descriptionLockReadonly = isFieldLocked(lockedFields, 'Artikelbeschreibung', 'readonly');
+
+  const artikelNummerHidden = isFieldLocked(lockedFields, 'Artikel_Nummer', 'hidden');
+  const artikelNummerReadonly = isFieldLocked(lockedFields, 'Artikel_Nummer', 'readonly');
+
+  const quantityHidden = isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
+  const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
+
   return (
     <>
       <input value={form.BoxID || ''} readOnly hidden />
 
-      <div className="row">
-        <label>
-          Artikelbeschreibung*
-        </label>
-        <input
-          value={form.Artikelbeschreibung || ''}
-          onChange={(e) => onUpdate('Artikelbeschreibung', e.target.value)}
-          required
-        />
-      </div>
+      {descriptionLockHidden ? (
+        <input type="hidden" value={form.Artikelbeschreibung || ''} readOnly />
+      ) : (
+        <div className="row">
+          <label>
+            Artikelbeschreibung*
+          </label>
+          <input
+            value={form.Artikelbeschreibung || ''}
+            onChange={(e) => onUpdate('Artikelbeschreibung', e.target.value)}
+            required
+            readOnly={descriptionLockReadonly}
+          />
+        </div>
+      )}
 
-      {descriptionSuggestions}
+      {!descriptionLockHidden ? descriptionSuggestions : null}
 
       <div className="row">
         {form.ItemUUID && (
@@ -133,41 +163,50 @@ export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNum
         <label>
           Artikelnummer*
         </label>
-        <div className="combined-input">
-          <input
-            value={form.Artikel_Nummer || ''}
-            onChange={(e) => onUpdate('Artikel_Nummer', e.target.value)}
-            required
-          />
-          {isNew && onGenerateMaterialNumber && (
-            <button type="button" onClick={onGenerateMaterialNumber}>
-              neu?
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="row">
-        <label>
-          Anzahl*
-        </label>
-        {isNew ? (
-          <input
-            type="number"
-            value={form.Auf_Lager ?? 0}
-            onChange={(e) => onUpdate('Auf_Lager', parseInt(e.target.value, 10) || 0)}
-            required
-          />
-        ) : onChangeStock ? (
-          <div className="combined-input">
-            <button type="button" onClick={() => handleStock('remove')}>-</button>
-            <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
-            <button type="button" onClick={() => handleStock('add')}>+</button>
-          </div>
+        {artikelNummerHidden ? (
+          <input type="hidden" value={form.Artikel_Nummer || ''} readOnly />
         ) : (
-          <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
+          <div className="combined-input">
+            <input
+              value={form.Artikel_Nummer || ''}
+              onChange={(e) => onUpdate('Artikel_Nummer', e.target.value)}
+              required
+              readOnly={artikelNummerReadonly}
+            />
+            {isNew && onGenerateMaterialNumber && !artikelNummerReadonly && (
+              <button type="button" onClick={onGenerateMaterialNumber}>
+                neu?
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {quantityHidden ? (
+        <input type="hidden" value={form.Auf_Lager ?? 0} readOnly />
+      ) : (
+        <div className="row">
+          <label>
+            Anzahl*
+          </label>
+          {isNew && !quantityReadonly ? (
+            <input
+              type="number"
+              value={form.Auf_Lager ?? 0}
+              onChange={(e) => onUpdate('Auf_Lager', parseInt(e.target.value, 10) || 0)}
+              required
+            />
+          ) : onChangeStock && !isNew && !quantityReadonly ? (
+            <div className="combined-input">
+              <button type="button" onClick={() => handleStock('remove')}>-</button>
+              <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
+              <button type="button" onClick={() => handleStock('add')}>+</button>
+            </div>
+          ) : (
+            <input type="number" value={form.Auf_Lager ?? 0} readOnly required />
+          )}
+        </div>
+      )}
 
       <div className="row">
         <label>

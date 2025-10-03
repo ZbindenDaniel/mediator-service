@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
+import { ItemDetailsFields, ItemFormData, LockedFieldConfig, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
 import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
 import { useSimilarItems } from './forms/useSimilarItems';
 
@@ -9,9 +9,11 @@ interface Props {
   submitLabel: string;
   isNew?: boolean;
   headerContent?: React.ReactNode;
+  lockedFields?: LockedFieldConfig;
+  hidePhotoInputs?: boolean;
 }
 
-export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) {
+export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent, lockedFields, hidePhotoInputs }: Props) {
   const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
 
   const { similarItems, loading, error, hasQuery } = useSimilarItems({
@@ -57,7 +59,29 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
     [update]
   );
 
-  let headerContent = 'TODO!!';
+  const shouldShowSuggestions = hasQuery && lockedFields?.Artikelbeschreibung !== 'hidden' && lockedFields?.Artikelbeschreibung !== 'readonly';
+
+  const photoPreview = useMemo(() => {
+    if (!hidePhotoInputs) {
+      return null;
+    }
+    const photos = [form.picture1, form.picture2, form.picture3].filter(Boolean);
+    if (photos.length === 0) {
+      return null;
+    }
+    return (
+      <div className="row">
+        <label>Vorhandene Fotos</label>
+        <ul className="photo-preview-list">
+          {photos.map((_, index) => (
+            <li key={index}>
+              <span>Foto {index + 1} übernommen</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }, [form.picture1, form.picture2, form.picture3, hidePhotoInputs]);
 
   return (
     <div className='container item'>
@@ -71,7 +95,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
             onGenerateMaterialNumber={generateMaterialNumber}
             onChangeStock={!isNew ? changeStock : undefined}
             descriptionSuggestions={
-              hasQuery ? (
+              shouldShowSuggestions ? (
                 <SimilarItemsPanel
                   items={similarItems}
                   loading={loading}
@@ -80,54 +104,61 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
                 />
               ) : null
             }
+            lockedFields={lockedFields}
           />
 
-          {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
-          <div className="row">
-            <label>
-              Foto 1{isNew ? '*' : ''}
-            </label>
-            <input
-              type="file"
-              id="picture1"
-              name="picture1"
-              accept="image/*"
-              capture="environment"
-              required={isNew}
-              onChange={handlePhoto1Change}
-            />
-          </div>
+          {!hidePhotoInputs ? (
+            <>
+              {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
+              <div className="row">
+                <label>
+                  Foto 1{isNew ? '*' : ''}
+                </label>
+                <input
+                  type="file"
+                  id="picture1"
+                  name="picture1"
+                  accept="image/*"
+                  capture="environment"
+                  required={isNew}
+                  onChange={handlePhoto1Change}
+                />
+              </div>
 
-          {form.picture1 && (
-            <div className="row">
-              <label>
-                Foto 2
-              </label>
-              <input
-                type="file"
-                id="picture2"
-                name="picture2"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhoto2Change}
-              />
-            </div>
-          )}
+              {form.picture1 && (
+                <div className="row">
+                  <label>
+                    Foto 2
+                  </label>
+                  <input
+                    type="file"
+                    id="picture2"
+                    name="picture2"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhoto2Change}
+                  />
+                </div>
+              )}
 
-          {form.picture2 && (
-            <div className="row">
-              <label>
-                Foto 3
-              </label>
-              <input
-                type="file"
-                id="picture3"
-                name="picture3"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhoto3Change}
-              />
-            </div>
+              {form.picture2 && (
+                <div className="row">
+                  <label>
+                    Foto 3
+                  </label>
+                  <input
+                    type="file"
+                    id="picture3"
+                    name="picture3"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhoto3Change}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            photoPreview
           )}
 
           <div className="row">
