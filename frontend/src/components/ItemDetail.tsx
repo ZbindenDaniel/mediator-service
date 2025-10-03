@@ -10,6 +10,7 @@ import {
   buildAgenticCancelUrl,
   buildAgenticRunUrl,
   cancelAgenticRun,
+  persistAgenticRunCancellation,
   resolveAgenticApiBase,
   triggerAgenticRun
 } from '../lib/agentic';
@@ -330,11 +331,32 @@ export default function ItemDetail({ itemId }: Props) {
         itemId: refreshedRun.ItemUUID || item.ItemUUID,
         artikelbeschreibung: searchTerm
       };
-      await triggerAgenticRun({
+      const triggerResult = await triggerAgenticRun({
         runUrl: agenticRunUrl,
         payload: triggerPayload,
         context: 'item detail restart'
       });
+      if (triggerResult.outcome !== 'triggered') {
+        console.warn('Agentic restart did not trigger run; auto-cancelling', triggerResult);
+        const cancelResult = await persistAgenticRunCancellation({
+          itemId: refreshedRun.ItemUUID || item.ItemUUID,
+          actor,
+          context: 'item detail restart auto-cancel'
+        });
+        if (cancelResult.ok && cancelResult.agentic) {
+          setAgentic(cancelResult.agentic);
+        }
+        const baseMessage =
+          triggerResult.outcome === 'skipped' && triggerResult.reason === 'run-url-missing'
+            ? 'Agentic-Konfiguration fehlt. Durchlauf wurde abgebrochen.'
+            : 'Agentic-Neustart konnte nicht gestartet werden. Durchlauf wurde abgebrochen.';
+        if (!cancelResult.ok) {
+          setAgenticError(`${baseMessage} (Abbruch konnte nicht gespeichert werden.)`);
+        } else {
+          setAgenticError(baseMessage);
+        }
+        return;
+      }
     } catch (err) {
       console.error('Agentic restart request failed', err);
       setAgenticError('Agentic-Neustart fehlgeschlagen.');
@@ -370,36 +392,22 @@ export default function ItemDetail({ itemId }: Props) {
     let updatedRun: AgenticRun | null = agentic;
     let finalError: string | null = null;
 
-    try {
-      const res = await fetch(
-        `/api/items/${encodeURIComponent(agentic.ItemUUID)}/agentic/cancel`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor })
-        }
-      );
+    const persistence = await persistAgenticRunCancellation({
+      itemId: agentic.ItemUUID,
+      actor,
+      context: 'item detail cancel persistence'
+    });
 
-      if (res.ok) {
-        const data = await res
-          .json()
-          .catch((err) => {
-            console.error('Failed to parse agentic cancel response', err);
-            return null;
-          });
-        if (data?.agentic) {
-          updatedRun = data.agentic;
-        }
-      } else if (res.status === 404) {
-        console.warn('Agentic cancel failed: no existing run for item', agentic.ItemUUID);
-        finalError = 'Kein laufender agentischer Durchlauf gefunden.';
-      } else {
-        console.error('Agentic cancel failed', res.status);
-        finalError = 'Agentic-Abbruch konnte nicht gespeichert werden.';
+    if (persistence.ok) {
+      if (persistence.agentic) {
+        updatedRun = persistence.agentic;
       }
-    } catch (err) {
-      console.error('Agentic cancel request failed', err);
+    } else if (persistence.status === 404) {
+      finalError = 'Kein laufender agentischer Durchlauf gefunden.';
+    } else if (persistence.status === 0) {
       finalError = 'Agentic-Abbruch fehlgeschlagen.';
+    } else {
+      finalError = 'Agentic-Abbruch konnte nicht gespeichert werden.';
     }
 
     if (agenticCancelUrl) {
