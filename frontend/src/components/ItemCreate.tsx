@@ -5,10 +5,9 @@ import { getUser } from '../lib/user';
 import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
-import ItemForm from './ItemForm';
 import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
-import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
+import type { ItemFormData } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
 
 type AgenticEnv = typeof globalThis & {
@@ -16,7 +15,7 @@ type AgenticEnv = typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
-type CreationStep = 'basicInfo' | 'matchSelection' | 'manualEdit';
+type CreationStep = 'basicInfo' | 'matchSelection';
 
 export default function ItemCreate() {
   const navigate = useNavigate();
@@ -28,7 +27,6 @@ export default function ItemCreate() {
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
   const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
-  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [creating, setCreating] = useState(false);
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
@@ -97,6 +95,28 @@ export default function ItemCreate() {
       ItemUUID: itemUUID || draft.ItemUUID
     }),
     [boxId, draft, itemUUID]
+  );
+
+  const handleNavigateToEdit = useCallback(
+    async (createdItem: Item | undefined) => {
+      if (!createdItem?.ItemUUID) {
+        console.error('Created item missing ItemUUID; cannot open edit view', createdItem);
+        return;
+      }
+
+      try {
+        alert('Artikel erstellt. Details können jetzt bearbeitet werden.');
+      } catch (alertErr) {
+        console.warn('Failed to display creation alert', alertErr);
+      }
+
+      try {
+        navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}/edit`, { replace: true });
+      } catch (navErr) {
+        console.error('Failed to navigate to created item edit view', navErr);
+      }
+    },
+    [navigate]
   );
 
   async function reportAgenticTriggerFailure({
@@ -275,14 +295,19 @@ export default function ItemCreate() {
   async function submitNewItem(
     data: Partial<ItemFormData>,
     context: string,
-    options: { keepItemUUID?: boolean } = {}
+    options: {
+      keepItemUUID?: boolean;
+      onCreated?: (item: Item | undefined) => Promise<void> | void;
+      suppressDefaultNavigation?: boolean;
+    } = {}
   ) {
     if (creating) {
       console.warn('Item creation already running. Ignoring duplicate submit.', { context });
       return;
     }
 
-    const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID });
+    const { keepItemUUID = false, onCreated, suppressDefaultNavigation = false } = options;
+    const params = buildCreationParams(data, { removeItemUUID: !keepItemUUID });
     try {
       setCreating(true);
       console.log('Submitting item creation payload', { context, data });
@@ -306,10 +331,21 @@ export default function ItemCreate() {
 
       await triggerAgenticRun(agenticPayload, context);
 
-      alert('Behälter erstellt. Bitte platzieren!');
-      if (createdItem?.BoxID) {
-        navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
+      if (onCreated) {
+        try {
+          await onCreated(createdItem);
+        } catch (callbackErr) {
+          console.error('onCreated callback for item creation failed', callbackErr);
+        }
       }
+
+      if (!suppressDefaultNavigation) {
+        alert('Behälter erstellt. Bitte platzieren!');
+        if (createdItem?.BoxID) {
+          navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
+        }
+      }
+      return createdItem;
     } catch (err) {
       console.error('Failed to create item', err);
       throw err;
@@ -329,7 +365,6 @@ export default function ItemCreate() {
       };
       console.log('Advancing to match selection with basic info', normalized);
       setBasicInfo(normalized);
-      setManualDraft(normalized);
       setCreationStep('matchSelection');
     } catch (err) {
       console.error('Failed to prepare basic info for next step', err);
@@ -357,62 +392,38 @@ export default function ItemCreate() {
         delete clone.ItemUUID;
       }
       console.log('Creating item from selected duplicate', { itemUUID: item.ItemUUID });
-      await submitNewItem(clone, 'match-selection');
+      await submitNewItem(clone, 'match-selection', {
+        suppressDefaultNavigation: true,
+        onCreated: handleNavigateToEdit
+      });
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
     }
   };
 
-  const ensureManualArtikelNummer = useCallback(async () => {
-    const currentNumber = basicInfo.Artikel_Nummer?.trim();
-    if (currentNumber) {
+  const handleSkipMatches = async () => {
+    if (creating) {
+      console.warn('Skipping duplicate bypass; creation already running.');
       return;
     }
+    console.log('No duplicate selected, creating item directly');
     try {
-      console.log('Requesting material number for manual item creation fallback');
-      const response = await fetch('/api/getNewMaterialNumber');
-      if (!response.ok) {
-        console.error('Failed to get material number for manual fallback', response.status);
-        return;
-      }
-      const payload = await response
-        .json()
-        .catch((err) => {
-          console.error('Failed to parse material number response', err);
-          return null;
-        });
-      const generatedNumber = payload?.nextArtikelNummer;
-      if (!generatedNumber) {
-        console.warn('Material number response missing nextArtikelNummer');
-        return;
-      }
-      setBasicInfo((prev) => (prev.Artikel_Nummer ? prev : { ...prev, Artikel_Nummer: generatedNumber }));
-      setManualDraft((prev) => (prev.Artikel_Nummer ? prev : { ...prev, Artikel_Nummer: generatedNumber }));
+      const payload: Partial<ItemFormData> = {
+        ...basicInfo,
+        BoxID: basicInfo.BoxID || boxId || undefined,
+        Artikelbeschreibung: basicInfo.Artikelbeschreibung,
+        Auf_Lager: basicInfo.Auf_Lager,
+        picture1: basicInfo.picture1,
+        picture2: basicInfo.picture2,
+        picture3: basicInfo.picture3
+      };
+      await submitNewItem(payload, 'skip-duplicates', {
+        suppressDefaultNavigation: true,
+        onCreated: handleNavigateToEdit
+      });
     } catch (err) {
-      console.error('Failed to request material number for manual fallback', err);
+      console.error('Failed to create item after skipping duplicates', err);
     }
-  }, [basicInfo.Artikel_Nummer]);
-
-  const handleSkipMatches = () => {
-    console.log('No duplicate selected, switching to manual edit');
-    setManualDraft((prev) => ({ ...prev, ...basicInfo }));
-    setCreationStep('manualEdit');
-    void ensureManualArtikelNummer();
-  };
-
-  const handleManualSubmit = async (data: Partial<ItemFormData>) => {
-    const merged: Partial<ItemFormData> = {
-      ...basicInfo,
-      ...data,
-      BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
-      Artikelbeschreibung: basicInfo.Artikelbeschreibung,
-      Artikel_Nummer: data.Artikel_Nummer || basicInfo.Artikel_Nummer,
-      Auf_Lager: basicInfo.Auf_Lager,
-      picture1: basicInfo.picture1,
-      picture2: basicInfo.picture2,
-      picture3: basicInfo.picture3
-    };
-    await submitNewItem(merged, 'manual-edit');
   };
 
   const handleAgenticDetails = async (data: Partial<ItemFormData>) => {
@@ -481,15 +492,6 @@ export default function ItemCreate() {
     await submitNewItem(mergedData, 'agentic-step-two', { keepItemUUID: true });
   };
 
-  const manualLockedFields = useMemo<LockedFieldConfig>(
-    () => ({
-      Artikelbeschreibung: 'readonly',
-      Artikel_Nummer: 'readonly',
-      Auf_Lager: 'readonly'
-    }),
-    []
-  );
-
   console.log(`Rendering item create form (step ${shouldUseAgenticForm ? agenticStep : creationStep})`, shouldUseAgenticForm);
   if (shouldUseAgenticForm) {
     return (
@@ -518,20 +520,6 @@ export default function ItemCreate() {
     );
   }
 
-  return (
-    <ItemForm
-      item={manualDraft}
-      onSubmit={handleManualSubmit}
-      submitLabel="Speichern"
-      isNew
-      headerContent={
-        <>
-          <h2>Details ergänzen</h2>
-          <p>Die Pflichtfelder wurden übernommen. Bitte ergänzen Sie bei Bedarf weitere Angaben.</p>
-        </>
-      }
-      lockedFields={manualLockedFields}
-      hidePhotoInputs
-    />
-  );
+  console.warn('Item creation reached unexpected step state', creationStep);
+  return null;
 }

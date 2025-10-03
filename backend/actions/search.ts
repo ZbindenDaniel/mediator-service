@@ -20,7 +20,12 @@ const action: Action = {
         url.searchParams.get('material') ||
         '';
       if (!term) return sendJson(res, 400, { error: 'query term is required' });
-      const like = `%${term}%`;
+      const trimmed = term.trim();
+      if (!trimmed) {
+        return sendJson(res, 400, { error: 'query term is required' });
+      }
+      const wildcardTerm = trimmed.replace(/\s+/g, '%');
+      const like = `%${wildcardTerm}%`;
       const items = ctx.db
         .prepare(
           `SELECT i.*, COALESCE(i.Location, b.Location) AS Location
@@ -36,7 +41,7 @@ const action: Action = {
       const boxes = ctx.db
         .prepare('SELECT BoxID, Location FROM boxes WHERE BoxID LIKE ? OR Location LIKE ?')
         .all(like, like);
-      console.log('search', term, '→', items.length, 'items', boxes.length, 'boxes');
+      console.log('search', term, '→ pattern', like, '→', items.length, 'items', boxes.length, 'boxes');
       sendJson(res, 200, { items, boxes });
     } catch (err) {
       console.error('Search failed', err);
