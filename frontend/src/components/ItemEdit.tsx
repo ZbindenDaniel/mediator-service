@@ -74,5 +74,13 @@ export default function ItemEdit({ itemId }: Props) {
     </section>
   );
 
-  return <ItemForm item={item} onSubmit={handleSubmit} submitLabel="Speichern" headerContent={gallery} />;
+  return (
+    <ItemForm
+      item={item}
+      onSubmit={handleSubmit}
+      submitLabel="Speichern"
+      headerContent={gallery}
+      lockedFields={{ Artikel_Nummer: 'readonly' }}
+    />
+  );
 }

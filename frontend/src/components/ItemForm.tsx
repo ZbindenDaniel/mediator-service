@@ -22,6 +22,10 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
   });
 
   const handleSelectSimilar = (selected: typeof similarItems[number]) => {
+    if (!isNew) {
+      console.info('Ignoring similar item selection because form is in edit mode');
+      return;
+    }
     try {
       console.log('Applying similar item selection', selected.ItemUUID);
       setForm((prev) => {
@@ -59,7 +63,11 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
     [update]
   );
 
-  const shouldShowSuggestions = hasQuery && lockedFields?.Artikelbeschreibung !== 'hidden' && lockedFields?.Artikelbeschreibung !== 'readonly';
+  const shouldShowSuggestions =
+    isNew === true &&
+    hasQuery &&
+    lockedFields?.Artikelbeschreibung !== 'hidden' &&
+    lockedFields?.Artikelbeschreibung !== 'readonly';
 
   const photoPreview = useMemo(() => {
     if (!hidePhotoInputs) {

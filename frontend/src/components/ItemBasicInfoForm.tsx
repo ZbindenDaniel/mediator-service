@@ -8,10 +8,21 @@ interface ItemBasicInfoFormProps {
 }
 
 export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weiter' }: ItemBasicInfoFormProps) {
-  const { form, update, mergeForm, generateMaterialNumber } = useItemFormState({ initialItem: initialValues });
+  const normalizedInitialValues = useMemo(
+    () => ({
+      ...initialValues,
+      Auf_Lager: initialValues.Auf_Lager ?? 1
+    }),
+    [initialValues]
+  );
+
+  const { form, update, mergeForm } = useItemFormState({ initialItem: normalizedInitialValues });
 
   useEffect(() => {
-    mergeForm(initialValues);
+    mergeForm({
+      ...initialValues,
+      Auf_Lager: initialValues.Auf_Lager ?? 1
+    });
   }, [initialValues, mergeForm]);
 
   const handlePhoto1Change = useMemo(
@@ -53,30 +64,17 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
           </div>
 
           <div className="row">
-            <label>Artikelnummer*</label>
-            <div className="combined-input">
-              <input
-                value={form.Artikel_Nummer || ''}
-                onChange={(event) => update('Artikel_Nummer', event.target.value)}
-                required
-              />
-              <button type="button" onClick={() => void generateMaterialNumber()}>neu?</button>
-            </div>
-          </div>
-
-          <div className="row">
             <label>Anzahl*</label>
             <input
               type="number"
-              value={form.Auf_Lager ?? 0}
-              onChange={(event) => update('Auf_Lager', parseInt(event.target.value, 10) || 0)}
+              min={1}
+              value={form.Auf_Lager ?? 1}
+              onChange={(event) => {
+                const nextValue = parseInt(event.target.value, 10);
+                update('Auf_Lager', Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1);
+              }}
               required
             />
-          </div>
-
-          <div className="row">
-            <label>Kurzbeschreibung</label>
-            <input value={form.Kurzbeschreibung || ''} onChange={(event) => update('Kurzbeschreibung', event.target.value)} />
           </div>
 
           {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}

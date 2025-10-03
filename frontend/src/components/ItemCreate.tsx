@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
@@ -321,12 +321,11 @@ export default function ItemCreate() {
   const handleBasicInfoNext = (data: Partial<ItemFormData>) => {
     try {
       const trimmedDescription = data.Artikelbeschreibung?.trim() || data.Artikelbeschreibung;
-      const trimmedNumber = data.Artikel_Nummer?.trim() || data.Artikel_Nummer;
       const normalized: Partial<ItemFormData> = {
         ...data,
         BoxID: data.BoxID || boxId || undefined,
         Artikelbeschreibung: trimmedDescription,
-        Artikel_Nummer: trimmedNumber
+        Auf_Lager: data.Auf_Lager ?? 1
       };
       console.log('Advancing to match selection with basic info', normalized);
       setBasicInfo(normalized);
@@ -350,7 +349,6 @@ export default function ItemCreate() {
         Artikelbeschreibung: basicInfo.Artikelbeschreibung || item.Artikelbeschreibung,
         Artikel_Nummer: basicInfo.Artikel_Nummer || item.Artikel_Nummer,
         Auf_Lager: basicInfo.Auf_Lager ?? item.Auf_Lager,
-        Kurzbeschreibung: basicInfo.Kurzbeschreibung || item.Kurzbeschreibung,
         picture1: basicInfo.picture1 || item.picture1,
         picture2: basicInfo.picture2 || item.picture2,
         picture3: basicInfo.picture3 || item.picture3
@@ -365,10 +363,41 @@ export default function ItemCreate() {
     }
   };
 
+  const ensureManualArtikelNummer = useCallback(async () => {
+    const currentNumber = basicInfo.Artikel_Nummer?.trim();
+    if (currentNumber) {
+      return;
+    }
+    try {
+      console.log('Requesting material number for manual item creation fallback');
+      const response = await fetch('/api/getNewMaterialNumber');
+      if (!response.ok) {
+        console.error('Failed to get material number for manual fallback', response.status);
+        return;
+      }
+      const payload = await response
+        .json()
+        .catch((err) => {
+          console.error('Failed to parse material number response', err);
+          return null;
+        });
+      const generatedNumber = payload?.nextArtikelNummer;
+      if (!generatedNumber) {
+        console.warn('Material number response missing nextArtikelNummer');
+        return;
+      }
+      setBasicInfo((prev) => (prev.Artikel_Nummer ? prev : { ...prev, Artikel_Nummer: generatedNumber }));
+      setManualDraft((prev) => (prev.Artikel_Nummer ? prev : { ...prev, Artikel_Nummer: generatedNumber }));
+    } catch (err) {
+      console.error('Failed to request material number for manual fallback', err);
+    }
+  }, [basicInfo.Artikel_Nummer]);
+
   const handleSkipMatches = () => {
     console.log('No duplicate selected, switching to manual edit');
     setManualDraft((prev) => ({ ...prev, ...basicInfo }));
     setCreationStep('manualEdit');
+    void ensureManualArtikelNummer();
   };
 
   const handleManualSubmit = async (data: Partial<ItemFormData>) => {
@@ -377,7 +406,7 @@ export default function ItemCreate() {
       ...data,
       BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
       Artikelbeschreibung: basicInfo.Artikelbeschreibung,
-      Artikel_Nummer: basicInfo.Artikel_Nummer,
+      Artikel_Nummer: data.Artikel_Nummer || basicInfo.Artikel_Nummer,
       Auf_Lager: basicInfo.Auf_Lager,
       picture1: basicInfo.picture1,
       picture2: basicInfo.picture2,
