@@ -50,6 +50,18 @@ export function buildAgenticRunUrl(agenticApiBase: string | null): string | null
   }
 }
 
+export function buildAgenticCancelUrl(agenticApiBase: string | null): string | null {
+  if (!agenticApiBase) {
+    return null;
+  }
+  try {
+    return new URL('/run/cancel', agenticApiBase).toString();
+  } catch (err) {
+    console.error('Failed to construct agentic cancel URL', err);
+    return null;
+  }
+}
+
 export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRunTriggerOptions): Promise<void> {
   if (!runUrl) {
     console.warn(`Agentic trigger skipped (${context}): run URL is not configured.`);
@@ -110,5 +122,61 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
     }
   } catch (err) {
     console.error(`Agentic trigger invocation failed during ${context}`, err);
+  }
+}
+
+export interface AgenticRunCancelOptions {
+  cancelUrl: string | null;
+  itemId: string | null | undefined;
+  actor?: string | null;
+  context: string;
+}
+
+export async function cancelAgenticRun({ cancelUrl, itemId, actor, context }: AgenticRunCancelOptions): Promise<void> {
+  if (!cancelUrl) {
+    console.warn(`Agentic cancel skipped (${context}): cancel URL is not configured.`);
+    return;
+  }
+
+  const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
+  if (!trimmedItemId) {
+    console.warn(`Agentic cancel skipped (${context}): missing ItemUUID`);
+    return;
+  }
+
+  const trimmedActor = typeof actor === 'string' ? actor.trim() : '';
+
+  try {
+    const body = {
+      item: { ItemUUID: trimmedItemId },
+      actor: trimmedActor || undefined
+    } as const;
+
+    const response = await fetch(cancelUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      // TODO: Include richer context payload when the agentic API expects extended item metadata.
+      let errorDetails: unknown = null;
+      try {
+        errorDetails = await response.clone().json();
+      } catch (jsonErr) {
+        try {
+          errorDetails = await response.text();
+        } catch (textErr) {
+          errorDetails = { message: 'Failed to read response body', cause: textErr };
+        }
+        console.warn(`Agentic cancel failed during ${context}: non-JSON error payload`, jsonErr);
+      }
+      const err = new Error(`Agentic cancel failed during ${context}`);
+      console.error(err.message, response.status, errorDetails);
+      throw err;
+    }
+  } catch (err) {
+    console.error(`Agentic cancel invocation failed during ${context}`, err);
+    throw err instanceof Error ? err : new Error('Agentic cancel invocation failed');
   }
 }

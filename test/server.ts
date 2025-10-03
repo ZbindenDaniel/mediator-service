@@ -2,12 +2,14 @@ const http = require('http');
 
 const boxes = new Map();
 const items = new Map();
+const agenticRuns = new Map();
 let materialCounter = 10000;
 let boxCounter = 0;
 
 function resetData() {
   boxes.clear();
   items.clear();
+  agenticRuns.clear();
   materialCounter = 10000;
   boxCounter = 0;
 }
@@ -33,6 +35,25 @@ function formatItem(item) {
     Location: item.location,
     quantity: item.quantity
   };
+}
+
+function getAgenticRun(itemId) {
+  return agenticRuns.get(itemId) || null;
+}
+
+function saveAgenticRun(itemId, data) {
+  const nowIso = new Date().toISOString();
+  const existing = agenticRuns.get(itemId) || {};
+  const run = {
+    ItemUUID: itemId,
+    SearchQuery: typeof data.SearchQuery === 'string' ? data.SearchQuery : existing.SearchQuery || '',
+    Status: data.Status || existing.Status || 'queued',
+    LastModified: nowIso,
+    ReviewState: data.ReviewState || existing.ReviewState || 'not_required',
+    ReviewedBy: data.ReviewedBy ?? null
+  };
+  agenticRuns.set(itemId, run);
+  return run;
 }
 
 function parseBody(req) {
@@ -249,6 +270,60 @@ function handleGetItem(res, itemId) {
   return sendJson(res, 200, { item: formatItem(item) });
 }
 
+async function handleAgenticRestart(req, res, itemId) {
+  const item = items.get(itemId);
+  if (!item) {
+    return sendJson(res, 404, { error: 'item not found' });
+  }
+  const body = (await parseBody(req)) as Buffer;
+  let payload: { actor?: string; search?: string } = {};
+  try {
+    payload = JSON.parse(body.toString() || '{}');
+  } catch (err) {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  if (!payload.actor) {
+    return sendJson(res, 400, { error: 'actor required' });
+  }
+  const searchQuery = (payload.search || item.description || '').trim();
+  const run = saveAgenticRun(itemId, {
+    Status: 'queued',
+    SearchQuery: searchQuery,
+    ReviewState: 'not_required',
+    ReviewedBy: null
+  });
+  return sendJson(res, 200, { agentic: run });
+}
+
+async function handleAgenticCancel(req, res, itemId) {
+  const run = getAgenticRun(itemId);
+  if (!run) {
+    return sendJson(res, 404, { error: 'Agentic run not found' });
+  }
+  const body = (await parseBody(req)) as Buffer;
+  let payload: { actor?: string } = {};
+  try {
+    payload = JSON.parse(body.toString() || '{}');
+  } catch (err) {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+  if (!payload.actor) {
+    return sendJson(res, 400, { error: 'actor required' });
+  }
+  const updated = saveAgenticRun(itemId, {
+    Status: 'cancelled',
+    SearchQuery: run.SearchQuery,
+    ReviewState: 'not_required',
+    ReviewedBy: null
+  });
+  return sendJson(res, 200, { agentic: updated });
+}
+
+function handleAgenticStatus(res, itemId) {
+  const run = getAgenticRun(itemId);
+  return sendJson(res, 200, { agentic: run });
+}
+
 function handleListItems(res) {
   const data = Array.from(items.values()).map((item) => formatItem(item));
   return sendJson(res, 200, { items: data });
@@ -298,6 +373,16 @@ const server = http.createServer(async (req, res) => {
       const itemId = decodeURIComponent(parts[3]);
       return handleMoveItem(req, res, itemId);
     }
+    if (req.method === 'POST' && pathname.startsWith('/api/items/') && pathname.endsWith('/agentic/restart')) {
+      const parts = pathname.split('/');
+      const itemId = decodeURIComponent(parts[3]);
+      return handleAgenticRestart(req, res, itemId);
+    }
+    if (req.method === 'POST' && pathname.startsWith('/api/items/') && pathname.endsWith('/agentic/cancel')) {
+      const parts = pathname.split('/');
+      const itemId = decodeURIComponent(parts[3]);
+      return handleAgenticCancel(req, res, itemId);
+    }
     if (req.method === 'POST' && pathname === '/api/boxes') {
       const body = (await parseBody(req)) as Buffer;
       let payload: { actor?: string } = {};
@@ -322,6 +407,11 @@ const server = http.createServer(async (req, res) => {
       const parts = pathname.split('/');
       const itemId = decodeURIComponent(parts[3]);
       return handleAdjustStock(req, res, itemId, -1);
+    }
+    if (req.method === 'GET' && pathname.startsWith('/api/items/') && pathname.endsWith('/agentic')) {
+      const parts = pathname.split('/');
+      const itemId = decodeURIComponent(parts[3]);
+      return handleAgenticStatus(res, itemId);
     }
     if (req.method === 'GET' && pathname.startsWith('/api/items/')) {
       const itemId = decodeURIComponent(pathname.split('/')[3]);

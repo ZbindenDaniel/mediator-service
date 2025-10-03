@@ -6,7 +6,13 @@ import type { Item, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
-import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun } from '../lib/agentic';
+import {
+  buildAgenticCancelUrl,
+  buildAgenticRunUrl,
+  cancelAgenticRun,
+  resolveAgenticApiBase,
+  triggerAgenticRun
+} from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 
@@ -75,7 +81,7 @@ export function AgenticStatusCard({
       {!needsReview && hasFailure ? (
         <div className='row'>
           <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
-            Neu starten
+            Wiederholen
           </button>
         </div>
       ) : null}
@@ -109,6 +115,7 @@ export default function ItemDetail({ itemId }: Props) {
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
+  const agenticCancelUrl = useMemo(() => buildAgenticCancelUrl(agenticApiBase), [agenticApiBase]);
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
@@ -149,7 +156,7 @@ export default function ItemDetail({ itemId }: Props) {
   const normalizedAgenticStatus = (agentic?.Status || '').toLowerCase();
   const agenticHasFailure = !agentic
     ? true
-    : ['failed', 'error', 'errored'].includes(normalizedAgenticStatus);
+    : ['failed', 'error', 'errored', 'cancelled', 'canceled'].includes(normalizedAgenticStatus);
 
   function agenticStatusDisplay(run: AgenticRun | null): {
     label: string;
@@ -180,6 +187,10 @@ export default function ItemDetail({ itemId }: Props) {
       variant = 'pending';
       label = 'Wartet';
       description = 'Der agentische Durchlauf wartet auf Ausführung.';
+    } else if (['cancelled', 'canceled'].includes(normalized)) {
+      variant = 'info';
+      label = 'Abgebrochen';
+      description = 'Der agentische Durchlauf wurde abgebrochen.';
     } else if (['completed', 'done', 'success'].includes(normalized)) {
       if ((run.ReviewState || '').toLowerCase() === 'pending') {
         variant = 'pending';
@@ -333,16 +344,88 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
-  function handleAgenticCancel() {
-    // TODO: Replace local reset with request abort once the agentic API supports cancellation hooks.
-    try {
-      console.info('Agentic action cancelled by user');
-      setAgenticActionPending(false);
-      setAgenticError(null);
-      setAgenticReviewIntent(null);
-    } catch (err) {
-      console.error('Failed to reset agentic state', err);
+  async function handleAgenticCancel() {
+    if (!agentic) {
+      console.warn('Agentic cancel requested without run data');
+      setAgenticError('Kein agentischer Durchlauf vorhanden.');
+      return;
     }
+
+    const actor = getUser();
+    if (!actor) {
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
+
+    if (!window.confirm('Agentischen Durchlauf abbrechen?')) {
+      return;
+    }
+
+    console.info('Agentic action cancellation requested', agentic.ItemUUID);
+
+    setAgenticActionPending(true);
+    setAgenticReviewIntent(null);
+    setAgenticError(null);
+
+    let updatedRun: AgenticRun | null = agentic;
+    let finalError: string | null = null;
+
+    try {
+      const res = await fetch(
+        `/api/items/${encodeURIComponent(agentic.ItemUUID)}/agentic/cancel`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor })
+        }
+      );
+
+      if (res.ok) {
+        const data = await res
+          .json()
+          .catch((err) => {
+            console.error('Failed to parse agentic cancel response', err);
+            return null;
+          });
+        if (data?.agentic) {
+          updatedRun = data.agentic;
+        }
+      } else if (res.status === 404) {
+        console.warn('Agentic cancel failed: no existing run for item', agentic.ItemUUID);
+        finalError = 'Kein laufender agentischer Durchlauf gefunden.';
+      } else {
+        console.error('Agentic cancel failed', res.status);
+        finalError = 'Agentic-Abbruch konnte nicht gespeichert werden.';
+      }
+    } catch (err) {
+      console.error('Agentic cancel request failed', err);
+      finalError = 'Agentic-Abbruch fehlgeschlagen.';
+    }
+
+    if (agenticCancelUrl) {
+      try {
+        await cancelAgenticRun({
+          cancelUrl: agenticCancelUrl,
+          itemId: agentic.ItemUUID,
+          actor,
+          context: 'item detail cancel'
+        });
+      } catch (err) {
+        console.error('Agentic external cancel failed', err);
+        if (!finalError) {
+          finalError = 'Agentic-Abbruch konnte extern nicht gestoppt werden.';
+        }
+      }
+    } else {
+      console.warn('Agentic cancel URL not configured; external cancellation skipped.');
+    }
+
+    if (updatedRun) {
+      setAgentic(updatedRun);
+    }
+    setAgenticReviewIntent(null);
+    setAgenticError(finalError);
+    setAgenticActionPending(false);
   }
 
   const agenticStatus = agenticStatusDisplay(agentic);

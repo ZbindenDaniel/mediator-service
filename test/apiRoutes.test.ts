@@ -244,6 +244,42 @@ test('list items returns data', async () => {
   expect(j.items.length).toBeGreaterThan(0);
 });
 
+test('agentic cancel endpoint updates run status', async () => {
+  const targetItem = itemId(5);
+  const targetBox = boxId(5);
+
+  const createRes = await postForm('/api/import/item', {
+    BoxID: targetBox,
+    ItemUUID: targetItem,
+    Artikel_Nummer: '1099',
+    Artikelbeschreibung: 'Agentic Cancel Item',
+    Location: 'A-02-00',
+    actor: 'tester'
+  });
+  expect(createRes.status).toBe(200);
+
+  const restartRes = await fetch(baseUrl + `/api/items/${targetItem}/agentic/restart`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor: 'tester', search: 'Agentic Cancel Item' })
+  });
+  expect(restartRes.status).toBe(200);
+
+  const cancelRes = await fetch(baseUrl + `/api/items/${targetItem}/agentic/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actor: 'tester' })
+  });
+  expect(cancelRes.status).toBe(200);
+  const cancelBody = await cancelRes.json();
+  expect(cancelBody?.agentic?.Status).toBe('cancelled');
+
+  const statusRes = await fetch(baseUrl + `/api/items/${targetItem}/agentic`);
+  expect(statusRes.status).toBe(200);
+  const statusBody = await statusRes.json();
+  expect(statusBody?.agentic?.Status).toBe('cancelled');
+});
+
 test('importing items preserves box location when subsequent payload omits Standort', async () => {
   const targetBox = boxId(5);
   const firstItem = itemId(5);
