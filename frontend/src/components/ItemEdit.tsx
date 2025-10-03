@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
 import { getUser } from '../lib/user';
-import ItemForm_Agentic from './ItemForm_agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 
 interface Props {

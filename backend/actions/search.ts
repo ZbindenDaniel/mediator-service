@@ -1,91 +1,68 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { compareTwoStrings } from 'string-similarity';
+import { compareTwoStrings } from '../../vendor/string-similarity';
 import type { Action } from './index';
 
 function normalize(value: unknown): string {
-  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
-function computeTokenScore(tokens: string[], candidateTokens: string[]): number {
-  if (!tokens.length || !candidateTokens.length) {
+function createCandidateCorpus(item: Record<string, unknown>): string[] {
+  return [
+    normalize(item.Artikelbeschreibung),
+    normalize(item.Artikel_Nummer),
+    normalize(item.BoxID),
+    normalize(item.Location)
+  ].filter((entry) => entry.length > 0);
+}
+
+function evaluateSimilarity(term: string, corpus: string[]): number {
+  if (!term) {
     return 0;
   }
 
-  let aggregate = 0;
-  for (const token of tokens) {
-    let best = 0;
-    for (const candidate of candidateTokens) {
-      const score = compareTwoStrings(token, candidate);
-      if (score > best) {
-        best = score;
-        if (best >= 1) {
-          break;
-        }
-      }
-    }
-    aggregate += best;
-  }
+  const normalizedTerm = normalize(term);
+  const compactTerm = normalizedTerm.replace(/\s+/g, '');
+  const tokens = normalizedTerm.split(' ').filter(Boolean);
 
-  return aggregate / tokens.length;
-}
+  let bestScore = 0;
+  let hasTokenCoverage = tokens.length === 0;
 
-function computeSimilarityScore(term: string, tokens: string[], candidate: unknown): number {
-  const normalizedCandidate = normalize(candidate);
-  if (!normalizedCandidate) {
-    return 0;
-  }
+  for (const candidate of corpus) {
+    const compactCandidate = candidate.replace(/\s+/g, '');
+    const directScore = compareTwoStrings(normalizedTerm, candidate);
+    const compactScore = compareTwoStrings(compactTerm, compactCandidate);
+    const candidateBest = Math.max(directScore, compactScore);
+    bestScore = Math.max(bestScore, candidateBest);
 
-  const baseScore = compareTwoStrings(term, normalizedCandidate);
-  const candidateTokens = normalizedCandidate.split(/\s+/).filter(Boolean);
-  const tokenScore = computeTokenScore(tokens, candidateTokens);
-  const substringScore = tokens.length
-    ? tokens.reduce((count, token) => (normalizedCandidate.includes(token) ? count + 1 : count), 0) / tokens.length
-    : 0;
-
-  return Math.max(baseScore, tokenScore, substringScore);
-}
-
-function scoreItem(term: string, tokens: string[], item: any): number {
-  const fields = [
-    item?.Artikelbeschreibung,
-    item?.Kurzbeschreibung,
-    item?.Langtext,
-    item?.Artikel_Nummer,
-    item?.Hersteller,
-    item?.Location,
-    item?.BoxID,
-    item?.ItemUUID
-  ];
-
-  let best = 0;
-  for (const field of fields) {
-    const similarity = computeSimilarityScore(term, tokens, field);
-    if (similarity > best) {
-      best = similarity;
-      if (best >= 1) {
-        break;
-      }
+    if (tokens.length > 0) {
+      const coversAllTokens = tokens.every((token) => {
+        const tokenScore = Math.max(
+          compareTwoStrings(token, candidate),
+          compareTwoStrings(token.replace(/\s+/g, ''), compactCandidate)
+        );
+        const hasInclusion = candidate.includes(token) || compactCandidate.includes(token.replace(/\s+/g, ''));
+        return hasInclusion || tokenScore >= 0.65;
+      });
+      hasTokenCoverage = hasTokenCoverage || coversAllTokens;
     }
   }
 
-  return best;
-}
-
-function scoreBox(term: string, tokens: string[], box: any): number {
-  const fields = [box?.BoxID, box?.Location];
-  let best = 0;
-  for (const field of fields) {
-    const similarity = computeSimilarityScore(term, tokens, field);
-    if (similarity > best) {
-      best = similarity;
-      if (best >= 1) {
-        break;
-      }
-    }
+  if (!hasTokenCoverage) {
+    return Math.min(bestScore, 0.49);
   }
 
-  return best;
+  return bestScore;
 }
+
+const MIN_SIMILARITY_SCORE = 0.6;
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -105,14 +82,13 @@ const action: Action = {
         url.searchParams.get('q') ||
         url.searchParams.get('material') ||
         '';
-      if (!term) return sendJson(res, 400, { error: 'query term is required' });
-      const trimmed = term.trim();
-      if (!trimmed) {
+      const trimmedTerm = term.trim();
+      if (!trimmedTerm) {
+        console.warn('Search aborted: empty term');
         return sendJson(res, 400, { error: 'query term is required' });
       }
-      const wildcardTerm = trimmed.replace(/\s+/g, '%');
-      const like = `%${wildcardTerm}%`;
-      const rawItems = ctx.db
+      const like = `%${trimmedTerm}%`;
+      const items = ctx.db
         .prepare(
           `SELECT i.*, COALESCE(i.Location, b.Location) AS Location
            FROM items i
@@ -124,35 +100,30 @@ const action: Action = {
               OR b.Location LIKE ?`
         )
         .all(like, like, like, like, like);
-      const rawBoxes = ctx.db
+      const boxes = ctx.db
         .prepare('SELECT BoxID, Location FROM boxes WHERE BoxID LIKE ? OR Location LIKE ?')
         .all(like, like);
-      const normalizedTerm = trimmed.toLowerCase();
-      const tokens = normalizedTerm.split(/\s+/).filter(Boolean);
-      const scoredItems = rawItems
-        .map((item: any) => ({ item, score: scoreItem(normalizedTerm, tokens, item) }))
-        .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-      const scoredBoxes = rawBoxes
-        .map((box: any) => ({ box, score: scoreBox(normalizedTerm, tokens, box) }))
-        .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-      const topItemScore = scoredItems.length ? scoredItems[0].score : 0;
-      console.log(
-        'search',
-        term,
-        '→ pattern',
-        like,
-        '→',
-        rawItems.length,
-        'items',
-        rawBoxes.length,
-        'boxes',
-        'top score',
-        topItemScore.toFixed(3)
-      );
-      sendJson(res, 200, {
-        items: scoredItems.map((entry: { item: any }) => entry.item),
-        boxes: scoredBoxes.map((entry: { box: any }) => entry.box)
-      });
+
+      const scoredItems = items
+        .map((item: Record<string, unknown>) => {
+          const score = evaluateSimilarity(trimmedTerm, createCandidateCorpus(item));
+          return { item, score };
+        })
+        .filter(({ score }) => score >= MIN_SIMILARITY_SCORE)
+        .sort((a, b) => b.score - a.score)
+        .map(({ item, score }) => ({ ...item, similarityScore: score }));
+
+      const scoredBoxes = boxes
+        .map((box: Record<string, unknown>) => {
+          const score = evaluateSimilarity(trimmedTerm, createCandidateCorpus(box));
+          return { box, score };
+        })
+        .filter(({ score }) => score >= MIN_SIMILARITY_SCORE)
+        .sort((a, b) => b.score - a.score)
+        .map(({ box, score }) => ({ ...box, similarityScore: score }));
+
+      console.log('search', trimmedTerm, '→', scoredItems.length, 'items', scoredBoxes.length, 'boxes');
+      sendJson(res, 200, { items: scoredItems, boxes: scoredBoxes });
     } catch (err) {
       console.error('Search failed', err);
       sendJson(res, 500, { error: (err as Error).message });

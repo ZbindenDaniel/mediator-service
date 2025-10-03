@@ -127,4 +127,3 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
     </div>
   );
 }
-
