@@ -11,7 +11,8 @@ async function bundle() {
     console.log('Bundled frontend to frontend/public/bundle.js');
   } catch (err) {
     if (err?.code === 'MODULE_NOT_FOUND') {
-      console.warn('[bundle] esbuild not available – skipping frontend bundle generation.');
+      console.error('[bundle] esbuild not available');
+      throw new Error("Bundle error")
       return;
     }
     console.error('Failed to bundle frontend', err);
