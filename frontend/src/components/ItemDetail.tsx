@@ -48,7 +48,7 @@ export function AgenticStatusCard({
 }: AgenticStatusCardProps) {
   return (
     <div className="card">
-      <h3>Agentic Status</h3>
+      <h3>Ki Status</h3>
       <div className="row">
         <span className={status.className}>{status.label}</span>
       </div>
@@ -74,11 +74,13 @@ export function AgenticStatusCard({
       {error ? (
         <p className="muted" style={{ color: '#a30000' }}>{error}</p>
       ) : null}
-      <div className='row'>
+      { status.label != 'Abgebrochen' ?(
+        <div className='row'>
         <button type="button" className="btn" onClick={onCancel}>
           Abbrechen
         </button>
       </div>
+      ) : null}
       {!needsReview && hasFailure ? (
         <div className='row'>
           <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
