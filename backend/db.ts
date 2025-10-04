@@ -389,10 +389,12 @@ export const listItems = db.prepare(
 );
 
 export const listItemsForExport = db.prepare(
-  `SELECT * FROM items
-   WHERE (@createdAfter IS NULL OR Datum_erfasst >= @createdAfter)
-     AND (@updatedAfter IS NULL OR UpdatedAt >= @updatedAfter)
-   ORDER BY Datum_erfasst`
+  `SELECT i.*, COALESCE(i.Location, b.Location) AS Location
+   FROM items i
+   LEFT JOIN boxes b ON i.BoxID = b.BoxID
+   WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
+     AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
+   ORDER BY i.Datum_erfasst`
 );
 
 export type { AgenticRun, Box, Item, LabelJob, EventLog };
