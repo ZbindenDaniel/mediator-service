@@ -6,32 +6,38 @@ interface Props {
   events: EventLog[];
 }
 
+export function RecentEventsList({ events }: Props) {
+  return (
+    <div id="eventsOut" className="list">
+      {events.length ? (
+        events.map((e) => (
+          <React.Fragment key={e.Id}>
+            <div className="card">
+              <div>
+                <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Behälter' : 'Artikel'}</span>
+                <br />
+              </div>
+              <div>{formatDate(e.CreatedAt)} </div>
+              <div> {eventLabel(e.Event)}{e.Actor ? ` von ${e.Actor}` : ''}</div>
+              <div className="muted">
+                {e.EntityId}
+              </div>
+            </div>
+            <div className="spacer"></div>
+          </React.Fragment>
+        ))
+      ) : (
+        <div className="muted">Keine aktuellen Aktivitäten.</div>
+      )}
+    </div>
+  );
+}
+
 export default function RecentEventsCard({ events }: Props) {
   return (
     <div className="card">
       <h2 id="activity">Letzte Aktivitäten</h2>
-      <div id="eventsOut" className="list">
-        {events.length ? (
-          events.map(e => (
-            <React.Fragment key={e.Id}>
-              <div className="card">
-                <div>
-                  <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Behälter' : 'Artikel'}</span>
-                  <br />
-                </div>
-                <div>{formatDate(e.CreatedAt)} </div>
-                <div> {eventLabel(e.Event)}{e.Actor ? ` von ${e.Actor}` : ''}</div>
-                  <div className="muted">
-                    {e.EntityId}
-                  </div>
-              </div>
-              <div className="spacer"></div>
-            </React.Fragment>
-          ))
-        ) : (
-          <div className="muted">Keine aktuellen Aktivitäten.</div>
-        )}
-      </div>
+      <RecentEventsList events={events} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import CreateItemCard from './CreateItemCard';
 import SearchCard from './SearchCard';
 import StatsCard from './StatsCard';
 import RecentBoxesCard from './RecentBoxesCard';
-import RecentEventsCard from './RecentEventsCard';
+import { RecentEventsList } from './RecentEventsCard';
 import ImportCard from './ImportCard';
 import type { Box, EventLog } from '../../../models';
 
@@ -24,6 +24,7 @@ export default function LandingPage() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [printerOk, setPrinterOk] = useState<boolean | null>(null);
   const [health, setHealth] = useState('prüfe…');
+  const [previewEvents, setPreviewEvents] = useState<EventLog[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -31,9 +32,19 @@ export default function LandingPage() {
         const r = await fetch('/api/overview');
         const d = await r.json();
         setOverview(d);
+        if (Array.isArray(d?.recentEvents)) {
+          const limited = d.recentEvents.slice(0, 3);
+          if (d.recentEvents.length > 3) {
+            console.info('Truncating overview events to preview limit', { total: d.recentEvents.length });
+          }
+          setPreviewEvents(limited);
+        } else {
+          setPreviewEvents([]);
+        }
         console.log('Loaded overview');
       } catch (err) {
         console.error('Failed to load overview', err);
+        setPreviewEvents([]);
       }
     })();
   }, []);
@@ -82,7 +93,15 @@ export default function LandingPage() {
         </div>
         <StatsCard counts={overview?.counts} printerOk={printerOk} health={health} />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
-        <RecentEventsCard events={overview?.recentEvents || []} />
+        <div className="card recent-activities-preview" aria-labelledby="recent-activities-heading">
+          <div className="card-header">
+            <h2 id="recent-activities-heading">Letzte Aktivitäten</h2>
+            <Link to="/activities" className="muted" aria-label="Alle Aktivitäten anzeigen">
+              Alle Aktivitäten
+            </Link>
+          </div>
+          <RecentEventsList events={previewEvents} />
+        </div>
         <ImportCard />
       </div>
     </div>

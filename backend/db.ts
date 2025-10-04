@@ -354,7 +354,15 @@ export const listRecentEvents = db.prepare(`
          i.Artikelbeschreibung, i.Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
-  ORDER BY e.Id DESC LIMIT 4`);
+  ORDER BY e.Id DESC LIMIT 3`);
+export const listRecentActivities = db.prepare(`
+  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Meta,
+         i.Artikelbeschreibung, i.Artikel_Nummer
+  FROM events e
+  LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
+  ORDER BY e.Id DESC
+  LIMIT @limit`);
+export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events`);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoWms = db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`);

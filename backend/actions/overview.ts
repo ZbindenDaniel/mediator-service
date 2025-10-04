@@ -12,6 +12,7 @@ const action: Action = {
   appliesTo: () => false,
   matches: (path, method) => path === '/api/overview' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
+    const OVERVIEW_EVENT_LIMIT = 3;
     try {
       const counts = {
         boxes: ctx.countBoxes.get().c || 0,
@@ -20,6 +21,17 @@ const action: Action = {
       };
       const recentBoxes = ctx.listRecentBoxes.all();
       const recentEvents = ctx.listRecentEvents.all();
+      try {
+        const totalEvents = ctx.countEvents.get().c || 0;
+        if (totalEvents > OVERVIEW_EVENT_LIMIT) {
+          console.info('Overview recent events truncated', {
+            limit: OVERVIEW_EVENT_LIMIT,
+            total: totalEvents
+          });
+        }
+      } catch (err) {
+        console.error('Failed to determine total event count for overview', err);
+      }
       sendJson(res, 200, { counts, recentBoxes, recentEvents });
     } catch (err) {
       console.error('Overview endpoint failed', err);
