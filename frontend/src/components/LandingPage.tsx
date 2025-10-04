@@ -4,7 +4,7 @@ import CreateItemCard from './CreateItemCard';
 import SearchCard from './SearchCard';
 import StatsCard from './StatsCard';
 import RecentBoxesCard from './RecentBoxesCard';
-import { RecentEventsList } from './RecentEventsCard';
+import RecentEventsCard, { RecentEventsList } from './RecentEventsCard';
 import ImportCard from './ImportCard';
 import type { Box, EventLog } from '../../../models';
 
@@ -93,15 +93,7 @@ export default function LandingPage() {
         </div>
         <StatsCard counts={overview?.counts} printerOk={printerOk} health={health} />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
-        <div className="card recent-activities-preview" aria-labelledby="recent-activities-heading">
-          <div className="card-header">
-            <h2 id="recent-activities-heading">Letzte Aktivitäten</h2>
-            <Link to="/activities" className="muted" aria-label="Alle Aktivitäten anzeigen">
-              Alle Aktivitäten
-            </Link>
-          </div>
-          <RecentEventsList events={previewEvents} />
-        </div>
+        <RecentEventsCard events={previewEvents}></RecentEventsCard>
         <ImportCard />
       </div>
     </div>

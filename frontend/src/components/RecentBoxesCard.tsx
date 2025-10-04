@@ -12,18 +12,9 @@ export default function RecentBoxesCard({ boxes }: Props) {
   return (
     <div className="card">
       <div
-        className="card-header"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px'
-        }}
-      >
+        className="card-header">
         <h2 id="boxes">Letzte Behälter</h2>
-        <Link className="btn" to="/boxes">
-          Alle Behälter
+        <Link className="btn" to="/boxes">Alle
         </Link>
       </div>
       <div id="boxesOut" className="list">

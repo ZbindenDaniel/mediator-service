@@ -48,7 +48,7 @@ export default function BoxListPage() {
   }, []);
 
   return (
-    <div className="card">
+    <div className="container box">
       <h2>Alle Behälter</h2>
       {error ? (
         <div className="muted">{error}</div>

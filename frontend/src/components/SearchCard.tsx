@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
 import BoxColorTag from './BoxColorTag';
+import { Link } from 'react-router-dom';
 
 type SearchResult =
   | { type: 'box'; id: string; location?: string | null }
@@ -34,7 +35,12 @@ export default function SearchCard() {
 
   return (
     <div className="card" id="find">
-      <h2>Artikel finden</h2>
+      <div className="card-header">
+        <h2>Artikel finden</h2>
+        <Link to="/items" className="muted" aria-label="Alle Artikel anzeigen">
+          Alle
+        </Link>
+      </div>
       <div className="row">
         <input
           value={query}
@@ -44,7 +50,6 @@ export default function SearchCard() {
           autoFocus
         />
         <button className="btn" onClick={runFind}>Suchen</button>
-        <button className='btn'><a href="/items">Alle Artikel</a></button>
       </div>
       <div className="list" style={{ marginTop: '10px' }}>
         {results.map((res, idx) =>

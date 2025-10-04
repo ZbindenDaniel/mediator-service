@@ -213,6 +213,11 @@ div {
         background-color: $item-color;
         min-height: 100vh;
     }
+
+    &.activities {
+        background-color: #f9cb9c;
+        min-height: 100vh;
+    }
 }
 
 .stack {
@@ -234,6 +239,15 @@ div {
 
 .details td {
     padding: 0.25rem 0;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 8px;
 }
 
 .card {

@@ -27,6 +27,7 @@ export default function ItemListPage() {
   const filtered = showUnplaced ? items.filter((it) => !it.BoxID) : items;
 
   return (
+    // <div className="container item">
     <div className="card">
       <h2>Alle Artikel</h2>
       <div className="filter-bar">

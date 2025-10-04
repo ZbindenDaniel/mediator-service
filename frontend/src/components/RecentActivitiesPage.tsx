@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { EventLog } from '../../../models';
-import RecentEventsCard from './RecentEventsCard';
+import RecentEventsCard, { RecentEventsList } from './RecentEventsCard';
 
 const DEFAULT_LIMIT = 50;
 
@@ -47,19 +47,8 @@ export default function RecentActivitiesPage() {
 
   return (
     <div className="container activities">
-      <nav aria-label="Brotkrumen" className="breadcrumb">
-        <ol>
-          <li>
-            <Link to="/" aria-label="Zurück zur Übersicht">Übersicht</Link>
-          </li>
-          <li aria-current="page">Aktivitäten</li>
-        </ol>
-      </nav>
       <div className="page-header">
         <h1>Letzte Aktivitäten</h1>
-        <Link className="back-link" to="/" aria-label="Zurück zur Übersicht">
-          &larr; Zur Übersicht
-        </Link>
       </div>
       {loading && <p className="muted">Aktivitäten werden geladen…</p>}
       {error && (
@@ -68,7 +57,7 @@ export default function RecentActivitiesPage() {
           <p className="muted">{error}</p>
         </div>
       )}
-      {!loading && !error && <RecentEventsCard events={events} />}
+      {!loading && !error && <RecentEventsList events={events} />}
     </div>
   );
 }

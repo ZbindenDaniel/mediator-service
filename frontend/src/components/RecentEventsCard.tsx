@@ -2,6 +2,7 @@ import React from 'react';
 import type { EventLog } from '../../../models';
 import { formatDate } from '../lib/format';
 import { eventLabel } from '../../../models/event-labels';
+import { Link } from 'react-router-dom';
 interface Props {
   events: EventLog[];
 }
@@ -35,8 +36,14 @@ export function RecentEventsList({ events }: Props) {
 
 export default function RecentEventsCard({ events }: Props) {
   return (
+    
     <div className="card">
-      <h2 id="activity">Letzte Aktivitäten</h2>
+       <div className="card-header">
+              <h2 id='activity'>Letzte Aktivitäten</h2>
+              <Link to="/activities" className="muted" aria-label="Alle Aktivitäten anzeigen">
+                Alle
+              </Link>
+            </div>
       <RecentEventsList events={events} />
     </div>
   );
