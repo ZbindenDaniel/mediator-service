@@ -8,9 +8,9 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 ## item form
 
-- [ ] when editing the existing images are not set in the Inputs. the file input should show the filename
+- [x] when editing the existing images are not set in the Inputs. the file input should show the filename
 - [ ] 'Hauptkategorie' and 'Unterkategorie' are dropdown selections. the value lookup is missing. the Unterkategorie selection depends on the Hauptkategorie. Implement the structure with one example (Computer - Thin Client). this selection is fetched from a new file 'ItemCategories'
-- [ ] 'Anzahl' default should be 1
+- [x] 'Anzahl' default should be 1
 
 ## item search
 
@@ -20,15 +20,20 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 - [x] images ar not rendered. the request returns 404
 - [x] activities are not translated
+- [ ] Enlarge items onclick
   
 ### agentic Status
 
-- [ ] always visible button 'cancel' is missing.
+- [x] always visible button 'cancel' is missing.
 
 ## box detail
 
 - [x] when adding a new item with the button 'neu' it seems like the previous item is deleted. This mustn't happen
 - [x] At the same time it seems that the location of the box is reset.
+
+## box list
+
+- [ ] order boxes by date desc
 
 ### activities
 
@@ -46,9 +51,11 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 - [x] should contain a button 'Alle Behälter' which leads to a new view (similar to ItemList)
 
-### CSV import
+### CSV import & export
 
 - [ ] the validation should return the number of parsed items
+- [ ] refresh after import
+- [ ] in the export we have to set the location of the items box into the item so when importing again the box hast the location set
 
 ## Printing
 
@@ -58,19 +65,25 @@ This list tracks defects that require fixes. Cross-reference the planning contex
   - [x]  Also the labels should be larger (A5) and also contain the same information in human readbale text.
   
 ## Build & Tooling
+
 - [ ] `sass` CLI is required for tests and builds. When unavailable the build fails with `sh: 1: sass: not found`. Registry restrictions can block installation.
+- [ ] Add swagger API doc
 
 ## UX & Workflow
+
 - [ ] Confirming "Entnehmen" is not yet implemented; users can remove items without a confirmation step.
 - [ ] Double-clicking the username should allow editing, but the behavior is currently missing.
 
 ## Data Handling
+
 - [ ] Moving boxes or items does not trigger a full reload, causing stale views after mutations.
 - [ ] Monitoring persisted image writes and `agenticSearchQuery` handling in `backend/actions/import-item.ts` is needed to ensure data consistency.
 
 ## Layout & Presentation
+
 - [ ] Item short description (Kurzbeschreibung) layout needs improvement for readability.
 
 ## Agentic Flow
+
 - [ ] Switching from the agentic edit form to manual editing is missing a direct link button in `ItemForm_Agentic`.
 - [ ] The asynchronous agentic run trigger in `frontend/src/components/ItemCreate.tsx` still needs refinement based on UX feedback.

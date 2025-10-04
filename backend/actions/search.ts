@@ -33,31 +33,30 @@ function computeSimilarityScore(term: string, tokens: string[], candidate: unkno
   const normalizedCandidate = normalize(candidate);
   if (!normalizedCandidate) return 0;
 
-  const exactEqual = normalizedCandidate === term;
-  if (exactEqual) return 1; // only exact string equality gets 1.0
+  const normalizedTerm = normalize(term);
+  if (normalizedCandidate === normalizedTerm) return 1; // exact only
 
-  // String-level similarity (e.g., Dice via string-similarity)
-  const baseScoreRaw = compareTwoStrings(term, normalizedCandidate); // [0,1]
-  const baseScore = Math.min(baseScoreRaw, 0.99); // never let non-exact reach 1.0
+  // Whole-string similarity (never reaches 1 unless exact)
+  const baseScore = Math.min(compareTwoStrings(normalizedTerm, normalizedCandidate), 0.99);
 
-  // Tokenize candidate
   const candidateTokens = normalizedCandidate.split(/\s+/).filter(Boolean);
+  const queryTokens = (tokens && tokens.length ? tokens : normalizedTerm.split(/\s+/)).filter(Boolean);
 
-  // Token overlap score (Jaccard): |A ∩ B| / |A ∪ B|
-  const a = new Set(tokens);
-  const b = new Set(candidateTokens);
-  let inter = 0;
-  for (const t of a) if (b.has(t)) inter++;
-  const unionSize = new Set([...a, ...b]).size;
-  const jaccard = unionSize ? inter / unionSize : 0;
+  // For each query token, find its best fuzzy match in candidate tokens
+  const perTokenBest: number[] = queryTokens.map(qt => {
+    let best = 0;
+    for (const ct of candidateTokens) best = Math.max(best, compareTwoStrings(qt, ct));
+    // ignore tiny accidental similarities (noise/extra words)
+    return best >= 0.35 ? best : 0;
+  });
 
-  // If you have your own tokenScore, keep it—but ensure it can't hit 1 unless sets equal
-  const tokenScore = Math.min(computeTokenScore(tokens, candidateTokens), 0.99);
+  // Soft-OR aggregation: 1 - Π(1 - s_i)
+  // Extra tokens with 0 similarity do not reduce the score.
+  const softRecall = 1 - perTokenBest.reduce((prod, s) => prod * (1 - s), 1);
 
   // Combine conservatively
-  return Math.max(baseScore, tokenScore, jaccard);
+  return Math.max(baseScore, softRecall);
 }
-
 
 function scoreItem(term: string, tokens: string[], item: any): number {
   const fields = [
@@ -86,7 +85,7 @@ function scoreItem(term: string, tokens: string[], item: any): number {
 }
 
 function scoreBox(term: string, tokens: string[], box: any): number {
-        console.log("scoreBox")
+  console.log("scoreBox")
   const fields = [box?.BoxID, box?.Location];
   let best = 0;
   for (const field of fields) {
@@ -114,63 +113,174 @@ const action: Action = {
   matches: (path, method) => path === '/api/search' && method === 'GET',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      console.log("search...", )
-      const url = new URL(req.url || '', 'http://localhost');
+      console.log("search...");
+      const url = new URL(req.url || "", "http://localhost");
       const term =
-        url.searchParams.get('term') ||
-        url.searchParams.get('q') ||
-        url.searchParams.get('material') ||
-        '';
-      if (!term) return sendJson(res, 400, { error: 'query term is required' });
+        url.searchParams.get("term") ||
+        url.searchParams.get("q") ||
+        url.searchParams.get("material") ||
+        "";
+      if (!term) return sendJson(res, 400, { error: "query term is required" });
+
       const trimmed = term.trim();
       if (!trimmed) {
-        return sendJson(res, 400, { error: 'query term is required' });
+        return sendJson(res, 400, { error: "query term is required" });
       }
-      const wildcardTerm = trimmed.replace(/\s+/g, '%');
-      const like = `%${wildcardTerm}%`;
-      const rawItems = ctx.db
-        .prepare(
-          `SELECT i.*, COALESCE(i.Location, b.Location) AS Location
-           FROM items i
-           LEFT JOIN boxes b ON i.BoxID = b.BoxID
-           WHERE i.ItemUUID LIKE ?
-              OR i.Artikel_Nummer LIKE ?
-              OR i.Artikelbeschreibung LIKE ?
-              OR i.BoxID LIKE ?`
-        )
-        .all(like, like, like, like);
-      const rawBoxes = ctx.db
-        .prepare('SELECT BoxID, Location FROM boxes WHERE BoxID LIKE ? OR Location LIKE ?')
-        .all(like, like);
-      const normalizedTerm = trimmed.toLowerCase();
-      const tokens = normalizedTerm.split(/\s+/).filter(Boolean);
+
+      const normalized = trimmed.toLowerCase();
+      const tokens = normalized.split(/\s+/).filter(Boolean);
+      if (!tokens.length) {
+        return sendJson(res, 400, { error: "query term is required" });
+      }
+
+      // require at least 50% of tokens (min 1)
+      const minTokenHits = Math.max(1, Math.ceil(tokens.length * 0.5));
+
+      const like4 = (t: string) => {
+        const p = `%${t}%`;
+        return [p, p, p, p] as const;
+      };
+      const like2 = (t: string) => {
+        const p = `%${t}%`;
+        return [p, p] as const;
+      };
+
+      // ---------------- ITEMS ----------------
+      // token_hits: per-token presence (0/1), not per-field sum
+      const itemTokenPresenceTerms = tokens.map(() => `
+    CASE WHEN (
+      lower(i.ItemUUID)            LIKE ?
+      OR lower(i.Artikel_Nummer)   LIKE ?
+      OR lower(i.Artikelbeschreibung) LIKE ?
+      OR lower(i.BoxID)            LIKE ?
+    ) THEN 1 ELSE 0 END
+  `).join(" + ");
+
+      // exact match if ANY field equals the normalized query
+      const itemExactMatchExpr = `
+    CASE WHEN (
+      lower(i.ItemUUID)            = ?
+      OR lower(i.Artikel_Nummer)   = ?
+      OR lower(i.Artikelbeschreibung) = ?
+      OR lower(i.BoxID)            = ?
+    ) THEN 1 ELSE 0 END
+  `;
+
+      const itemSql = `
+    SELECT *
+    FROM (
+      SELECT
+        i.*,
+        COALESCE(i.Location, b.Location) AS Location,
+        (${itemTokenPresenceTerms}) AS token_hits,
+        ${itemExactMatchExpr} AS exact_match,
+        CASE
+          WHEN ${itemExactMatchExpr} = 1 THEN 1.0
+          ELSE (CAST((${itemTokenPresenceTerms}) AS REAL) / ?) * 0.99
+        END AS sql_score
+      FROM items i
+      LEFT JOIN boxes b ON i.BoxID = b.BoxID
+    )
+    WHERE token_hits >= ?
+    ORDER BY exact_match DESC, sql_score DESC
+    LIMIT 5
+  `;
+
+      const itemParams = [
+        // token_hits params
+        ...tokens.flatMap(like4),
+        // exact_match params (equality, 4 fields)
+        normalized, normalized, normalized, normalized,
+        // sql_score CASE exact_match params (repeat the equality)
+        normalized, normalized, normalized, normalized,
+        // sql_score token_hits terms again (used in ELSE)
+        ...tokens.flatMap(like4),
+        // divisor = tokens.length
+        tokens.length,
+        // WHERE threshold
+        minTokenHits,
+      ];
+
+      const rawItems = ctx.db.prepare(itemSql).all(...itemParams);
+
+      // ---------------- BOXES ----------------
+      const boxTokenPresenceTerms = tokens.map(() => `
+    CASE WHEN (
+      lower(b.BoxID)    LIKE ?
+      OR lower(b.Location) LIKE ?
+    ) THEN 1 ELSE 0 END
+  `).join(" + ");
+
+      const boxExactMatchExpr = `
+    CASE WHEN (
+      lower(b.BoxID)    = ?
+      OR lower(b.Location) = ?
+    ) THEN 1 ELSE 0 END
+  `;
+
+      const boxSql = `
+    SELECT *
+    FROM (
+      SELECT
+        b.BoxID, b.Location,
+        (${boxTokenPresenceTerms}) AS token_hits,
+        ${boxExactMatchExpr} AS exact_match,
+        CASE
+          WHEN ${boxExactMatchExpr} = 1 THEN 1.0
+          ELSE (CAST((${boxTokenPresenceTerms}) AS REAL) / ?) * 0.99
+        END AS sql_score
+      FROM boxes b
+    )
+    WHERE token_hits >= ?
+    ORDER BY exact_match DESC, sql_score DESC
+    LIMIT 5
+  `;
+
+      const boxParams = [
+        // token_hits params
+        ...tokens.flatMap(like2),
+        // exact_match params
+        normalized, normalized,
+        // sql_score CASE exact_match params (repeat)
+        normalized, normalized,
+        // sql_score token_hits terms again
+        ...tokens.flatMap(like2),
+        // divisor = tokens.length
+        tokens.length,
+        // WHERE threshold
+        minTokenHits,
+      ];
+
+      const rawBoxes = ctx.db.prepare(boxSql).all(...boxParams);
+
+      // ----- same JS scoring + response -----
       const scoredItems = rawItems
-        .map((item: any) => ({ item, score: scoreItem(normalizedTerm, tokens, item) }))
+        .map((item: any) => ({ item, score: scoreItem(normalized, tokens, item) }))
         .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
+
       const scoredBoxes = rawBoxes
-        .map((box: any) => ({ box, score: scoreBox(normalizedTerm, tokens, box) }))
+        .map((box: any) => ({ box, score: scoreBox(normalized, tokens, box) }))
         .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
-        console.log('boxes, items', scoredBoxes, scoredItems);
+
       const topItemScore = scoredItems.length ? scoredItems[0].score : 0;
       console.log(
-        'search',
+        "search",
         term,
-        '→ pattern',
-        like,
-        '→',
+        "→",
         rawItems.length,
-        'items',
+        "items",
         rawBoxes.length,
-        'boxes',
-        'top score',
+        "boxes",
+        "top score",
         topItemScore.toFixed(3)
       );
+
       sendJson(res, 200, {
         items: scoredItems.map((entry: { item: any }) => entry.item),
-        boxes: scoredBoxes.map((entry: { box: any }) => entry.box)
+        boxes: scoredBoxes.map((entry: { box: any }) => entry.box),
       });
     } catch (err) {
-      console.error('Search failed', err);
+      console.error("Search failed", err);
       sendJson(res, 500, { error: (err as Error).message });
     }
   },

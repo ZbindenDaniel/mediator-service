@@ -24,6 +24,7 @@ body {
   margin-right: 1rem;
 }
 .layout main {
+  height: 100vh;
   padding: 1rem;
 }
 .box-list ul,

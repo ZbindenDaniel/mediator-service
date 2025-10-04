@@ -21,6 +21,7 @@ export default function SearchCard() {
         return;
       }
       const data = await r.json();
+      console.log('Search data', data);
       const next: SearchResult[] = [];
       (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
       (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, location: b.Location }));

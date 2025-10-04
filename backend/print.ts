@@ -51,17 +51,64 @@ export function sendZpl(zpl: string): Promise<{ sent: boolean; reason?: string }
   });
 }
 
-export function testPrinterConnection(): Promise<{ ok: boolean; reason?: string }> {
+const PROBE = "\x1B%-12345X@PJL INFO STATUS\r\n@PJL INFO ID\r\n@PJL EOJ\r\n\x1B%-12345X";
+
+export function testPrinterConnection(
+  host: string,
+  port = 9100,
+  timeoutMs = 3000
+): Promise<{ ok: boolean; reason?: string }> {
   return new Promise((resolve) => {
-    if (!PRINTER_HOST || !PRINTER_PORT) {
-      return resolve({ ok: false, reason: 'not_configured' });
-    }
-    const socket = net.createConnection({ host: PRINTER_HOST, port: PRINTER_PORT }, () => {
-      socket.end();
-      resolve({ ok: true });
+    const socket = net.createConnection({ host, port });
+    let resolved = false;
+    let gotData = false;
+    let buf = "";
+
+    const finish = (res: { ok: boolean; reason?: string }) => {
+      if (resolved) return;
+      resolved = true;
+      try { socket.destroy(); } catch {}
+      resolve(res);
+    };
+
+    socket.setTimeout(timeoutMs);
+
+    socket.once("connect", () => {
+      // Write PJL probe and wait for data
+      socket.write(PROBE, (err) => {
+        if (err) return finish({ ok: false, reason: err.message || "write_error" });
+      });
     });
-    socket.on('error', (err) => resolve({ ok: false, reason: err.message || 'socket_error' }));
+
+    socket.on("data", (chunk) => {
+      gotData = true;
+      buf += chunk.toString("ascii");
+
+      // Heuristics: look for READY/ONLINE or INFO payloads
+      if (/READY|ONLINE|@PJL\s+INFO/i.test(buf)) {
+        finish({ ok: true });
+      } else if (/OFFLINE|ERROR|JAM|OUT\s+OF\s+PAPER/i.test(buf)) {
+        finish({ ok: false, reason: "printer_error_state" });
+      }
+    });
+
+    socket.once("timeout", () => {
+      // Connected but no useful reply
+      finish({ ok: false, reason: gotData ? "inconclusive" : "timeout_no_response" });
+    });
+
+    socket.once("error", (err) => {
+      finish({ ok: false, reason: err.message || "socket_error" });
+    });
+
+    socket.once("close", (hadError) => {
+      if (!resolved) {
+        // Closed with no data → treat as failure
+        finish({ ok: false, reason: hadError ? "socket_closed_with_error" : "closed_no_response" });
+      }
+    });
   });
 }
+
 
 export default { zplForItem, zplForBox, sendZpl, testPrinterConnection };

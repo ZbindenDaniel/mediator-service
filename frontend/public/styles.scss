@@ -57,6 +57,11 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
+.layout {
+    height: 100vh;
+    padding: 1rem;
+}
+
 textarea {
     resize: vertical;
     min-height: 80px;
@@ -90,8 +95,7 @@ textarea {
     gap: 1rem;
 }
 
-#header-back-button
-{
+#header-back-button {
     font-size: 22px;
     font-weight: bolder;
     text-decoration: none;
@@ -194,18 +198,20 @@ div {
     margin: 0 auto;
     padding: var(--pad);
     width: 100;
-    min-height: 100%;
 
     &.overview {
         background-color: $base-color;
+        min-height: 100vh;
     }
 
     &.box {
         background-color: $box-color;
+        min-height: 100vh;
     }
 
     &.item {
         background-color: $item-color;
+        min-height: 100vh;
     }
 }
 
@@ -480,6 +486,7 @@ button:focus {
 }
 
 @media (max-width: 600px) {
+
     .item-list th,
     .item-list td {
         padding: 6px 4px;
@@ -592,11 +599,13 @@ button:focus {
         width: 100%;
         display: block;
     }
+
     .details tbody,
     .details tr {
         display: block;
         width: 100%;
     }
+
     .details .responsive-row {
         display: flex;
         flex-direction: column;
@@ -604,11 +613,13 @@ button:focus {
         margin-bottom: 8px;
         padding-bottom: 4px;
     }
+
     .details .responsive-th {
         font-weight: bold;
         color: var(--muted);
         padding-bottom: 2px;
     }
+
     .details .responsive-td {
         padding-left: 0;
     }
