@@ -1,6 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Item } from '../../../../models';
 import { getUser } from '../../lib/user';
+import { itemCategories } from '../../data/itemCategories';
+import type { ItemCategoryDefinition } from '../../data/itemCategories';
 
 export interface ItemFormData extends Item {
   picture1?: string | null;
@@ -103,7 +105,7 @@ export function ItemDetailsFields({
   onChangeStock,
   descriptionSuggestions,
   lockedFields
-}: ItemDetailsFieldsProps) {   
+}: ItemDetailsFieldsProps) {
   if(isNew && onGenerateMaterialNumber && form.Artikel_Nummer == null)
     onGenerateMaterialNumber();
 
@@ -131,6 +133,177 @@ export function ItemDetailsFields({
 
   const quantityHidden = isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
   const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
+
+  const categoryLookup = useMemo(() => {
+    const map = new Map<number, ItemCategoryDefinition>();
+    for (const category of itemCategories) {
+      map.set(category.code, category);
+    }
+    return map;
+  }, []);
+
+  const buildHauptOptions = useCallback(
+    (currentValue?: number) => {
+      const options = itemCategories.map((category) => ({
+        value: category.code.toString(),
+        label: category.label
+      }));
+
+      if (typeof currentValue === 'number' && !categoryLookup.has(currentValue)) {
+        options.unshift({
+          value: currentValue.toString(),
+          label: `Unbekannte Kategorie (${currentValue})`
+        });
+      }
+
+      return options;
+    },
+    [categoryLookup]
+  );
+
+  const buildUnterOptions = useCallback(
+    (parentValue?: number, currentValue?: number) => {
+      const options: { value: string; label: string }[] = [];
+      let known = false;
+
+      if (typeof parentValue === 'number') {
+        const parentCategory = categoryLookup.get(parentValue);
+        if (parentCategory) {
+          for (const subCategory of parentCategory.subcategories) {
+            options.push({
+              value: subCategory.code.toString(),
+              label: subCategory.label
+            });
+            if (typeof currentValue === 'number' && subCategory.code === currentValue) {
+              known = true;
+            }
+          }
+        }
+      }
+
+      if (typeof currentValue === 'number' && !known) {
+        options.unshift({
+          value: currentValue.toString(),
+          label: `Unbekannte Kategorie (${currentValue})`
+        });
+      }
+
+      return options;
+    },
+    [categoryLookup]
+  );
+
+  const handleHauptkategorieChange = useCallback(
+    (
+      hauptKey: 'Hauptkategorien_A' | 'Hauptkategorien_B',
+      unterKey: 'Unterkategorien_A' | 'Unterkategorien_B'
+    ) =>
+      (event: React.ChangeEvent<HTMLSelectElement>) => {
+        try {
+          const { value } = event.target;
+          if (!value) {
+            onUpdate(hauptKey, undefined as any);
+            onUpdate(unterKey, undefined as any);
+            return;
+          }
+
+          const parsed = Number.parseInt(value, 10);
+          if (Number.isNaN(parsed)) {
+            console.warn('Received non-numeric Hauptkategorie selection', { field: hauptKey, value });
+            onUpdate(hauptKey, undefined as any);
+            onUpdate(unterKey, undefined as any);
+            return;
+          }
+
+          onUpdate(hauptKey, parsed as any);
+          onUpdate(unterKey, undefined as any);
+        } catch (err) {
+          console.error('Failed to handle Hauptkategorie change', { field: hauptKey }, err);
+        }
+      },
+    [onUpdate]
+  );
+
+  const handleUnterkategorieChange = useCallback(
+    (unterKey: 'Unterkategorien_A' | 'Unterkategorien_B') =>
+      (event: React.ChangeEvent<HTMLSelectElement>) => {
+        try {
+          const { value } = event.target;
+          if (!value) {
+            onUpdate(unterKey, undefined as any);
+            return;
+          }
+
+          const parsed = Number.parseInt(value, 10);
+          if (Number.isNaN(parsed)) {
+            console.warn('Received non-numeric Unterkategorie selection', { field: unterKey, value });
+            onUpdate(unterKey, undefined as any);
+            return;
+          }
+
+          onUpdate(unterKey, parsed as any);
+        } catch (err) {
+          console.error('Failed to handle Unterkategorie change', { field: unterKey }, err);
+        }
+      },
+    [onUpdate]
+  );
+
+  const hauptOptionsA = useMemo(
+    () => buildHauptOptions(form.Hauptkategorien_A),
+    [buildHauptOptions, form.Hauptkategorien_A]
+  );
+  const hauptOptionsB = useMemo(
+    () => buildHauptOptions(form.Hauptkategorien_B),
+    [buildHauptOptions, form.Hauptkategorien_B]
+  );
+
+  const unterOptionsA = useMemo(
+    () => buildUnterOptions(form.Hauptkategorien_A, form.Unterkategorien_A),
+    [buildUnterOptions, form.Hauptkategorien_A, form.Unterkategorien_A]
+  );
+  const unterOptionsB = useMemo(
+    () => buildUnterOptions(form.Hauptkategorien_B, form.Unterkategorien_B),
+    [buildUnterOptions, form.Hauptkategorien_B, form.Unterkategorien_B]
+  );
+
+  useEffect(() => {
+    if (typeof form.Hauptkategorien_A === 'number' && !categoryLookup.has(form.Hauptkategorien_A)) {
+      console.warn('Missing Hauptkategorie mapping for Hauptkategorien_A', form.Hauptkategorien_A);
+    }
+  }, [categoryLookup, form.Hauptkategorien_A]);
+
+  useEffect(() => {
+    if (typeof form.Hauptkategorien_B === 'number' && !categoryLookup.has(form.Hauptkategorien_B)) {
+      console.warn('Missing Hauptkategorie mapping for Hauptkategorien_B', form.Hauptkategorien_B);
+    }
+  }, [categoryLookup, form.Hauptkategorien_B]);
+
+  useEffect(() => {
+    if (typeof form.Unterkategorien_A === 'number') {
+      const haupt = typeof form.Hauptkategorien_A === 'number' ? categoryLookup.get(form.Hauptkategorien_A) : undefined;
+      const known = haupt?.subcategories.some((subCategory) => subCategory.code === form.Unterkategorien_A) ?? false;
+      if (!known) {
+        console.warn('Missing Unterkategorie mapping for Unterkategorien_A', {
+          hauptkategorie: form.Hauptkategorien_A,
+          unterkategorie: form.Unterkategorien_A
+        });
+      }
+    }
+  }, [categoryLookup, form.Hauptkategorien_A, form.Unterkategorien_A]);
+
+  useEffect(() => {
+    if (typeof form.Unterkategorien_B === 'number') {
+      const haupt = typeof form.Hauptkategorien_B === 'number' ? categoryLookup.get(form.Hauptkategorien_B) : undefined;
+      const known = haupt?.subcategories.some((subCategory) => subCategory.code === form.Unterkategorien_B) ?? false;
+      if (!known) {
+        console.warn('Missing Unterkategorie mapping for Unterkategorien_B', {
+          hauptkategorie: form.Hauptkategorien_B,
+          unterkategorie: form.Unterkategorien_B
+        });
+      }
+    }
+  }, [categoryLookup, form.Hauptkategorien_B, form.Unterkategorien_B]);
 
   return (
     <>
@@ -283,53 +456,67 @@ export function ItemDetailsFields({
         <label>
           Hauptkategorien A
         </label>
-        <input
-          type="number"
-          value={form.Hauptkategorien_A?.toString() || ''}
-          onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Hauptkategorien_A', Number.isNaN(n) ? undefined : n);
-          }}
-        />
+        <select
+          value={typeof form.Hauptkategorien_A === 'number' ? form.Hauptkategorien_A.toString() : ''}
+          onChange={handleHauptkategorieChange('Hauptkategorien_A', 'Unterkategorien_A')}
+        >
+          <option value="">Bitte auswählen</option>
+          {hauptOptionsA.map((option) => (
+            <option key={`haupt-a-${option.value}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="row">
         <label>
           Unterkategorien A
         </label>
-        <input
-          type="number"
-          value={form.Unterkategorien_A?.toString() || ''}
-          onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Unterkategorien_A', Number.isNaN(n) ? undefined : n);
-          }}
-        />
+        <select
+          value={typeof form.Unterkategorien_A === 'number' ? form.Unterkategorien_A.toString() : ''}
+          onChange={handleUnterkategorieChange('Unterkategorien_A')}
+          disabled={typeof form.Hauptkategorien_A !== 'number'}
+        >
+          <option value="">Bitte auswählen</option>
+          {unterOptionsA.map((option) => (
+            <option key={`unter-a-${option.value}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="row">
         <label>
           Hauptkategorien B
         </label>
-        <input
-          type="number"
-          value={form.Hauptkategorien_B?.toString() || ''}
-          onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Hauptkategorien_B', Number.isNaN(n) ? undefined : n);
-          }}
-        />
+        <select
+          value={typeof form.Hauptkategorien_B === 'number' ? form.Hauptkategorien_B.toString() : ''}
+          onChange={handleHauptkategorieChange('Hauptkategorien_B', 'Unterkategorien_B')}
+        >
+          <option value="">Bitte auswählen</option>
+          {hauptOptionsB.map((option) => (
+            <option key={`haupt-b-${option.value}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="row">
         <label>
           Unterkategorien B
         </label>
-        <input
-          type="number"
-          value={form.Unterkategorien_B?.toString() || ''}
-          onChange={(e) => {
-            const n = parseInt(e.target.value, 10);
-            onUpdate('Unterkategorien_B', Number.isNaN(n) ? undefined : n);
-          }}
-        />
+        <select
+          value={typeof form.Unterkategorien_B === 'number' ? form.Unterkategorien_B.toString() : ''}
+          onChange={handleUnterkategorieChange('Unterkategorien_B')}
+          disabled={typeof form.Hauptkategorien_B !== 'number'}
+        >
+          <option value="">Bitte auswählen</option>
+          {unterOptionsB.map((option) => (
+            <option key={`unter-b-${option.value}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <hr></hr>
