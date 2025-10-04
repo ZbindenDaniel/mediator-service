@@ -2,30 +2,34 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
-import {
-  buildAgenticRunUrl,
-  persistAgenticRunCancellation,
-  resolveAgenticApiBase,
-  triggerAgenticRun as triggerAgenticRunRequest
-} from '../lib/agentic';
+import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
-import type { ItemFormData } from './forms/itemFormShared';
+import { ItemBasicInfoForm } from './ItemBasicInfoForm';
+import { ItemMatchSelection } from './ItemMatchSelection';
+import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
+import type { SimilarItem } from './forms/useSimilarItems';
 
 type AgenticEnv = typeof globalThis & {
   AGENTIC_API_BASE?: string;
   process?: { env?: Record<string, string | undefined> };
 };
 
+type CreationStep = 'basicInfo' | 'matchSelection' | 'manualEdit';
+
 export default function ItemCreate() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const boxId = params.get('box') || null;
-  const [step, setStep] = useState(1);
+  const [agenticStep, setAgenticStep] = useState(1);
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [itemUUID, setItemUUID] = useState<string | undefined>();
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
+  const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
+  const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [creating, setCreating] = useState(false);
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
@@ -86,17 +90,14 @@ export default function ItemCreate() {
     };
   }, [agenticApiBase]);
 
-  const baseDraft = useMemo(() => {
-    const derivedItemUUID = itemUUID ?? draft.ItemUUID;
-    if (!itemUUID && draft.ItemUUID) {
-      console.info('ItemCreate preserving draft ItemUUID from prior step');
-    }
-    return {
+  const baseDraft = useMemo(
+    () => ({
       ...draft,
       BoxID: draft.BoxID || boxId || undefined,
-      ItemUUID: derivedItemUUID || undefined
-    };
-  }, [boxId, draft, itemUUID]);
+      ItemUUID: itemUUID || draft.ItemUUID
+    }),
+    [boxId, draft, itemUUID]
+  );
 
   async function reportAgenticTriggerFailure({
     itemId,
@@ -225,130 +226,193 @@ export default function ItemCreate() {
   async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
     if (!shouldUseAgenticForm) {
       console.info(`Agentic trigger skipped (${context}): service not healthy.`);
-      if (agenticPayload.itemId) {
-        const actor = getUser();
-        const cancelResult = await persistAgenticRunCancellation({
-          itemId: agenticPayload.itemId,
-          actor,
-          context: `${context} auto-cancel (service unhealthy)`
-        });
-        if (!cancelResult.ok) {
-          console.warn('Persisted cancellation after unhealthy service skip failed', cancelResult);
-        }
-      }
       return;
     }
 
-    const result = await triggerAgenticRunRequest({
-      runUrl: agenticRunUrl,
-      payload: agenticPayload,
-      context
-    });
-
-    if (result.outcome !== 'triggered') {
-      console.warn('Agentic trigger did not start; attempting to persist cancellation', {
-        context,
-        result
+    try {
+      await triggerAgenticRunRequest({
+        runUrl: agenticRunUrl,
+        payload: agenticPayload,
+        context
       });
+    } catch (err) {
+      console.error('Failed to trigger agentic run', err);
       if (agenticPayload.itemId) {
-        const actor = getUser();
-        const cancelResult = await persistAgenticRunCancellation({
+        await reportAgenticTriggerFailure({
           itemId: agenticPayload.itemId,
-          actor,
-          context: `${context} auto-cancel`
+          search: agenticPayload.artikelbeschreibung ?? '',
+          context,
+          error: err
         });
-        if (!cancelResult.ok) {
-          console.warn('Persisted cancellation after trigger skip failed', cancelResult);
-        }
-      } else {
-        console.warn('Agentic trigger skip could not be cancelled due to missing ItemUUID');
       }
     }
   }
 
-  async function handleSubmit(data: Partial<ItemFormData>) {
-    const payload: Record<string, unknown> = { ...data, BoxID: boxId || data.BoxID || '', actor: getUser() };
-
-    const candidateItemUUID = typeof payload['ItemUUID'] === 'string' ? payload['ItemUUID'] : undefined;
-    if (!itemUUID && !draft.ItemUUID && candidateItemUUID && candidateItemUUID.trim()) {
-      console.warn('ItemCreate dropping unexpected ItemUUID for new item creation', candidateItemUUID);
-      delete payload['ItemUUID'];
+  function buildCreationParams(data: Partial<ItemFormData>, options: { removeItemUUID?: boolean } = {}) {
+    const { removeItemUUID = true } = options;
+    const params = new URLSearchParams();
+    const sanitized: Record<string, unknown> = { ...data };
+    if (!sanitized.BoxID && boxId) {
+      sanitized.BoxID = boxId;
+    }
+    if (removeItemUUID && 'ItemUUID' in sanitized) {
+      delete sanitized.ItemUUID;
+    }
+    const actor = getUser();
+    if (actor) {
+      sanitized.actor = actor;
     }
 
-    const p = new URLSearchParams();
-    Object.entries(payload).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') {
-        p.append(k, String(v));
+    Object.entries(sanitized).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.append(key, String(value));
       }
     });
+
+    return params;
+  }
+
+  async function submitNewItem(
+    data: Partial<ItemFormData>,
+    context: string,
+    options: { keepItemUUID?: boolean } = {}
+  ) {
+    if (creating) {
+      console.warn('Item creation already running. Ignoring duplicate submit.', { context });
+      return;
+    }
+
+    const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID });
     try {
-      const res = await fetch('/api/import/item', {
+      setCreating(true);
+      console.log('Submitting item creation payload', { context, data });
+      const response = await fetch('/api/import/item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: p.toString()
+        body: params.toString()
       });
-      if (!res.ok) {
-        console.error('Failed to create item', res.status);
-        throw new Error(`Failed to create item. Status: ${res.status}`);
+      if (!response.ok) {
+        console.error('Failed to create item', response.status);
+        throw new Error(`Failed to create item. Status: ${response.status}`);
       }
 
-      const j = await res.json();
-      const createdItem: Item | undefined = j?.item;
-
+      const body = await response.json();
+      const createdItem: Item | undefined = body?.item;
       const searchText = createdItem?.Artikelbeschreibung || data.Artikelbeschreibung || '';
       const agenticPayload: AgenticRunTriggerPayload = {
         itemId: createdItem?.ItemUUID,
         artikelbeschreibung: searchText
       };
 
-      void triggerAgenticRun(agenticPayload, 'item creation');
+      await triggerAgenticRun(agenticPayload, context);
 
       alert('Behälter erstellt. Bitte platzieren!');
       if (createdItem?.BoxID) {
         navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
       }
-      setItemUUID(undefined);
-      setDraft(() => ({ BoxID: createdItem?.BoxID || boxId || undefined }));
-      setStep(1);
-      console.info('ItemCreate reset draft after successful creation');
     } catch (err) {
       console.error('Failed to create item', err);
       throw err;
+    } finally {
+      setCreating(false);
     }
   }
 
-  async function handleSubmitDetails(data: Partial<ItemFormData>) {
-    console.log('Submitting step 1 item details', data);
-    const detailPayload = {
+  const handleBasicInfoNext = (data: Partial<ItemFormData>) => {
+    try {
+      const trimmedDescription = data.Artikelbeschreibung?.trim() || data.Artikelbeschreibung;
+      const trimmedNumber = data.Artikel_Nummer?.trim() || data.Artikel_Nummer;
+      const normalized: Partial<ItemFormData> = {
+        ...data,
+        BoxID: data.BoxID || boxId || undefined,
+        Artikelbeschreibung: trimmedDescription,
+        Artikel_Nummer: trimmedNumber
+      };
+      console.log('Advancing to match selection with basic info', normalized);
+      setBasicInfo(normalized);
+      setManualDraft(normalized);
+      setCreationStep('matchSelection');
+    } catch (err) {
+      console.error('Failed to prepare basic info for next step', err);
+    }
+  };
+
+  const handleMatchSelection = async (item: SimilarItem) => {
+    if (creating) {
+      console.warn('Skipping match selection submit; creation already running.');
+      return;
+    }
+    try {
+      const clone: Partial<ItemFormData> = {
+        ...item,
+        ...basicInfo,
+        BoxID: basicInfo.BoxID || item.BoxID || boxId || undefined,
+        Artikelbeschreibung: basicInfo.Artikelbeschreibung || item.Artikelbeschreibung,
+        Artikel_Nummer: basicInfo.Artikel_Nummer || item.Artikel_Nummer,
+        Auf_Lager: basicInfo.Auf_Lager ?? item.Auf_Lager,
+        Kurzbeschreibung: basicInfo.Kurzbeschreibung || item.Kurzbeschreibung,
+        picture1: basicInfo.picture1,
+        picture2: basicInfo.picture2,
+        picture3: basicInfo.picture3 
+      };
+      if ('ItemUUID' in clone) {
+        delete clone.ItemUUID;
+      }
+      console.log('Creating item from selected duplicate', { itemUUID: item.ItemUUID });
+      await submitNewItem(clone, 'match-selection');
+    } catch (err) {
+      console.error('Failed to create item from duplicate selection', err);
+    }
+  };
+
+  const handleSkipMatches = () => {
+    console.log('No duplicate selected, switching to manual edit');
+    setManualDraft((prev) => ({ ...prev, ...basicInfo }));
+    setCreationStep('manualEdit');
+  };
+
+  const handleManualSubmit = async (data: Partial<ItemFormData>) => {
+    const merged: Partial<ItemFormData> = {
+      ...basicInfo,
+      ...data,
+      BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
+      Artikelbeschreibung: basicInfo.Artikelbeschreibung,
+      Artikel_Nummer: basicInfo.Artikel_Nummer,
+      Auf_Lager: basicInfo.Auf_Lager,
+      picture1: basicInfo.picture1,
+      picture2: basicInfo.picture2,
+      picture3: basicInfo.picture3
+    };
+    await submitNewItem(merged, 'manual-edit');
+  };
+
+  const handleAgenticDetails = async (data: Partial<ItemFormData>) => {
+    console.log('Submitting agentic step 1 item details', data);
+    const detailPayload: Partial<ItemFormData> = {
       Artikelbeschreibung: data.Artikelbeschreibung,
       Artikel_Nummer: data.Artikel_Nummer,
       Auf_Lager: data.Auf_Lager,
       BoxID: data.BoxID || boxId || undefined,
-      agenticStatus: 'queued' as const,
+      agenticStatus: 'queued',
       agenticSearch: data.Artikelbeschreibung
-    } satisfies Partial<ItemFormData>;
+    };
 
-    const p = new URLSearchParams();
-    Object.entries({ ...detailPayload, actor: getUser() }).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') {
-        p.append(k, String(v));
-      }
-    });
+    const params = buildCreationParams(detailPayload);
 
     try {
-      const res = await fetch('/api/import/item', {
+      const response = await fetch('/api/import/item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: p.toString()
+        body: params.toString()
       });
 
-      if (!res.ok) {
-        console.error('Failed to create item during step 1', res.status);
-        throw new Error(`Failed to create item. Status: ${res.status}`);
+      if (!response.ok) {
+        console.error('Failed to create item during agentic step 1', response.status);
+        throw new Error(`Failed to create item. Status: ${response.status}`);
       }
 
-      const j = await res.json();
-      const createdItem: Item | undefined = j?.item;
+      const body = await response.json();
+      const createdItem: Item | undefined = body?.item;
 
       setDraft((prev) => ({
         ...prev,
@@ -359,6 +423,7 @@ export default function ItemCreate() {
         agenticSearch: detailPayload.agenticSearch
       }));
       setItemUUID(createdItem?.ItemUUID || itemUUID);
+      setAgenticStep(2);
 
       const searchText = createdItem?.Artikelbeschreibung || detailPayload.Artikelbeschreibung || '';
       const agenticPayload: AgenticRunTriggerPayload = {
@@ -366,17 +431,15 @@ export default function ItemCreate() {
         artikelbeschreibung: searchText
       };
 
-      setStep(2);
-
-      void triggerAgenticRun(agenticPayload, 'step one submission');
+      await triggerAgenticRun(agenticPayload, 'agentic-step-one');
     } catch (err) {
-      console.error('Failed to submit step 1 item details', err);
+      console.error('Failed to submit agentic step 1 item details', err);
       throw err;
     }
-  }
+  };
 
-  async function handleSubmitPhotos(data: Partial<ItemFormData>) {
-    console.log('Submitting step 2 item photos', data);
+  const handleAgenticPhotos = async (data: Partial<ItemFormData>) => {
+    console.log('Submitting agentic step 2 item photos', data);
     const mergedData: Partial<ItemFormData> = {
       ...baseDraft,
       ...data,
@@ -386,29 +449,60 @@ export default function ItemCreate() {
       agenticSearch: baseDraft.agenticSearch || baseDraft.Artikelbeschreibung
     };
 
-    await handleSubmit(mergedData);
-  }
+    await submitNewItem(mergedData, 'agentic-step-two', { keepItemUUID: true });
+  };
 
-  console.log(`Rendering item create form (step ${step})`, shouldUseAgenticForm);
+  const manualLockedFields = useMemo<LockedFieldConfig>(
+    () => ({
+      Artikelbeschreibung: 'readonly',
+      Artikel_Nummer: 'readonly',
+      Auf_Lager: 'readonly'
+    }),
+    []
+  );
+
+  console.log(`Rendering item create form (step ${shouldUseAgenticForm ? agenticStep : creationStep})`, shouldUseAgenticForm);
   if (shouldUseAgenticForm) {
     return (
       <ItemForm_Agentic
         draft={baseDraft}
-        step={step}
-        onSubmitDetails={handleSubmitDetails}
-        onSubmitPhotos={handleSubmitPhotos}
+        step={agenticStep}
+        onSubmitDetails={handleAgenticDetails}
+        onSubmitPhotos={handleAgenticPhotos}
         submitLabel="Speichern"
         isNew
       />
     );
   }
 
+  if (creationStep === 'basicInfo') {
+    return <ItemBasicInfoForm initialValues={basicInfo} onSubmit={handleBasicInfoNext} />;
+  }
+
+  if (creationStep === 'matchSelection') {
+    return (
+      <ItemMatchSelection
+        searchTerm={basicInfo.Artikelbeschreibung || ''}
+        onSelect={handleMatchSelection}
+        onSkip={handleSkipMatches}
+      />
+    );
+  }
+
   return (
     <ItemForm
-      item={baseDraft}
-      onSubmit={handleSubmit}
+      item={manualDraft}
+      onSubmit={handleManualSubmit}
       submitLabel="Speichern"
       isNew
+      headerContent={
+        <>
+          <h2>Details ergänzen</h2>
+          <p>Die Pflichtfelder wurden übernommen. Bitte ergänzen Sie bei Bedarf weitere Angaben.</p>
+        </>
+      }
+      lockedFields={manualLockedFields}
+      hidePhotoInputs
     />
   );
 }

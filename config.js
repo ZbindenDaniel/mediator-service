@@ -1,5 +1,5 @@
 module.exports = {
-  HOSTNAME: 'http://192.168.1.19',
+  HOSTNAME: '0.0.0.0',
   HTTP_PORT: parseInt(process.env.HTTP_PORT || "8080", 10),
   DB_PATH: process.env.DB_PATH || "./data/mediator.sqlite",
   INBOX_DIR: process.env.INBOX_DIR || "./data/inbox",

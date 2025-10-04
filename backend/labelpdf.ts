@@ -91,7 +91,7 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
       .fillColor('#1d3557')
       .text(`Box-ID: ${boxData.id}`, { width: contentWidth });
 
-       doc
+    doc
       .moveDown(1)
       .font('Helvetica-Bold')
       .fontSize(13)
@@ -109,7 +109,7 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
 
     const description = boxData.description?.trim() || '—';
     doc
-      .moveDown(1)
+      .moveDown(3)
       .font('Helvetica-Bold')
       .fontSize(13)
       .fillColor('#0b1f33')
@@ -122,7 +122,7 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
       .fillColor('#2f3c4f')
       .text(description, { width: contentWidth, lineGap: 2 });
 
-   
+
 
     doc.image(qr, qrX, qrY, { fit: [qrSize, qrSize] });
 
@@ -181,12 +181,6 @@ export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promi
 
     doc
       .save()
-      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
-      .fill('#f5f7fb')
-      .restore();
-
-    doc
-      .save()
       .roundedRect(textX - 12, textY - 18, textWidth + 24, frameHeight - 48, 12)
       .fill('#ffffff')
       .restore();
@@ -196,12 +190,6 @@ export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promi
       .roundedRect(qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 12)
       .fill('#ffffff')
       .restore();
-
-    doc
-      .lineWidth(2)
-      .strokeColor('#dce3f0')
-      .roundedRect(frameX, frameY, frameWidth, frameHeight, 16)
-      .stroke();
 
     const headline = itemData.description?.trim() || 'Artikel';
     doc
@@ -215,7 +203,14 @@ export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promi
       .font('Helvetica')
       .fontSize(14)
       .fillColor('#1d3557')
-      .text(`Artikelnummer: ${itemData.materialNumber?.trim() || '—'}`, { width: textWidth });
+      .text('Artikelnummer');
+
+    doc
+      .moveDown(0.15)
+      .font('Helvetica')
+      .fontSize(12)
+      .fillColor('#2f3c4f')
+      .text(`${itemData.materialNumber?.trim() || '—'}`, { width: textWidth });
 
     const drawSection = (label: string, value: string, space = 0.7) => {
       doc
