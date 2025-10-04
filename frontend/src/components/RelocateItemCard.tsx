@@ -3,9 +3,10 @@ import { getUser } from '../lib/user';
 
 interface Props {
   itemId: string;
+  onRelocated?: () => void | Promise<void>;
 }
 
-export default function RelocateItemCard({ itemId }: Props) {
+export default function RelocateItemCard({ itemId, onRelocated }: Props) {
   const [boxId, setBoxId] = useState('');
   const [suggestions, setSuggestions] = useState<{ BoxID: string; Location: string }[]>([]);
   const [status, setStatus] = useState('');
@@ -38,12 +39,36 @@ export default function RelocateItemCard({ itemId }: Props) {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setStatus('Artikel verschoben');
+        console.info('Relocate item succeeded', {
+          itemId,
+          toBoxId: boxId,
+          status: res.status,
+          response: data
+        });
+        if (typeof onRelocated === 'function') {
+          try {
+            await onRelocated();
+            console.info('Relocate item onRelocated callback completed', { itemId, toBoxId: boxId });
+          } catch (callbackErr) {
+            console.error('Relocate item onRelocated callback failed', {
+              itemId,
+              toBoxId: boxId,
+              error: callbackErr
+            });
+          }
+        }
       } else {
-        setStatus('Fehler: ' + (data.error || res.status));
+        const errorMessage = 'Fehler: ' + (data.error || res.status);
+        setStatus(errorMessage);
+        console.warn('Relocate item failed', {
+          itemId,
+          toBoxId: boxId,
+          status: res.status,
+          error: data.error ?? data
+        });
       }
-      console.log('relocate item', res.status);
     } catch (err) {
-      console.error('Relocate item failed', err);
+      console.error('Relocate item request failed', { itemId, toBoxId: boxId, error: err });
       setStatus('Verschieben fehlgeschlagen');
     }
   }

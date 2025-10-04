@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
@@ -122,38 +122,39 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setItem(data.item);
-          setEvents(data.events || []);
-          setAgentic(data.agentic ?? null);
-          const media = Array.isArray(data.media)
-            ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
-            : [];
-          setMediaAssets(media);
-          setAgenticError(null);
-          setAgenticReviewIntent(null);
-        } else {
-          console.error('Failed to fetch item', res.status);
-          setAgentic(null);
-          setAgenticError('Agentic-Status konnte nicht geladen werden.');
-          setMediaAssets([]);
-          setAgenticReviewIntent(null);
-        }
-      } catch (err) {
-        console.error('Failed to fetch item', err);
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setItem(data.item);
+        setEvents(data.events || []);
+        setAgentic(data.agentic ?? null);
+        const media = Array.isArray(data.media)
+          ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
+          : [];
+        setMediaAssets(media);
+        setAgenticError(null);
+        setAgenticReviewIntent(null);
+      } else {
+        console.error('Failed to fetch item', res.status);
         setAgentic(null);
         setAgenticError('Agentic-Status konnte nicht geladen werden.');
         setMediaAssets([]);
         setAgenticReviewIntent(null);
       }
+    } catch (err) {
+      console.error('Failed to fetch item', err);
+      setAgentic(null);
+      setAgenticError('Agentic-Status konnte nicht geladen werden.');
+      setMediaAssets([]);
+      setAgenticReviewIntent(null);
     }
-    load();
   }, [itemId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const agenticNeedsReview = agentic ? (agentic.ReviewState || '').toLowerCase() === 'pending' : false;
   const normalizedAgenticStatus = (agentic?.Status || '').toLowerCase();
@@ -568,7 +569,7 @@ export default function ItemDetail({ itemId }: Props) {
               onCancel={handleAgenticCancel}
             />
 
-            <RelocateItemCard itemId={item.ItemUUID} />
+            <RelocateItemCard itemId={item.ItemUUID} onRelocated={load} />
 
             <PrintLabelButton itemId={item.ItemUUID} />
 
