@@ -23,6 +23,7 @@ export default function BoxDetail({ boxId }: Props) {
   const [events, setEvents] = useState<EventLog[]>([]);
   const [note, setNote] = useState('');
   const [noteStatus, setNoteStatus] = useState('');
+  const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
   const navigate = useNavigate();
 
@@ -48,6 +49,13 @@ export default function BoxDetail({ boxId }: Props) {
   }
 
   async function removeItem(itemId: string) {
+    const confirmed = window.confirm('Entnehmen?');
+    if (!confirmed) {
+      console.log('Item removal cancelled', { itemId });
+      setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme abgebrochen' }));
+      return;
+    }
+    console.log('Item removal confirmed', { itemId });
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/remove`, {
         method: 'POST',
@@ -55,12 +63,16 @@ export default function BoxDetail({ boxId }: Props) {
         body: JSON.stringify({ actor: getUser() })
       });
       if (res.ok) {
-        load();
+        setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme erfolgreich' }));
+        await load();
+        console.log('Item removal succeeded', { itemId });
       } else {
         console.error('Failed to remove item', res.status);
+        setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme fehlgeschlagen' }));
       }
     } catch (err) {
       console.error('Failed to remove item', err);
+      setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme fehlgeschlagen' }));
     }
   }
   async function load() {
@@ -175,6 +187,11 @@ export default function BoxDetail({ boxId }: Props) {
                         <div className='row'>
                           <button type="button" className="btn" onClick={() => removeItem(it.ItemUUID)}>Entnehmen</button>
                         </div>
+                        {removalStatus[it.ItemUUID] && (
+                          <div className='row'>
+                            <span className="muted">{removalStatus[it.ItemUUID]}</span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
