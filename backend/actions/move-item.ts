@@ -27,11 +27,15 @@ const action: Action = {
       if (!toBoxId || !actor) return sendJson(res, 400, { error: 'toBoxId and actor are required' });
       const dest = ctx.getBox.get(toBoxId);
       if (!dest) return sendJson(res, 404, { error: 'destination box not found' });
-      const txn = ctx.db.transaction((u: string, to: string, a: string, from: string) => {
-        ctx.db.prepare(`UPDATE items SET BoxID=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(to, u);
+      const destLocation = typeof dest.Location === 'string' ? dest.Location.trim() : dest.Location || null;
+      if (!destLocation) {
+        console.warn('[move-item] Destination box lacks Standort', { itemId: uuid, toBoxId });
+      }
+      const txn = ctx.db.transaction((u: string, to: string, a: string, from: string, location: string | null) => {
+        ctx.db.prepare(`UPDATE items SET BoxID=?, Location=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(to, location, u);
         ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: u, Event: 'Moved', Meta: JSON.stringify({ from, to }) });
       });
-      txn(uuid, toBoxId, actor, item.BoxID);
+      txn(uuid, toBoxId, actor, item.BoxID, destLocation || null);
       sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error('Move item failed', err);
