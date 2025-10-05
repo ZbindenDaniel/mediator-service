@@ -1,3 +1,11 @@
+export function setUser(username: string): void {
+  try {
+    localStorage.setItem('username', username);
+  } catch (err) {
+    console.error('Failed to persist username', err);
+  }
+}
+
 export function getUser(): string {
   let u = '';
   try {
@@ -7,8 +15,11 @@ export function getUser(): string {
   }
   if (!u) {
     try {
-      u = window.prompt('Bitte geben Sie Ihren Benutzernamen ein:') || '';
-      if (u) localStorage.setItem('username', u);
+      const input = window.prompt('Bitte geben Sie Ihren Benutzernamen ein:') || '';
+      if (input) {
+        setUser(input);
+        u = input;
+      }
     } catch (err) {
       console.error('Username prompt failed', err);
     }
