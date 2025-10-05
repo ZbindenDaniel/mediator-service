@@ -15,7 +15,7 @@ export interface LoadingPageProps {
   className?: string;
 }
 
-const LETTERS = ['r', 'e', 'v', 'a', 'm', 'p'];
+const LETTERS = ['r', 'e', 'v', 'a', 'm', 'p', '!'];
 
 const LoadingPage: React.FC<LoadingPageProps> = ({
   message = 'Loading…',
@@ -27,7 +27,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
   return (
     <div className={rootClassName} role="status" aria-live="polite">
       <div className="loading-page__flyers" aria-hidden="true">
-        {Array.from({ length: 6 }).map((_, index) => (
+        {Array.from({ length: 16 }).map((_, index) => (
           <span
             key={`loading-r-${index}`}
             className={`loading-page__flyer loading-page__flyer--${(index % 4) + 1}`}
