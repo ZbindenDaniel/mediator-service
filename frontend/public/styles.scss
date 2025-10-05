@@ -610,43 +610,6 @@ button:focus {
     border: 2px dashed rgba(0, 0, 0, 0.08);
 }
 
-.loading-page__spinner span {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    font-size: clamp(2.1rem, 4vw, 3.4rem);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    transform-origin: center;
-    --rotation: calc(var(--index) * 60deg);
-    transform: rotate(var(--rotation)) translateY(calc(-1 * clamp(72px, 11vw, 96px))) rotate(calc(var(--rotation) * -1));
-}
-
-.loading-page__spinner span:nth-child(1) {
-    color: $overview-color;
-}
-
-.loading-page__spinner span:nth-child(2) {
-    color: $box-color;
-}
-
-.loading-page__spinner span:nth-child(3) {
-    color: $item-color;
-}
-
-.loading-page__spinner span:nth-child(4) {
-    color: $activity-color;
-}
-
-.loading-page__spinner span:nth-child(5) {
-    color: $overview-color;
-}
-
-.loading-page__spinner span:nth-child(6) {
-    color: $box-color;
-}
-
 .loading-page__message {
     max-width: 360px;
     font-size: clamp(1rem, 2vw, 1.2rem);
@@ -671,28 +634,34 @@ button:focus {
 .loading-page__flyer--1 {
     top: 12%;
     color: $item-color;
-    animation: loading-r-flight-a 7.5s linear infinite;
+    animation-name: loading-r-flight-a;
 }
 
 .loading-page__flyer--2 {
     top: 45%;
     color: $box-color;
-    animation: loading-r-flight-b 6.5s linear infinite;
-    animation-delay: -2s;
+    animation-name: loading-r-flight-b;
 }
 
 .loading-page__flyer--3 {
     top: 72%;
     color: $overview-color;
-    animation: loading-r-flight-c 8.5s linear infinite;
-    animation-delay: -3s;
+    animation-name: loading-r-flight-c;
 }
 
 .loading-page__flyer--4 {
     top: 28%;
     color: $activity-color;
-    animation: loading-r-flight-d 9s linear infinite;
-    animation-delay: -4s;
+    animation-name: loading-r-flight-d;
+}
+
+.loading-page__flyer--1,
+.loading-page__flyer--2,
+.loading-page__flyer--3,
+.loading-page__flyer--4 {
+    animation-duration: var(--flyer-speed, 7.5s);
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
 }
 
 @keyframes loading-revamp-spin {
