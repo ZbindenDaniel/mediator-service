@@ -6,6 +6,7 @@ import StatsCard from './StatsCard';
 import RecentBoxesCard from './RecentBoxesCard';
 import RecentEventsCard from './RecentEventsCard';
 import ImportCard from './ImportCard';
+import LoadingPage from './LoadingPage';
 import type { Box, EventLog } from '../../../models';
 
 interface OverviewCounts {
@@ -22,7 +23,9 @@ interface OverviewData {
 
 export default function LandingPage() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [health, setHealth] = useState('prüfe…');
+  const [health, setHealth] = useState('');
+  const [isOverviewLoading, setIsOverviewLoading] = useState(true);
+  const [isHealthLoading, setIsHealthLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -33,6 +36,8 @@ export default function LandingPage() {
         console.log('Loaded overview');
       } catch (err) {
         console.error('Failed to load overview', err);
+      } finally {
+        setIsOverviewLoading(false);
       }
     })();
   }, []);
@@ -47,9 +52,19 @@ export default function LandingPage() {
       } catch (err) {
         console.error('Health check failed', err);
         setHealth('nicht erreichbar');
+      } finally {
+        setIsHealthLoading(false);
       }
     })();
   }, []);
+
+  if (isOverviewLoading || isHealthLoading) {
+    return (
+      <LoadingPage message="Übersicht wird geladen…">
+        <p className="muted">Aktuelle Kennzahlen und Dienststatus folgen in Kürze.</p>
+      </LoadingPage>
+    );
+  }
 
   return (
     <div className="container overview">

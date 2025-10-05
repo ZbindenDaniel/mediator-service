@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import ItemList from './ItemList';
+import LoadingPage from './LoadingPage';
 import type { Item } from '../../../models';
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [showUnplaced, setShowUnplaced] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
@@ -19,12 +21,22 @@ export default function ItemListPage() {
         console.log('loaded items', (data.items || []).length);
       } catch (err) {
         console.error('fetch items failed', err);
+      } finally {
+        setIsLoading(false);
       }
     }
     load();
   }, []);
 
   const filtered = showUnplaced ? items.filter((it) => !it.BoxID) : items;
+
+  if (isLoading) {
+    return (
+      <LoadingPage message="Lade Artikelübersicht…">
+        <p className="muted">Die vollständige Artikelliste wird vorbereitet.</p>
+      </LoadingPage>
+    );
+  }
 
   return (
     <div className="card">

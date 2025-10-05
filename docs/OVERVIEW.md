@@ -13,6 +13,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Legacy JavaScript scripts remain for compatibility; modernization continues incrementally.
 
 ## Next Steps
+- Audit remaining detail routes (e.g., BoxDetail, ItemDetail) to determine whether the shared `LoadingPage` pattern should be applied for initial fetches.
 - Enable switch from agentic to manual edit via button. Very simple link button from ItemForm_Agentic to ItemForm.
 - Move of items and boxes triggers reload.
 - Monitor persisted image writes and `agenticSearchQuery` handling in `backend/actions/import-item.ts` for follow-up polish.
@@ -32,6 +33,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Introduced the shared `LoadingPage` experience on landing and item list routes so top-level pages display a consistent loading state while fetching data.
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.
 - Wrapped removal and deletion in database transactions and added unit tests to verify item stock and box deletion logic.
