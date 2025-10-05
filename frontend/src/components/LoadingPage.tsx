@@ -15,9 +15,10 @@ export interface LoadingPageProps {
   className?: string;
 }
 
-const FLYER_WORD = 'revamp!';
+const FLYER_WORD = 'revamp';
 const FLYER_LETTERS = [...FLYER_WORD];
-const FLYER_COUNT = 32;
+const COLORES = ['#ff4d4d', '#ffb84d', '#ffff4d', '#4dff4d', '#4dffff', '#4d4dff', '#ff4dff'];
+const FLYER_COUNT = 6*10; // FLYER_LETTERS.length * N
 const FLYER_SPEED_SECONDS = 6.5;
 const FLYER_FREQUENCY_SECONDS = 0.4;
 
@@ -25,6 +26,7 @@ type FlyerConfig = {
   character: string;
   variant: number;
   delay: number;
+  color: string;
 };
 
 const LoadingPage: React.FC<LoadingPageProps> = ({
@@ -49,8 +51,9 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
     try {
       return Array.from({ length: FLYER_COUNT }).map((_, index) => ({
         character: FLYER_LETTERS[index % FLYER_LETTERS.length],
-        variant: (index % 4) + 1,
-        delay: -index * FLYER_FREQUENCY_SECONDS,
+        variant: index % 6 + 1, // between 1 and 6
+        delay: Math.random() * FLYER_LETTERS.length * FLYER_FREQUENCY_SECONDS,
+        color: COLORES[Math.floor(Math.random() * COLORES.length)]
       })) as FlyerConfig[];
     } catch (error) {
       console.error('[LoadingPage] Failed to build flyers', error);
@@ -67,6 +70,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
     });
   }, [FLYER_COUNT, FLYER_FREQUENCY_SECONDS, FLYER_SPEED_SECONDS, FLYER_WORD]);
 
+  console.debug(flyers)
   return (
     <div className={rootClassName} role="status" aria-live="polite" style={rootStyle}>
       <div className="loading-page__flyers" aria-hidden="true">
@@ -76,6 +80,9 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
             className={`loading-page__flyer loading-page__flyer--${flyer.variant}`}
             style={{
               animationDelay: `${flyer.delay}s`,
+              top: `${Math.random() * 100}%`,
+              left: `${Math.random() * 100}%`,
+              color: `${flyer.color}`
             }}
           >
             {flyer.character}
@@ -83,7 +90,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
         ))}
       </div>
 
-      <div className="loading-page__spinner" aria-hidden="true" />
+      {/* <div className="loading-page__spinner" aria-hidden="true" /> */}
 
       {(children || message) && (
         <div className="loading-page__message">
