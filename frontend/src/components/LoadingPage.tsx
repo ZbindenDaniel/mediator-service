@@ -15,7 +15,17 @@ export interface LoadingPageProps {
   className?: string;
 }
 
-const LETTERS = ['r', 'e', 'v', 'a', 'm', 'p', '!'];
+const FLYER_WORD = 'revamp!';
+const FLYER_LETTERS = [...FLYER_WORD];
+const FLYER_COUNT = 32;
+const FLYER_SPEED_SECONDS = 6.5;
+const FLYER_FREQUENCY_SECONDS = 0.4;
+
+type FlyerConfig = {
+  character: string;
+  variant: number;
+  delay: number;
+};
 
 const LoadingPage: React.FC<LoadingPageProps> = ({
   message = 'Loading…',
@@ -23,27 +33,57 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
   className,
 }) => {
   const rootClassName = ['loading-page', className].filter(Boolean).join(' ');
+  const rootStyle = React.useMemo(
+    () =>
+      ({
+        '--flyer-speed': `${FLYER_SPEED_SECONDS}s`,
+        '--flyer-frequency': `${FLYER_FREQUENCY_SECONDS}s`,
+      }) as React.CSSProperties,
+    [
+      FLYER_SPEED_SECONDS,
+      FLYER_FREQUENCY_SECONDS,
+    ],
+  );
+
+  const flyers = React.useMemo(() => {
+    try {
+      return Array.from({ length: FLYER_COUNT }).map((_, index) => ({
+        character: FLYER_LETTERS[index % FLYER_LETTERS.length],
+        variant: (index % 4) + 1,
+        delay: -index * FLYER_FREQUENCY_SECONDS,
+      })) as FlyerConfig[];
+    } catch (error) {
+      console.error('[LoadingPage] Failed to build flyers', error);
+      return [] as FlyerConfig[];
+    }
+  }, [FLYER_COUNT, FLYER_FREQUENCY_SECONDS, FLYER_LETTERS]);
+
+  React.useEffect(() => {
+    console.debug('[LoadingPage] flyer configuration', {
+      speedSeconds: FLYER_SPEED_SECONDS,
+      frequencySeconds: FLYER_FREQUENCY_SECONDS,
+      totalFlyers: FLYER_COUNT,
+      word: FLYER_WORD,
+    });
+  }, [FLYER_COUNT, FLYER_FREQUENCY_SECONDS, FLYER_SPEED_SECONDS, FLYER_WORD]);
 
   return (
-    <div className={rootClassName} role="status" aria-live="polite">
+    <div className={rootClassName} role="status" aria-live="polite" style={rootStyle}>
       <div className="loading-page__flyers" aria-hidden="true">
-        {Array.from({ length: 16 }).map((_, index) => (
+        {flyers.map((flyer, index) => (
           <span
-            key={`loading-r-${index}`}
-            className={`loading-page__flyer loading-page__flyer--${(index % 4) + 1}`}
+            key={`loading-flyer-${index}`}
+            className={`loading-page__flyer loading-page__flyer--${flyer.variant}`}
+            style={{
+              animationDelay: `${flyer.delay}s`,
+            }}
           >
-            r
+            {flyer.character}
           </span>
         ))}
       </div>
 
-      <div className="loading-page__spinner" aria-hidden="true">
-        {LETTERS.map((letter, index) => (
-          <span key={`${letter}-${index}`} style={{ '--index': index } as React.CSSProperties}>
-            {letter}
-          </span>
-        ))}
-      </div>
+      <div className="loading-page__spinner" aria-hidden="true" />
 
       {(children || message) && (
         <div className="loading-page__message">
