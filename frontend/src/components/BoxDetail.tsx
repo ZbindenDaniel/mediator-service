@@ -151,7 +151,7 @@ export default function BoxDetail({ boxId }: Props) {
                     setNoteStatus('Fehler');
                   }
                 } }>
-                  <div className='container'>
+                  <div className=''>
                     <div className='row'>
                       <textarea
                         value={note}
@@ -173,7 +173,7 @@ export default function BoxDetail({ boxId }: Props) {
 
             <div className="card">
               <h3>Artikel</h3>
-              <div className='container'>
+              <div className=''>
                 <div className='row'>
                   <div className="item-cards">
                     {items.map((it) => (

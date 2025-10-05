@@ -45,7 +45,7 @@ export default function SearchCard() {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Material, B-…, oder UUID"
+          placeholder="z.B. Lenovo x230, B-151025, Brother"
           onKeyDown={e => { if (e.key === 'Enter') runFind(); }}
         />
         <button className="btn" onClick={runFind}>Suchen</button>

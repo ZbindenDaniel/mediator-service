@@ -98,7 +98,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     <div className="card relocate-card">
       <h3>Artikel umlagern</h3>
       <form onSubmit={handle}>
-        <div className='container'>
+        <div className=''>
           <div className='row'>
             <label>
               Ziel Behälter-ID

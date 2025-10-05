@@ -15,11 +15,11 @@ $activity-color: #804db4;
     /* text */
     --muted: #5f6368;
     /* muted text */
-    --bg: #bce0a3; // #bce0a3
+    --bg: floralwhite; // #bce0a3
     /* page bg */
     --head: #bce0a3;
     /* header */
-    --card: #ff69b429; //  #ff69b429,  #3a313429
+    --card: #3a313429; //  #ff69b429,  #3a313429,
     /* card bg */
     --line: #e6e6e6;
     /* borders */
@@ -213,8 +213,6 @@ div {
     padding: var(--pad);
     margin: 0 auto;
     border-left: solid 3px;
-    background-color: floralwhite;
-
 
     &.overview {
         border-color: $overview-color;

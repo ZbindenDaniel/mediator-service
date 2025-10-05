@@ -53,7 +53,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
     <div className="card relocate-card">
       <h3>Behälter umlagern</h3>
       <form onSubmit={handle}>
-        <div className='container'>
+        <div className=''>
           <div className='row'>
             <label>
               Neuer Ort

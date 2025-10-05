@@ -350,9 +350,7 @@ export function ItemDetailsFields({
           </div>
       </div>
 
-      {quantityHidden ? (
-        <input type="hidden" value={form.Auf_Lager ?? 0} readOnly />
-      ) : (
+      {(
         <div className="row">
           <label>
             Anzahl*

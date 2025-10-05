@@ -11,14 +11,14 @@ export const EVENT_LABELS: Record<string, string> = {
   Deleted: 'Gelöscht',
   Exported: 'Exportiert',
   Created: 'Erstellt',
-  AgenticRunRestarted: 'Agentic-Lauf neu gestartet',
-  AgenticRunCancelled: 'Agentic-Lauf abgebrochen',
-  AgenticTriggerFailed: 'Agentic-Auslösung fehlgeschlagen',
-  AgenticSearchQueued: 'Agentic-Suche eingereiht',
-  AgenticResultReceived: 'Agentic-Ergebnis erhalten',
-  AgenticResultFailed: 'Agentic-Ergebnis fehlgeschlagen',
-  AgenticReviewApproved: 'Agentic-Prüfung freigegeben',
-  AgenticReviewRejected: 'Agentic-Prüfung abgelehnt',
+  AgenticRunRestarted: 'Ki-Lauf neu gestartet',
+  AgenticRunCancelled: 'Ki-Lauf abgebrochen',
+  AgenticTriggerFailed: 'Ki-Auslösung fehlgeschlagen',
+  AgenticSearchQueued: 'Ki-Suche eingereiht',
+  AgenticResultReceived: 'Ki-Ergebnis erhalten',
+  AgenticResultFailed: 'Ki-Ergebnis fehlgeschlagen',
+  AgenticReviewApproved: 'Ki-Prüfung freigegeben',
+  AgenticReviewRejected: 'Ki-Prüfung abgelehnt',
   QrScanned: 'QR-Code gescannt'
 };
 
