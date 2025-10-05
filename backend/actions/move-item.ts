@@ -32,12 +32,58 @@ const action: Action = {
       if (!normalizedLocation) {
         console.warn('[move-item] Destination box missing Location', { itemId: uuid, boxId: toBoxId });
       }
+      const itemRefId = item.ItemRefID ?? null;
       const txn = ctx.db.transaction((u: string, to: string, a: string, from: string, location: string | null) => {
-        ctx.db.prepare(`UPDATE items SET BoxID=?, Location=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(to, location, u);
-        ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: u, Event: 'Moved', Meta: JSON.stringify({ from, to }) });
+        try {
+          ctx.updateItemQuantPlacement(u, to, location);
+        } catch (updateErr) {
+          console.error('[move-item] Failed to update item placement', { itemUUID: u, toBoxId: to, error: updateErr });
+          throw updateErr;
+        }
+
+        let updated: any;
+        try {
+          updated = ctx.getItem.get(u);
+        } catch (lookupErr) {
+          console.error('[move-item] Failed to reload item after move', { itemUUID: u, error: lookupErr });
+          throw lookupErr;
+        }
+
+        const effectiveRefId = updated?.ItemRefID ?? itemRefId;
+        const meta = {
+          from,
+          to,
+          location,
+          refId: effectiveRefId,
+          quant: {
+            ItemUUID: u,
+            ItemRefID: effectiveRefId,
+            BoxID: updated?.BoxID ?? to,
+            Location: updated?.Location ?? updated?.StoredLocation ?? location ?? null
+          }
+        };
+
+        ctx.logEvent.run({
+          Actor: a,
+          EntityType: 'Item',
+          EntityId: u,
+          Event: 'Moved',
+          Meta: JSON.stringify(meta)
+        });
+
+        return updated;
       });
-      txn(uuid, toBoxId, actor, item.BoxID, normalizedLocation);
-      sendJson(res, 200, { ok: true });
+      const updated = txn(uuid, toBoxId, actor, item.BoxID, normalizedLocation);
+      sendJson(res, 200, {
+        ok: true,
+        item: updated
+          ? {
+              ItemUUID: updated.ItemUUID,
+              BoxID: updated.BoxID,
+              Location: updated.Location ?? updated.StoredLocation ?? normalizedLocation ?? null
+            }
+          : null
+      });
     } catch (err) {
       console.error('Move item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

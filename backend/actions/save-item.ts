@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { Item } from '../../models';
 import type { Action } from './index';
+import { attachItemRelations } from './utils/item-response';
 
 const MEDIA_PREFIX = '/media/';
 const MEDIA_DIR = path.join(__dirname, '../../media');
@@ -158,7 +159,8 @@ const action: Action = {
           normalisedGrafikname && normalisedGrafikname !== item.Grafikname
             ? { ...item, Grafikname: normalisedGrafikname }
             : item;
-        return sendJson(res, 200, { item: responseItem, box, events, agentic, media });
+        const itemWithRelations = attachItemRelations(responseItem);
+        return sendJson(res, 200, { item: itemWithRelations, box, events, agentic, media });
       } catch (err) {
         console.error('Fetch item failed', err);
         return sendJson(res, 500, { error: (err as Error).message });

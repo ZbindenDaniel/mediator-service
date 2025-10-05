@@ -571,9 +571,28 @@ const decrementQuantStmt = db.prepare(
 );
 
 const deleteItemQuantStmt = db.prepare(`DELETE FROM item_quants WHERE ItemUUID = ?`);
+const updateItemQuantPlacementStmt = db.prepare(
+  `
+    UPDATE item_quants
+       SET BoxID = @BoxID,
+           Location = @Location,
+           UpdatedAt = datetime('now')
+     WHERE ItemUUID = @ItemUUID
+  `
+);
 
 export function createItemRefKey(artikelNummer: string | null | undefined, fallback: string): string {
   return makeItemRefKey(artikelNummer, fallback);
+}
+
+export function getItemRefIdByKey(refKey: string): number | null {
+  try {
+    const resolved = selectItemRefIdByKey.get(refKey) as { ItemRefID: number } | undefined;
+    return resolved?.ItemRefID ?? null;
+  } catch (err) {
+    console.error('Failed to resolve item_ref by key', { refKey, error: err });
+    throw err;
+  }
 }
 
 function toIso(value: unknown): string | null {
@@ -690,6 +709,19 @@ export function deleteItemQuant(itemUUID: string): void {
     deleteItemQuantStmt.run(itemUUID);
   } catch (err) {
     console.error('Failed to delete item quantity', err);
+    throw err;
+  }
+}
+
+export function updateItemQuantPlacement(itemUUID: string, boxId: string, location: string | null): void {
+  try {
+    updateItemQuantPlacementStmt.run({
+      ItemUUID: itemUUID,
+      BoxID: boxId,
+      Location: location ?? null
+    });
+  } catch (err) {
+    console.error('Failed to update item placement', { itemUUID, boxId, error: err });
     throw err;
   }
 }

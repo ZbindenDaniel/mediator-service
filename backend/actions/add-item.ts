@@ -25,20 +25,45 @@ const action: Action = {
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const currentQty = typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0;
+      const itemRefId = item.ItemRefID ?? null;
       const txn = ctx.db.transaction((u: string, a: string) => {
-        ctx.incrementQuant(u);
-        const updated = ctx.getItem.get(u);
+        try {
+          ctx.incrementQuant(u);
+        } catch (incrementErr) {
+          console.error('[add-item] Failed to increment item quantity', { itemUUID: u, error: incrementErr });
+          throw incrementErr;
+        }
+
+        let updated: any;
+        try {
+          updated = ctx.getItem.get(u);
+        } catch (lookupErr) {
+          console.error('[add-item] Failed to reload item after increment', { itemUUID: u, error: lookupErr });
+          throw lookupErr;
+        }
+
+        const effectiveRefId = updated?.ItemRefID ?? itemRefId;
+        const meta = {
+          toBox: updated?.BoxID ?? item.BoxID ?? null,
+          before: currentQty,
+          after: updated?.Auf_Lager ?? 0,
+          refId: effectiveRefId,
+          quant: {
+            ItemUUID: u,
+            ItemRefID: effectiveRefId,
+            BoxID: updated?.BoxID ?? item.BoxID ?? null,
+            Location: updated?.Location ?? updated?.StoredLocation ?? null
+          }
+        };
+
         ctx.logEvent.run({
           Actor: a,
           EntityType: 'Item',
           EntityId: u,
           Event: 'Added',
-          Meta: JSON.stringify({
-            toBox: item.BoxID,
-            before: currentQty,
-            after: updated?.Auf_Lager ?? 0
-          })
+          Meta: JSON.stringify(meta)
         });
+
         return updated;
       });
       const updated = txn(uuid, actor);

@@ -15,6 +15,7 @@ import {
   buildItemRefRecord,
   buildItemQuantRecord,
   createItemRefKey,
+  getItemRefIdByKey,
   findByMaterial,
   itemsByBox,
   getBox,
@@ -44,6 +45,7 @@ import {
   decrementQuant,
   incrementQuant,
   deleteItemQuant,
+  updateItemQuantPlacement,
   deleteBox
 } from './db';
 import type { Item, LabelJob } from './db';
@@ -275,6 +277,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           buildItemRefRecord,
           buildItemQuantRecord,
           createItemRefKey,
+          getItemRefIdByKey,
           findByMaterial,
           itemsByBox,
           getBox,
@@ -286,6 +289,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           decrementQuant,
           incrementQuant,
           deleteItemQuant,
+          updateItemQuantPlacement,
           deleteBox,
           listItems,
           pdfForBox,

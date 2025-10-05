@@ -27,20 +27,44 @@ const action: Action = {
       const currentQty = typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0;
       if (currentQty <= 0) return sendJson(res, 400, { error: 'item has no stock' });
       const clearedBox = currentQty === 1;
+      const itemRefId = item.ItemRefID ?? null;
       const txn = ctx.db.transaction((u: string, a: string) => {
-        ctx.decrementQuant(u);
-        const updated = ctx.getItem.get(u);
+        try {
+          ctx.decrementQuant(u);
+        } catch (decrementErr) {
+          console.error('[remove-item] Failed to decrement item quantity', { itemUUID: u, error: decrementErr });
+          throw decrementErr;
+        }
+
+        let updated: any;
+        try {
+          updated = ctx.getItem.get(u);
+        } catch (lookupErr) {
+          console.error('[remove-item] Failed to reload item after decrement', { itemUUID: u, error: lookupErr });
+          throw lookupErr;
+        }
+
+        const effectiveRefId = updated?.ItemRefID ?? itemRefId;
+        const meta = {
+          fromBox: item.BoxID,
+          before: currentQty,
+          after: updated?.Auf_Lager ?? 0,
+          clearedBox,
+          refId: effectiveRefId,
+          quant: {
+            ItemUUID: u,
+            ItemRefID: effectiveRefId,
+            BoxID: updated?.BoxID ?? null,
+            Location: updated?.Location ?? updated?.StoredLocation ?? null
+          }
+        };
+
         ctx.logEvent.run({
           Actor: a,
           EntityType: 'Item',
           EntityId: u,
           Event: 'Removed',
-          Meta: JSON.stringify({
-            fromBox: item.BoxID,
-            before: currentQty,
-            after: updated?.Auf_Lager ?? 0,
-            clearedBox
-          })
+          Meta: JSON.stringify(meta)
         });
         return updated;
       });

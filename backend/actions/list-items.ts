@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { attachItemRelationsToMany } from './utils/item-response';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -13,7 +14,8 @@ const action: Action = {
   matches: (path, method) => path === '/api/items' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const items = ctx.listItems.all();
+      const rawItems = ctx.listItems.all();
+      const items = attachItemRelationsToMany(rawItems ?? []);
       console.log('list-items', items.length);
       sendJson(res, 200, { items });
     } catch (err) {

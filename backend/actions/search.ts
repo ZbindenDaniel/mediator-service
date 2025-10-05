@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
 import type { Action } from './index';
+import { attachItemRelationsToMany } from './utils/item-response';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -303,8 +304,12 @@ const action: Action = {
         topItemScore.toFixed(3)
       );
 
+      const mergedItems = attachItemRelationsToMany(
+        scoredItems.map((entry: { item: any }) => entry.item)
+      );
+
       sendJson(res, 200, {
-        items: scoredItems.map((entry: { item: any }) => entry.item),
+        items: mergedItems,
         boxes: scoredBoxes.map((entry: { box: any }) => entry.box),
       });
     } catch (err) {

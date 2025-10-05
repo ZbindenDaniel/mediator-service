@@ -138,10 +138,71 @@ const action: Action = {
           });
 
           const preparedItem = { ...itemData, BoxID: boxId };
+          const refKey = ctx.createItemRefKey(
+            preparedItem?.Artikel_Nummer ?? null,
+            preparedItem.ItemUUID
+          );
+
+          let existingRefId: number | null = null;
+          if (typeof ctx.getItemRefIdByKey === 'function') {
+            try {
+              existingRefId = ctx.getItemRefIdByKey(refKey);
+              if (existingRefId) {
+                console.info('[import-item] Reusing existing item_ref record', {
+                  refKey,
+                  existingRefId,
+                  itemUUID: preparedItem.ItemUUID,
+                  artikelNummer: preparedItem?.Artikel_Nummer ?? null
+                });
+              }
+            } catch (lookupErr) {
+              console.error('[import-item] Failed to check for duplicate item_ref', {
+                refKey,
+                itemUUID: preparedItem.ItemUUID,
+                error: lookupErr
+              });
+            }
+          } else {
+            console.warn('[import-item] getItemRefIdByKey not available in context', {
+              refKey,
+              itemUUID: preparedItem.ItemUUID
+            });
+          }
+
           const refRecord = ctx.buildItemRefRecord(preparedItem);
-          const refId = ctx.upsertItemRef(refRecord);
+          let refId: number;
+          try {
+            refId = ctx.upsertItemRef(refRecord);
+          } catch (upsertErr) {
+            console.error('[import-item] Failed to upsert item_ref record', {
+              refKey,
+              itemUUID: preparedItem.ItemUUID,
+              error: upsertErr
+            });
+            throw upsertErr;
+          }
+
+          if (existingRefId && refId !== existingRefId) {
+            console.warn('[import-item] Deduplication mismatch after upsert', {
+              refKey,
+              expected: existingRefId,
+              actual: refId,
+              itemUUID: preparedItem.ItemUUID
+            });
+          }
+
           const quantRecord = ctx.buildItemQuantRecord(preparedItem, refId);
-          ctx.upsertItemQuant(quantRecord);
+          try {
+            ctx.upsertItemQuant(quantRecord);
+          } catch (quantErr) {
+            console.error('[import-item] Failed to upsert item_quant record', {
+              itemUUID: preparedItem.ItemUUID,
+              refId,
+              boxId,
+              error: quantErr
+            });
+            throw quantErr;
+          }
 
           ctx.upsertAgenticRun.run({
             ItemUUID: itemData.ItemUUID,
