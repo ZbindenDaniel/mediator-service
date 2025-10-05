@@ -29,7 +29,7 @@ export default function ItemList({ items }: Props) {
               <td className="col-id" style={{ display: 'none' }}>{it.ItemUUID}</td>
               <td className="col-select"><input type="checkbox" /></td>
               <td className="col-desc">{it.Artikelbeschreibung}</td>
-              <td className="col-box">{it.BoxID}</td>
+              <td className="col-box">{<Link to={`/boxes/${(it.BoxID)}`}></Link>}</td>
               <td className="col-location"><BoxColorTag locationKey={it.BoxID} /></td>
               <td className="col-link"><Link to={`/items/${encodeURIComponent(it.ItemUUID)}`}><GoLinkExternal /></Link></td>
             </tr>
