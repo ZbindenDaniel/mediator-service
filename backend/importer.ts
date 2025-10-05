@@ -1,7 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
-import { upsertBox, upsertItem, queueLabel } from './db';
+import {
+  upsertBox,
+  upsertItemRef,
+  upsertItemQuant,
+  buildItemRefRecord,
+  buildItemQuantRecord,
+  queueLabel
+} from './db';
 import { Box, Item } from '../models';
 import { Op } from './ops/types';
 
@@ -116,12 +123,10 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Einheit: final['Einheit'] || '',
         WmsLink: final['WmsLink'] || '',
       };
-      upsertItem.run({
-        ...item,
-        UpdatedAt: now,
-        Datum_erfasst: item.Datum_erfasst ? item.Datum_erfasst.toISOString() : null,
-        Veröffentlicht_Status: item.Veröffentlicht_Status ? 'yes' : 'no'
-      });
+      const refRecord = buildItemRefRecord(item);
+      const refId = upsertItemRef(refRecord);
+      const quantRecord = buildItemQuantRecord(item, refId);
+      upsertItemQuant(quantRecord);
 
       boxesTouched.add(final.BoxID);
       count++;

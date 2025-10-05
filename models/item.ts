@@ -1,8 +1,11 @@
 export interface Item {
   ItemUUID: string;
+  ItemRefID?: number;
   BoxID: string | null;
+  StoredLocation?: string | null;
   Location?: string;
   UpdatedAt: Date;
+  CreatedAt?: Date;
   Datum_erfasst?: Date;
   Artikel_Nummer?: string;
   Grafikname?: string;

@@ -106,13 +106,13 @@ const action: Action = {
           }
           merged.ItemUUID = itemUUID;
           merged.UpdatedAt = now;
+          merged.Datum_erfasst = toIsoString(merged.Datum_erfasst);
+          merged.Veröffentlicht_Status = normalizePublishedStatus(merged.Veröffentlicht_Status);
 
-          ctx.upsertItem.run({
-            ...merged,
-            UpdatedAt: now,
-            Datum_erfasst: toIsoString(merged.Datum_erfasst),
-            Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status)
-          });
+          const refRecord = ctx.buildItemRefRecord(merged);
+          const refId = ctx.upsertItemRef(refRecord);
+          const quantRecord = ctx.buildItemQuantRecord(merged, refId);
+          ctx.upsertItemQuant(quantRecord);
 
           const normalizedDecision = review.Decision ? review.Decision.toLowerCase() : null;
           const fallbackReviewState = existingRun?.ReviewState && existingRun.ReviewState !== 'pending'

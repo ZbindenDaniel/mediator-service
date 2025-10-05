@@ -136,12 +136,13 @@ const action: Action = {
             PlacedAt: null,
             UpdatedAt: now
           });
-          ctx.upsertItem.run({
-            ...itemData,
-            UpdatedAt: itemData.UpdatedAt.toISOString(),
-            Datum_erfasst: itemData.Datum_erfasst ? itemData.Datum_erfasst.toISOString() : null,
-            Veröffentlicht_Status: itemData.Veröffentlicht_Status ? 'yes' : 'no'
-          });
+
+          const preparedItem = { ...itemData, BoxID: boxId };
+          const refRecord = ctx.buildItemRefRecord(preparedItem);
+          const refId = ctx.upsertItemRef(refRecord);
+          const quantRecord = ctx.buildItemQuantRecord(preparedItem, refId);
+          ctx.upsertItemQuant(quantRecord);
+
           ctx.upsertAgenticRun.run({
             ItemUUID: itemData.ItemUUID,
             SearchQuery: search || null,
