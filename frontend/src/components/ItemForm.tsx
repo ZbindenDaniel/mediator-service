@@ -11,7 +11,7 @@ interface Props {
   headerContent?: React.ReactNode;
 }
 
-export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) {
+export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent = null }: Props) {
   const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
 
   const { similarItems, loading, error, hasQuery } = useSimilarItems({
@@ -56,8 +56,6 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew }: Props) 
     () => createPhotoChangeHandler(update, 'picture3'),
     [update]
   );
-
-  let headerContent = 'TODO!!';
 
   return (
     <div className='container item'>
