@@ -10,7 +10,8 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 - [x] when editing the existing images are not set in the Inputs. the file input should show the filename
 - [x] 'Anzahl' default should be 1
-
+- [ ] When copying an item. the Anzahl is also copiet. This must'nt happen!
+  - [ ] in general the copying of items has dramatic side effects.
 ## item search
 
 - [x] often times 'nicht gesetzt' is displayed but when navigating to the item a box is set. (see bug in itemList)
@@ -19,7 +20,6 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 - [x] images ar not rendered. the request returns 404
 - [x] activities are not translated
-- [ ] Enlarge items onclick
   
 ### agentic Status
 

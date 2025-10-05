@@ -41,16 +41,16 @@ export default function ItemListPage() {
 
   return (
     // <div className="container item">
-    <div className="card">
+    <div className="">
       <h2>Alle Artikel</h2>
-      <div className="filter-bar">
+      {/* <div className="filter-bar">
         <input type="checkbox" id="unplaced" name="unplaced" value="Bike" checked={showUnplaced}
           onChange={(e) => setShowUnplaced(e.target.checked)} />
         <label htmlFor="unplaced">Unplatzierte Artikel
         </label>
 
         <GoContainer />
-      </div>
+      </div> */}
       <ItemList items={filtered} />
     </div>
   );

@@ -360,14 +360,14 @@ export const listRecentActivities = db.prepare(`
          i.Artikelbeschreibung, i.Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
-  ORDER BY e.Id DESC
+  ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
 export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events`);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoWms = db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
-export const listRecentBoxes = db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 4`);
+export const listRecentBoxes = db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 5`);
 export const getMaxBoxId = db.prepare(
   `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`
 );

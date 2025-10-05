@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Box } from '../../../models/box';
 import BoxColorTag from './BoxColorTag';
 import { formatDate } from '../lib/format';
+import { GoLinkExternal } from 'react-icons/go';
 
 interface Props {
   boxes: Box[];
@@ -19,7 +20,7 @@ export default function BoxList({ boxes }: Props) {
             <th className="col-box-id">Box</th>
             <th className="col-location">Standort</th>
             <th className="col-updated">Aktualisiert</th>
-            <th className="col-link">Details</th>
+            <th className="col-link"></th>
           </tr>
         </thead>
         <tbody>
@@ -33,7 +34,7 @@ export default function BoxList({ boxes }: Props) {
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>
                   <td className="col-link">
-                    <Link to={`/boxes/${encodeURIComponent(box.BoxID)}`}>Details</Link>
+                    <Link to={`/boxes/${encodeURIComponent(box.BoxID)}`}><GoLinkExternal /></Link>
                   </td>
                 </tr>
               );
