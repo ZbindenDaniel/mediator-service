@@ -54,27 +54,22 @@ export default function SearchCard() {
       <div className="list" style={{ marginTop: '10px' }}>
         {results.map((res, idx) =>
           res.type === 'box' ? (
-            <div className="card" key={`b-${idx}`}>
+            <div className="card linkcard" key={`b-${idx}`}>
+             <Link className="linkcard" to={`/boxes/${encodeURIComponent(res.id)}`}>
               <div>
-                Behälter:{' '}
-                <a href={`/boxes/${encodeURIComponent(res.id)}`}>
-                  res.id
-                </a>
+                Behälter: {res.id}
               </div>
+             </Link>
             </div>
           ) : (
-            <div className="card" key={res.item.ItemUUID}>
+            <div className="card linkcard" key={res.item.ItemUUID}>
+              <Link className="linkcard" to={`/items/${encodeURIComponent(res.item.ItemUUID)}`}>
               <div>
-                <b>
-                  <a href={`/items/${encodeURIComponent(res.item.ItemUUID)}`}>
-                    {res.item.Artikel_Nummer || '(kein Artikel)'}
-                  </a>
-                </b>
-                <br />
                 <span className="pill mono">
                   {(res.item.ItemUUID || '').slice(-6).toUpperCase()}
                 </span>
               </div>
+              </Link>
               <div className="muted">{res.item.Artikelbeschreibung || ''}</div>
               {res.item.BoxID && (
                 <div>

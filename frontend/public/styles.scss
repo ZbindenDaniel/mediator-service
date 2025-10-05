@@ -256,6 +256,7 @@ div {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: calc(var(--pad) + 2px);
+    margin-bottom: 8px;
 }
 
 .qr-scanner .card {
