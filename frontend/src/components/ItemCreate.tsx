@@ -2,7 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
-import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
+import {
+  buildAgenticRunUrl,
+  resolveAgenticApiBase,
+  triggerAgenticRun as triggerAgenticRunRequest
+} from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
@@ -17,6 +21,127 @@ type AgenticEnv = typeof globalThis & {
 };
 
 type CreationStep = 'basicInfo' | 'matchSelection' | 'manualEdit';
+
+export interface AgenticTriggerFailureReportArgs {
+  itemId: string;
+  search: string;
+  context: string;
+  status?: number;
+  responseBody?: string | null;
+  error?: unknown;
+}
+
+export type AgenticTriggerFailureReporter = (args: AgenticTriggerFailureReportArgs) => Promise<void>;
+
+export interface AgenticTriggerHandlerOptions {
+  agenticPayload: AgenticRunTriggerPayload;
+  context: string;
+  agenticRunUrl: string | null;
+  triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
+  reportFailure: AgenticTriggerFailureReporter;
+  alertFn: (message: string) => void;
+  logger?: Pick<Console, 'info' | 'warn' | 'error'>;
+  onSkipped?: (itemId: string) => void;
+}
+
+export async function handleAgenticRunTrigger({
+  agenticPayload,
+  context,
+  agenticRunUrl,
+  triggerAgenticRunRequest,
+  reportFailure,
+  alertFn,
+  logger = console,
+  onSkipped
+}: AgenticTriggerHandlerOptions): Promise<void> {
+  const trimmedItemId =
+    typeof agenticPayload.itemId === 'string' && agenticPayload.itemId.trim()
+      ? agenticPayload.itemId.trim()
+      : '';
+  const searchTerm = agenticPayload.artikelbeschreibung ?? '';
+
+  try {
+    const result = await triggerAgenticRunRequest({
+      runUrl: agenticRunUrl,
+      payload: agenticPayload,
+      context
+    });
+
+    const status = result.outcome === 'triggered' || result.outcome === 'failed' ? result.status : undefined;
+    logger.info?.('Agentic trigger result', { context, outcome: result.outcome, status });
+
+    if (result.outcome === 'triggered') {
+      return;
+    }
+
+    if (result.outcome === 'skipped') {
+      if (trimmedItemId) {
+        try {
+          await reportFailure({
+            itemId: trimmedItemId,
+            search: searchTerm,
+            context,
+            responseBody: result.message,
+            error: result.reason
+          });
+        } catch (failureErr) {
+          logger.error?.('Failed to report skipped agentic trigger', failureErr);
+        }
+        onSkipped?.(trimmedItemId);
+      } else {
+        logger.warn?.('Agentic trigger skipped without ItemUUID', { context, reason: result.reason });
+      }
+
+      if (result.message) {
+        try {
+          alertFn(result.message);
+        } catch (alertErr) {
+          logger.warn?.('Failed to display skipped agentic trigger message', alertErr);
+        }
+      }
+      return;
+    }
+
+    if (trimmedItemId) {
+      try {
+        await reportFailure({
+          itemId: trimmedItemId,
+          search: searchTerm,
+          context,
+          status: result.status,
+          responseBody: result.message,
+          error: result.error
+        });
+      } catch (failureErr) {
+        logger.error?.('Failed to report agentic trigger failure outcome', failureErr);
+      }
+    } else {
+      logger.warn?.('Agentic trigger failed without ItemUUID', { context, reason: result.reason });
+    }
+
+    if (result.message) {
+      try {
+        alertFn(result.message);
+      } catch (alertErr) {
+        logger.warn?.('Failed to display agentic trigger failure message', alertErr);
+      }
+    }
+  } catch (err) {
+    logger.error?.('Failed to trigger agentic run', err);
+    if (trimmedItemId) {
+      try {
+        await reportFailure({
+          itemId: trimmedItemId,
+          search: searchTerm,
+          context,
+          error: err
+        });
+      } catch (failureErr) {
+        logger.error?.('Failed to report agentic trigger exception', failureErr);
+      }
+    }
+  }
+}
 
 export default function ItemCreate() {
   const navigate = useNavigate();
@@ -106,14 +231,7 @@ export default function ItemCreate() {
     status,
     responseBody,
     error
-  }: {
-    itemId: string;
-    search: string;
-    context: string;
-    status?: number;
-    responseBody?: string | null;
-    error?: unknown;
-  }) {
+  }: AgenticTriggerFailureReportArgs) {
     if (!itemId) {
       return;
     }
@@ -229,22 +347,38 @@ export default function ItemCreate() {
       return;
     }
 
+    const showAlert = (message: string) => {
+      if (!message) {
+        return;
+      }
+      try {
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert(message);
+        } else if (typeof alert === 'function') {
+          alert(message);
+        } else {
+          console.info('Agentic trigger notice', message);
+        }
+      } catch (alertErr) {
+        console.warn('Failed to display agentic trigger alert', alertErr);
+      }
+    };
+
     try {
-      await triggerAgenticRunRequest({
-        runUrl: agenticRunUrl,
-        payload: agenticPayload,
-        context
+      await handleAgenticRunTrigger({
+        agenticPayload,
+        context,
+        agenticRunUrl,
+        triggerAgenticRunRequest,
+        reportFailure: reportAgenticTriggerFailure,
+        alertFn: showAlert,
+        logger: console,
+        onSkipped: (itemId) => {
+          setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+        }
       });
     } catch (err) {
-      console.error('Failed to trigger agentic run', err);
-      if (agenticPayload.itemId) {
-        await reportAgenticTriggerFailure({
-          itemId: agenticPayload.itemId,
-          search: agenticPayload.artikelbeschreibung ?? '',
-          context,
-          error: err
-        });
-      }
+      console.error('Unhandled error while processing agentic trigger', err);
     }
   }
 
