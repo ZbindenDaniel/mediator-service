@@ -21,25 +21,42 @@ export function SimilarItemsPanel({ items, loading, error, onSelect }: SimilarIt
         {error && <div className="suggestion-error">{error}</div>}
         {!loading && !error && items.length > 0 && (
           <ul>
-            {items.map((item) => (
-              <li key={item.ItemUUID} className="suggestion-item">
-                <div className="suggestion-item__details">
-                  <div>
-                    <span className="suggestion-item__number">{item.Artikel_Nummer || '—'}</span>
+            {items.map((item) => {
+              const artikelNummer =
+                typeof item.reference?.Artikel_Nummer === 'string'
+                  ? item.reference.Artikel_Nummer
+                  : item.Artikel_Nummer || '—';
+              const beschreibung =
+                typeof item.reference?.Artikelbeschreibung === 'string'
+                  ? item.reference.Artikelbeschreibung
+                  : item.Artikelbeschreibung || 'Keine Beschreibung';
+              const boxId = item.quantity?.BoxID ?? item.BoxID ?? 'unbekannt';
+              const itemId = item.quantity?.ItemUUID ?? item.ItemUUID;
+              const quantity =
+                typeof item.quantity?.Quantity === 'number'
+                  ? item.quantity.Quantity
+                  : item.Auf_Lager ?? 0;
+              return (
+                <li key={itemId} className="suggestion-item">
+                  <div className="suggestion-item__details">
+                    <div>
+                      <span className="suggestion-item__number">{artikelNummer || '—'}</span>
+                    </div>
+                    <div>{beschreibung || 'Keine Beschreibung'}</div>
+                    <div className="suggestion-item__box">Behälter: {boxId || 'unbekannt'}</div>
+                    <div className="suggestion-item__box">Bestand: {quantity}</div>
                   </div>
-                  <div>{item.Artikelbeschreibung || 'Keine Beschreibung'}</div>
-                  <div className="suggestion-item__box">Behälter: {item.BoxID || 'unbekannt'}</div>
-                </div>
-                <div className="suggestion-item__actions">
-                  <a href={`/items/${encodeURIComponent(item.ItemUUID)}`} target="_blank" rel="noreferrer">
-                    ansehen
-                  </a>
-                  <button type="button" onClick={() => onSelect(item)}>
-                    übernehmen
-                  </button>
-                </div>
-              </li>
-            ))}
+                  <div className="suggestion-item__actions">
+                    <a href={`/items/${encodeURIComponent(itemId)}`} target="_blank" rel="noreferrer">
+                      ansehen
+                    </a>
+                    <button type="button" onClick={() => onSelect(item)}>
+                      übernehmen
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

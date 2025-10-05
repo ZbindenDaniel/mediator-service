@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Item } from '../../../../models';
+import type { Item, ItemQuant, ItemReference } from '../../../../models';
 import { getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
@@ -21,19 +21,189 @@ interface UseItemFormStateOptions {
   initialItem: Partial<ItemFormData>;
 }
 
+const REFERENCE_KEYS: (keyof ItemReference)[] = [
+  'ItemRefID',
+  'Datum_erfasst',
+  'Artikel_Nummer',
+  'Grafikname',
+  'Artikelbeschreibung',
+  'Verkaufspreis',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg',
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B',
+  'Veröffentlicht_Status',
+  'Shopartikel',
+  'Artikeltyp',
+  'Einheit',
+  'WmsLink'
+];
+
+const QUANTITY_KEYS: (keyof ItemQuant)[] = [
+  'ItemUUID',
+  'ItemRefID',
+  'BoxID',
+  'Location',
+  'StoredLocation',
+  'Quantity',
+  'CreatedAt',
+  'UpdatedAt'
+];
+
+function normaliseItemFormData(data: Partial<ItemFormData>): Partial<ItemFormData> {
+  const base: Partial<ItemFormData> = { ...data };
+  const reference: Partial<ItemReference> = { ...(base.reference ?? {}) };
+  const quantity: Partial<ItemQuant> = { ...(base.quantity ?? {}) };
+
+  for (const key of REFERENCE_KEYS) {
+    const topValue = (base as Record<string, unknown>)[key];
+    if (topValue !== undefined && reference[key] === undefined) {
+      reference[key] = key === 'ItemRefID' ? (topValue as number | null) ?? null : (topValue as any);
+    } else if (reference[key] !== undefined && topValue === undefined) {
+      (base as Record<string, unknown>)[key] = reference[key] as unknown;
+    }
+  }
+
+  if (typeof base.Artikelbeschreibung !== 'undefined' && reference.Artikelbeschreibung === undefined) {
+    reference.Artikelbeschreibung = base.Artikelbeschreibung;
+  } else if (reference.Artikelbeschreibung !== undefined && base.Artikelbeschreibung === undefined) {
+    base.Artikelbeschreibung = reference.Artikelbeschreibung as string | undefined | null;
+  }
+
+  if (typeof base.Artikel_Nummer !== 'undefined' && reference.Artikel_Nummer === undefined) {
+    reference.Artikel_Nummer = base.Artikel_Nummer;
+  } else if (reference.Artikel_Nummer !== undefined && base.Artikel_Nummer === undefined) {
+    base.Artikel_Nummer = reference.Artikel_Nummer as string | undefined | null;
+  }
+
+  for (const key of QUANTITY_KEYS) {
+    const topValue = (base as Record<string, unknown>)[key];
+    if (topValue !== undefined && quantity[key] === undefined) {
+      quantity[key] = key === 'ItemRefID'
+        ? (topValue as number | null) ?? null
+        : (topValue as any);
+    } else if (quantity[key] !== undefined && topValue === undefined) {
+      (base as Record<string, unknown>)[key] = quantity[key] as unknown;
+    }
+  }
+
+  if (typeof base.Auf_Lager === 'number' && quantity.Quantity === undefined) {
+    quantity.Quantity = base.Auf_Lager;
+  } else if (typeof quantity.Quantity === 'number' && base.Auf_Lager === undefined) {
+    base.Auf_Lager = quantity.Quantity;
+  }
+
+  if (base.BoxID !== undefined && quantity.BoxID === undefined) {
+    quantity.BoxID = base.BoxID;
+  } else if (quantity.BoxID !== undefined && base.BoxID === undefined) {
+    base.BoxID = quantity.BoxID ?? null;
+  }
+
+  if (base.ItemUUID && !quantity.ItemUUID) {
+    quantity.ItemUUID = base.ItemUUID;
+  } else if (!base.ItemUUID && quantity.ItemUUID) {
+    base.ItemUUID = quantity.ItemUUID;
+  }
+
+  const refIdFromTop =
+    typeof base.ItemRefID === 'number'
+      ? base.ItemRefID
+      : reference.ItemRefID ?? quantity.ItemRefID ?? null;
+  reference.ItemRefID = refIdFromTop ?? null;
+  quantity.ItemRefID = refIdFromTop ?? null;
+  base.ItemRefID = refIdFromTop ?? undefined;
+
+  base.reference = reference;
+  base.quantity = quantity;
+
+  return base;
+}
+
+function readString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toString();
+  }
+  return undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return undefined;
+}
+
 export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({ ...initialItem });
+  const [form, setInternalForm] = useState<Partial<ItemFormData>>(() => normaliseItemFormData({ ...initialItem }));
+
+  const applyFormUpdate = useCallback(
+    (
+      next:
+        | Partial<ItemFormData>
+        | ((prev: Partial<ItemFormData>) => Partial<ItemFormData>)
+    ) => {
+      if (typeof next === 'function') {
+        setInternalForm((prev) => {
+          try {
+            const computed = (next as (value: Partial<ItemFormData>) => Partial<ItemFormData>)(prev);
+            return normaliseItemFormData(computed ?? {});
+          } catch (err) {
+            console.error('Failed to compute next form state', err);
+            return prev;
+          }
+        });
+      } else {
+        setInternalForm(normaliseItemFormData(next));
+      }
+    },
+    []
+  );
+
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setInternalForm((prev) => {
+      const next: Partial<ItemFormData> = { ...prev };
+      if (key === 'reference' && value && typeof value === 'object') {
+        next.reference = { ...(prev.reference ?? {}), ...(value as Partial<ItemReference>) };
+      } else if (key === 'quantity' && value && typeof value === 'object') {
+        next.quantity = { ...(prev.quantity ?? {}), ...(value as Partial<ItemQuant>) };
+      } else {
+        (next as Record<string, unknown>)[key as string] = value as unknown;
+      }
+      return normaliseItemFormData(next);
+    });
   }, []);
 
-  const mergeForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm((prev) => ({ ...prev, ...next }));
-  }, []);
+  const mergeForm = useCallback(
+    (next: Partial<ItemFormData>) => {
+      applyFormUpdate((prev) => ({ ...prev, ...next }));
+    },
+    [applyFormUpdate]
+  );
 
   const resetForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm({ ...next });
-  }, []);
+    applyFormUpdate({ ...next });
+  }, [applyFormUpdate]);
 
   const generateMaterialNumber = useCallback(async () => {
     try {
@@ -51,34 +221,108 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
   }, [update]);
 
   const changeStock = useCallback(async (op: StockOperation) => {
-    if (!form.ItemUUID) {
+    const itemUUID = form.quantity?.ItemUUID ?? form.ItemUUID;
+    if (!itemUUID) {
       console.warn('Cannot change stock without an ItemUUID');
       return;
     }
+
+    const actor = getUser();
+    const primaryUrl = `/api/item-quants/${encodeURIComponent(itemUUID)}/${op === 'add' ? 'increment' : 'decrement'}`;
+    const legacyUrl = `/api/items/${encodeURIComponent(itemUUID)}/${op}`;
+
+    const requestInit: RequestInit = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor })
+    };
+
+    let response: Response | null = null;
+    let payload: any = null;
+
     try {
-      console.log('Changing stock quantity', { op, itemUUID: form.ItemUUID });
-      const res = await fetch(`/api/items/${encodeURIComponent(form.ItemUUID)}/${op}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser() })
-      });
-      if (!res.ok) {
-        console.error(`Failed to ${op} stock`, res.status);
+      console.log('Changing stock quantity via primary endpoint', { op, itemUUID });
+      response = await fetch(primaryUrl, requestInit);
+      if (!response.ok && [404, 405, 501].includes(response.status)) {
+        console.warn('Primary item quant endpoint unavailable, falling back to legacy endpoint', {
+          op,
+          itemUUID,
+          status: response.status
+        });
+        response = null;
+      }
+    } catch (primaryErr) {
+      console.error('Primary item quant endpoint failed', primaryErr);
+      response = null;
+    }
+
+    if (!response) {
+      try {
+        console.log('Changing stock quantity via legacy endpoint', { op, itemUUID });
+        response = await fetch(legacyUrl, requestInit);
+      } catch (legacyErr) {
+        console.error('Legacy stock endpoint failed', legacyErr);
         return;
       }
-      const j = await res.json();
-      setForm((prev) => {
-        const next = { ...prev, Auf_Lager: j.quantity };
-        if (op === 'remove' && j.boxId === null) {
-          next.BoxID = null as any;
-        }
-        return next;
-      });
-      console.log(`Stock ${op === 'add' ? 'increase' : 'decrease'} succeeded`, j);
-    } catch (err) {
-      console.error(`Failed to ${op} stock`, err);
     }
-  }, [form.ItemUUID]);
+
+    if (!response) {
+      console.error('No response received from stock endpoints', { op, itemUUID });
+      return;
+    }
+
+    if (!response.ok) {
+      const errorBody = await response
+        .text()
+        .catch((err) => {
+          console.error('Failed to read stock response body', err);
+          return '';
+        });
+      console.error(`Failed to ${op} stock`, {
+        status: response.status,
+        body: errorBody
+      });
+      return;
+    }
+
+    try {
+      payload = await response.json();
+    } catch (parseErr) {
+      console.error('Failed to parse stock response', parseErr);
+      payload = null;
+    }
+
+    const nextQuantity = typeof payload?.quantity === 'number' ? payload.quantity : undefined;
+    const nextBoxId =
+      payload && Object.prototype.hasOwnProperty.call(payload, 'boxId')
+        ? payload.boxId ?? null
+        : payload?.item?.BoxID ?? null;
+
+    applyFormUpdate((prev) => {
+      const currentQuantity: Partial<ItemQuant> = { ...(prev.quantity ?? {}) };
+      if (nextQuantity !== undefined) {
+        currentQuantity.Quantity = nextQuantity;
+      }
+      if (nextBoxId !== undefined) {
+        currentQuantity.BoxID = nextBoxId;
+      }
+      return normaliseItemFormData({
+        ...prev,
+        Auf_Lager: nextQuantity ?? prev.Auf_Lager,
+        BoxID: nextBoxId ?? prev.BoxID ?? null,
+        quantity: currentQuantity
+      });
+    });
+
+    console.log(`Stock ${op === 'add' ? 'increase' : 'decrease'} succeeded`, {
+      op,
+      itemUUID,
+      quantity: nextQuantity,
+      boxId: nextBoxId
+    });
+  }, [applyFormUpdate, form.ItemUUID, form.quantity?.ItemUUID]);
+
+  const setForm = useCallback(applyFormUpdate, [applyFormUpdate]);
 
   return { form, update, mergeForm, resetForm, setForm, generateMaterialNumber, changeStock } as const;
 }
@@ -106,8 +350,36 @@ export function ItemDetailsFields({
   descriptionSuggestions,
   lockedFields
 }: ItemDetailsFieldsProps) {
-  if(isNew && onGenerateMaterialNumber && form.Artikel_Nummer == null)
+  const reference = form.reference ?? {};
+  const quantity = form.quantity ?? {};
+
+  const artikelbeschreibungValue = readString(reference.Artikelbeschreibung) ?? form.Artikelbeschreibung ?? '';
+  const artikelNummerValue = readString(reference.Artikel_Nummer) ?? form.Artikel_Nummer ?? '';
+  const kurzbeschreibungValue = readString(reference.Kurzbeschreibung) ?? form.Kurzbeschreibung ?? '';
+  const langtextValue = readString(reference.Langtext) ?? form.Langtext ?? '';
+  const herstellerValue = readString(reference.Hersteller) ?? form.Hersteller ?? '';
+  const einheitValue = readString(reference.Einheit) ?? form.Einheit ?? '';
+  const wmsLinkValue = readString(reference.WmsLink) ?? form.WmsLink ?? '';
+  const verkaufspreisValue = readNumber(reference.Verkaufspreis) ?? form.Verkaufspreis ?? 0;
+  const laengeValue = readNumber(reference.Länge_mm) ?? form.Länge_mm ?? 0;
+  const breiteValue = readNumber(reference.Breite_mm) ?? form.Breite_mm ?? 0;
+  const hoeheValue = readNumber(reference.Höhe_mm) ?? form.Höhe_mm ?? 0;
+  const gewichtValue = readNumber(reference.Gewicht_kg) ?? form.Gewicht_kg ?? 0;
+  const hauptAValue = readNumber(reference.Hauptkategorien_A) ?? form.Hauptkategorien_A;
+  const unterAValue = readNumber(reference.Unterkategorien_A) ?? form.Unterkategorien_A;
+  const hauptBValue = readNumber(reference.Hauptkategorien_B) ?? form.Hauptkategorien_B;
+  const unterBValue = readNumber(reference.Unterkategorien_B) ?? form.Unterkategorien_B;
+  const quantityValue = typeof quantity.Quantity === 'number' ? quantity.Quantity : form.Auf_Lager ?? 0;
+  const boxIdValue =
+    typeof quantity.BoxID === 'string'
+      ? quantity.BoxID
+      : quantity.BoxID === null
+      ? ''
+      : form.BoxID || '';
+
+  if (isNew && onGenerateMaterialNumber && !(artikelNummerValue || '').toString().trim()) {
     onGenerateMaterialNumber();
+  }
 
   const handleStock = useCallback(async (op: StockOperation) => {
     if (!onChangeStock) {
@@ -250,74 +522,82 @@ export function ItemDetailsFields({
   );
 
   const hauptOptionsA = useMemo(
-    () => buildHauptOptions(form.Hauptkategorien_A),
-    [buildHauptOptions, form.Hauptkategorien_A]
+    () => buildHauptOptions(typeof hauptAValue === 'number' ? hauptAValue : undefined),
+    [buildHauptOptions, hauptAValue]
   );
   const hauptOptionsB = useMemo(
-    () => buildHauptOptions(form.Hauptkategorien_B),
-    [buildHauptOptions, form.Hauptkategorien_B]
+    () => buildHauptOptions(typeof hauptBValue === 'number' ? hauptBValue : undefined),
+    [buildHauptOptions, hauptBValue]
   );
 
   const unterOptionsA = useMemo(
-    () => buildUnterOptions(form.Hauptkategorien_A, form.Unterkategorien_A),
-    [buildUnterOptions, form.Hauptkategorien_A, form.Unterkategorien_A]
+    () =>
+      buildUnterOptions(
+        typeof hauptAValue === 'number' ? hauptAValue : undefined,
+        typeof unterAValue === 'number' ? unterAValue : undefined
+      ),
+    [buildUnterOptions, hauptAValue, unterAValue]
   );
   const unterOptionsB = useMemo(
-    () => buildUnterOptions(form.Hauptkategorien_B, form.Unterkategorien_B),
-    [buildUnterOptions, form.Hauptkategorien_B, form.Unterkategorien_B]
+    () =>
+      buildUnterOptions(
+        typeof hauptBValue === 'number' ? hauptBValue : undefined,
+        typeof unterBValue === 'number' ? unterBValue : undefined
+      ),
+    [buildUnterOptions, hauptBValue, unterBValue]
   );
 
   useEffect(() => {
-    if (typeof form.Hauptkategorien_A === 'number' && !categoryLookup.has(form.Hauptkategorien_A)) {
-      console.warn('Missing Hauptkategorie mapping for Hauptkategorien_A', form.Hauptkategorien_A);
+    if (typeof hauptAValue === 'number' && !categoryLookup.has(hauptAValue)) {
+      console.warn('Missing Hauptkategorie mapping for Hauptkategorien_A', hauptAValue);
     }
-  }, [categoryLookup, form.Hauptkategorien_A]);
+  }, [categoryLookup, hauptAValue]);
 
   useEffect(() => {
-    if (typeof form.Hauptkategorien_B === 'number' && !categoryLookup.has(form.Hauptkategorien_B)) {
-      console.warn('Missing Hauptkategorie mapping for Hauptkategorien_B', form.Hauptkategorien_B);
+    if (typeof hauptBValue === 'number' && !categoryLookup.has(hauptBValue)) {
+      console.warn('Missing Hauptkategorie mapping for Hauptkategorien_B', hauptBValue);
     }
-  }, [categoryLookup, form.Hauptkategorien_B]);
+  }, [categoryLookup, hauptBValue]);
 
   useEffect(() => {
-    if (typeof form.Unterkategorien_A === 'number') {
-      const haupt = typeof form.Hauptkategorien_A === 'number' ? categoryLookup.get(form.Hauptkategorien_A) : undefined;
-      const known = haupt?.subcategories.some((subCategory) => subCategory.code === form.Unterkategorien_A) ?? false;
+    if (typeof unterAValue === 'number') {
+      const haupt = typeof hauptAValue === 'number' ? categoryLookup.get(hauptAValue) : undefined;
+      const known = haupt?.subcategories.some((subCategory) => subCategory.code === unterAValue) ?? false;
       if (!known) {
         console.warn('Missing Unterkategorie mapping for Unterkategorien_A', {
-          hauptkategorie: form.Hauptkategorien_A,
-          unterkategorie: form.Unterkategorien_A
+          hauptkategorie: hauptAValue,
+          unterkategorie: unterAValue
         });
       }
     }
-  }, [categoryLookup, form.Hauptkategorien_A, form.Unterkategorien_A]);
+  }, [categoryLookup, hauptAValue, unterAValue]);
 
   useEffect(() => {
-    if (typeof form.Unterkategorien_B === 'number') {
-      const haupt = typeof form.Hauptkategorien_B === 'number' ? categoryLookup.get(form.Hauptkategorien_B) : undefined;
-      const known = haupt?.subcategories.some((subCategory) => subCategory.code === form.Unterkategorien_B) ?? false;
+    if (typeof unterBValue === 'number') {
+      const haupt = typeof hauptBValue === 'number' ? categoryLookup.get(hauptBValue) : undefined;
+      const known = haupt?.subcategories.some((subCategory) => subCategory.code === unterBValue) ?? false;
       if (!known) {
         console.warn('Missing Unterkategorie mapping for Unterkategorien_B', {
-          hauptkategorie: form.Hauptkategorien_B,
-          unterkategorie: form.Unterkategorien_B
+          hauptkategorie: hauptBValue,
+          unterkategorie: unterBValue
         });
       }
     }
-  }, [categoryLookup, form.Hauptkategorien_B, form.Unterkategorien_B]);
+  }, [categoryLookup, hauptBValue, unterBValue]);
 
   return (
     <>
-      <input value={form.BoxID || ''} readOnly hidden />
+      <input value={boxIdValue} readOnly hidden />
 
       {descriptionLockHidden ? (
-        <input type="hidden" value={form.Artikelbeschreibung || ''} readOnly />
+        <input type="hidden" value={artikelbeschreibungValue} readOnly />
       ) : (
         <div className="row">
           <label>
             Artikelbeschreibung*
           </label>
           <input
-            value={form.Artikelbeschreibung || ''}
+            value={artikelbeschreibungValue}
             onChange={(e) => onUpdate('Artikelbeschreibung', e.target.value)}
             required
             readOnly={descriptionLockReadonly}
@@ -342,25 +622,25 @@ export function ItemDetailsFields({
        
           <div className="combined-input">
             <input
-              value={form.Artikel_Nummer || ''}
+              value={artikelNummerValue}
               onChange={(e) => onUpdate('Artikel_Nummer', e.target.value)}
               required
-              readOnly
+              readOnly={artikelNummerReadonly}
             />
           </div>
       </div>
 
       {quantityHidden ? (
-        <input type="hidden" value={form.Auf_Lager ?? 0} readOnly />
+        <input type="hidden" value={quantityValue} readOnly />
       ) : (
         <div className="row">
           <label>
             Anzahl*
           </label>
            <div className="combined-input">
-              <button type="button" onClick={() => handleStock('remove')}>-</button>
-              <input type="number" value={form.Auf_Lager ?? 0} required />
-              <button type="button" onClick={() => handleStock('add')}>+</button>
+              <button type="button" onClick={() => handleStock('remove')} disabled={quantityReadonly}>-</button>
+              <input type="number" value={quantityValue} required readOnly={quantityReadonly} />
+              <button type="button" onClick={() => handleStock('add')} disabled={quantityReadonly}>+</button>
             </div>
         </div>
       )}
@@ -370,7 +650,7 @@ export function ItemDetailsFields({
           Kurzbeschreibung
         </label>
         <input
-          value={form.Kurzbeschreibung || ''}
+          value={kurzbeschreibungValue}
           onChange={(e) => onUpdate('Kurzbeschreibung', e.target.value)}
         />
       </div>
@@ -380,7 +660,7 @@ export function ItemDetailsFields({
           Langtext
         </label>
         <textarea
-          value={form.Langtext || ''}
+          value={langtextValue}
           onChange={(e) => onUpdate('Langtext', e.target.value)}
           rows={3}
         />
@@ -391,7 +671,7 @@ export function ItemDetailsFields({
           Hersteller
         </label>
         <input
-          value={form.Hersteller || ''}
+          value={herstellerValue}
           onChange={(e) => onUpdate('Hersteller', e.target.value)}
         />
       </div>
@@ -402,7 +682,7 @@ export function ItemDetailsFields({
         </label>
         <input
           type="number"
-          value={form.Länge_mm ?? 0}
+          value={laengeValue}
           onChange={(e) => onUpdate('Länge_mm', parseInt(e.target.value, 10) || 0)}
         />
       </div>
@@ -412,7 +692,7 @@ export function ItemDetailsFields({
         </label>
         <input
           type="number"
-          value={form.Breite_mm ?? 0}
+          value={breiteValue}
           onChange={(e) => onUpdate('Breite_mm', parseInt(e.target.value, 10) || 0)}
         />
       </div>
@@ -422,7 +702,7 @@ export function ItemDetailsFields({
         </label>
         <input
           type="number"
-          value={form.Höhe_mm ?? 0}
+          value={hoeheValue}
           onChange={(e) => onUpdate('Höhe_mm', parseInt(e.target.value, 10) || 0)}
         />
       </div>
@@ -433,7 +713,7 @@ export function ItemDetailsFields({
         <input
           type="number"
           step="0.01"
-          value={form.Gewicht_kg ?? 0}
+          value={gewichtValue}
           onChange={(e) => onUpdate('Gewicht_kg', parseFloat(e.target.value) || 0)}
         />
       </div>
@@ -445,7 +725,7 @@ export function ItemDetailsFields({
         <input
           type="number"
           step="0.01"
-          value={form.Verkaufspreis ?? 0}
+          value={verkaufspreisValue}
           onChange={(e) => onUpdate('Verkaufspreis', parseFloat(e.target.value) || 0)}
         />
       </div>
@@ -457,7 +737,7 @@ export function ItemDetailsFields({
           Hauptkategorien A
         </label>
         <select
-          value={typeof form.Hauptkategorien_A === 'number' ? form.Hauptkategorien_A.toString() : ''}
+          value={typeof hauptAValue === 'number' ? hauptAValue.toString() : ''}
           onChange={handleHauptkategorieChange('Hauptkategorien_A', 'Unterkategorien_A')}
         >
           <option value="">Bitte auswählen</option>
@@ -473,9 +753,9 @@ export function ItemDetailsFields({
           Unterkategorien A
         </label>
         <select
-          value={typeof form.Unterkategorien_A === 'number' ? form.Unterkategorien_A.toString() : ''}
+          value={typeof unterAValue === 'number' ? unterAValue.toString() : ''}
           onChange={handleUnterkategorieChange('Unterkategorien_A')}
-          disabled={typeof form.Hauptkategorien_A !== 'number'}
+          disabled={typeof hauptAValue !== 'number'}
         >
           <option value="">Bitte auswählen</option>
           {unterOptionsA.map((option) => (
@@ -490,7 +770,7 @@ export function ItemDetailsFields({
           Hauptkategorien B
         </label>
         <select
-          value={typeof form.Hauptkategorien_B === 'number' ? form.Hauptkategorien_B.toString() : ''}
+          value={typeof hauptBValue === 'number' ? hauptBValue.toString() : ''}
           onChange={handleHauptkategorieChange('Hauptkategorien_B', 'Unterkategorien_B')}
         >
           <option value="">Bitte auswählen</option>
@@ -506,9 +786,9 @@ export function ItemDetailsFields({
           Unterkategorien B
         </label>
         <select
-          value={typeof form.Unterkategorien_B === 'number' ? form.Unterkategorien_B.toString() : ''}
+          value={typeof unterBValue === 'number' ? unterBValue.toString() : ''}
           onChange={handleUnterkategorieChange('Unterkategorien_B')}
-          disabled={typeof form.Hauptkategorien_B !== 'number'}
+          disabled={typeof hauptBValue !== 'number'}
         >
           <option value="">Bitte auswählen</option>
           {unterOptionsB.map((option) => (
@@ -526,7 +806,7 @@ export function ItemDetailsFields({
           Einheit
         </label>
         <input
-          value={form.Einheit || ''}
+          value={einheitValue}
           onChange={(e) => onUpdate('Einheit', e.target.value)}
         />
       </div>
@@ -536,7 +816,7 @@ export function ItemDetailsFields({
           Kivi-Link
         </label>
         <input
-          value={form.WmsLink || ''}
+          value={wmsLinkValue}
           onChange={(e) => onUpdate('WmsLink', e.target.value)}
         />
       </div>

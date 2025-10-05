@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Item } from '../../../models';
+import type { ItemWithRelations } from '../../../models';
 import ItemForm from './ItemForm';
 import { getUser } from '../lib/user';
 import ItemForm_Agentic from './ItemForm_agentic';
@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function ItemEdit({ itemId }: Props) {
-  const [item, setItem] = useState<Item | null>(null);
+  const [item, setItem] = useState<ItemWithRelations | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
 
@@ -20,8 +20,8 @@ export default function ItemEdit({ itemId }: Props) {
       try {
         const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
         if (res.ok) {
-          const data = await res.json();
-          setItem(data.item);
+        const data = await res.json();
+        setItem((data.item ?? null) as ItemWithRelations | null);
           const media = Array.isArray(data.media)
             ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
             : [];
@@ -38,12 +38,13 @@ export default function ItemEdit({ itemId }: Props) {
     load();
   }, [itemId]);
 
-  async function handleSubmit(data: Partial<Item>) {
+  async function handleSubmit(data: Partial<ItemWithRelations>) {
     try {
+      const { reference, quantity, ...rest } = data as any;
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, actor: getUser() })
+        body: JSON.stringify({ ...rest, actor: getUser() })
       });
       if (res.ok) {
         const payload = await res

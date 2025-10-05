@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Item } from '../../../models';
+import type { ItemWithRelations } from '../../../models';
 import { getUser } from '../lib/user';
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
 
 export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Item[]>([]);
+  const [results, setResults] = useState<ItemWithRelations[]>([]);
 
   async function runSearch() {
     const term = query.trim();
@@ -24,25 +24,27 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
         return;
       }
       const data = await r.json();
-      setResults((data.items || []) as Item[]);
+      setResults((data.items || []) as ItemWithRelations[]);
     } catch (err) {
       console.error('search failed', err);
     }
   }
 
-  async function addToBox(item: Item) {
+  async function addToBox(item: ItemWithRelations) {
     try {
-      if (item.BoxID && item.BoxID !== boxId) {
-        const ok = window.confirm(`Artikel ist bereits in Behälter ${item.BoxID}. Verschieben?`);
+      const currentBoxId = item.quantity?.BoxID ?? item.BoxID;
+      if (currentBoxId && currentBoxId !== boxId) {
+        const ok = window.confirm(`Artikel ist bereits in Behälter ${currentBoxId}. Verschieben?`);
         if (!ok) return;
       }
-      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/move`, {
+      const targetItemUUID = item.quantity?.ItemUUID ?? item.ItemUUID;
+      const res = await fetch(`/api/items/${encodeURIComponent(targetItemUUID)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toBoxId: boxId, actor: getUser() })
       });
       if (res.ok) {
-        console.log('Added item to box', item.ItemUUID, boxId);
+        console.log('Added item to box', targetItemUUID, boxId);
         onAdded();
         onClose();
       } else {
@@ -67,13 +69,27 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
           <button className="btn" onClick={runSearch}>Suchen</button>
         </div>
         <div className="results">
-          {results.map(it => (
-            <div key={it.ItemUUID} className="card result">
-              <div><b>{it.Artikel_Nummer || it.ItemUUID}</b></div>
-              <div>{it.Artikelbeschreibung}</div>
-              <button className="btn" onClick={() => addToBox(it)}>Auswählen</button>
-            </div>
-          ))}
+          {results.map((it) => {
+            const artikelNummer =
+              typeof it.reference?.Artikel_Nummer === 'string' ? it.reference.Artikel_Nummer : it.Artikel_Nummer;
+            const beschreibung =
+              typeof it.reference?.Artikelbeschreibung === 'string'
+                ? it.reference.Artikelbeschreibung
+                : it.Artikelbeschreibung;
+            const currentBoxId = it.quantity?.BoxID ?? it.BoxID;
+            const itemId = it.quantity?.ItemUUID ?? it.ItemUUID;
+            const quantity =
+              typeof it.quantity?.Quantity === 'number' ? it.quantity.Quantity : it.Auf_Lager ?? 0;
+            return (
+              <div key={itemId} className="card result">
+                <div><b>{artikelNummer || itemId}</b></div>
+                <div>{beschreibung || 'Keine Beschreibung'}</div>
+                <div className="muted">Aktueller Behälter: {currentBoxId || 'unbekannt'}</div>
+                <div className="muted">Bestand: {quantity}</div>
+                <button className="btn" onClick={() => addToBox(it)}>Auswählen</button>
+              </div>
+            );
+          })}
         </div>
         <div className="row mt-10">
           <button className="btn" onClick={onClose}>Abbrechen</button>

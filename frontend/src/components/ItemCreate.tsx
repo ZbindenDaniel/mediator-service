@@ -148,13 +148,23 @@ export default function ItemCreate() {
   const [params] = useSearchParams();
   const boxId = params.get('box') || null;
   const [agenticStep, setAgenticStep] = useState(1);
-  const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({
+    BoxID: boxId || undefined,
+    quantity: { BoxID: boxId || undefined }
+  }));
   const [itemUUID, setItemUUID] = useState<string | undefined>();
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
   const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
-  const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
-  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({
+    BoxID: boxId || undefined,
+    quantity: { BoxID: boxId || undefined }
+  }));
+  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({
+    BoxID: boxId || undefined,
+    quantity: { BoxID: boxId || undefined }
+  }));
   const [creating, setCreating] = useState(false);
+  const [selectedReferenceId, setSelectedReferenceId] = useState<number | null>(null);
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
@@ -216,11 +226,19 @@ export default function ItemCreate() {
   }, [agenticApiBase]);
 
   const baseDraft = useMemo(
-    () => ({
-      ...draft,
-      BoxID: draft.BoxID || boxId || undefined,
-      ItemUUID: itemUUID || draft.ItemUUID
-    }),
+    () => {
+      const nextQuantity = {
+        ...(draft.quantity ?? {}),
+        BoxID: (draft.quantity?.BoxID ?? draft.BoxID) || boxId || undefined,
+        ItemUUID: itemUUID || draft.quantity?.ItemUUID || draft.ItemUUID
+      };
+      return {
+        ...draft,
+        BoxID: draft.BoxID || nextQuantity.BoxID,
+        ItemUUID: itemUUID || draft.ItemUUID,
+        quantity: nextQuantity
+      };
+    },
     [boxId, draft, itemUUID]
   );
 
@@ -386,12 +404,31 @@ export default function ItemCreate() {
     const { removeItemUUID = true } = options;
     const params = new URLSearchParams();
     const sanitized: Record<string, unknown> = { ...data };
-    if (!sanitized.BoxID && boxId) {
-      sanitized.BoxID = boxId;
+    const reference = (data.reference ?? {}) as Record<string, unknown>;
+    const quantity = (data.quantity ?? {}) as Record<string, unknown>;
+
+    if (!sanitized.BoxID) {
+      sanitized.BoxID = quantity.BoxID ?? boxId ?? sanitized.BoxID;
     }
+    if (typeof sanitized.Auf_Lager === 'undefined' && typeof quantity.Quantity === 'number') {
+      sanitized.Auf_Lager = quantity.Quantity;
+    }
+    if (!sanitized.ItemUUID && quantity.ItemUUID) {
+      sanitized.ItemUUID = quantity.ItemUUID;
+    }
+
     if (removeItemUUID && 'ItemUUID' in sanitized) {
       delete sanitized.ItemUUID;
     }
+
+    Object.entries(reference).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && sanitized[key] === undefined) {
+        sanitized[key] = value;
+      }
+    });
+
+    delete sanitized.reference;
+    delete sanitized.quantity;
     const actor = getUser();
     if (actor) {
       sanitized.actor = actor;
@@ -456,11 +493,26 @@ export default function ItemCreate() {
     try {
       const trimmedDescription = data.Artikelbeschreibung?.trim() || data.Artikelbeschreibung;
       const trimmedNumber = data.Artikel_Nummer?.trim() || data.Artikel_Nummer;
+      const quantityValue =
+        typeof data.quantity?.Quantity === 'number'
+          ? data.quantity.Quantity
+          : data.Auf_Lager ?? basicInfo.quantity?.Quantity ?? basicInfo.Auf_Lager ?? 1;
       const normalized: Partial<ItemFormData> = {
         ...data,
         BoxID: data.BoxID || boxId || undefined,
         Artikelbeschreibung: trimmedDescription,
-        Artikel_Nummer: trimmedNumber
+        Artikel_Nummer: trimmedNumber,
+        Auf_Lager: quantityValue,
+        quantity: {
+          ...(data.quantity ?? {}),
+          BoxID: data.quantity?.BoxID ?? data.BoxID ?? boxId ?? undefined,
+          Quantity: quantityValue
+        },
+        reference: {
+          ...(data.reference ?? {}),
+          Artikelbeschreibung: trimmedDescription,
+          Artikel_Nummer: trimmedNumber
+        }
       };
       console.log('Advancing to match selection with basic info', normalized);
       setBasicInfo(normalized);
@@ -476,23 +528,110 @@ export default function ItemCreate() {
       console.warn('Skipping match selection submit; creation already running.');
       return;
     }
+
+    const refId = typeof item.reference?.ItemRefID === 'number' ? item.reference.ItemRefID : item.ItemRefID ?? null;
+    setSelectedReferenceId(refId);
+    if (refId != null) {
+      setBasicInfo((prev) => ({
+        ...prev,
+        ItemRefID: refId,
+        reference: { ...(prev.reference ?? {}), ItemRefID: refId },
+        quantity: { ...(prev.quantity ?? {}), ItemRefID: refId }
+      }));
+      setManualDraft((prev) => ({
+        ...prev,
+        ItemRefID: refId,
+        reference: { ...(prev.reference ?? {}), ItemRefID: refId },
+        quantity: { ...(prev.quantity ?? {}), ItemRefID: refId }
+      }));
+    }
+    const quantityValue = basicInfo.quantity?.Quantity ?? basicInfo.Auf_Lager ?? 1;
+    const targetBoxId = basicInfo.quantity?.BoxID ?? basicInfo.BoxID ?? boxId ?? undefined;
+    const actor = getUser();
+    const dedupePayload = {
+      actor,
+      quantity: quantityValue,
+      boxId: targetBoxId,
+      sourceItemUUID: item.quantity?.ItemUUID ?? item.ItemUUID,
+      search: basicInfo.reference?.Artikelbeschreibung || basicInfo.Artikelbeschreibung || ''
+    };
+
+    if (refId != null) {
+      try {
+        setCreating(true);
+        console.log('Attempting duplicate-based quantity creation', { refId, dedupePayload });
+        const response = await fetch(`/api/item-refs/${encodeURIComponent(refId)}/item-quants`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dedupePayload)
+        });
+        if (response.ok) {
+          let body: any = null;
+          try {
+            body = await response.json();
+          } catch (parseErr) {
+            console.error('Failed to parse duplicate quantity response', parseErr);
+          }
+          const destinationBox = body?.item?.BoxID ?? body?.quantity?.BoxID ?? targetBoxId;
+          console.log('Duplicate quantity creation succeeded', {
+            refId,
+            destinationBox,
+            itemUUID: body?.quantity?.ItemUUID
+          });
+          alert('Bestand übernommen. Bitte platzieren!');
+          if (destinationBox) {
+            navigate(`/boxes/${encodeURIComponent(destinationBox)}`);
+          }
+          setCreating(false);
+          return;
+        }
+
+        if (![404, 405, 501].includes(response.status)) {
+          const errorText = await response.text().catch(() => '');
+          console.error('Item quant creation failed', { status: response.status, error: errorText });
+          alert('Bestand konnte nicht übernommen werden. Verwende den klassischen Import.');
+        } else {
+          console.warn('Deduplicated quant endpoint unavailable, falling back to legacy import', response.status);
+        }
+      } catch (err) {
+        console.error('Deduplicated quant creation threw an error', err);
+      } finally {
+        setCreating(false);
+      }
+    }
+
     try {
       const clone: Partial<ItemFormData> = {
         ...item,
         ...basicInfo,
-        BoxID: basicInfo.BoxID || item.BoxID || boxId || undefined,
-        Artikelbeschreibung: basicInfo.Artikelbeschreibung || item.Artikelbeschreibung,
-        Artikel_Nummer: basicInfo.Artikel_Nummer || item.Artikel_Nummer,
-        Auf_Lager: basicInfo.Auf_Lager ?? item.Auf_Lager,
+        BoxID: targetBoxId,
+        Artikelbeschreibung: basicInfo.Artikelbeschreibung ||
+          (typeof item.reference?.Artikelbeschreibung === 'string' ? item.reference.Artikelbeschreibung : item.Artikelbeschreibung),
+        Artikel_Nummer: basicInfo.Artikel_Nummer ||
+          (typeof item.reference?.Artikel_Nummer === 'string' ? item.reference.Artikel_Nummer : item.Artikel_Nummer),
+        Auf_Lager: quantityValue,
+        quantity: {
+          ...(item.quantity ?? {}),
+          ...(basicInfo.quantity ?? {}),
+          BoxID: targetBoxId,
+          Quantity: quantityValue
+        },
+        reference: {
+          ...(item.reference ?? {}),
+          ...(basicInfo.reference ?? {})
+        },
         Kurzbeschreibung: basicInfo.Kurzbeschreibung || item.Kurzbeschreibung,
         picture1: basicInfo.picture1,
         picture2: basicInfo.picture2,
-        picture3: basicInfo.picture3 
+        picture3: basicInfo.picture3
       };
       if ('ItemUUID' in clone) {
         delete clone.ItemUUID;
       }
-      console.log('Creating item from selected duplicate', { itemUUID: item.ItemUUID });
+      if (clone.quantity) {
+        delete clone.quantity.ItemUUID;
+      }
+      console.log('Creating item from selected duplicate via legacy import', { itemUUID: item.ItemUUID });
       await submitNewItem(clone, 'match-selection');
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
@@ -502,6 +641,7 @@ export default function ItemCreate() {
   const handleSkipMatches = () => {
     console.log('No duplicate selected, switching to manual edit');
     setManualDraft((prev) => ({ ...prev, ...basicInfo }));
+    setSelectedReferenceId(null);
     setCreationStep('manualEdit');
   };
 
@@ -512,7 +652,17 @@ export default function ItemCreate() {
       BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
       Artikelbeschreibung: basicInfo.Artikelbeschreibung,
       Artikel_Nummer: basicInfo.Artikel_Nummer,
-      Auf_Lager: basicInfo.Auf_Lager,
+      Auf_Lager: basicInfo.quantity?.Quantity ?? basicInfo.Auf_Lager,
+      quantity: {
+        ...(basicInfo.quantity ?? {}),
+        ...(data.quantity ?? {}),
+        BoxID: data.quantity?.BoxID ?? data.BoxID ?? basicInfo.quantity?.BoxID ?? basicInfo.BoxID ?? boxId ?? undefined,
+        Quantity: basicInfo.quantity?.Quantity ?? data.quantity?.Quantity ?? basicInfo.Auf_Lager ?? 1
+      },
+      reference: {
+        ...(basicInfo.reference ?? {}),
+        ...(data.reference ?? {})
+      },
       picture1: basicInfo.picture1,
       picture2: basicInfo.picture2,
       picture3: basicInfo.picture3
@@ -522,11 +672,22 @@ export default function ItemCreate() {
 
   const handleAgenticDetails = async (data: Partial<ItemFormData>) => {
     console.log('Submitting agentic step 1 item details', data);
+    const quantityValue = data.quantity?.Quantity ?? data.Auf_Lager ?? 1;
     const detailPayload: Partial<ItemFormData> = {
       Artikelbeschreibung: data.Artikelbeschreibung,
       Artikel_Nummer: data.Artikel_Nummer,
-      Auf_Lager: data.Auf_Lager,
-      BoxID: data.BoxID || boxId || undefined,
+      Auf_Lager: quantityValue,
+      BoxID: data.BoxID || data.quantity?.BoxID || boxId || undefined,
+      quantity: {
+        ...(data.quantity ?? {}),
+        BoxID: data.quantity?.BoxID ?? data.BoxID ?? boxId ?? undefined,
+        Quantity: quantityValue
+      },
+      reference: {
+        ...(data.reference ?? {}),
+        Artikelbeschreibung: data.Artikelbeschreibung,
+        Artikel_Nummer: data.Artikel_Nummer
+      },
       agenticStatus: 'queued',
       agenticSearch: data.Artikelbeschreibung
     };
@@ -574,11 +735,24 @@ export default function ItemCreate() {
 
   const handleAgenticPhotos = async (data: Partial<ItemFormData>) => {
     console.log('Submitting agentic step 2 item photos', data);
+    const quantityValue =
+      data.quantity?.Quantity ?? data.Auf_Lager ?? baseDraft.quantity?.Quantity ?? baseDraft.Auf_Lager;
     const mergedData: Partial<ItemFormData> = {
       ...baseDraft,
       ...data,
       BoxID: data.BoxID || baseDraft.BoxID,
       ItemUUID: itemUUID || baseDraft.ItemUUID,
+      Auf_Lager: quantityValue,
+      quantity: {
+        ...(baseDraft.quantity ?? {}),
+        ...(data.quantity ?? {}),
+        BoxID: data.quantity?.BoxID ?? data.BoxID ?? baseDraft.quantity?.BoxID ?? baseDraft.BoxID,
+        Quantity: quantityValue
+      },
+      reference: {
+        ...(baseDraft.reference ?? {}),
+        ...(data.reference ?? {})
+      },
       agenticStatus: 'running',
       agenticSearch: baseDraft.agenticSearch || baseDraft.Artikelbeschreibung
     };

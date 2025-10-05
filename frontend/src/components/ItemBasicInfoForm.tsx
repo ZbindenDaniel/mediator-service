@@ -37,16 +37,37 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
     }
   };
 
+  const reference = form.reference ?? {};
+  const quantity = form.quantity ?? {};
+  const artikelbeschreibungValue =
+    typeof reference.Artikelbeschreibung === 'string'
+      ? reference.Artikelbeschreibung
+      : typeof form.Artikelbeschreibung === 'string'
+      ? form.Artikelbeschreibung
+      : '';
+  const quantityValue =
+    typeof quantity.Quantity === 'number'
+      ? quantity.Quantity
+      : typeof form.Auf_Lager === 'number'
+      ? form.Auf_Lager
+      : 1;
+  const boxIdValue =
+    typeof quantity.BoxID === 'string'
+      ? quantity.BoxID
+      : quantity.BoxID === null
+      ? ''
+      : form.BoxID || '';
+
   return (
     <div className='container item'>
       <div className="card">
         <form onSubmit={handleSubmit} className="item-form">
-          <input type="hidden" value={form.BoxID || ''} readOnly />
+          <input type="hidden" value={boxIdValue} readOnly />
 
           <div className="row">
             <label>Artikelbeschreibung*</label>
             <input
-              value={form.Artikelbeschreibung || ''}
+              value={artikelbeschreibungValue}
               onChange={(event) => update('Artikelbeschreibung', event.target.value)}
               required
             />
@@ -56,7 +77,7 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
             <label>Anzahl*</label>
             <input
               type="number"
-              value={form.Auf_Lager ?? 1}
+              value={quantityValue}
               onChange={(event) => update('Auf_Lager', parseInt(event.target.value, 10) || 0)}
               required
             />

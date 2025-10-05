@@ -26,9 +26,21 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
     try {
       console.log('Applying similar item selection', selected.ItemUUID);
       setForm((prev) => {
-        const next = { ...prev, ...selected } as Partial<ItemFormData>;
+        const next: Partial<ItemFormData> = {
+          ...prev,
+          ...selected,
+          reference: selected.reference
+            ? { ...(prev.reference ?? {}), ...selected.reference }
+            : prev.reference,
+          quantity: selected.quantity
+            ? { ...(prev.quantity ?? {}), ...selected.quantity }
+            : prev.quantity
+        };
         if (isNew) {
           delete (next as Partial<ItemFormData>).ItemUUID;
+          if (next.quantity) {
+            delete next.quantity.ItemUUID;
+          }
         }
         return next;
       });

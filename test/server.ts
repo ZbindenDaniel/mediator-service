@@ -5,6 +5,7 @@ const items = new Map();
 const agenticRuns = new Map();
 let materialCounter = 10000;
 let boxCounter = 0;
+let itemRefCounter = 0;
 
 function resetData() {
   boxes.clear();
@@ -12,6 +13,7 @@ function resetData() {
   agenticRuns.clear();
   materialCounter = 10000;
   boxCounter = 0;
+  itemRefCounter = 0;
 }
 
 function sendJson(res, status, body) {
@@ -21,19 +23,97 @@ function sendJson(res, status, body) {
 
 function ensureBox(boxId, location = '') {
   if (!boxes.has(boxId)) {
-    boxes.set(boxId, { id: boxId, location, items: new Set() });
+    boxes.set(boxId, { id: boxId, location, items: new Set(), notes: '' });
   }
   return boxes.get(boxId);
 }
 
-function formatItem(item) {
+function createItemRecord({
+  id,
+  boxId,
+  artikelNummer,
+  description,
+  location,
+  quantity
+}: {
+  id: string;
+  boxId: string | null;
+  artikelNummer: string;
+  description: string;
+  location: string;
+  quantity: number;
+}) {
+  const nowIso = new Date().toISOString();
+  const refId = ++itemRefCounter;
   return {
-    ItemUUID: item.id,
-    BoxID: item.boxId,
+    id,
+    boxId,
+    artikelNummer,
+    description,
+    location,
+    storedLocation: location,
+    quantityValue: quantity,
+    refId,
+    createdAt: nowIso,
+    updatedAt: nowIso
+  };
+}
+
+function buildReference(item: any) {
+  return {
+    ItemRefID: item.refId,
     Artikel_Nummer: item.artikelNummer,
     Artikelbeschreibung: item.description,
-    Location: item.location,
-    quantity: item.quantity
+    Kurzbeschreibung: null,
+    Langtext: null,
+    Hersteller: null,
+    Einheit: null,
+    WmsLink: null,
+    Verkaufspreis: null,
+    Datum_erfasst: item.createdAt,
+    Hauptkategorien_A: null,
+    Unterkategorien_A: null,
+    Hauptkategorien_B: null,
+    Unterkategorien_B: null,
+    Veröffentlicht_Status: null,
+    Shopartikel: null,
+    Artikeltyp: null,
+    Gewicht_kg: null,
+    Breite_mm: null,
+    Höhe_mm: null,
+    Länge_mm: null
+  };
+}
+
+function buildQuantity(item: any) {
+  return {
+    ItemUUID: item.id,
+    ItemRefID: item.refId,
+    BoxID: item.boxId,
+    Location: item.location || null,
+    StoredLocation: item.storedLocation || null,
+    Quantity: item.quantityValue,
+    CreatedAt: item.createdAt,
+    UpdatedAt: item.updatedAt
+  };
+}
+
+function formatItem(item: any) {
+  const reference = buildReference(item);
+  const quantity = buildQuantity(item);
+  return {
+    ItemUUID: item.id,
+    ItemRefID: item.refId,
+    BoxID: item.boxId,
+    StoredLocation: item.storedLocation || null,
+    Location: item.location || null,
+    UpdatedAt: item.updatedAt,
+    CreatedAt: item.createdAt,
+    Artikel_Nummer: item.artikelNummer,
+    Artikelbeschreibung: item.description,
+    Auf_Lager: item.quantityValue,
+    reference,
+    quantity
   };
 }
 
@@ -90,14 +170,14 @@ async function handleImportItem(req, res) {
     return sendJson(res, 400, { error: 'actor required' });
   }
   const quantity = Number(params.get('Auf_Lager') || '1') || 1;
-  const item = {
+  const item = createItemRecord({
     id: itemId,
     boxId,
     artikelNummer,
     description,
     location,
     quantity
-  };
+  });
   items.set(itemId, item);
   const box = ensureBox(boxId, location);
   box.items.add(itemId);
@@ -149,14 +229,14 @@ async function handleImportCsv(req, res) {
     const boxId = cols[idx.BoxID];
     if (!id || !boxId) continue;
     const quantity = Number(cols[idx.Auf_Lager] || '1') || 1;
-    const item = {
+    const item = createItemRecord({
       id,
       boxId,
       artikelNummer: cols[idx.Artikel_Nummer] || '',
       description: cols[idx.Artikelbeschreibung] || '',
       location: cols[idx.Location] || '',
       quantity
-    };
+    });
     items.set(id, item);
     ensureBox(boxId, item.location).items.add(id);
   }
@@ -165,11 +245,18 @@ async function handleImportCsv(req, res) {
 
 function handleGetBox(res, boxId) {
   const box = boxes.get(boxId);
-  const data = box
-    ? Array.from(box.items).map((id) => formatItem(items.get(id)))
-    : [];
-  console.log('[test server] get box', boxId, 'items returned', data.length);
-  return sendJson(res, 200, { items: data });
+  const itemsInBox = box ? Array.from(box.items).map((id) => formatItem(items.get(id))) : [];
+  console.log('[test server] get box', boxId, 'items returned', itemsInBox.length);
+  const boxPayload = box
+    ? {
+        BoxID: box.id,
+        Location: box.location,
+        Notes: box.notes || '',
+        PlacedAt: new Date().toISOString(),
+        PlacedBy: 'tester'
+      }
+    : null;
+  return sendJson(res, 200, { box: boxPayload, items: itemsInBox, events: [] });
 }
 
 function handleSearch(res, term) {
@@ -208,7 +295,8 @@ async function handleUpdateItem(req, res, itemId) {
   if (payload.Artikelbeschreibung) {
     item.description = payload.Artikelbeschreibung;
   }
-  return sendJson(res, 200, { ok: true });
+  item.updatedAt = new Date().toISOString();
+  return sendJson(res, 200, { ok: true, item: formatItem(item) });
 }
 
 async function handleMoveItem(req, res, itemId) {
@@ -233,8 +321,9 @@ async function handleMoveItem(req, res, itemId) {
     boxes.get(item.boxId).items.delete(item.id);
   }
   item.boxId = payload.toBoxId;
+  item.updatedAt = new Date().toISOString();
   boxes.get(payload.toBoxId).items.add(item.id);
-  return sendJson(res, 200, { ok: true });
+  return sendJson(res, 200, { ok: true, item: formatItem(item) });
 }
 
 async function handleAdjustStock(req, res, itemId, delta) {
@@ -252,14 +341,20 @@ async function handleAdjustStock(req, res, itemId, delta) {
   if (!payload.actor) {
     return sendJson(res, 400, { error: 'actor required' });
   }
-  item.quantity = Math.max(0, item.quantity + delta);
-  if (item.quantity === 0) {
+  item.quantityValue = Math.max(0, item.quantityValue + delta);
+  item.updatedAt = new Date().toISOString();
+  if (item.quantityValue === 0) {
     if (item.boxId && boxes.has(item.boxId)) {
       boxes.get(item.boxId).items.delete(item.id);
     }
     item.boxId = null;
   }
-  return sendJson(res, 200, { quantity: item.quantity });
+  const formatted = formatItem(item);
+  return sendJson(res, 200, {
+    quantity: formatted.quantity.Quantity,
+    quantityRecord: formatted.quantity,
+    item: { BoxID: formatted.BoxID }
+  });
 }
 
 function handleGetItem(res, itemId) {
@@ -397,6 +492,17 @@ const server = http.createServer(async (req, res) => {
       const id = generateBoxId();
       ensureBox(id);
       return sendJson(res, 200, { id });
+    }
+    if (req.method === 'POST' && pathname.startsWith('/api/item-quants/')) {
+      const parts = pathname.split('/');
+      const itemId = decodeURIComponent(parts[3] || '');
+      const action = parts[4] || '';
+      if (action === 'increment') {
+        return handleAdjustStock(req, res, itemId, 1);
+      }
+      if (action === 'decrement') {
+        return handleAdjustStock(req, res, itemId, -1);
+      }
     }
     if (req.method === 'POST' && pathname.startsWith('/api/items/') && pathname.endsWith('/add')) {
       const parts = pathname.split('/');

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
-import type { Item, EventLog, AgenticRun } from '../../../models';
+import type { ItemWithRelations, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -106,8 +106,29 @@ function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
 }
 
+function coerceString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toString();
+  }
+  return undefined;
+}
+
+function coerceNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 export default function ItemDetail({ itemId }: Props) {
-  const [item, setItem] = useState<Item | null>(null);
+  const [item, setItem] = useState<ItemWithRelations | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
@@ -115,6 +136,61 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
+
+  const derived = useMemo(() => {
+    if (!item) {
+      return null;
+    }
+    const reference = item.reference ?? {};
+    const quantity = item.quantity ?? {};
+    const itemId = quantity.ItemUUID ?? item.ItemUUID;
+    const artikelbeschreibung = coerceString(reference.Artikelbeschreibung) ?? item.Artikelbeschreibung ?? '';
+    const artikelNummer = coerceString(reference.Artikel_Nummer) ?? item.Artikel_Nummer ?? '';
+    const kurzbeschreibung = coerceString(reference.Kurzbeschreibung) ?? item.Kurzbeschreibung ?? '';
+    const langtext = coerceString(reference.Langtext) ?? item.Langtext ?? '';
+    const hersteller = coerceString(reference.Hersteller) ?? item.Hersteller ?? '';
+    const einheit = coerceString(reference.Einheit) ?? item.Einheit ?? '';
+    const wmsLink = coerceString(reference.WmsLink) ?? item.WmsLink ?? '';
+    const verkaufspreis = coerceNumber(reference.Verkaufspreis) ?? item.Verkaufspreis ?? null;
+    const quantityValue = typeof quantity.Quantity === 'number' ? quantity.Quantity : item.Auf_Lager ?? 0;
+    const boxId = quantity.BoxID ?? item.BoxID ?? null;
+    const datumErfasst = reference.Datum_erfasst ?? item.Datum_erfasst ?? null;
+    const updatedAt = quantity.UpdatedAt ?? item.UpdatedAt ?? null;
+    const createdAt = quantity.CreatedAt ?? item.CreatedAt ?? null;
+    const length = coerceNumber(reference.Länge_mm) ?? item.Länge_mm ?? null;
+    const width = coerceNumber(reference.Breite_mm) ?? item.Breite_mm ?? null;
+    const height = coerceNumber(reference.Höhe_mm) ?? item.Höhe_mm ?? null;
+    const weight = coerceNumber(reference.Gewicht_kg) ?? item.Gewicht_kg ?? null;
+    const location = quantity.Location ?? item.Location ?? null;
+    const storedLocation = quantity.StoredLocation ?? item.StoredLocation ?? null;
+
+    return {
+      reference,
+      quantity,
+      itemId,
+      artikelbeschreibung,
+      artikelNummer,
+      kurzbeschreibung,
+      langtext,
+      hersteller,
+      einheit,
+      wmsLink,
+      verkaufspreis,
+      quantityValue,
+      boxId,
+      datumErfasst,
+      updatedAt,
+      createdAt,
+      length,
+      width,
+      height,
+      weight,
+      location,
+      storedLocation
+    };
+  }, [item]);
+
+  const currentItemId = derived?.itemId ?? item?.ItemUUID ?? itemId;
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
@@ -127,7 +203,8 @@ export default function ItemDetail({ itemId }: Props) {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
       if (res.ok) {
         const data = await res.json();
-        setItem(data.item);
+        const nextItem = (data.item ?? null) as ItemWithRelations | null;
+        setItem(nextItem);
         setEvents(data.events || []);
         setAgentic(data.agentic ?? null);
         const media = Array.isArray(data.media)
@@ -282,7 +359,7 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const baseSearchTerm = (agentic?.SearchQuery || item.Artikelbeschreibung || '').trim();
+    const baseSearchTerm = (agentic?.SearchQuery || derived?.artikelbeschreibung || '').trim();
 
     setAgenticActionPending(true);
     setAgenticError(null);
@@ -290,7 +367,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     try {
       const restartResponse = await fetch(
-        `/api/items/${encodeURIComponent(item.ItemUUID)}/agentic/restart`,
+        `/api/items/${encodeURIComponent(currentItemId)}/agentic/restart`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -323,7 +400,7 @@ export default function ItemDetail({ itemId }: Props) {
       const searchTerm =
         (refreshedRun.SearchQuery ?? '').trim() ||
         baseSearchTerm ||
-        item.Artikelbeschreibung ||
+        derived?.artikelbeschreibung ||
         '';
       if (!searchTerm) {
         console.warn('Agentic restart skipped: missing search term');
@@ -331,7 +408,7 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
       const triggerPayload: AgenticRunTriggerPayload = {
-        itemId: refreshedRun.ItemUUID || item.ItemUUID,
+        itemId: refreshedRun.ItemUUID || currentItemId,
         artikelbeschreibung: searchTerm
       };
       const triggerResult = await triggerAgenticRun({
@@ -342,7 +419,7 @@ export default function ItemDetail({ itemId }: Props) {
       if (triggerResult.outcome !== 'triggered') {
         console.warn('Agentic restart did not trigger run; auto-cancelling', triggerResult);
         const cancelResult = await persistAgenticRunCancellation({
-          itemId: refreshedRun.ItemUUID || item.ItemUUID,
+          itemId: refreshedRun.ItemUUID || currentItemId,
           actor,
           context: 'item detail restart auto-cancel'
         });
@@ -463,14 +540,14 @@ export default function ItemDetail({ itemId }: Props) {
     if (!item) return;
     if (!window.confirm('Item wirklich löschen?')) return;
     try {
-      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/delete`, {
+      const res = await fetch(`/api/items/${encodeURIComponent(currentItemId)}/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actor: getUser(), confirm: true })
       });
       if (res.ok) {
-        if (item.BoxID) {
-          navigate(`/boxes/${encodeURIComponent(String(item.BoxID))}`);
+        if (derived?.boxId) {
+          navigate(`/boxes/${encodeURIComponent(String(derived.boxId))}`);
         } else {
           navigate('/');
         }
@@ -488,11 +565,11 @@ export default function ItemDetail({ itemId }: Props) {
         {item ? (
           <>
             <div className="card">
-              <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
+              <h2>Artikel <span className="muted">({currentItemId})</span></h2>
               <section className="item-media-section">
                 <h3>Medien</h3>
                 <ItemMediaGallery
-                  itemId={item.ItemUUID}
+                  itemId={currentItemId}
                   grafikname={item.Grafikname}
                   mediaAssets={mediaAssets}
                 />
@@ -506,21 +583,27 @@ export default function ItemDetail({ itemId }: Props) {
                         'Erstellt von',
                         resolveActorName(events.length ? events[events.length - 1].Actor : null)
                       ],
-                      ['Artikelbeschreibung', item.Artikelbeschreibung],
-                      ['Artikelnummer', item.Artikel_Nummer],
-                      ['Anzahl', item.Auf_Lager],
-                      ['Behälter', item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : ''],
-                      ['Kurzbeschreibung', item.Kurzbeschreibung],
-                      ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
-                      ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
-                      ['Verkaufspreis', item.Verkaufspreis],
-                      ['Langtext', item.Langtext],
-                      ['Hersteller', item.Hersteller],
-                      ['Länge (mm)', item.Länge_mm],
-                      ['Breite (mm)', item.Breite_mm],
-                      ['Höhe (mm)', item.Höhe_mm],
-                      ['Gewicht (kg)', item.Gewicht_kg],
-                      ['Einheit', item.Einheit],
+                      ['Artikelbeschreibung', derived?.artikelbeschreibung],
+                      ['Artikelnummer', derived?.artikelNummer],
+                      ['Anzahl', derived?.quantityValue],
+                      [
+                        'Behälter',
+                        derived?.boxId
+                          ? <Link to={`/boxes/${encodeURIComponent(String(derived.boxId))}`}>{derived.boxId}</Link>
+                          : ''
+                      ],
+                      ['Kurzbeschreibung', derived?.kurzbeschreibung],
+                      ['Erfasst am', derived?.datumErfasst ? formatDateTime(derived.datumErfasst as any) : ''],
+                      ['Aktualisiert am', derived?.updatedAt ? formatDateTime(derived.updatedAt as any) : ''],
+                      ['Verkaufspreis', derived?.verkaufspreis],
+                      ['Langtext', derived?.langtext],
+                      ['Hersteller', derived?.hersteller],
+                      ['Länge (mm)', derived?.length],
+                      ['Breite (mm)', derived?.width],
+                      ['Höhe (mm)', derived?.height],
+                      ['Gewicht (kg)', derived?.weight],
+                      ['Einheit', derived?.einheit],
+                      ['Standort', derived?.location || derived?.storedLocation || ''],
                       // ['Kivi-Link', item.WmsLink]
                     ] as [string, any][]).map(([k, v]) => (
                       <tr key={k} className="responsive-row">
@@ -532,25 +615,81 @@ export default function ItemDetail({ itemId }: Props) {
                 </table>
               </div>
               <div className='row'>
-                <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
+                <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(currentItemId)}/edit`)}>Bearbeiten</button>
                 <button type="button" className="btn" onClick={async () => {
                   if (!window.confirm('Entnehmen?')) return;
+                  const actor = getUser();
+                  const primaryUrl = `/api/item-quants/${encodeURIComponent(currentItemId)}/decrement`;
+                  const legacyUrl = `/api/items/${encodeURIComponent(currentItemId)}/remove`;
+                  const requestInit: RequestInit = {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ actor })
+                  };
+                  let response: Response | null = null;
                   try {
-                    const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ actor: getUser() })
-                    });
-                    if (res.ok) {
-                      const j = await res.json();
-                      setItem({ ...item, Auf_Lager: j.quantity, BoxID: j.boxId });
-                      console.log('Item entnommen', item.ItemUUID);
-                    } else {
-                      console.error('Failed to remove item', res.status);
+                    response = await fetch(primaryUrl, requestInit);
+                    if (!response.ok && [404, 405, 501].includes(response.status)) {
+                      console.warn('Primary decrement endpoint unavailable, falling back to legacy', {
+                        status: response.status,
+                        currentItemId
+                      });
+                      response = null;
                     }
                   } catch (err) {
-                    console.error('Entnahme fehlgeschlagen', err);
+                    console.error('Primary decrement endpoint failed', err);
+                    response = null;
                   }
+
+                  if (!response) {
+                    try {
+                      response = await fetch(legacyUrl, requestInit);
+                    } catch (legacyErr) {
+                      console.error('Legacy remove endpoint failed', legacyErr);
+                      return;
+                    }
+                  }
+
+                  if (!response) {
+                    console.error('No response received for item removal', { currentItemId });
+                    return;
+                  }
+
+                  if (!response.ok) {
+                    console.error('Failed to remove item', response.status);
+                    return;
+                  }
+
+                  const payload = await response
+                    .json()
+                    .catch((err) => {
+                      console.error('Failed to parse item removal response', err);
+                      return null;
+                    });
+
+                  const nextQuantity = typeof payload?.quantity === 'number' ? payload.quantity : undefined;
+                  const nextBoxId =
+                    payload && Object.prototype.hasOwnProperty.call(payload, 'boxId')
+                      ? payload.boxId ?? null
+                      : payload?.item?.BoxID ?? null;
+
+                  setItem((prev) => {
+                    if (!prev) {
+                      return prev;
+                    }
+                    const updatedQuantity = {
+                      ...(prev.quantity ?? {}),
+                      Quantity: nextQuantity ?? prev.quantity?.Quantity ?? prev.Auf_Lager ?? 0,
+                      BoxID: nextBoxId ?? prev.quantity?.BoxID ?? prev.BoxID ?? null
+                    };
+                    return {
+                      ...prev,
+                      Auf_Lager: updatedQuantity.Quantity,
+                      BoxID: updatedQuantity.BoxID,
+                      quantity: updatedQuantity
+                    };
+                  });
+                  console.log('Item entnommen', currentItemId);
                 }}>Entnehmen</button>
                 <button type="button" className="btn danger" onClick={handleDelete}>Löschen</button>
               </div>
@@ -569,9 +708,9 @@ export default function ItemDetail({ itemId }: Props) {
               onCancel={handleAgenticCancel}
             />
 
-            <RelocateItemCard itemId={item.ItemUUID} onRelocated={load} />
+            <RelocateItemCard itemId={currentItemId} onRelocated={load} />
 
-            <PrintLabelButton itemId={item.ItemUUID} />
+            <PrintLabelButton itemId={currentItemId} />
 
             <div className="card">
               <h3>Aktivitäten</h3>

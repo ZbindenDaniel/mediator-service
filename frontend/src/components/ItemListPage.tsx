@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
-import type { Item } from '../../../models';
+import type { ItemWithRelations } from '../../../models';
 import { GoContainer } from 'react-icons/go';
 
 export default function ItemListPage() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<ItemWithRelations[]>([]);
   const [showUnplaced, setShowUnplaced] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -18,7 +18,7 @@ export default function ItemListPage() {
           return;
         }
         const data = await r.json();
-        setItems(data.items || []);
+        setItems((data.items || []) as ItemWithRelations[]);
         console.log('loaded items', (data.items || []).length);
       } catch (err) {
         console.error('fetch items failed', err);
@@ -29,7 +29,7 @@ export default function ItemListPage() {
     load();
   }, []);
 
-  const filtered = showUnplaced ? items.filter((it) => !it.BoxID) : items;
+  const filtered = showUnplaced ? items.filter((it) => !(it.quantity?.BoxID ?? it.BoxID)) : items;
 
   if (isLoading) {
     return (

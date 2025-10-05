@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Item } from '../../../../models';
+import type { ItemWithRelations } from '../../../../models';
 
-type SimilarItem = Item;
+type SimilarItem = ItemWithRelations;
 
 interface UseSimilarItemsOptions {
   description: string | undefined;
@@ -60,7 +60,10 @@ export function useSimilarItems({
         }
         const data = await response.json();
         const items = Array.isArray(data?.items) ? (data.items as SimilarItem[]) : [];
-        const filtered = items.filter((item) => item.ItemUUID !== currentItemUUID);
+        const filtered = items.filter((item) => {
+          const candidateId = item.quantity?.ItemUUID ?? item.ItemUUID;
+          return candidateId !== currentItemUUID;
+        });
         setSimilarItems(filtered);
         setLoading(false);
       } catch (err) {

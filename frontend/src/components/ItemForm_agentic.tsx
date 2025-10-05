@@ -33,9 +33,21 @@ export default function ItemForm_Agentic({
     try {
       console.log('Applying similar item selection (agentic)', selected.ItemUUID);
       setForm((prev) => {
-        const next = { ...prev, ...selected } as Partial<ItemFormData>;
+        const next: Partial<ItemFormData> = {
+          ...prev,
+          ...selected,
+          reference: selected.reference
+            ? { ...(prev.reference ?? {}), ...selected.reference }
+            : prev.reference,
+          quantity: selected.quantity
+            ? { ...(prev.quantity ?? {}), ...selected.quantity }
+            : prev.quantity
+        };
         if (isNew) {
           delete (next as Partial<ItemFormData>).ItemUUID;
+          if (next.quantity) {
+            delete next.quantity.ItemUUID;
+          }
         }
         return next;
       });
