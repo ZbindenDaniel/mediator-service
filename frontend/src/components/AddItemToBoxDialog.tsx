@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import type { Item } from '../../../models';
+import type { ItemRecord } from '../../../models';
 import { getUser } from '../lib/user';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 interface Props {
   boxId: string;
@@ -10,7 +11,7 @@ interface Props {
 
 export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Item[]>([]);
+  const [results, setResults] = useState<ItemRecord[]>([]);
 
   async function runSearch() {
     const term = query.trim();
@@ -24,13 +25,20 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
         return;
       }
       const data = await r.json();
-      setResults((data.items || []) as Item[]);
+      const rawItems: unknown[] = Array.isArray(data.items) ? data.items : [];
+      if (!Array.isArray(data.items)) {
+        console.warn('AddItemToBoxDialog: unexpected search payload', data.items);
+      }
+      const parsed = rawItems
+        .map((entry, index) => coerceItemRecord(entry, `add-item-search-${index}`))
+        .filter((entry): entry is ItemRecord => Boolean(entry));
+      setResults(parsed);
     } catch (err) {
       console.error('search failed', err);
     }
   }
 
-  async function addToBox(item: Item) {
+  async function addToBox(item: ItemRecord) {
     try {
       if (item.BoxID && item.BoxID !== boxId) {
         const ok = window.confirm(`Artikel ist bereits in Behälter ${item.BoxID}. Verschieben?`);

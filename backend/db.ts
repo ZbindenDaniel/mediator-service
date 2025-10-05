@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { DB_PATH } from './config';
-import { AgenticRun, Box, Item, LabelJob, EventLog } from '../models';
+import type { AgenticRun, Box, EventLog, ItemQuant, ItemRecord, ItemRef, LabelJob } from '../models';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 let db: Database.Database;
@@ -405,5 +405,5 @@ export const listItemsForExport = db.prepare(
    ORDER BY i.Datum_erfasst`
 );
 
-export type { AgenticRun, Box, Item, LabelJob, EventLog };
+export type { AgenticRun, Box, ItemQuant, ItemRecord, ItemRef, LabelJob, EventLog };
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
 import type { SimilarItem } from './forms/useSimilarItems';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 interface ItemMatchSelectionProps {
   searchTerm: string;
@@ -47,7 +48,13 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
           return;
         }
         const payload = await response.json();
-        const results = Array.isArray(payload?.items) ? (payload.items as SimilarItem[]) : [];
+        const rawItems: unknown[] = Array.isArray(payload?.items) ? payload.items : [];
+        if (!Array.isArray(payload?.items)) {
+          console.warn('ItemMatchSelection: unexpected items payload', payload?.items);
+        }
+        const results = rawItems
+          .map((entry, index) => coerceItemRecord(entry, `item-match-${index}`))
+          .filter((entry): entry is SimilarItem => Boolean(entry));
         setItems(results);
         setLoading(false);
       } catch (err) {

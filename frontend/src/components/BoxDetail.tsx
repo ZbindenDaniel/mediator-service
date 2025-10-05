@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
-import type { Box, Item, EventLog } from '../../../models';
+import type { Box, ItemRecord, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import BoxColorTag from './BoxColorTag';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 interface Props {
   boxId: string;
@@ -19,7 +20,7 @@ function resolveActorName(actor?: string | null): string {
 
 export default function BoxDetail({ boxId }: Props) {
   const [box, setBox] = useState<Box | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<ItemRecord[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
   const [note, setNote] = useState('');
   const [noteStatus, setNoteStatus] = useState('');
@@ -82,7 +83,14 @@ export default function BoxDetail({ boxId }: Props) {
         const data = await res.json();
         setBox(data.box);
         setNote(data.box?.Notes || '');
-        setItems(data.items || []);
+        const rawItems: unknown[] = Array.isArray(data.items) ? data.items : [];
+        if (!Array.isArray(data.items)) {
+          console.warn('BoxDetail: unexpected items payload', data.items);
+        }
+        const parsed = rawItems
+          .map((entry, index) => coerceItemRecord(entry, `box-detail-${index}`))
+          .filter((entry): entry is ItemRecord => Boolean(entry));
+        setItems(parsed);
         setEvents(data.events || []);
       } else {
         console.error('Failed to fetch box', res.status);

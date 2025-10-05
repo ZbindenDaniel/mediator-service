@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { Item } from '../../models';
+import type { ItemQuant, ItemRecord, ItemRef } from '../../models';
+import { normaliseItemQuant } from '../../models';
 import type { ItemLabelPayload } from '../labelpdf';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -20,8 +21,14 @@ const action: Action = {
       const m = req.url?.match(/^\/api\/print\/item\/([^/]+)$/);
       const id = m ? decodeURIComponent(m[1]) : '';
       if (!id) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(id) as Item | undefined;
-      if (!item) return sendJson(res, 404, { error: 'item not found' });
+      const rawItem = ctx.getItem.get(id) as Partial<ItemRecord> | undefined;
+      if (!rawItem) return sendJson(res, 404, { error: 'item not found' });
+      const quant = normaliseItemQuant(rawItem as Partial<ItemQuant>);
+      if (!quant) {
+        console.error('print-item: unable to normalise item quant payload', { itemId: id, payload: rawItem });
+        return sendJson(res, 500, { error: 'invalid item payload' });
+      }
+      const item: ItemRecord = { ...(rawItem as ItemRef), ...quant };
       const zpl = ctx.zplForItem({ materialNumber: item.Artikel_Nummer, itemUUID: item.ItemUUID });
       const quantityRaw = item.Auf_Lager as unknown;
       let parsedQuantity = 0;

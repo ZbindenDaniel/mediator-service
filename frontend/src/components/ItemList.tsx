@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import type { Item } from '../../../models';
+import type { ItemRecord } from '../../../models';
 import BoxColorTag from './BoxColorTag';
 
 interface Props {
-  items: Item[];
+  items: ItemRecord[];
 }
 
 export default function ItemList({ items }: Props) {

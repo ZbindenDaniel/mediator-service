@@ -42,7 +42,8 @@ import {
   deleteItem,
   deleteBox
 } from './db';
-import type { Item, LabelJob } from './db';
+import type { ItemQuant, ItemRecord, LabelJob } from './db';
+import { normaliseItemQuant } from '../models';
 import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
@@ -100,12 +101,19 @@ async function runPrintWorker(): Promise<void> {
   const job = nextLabelJob.get() as LabelJob | undefined;
   if (!job) return;
   try {
-    const item = getItem.get(job.ItemUUID) as Item | undefined;
-    if (!item) {
+    const rawItem = getItem.get(job.ItemUUID) as Partial<ItemRecord> | undefined;
+    if (!rawItem) {
       console.error('Label job item not found', job.ItemUUID);
       updateLabelJobStatus.run('Error', 'item not found', job.Id);
       return;
     }
+    const quant = normaliseItemQuant(rawItem as Partial<ItemQuant>);
+    if (!quant) {
+      console.error('Label job item payload invalid', { itemId: job.ItemUUID, payload: rawItem });
+      updateLabelJobStatus.run('Error', 'invalid item payload', job.Id);
+      return;
+    }
+    const item: ItemRecord = { ...(rawItem as ItemRecord), ...quant };
       const zpl = zplForItem({
         materialNumber: item.Artikel_Nummer,
         itemUUID: item.ItemUUID

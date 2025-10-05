@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { Box, Item } from '../../models';
+import type { Box, ItemQuant, ItemRecord } from '../../models';
+import { normaliseItemQuant } from '../../models';
 import type { BoxLabelPayload } from '../labelpdf';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -24,15 +25,15 @@ const action: Action = {
       if (!box) return sendJson(res, 404, { error: 'box not found' });
       const zpl = ctx.zplForBox({ boxId: box.BoxID, location: box.Location || '' });
 
-      const items = (ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [];
-      const totalQuantity = items.reduce((sum, item) => {
-        const raw = (item as Item)?.Auf_Lager as unknown;
-        if (typeof raw === 'number' && Number.isFinite(raw)) return sum + raw;
-        if (typeof raw === 'string') {
-          const parsed = Number.parseFloat(raw);
-          if (Number.isFinite(parsed)) return sum + parsed;
+      const rawItems = (ctx.itemsByBox?.all(box.BoxID) as Array<Partial<ItemRecord>> | undefined) || [];
+      const totalQuantity = rawItems.reduce((sum, entry) => {
+        const quant = normaliseItemQuant(entry as Partial<ItemQuant>);
+        if (!quant) {
+          console.warn('print-box: skipped item with invalid quantity payload', { boxId: box.BoxID, entry });
+          return sum;
         }
-        return sum;
+        const value = typeof quant.Auf_Lager === 'number' && Number.isFinite(quant.Auf_Lager) ? quant.Auf_Lager : 0;
+        return sum + value;
       }, 0);
 
       const boxData: BoxLabelPayload = {

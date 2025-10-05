@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Item } from '../../../../models';
+import type { ItemRecord } from '../../../../models';
 import { getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
 
-export interface ItemFormData extends Item {
+export interface ItemFormData extends ItemRecord {
   picture1?: string | null;
   picture2?: string | null;
   picture3?: string | null;
@@ -68,9 +68,13 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
       }
       const j = await res.json();
       setForm((prev) => {
-        const next = { ...prev, Auf_Lager: j.quantity };
+        const nextQuantity = typeof j.quantity === 'number' ? j.quantity : prev.Auf_Lager;
+        if (typeof j.quantity !== 'number') {
+          console.warn('changeStock: quantity missing in response', j);
+        }
+        const next: Partial<ItemFormData> = { ...prev, Auf_Lager: nextQuantity };
         if (op === 'remove' && j.boxId === null) {
-          next.BoxID = null as any;
+          next.BoxID = null;
         }
         return next;
       });

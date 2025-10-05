@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Item } from '../../../../models';
+import type { ItemRecord } from '../../../../models';
+import { coerceItemRecord } from '../../lib/itemLayers';
 
-type SimilarItem = Item;
+type SimilarItem = ItemRecord;
 
 interface UseSimilarItemsOptions {
   description: string | undefined;
@@ -59,7 +60,13 @@ export function useSimilarItems({
           return;
         }
         const data = await response.json();
-        const items = Array.isArray(data?.items) ? (data.items as SimilarItem[]) : [];
+        const rawItems: unknown[] = Array.isArray(data?.items) ? data.items : [];
+        if (!Array.isArray(data?.items)) {
+          console.warn('useSimilarItems: unexpected items payload', data?.items);
+        }
+        const items = rawItems
+          .map((entry, index) => coerceItemRecord(entry, `similar-items-${index}`))
+          .filter((entry): entry is ItemRecord => Boolean(entry));
         const filtered = items.filter((item) => item.ItemUUID !== currentItemUUID);
         setSimilarItems(filtered);
         setLoading(false);

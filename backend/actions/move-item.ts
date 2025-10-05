@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { normaliseItemQuant } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -18,6 +19,11 @@ const action: Action = {
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
       const item = ctx.getItem.get(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
+      const quant = normaliseItemQuant(item);
+      if (!quant) {
+        console.error('move-item: invalid item payload', { itemId: uuid, payload: item });
+        return sendJson(res, 500, { error: 'invalid item payload' });
+      }
       let raw = '';
       for await (const c of req) raw += c;
       let data: any = {};
@@ -36,7 +42,7 @@ const action: Action = {
         ctx.db.prepare(`UPDATE items SET BoxID=?, Location=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(to, location, u);
         ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: u, Event: 'Moved', Meta: JSON.stringify({ from, to }) });
       });
-      txn(uuid, toBoxId, actor, item.BoxID, normalizedLocation);
+      txn(uuid, toBoxId, actor, quant.BoxID ?? null, normalizedLocation);
       sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error('Move item failed', err);

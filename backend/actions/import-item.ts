@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import type { Action } from './index';
+import type { ItemQuant, ItemRecord, ItemRef } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -65,16 +66,16 @@ const action: Action = {
         console.error('Failed to save images', e);
       }
       const requestedLocation = (p.get('Location') || '').trim();
-      const data = {
-        BoxID,
+      const recordedAtRaw = (p.get('Datum_erfasst') || '').trim();
+      const recordedAt = recordedAtRaw ? new Date(recordedAtRaw) : undefined;
+      if (recordedAt && Number.isNaN(recordedAt.getTime())) {
+        console.warn('[import-item] Invalid Datum_erfasst payload', { ItemUUID, recordedAtRaw });
+      }
+      const itemRef: ItemRef = {
         ItemUUID,
-        Location: requestedLocation,
-        UpdatedAt: nowDate,
-        Datum_erfasst: (p.get('Datum_erfasst') || '').trim() ? new Date((p.get('Datum_erfasst') || '').trim()) : undefined,
         Artikel_Nummer: (p.get('Artikel_Nummer') || '').trim(),
         Grafikname: firstImage,
         Artikelbeschreibung: (p.get('Artikelbeschreibung') || '').trim(),
-        Auf_Lager: parseInt((p.get('Auf_Lager') || '1').trim(), 10) || 1,
         Verkaufspreis: parseFloat((p.get('Verkaufspreis') || '0').replace(',', '.').trim()) || 0,
         Kurzbeschreibung: (p.get('Kurzbeschreibung') || '').trim(),
         Langtext: (p.get('Langtext') || '').trim(),
@@ -91,8 +92,17 @@ const action: Action = {
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
         Einheit: (p.get('Einheit') || '').trim(),
-        WmsLink: (p.get('WmsLink') || '').trim(),
+        WmsLink: (p.get('WmsLink') || '').trim()
       };
+      const quant: ItemQuant = {
+        ItemUUID,
+        BoxID,
+        Location: requestedLocation,
+        UpdatedAt: nowDate,
+        Datum_erfasst: recordedAt && !Number.isNaN(recordedAt.getTime()) ? recordedAt : undefined,
+        Auf_Lager: parseInt((p.get('Auf_Lager') || '1').trim(), 10) || 1
+      };
+      const data: ItemRecord = { ...itemRef, ...quant };
 
       const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();
       const requestedStatus = (p.get('agenticStatus') || 'queued').trim().toLowerCase();

@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { Item } from '../../../models';
+import type { ItemRecord } from '../../../models';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 interface Props {
   boxId: string;
 }
 
 export default function BoxEdit({ boxId }: Props) {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<ItemRecord[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -15,7 +16,14 @@ export default function BoxEdit({ boxId }: Props) {
         const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}`);
         if (res.ok) {
           const data = await res.json();
-          setItems(data.items || []);
+          const rawItems: unknown[] = Array.isArray(data.items) ? data.items : [];
+          if (!Array.isArray(data.items)) {
+            console.warn('BoxEdit: unexpected items payload', data.items);
+          }
+          const parsed = rawItems
+            .map((entry, index) => coerceItemRecord(entry, `box-edit-${index}`))
+            .filter((entry): entry is ItemRecord => Boolean(entry));
+          setItems(parsed);
         } else {
           console.error('Failed to load box', res.status);
         }

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import ItemList from './ItemList';
-import type { Item } from '../../../models';
+import type { ItemRecord } from '../../../models';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 export default function ItemListPage() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<ItemRecord[]>([]);
   const [showUnplaced, setShowUnplaced] = useState(false);
 
   useEffect(() => {
@@ -15,8 +16,15 @@ export default function ItemListPage() {
           return;
         }
         const data = await r.json();
-        setItems(data.items || []);
-        console.log('loaded items', (data.items || []).length);
+        const rawItems: unknown[] = Array.isArray(data.items) ? data.items : [];
+        if (!Array.isArray(data.items)) {
+          console.warn('ItemListPage: unexpected items payload', data.items);
+        }
+        const records = rawItems
+          .map((entry, index) => coerceItemRecord(entry, `item-list-${index}`))
+          .filter((entry): entry is ItemRecord => Boolean(entry));
+        setItems(records);
+        console.log('loaded items', records.length);
       } catch (err) {
         console.error('fetch items failed', err);
       }

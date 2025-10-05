@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
-import type { Item, EventLog, AgenticRun } from '../../../models';
+import type { ItemRecord, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -16,6 +16,7 @@ import {
 } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 interface Props {
   itemId: string;
@@ -107,7 +108,7 @@ function resolveActorName(actor?: string | null): string {
 }
 
 export default function ItemDetail({ itemId }: Props) {
-  const [item, setItem] = useState<Item | null>(null);
+  const [item, setItem] = useState<ItemRecord | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
@@ -127,7 +128,13 @@ export default function ItemDetail({ itemId }: Props) {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
       if (res.ok) {
         const data = await res.json();
-        setItem(data.item);
+        const record = coerceItemRecord(data.item, 'item-detail-load');
+        if (!record) {
+          console.error('ItemDetail: invalid item payload received', data.item);
+          setItem(null);
+        } else {
+          setItem(record);
+        }
         setEvents(data.events || []);
         setAgentic(data.agentic ?? null);
         const media = Array.isArray(data.media)
@@ -543,7 +550,13 @@ export default function ItemDetail({ itemId }: Props) {
                     });
                     if (res.ok) {
                       const j = await res.json();
-                      setItem({ ...item, Auf_Lager: j.quantity, BoxID: j.boxId });
+                      const nextQuantity = typeof j.quantity === 'number' ? j.quantity : item.Auf_Lager;
+                      if (typeof j.quantity !== 'number') {
+                        console.warn('ItemDetail: removal response missing quantity', j);
+                      }
+                      const nextBoxId =
+                        typeof j.boxId === 'string' ? j.boxId : j.boxId === null ? null : item.BoxID ?? null;
+                      setItem({ ...item, Auf_Lager: nextQuantity, BoxID: nextBoxId });
                       console.log('Item entnommen', item.ItemUUID);
                     } else {
                       console.error('Failed to remove item', res.status);

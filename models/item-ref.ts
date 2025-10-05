@@ -1,13 +1,9 @@
-export interface Item {
+// TODO: Align ItemRef naming with API contract once quantitative split stabilises.
+export interface ItemRef {
   ItemUUID: string;
-  BoxID: string | null;
-  Location?: string;
-  UpdatedAt: Date;
-  Datum_erfasst?: Date;
   Artikel_Nummer?: string;
   Grafikname?: string;
   Artikelbeschreibung?: string;
-  Auf_Lager?: number;
   Verkaufspreis?: number;
   Kurzbeschreibung?: string;
   Langtext?: string;

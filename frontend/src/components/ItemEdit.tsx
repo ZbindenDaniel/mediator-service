@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
 import { getUser } from '../lib/user';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemMediaGallery from './ItemMediaGallery';
+import type { ItemFormData } from './forms/itemFormShared';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 interface Props {
   itemId: string;
 }
 
 export default function ItemEdit({ itemId }: Props) {
-  const [item, setItem] = useState<Item | null>(null);
+  const [item, setItem] = useState<Partial<ItemFormData> | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
 
@@ -21,7 +22,13 @@ export default function ItemEdit({ itemId }: Props) {
         const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
         if (res.ok) {
           const data = await res.json();
-          setItem(data.item);
+          const record = coerceItemRecord(data.item, 'item-edit-load');
+          if (!record) {
+            console.error('ItemEdit: invalid item payload', data.item);
+            setItem(null);
+          } else {
+            setItem(record);
+          }
           const media = Array.isArray(data.media)
             ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
             : [];
@@ -38,7 +45,7 @@ export default function ItemEdit({ itemId }: Props) {
     load();
   }, [itemId]);
 
-  async function handleSubmit(data: Partial<Item>) {
+  async function handleSubmit(data: Partial<ItemFormData>) {
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`, {
         method: 'PUT',

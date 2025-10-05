@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
 import { upsertBox, upsertItem, queueLabel } from './db';
-import { Box, Item } from '../models';
+import { Box, ItemQuant, ItemRecord, ItemRef } from '../models';
 import { Op } from './ops/types';
 
 function loadOps(): Op[] {
@@ -41,7 +41,7 @@ const ops = loadOps();
 function applyOps(row: Record<string, string>): Record<string, string> {
   const ctx = {
     queueLabel: (itemUUID: string) => queueLabel.run(itemUUID),
-    log: (...a: unknown[]) => console.log('[ops]', ...a),
+    log: (...a: unknown[]) => console.log('[ops]', ...a)
   };
   let current = row;
   for (const op of ops) {
@@ -73,31 +73,26 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
       const row = normalize(r);
       const final = applyOps(row);
       if (final.BoxID) {
-      const box: Box = {
-        BoxID: final.BoxID,
-        Location: final.Location || '',
-        CreatedAt: final.CreatedAt || '',
-        Notes: final.Notes || '',
-        PlacedBy: final.PlacedBy || '',
-        PlacedAt: final.PlacedAt || '',
-        UpdatedAt: now,
-      };
-      upsertBox.run(box);
-    }
+        const box: Box = {
+          BoxID: final.BoxID,
+          Location: final.Location || '',
+          CreatedAt: final.CreatedAt || '',
+          Notes: final.Notes || '',
+          PlacedBy: final.PlacedBy || '',
+          PlacedAt: final.PlacedAt || '',
+          UpdatedAt: now
+        };
+        upsertBox.run(box);
+      }
       const hkA = parseInt(final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const ukA = parseInt(final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const hkB = parseInt(final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const ukB = parseInt(final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
-      const item: Item = {
+      const itemRef: ItemRef = {
         ItemUUID: final.itemUUID,
-        BoxID: final.BoxID || null,
-        Location: final.Location || '',
-        UpdatedAt: nowDate,
-        Datum_erfasst: final['Datum erfasst'] ? new Date(final['Datum erfasst']) : undefined,
         Artikel_Nummer: final['Artikel-Nummer'] || '',
         Grafikname: final['Grafikname(n)'] || '',
         Artikelbeschreibung: final['Artikelbeschreibung'] || '',
-        Auf_Lager: parseInt(final['Auf_Lager'] || final['Qty'] || '0', 10) || 0,
         Verkaufspreis: parseFloat(final['Verkaufspreis'] || '0') || 0,
         Kurzbeschreibung: final['Kurzbeschreibung'] || '',
         Langtext: final['Langtext'] || '',
@@ -114,8 +109,21 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Shopartikel: parseInt(final['Shopartikel'] || '0', 10) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
         Einheit: final['Einheit'] || '',
-        WmsLink: final['WmsLink'] || '',
+        WmsLink: final['WmsLink'] || ''
       };
+      const recordedAt = final['Datum erfasst'] ? new Date(final['Datum erfasst']) : undefined;
+      if (recordedAt && Number.isNaN(recordedAt.getTime())) {
+        console.warn('CSV ingestion: invalid Datum_erfasst value', { itemId: final.itemUUID, raw: final['Datum erfasst'] });
+      }
+      const quant: ItemQuant = {
+        ItemUUID: final.itemUUID,
+        BoxID: final.BoxID?.trim() ? final.BoxID : null,
+        Location: final.Location?.trim() || undefined,
+        UpdatedAt: nowDate,
+        Datum_erfasst: recordedAt && !Number.isNaN(recordedAt.getTime()) ? recordedAt : undefined,
+        Auf_Lager: parseInt(final['Auf_Lager'] || final['Qty'] || '0', 10) || 0
+      };
+      const item: ItemRecord = { ...itemRef, ...quant };
       upsertItem.run({
         ...item,
         UpdatedAt: now,
@@ -123,7 +131,9 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Veröffentlicht_Status: item.Veröffentlicht_Status ? 'yes' : 'no'
       });
 
-      boxesTouched.add(final.BoxID);
+      if (final.BoxID?.trim()) {
+        boxesTouched.add(final.BoxID.trim());
+      }
       count++;
     }
 

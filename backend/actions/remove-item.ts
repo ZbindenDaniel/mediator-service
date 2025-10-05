@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { normaliseItemQuant } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -18,13 +19,18 @@ const action: Action = {
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
       const item = ctx.getItem.get(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
+      const quant = normaliseItemQuant(item);
+      if (!quant) {
+        console.error('remove-item: invalid quantity payload', { itemId: uuid, payload: item });
+        return sendJson(res, 500, { error: 'invalid item payload' });
+      }
       let raw = '';
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
-      const currentQty = typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0;
+      const currentQty = typeof quant.Auf_Lager === 'number' ? quant.Auf_Lager : 0;
       if (currentQty <= 0) return sendJson(res, 400, { error: 'item has no stock' });
       const clearedBox = currentQty === 1;
       const txn = ctx.db.transaction((u: string, a: string) => {
@@ -36,17 +42,22 @@ const action: Action = {
           EntityId: u,
           Event: 'Removed',
           Meta: JSON.stringify({
-            fromBox: item.BoxID,
+            fromBox: quant.BoxID,
             before: currentQty,
-            after: updated?.Auf_Lager ?? 0,
+            after: normaliseItemQuant(updated)?.Auf_Lager ?? 0,
             clearedBox
           })
         });
         return updated;
       });
       const updated = txn(uuid, actor);
-      console.log('Removed item', uuid, 'new qty', updated?.Auf_Lager);
-      sendJson(res, 200, { ok: true, quantity: updated?.Auf_Lager ?? 0, boxId: updated?.BoxID ?? null });
+      const updatedQuant = normaliseItemQuant(updated);
+      console.log('Removed item', uuid, 'new qty', updatedQuant?.Auf_Lager);
+      sendJson(res, 200, {
+        ok: true,
+        quantity: updatedQuant?.Auf_Lager ?? 0,
+        boxId: updatedQuant?.BoxID ?? null
+      });
     } catch (err) {
       console.error('Remove item failed', err);
       sendJson(res, 500, { error: (err as Error).message });

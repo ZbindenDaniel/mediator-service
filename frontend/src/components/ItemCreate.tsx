@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
 import {
   buildAgenticRunUrl,
@@ -14,6 +13,7 @@ import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 type AgenticEnv = typeof globalThis & {
   AGENTIC_API_BASE?: string;
@@ -431,7 +431,7 @@ export default function ItemCreate() {
       }
 
       const body = await response.json();
-      const createdItem: Item | undefined = body?.item;
+      const createdItem = coerceItemRecord(body?.item, 'item-create-submit');
       const searchText = createdItem?.Artikelbeschreibung || data.Artikelbeschreibung || '';
       const agenticPayload: AgenticRunTriggerPayload = {
         itemId: createdItem?.ItemUUID,
@@ -546,7 +546,7 @@ export default function ItemCreate() {
       }
 
       const body = await response.json();
-      const createdItem: Item | undefined = body?.item;
+      const createdItem = coerceItemRecord(body?.item, 'item-create-agentic');
 
       setDraft((prev) => ({
         ...prev,

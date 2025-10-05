@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
-import { Item } from '../../models';
+import type { ItemQuant, ItemRecord, ItemRef } from '../../models';
+import { normaliseItemQuant } from '../../models';
 import type { Action } from './index';
 
 const MEDIA_PREFIX = '/media/';
@@ -171,8 +172,9 @@ const action: Action = {
       const data = raw ? JSON.parse(raw) : {};
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
-      const existing = ctx.getItem.get(itemId) || {};
-      let grafik = existing.Grafikname || '';
+      const existing = (ctx.getItem.get(itemId) as Partial<ItemRecord>) || {};
+      const existingQuant = normaliseItemQuant(existing as Partial<ItemQuant>);
+      let grafik = (existing as ItemRef)?.Grafikname || '';
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
         const dir = path.join(MEDIA_DIR, itemId);
@@ -201,15 +203,67 @@ const action: Action = {
       }
       const normalisedGrafikname = normaliseMediaReference(itemId, grafik);
       const { picture1, picture2, picture3, ...rest } = data;
-      const item: Item = {
-        ...existing,
-        ...rest,
-        Grafikname: normalisedGrafikname ?? undefined,
+      const {
+        BoxID: boxIdRaw,
+        Location: locationRaw,
+        Auf_Lager: quantityRaw,
+        Datum_erfasst: recordedAtRaw,
+        UpdatedAt: _ignoreUpdatedAt,
+        ...refPayload
+      } = rest;
+
+      const resolvedBoxId =
+        typeof boxIdRaw === 'string'
+          ? boxIdRaw.trim() || null
+          : boxIdRaw === null
+          ? null
+          : existingQuant?.BoxID ?? null;
+
+      const resolvedLocation =
+        typeof locationRaw === 'string'
+          ? locationRaw.trim() || existingQuant?.Location
+          : existingQuant?.Location;
+
+      let resolvedQuantity: number | undefined = existingQuant?.Auf_Lager;
+      if (typeof quantityRaw === 'number') {
+        resolvedQuantity = quantityRaw;
+      } else if (typeof quantityRaw === 'string') {
+        const parsed = Number(quantityRaw);
+        if (Number.isFinite(parsed)) {
+          resolvedQuantity = parsed;
+        } else {
+          console.warn('save-item: quantity payload not numeric', { itemId, quantityRaw });
+        }
+      }
+
+      let resolvedRecordedAt: Date | undefined = existingQuant?.Datum_erfasst;
+      if (recordedAtRaw) {
+        const parsed = recordedAtRaw instanceof Date ? recordedAtRaw : new Date(recordedAtRaw);
+        if (Number.isNaN(parsed.getTime())) {
+          console.warn('save-item: Datum_erfasst payload invalid', { itemId, recordedAtRaw });
+        } else {
+          resolvedRecordedAt = parsed;
+        }
+      }
+
+      const quant: ItemQuant = {
         ItemUUID: itemId,
-        BoxID: data.BoxID ?? existing.BoxID ?? '',
-        UpdatedAt: new Date()
+        BoxID: resolvedBoxId ?? null,
+        Location: resolvedLocation,
+        UpdatedAt: new Date(),
+        Datum_erfasst: resolvedRecordedAt,
+        Auf_Lager: resolvedQuantity
       };
-      const txn = ctx.db.transaction((it: Item, a: string) => {
+
+      const itemRef: ItemRef = {
+        ...(existing as ItemRef),
+        ...refPayload,
+        Grafikname: normalisedGrafikname ?? undefined,
+        ItemUUID: itemId
+      };
+
+      const item: ItemRecord = { ...itemRef, ...quant };
+      const txn = ctx.db.transaction((it: ItemRecord, a: string) => {
         ctx.upsertItem.run({
           ...it,
           UpdatedAt: it.UpdatedAt.toISOString(),

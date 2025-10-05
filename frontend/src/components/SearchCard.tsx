@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import type { Item } from '../../../models';
-import BoxColorTag from './BoxColorTag';
+import type { ItemRecord } from '../../../models';
 import { Link } from 'react-router-dom';
+import { coerceItemRecord } from '../lib/itemLayers';
 
 type SearchResult =
   | { type: 'box'; id: string; location?: string | null }
-  | { type: 'item'; item: Item };
+  | { type: 'item'; item: ItemRecord };
 
 export default function SearchCard() {
   const [query, setQuery] = useState('');
@@ -24,7 +24,16 @@ export default function SearchCard() {
       const data = await r.json();
       console.log('Search data', data);
       const next: SearchResult[] = [];
-      (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
+      const items: unknown[] = Array.isArray(data.items) ? data.items : [];
+      if (!Array.isArray(data.items)) {
+        console.warn('SearchCard: unexpected items payload', data.items);
+      }
+      items.forEach((entry, index) => {
+        const record = coerceItemRecord(entry, `search-card-${index}`);
+        if (record) {
+          next.push({ type: 'item', item: record });
+        }
+      });
       (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, location: b.Location }));
       console.log('Search returned', (data.items || []).length, 'items', (data.boxes || []).length, 'behälter');
       setResults(next);
