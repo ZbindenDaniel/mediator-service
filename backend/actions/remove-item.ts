@@ -34,7 +34,7 @@ const action: Action = {
       if (currentQty <= 0) return sendJson(res, 400, { error: 'item has no stock' });
       const clearedBox = currentQty === 1;
       const txn = ctx.db.transaction((u: string, a: string) => {
-        ctx.decrementItemStock.run(u);
+        ctx.decrementQuant(u);
         const updated = ctx.getItem.get(u);
         ctx.logEvent.run({
           Actor: a,

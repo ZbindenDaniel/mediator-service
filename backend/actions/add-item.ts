@@ -32,7 +32,7 @@ const action: Action = {
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const currentQty = typeof quant.Auf_Lager === 'number' ? quant.Auf_Lager : 0;
       const txn = ctx.db.transaction((u: string, a: string) => {
-        ctx.incrementItemStock.run(u);
+        ctx.incrementQuant(u);
         const updated = ctx.getItem.get(u);
         ctx.logEvent.run({
           Actor: a,

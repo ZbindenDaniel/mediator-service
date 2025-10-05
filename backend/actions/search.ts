@@ -149,20 +149,20 @@ const action: Action = {
       // token_hits: per-token presence (0/1), not per-field sum
       const itemTokenPresenceTerms = tokens.map(() => `
     CASE WHEN (
-      lower(i.ItemUUID)            LIKE ?
-      OR lower(i.Artikel_Nummer)   LIKE ?
-      OR lower(i.Artikelbeschreibung) LIKE ?
-      OR lower(i.BoxID)            LIKE ?
+      lower(q.ItemUUID)            LIKE ?
+      OR lower(r.Artikel_Nummer)   LIKE ?
+      OR lower(r.Artikelbeschreibung) LIKE ?
+      OR lower(q.BoxID)            LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
 
       // exact match if ANY field equals the normalized query
       const itemExactMatchExpr = `
     CASE WHEN (
-      lower(i.ItemUUID)            = ?
-      OR lower(i.Artikel_Nummer)   = ?
-      OR lower(i.Artikelbeschreibung) = ?
-      OR lower(i.BoxID)            = ?
+      lower(q.ItemUUID)            = ?
+      OR lower(r.Artikel_Nummer)   = ?
+      OR lower(r.Artikelbeschreibung) = ?
+      OR lower(q.BoxID)            = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -170,16 +170,42 @@ const action: Action = {
     SELECT *
     FROM (
       SELECT
-        i.*,
-        COALESCE(i.Location, b.Location) AS Location,
+        q.ItemUUID,
+        q.BoxID,
+        COALESCE(q.Location, b.Location) AS Location,
+        q.UpdatedAt,
+        q.Datum_erfasst,
+        q.Auf_Lager,
+        r.Artikel_Nummer,
+        r.Grafikname,
+        r.Artikelbeschreibung,
+        r.Verkaufspreis,
+        r.Kurzbeschreibung,
+        r.Langtext,
+        r.Hersteller,
+        r.Länge_mm,
+        r.Breite_mm,
+        r.Höhe_mm,
+        r.Gewicht_kg,
+        r.Hauptkategorien_A,
+        r.Unterkategorien_A,
+        r.Hauptkategorien_B,
+        r.Unterkategorien_B,
+        r.Veröffentlicht_Status,
+        r.Shopartikel,
+        r.Artikeltyp,
+        r.Einheit,
+        r.WmsLink,
+        r.EntityType,
         (${itemTokenPresenceTerms}) AS token_hits,
         ${itemExactMatchExpr} AS exact_match,
         CASE
           WHEN ${itemExactMatchExpr} = 1 THEN 1.0
           ELSE (CAST((${itemTokenPresenceTerms}) AS REAL) / ?) * 0.99
         END AS sql_score
-      FROM items i
-      LEFT JOIN boxes b ON i.BoxID = b.BoxID
+      FROM item_quants q
+      JOIN item_refs r ON q.RefID = r.RefID
+      LEFT JOIN boxes b ON q.BoxID = b.BoxID
     )
     WHERE token_hits >= ?
     ORDER BY exact_match DESC, sql_score DESC

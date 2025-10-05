@@ -131,27 +131,22 @@ const action: Action = {
       const txn = ctx.db.transaction(
         (
           boxId: string,
-          itemData: any,
+          itemData: ItemRecord,
           a: string,
           search: string,
           status: string,
           boxLocation: string | null
         ) => {
-          ctx.upsertBox.run({
+          ctx.upsertBox({
             BoxID: boxId,
-            Location: boxLocation,
+            Location: boxLocation ?? undefined,
             CreatedAt: now,
-            Notes: null,
-            PlacedBy: null,
-            PlacedAt: null,
+            Notes: undefined,
+            PlacedBy: undefined,
+            PlacedAt: undefined,
             UpdatedAt: now
           });
-          ctx.upsertItem.run({
-            ...itemData,
-            UpdatedAt: itemData.UpdatedAt.toISOString(),
-            Datum_erfasst: itemData.Datum_erfasst ? itemData.Datum_erfasst.toISOString() : null,
-            Veröffentlicht_Status: itemData.Veröffentlicht_Status ? 'yes' : 'no'
-          });
+          ctx.upsertItemRecord(itemData);
           ctx.upsertAgenticRun.run({
             ItemUUID: itemData.ItemUUID,
             SearchQuery: search || null,

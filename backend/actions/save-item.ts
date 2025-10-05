@@ -264,17 +264,7 @@ const action: Action = {
 
       const item: ItemRecord = { ...itemRef, ...quant };
       const txn = ctx.db.transaction((it: ItemRecord, a: string) => {
-        ctx.upsertItem.run({
-          ...it,
-          UpdatedAt: it.UpdatedAt.toISOString(),
-          Datum_erfasst: it.Datum_erfasst ? it.Datum_erfasst.toISOString() : null,
-          Veröffentlicht_Status:
-            typeof it.Veröffentlicht_Status === 'boolean'
-              ? it.Veröffentlicht_Status
-                ? 'yes'
-                : 'no'
-              : it.Veröffentlicht_Status
-        });
+        ctx.upsertItemRecord(it);
         ctx.logEvent.run({
           Actor: a,
           EntityType: 'Item',

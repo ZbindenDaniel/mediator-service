@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
-import { upsertBox, upsertItem, queueLabel } from './db';
+import { upsertBox, upsertItemRecord, queueLabel } from './db';
 import { Box, ItemQuant, ItemRecord, ItemRef } from '../models';
 import { Op } from './ops/types';
 
@@ -82,7 +82,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
           PlacedAt: final.PlacedAt || '',
           UpdatedAt: now
         };
-        upsertBox.run(box);
+        upsertBox(box);
       }
       const hkA = parseInt(final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const ukA = parseInt(final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
@@ -124,12 +124,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Auf_Lager: parseInt(final['Auf_Lager'] || final['Qty'] || '0', 10) || 0
       };
       const item: ItemRecord = { ...itemRef, ...quant };
-      upsertItem.run({
-        ...item,
-        UpdatedAt: now,
-        Datum_erfasst: item.Datum_erfasst ? item.Datum_erfasst.toISOString() : null,
-        Veröffentlicht_Status: item.Veröffentlicht_Status ? 'yes' : 'no'
-      });
+      upsertItemRecord(item);
 
       if (final.BoxID?.trim()) {
         boxesTouched.add(final.BoxID.trim());

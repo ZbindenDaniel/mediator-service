@@ -33,13 +33,13 @@ const action: Action = {
       const id = `B-${dd}${mm}${yy}-${idNum.toString().padStart(4, '0')}`;
       const now = nowDate.toISOString();
       const txn = ctx.db.transaction((boxId: string, a: string) => {
-        ctx.upsertBox.run({
+        ctx.upsertBox({
           BoxID: boxId,
-          Location: null,
+          Location: undefined,
           CreatedAt: now,
-          Notes: null,
+          Notes: undefined,
           PlacedBy: a,
-          PlacedAt: null,
+          PlacedAt: undefined,
           UpdatedAt: now
         });
         ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Created', Meta: null });

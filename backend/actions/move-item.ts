@@ -39,7 +39,7 @@ const action: Action = {
         console.warn('[move-item] Destination box missing Location', { itemId: uuid, boxId: toBoxId });
       }
       const txn = ctx.db.transaction((u: string, to: string, a: string, from: string, location: string | null) => {
-        ctx.db.prepare(`UPDATE items SET BoxID=?, Location=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(to, location, u);
+        ctx.updateQuantPlacement(u, to, location);
         ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: u, Event: 'Moved', Meta: JSON.stringify({ from, to }) });
       });
       txn(uuid, toBoxId, actor, quant.BoxID ?? null, normalizedLocation);

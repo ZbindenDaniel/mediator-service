@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { AgenticRun } from '../../models';
+import type { AgenticRun, ItemRecord } from '../../models';
 import { AGENTIC_SHARED_SECRET } from '../config';
 
 const SHARED_SECRET_HEADER = 'x-agent-secret';
@@ -10,23 +10,16 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-function toIsoString(value: unknown): string | null {
-  if (!value) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'string' && value.trim()) {
-    const d = new Date(value);
-    if (!Number.isNaN(d.getTime())) return d.toISOString();
-    return null;
-  }
-  return null;
-}
-
-function normalizePublishedStatus(value: unknown): string {
-  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+function toDate(value: unknown): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   if (typeof value === 'string') {
-    return ['yes', 'ja', 'true', '1'].includes(value.trim().toLowerCase()) ? 'yes' : 'no';
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
   }
-  return 'no';
+  return undefined;
 }
 
 const action: Action = {
@@ -107,12 +100,12 @@ const action: Action = {
           merged.ItemUUID = itemUUID;
           merged.UpdatedAt = now;
 
-          ctx.upsertItem.run({
-            ...merged,
-            UpdatedAt: now,
-            Datum_erfasst: toIsoString(merged.Datum_erfasst),
-            Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status)
-          });
+          const mergedRecord: ItemRecord = {
+            ...(merged as ItemRecord),
+            UpdatedAt: toDate(now) ?? new Date(),
+            Datum_erfasst: toDate(merged.Datum_erfasst)
+          };
+          ctx.upsertItemRecord(mergedRecord);
 
           const normalizedDecision = review.Decision ? review.Decision.toLowerCase() : null;
           const fallbackReviewState = existingRun?.ReviewState && existingRun.ReviewState !== 'pending'

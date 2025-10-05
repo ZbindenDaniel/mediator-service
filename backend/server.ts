@@ -10,7 +10,7 @@ import {
   db,
   getItem,
   upsertBox,
-  upsertItem,
+  upsertItemRecord,
   findByMaterial,
   itemsByBox,
   getBox,
@@ -37,10 +37,11 @@ import {
   listItemsForExport,
   updateAgenticReview,
   listItems,
-  decrementItemStock,
-  incrementItemStock,
+  decrementQuant,
+  incrementQuant,
   deleteItem,
-  deleteBox
+  deleteBox,
+  updateQuantPlacement
 } from './db';
 import type { ItemQuant, ItemRecord, LabelJob } from './db';
 import { normaliseItemQuant } from '../models';
@@ -136,14 +137,15 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 type ActionContext = {
   db: typeof db;
   upsertBox: typeof upsertBox;
-  upsertItem: typeof upsertItem;
+  upsertItemRecord: typeof upsertItemRecord;
   findByMaterial: typeof findByMaterial;
   itemsByBox: typeof itemsByBox;
   getBox: typeof getBox;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
-  decrementItemStock: typeof decrementItemStock;
-  incrementItemStock: typeof incrementItemStock;
+  decrementQuant: typeof decrementQuant;
+  incrementQuant: typeof incrementQuant;
+  updateQuantPlacement: typeof updateQuantPlacement;
   deleteItem: typeof deleteItem;
   deleteBox: typeof deleteBox;
   upsertAgenticRun: typeof upsertAgenticRun;
@@ -270,7 +272,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
         await action.handle?.(req, res, {
           db,
           upsertBox,
-          upsertItem,
+          upsertItemRecord,
           findByMaterial,
           itemsByBox,
           getBox,
@@ -279,8 +281,9 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getAgenticRun,
           updateAgenticRunStatus,
           getItem,
-          decrementItemStock,
-          incrementItemStock,
+          decrementQuant,
+          incrementQuant,
+          updateQuantPlacement,
           deleteItem,
           deleteBox,
           listItems,
@@ -300,8 +303,8 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           countBoxes,
           countEvents,
           countItems,
-  countItemsNoWms,
-  countItemsNoBox,
+          countItemsNoWms,
+          countItemsNoBox,
           listRecentBoxes,
           getMaxBoxId,
           getMaxItemId,
