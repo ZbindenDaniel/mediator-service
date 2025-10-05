@@ -27,10 +27,6 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
     setForm((prev) => ({ ...prev, ...next }));
   }, []);
 
-  const resetForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm({ ...next });
-  }, []);
-
   const generateMaterialNumber = useCallback(async () => {
     try {
       console.log('Requesting new material number for item form');
@@ -76,7 +72,7 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
     }
   }, [form.ItemUUID]);
 
-  return { form, update, mergeForm, resetForm, setForm, generateMaterialNumber, changeStock } as const;
+  return { form, update, mergeForm, setForm, generateMaterialNumber, changeStock } as const;
 }
 
 interface ItemDetailsFieldsProps {
