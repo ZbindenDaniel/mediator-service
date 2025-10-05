@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getUser, setUser as persistUser } from '../lib/user';
+import { GoArrowLeft } from 'react-icons/go';
 
 export default function Header() {
   const [user, setUserState] = useState('');
@@ -36,7 +37,7 @@ export default function Header() {
     <header className="header">
       <div className="left">
         <nav>
-            <button id='header-back-button' type="button" onClick={() => window.history.back()}>{String.fromCharCode(8592)}</button>
+            <button id='header-back-button' type="button" onClick={() => window.history.back()}><GoArrowLeft /></button>
         </nav>
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
       </div>

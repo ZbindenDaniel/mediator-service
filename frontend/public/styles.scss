@@ -1,4 +1,5 @@
-$base-color: #8ab4f8;
+$overview-color: #8ab4f8;
+$activity-color: #dbeafe;
 $item-color: aquamarine;
 $box-color: rgb(221, 60, 114);
 
@@ -200,7 +201,7 @@ div {
     width: 100;
 
     &.overview {
-        background-color: $base-color;
+        background-color: $overview-color;
         min-height: 100vh;
     }
 
@@ -547,6 +548,214 @@ button:focus {
 
 .mt-10 {
     margin-top: 10px;
+}
+
+/* Loading page */
+.loading-page {
+    position: relative;
+    min-height: min(100vh, 680px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    text-align: center;
+    gap: 24px;
+    overflow: hidden;
+}
+
+.loading-page__spinner {
+    position: relative;
+    width: clamp(200px, 32vw, 280px);
+    height: clamp(200px, 32vw, 280px);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: loading-revamp-spin 8s linear infinite;
+}
+
+.loading-page__spinner::before {
+    content: '';
+    position: absolute;
+    inset: 12%;
+    border-radius: 50%;
+    border: 2px dashed rgba(0, 0, 0, 0.08);
+}
+
+.loading-page__spinner span {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    font-size: clamp(2.1rem, 4vw, 3.4rem);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    transform-origin: center;
+    --rotation: calc(var(--index) * 60deg);
+    transform: rotate(var(--rotation)) translateY(calc(-1 * clamp(72px, 11vw, 96px))) rotate(calc(var(--rotation) * -1));
+}
+
+.loading-page__spinner span:nth-child(1) {
+    color: $overview-color;
+}
+
+.loading-page__spinner span:nth-child(2) {
+    color: $box-color;
+}
+
+.loading-page__spinner span:nth-child(3) {
+    color: $item-color;
+}
+
+.loading-page__spinner span:nth-child(4) {
+    color: $activity-color;
+}
+
+.loading-page__spinner span:nth-child(5) {
+    color: $overview-color;
+}
+
+.loading-page__spinner span:nth-child(6) {
+    color: $box-color;
+}
+
+.loading-page__message {
+    max-width: 360px;
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    color: var(--muted);
+}
+
+.loading-page__flyers {
+    position: absolute;
+    inset: -20% -10%;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.loading-page__flyer {
+    position: absolute;
+    font-weight: 700;
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    opacity: 0;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.16));
+}
+
+.loading-page__flyer--1 {
+    top: 12%;
+    color: $item-color;
+    animation: loading-r-flight-a 7.5s linear infinite;
+}
+
+.loading-page__flyer--2 {
+    top: 45%;
+    color: $box-color;
+    animation: loading-r-flight-b 6.5s linear infinite;
+    animation-delay: -2s;
+}
+
+.loading-page__flyer--3 {
+    top: 72%;
+    color: $overview-color;
+    animation: loading-r-flight-c 8.5s linear infinite;
+    animation-delay: -3s;
+}
+
+.loading-page__flyer--4 {
+    top: 28%;
+    color: $activity-color;
+    animation: loading-r-flight-d 9s linear infinite;
+    animation-delay: -4s;
+}
+
+@keyframes loading-revamp-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes loading-r-flight-a {
+    0% {
+        transform: translate(-20vw, -30vh) scale(0.6) rotate(-15deg);
+        opacity: 0;
+    }
+
+    15% {
+        opacity: 0.9;
+    }
+
+    75% {
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: translate(110vw, 25vh) scale(1.2) rotate(18deg);
+        opacity: 0;
+    }
+}
+
+@keyframes loading-r-flight-b {
+    0% {
+        transform: translate(-25vw, 15vh) scale(0.7) rotate(12deg);
+        opacity: 0;
+    }
+
+    20% {
+        opacity: 0.85;
+    }
+
+    70% {
+        opacity: 0.75;
+    }
+
+    100% {
+        transform: translate(120vw, -18vh) scale(1.25) rotate(-22deg);
+        opacity: 0;
+    }
+}
+
+@keyframes loading-r-flight-c {
+    0% {
+        transform: translate(-18vw, 40vh) scale(0.65) rotate(-24deg);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 0.8;
+    }
+
+    80% {
+        opacity: 0.7;
+    }
+
+    100% {
+        transform: translate(105vw, -25vh) scale(1.3) rotate(18deg);
+        opacity: 0;
+    }
+}
+
+@keyframes loading-r-flight-d {
+    0% {
+        transform: translate(-22vw, -10vh) scale(0.75) rotate(30deg);
+        opacity: 0;
+    }
+
+    18% {
+        opacity: 0.85;
+    }
+
+    78% {
+        opacity: 0.75;
+    }
+
+    100% {
+        transform: translate(115vw, 32vh) scale(1.35) rotate(-26deg);
+        opacity: 0;
+    }
 }
 
 /* Mobile scan pages: slightly larger base */

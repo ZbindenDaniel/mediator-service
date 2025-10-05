@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import type { Item } from '../../../models';
 import BoxColorTag from './BoxColorTag';
+import { GoLinkExternal } from "react-icons/go";
 
 interface Props {
   items: Item[];
@@ -30,7 +31,7 @@ export default function ItemList({ items }: Props) {
               <td className="col-desc">{it.Artikelbeschreibung}</td>
               <td className="col-box">{it.BoxID}</td>
               <td className="col-location"><BoxColorTag locationKey={it.BoxID} /></td>
-              <td className="col-link"><Link to={`/items/${encodeURIComponent(it.ItemUUID)}`}>Details</Link></td>
+              <td className="col-link"><Link to={`/items/${encodeURIComponent(it.ItemUUID)}`}><GoLinkExternal /></Link></td>
             </tr>
           ))}
         </tbody>

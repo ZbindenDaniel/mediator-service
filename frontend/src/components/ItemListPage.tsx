@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ItemList from './ItemList';
 import type { Item } from '../../../models';
+import { GoContainer } from 'react-icons/go';
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -31,14 +32,12 @@ export default function ItemListPage() {
     <div className="card">
       <h2>Alle Artikel</h2>
       <div className="filter-bar">
-        <label>
-          <input
-            type="checkbox"
-            checked={showUnplaced}
-            onChange={(e) => setShowUnplaced(e.target.checked)}
-          />
-          Unplatzierte Artikel
+        <input type="checkbox" id="unplaced" name="unplaced" value="Bike" checked={showUnplaced}
+          onChange={(e) => setShowUnplaced(e.target.checked)} />
+        <label htmlFor="unplaced">Unplatzierte Artikel
         </label>
+
+        <GoContainer />
       </div>
       <ItemList items={filtered} />
     </div>
