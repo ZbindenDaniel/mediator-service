@@ -510,6 +510,32 @@ button:focus {
     }
 }
 
+/* Box list */
+.box-list-wrapper {
+    overflow-x: auto;
+}
+
+.box-list {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.box-list th,
+.box-list td {
+    padding: 8px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+}
+
+@media (max-width: 600px) {
+
+    .box-list th,
+    .box-list td {
+        padding: 6px 4px;
+        font-size: 0.85rem;
+    }
+}
+
 .filter-bar {
     margin-bottom: 10px;
 }
