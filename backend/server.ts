@@ -10,7 +10,11 @@ import {
   db,
   getItem,
   upsertBox,
-  upsertItem,
+  upsertItemRef,
+  upsertItemQuant,
+  buildItemRefRecord,
+  buildItemQuantRecord,
+  createItemRefKey,
   findByMaterial,
   itemsByBox,
   getBox,
@@ -37,9 +41,9 @@ import {
   listItemsForExport,
   updateAgenticReview,
   listItems,
-  decrementItemStock,
-  incrementItemStock,
-  deleteItem,
+  decrementQuant,
+  incrementQuant,
+  deleteItemQuant,
   deleteBox
 } from './db';
 import type { Item, LabelJob } from './db';
@@ -128,15 +132,19 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 type ActionContext = {
   db: typeof db;
   upsertBox: typeof upsertBox;
-  upsertItem: typeof upsertItem;
+  upsertItemRef: typeof upsertItemRef;
+  upsertItemQuant: typeof upsertItemQuant;
+  buildItemRefRecord: typeof buildItemRefRecord;
+  buildItemQuantRecord: typeof buildItemQuantRecord;
+  createItemRefKey: typeof createItemRefKey;
   findByMaterial: typeof findByMaterial;
   itemsByBox: typeof itemsByBox;
   getBox: typeof getBox;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
-  decrementItemStock: typeof decrementItemStock;
-  incrementItemStock: typeof incrementItemStock;
-  deleteItem: typeof deleteItem;
+  decrementQuant: typeof decrementQuant;
+  incrementQuant: typeof incrementQuant;
+  deleteItemQuant: typeof deleteItemQuant;
   deleteBox: typeof deleteBox;
   upsertAgenticRun: typeof upsertAgenticRun;
   getAgenticRun: typeof getAgenticRun;
@@ -262,7 +270,11 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
         await action.handle?.(req, res, {
           db,
           upsertBox,
-          upsertItem,
+          upsertItemRef,
+          upsertItemQuant,
+          buildItemRefRecord,
+          buildItemQuantRecord,
+          createItemRefKey,
           findByMaterial,
           itemsByBox,
           getBox,
@@ -271,9 +283,9 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           getAgenticRun,
           updateAgenticRunStatus,
           getItem,
-          decrementItemStock,
-          incrementItemStock,
-          deleteItem,
+          decrementQuant,
+          incrementQuant,
+          deleteItemQuant,
           deleteBox,
           listItems,
           pdfForBox,

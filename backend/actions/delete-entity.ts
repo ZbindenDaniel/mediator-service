@@ -28,7 +28,7 @@ const action: Action = {
         const item = ctx.getItem.get(id);
         if (!item) return sendJson(res, 404, { error: 'item not found' });
         ctx.db.transaction(() => {
-          ctx.deleteItem.run(id);
+          ctx.deleteItemQuant(id);
           ctx.logEvent.run({ Actor: actor, EntityType: 'Item', EntityId: id, Event: 'Deleted', Meta: null });
         })();
       } else {
