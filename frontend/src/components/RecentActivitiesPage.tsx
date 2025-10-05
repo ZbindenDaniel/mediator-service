@@ -46,7 +46,7 @@ export default function RecentActivitiesPage() {
   }, []);
 
   return (
-    <div className="container activities">
+    <div className="list-container activities">
       <div className="page-header">
         <h1>Letzte Aktivitäten</h1>
       </div>

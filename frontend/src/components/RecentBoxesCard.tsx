@@ -14,7 +14,7 @@ export default function RecentBoxesCard({ boxes }: Props) {
       <div
         className="card-header">
         <h2 id="boxes">Letzte Behälter</h2>
-        <Link className="btn" to="/boxes">Alle
+        <Link id="all-boxes" to="/boxes">Alle
         </Link>
       </div>
       <div id="boxesOut" className="list">

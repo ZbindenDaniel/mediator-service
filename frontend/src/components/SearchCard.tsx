@@ -37,7 +37,7 @@ export default function SearchCard() {
     <div className="card" id="find">
       <div className="card-header">
         <h2>Artikel finden</h2>
-        <Link to="/items" className="muted" aria-label="Alle Artikel anzeigen">
+        <Link to="/items" id="all-items" aria-label="Alle Artikel anzeigen">
           Alle
         </Link>
       </div>
@@ -47,7 +47,6 @@ export default function SearchCard() {
           onChange={e => setQuery(e.target.value)}
           placeholder="Material, B-…, oder UUID"
           onKeyDown={e => { if (e.key === 'Enter') runFind(); }}
-          autoFocus
         />
         <button className="btn" onClick={runFind}>Suchen</button>
       </div>

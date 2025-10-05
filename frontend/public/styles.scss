@@ -1,7 +1,7 @@
 $overview-color: #8ab4f8;
-$activity-color: #dbeafe;
-$item-color: aquamarine;
+$item-color: #50b694;
 $box-color: rgb(221, 60, 114);
+$activity-color: #804db4;
 
 /* ===== Base (mobile-first) ===== */
 :root {
@@ -15,9 +15,11 @@ $box-color: rgb(221, 60, 114);
     /* text */
     --muted: #5f6368;
     /* muted text */
-    --bg: #ffffff;
-    /* page */
-    --card: #ffffff;
+    --bg: #bce0a3; // #bce0a3
+    /* page bg */
+    --head: #bce0a3;
+    /* header */
+    --card: #ff69b429; //  #ff69b429,  #3a313429
     /* card bg */
     --line: #e6e6e6;
     /* borders */
@@ -60,7 +62,7 @@ body {
 
 .layout {
     height: 100vh;
-    padding: 1rem;
+    padding: 4px;
 }
 
 textarea {
@@ -80,10 +82,9 @@ textarea {
 .header {
     // position: sticky;
     top: 0;
-    background: var(--bg);
+    background: var(--head);
     border-bottom: 1px solid var(--line);
     z-index: 10;
-    // color: #fff;
     padding: 1rem;
     display: flex;
     align-items: center;
@@ -111,6 +112,18 @@ textarea {
 #homelink {
     text-decoration: none;
     color: var(--fg);
+}
+
+#all-items {
+    color: $item-color;
+}
+
+#all-boxes {
+    color: $box-color;
+}
+
+#all-events {
+    color: $activity-color;
 }
 
 .header .user {
@@ -196,28 +209,49 @@ div {
 /* Containers */
 .container {
     max-width: var(--maxw);
-    margin: 0 auto;
+    min-height: 100vh;
     padding: var(--pad);
-    width: 100;
+    margin: 0 auto;
+    border-left: solid 3px;
+    background-color: floralwhite;
+
 
     &.overview {
-        background-color: $overview-color;
+        border-color: $overview-color;
         min-height: 100vh;
     }
 
     &.box {
-        background-color: $box-color;
+        border-color: $box-color;
         min-height: 100vh;
     }
 
     &.item {
-        background-color: $item-color;
+        border-color: $item-color;
         min-height: 100vh;
     }
 
     &.activities {
-        background-color: #f9cb9c;
+        background-color: $activity-color;
         min-height: 100vh;
+    }
+}
+
+.list-container {
+    border-left: solid 3px;
+    min-height: 100vh;
+    padding: 6px;
+
+    &.item {
+        border-color: $item-color
+    }
+
+    &.box {
+        border-color: $box-color
+    }
+
+    &.activities {
+        border-color: $activity-color
     }
 }
 
@@ -719,15 +753,15 @@ button:focus {
         transform: translate(105vw, -25vh) scale(1.3) rotate(18deg);
         opacity: 0;
     }
-    
+
     10% {
         opacity: 0.8;
     }
-    
+
     80% {
         opacity: 0.7;
     }
-    
+
     100% {
         transform: translate(-18vw, 40vh) scale(0.65) rotate(-24deg);
         opacity: 0;
@@ -767,7 +801,7 @@ button:focus {
     78% {
         opacity: 0.75;
     }
-    
+
     100% {
         transform: translate(56vw, -1vh) scale(0.8) rotate(22deg);
         opacity: 0;
@@ -787,7 +821,7 @@ button:focus {
     78% {
         opacity: 0.75;
     }
-    
+
     100% {
         transform: translate(120vw, -1vh) scale(0.8) rotate(10deg);
         opacity: 0;

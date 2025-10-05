@@ -14,7 +14,6 @@ interface Props {
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent, lockedFields, hidePhotoInputs }: Props) {
-  console.log('!!!! ItemForm')
   const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
 
   const { similarItems, loading, error, hasQuery } = useSimilarItems({

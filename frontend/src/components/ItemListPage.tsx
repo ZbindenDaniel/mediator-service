@@ -41,7 +41,7 @@ export default function ItemListPage() {
 
   return (
     // <div className="container item">
-    <div className="">
+    <div className="list-container item">
       <h2>Alle Artikel</h2>
       {/* <div className="filter-bar">
         <input type="checkbox" id="unplaced" name="unplaced" value="Bike" checked={showUnplaced}

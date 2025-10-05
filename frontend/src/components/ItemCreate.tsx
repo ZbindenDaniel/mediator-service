@@ -506,6 +506,11 @@ export default function ItemCreate() {
   };
 
   const handleManualSubmit = async (data: Partial<ItemFormData>) => {
+    console.log('Submitting manual edit item details', data);
+    if (creating) {
+      console.warn('Skipping manual submit; creation already running.');
+      return;
+    }
     const merged: Partial<ItemFormData> = {
       ...basicInfo,
       ...data,
@@ -596,6 +601,7 @@ export default function ItemCreate() {
   );
 
   console.log(`Rendering item create form (step ${shouldUseAgenticForm ? agenticStep : creationStep})`, shouldUseAgenticForm);
+  // TODO: if(isLoading) display loading state LoadingPage
   if (shouldUseAgenticForm) {
     return (
       <ItemForm_Agentic

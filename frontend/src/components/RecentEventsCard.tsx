@@ -40,7 +40,7 @@ export default function RecentEventsCard({ events }: Props) {
     <div className="card">
        <div className="card-header">
               <h2 id='activity'>Letzte Aktivitäten</h2>
-              <Link to="/activities" className="muted" aria-label="Alle Aktivitäten anzeigen">
+              <Link to="/activities" id="all-events" aria-label="Alle Aktivitäten anzeigen">
                 Alle
               </Link>
             </div>

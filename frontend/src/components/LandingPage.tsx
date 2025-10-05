@@ -63,7 +63,7 @@ export default function LandingPage() {
         console.error('Printer status fetch failed', err);
         setPrinterOk(false);
       } finally {
-        // setIsOverviewLoading(false);
+        setIsOverviewLoading(false);
       }
     })();
   }, []);
