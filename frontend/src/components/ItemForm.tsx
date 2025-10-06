@@ -67,9 +67,6 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
   const shouldShowSuggestions = hasQuery && lockedFields?.Artikelbeschreibung !== 'hidden' && lockedFields?.Artikelbeschreibung !== 'readonly';
 
   const photoPreview = useMemo(() => {
-    if (!hidePhotoInputs) {
-      return null;
-    }
     const photos = [form.picture1, form.picture2, form.picture3].filter(Boolean);
     if (photos.length === 0) {
       return null;
@@ -86,7 +83,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
         </ul>
       </div>
     );
-  }, [form.picture1, form.picture2, form.picture3, hidePhotoInputs]);
+  }, [form.picture1, form.picture2, form.picture3]);
 
   return (
     <div className='container item'>
@@ -114,6 +111,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
 
           {!hidePhotoInputs ? (
             <>
+              {photoPreview}
               {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
               <div className="row">
                 <label>
