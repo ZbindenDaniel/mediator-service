@@ -32,6 +32,18 @@ export default function BoxDetail({ boxId }: Props) {
     if (!box) return;
 
     let confirmed = false;
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic cancel user alert', error);
+      }
+      return;
+    }
     try {
       confirmed = await dialogService.confirm({
         title: 'Behälter löschen',
@@ -201,7 +213,7 @@ export default function BoxDetail({ boxId }: Props) {
                     console.error('Note save failed', err);
                     setNoteStatus('Fehler');
                   }
-                } }>
+                }}>
                   <div className=''>
                     <div className='row'>
                       <textarea

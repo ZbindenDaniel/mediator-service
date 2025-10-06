@@ -75,12 +75,12 @@ export function AgenticStatusCard({
       {error ? (
         <p className="muted" style={{ color: '#a30000' }}>{error}</p>
       ) : null}
-      { status.label != 'Abgebrochen' ?(
+      {status.label != 'Abgebrochen' ? (
         <div className='row'>
-        <button type="button" className="btn" onClick={onCancel}>
-          Abbrechen
-        </button>
-      </div>
+          <button type="button" className="btn" onClick={onCancel}>
+            Abbrechen
+          </button>
+        </div>
       ) : null}
       {!needsReview && hasFailure ? (
         <div className='row'>
@@ -569,6 +569,18 @@ export default function ItemDetail({ itemId }: Props) {
   async function handleDelete() {
     if (!item) return;
     let confirmed = false;
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic cancel user alert', error);
+      }
+      return;
+    }
     try {
       confirmed = await dialogService.confirm({
         title: 'Artikel löschen',
@@ -622,7 +634,7 @@ export default function ItemDetail({ itemId }: Props) {
               <div className='row'>
 
                 <table className="details">
-                    <tbody>
+                  <tbody>
                     {([
                       [
                         'Erstellt von',
@@ -646,17 +658,29 @@ export default function ItemDetail({ itemId }: Props) {
                       // ['Kivi-Link', item.WmsLink]
                     ] as [string, any][]).map(([k, v]) => (
                       <tr key={k} className="responsive-row">
-                      <th className="responsive-th">{k}</th>
-                      <td className="responsive-td">{v ?? ''}</td>
+                        <th className="responsive-th">{k}</th>
+                        <td className="responsive-td">{v ?? ''}</td>
                       </tr>
                     ))}
-                    </tbody>
+                  </tbody>
                 </table>
               </div>
               <div className='row'>
                 <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
                 <button type="button" className="btn" onClick={async () => {
                   let confirmed = false;
+                  const actor = await ensureUser();
+                  if (!actor) {
+                    try {
+                      await dialogService.alert({
+                        title: 'Aktion nicht möglich',
+                        message: 'Bitte zuerst oben den Benutzer setzen.'
+                      });
+                    } catch (error) {
+                      console.error('Failed to display agentic cancel user alert', error);
+                    }
+                    return;
+                  }
                   try {
                     confirmed = await dialogService.confirm({
                       title: 'Artikel entnehmen',
@@ -667,24 +691,24 @@ export default function ItemDetail({ itemId }: Props) {
                   } catch (error) {
                     console.error('Failed to confirm inline item removal', error);
                     return;
+                  }
+                  try {
+                    const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ actor })
+                    });
+                    if (res.ok) {
+                      const j = await res.json();
+                      setItem({ ...item, Auf_Lager: j.quantity, BoxID: j.boxId });
+                      console.log('Item entnommen', item.ItemUUID);
+                    } else {
+                      console.error('Failed to remove item', res.status);
                     }
-                    try {
-                      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ actor })
-                      });
-                      if (res.ok) {
-                        const j = await res.json();
-                        setItem({ ...item, Auf_Lager: j.quantity, BoxID: j.boxId });
-                        console.log('Item entnommen', item.ItemUUID);
-                      } else {
-                        console.error('Failed to remove item', res.status);
-                      }
-                    } catch (err) {
-                      console.error('Entnahme fehlgeschlagen', err);
-                    }
-                  }}
+                  } catch (err) {
+                    console.error('Entnahme fehlgeschlagen', err);
+                  }
+                }}
                 >
                   Entnehmen
                 </button>

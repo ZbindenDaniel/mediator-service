@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Item, ItemRef } from '../../../../models';
-import type { Item } from '../../../../models';
 import { ensureUser, getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
