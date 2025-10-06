@@ -512,17 +512,16 @@ export default function ItemCreate() {
     }
     try {
       const referenceFields = extractReferenceFields(item);
+      const { picture1: _basicPicture1, picture2: _basicPicture2, picture3: _basicPicture3, ...basicInfoWithoutPictures } =
+        basicInfo;
       const clone: Partial<ItemFormData> = {
         ...referenceFields,
-        ...basicInfo,
+        ...basicInfoWithoutPictures,
         BoxID: basicInfo.BoxID || boxId || undefined,
         Artikelbeschreibung: basicInfo.Artikelbeschreibung,
         Artikel_Nummer: basicInfo.Artikel_Nummer || referenceFields.Artikel_Nummer,
         Kurzbeschreibung: basicInfo.Kurzbeschreibung || referenceFields.Kurzbeschreibung,
-        Auf_Lager: basicInfo.Auf_Lager,
-        picture1: basicInfo.picture1,
-        picture2: basicInfo.picture2,
-        picture3: basicInfo.picture3
+        Auf_Lager: basicInfo.Auf_Lager
       };
       if ('ItemUUID' in clone) {
         delete clone.ItemUUID;
@@ -536,7 +535,9 @@ export default function ItemCreate() {
 
   const handleSkipMatches = () => {
     console.log('No duplicate selected, switching to manual edit');
-    setManualDraft((prev) => ({ ...prev, ...basicInfo }));
+    const { picture1: _basicPicture1, picture2: _basicPicture2, picture3: _basicPicture3, ...basicInfoWithoutPictures } =
+      basicInfo;
+    setManualDraft((prev) => ({ ...prev, ...basicInfoWithoutPictures }));
     setCreationStep('manualEdit');
   };
 
@@ -546,16 +547,15 @@ export default function ItemCreate() {
       console.warn('Skipping manual submit; creation already running.');
       return;
     }
+    const { picture1: _basicPicture1, picture2: _basicPicture2, picture3: _basicPicture3, ...basicInfoWithoutPictures } =
+      basicInfo;
     const merged: Partial<ItemFormData> = {
-      ...basicInfo,
+      ...basicInfoWithoutPictures,
       ...data,
       BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
       Artikelbeschreibung: basicInfo.Artikelbeschreibung,
       Artikel_Nummer: basicInfo.Artikel_Nummer,
-      Auf_Lager: basicInfo.Auf_Lager,
-      picture1: basicInfo.picture1,
-      picture2: basicInfo.picture2,
-      picture3: basicInfo.picture3
+      Auf_Lager: basicInfo.Auf_Lager
     };
     await submitNewItem(merged, 'manual-edit');
   };
@@ -691,7 +691,6 @@ export default function ItemCreate() {
         </>
       }
       lockedFields={manualLockedFields}
-      hidePhotoInputs
     />
   );
 }
