@@ -100,10 +100,10 @@ textarea {
 }
 
 #header-back-button {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: bolder;
     text-decoration: none;
-    // border: 1px solid --muted;
+    display: contents;
     border-radius: 50%;
     padding: 4px 12px;
     background: transparent;
@@ -427,7 +427,7 @@ div {
     justify-content: center;
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(3px);
-    z-index: 1100;
+    z-index: 990;
     padding: 24px;
 }
 

@@ -12,7 +12,7 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
 
   async function handleClick() {
     try {
-      setStatus('Printing...');
+      setStatus('drucken...');
       const url = boxId
         ? `/api/print/box/${encodeURIComponent(boxId)}`
         : `/api/print/item/${encodeURIComponent(itemId || '')}`;
