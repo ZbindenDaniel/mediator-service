@@ -1,6 +1,5 @@
 Datum erfasst,Artikel-Nummer,Grafikname(n),Artikelbeschreibung,Auf_Lager,Verkaufspreis,Kurzbeschreibung,Langtext,Hersteller,Länge(mm),Breite(mm),Höhe(mm),Gewicht(kg),Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop),Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop),Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop),Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop),Veröffentlicht_Status,Shopartikel,Artikeltyp,Einheit,itemUUID,BoxID,Location,UpdatedAt
-,00001,/media/I-061025-0001/00001-1.png,Test,1,0,,,,,,,,,,,,no,0,,Stück,I-061025-0001,B-061025-0001,H,2025-10-06T20:53:08.198Z
-,7000,7000.jpg,Fujitsu Esprimo D756 E90+,1,130,Intel 6500 Core i5 4x3.20 GHz,Intel HD Graphics 530 SM / 8 GB DDR4 / 256 GB SSD,Fujitsu / Fujitsu-Siemens / Siemens,350,90,30,2,,,,,yes,0,part,Stck,080925-7000,,,2025-10-06T20:53:36.259Z
+,7000,7000.jpg,Fujitsu Esprimo D756 E90+,1,130,Intel 6500 Core i5 4x3.20 GHz,Intel HD Graphics 530 SM / 8 GB DDR4 / 256 GB SSD,Fujitsu / Fujitsu-Siemens / Siemens,350,90,30,2,,,,,yes,0,part,Stck,080925-7000,,,2025-10-06T21:41:06.641Z
 ,7001,7001.jpg,HP Compaq 8200 elite CMT i5,1,130,"Intel Core i5 3.30GHz,HD 240GB, RAM 8GB","Hersteller: HP Compaq
 Bauform: Convertible Minitower (CMT)
 Kerne: 4
@@ -14,14 +13,14 @@ Grafikkarte onboard: Intel HD Graphics
 Audio: High Definition Audio
 Interner Lautsprecher: Ja
 Netzteil: Intern 320 Watt
-Farbe: Schwarz / Silber",HP / Compaq,440,180,450,11,,,,,yes,0,part,Stck,080925-7001,,,2025-10-06T20:53:36.259Z
-,7002,7002.jpg,HP Compaq D530 CMT,1,0,"1024 RAM, 80 GB HDD, VGA Prozessor (CPU): Intel Pentium 4","Farbe: Schwarz/Silber  Formfaktor: Miditower  / Grafik: Die CPU verfügt über eine integrierte Grafikeinheit / Laufwerk-Schnittstek: IDE / Anschlüsse: USB X4 , PS/ 2 X2, Ethernet(RJ45) X1",HP / Compaq,440,170,450,14.2,,,,,yes,0,part,Stck,080925-7002,,,2025-10-06T20:53:36.259Z
+Farbe: Schwarz / Silber",HP / Compaq,440,180,450,11,,,,,yes,0,part,Stck,080925-7001,,,2025-10-06T21:41:06.641Z
+,7002,7002.jpg,HP Compaq D530 CMT,1,0,"1024 RAM, 80 GB HDD, VGA Prozessor (CPU): Intel Pentium 4","Farbe: Schwarz/Silber  Formfaktor: Miditower  / Grafik: Die CPU verfügt über eine integrierte Grafikeinheit / Laufwerk-Schnittstek: IDE / Anschlüsse: USB X4 , PS/ 2 X2, Ethernet(RJ45) X1",HP / Compaq,440,170,450,14.2,,,,,yes,0,part,Stck,080925-7002,,,2025-10-06T21:41:06.641Z
 ,7003,7003.jpg,HP Pavilion a6000 Serie,1,0,"Intel duo CPU E4400 RAM: 2 GB DDR2 (erweiterbar), 250 GB HDD, VGA, 230 V","Formfaktor – Tower
 Optische Speicherung – DVDRW-Laufwerk
 Grafikkarte – Integriert
 Audioausgabe – Soundkarte – Stereo
 Netzwerk – Netzwerkkarte – Ethernet, Fast Ethernet
-Anschlüsse – 6 USB-Ports, Kartenleser",HP / Compaq,400,170,390,5,,,,,yes,0,part,Stck,080925-7003,,,2025-10-06T20:53:36.259Z
+Anschlüsse – 6 USB-Ports, Kartenleser",HP / Compaq,400,170,390,5,,,,,yes,0,part,Stck,080925-7003,,,2025-10-06T21:41:06.641Z
 ,7004,7004.jpg,Fujitsu Esprimo P9900 E-STAR5,1,0,"Intel® Core™ i7,  RAM 6GB, 1TB SATA","Maximaler interner Speicher: vom
 Prozessor unterstützt 16 GB, Anzahl der Prozessorkerne 4
 Prozessor-Threads 8
@@ -32,7 +31,7 @@ Prozessorsockel LGA 1156 (Socket H)
 Processor cache 8 MB
 Prozessor Cache Typ Smart, CacheAnzahl der USB 2.0 Ports * 10, Audio-System HD
 Audio Kanäle 5.1 Kanäle
-Produkttyp * PC",Fujitsu / Fujitsu-Siemens / Siemens,392,203,390,12,,,,,yes,0,part,Stck,080925-7004,,,2025-10-06T20:53:36.259Z
+Produkttyp * PC",Fujitsu / Fujitsu-Siemens / Siemens,392,203,390,12,,,,,yes,0,part,Stck,080925-7004,,,2025-10-06T21:41:06.641Z
 ,7005,7005.jpg,HP Z400,1,0,"Xeon 3.33GHz, 16GB RAM, 160GB SSD","LaufwerkDVD-Brenner, Max.Arbeitsspeichergrösse: 24 GB, 
 Controller-Typ: SATA-Controller, 
 Ethernet LAN
@@ -46,7 +45,7 @@ USB 2.0 (frontseitig): 2
 Kopfhörer (frontseitig): 1
 Mikrofon (frontseitig): 1
 USB 2.0: 6
-Ethernet (RJ-45): 1",HP / Compaq,455,170,450,13.5,,,,,yes,0,part,Stck,080925-7005,,,2025-10-06T20:53:36.259Z
+Ethernet (RJ-45): 1",HP / Compaq,455,170,450,13.5,,,,,yes,0,part,Stck,080925-7005,,,2025-10-06T21:41:06.641Z
 ,7006,7006.jpg,HP Z800 Workstation,2,0,"Formfaktor: Tower, Prozessor: Intel Xeon, Arbeitsspeicher: 24 GB, Gesamtkapazität: 1 TB","Material: Aluminium, Formfaktor: Tower, Installierte CPU: 1, Max. unterstützt: 2, Kommunikation: Netzwerk Dual Gigabit Ethernet
 Wake on LAN: Ja PXE support, USB 2.0: 6, Ethernet (RJ45): 2
 Besonderheiten (KommSchnittstellen
@@ -56,7 +55,7 @@ SAS
 8
 PCI
 1
-,",HP / Compaq,530,190,45,13.5,,,,,yes,0,part,Stck,080925-7006,,,2025-10-06T20:53:36.259Z
+,",HP / Compaq,530,190,45,13.5,,,,,yes,0,part,Stck,080925-7006,,,2025-10-06T21:41:06.641Z
 ,7007,7007.jpg,Fujitsu Esprimo E900 E90+,1,0,"5 2400 3.1GHz, 4GB, 500GB HDD, DVI, Displayport","Formfaktor:  Small Form Factor (SFF), 
 Gehäusefarbe: Schwarz, USB 2.0 (frontseitig) 4,  Schnittstellen (intern)
 SATA II (3 Gbit/s)
@@ -70,11 +69,11 @@ PCI Express x1 (Low Profile)
 PCI Express x4 (Low Profile)
 1
 PCI Express x16 (Low Profile)
-1",HP / Compaq,380,340,100,10,,,,,yes,0,part,Stck,080925-7007,,,2025-10-06T20:53:36.259Z
+1",HP / Compaq,380,340,100,10,,,,,yes,0,part,Stck,080925-7007,,,2025-10-06T21:41:06.641Z
 ,7008,7008.jpg,Terra PC  1300062,2,0,"Intel Core i3-6100 2 70GHz 8GB 256GB SSD, HDM, VGA, DVI,","Optisches - LaufwerkDVD-Brenner DL, Laufwerk-Schnittstel: SATA, Chipsatz (Audio): Realtek ALC888, Kompatibiltät: 5.1, USB 2.0
-6",TerraTec,420,180,440,0,,,,,yes,0,part,Stck,080925-7008,,,2025-10-06T20:53:36.259Z
-,7009,7009.png,Acer Aspire M5811,1,0,Leeres Gehäuse,Einer Kartenleser.,Acer,420,18,380,2,,,,,yes,0,part,Stck,080925-7009,,,2025-10-06T20:53:36.259Z
-,7010,7010.png,Vipero (Asus P5G41C-M,1,0,"Core (TM) 2 CPU Q93008RAM,256 HDD, VGA,HDMI",,Asus,480,200,430,10,,,,,yes,0,part,Stck,080925-7010,,,2025-10-06T20:53:36.259Z
+6",TerraTec,420,180,440,0,,,,,yes,0,part,Stck,080925-7008,,,2025-10-06T21:41:06.641Z
+,7009,7009.png,Acer Aspire M5811,1,0,Leeres Gehäuse,Einer Kartenleser.,Acer,420,18,380,2,,,,,yes,0,part,Stck,080925-7009,,,2025-10-06T21:41:06.641Z
+,7010,7010.png,Vipero (Asus P5G41C-M,1,0,"Core (TM) 2 CPU Q93008RAM,256 HDD, VGA,HDMI",,Asus,480,200,430,10,,,,,yes,0,part,Stck,080925-7010,,,2025-10-06T21:41:06.641Z
 ,7011,7011.jpg,Lenovo ThinkCentre M72Z,1,0,"Intel Core i3-2120, 4 GB RAM, 500 GB HDD","Festplatten-Technologie
 HDD (Hard-Disk-Drive)
 Festplatten-Schnittstelle
@@ -110,38 +109,38 @@ USB 2.0
 Ethernet (RJ-45)
 1
 DisplayPort
-1",Lenovo / IBM,8,51,41,7.1,,,,,yes,0,part,Stck,080925-7011,,,2025-10-06T20:53:36.259Z
-,7012,7012.jpg,HP EliteOne 800 G2,1,0,"All-in-One PC - Sehr gut - Intel Core i5 6500 @ 3,2 GHz - 8 GB - 256 GB SSD – DVD-ROM","Displaygrösse: 23 ZollAuflösung: FHD (1920x1080)Farbe: Schwarz/ SilberSchnittstellen:6 x USB 31 x USB-C1 x DisplayPort1 x LAN1 x SD Kartenleser1 x Audio Eingang2 x Audio AusgangTechnische DatenGrading: Sehr gutlWebcam: JaSchnittstellen: 1x Audio - Eingang - 3.5 mm, 1x DisplayPort, 1x LAN RJ-45, 1x SD-Kartenleser, 1x USB-C, 2x Audio - Ausgang - 3.5 mm, 6x USB 3 Typ AMehr anzeigenLaufwerk: DVD-ROMDisplaygrösse: 23,0 ZollDisplayauflösung: 1920 x 1080 FHDFormfaktor: All-in-One PC",HP / Compaq,50,540,41,3.7,,,,,yes,0,part,Stck,080925-7012,,,2025-10-06T20:53:36.259Z
-,7013,7013.jpg,HP Pavilion p6-2220ezm,1,0,"Intel Core i5-3450 CPU@3.10GHz. 8GB RAM, 256HDD.Displayport, HDMI",,HP / Compaq,16,360,380,3,,,,,yes,0,part,Stck,080925-7013,,,2025-10-06T20:53:36.259Z
-,7014,,Apple Mac Pro Tower Model A1186,1,0,,,,0,0,0,0,,,,,yes,0,part,Stck,080925-7014,,,2025-10-06T20:53:36.259Z
-,7015,7015.jpg,HP EliteOne 800 G1 Aio,2,0,"Intel Core i5-4570S CPU@2.90GHz, 8192 MB DDR3 RAM, 256 GB SSD, 23 Zoll","FHD (1920x1080)Farbe: SchwarzSchnittstellen:6 x USB 31 x DisplayPort1 x LAN2 x PS21 x COM2 x Audio Ausgang1 x Audio EingangFormfaktor: All-in-One PCSchnittstellen: 1x Audio - Eingang - 3.5 mm, 1x COM, 1x DisplayPort, 1x LAN RJ-45, 2x Audio - Ausgang - 3.5 mm, 2x PS/2, 6x USB 3 Typ AMehr anzeigenLaufwerk: DVD-RWZustand: GebrauchtWebcam: Ja",HP / Compaq,25,55,58,11.8,,,,,yes,0,part,Stck,080925-7015,,,2025-10-06T20:53:36.259Z
+1",Lenovo / IBM,8,51,41,7.1,,,,,yes,0,part,Stck,080925-7011,,,2025-10-06T21:41:06.641Z
+,7012,7012.jpg,HP EliteOne 800 G2,1,0,"All-in-One PC - Sehr gut - Intel Core i5 6500 @ 3,2 GHz - 8 GB - 256 GB SSD – DVD-ROM","Displaygrösse: 23 ZollAuflösung: FHD (1920x1080)Farbe: Schwarz/ SilberSchnittstellen:6 x USB 31 x USB-C1 x DisplayPort1 x LAN1 x SD Kartenleser1 x Audio Eingang2 x Audio AusgangTechnische DatenGrading: Sehr gutlWebcam: JaSchnittstellen: 1x Audio - Eingang - 3.5 mm, 1x DisplayPort, 1x LAN RJ-45, 1x SD-Kartenleser, 1x USB-C, 2x Audio - Ausgang - 3.5 mm, 6x USB 3 Typ AMehr anzeigenLaufwerk: DVD-ROMDisplaygrösse: 23,0 ZollDisplayauflösung: 1920 x 1080 FHDFormfaktor: All-in-One PC",HP / Compaq,50,540,41,3.7,,,,,yes,0,part,Stck,080925-7012,,,2025-10-06T21:41:06.641Z
+,7013,7013.jpg,HP Pavilion p6-2220ezm,1,0,"Intel Core i5-3450 CPU@3.10GHz. 8GB RAM, 256HDD.Displayport, HDMI",,HP / Compaq,16,360,380,3,,,,,yes,0,part,Stck,080925-7013,,,2025-10-06T21:41:06.641Z
+,7014,,Apple Mac Pro Tower Model A1186,1,0,,,,0,0,0,0,,,,,yes,0,part,Stck,080925-7014,,,2025-10-06T21:41:06.641Z
+,7015,7015.jpg,HP EliteOne 800 G1 Aio,2,0,"Intel Core i5-4570S CPU@2.90GHz, 8192 MB DDR3 RAM, 256 GB SSD, 23 Zoll","FHD (1920x1080)Farbe: SchwarzSchnittstellen:6 x USB 31 x DisplayPort1 x LAN2 x PS21 x COM2 x Audio Ausgang1 x Audio EingangFormfaktor: All-in-One PCSchnittstellen: 1x Audio - Eingang - 3.5 mm, 1x COM, 1x DisplayPort, 1x LAN RJ-45, 2x Audio - Ausgang - 3.5 mm, 2x PS/2, 6x USB 3 Typ AMehr anzeigenLaufwerk: DVD-RWZustand: GebrauchtWebcam: Ja",HP / Compaq,25,55,58,11.8,,,,,yes,0,part,Stck,080925-7015,,,2025-10-06T21:41:06.641Z
 ,7016,7016.jpg,Alcatel  OS6450-P10,1,0,"Anschlüsse: 10x RJ45, 0x SFP, 2x SFP+, 0x QSFP+, 0x SFP28, 0x QSFP28
-Halbe Rack-Breite (21,5 cm)",,Alcatel,28,23,5,1,,,,,yes,0,part,Stck,080925-7016,,,2025-10-06T20:53:36.259Z
-,7017,7017.jpg,Sunrise Internet Box Fiber,3,0,10 Gbit/s  Internet verbindung mit FTTH technologie,,Swisscom,13,13,25,680,,,,,yes,0,part,Stck,080925-7017,,,2025-10-06T20:53:36.259Z
-,7018,7018.jpg,Gigaset C430A,1,0,"bis zu 6 mobilteile erweiterbar, kalender bis zu 30 termine und 3 personen.konferenzschaltung mit 1 externem und 2 internen teilnehmern",,Gigaset Communications / Siemens SHC,25,17,7,200,,,,,yes,0,part,Stck,080925-7018,,,2025-10-06T20:53:36.259Z
-,7019,7019.jpg,Gigaset DX800A all in one,1,0,"9cm display, bis zu 6 mobilteilen für 4 gleichzeitige gespräche",,Gigaset Communications / Siemens SHC,26,18,18,771,,,,,yes,0,part,Stck,080925-7019,,,2025-10-06T20:53:36.259Z
-,7020,7020.jpg,Alcatel OS6250-24,1,0,OS6250-24 fast ethernet- chassis Mit AOS Enterprise-Software. Bietet 24 RJ-45 10/100 BaseT oder 100/1000 BaseX Combo und zwei dedizierte 2.5G HDMI stacking Portas. 1U x ½ Rackformfaktor,connect,Alcatel,29,21,4,1.7,,,,,yes,0,part,Stck,080925-7020,,,2025-10-06T20:53:36.259Z
-,6532,7021.jpg,Lenovo T410,1,0,"Processor 1x Intel Core u5-520M @ 2.4GHz, Memory: 6GB DDR3 Ram, Storage 320GB HDD Graphics: Intel HD Graphics",,Lenovo / IBM,33,24,3,2.6,,,,,yes,0,part,Stck,080925-6532,,,2025-10-06T20:53:36.259Z
-,6190,7022.jpg,Lenovo T420s,1,0,,,Lenovo / IBM,34,23,2,2.5,,,,,yes,0,part,Stck,080925-6190,B-061025-0004,C,2025-10-06 20:54:20
-,7023,7023.jpg,Hp probook 430 G5,1,0,"Intel Core i7-8550U (1.8GHz 8M Cache) - 13.3"" Full HD LED 1920 x 1080 - 8GB DDR4 2400MHz - 256GB SSD - Intel UHD Graphics 620 - WebCam - Gigabit Ethernet - Wi-Fi 802.11 a/b/g/n/ac - Bluetooth 4.2 - Windows 10 Pro 64-bit",,HP / Compaq,33,23,1,1.5,,,,,yes,0,part,Stck,080925-7023,,,2025-10-06T20:53:36.259Z
-,6235,,Toshiba Tecra R950-19D,1,0,"15.6"", 1600x900 pixel, TFT (LED) • Intel HD Graphics 4000 • 500GB HDD, DVD±RW DL/RAM • 1x VGA, DisplayPort, Gigabit Ethernet, 802.11 a/b/g/n, Bluetooth 4.0, USB 3.0, eSATA, ExpressCard/34 • webcam, Windows 8 Professional (64-bit)",,Toshiba,38,25,2,2.5,,,,,yes,0,part,Stck,080925-6235,,,2025-10-06T20:53:36.259Z
+Halbe Rack-Breite (21,5 cm)",,Alcatel,28,23,5,1,,,,,yes,0,part,Stck,080925-7016,,,2025-10-06T21:41:06.641Z
+,7017,7017.jpg,Sunrise Internet Box Fiber,3,0,10 Gbit/s  Internet verbindung mit FTTH technologie,,Swisscom,13,13,25,680,,,,,yes,0,part,Stck,080925-7017,,,2025-10-06T21:41:06.641Z
+,7018,7018.jpg,Gigaset C430A,1,0,"bis zu 6 mobilteile erweiterbar, kalender bis zu 30 termine und 3 personen.konferenzschaltung mit 1 externem und 2 internen teilnehmern",,Gigaset Communications / Siemens SHC,25,17,7,200,,,,,yes,0,part,Stck,080925-7018,,,2025-10-06T21:41:06.641Z
+,7019,7019.jpg,Gigaset DX800A all in one,1,0,"9cm display, bis zu 6 mobilteilen für 4 gleichzeitige gespräche",,Gigaset Communications / Siemens SHC,26,18,18,771,,,,,yes,0,part,Stck,080925-7019,,,2025-10-06T21:41:06.641Z
+,7020,7020.jpg,Alcatel OS6250-24,1,0,OS6250-24 fast ethernet- chassis Mit AOS Enterprise-Software. Bietet 24 RJ-45 10/100 BaseT oder 100/1000 BaseX Combo und zwei dedizierte 2.5G HDMI stacking Portas. 1U x ½ Rackformfaktor,connect,Alcatel,29,21,4,1.7,,,,,yes,0,part,Stck,080925-7020,,,2025-10-06T21:41:06.641Z
+,6532,7021.jpg,Lenovo T410,1,0,"Processor 1x Intel Core u5-520M @ 2.4GHz, Memory: 6GB DDR3 Ram, Storage 320GB HDD Graphics: Intel HD Graphics",,Lenovo / IBM,33,24,3,2.6,,,,,yes,0,part,Stck,080925-6532,,,2025-10-06T21:41:06.641Z
+,6190,7022.jpg,Lenovo T420s,1,0,,,Lenovo / IBM,34,23,2,2.5,,,,,yes,0,part,Stck,080925-6190,B-061025-0004,C,2025-10-06T21:41:06.641Z
+,7023,7023.jpg,Hp probook 430 G5,1,0,"Intel Core i7-8550U (1.8GHz 8M Cache) - 13.3"" Full HD LED 1920 x 1080 - 8GB DDR4 2400MHz - 256GB SSD - Intel UHD Graphics 620 - WebCam - Gigabit Ethernet - Wi-Fi 802.11 a/b/g/n/ac - Bluetooth 4.2 - Windows 10 Pro 64-bit",,HP / Compaq,33,23,1,1.5,,,,,yes,0,part,Stck,080925-7023,,,2025-10-06T21:41:06.641Z
+,6235,,Toshiba Tecra R950-19D,1,0,"15.6"", 1600x900 pixel, TFT (LED) • Intel HD Graphics 4000 • 500GB HDD, DVD±RW DL/RAM • 1x VGA, DisplayPort, Gigabit Ethernet, 802.11 a/b/g/n, Bluetooth 4.0, USB 3.0, eSATA, ExpressCard/34 • webcam, Windows 8 Professional (64-bit)",,Toshiba,38,25,2,2.5,,,,,yes,0,part,Stck,080925-6235,,,2025-10-06T21:41:06.641Z
 ,7025,7025.jpg,HP pavilion dm1,1,0,"Ultra portabel mit einem Gewicht von nur 1,55 kg
     HD-Display mit einer Auflösung von 1366 x 768 Pixeln
     Integrierte Webcam für Videoanrufe
     500 GB HDD für umfangreichen Speicherplatz
-    Bluetooth-Konnektivität für drahtlose Übertragungen.",,HP / Compaq,29,21,3,1.6,,,,,yes,0,part,Stck,080925-7025,,,2025-10-06T20:53:36.259Z
+    Bluetooth-Konnektivität für drahtlose Übertragungen.",,HP / Compaq,29,21,3,1.6,,,,,yes,0,part,Stck,080925-7025,,,2025-10-06T21:41:06.641Z
 ,7026,7026.jpg,Dell Latitude E7470,1,0,"Processor: Intel i5-6300 (2.4 GHz).
     Memory: 8GB RAM.
     Storage: 256GB SSD.
     Graphics Card: Intel HD Graphics 520. 14-inch Display.
-    Operating System: Windows 10, 64-Bit.",,Dell,34,24,1,1.8,,,,,yes,0,part,Stck,080925-7026,,,2025-10-06T20:53:36.259Z
+    Operating System: Windows 10, 64-Bit.",,Dell,34,24,1,1.8,,,,,yes,0,part,Stck,080925-7026,,,2025-10-06T21:41:06.641Z
 ,7027,7027.jpg,Lenovo Thinkpad x220,1,0,"Intel® Core ™ i5-2520M-Prozessor (Dual-Core, 2,50 GHz, 3 MB Cache)
     Intel® Core ™ i7-2620M-Prozessor (Dual-Core, 2.70GHz, 4 MB Cache)
     4 GB DDR3-Speichercontroller (bis zu 1333 MHz)
     Intel Turbo Boost 2.0 (3,20 oder 3,4 GHz)
-    HT-Technologie",,,30,21,3,1.8,,,,,yes,0,part,Stck,080925-7027,,,2025-10-06T20:53:36.259Z
-,7028,7028.jpg,Dell E7270,1,0,ntel HD-Grafik 520 und unterstützt eine Reihe von Anschlüssen über eine Dockingstation. Typischerweise ist es mit Prozessoren der 6. Generation (Skylake) ausgestattet und kann mit verschiedenen RAM- und SSD-Konfigurationen geliefert werden,,Dell,31,22,2,1.26,,,,,yes,0,part,Stck,080925-7028,,,2025-10-06T20:53:36.259Z
-,3661,7029.jpg,Lenovo X230,1,0,"Prozessor Intel Core i5 3230M 2,6GHz (Dual-Core)Arbeitsspeicher 4 GBFestplatte 256 GB SSDBildschirm 12,5"" HD (1366x768) IPSGrafik Intel HD Graphics",,Lenovo / IBM,31,21,3,1.34,,,,,yes,0,part,Stck,080925-3661,B-061025-0002,A,2025-10-06 20:53:47
+    HT-Technologie",,,30,21,3,1.8,,,,,yes,0,part,Stck,080925-7027,,,2025-10-06T21:41:06.641Z
+,7028,7028.jpg,Dell E7270,1,0,ntel HD-Grafik 520 und unterstützt eine Reihe von Anschlüssen über eine Dockingstation. Typischerweise ist es mit Prozessoren der 6. Generation (Skylake) ausgestattet und kann mit verschiedenen RAM- und SSD-Konfigurationen geliefert werden,,Dell,31,22,2,1.26,,,,,yes,0,part,Stck,080925-7028,,,2025-10-06T21:41:06.641Z
+,3661,7029.jpg,Lenovo X230,1,0,"Prozessor Intel Core i5 3230M 2,6GHz (Dual-Core)Arbeitsspeicher 4 GBFestplatte 256 GB SSDBildschirm 12,5"" HD (1366x768) IPSGrafik Intel HD Graphics",,Lenovo / IBM,31,21,3,1.34,,,,,yes,0,part,Stck,080925-3661,B-061025-0002,A,2025-10-06T21:41:06.641Z
 ,6376,7030.jpg,MacBook Pro A1278,1,0,"MagSafe Netzanschluss
     Gigabit Ethernetanschluss
     FireWire 800 Anschluss (bis zu 800 Mbit/s)
@@ -149,54 +148,54 @@ Halbe Rack-Breite (21,5 cm)",,Alcatel,28,23,5,1,,,,,yes,0,part,Stck,080925-7016,
     Thunderbolt Anschluss (bis zu 10 Gbit/s)
     Audioeingang/-ausgang
     SDXC Kartensteckplatz
- Anschluss für Kensington Diebstahlsicherung",,Apple,22,32,2,2,,,,,yes,0,part,Stck,080925-6376,,,2025-10-06T20:53:36.259Z
+ Anschluss für Kensington Diebstahlsicherung",,Apple,22,32,2,2,,,,,yes,0,part,Stck,080925-6376,,,2025-10-06T21:41:06.641Z
 ,7031,7031.jpg,Dell E7250,1,0,"CPU-Generation: 5300U
     CPU-Hersteller: Intel
     CPU-Serie: i5
     Laufwerkgröße: 256 GB
-    RAM-Größe: 8 GB",,Dell,31,22,2,1.26,,,,,yes,0,part,Stck,080925-7031,,,2025-10-06T20:53:36.259Z
-,7032,7032.jpg,Hp Elitebook 840 G5,1,0,"14"", Intel Core i7-8550U, 16 GB, 1000 GB, CH",,HP / Compaq,33,23,1,1.5,,,,,yes,0,part,Stck,080925-7032,,,2025-10-06T20:53:36.259Z
-,7033,7033.jpg,Hp probook 6570b,4,0,Prozessor-FamilieCore i5 3rd GenArbeitsspeicher4 GBBetriebssystem VersionWindows 7 ProfessionalPixelauflösung1600 x 900 PixelTastaturlayoutSchweizArtikelnummer412607,,HP / Compaq,38,26,3,2.5,,,,,yes,0,part,Stck,080925-7033,,,2025-10-06T20:53:36.259Z
+    RAM-Größe: 8 GB",,Dell,31,22,2,1.26,,,,,yes,0,part,Stck,080925-7031,,,2025-10-06T21:41:06.641Z
+,7032,7032.jpg,Hp Elitebook 840 G5,1,0,"14"", Intel Core i7-8550U, 16 GB, 1000 GB, CH",,HP / Compaq,33,23,1,1.5,,,,,yes,0,part,Stck,080925-7032,,,2025-10-06T21:41:06.641Z
+,7033,7033.jpg,Hp probook 6570b,4,0,Prozessor-FamilieCore i5 3rd GenArbeitsspeicher4 GBBetriebssystem VersionWindows 7 ProfessionalPixelauflösung1600 x 900 PixelTastaturlayoutSchweizArtikelnummer412607,,HP / Compaq,38,26,3,2.5,,,,,yes,0,part,Stck,080925-7033,,,2025-10-06T21:41:06.641Z
 ,7034,7034.jpg,Toshiba Qosmio G50-13X,1,0,"Prozessor: Intel Core 2 Duo P7350, Intel Core 2 Duo P8400, Intel Core 2 Duo P8600, Intel Core 2 Duo T9400
 Grafikkarte: NVIDIA GeForce 9600M GT
-Bildschirm: 18.40 Zoll",,Toshiba,44,31,5,4.8,,,,,yes,0,part,Stck,080925-7034,,,2025-10-06T20:53:36.259Z
+Bildschirm: 18.40 Zoll",,Toshiba,44,31,5,4.8,,,,,yes,0,part,Stck,080925-7034,,,2025-10-06T21:41:06.641Z
 ,7035,7035.jpg,CLX. PayPen Wireless,1,0,"Der PayPen ist ein Hightech-Qualitätsprodukt und garantiert höchste Lesegenauigkeit. 
 E-Banking wird mit dem PayPen überraschend einfach und zuverlässig.
- Deshalb vertrauen Schweizer Banken und die PostFinance dem PayPen. Kompatibel zu Windows 7, Vista und XP.",,,23,15,5,300,,,,,yes,0,part,Stck,080925-7035,,,2025-10-06T20:53:36.259Z
+ Deshalb vertrauen Schweizer Banken und die PostFinance dem PayPen. Kompatibel zu Windows 7, Vista und XP.",,,23,15,5,300,,,,,yes,0,part,Stck,080925-7035,,,2025-10-06T21:41:06.641Z
 ,7036,7036.jpg,Zyxel USG 50,1,0,"350 Mbps maximale Durchsatzrate für SPI-Firewall-Verbindungen
     90 Mbps maximale Durchsatzrate für VPN-Verbindungen
     Maximal 10 gleichzeitige Tunnel für IPSec-VPN-Verbindungen.
     Firewall, die für SPI und VPN genutzt werden kann. Keine UTM-Funktionen.
-    Lüfterloses Design",,ZyXEL,24,17,4,3,,,,,yes,0,part,Stck,080925-7036,,,2025-10-06T20:53:36.259Z
+    Lüfterloses Design",,ZyXEL,24,17,4,3,,,,,yes,0,part,Stck,080925-7036,,,2025-10-06T21:41:06.641Z
 ,7037,7037.jpg,Dream Multimedia 500-C,1,0,"250 MHz PowerPC Processor (350 Mips)
 - Linux Operating System
 - 1 x Smartcard-Reader
 - MPEG2 Hardware decoding (DVB kompatibel)
 - Tunervarianten DM500: DVB-S, DVB-C, DVB-T
 - Tunervarianten DM500+: DVB-S
-- Anschluß V.24/RS232",,Dream,20,13,4,564,,,,,yes,0,part,Stck,080925-7037,,,2025-10-06T20:53:36.259Z
+- Anschluß V.24/RS232",,Dream,20,13,4,564,,,,,yes,0,part,Stck,080925-7037,,,2025-10-06T21:41:06.641Z
 ,7039,7039.jpg,FortiGate 30E,1,0,"5x 1-GbE-RJ45
 950 Mbps Firewall Throughput
-150 Mbps Threat Protection Throughput",,Fortinet,22,13,4,900,,,,,yes,0,part,Stck,080925-7039,,,2025-10-06T20:53:36.259Z
+150 Mbps Threat Protection Throughput",,Fortinet,22,13,4,900,,,,,yes,0,part,Stck,080925-7039,,,2025-10-06T21:41:06.641Z
 ,4157,7040.jpg,Internet-Box Light,1,0,"On/Off Taste
 -Power-Anschluss
 -Telefon-Anschluss
 -DSL Internet-Kabel Anschluss
 -Ethernet Kabel Anschluss 2x Datenübertragungsrate bis 100Mbit/s.
--3g/lte (USB)",,Swisscom,16,8,4,300,,,,,yes,0,part,Stck,080925-4157,B-061025-0003,B,2025-10-06 20:54:04
-,7041,7041.jpg,vanderbilt Wireless Smoke Detector,1,0,Voraussichtliche Akkulaufzeit von 10 Jahren Normalbetrieb. Das Gerät ist CPR-zugelassen für EN14604,,,12,12,3,200,,,,,yes,0,part,Stck,080925-7041,,,2025-10-06T20:53:36.259Z
-,7042,7042.jpg,Galaxy Note 10.1,1,0,BetriebssystemAndroidBetriebssystem VersionAndroid 4.0 (Ice Cream Sandwich)Arbeitsspeicher2 GBMax. Bildauflösung1280 x 800 PixelsMobiler ProzessorExynos 4412FarbeWeiss,,Samsung,26,18,1,600,,,,,yes,0,part,Stck,080925-7042,,,2025-10-06T20:53:36.259Z
+-3g/lte (USB)",,Swisscom,16,8,4,300,,,,,yes,0,part,Stck,080925-4157,B-061025-0003,B,2025-10-06T21:41:06.641Z
+,7041,7041.jpg,vanderbilt Wireless Smoke Detector,1,0,Voraussichtliche Akkulaufzeit von 10 Jahren Normalbetrieb. Das Gerät ist CPR-zugelassen für EN14604,,,12,12,3,200,,,,,yes,0,part,Stck,080925-7041,,,2025-10-06T21:41:06.641Z
+,7042,7042.jpg,Galaxy Note 10.1,1,0,BetriebssystemAndroidBetriebssystem VersionAndroid 4.0 (Ice Cream Sandwich)Arbeitsspeicher2 GBMax. Bildauflösung1280 x 800 PixelsMobiler ProzessorExynos 4412FarbeWeiss,,Samsung,26,18,1,600,,,,,yes,0,part,Stck,080925-7042,,,2025-10-06T21:41:06.641Z
 ,7043,7043.jpg,Lenovo Numeric Keypad Gen 2,1,0,"Konnektivität: Über USB
-    Leistungsbedarf: 5 V, 30 mA",,Lenovo / IBM,16,10,2,150,,,,,yes,0,part,Stck,080925-7043,,,2025-10-06T20:53:36.259Z
-,7044,7044.jpg,Zenitel Flowire,1,0,IP durch 2 kabel,,,10,8,3,300,,,,,yes,0,part,Stck,080925-7044,,,2025-10-06T20:53:36.259Z
-,7045,,freecall24.ch,2,0,"für brother HL 5130, 5150, Farbe: Schwarz, seiten ca 6700 @ 5% coverage",,,37,17,20,300,,,,,yes,0,part,Stck,080925-7045,,,2025-10-06T20:53:36.259Z
-,7046,7046.jpg,Zyxel GS-108B v2,1,0,100-240V AC 50/60Hz,,ZyXEL,17,10,3,240,,,,,yes,0,part,Stck,080925-7046,,,2025-10-06T20:53:36.259Z
-,7047,7047.jpg,Lightwin Media Converter,1,0,LWC 10/100 MM SC -FX (SC) Converter 1310nm 20KM,,,7,9,3,424,,,,,yes,0,part,Stck,080925-7047,,,2025-10-06T20:53:36.259Z
-,7048,7048.jpg,iway.ch Fiber Media Converter,1,0,10/100/1000M  Base-TX/FX Single Fiber BIDI Media Converter 20KM SC,,,7,9,3,240,,,,,yes,0,part,Stck,080925-7048,,,2025-10-06T20:53:36.259Z
-,7049,7049.jpg,HP Color LaserJet CÜ1515n,1,0,Produkt-serien nummer: CNCT8CVH6X Firmware Datumscode: 20130923,,HP / Compaq,45,40,26,18,,,,,yes,0,part,Stck,080925-7049,,,2025-10-06T20:53:36.259Z
-,7050,7050.jpg,HP prodesk 400 g5,1,0,"1x Audio / Mikrofon - 3.5 mm Combo, 1x HDMI, 1x LAN RJ-45, 2x DisplayPort, 2x USB 2 Typ A , 4x USB 3 Typ A",,HP / Compaq,175,177,34,1.3,,,,,yes,0,part,Stck,080925-7050,,,2025-10-06T20:53:36.259Z
-,7051,7051.jpg,Asus Barebone P6-P7H55E,1,0,ASUS Booksize P6-P7H55E. Prozessorsockel: LGA 1156 (Socket H). RAM-Speicher maximal: 8 GB. Anzahl Ethernet-LAN-Anschlüsse (RJ-45): 1. Stromversorgung: 200 W (Dimm slot b1 broken),,Asus,185,180,38,1.5,,,,,yes,0,part,Stck,080925-7051,,,2025-10-06T20:53:36.259Z
-,7052,7052.jpg,HP prodesk 400g3,3,0,Arbeitsspeicher8 GBSpeicherkonfiguration1 x 8GBMax. unterstützter Arbeitsspeicher32 GBArbeitsspeichertypDDR4-RAMRAM Geschwindigkeit2133 MHzEingestellte Taktfrequenz2133 MHzArbeitsspeicher FormfaktorDIMMAnzahl Arbeitsspeichersteckplätze2Anzahl freie Arbeitsspeichersteckplätze1,,HP / Compaq,175,177,34,1.3,,,,,yes,0,part,Stck,080925-7052,,,2025-10-06T20:53:36.259Z
+    Leistungsbedarf: 5 V, 30 mA",,Lenovo / IBM,16,10,2,150,,,,,yes,0,part,Stck,080925-7043,,,2025-10-06T21:41:06.641Z
+,7044,7044.jpg,Zenitel Flowire,1,0,IP durch 2 kabel,,,10,8,3,300,,,,,yes,0,part,Stck,080925-7044,,,2025-10-06T21:41:06.641Z
+,7045,,freecall24.ch,2,0,"für brother HL 5130, 5150, Farbe: Schwarz, seiten ca 6700 @ 5% coverage",,,37,17,20,300,,,,,yes,0,part,Stck,080925-7045,,,2025-10-06T21:41:06.641Z
+,7046,7046.jpg,Zyxel GS-108B v2,1,0,100-240V AC 50/60Hz,,ZyXEL,17,10,3,240,,,,,yes,0,part,Stck,080925-7046,,,2025-10-06T21:41:06.641Z
+,7047,7047.jpg,Lightwin Media Converter,1,0,LWC 10/100 MM SC -FX (SC) Converter 1310nm 20KM,,,7,9,3,424,,,,,yes,0,part,Stck,080925-7047,,,2025-10-06T21:41:06.641Z
+,7048,7048.jpg,iway.ch Fiber Media Converter,1,0,10/100/1000M  Base-TX/FX Single Fiber BIDI Media Converter 20KM SC,,,7,9,3,240,,,,,yes,0,part,Stck,080925-7048,,,2025-10-06T21:41:06.641Z
+,7049,7049.jpg,HP Color LaserJet CÜ1515n,1,0,Produkt-serien nummer: CNCT8CVH6X Firmware Datumscode: 20130923,,HP / Compaq,45,40,26,18,,,,,yes,0,part,Stck,080925-7049,,,2025-10-06T21:41:06.641Z
+,7050,7050.jpg,HP prodesk 400 g5,1,0,"1x Audio / Mikrofon - 3.5 mm Combo, 1x HDMI, 1x LAN RJ-45, 2x DisplayPort, 2x USB 2 Typ A , 4x USB 3 Typ A",,HP / Compaq,175,177,34,1.3,,,,,yes,0,part,Stck,080925-7050,,,2025-10-06T21:41:06.641Z
+,7051,7051.jpg,Asus Barebone P6-P7H55E,1,0,ASUS Booksize P6-P7H55E. Prozessorsockel: LGA 1156 (Socket H). RAM-Speicher maximal: 8 GB. Anzahl Ethernet-LAN-Anschlüsse (RJ-45): 1. Stromversorgung: 200 W (Dimm slot b1 broken),,Asus,185,180,38,1.5,,,,,yes,0,part,Stck,080925-7051,,,2025-10-06T21:41:06.641Z
+,7052,7052.jpg,HP prodesk 400g3,3,0,Arbeitsspeicher8 GBSpeicherkonfiguration1 x 8GBMax. unterstützter Arbeitsspeicher32 GBArbeitsspeichertypDDR4-RAMRAM Geschwindigkeit2133 MHzEingestellte Taktfrequenz2133 MHzArbeitsspeicher FormfaktorDIMMAnzahl Arbeitsspeichersteckplätze2Anzahl freie Arbeitsspeichersteckplätze1,,HP / Compaq,175,177,34,1.3,,,,,yes,0,part,Stck,080925-7052,,,2025-10-06T21:41:06.641Z
 ,7053,7053.jpg,HP prodesk 400g4,9,0,"Prozessor
 CPU Typ
 Intel Core i3
@@ -215,7 +214,7 @@ Harddisk
 HD Kapazität
 256GB
 HD Technologie
-SSD NVMe",,HP / Compaq,175,177,34,1.3,,,,,yes,0,part,Stck,080925-7053,,,2025-10-06T20:53:36.259Z
+SSD NVMe",,HP / Compaq,175,177,34,1.3,,,,,yes,0,part,Stck,080925-7053,,,2025-10-06T21:41:06.641Z
 ,7054,7053.jpg,HP prodesk 400g5,3,1,"Processor     Intel Core i5-8500  Graphics Processing Type     Integrated/On-Board Graphics  MPN     lenovodeals  Most Suitable For     Casual Computing, Engineering Coding, Graphic Design, Industrial, Office, Workstation, Home Desktop  Item Length     11.4 in  GPU     Intel UHD Graphics 630  Form Factor     Mini Desktop  Operating System Edition     Windows 11 Pro  Release Year     2018  Item Height     13.5 in  Operating System     Windows 11 Pro  Features     Optical Drive, Wi-Fi, DVD/RW  Hard Drive Capacity     1 TB  Item Width     3.64 in  Warranty     Free Microsoft Authorized Refurbisher 1 Year Limited Warranty  RAM Size     16 GB  Color     Black  Processor Speed     3.00 GHz  California Prop 65 Warning     This product can expose you to chemicals, including Lead, which are known to the State of California to cause cancer.  Brand     Lenovo
 CPU Typ
 Intel Core i3
@@ -234,8 +233,8 @@ Harddisk
 HD Kapazität
 256GB
 HD Technologie
-SSD NVMe",,HP / Compaq,175,177,34,2.3,,,,,yes,0,part,Stck,080925-7054,,,2025-10-06T20:53:36.259Z
-,7055,7055.jpg,PC on wheels Geräteablage,1,1,Um den pc rauf zu stellen mit räder,,,301,251,301,2.2,,,,,yes,0,part,Stck,080925-7055,,,2025-10-06T20:53:36.259Z
+SSD NVMe",,HP / Compaq,175,177,34,2.3,,,,,yes,0,part,Stck,080925-7054,,,2025-10-06T21:41:06.641Z
+,7055,7055.jpg,PC on wheels Geräteablage,1,1,Um den pc rauf zu stellen mit räder,,,301,251,301,2.2,,,,,yes,0,part,Stck,080925-7055,,,2025-10-06T21:41:06.641Z
 ,7056,7056.jpg,Yealink SIP-T48S,1,0,"Telefontyp
 
 VoIP Telefon
@@ -244,19 +243,19 @@ Telefon Anschluss
 Ethernet
 Telefon Funktionen
 
-Freisprecheinrichtung, Grosse Tasten, SMS Funktion",,Yealink,26,21,22,1.77,,,,,yes,0,part,Stck,080925-7056,,,2025-10-06T20:53:36.259Z
-,7057,7057.jpg,HP USB keyboard KB57211,1,0,USB powered 1GB RAM,,HP / Compaq,50,20,5,998,,,,,yes,0,part,Stck,080925-7057,,,2025-10-06T20:53:36.259Z
+Freisprecheinrichtung, Grosse Tasten, SMS Funktion",,Yealink,26,21,22,1.77,,,,,yes,0,part,Stck,080925-7056,,,2025-10-06T21:41:06.641Z
+,7057,7057.jpg,HP USB keyboard KB57211,1,0,USB powered 1GB RAM,,HP / Compaq,50,20,5,998,,,,,yes,0,part,Stck,080925-7057,,,2025-10-06T21:41:06.641Z
 ,7058,7058.jpg,Philips Subwoofer System SPA2310/00,1,0,"2.1 System: 2 Lautsprecher + 1 Subwoofer
 • Gesamtleistung: 20 Watt RMS
 • Starker Bass trotz kompakter Größe
 • Lautstärkeregler am Kabel
-• Anschluss über 3,5 mm Klinke (Plug & Play)",,Philips,350,284,215,5.2,,,,,yes,0,part,Stck,080925-7058,,,2025-10-06T20:53:36.259Z
-,7059,7059.jpg,HP Thunderbolt 3,1,0,"USB 3.0 anschlüsse, 4 mit Gigabit-LAN sound, display ports 2 VGA ports 1, Kompatibel mit: HP EliteBook 830 G5-G6, 840 G5-G6, 850 G5-G6",,HP / Compaq,230,57,17,220,,,,,yes,0,part,Stck,080925-7059,,,2025-10-06T20:53:36.259Z
-,7060,7060.jpg,HP Adapter GB4943.1-2011,1,0,100-240V 1.5A 50-60hz output 19.5v,,HP / Compaq,9,5,3,230,,,,,yes,0,part,Stck,080925-7060,,,2025-10-06T20:53:36.259Z
-,7061,7061.jpg,Hp adapter 708778-001,1,0,18.5V output 65W,,HP / Compaq,9,5,3,230,,,,,yes,0,part,Stck,080925-7061,,,2025-10-06T20:53:36.259Z
-,7062,7062.jpg,HP Travel Adapter,1,0,input 100-240V output 65W,,HP / Compaq,9,5,3,200,,,,,yes,0,part,Stck,080925-7062,,,2025-10-06T20:53:36.259Z
-,7063,7063.jpg,LG 32LS5600,1,0,32 Inch Screen  1920x1080 (FHD),,LG Electronics,746,462,36,5.1,,,,,yes,0,part,Stck,080925-7063,,,2025-10-06T20:53:36.259Z
-,7064,7064.jpg,Keysonic Wireless Multimedia Mini Keyboard,1,0,"Kabellos, Intregrierter Trackball, scroll wheel",,,307,115,3,465,,,,,yes,0,part,Stck,080925-7064,,,2025-10-06T20:53:36.259Z
+• Anschluss über 3,5 mm Klinke (Plug & Play)",,Philips,350,284,215,5.2,,,,,yes,0,part,Stck,080925-7058,,,2025-10-06T21:41:06.641Z
+,7059,7059.jpg,HP Thunderbolt 3,1,0,"USB 3.0 anschlüsse, 4 mit Gigabit-LAN sound, display ports 2 VGA ports 1, Kompatibel mit: HP EliteBook 830 G5-G6, 840 G5-G6, 850 G5-G6",,HP / Compaq,230,57,17,220,,,,,yes,0,part,Stck,080925-7059,,,2025-10-06T21:41:06.641Z
+,7060,7060.jpg,HP Adapter GB4943.1-2011,1,0,100-240V 1.5A 50-60hz output 19.5v,,HP / Compaq,9,5,3,230,,,,,yes,0,part,Stck,080925-7060,,,2025-10-06T21:41:06.641Z
+,7061,7061.jpg,Hp adapter 708778-001,1,0,18.5V output 65W,,HP / Compaq,9,5,3,230,,,,,yes,0,part,Stck,080925-7061,,,2025-10-06T21:41:06.641Z
+,7062,7062.jpg,HP Travel Adapter,1,0,input 100-240V output 65W,,HP / Compaq,9,5,3,200,,,,,yes,0,part,Stck,080925-7062,,,2025-10-06T21:41:06.641Z
+,7063,7063.jpg,LG 32LS5600,1,0,32 Inch Screen  1920x1080 (FHD),,LG Electronics,746,462,36,5.1,,,,,yes,0,part,Stck,080925-7063,,,2025-10-06T21:41:06.641Z
+,7064,7064.jpg,Keysonic Wireless Multimedia Mini Keyboard,1,0,"Kabellos, Intregrierter Trackball, scroll wheel",,,307,115,3,465,,,,,yes,0,part,Stck,080925-7064,,,2025-10-06T21:41:06.641Z
 ,7065,7065.jpg,Toshiba SA40-522,1,0,"Maximum Memory:
 
     2GB
@@ -280,7 +279,7 @@ Bus Architecture:
 
 Mfr's System P/N's:
 
-    PSA40E-0DEWP",,Toshiba,349,244,23,1.8,,,,,yes,0,part,Stck,080925-7065,,,2025-10-06T20:53:36.259Z
+    PSA40E-0DEWP",,Toshiba,349,244,23,1.8,,,,,yes,0,part,Stck,080925-7065,,,2025-10-06T21:41:06.641Z
 ,7066,7066.jpg,Lenovo Ideapad Yoga 11,1,0,"Prozessor
 NVIDIA Tegra 3 4 x 1.2 - 1.3 GHz, Kal-El
 Grafikkarte
@@ -292,14 +291,14 @@ Bildschirm
 11.60 Zoll 16:9, 1366 x 768 Pixel, Multi-Touch mit bis zu fünf Fingern, LED IPS, Diagonale: 29.5 Zentimeter, spiegelnd: ja
 Massenspeicher
 64 GB SSD, 64 GB 
-, eMMC",,Lenovo / IBM,300,204,15,1.27,,,,,yes,0,part,Stck,080925-7066,,,2025-10-06T20:53:36.259Z
+, eMMC",,Lenovo / IBM,300,204,15,1.27,,,,,yes,0,part,Stck,080925-7066,,,2025-10-06T21:41:06.641Z
 ,7067,7067.jpg,Lenovo N200,1,0,"Intel® Core™2 Duo T7100 1.8 GHz Processor cores: 2
 39.1 cm (15.4"") 1280 x 800 pixels Gloss 16:10
 1 GB DDR2-SDRAM 667 MHz 1 x 1 GB
 160 GB DVD Super Multi DL
 Intel® GMA X3100
 Ethernet LAN Bluetooth 2.0+EDR
-3.5 h",,Lenovo / IBM,360,266,4,2.88,,,,,yes,0,part,Stck,080925-7067,,,2025-10-06T20:53:36.259Z
+3.5 h",,Lenovo / IBM,360,266,4,2.88,,,,,yes,0,part,Stck,080925-7067,,,2025-10-06T21:41:06.641Z
 ,7068,7068.jpg,Toshiba NB100,1,0,"RAM
 1024 MB 
 , DDR2, PC2-6400, Samsung
@@ -313,13 +312,13 @@ Realtek ALC262 HD Audio
 Anschlüsse
 3 USB 2.0, 1 VGA, 1 Infrared, 1 Kensington Lock, Audio Anschlüsse: Mikro, Kppfhörer, Card Reader: 4in1
 Netzwerk
-Realtek RTL8102E Family PCI-E Fast Ethernet (10/100MBit/s), Atheros AR5007EG Wireless Network Adapter (b/g/), Bluetooth 2.1 + EDR",,Toshiba,225,190,29,1.05,,,,,yes,0,part,Stck,080925-7068,,,2025-10-06T20:53:36.259Z
-,7069,7069.jpg,Lebara STB-1HD,1,0,"FCC ID: 2AFC2-STB-1HD, IC: 20522-STB1HD,",,,100,100,4,200,,,,,yes,0,part,Stck,080925-7069,,,2025-10-06T20:53:36.259Z
+Realtek RTL8102E Family PCI-E Fast Ethernet (10/100MBit/s), Atheros AR5007EG Wireless Network Adapter (b/g/), Bluetooth 2.1 + EDR",,Toshiba,225,190,29,1.05,,,,,yes,0,part,Stck,080925-7068,,,2025-10-06T21:41:06.641Z
+,7069,7069.jpg,Lebara STB-1HD,1,0,"FCC ID: 2AFC2-STB-1HD, IC: 20522-STB1HD,",,,100,100,4,200,,,,,yes,0,part,Stck,080925-7069,,,2025-10-06T21:41:06.641Z
 ,7070,7070.jpg,lenovo v410z,1,0,"Intel Core i3-7100T 3,4 GHz Prozessor
 54,61cm (21,5"") Full HD 16:9 LED Display, Webcam
 4GB RAM, 500GB HDD, Integrated Intel HD Graphics 630, DVD-Brenner
-USB 3.1, USB 2.0, Gigabit LAN, HDMI, WLAN, Bluetooth, Formfaktor: All-in-One",2 kleine kratzer auf dem bildschirm,Lenovo / IBM,490,230,5,4.9,,,,,yes,0,part,Stck,080925-7070,,,2025-10-06T20:53:36.259Z
-,7071,,,1,0,,,,0,0,0,0,,,,,yes,0,part,Stck,080925-7071,,,2025-10-06T20:53:36.259Z
+USB 3.1, USB 2.0, Gigabit LAN, HDMI, WLAN, Bluetooth, Formfaktor: All-in-One",2 kleine kratzer auf dem bildschirm,Lenovo / IBM,490,230,5,4.9,,,,,yes,0,part,Stck,080925-7070,,,2025-10-06T21:41:06.641Z
+,7071,,,1,0,,,,0,0,0,0,,,,,yes,0,part,Stck,080925-7071,,,2025-10-06T21:41:06.641Z
 ,7072,7072.jpg,HP t620 thin client,1,0,"Prozessor-Familie
 
 G-Series
@@ -333,4 +332,5 @@ Netzwerk-Anschlüsse
 
 RJ45 (1x)
 Artikelnummer
-2750906",,HP / Compaq,22,24,4,1.36,,,,,yes,0,part,Stck,080925-7072,,,2025-10-06T20:53:36.259Z
+2750906",,HP / Compaq,22,24,4,1.36,,,,,yes,0,part,Stck,080925-7072,,,2025-10-06T21:41:06.641Z
+,07073,/media/I-061025-0001/07073-1.png,Banane,4,0,,,,,,,,,,,,no,0,,Stück,I-061025-0001,B-061025-0006,G,2025-10-06T21:46:56.206Z
