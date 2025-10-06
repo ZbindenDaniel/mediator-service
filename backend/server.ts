@@ -31,7 +31,6 @@ import {
   countBoxes,
   countEvents,
   countItems,
-  countItemsNoWms,
   countItemsNoBox,
   listRecentBoxes,
   getMaxBoxId,
@@ -164,7 +163,6 @@ type ActionContext = {
   countBoxes: typeof countBoxes;
   countEvents: typeof countEvents;
   countItems: typeof countItems;
-  countItemsNoWms: typeof countItemsNoWms;
   countItemsNoBox: typeof countItemsNoBox;
   listRecentBoxes: typeof listRecentBoxes;
   getMaxBoxId: typeof getMaxBoxId;
@@ -303,8 +301,7 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           countBoxes,
           countEvents,
           countItems,
-  countItemsNoWms,
-  countItemsNoBox,
+          countItemsNoBox,
           listRecentBoxes,
           getMaxBoxId,
           getMaxItemId,

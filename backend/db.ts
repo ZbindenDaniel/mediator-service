@@ -179,17 +179,6 @@ type ItemRefRow = {
   EntityType: string | null;
 };
 
-type ItemPersistencePayload = {
-  instance: ItemInstanceRow;
-  ref: ItemRefRow | null;
-  cleanupKey: string | null;
-};
-
-type ItemInstanceLookupRow = {
-  Artikel_Nummer: string | null;
-  Datum_erfasst: string | null;
-};
-
 function asNullableString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const str = String(value);
@@ -284,73 +273,21 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
   };
 }
 
+type ItemPersistencePayload = {
+  instance: ItemInstanceRow;
+  ref: ItemRefRow | null;
+};
+
 function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   const instance = prepareInstanceRow(item);
-  let cleanupKey: string | null = null;
 
-  let existingInstance: ItemInstanceLookupRow | undefined;
+  if (!instance.Artikel_Nummer) {
+    return { instance, ref: null };
+  }
+
   try {
-    existingInstance = getItemInstanceByUuidStatement.get(instance.ItemUUID) as
-      | ItemInstanceLookupRow
-      | undefined;
-  } catch (err) {
-    console.error('Failed to lookup existing item instance', {
-      itemUUID: instance.ItemUUID,
-      error: err
-    });
-    throw err;
-  }
-
-  const providedArtikel = asNullableTrimmedString(instance.Artikel_Nummer);
-  const existingArtikel = asNullableTrimmedString(existingInstance?.Artikel_Nummer ?? undefined);
-  let resolvedArtikel = providedArtikel || existingArtikel || null;
-
-  if (
-    providedArtikel === instance.ItemUUID &&
-    existingArtikel &&
-    existingArtikel !== instance.ItemUUID
-  ) {
-    resolvedArtikel = existingArtikel;
-  }
-
-  const wasFallbackArtikel = resolvedArtikel !== null && resolvedArtikel === instance.ItemUUID;
-
-  if (!resolvedArtikel || wasFallbackArtikel) {
-    const previous = resolvedArtikel;
-    resolvedArtikel = allocateArtikelNummerForItem(instance.ItemUUID, previous);
-    instance.Artikel_Nummer = resolvedArtikel;
-    if (previous === instance.ItemUUID || existingArtikel === instance.ItemUUID) {
-      cleanupKey = instance.ItemUUID;
-    }
-  } else {
-    instance.Artikel_Nummer = resolvedArtikel;
-    if (existingArtikel && existingArtikel === instance.ItemUUID && existingArtikel !== resolvedArtikel) {
-      cleanupKey = instance.ItemUUID;
-    }
-  }
-
-  if (
-    !item.Artikel_Nummer ||
-    asNullableTrimmedString(item.Artikel_Nummer) === instance.ItemUUID
-  ) {
-    (item as Item).Artikel_Nummer = instance.Artikel_Nummer ?? undefined;
-  }
-
-  if (!instance.Datum_erfasst) {
-    if (existingInstance?.Datum_erfasst) {
-      instance.Datum_erfasst = existingInstance.Datum_erfasst;
-    } else {
-      instance.Datum_erfasst = instance.UpdatedAt;
-      console.info('Defaulted Datum_erfasst for new item', {
-        itemUUID: instance.ItemUUID,
-        datumErfasst: instance.Datum_erfasst
-      });
-    }
-  }
-
-  let ref: ItemRefRow | null = null;
-  try {
-    ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: instance.Artikel_Nummer || resolvedArtikel || '' });
+    const ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: instance.Artikel_Nummer });
+    return { instance, ref };
   } catch (err) {
     console.error('Failed to prepare item reference payload', {
       itemUUID: instance.ItemUUID,
@@ -358,8 +295,6 @@ function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
     });
     throw err;
   }
-
-  return { instance, ref, cleanupKey };
 }
 
 function ensureItemTables(database: Database.Database = db): void {
@@ -382,16 +317,10 @@ ensureItemTables(db);
 
 let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
-let deleteItemReferenceByKeyStatement: Database.Statement;
-let getItemInstanceByUuidStatement: Database.Statement;
 let getMaxArtikelNummerStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
-  deleteItemReferenceByKeyStatement = db.prepare('DELETE FROM item_refs WHERE Artikel_Nummer = ?');
-  getItemInstanceByUuidStatement = db.prepare(
-    'SELECT Artikel_Nummer, Datum_erfasst FROM items WHERE ItemUUID = ?'
-  );
   getMaxArtikelNummerStatement = db.prepare(`
     SELECT Artikel_Nummer FROM item_refs
     WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''
@@ -403,52 +332,9 @@ try {
   throw err;
 }
 
-function parseArtikelNummer(candidate: string | null | undefined): number | null {
-  if (!candidate) return null;
-  const parsed = parseInt(candidate, 10);
-  if (!Number.isFinite(parsed)) {
-    console.warn('Encountered non-numeric Artikel_Nummer while parsing', {
-      candidate
-    });
-    return null;
-  }
-  return parsed;
-}
-
-function generateNextArtikelNummer(): string {
-  const allocator = db.transaction(() => {
-    const row = getMaxArtikelNummerStatement.get() as { Artikel_Nummer?: string } | undefined;
-    const currentMax = parseArtikelNummer(row?.Artikel_Nummer ?? null) ?? 0;
-    return String(currentMax + 1).padStart(5, '0');
-  });
-
-  try {
-    return allocator();
-  } catch (err) {
-    console.error('Failed to allocate Artikel_Nummer within transaction', err);
-    throw err;
-  }
-}
-
-function allocateArtikelNummerForItem(itemUUID: string, previous: string | null): string {
-  const next = generateNextArtikelNummer();
-  console.info('Allocated Artikel_Nummer for item', {
-    itemUUID,
-    artikelNummer: next,
-    previousArtikelNummer: previous
-  });
-  return next;
-}
-
 function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
   if (payload.ref) {
     upsertItemReferenceStatement.run(payload.ref);
-    if (
-      payload.cleanupKey &&
-      payload.cleanupKey !== payload.ref.Artikel_Nummer
-    ) {
-      deleteItemReferenceByKeyStatement.run(payload.cleanupKey);
-    }
   }
   upsertItemInstanceStatement.run(payload.instance);
 }
@@ -670,12 +556,6 @@ export const listRecentActivities = db.prepare(`
 export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events`);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
-export const countItemsNoWms = db.prepare(`
-  SELECT COUNT(*) as c
-  FROM items i
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
-  WHERE IFNULL(r.WmsLink, '') = ''
-`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
 export const listRecentBoxes = db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 5`);
 export const getMaxBoxId = db.prepare(
