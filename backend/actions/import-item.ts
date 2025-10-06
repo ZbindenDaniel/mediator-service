@@ -131,7 +131,8 @@ const action: Action = {
           a: string,
           search: string,
           status: string,
-          boxLocation: string | null
+          boxLocation: string | null,
+          agenticEnabled: boolean
         ) => {
           ctx.upsertBox.run({
             BoxID: boxId,
@@ -143,25 +144,42 @@ const action: Action = {
             UpdatedAt: now
           });
           ctx.persistItemWithinTransaction(itemData);
-          ctx.upsertAgenticRun.run({
-            ItemUUID: itemData.ItemUUID,
-            SearchQuery: search || null,
-            Status: status,
-            LastModified: now,
-            ReviewState: 'not_required',
-            ReviewedBy: null
-          });
+          if (agenticEnabled) {
+            ctx.upsertAgenticRun.run({
+              ItemUUID: itemData.ItemUUID,
+              SearchQuery: search || null,
+              Status: status,
+              LastModified: now,
+              ReviewState: 'not_required',
+              ReviewedBy: null
+            });
+          }
           ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
-          ctx.logEvent.run({
-            Actor: a,
-            EntityType: 'Item',
-            EntityId: itemData.ItemUUID,
-            Event: 'AgenticSearchQueued',
-            Meta: JSON.stringify({ SearchQuery: search, Status: status })
-          });
+          if (agenticEnabled) {
+            ctx.logEvent.run({
+              Actor: a,
+              EntityType: 'Item',
+              EntityId: itemData.ItemUUID,
+              Event: 'AgenticSearchQueued',
+              Meta: JSON.stringify({ SearchQuery: search, Status: status })
+            });
+          } else {
+            console.info('[import-item] Agentic service disabled; skipping agentic run persistence', {
+              ItemUUID: itemData.ItemUUID,
+              Actor: a
+            });
+          }
         }
       );
-      txn(BoxID, { ...data, ItemUUID }, actor, agenticSearchQuery, agenticStatus, boxLocationToPersist);
+      txn(
+        BoxID,
+        { ...data, ItemUUID },
+        actor,
+        agenticSearchQuery,
+        agenticStatus,
+        boxLocationToPersist,
+        Boolean(ctx.agenticServiceEnabled)
+      );
       sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
     } catch (err) {
       console.error('Import item failed', err);

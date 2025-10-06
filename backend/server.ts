@@ -173,7 +173,14 @@ type ActionContext = {
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
+  agenticServiceEnabled: boolean;
 };
+
+const agenticServiceEnabled = Boolean(process.env.AGENTIC_API_BASE && process.env.AGENTIC_API_BASE.trim());
+
+if (!agenticServiceEnabled) {
+  console.info('[server] Agentic API base not configured; agentic processing disabled.');
+}
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -310,7 +317,8 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           updateAgenticReview,
           INBOX_DIR,
           PUBLIC_DIR,
-          PREVIEW_DIR
+          PREVIEW_DIR,
+          agenticServiceEnabled
         });
       } catch (err) {
         console.error('Action handler failed', err);

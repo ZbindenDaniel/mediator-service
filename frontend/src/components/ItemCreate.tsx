@@ -367,7 +367,6 @@ export default function ItemCreate() {
 
   async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
     if (!shouldUseAgenticForm) {
-      console.info(`Agentic trigger skipped (${context}): service not healthy.`);
       return;
     }
 
