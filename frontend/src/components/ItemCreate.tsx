@@ -15,7 +15,7 @@ import { ItemMatchSelection } from './ItemMatchSelection';
 import { useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
-import { extractReferenceFields } from './forms/itemFormShared';
+import { ITEM_FORM_DEFAULT_EINHEIT, extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
 
 type AgenticEnv = typeof globalThis & {
@@ -405,6 +405,10 @@ export default function ItemCreate() {
     }
     if (actor) {
       sanitized.actor = actor;
+    }
+    const einheit = sanitized.Einheit;
+    if (typeof einheit !== 'string' || einheit.trim() === '') {
+      sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
     }
 
     Object.entries(sanitized).forEach(([key, value]) => {

@@ -3,6 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import type { Action } from './index';
 
+const DEFAULT_EINHEIT = 'Stück';
+
+function coalesceEinheit(value: string | null): string {
+  const trimmed = (value || '').trim();
+  return trimmed || DEFAULT_EINHEIT;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -90,7 +97,7 @@ const action: Action = {
         Veröffentlicht_Status: ['yes','ja','true','1'].includes((p.get('Veröffentlicht_Status') || '').trim().toLowerCase()),
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
-        Einheit: (p.get('Einheit') || '').trim(),
+        Einheit: coalesceEinheit(p.get('Einheit')),
         WmsLink: (p.get('WmsLink') || '').trim(),
       };
 
