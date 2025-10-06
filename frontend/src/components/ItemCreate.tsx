@@ -520,10 +520,7 @@ export default function ItemCreate() {
         Artikelbeschreibung: basicInfo.Artikelbeschreibung,
         Artikel_Nummer: basicInfo.Artikel_Nummer || referenceFields.Artikel_Nummer,
         Kurzbeschreibung: basicInfo.Kurzbeschreibung || referenceFields.Kurzbeschreibung,
-        Auf_Lager: basicInfo.Auf_Lager,
-        picture1: basicInfo.picture1,
-        picture2: basicInfo.picture2,
-        picture3: basicInfo.picture3
+        Auf_Lager: basicInfo.Auf_Lager
       };
       if ('ItemUUID' in clone) {
         delete clone.ItemUUID;
@@ -553,10 +550,7 @@ export default function ItemCreate() {
       BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
       Artikelbeschreibung: basicInfo.Artikelbeschreibung,
       Artikel_Nummer: basicInfo.Artikel_Nummer,
-      Auf_Lager: basicInfo.Auf_Lager,
-      picture1: basicInfo.picture1,
-      picture2: basicInfo.picture2,
-      picture3: basicInfo.picture3
+      Auf_Lager: basicInfo.Auf_Lager
     };
     await submitNewItem(merged, 'manual-edit');
   };
@@ -713,7 +707,6 @@ export default function ItemCreate() {
           </>
         }
         lockedFields={manualLockedFields}
-        hidePhotoInputs
       />
     </>
   );
