@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Item, ItemRef } from '../../../../models';
 import type { Item } from '../../../../models';
-import { ensureUser } from '../../lib/user';
+import { ensureUser, getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
+import type { ConfirmDialogOptions } from '../dialog';
+import { dialogService } from '../dialog';
 
 export interface ItemFormData extends Item {
   picture1?: string | null;
@@ -12,10 +15,54 @@ export interface ItemFormData extends Item {
   agenticSearch?: string;
 }
 
+const referenceFieldKeys: (keyof ItemRef)[] = [
+  'Artikel_Nummer',
+  'Grafikname',
+  'Artikelbeschreibung',
+  'Verkaufspreis',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg',
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B',
+  'Veröffentlicht_Status',
+  'Shopartikel',
+  'Artikeltyp',
+  'Einheit',
+  'WmsLink',
+  'EntityType'
+];
+
+export function extractReferenceFields(source: Partial<Item> | Partial<ItemRef>): Partial<ItemRef> {
+  const reference: Partial<ItemRef> = {};
+  for (const key of referenceFieldKeys) {
+    if (key in source) {
+      // Deliberately copy undefined to allow clearing inherited values
+      (reference as Record<string, unknown>)[key] = (source as Record<string, unknown>)[key];
+    }
+  }
+  return reference;
+}
+
 export type LockedFieldMode = 'readonly' | 'hidden';
 export type LockedFieldConfig = Partial<Record<keyof ItemFormData, LockedFieldMode>>;
 
 export type StockOperation = 'add' | 'remove';
+
+export function buildStockConfirmOptions(op: StockOperation): ConfirmDialogOptions {
+  return {
+    title: 'Bestandsänderung bestätigen',
+    message: `Bestand ${op === 'add' ? 'erhöhen' : 'verringern'}?`,
+    confirmLabel: op === 'add' ? 'Erhöhen' : 'Verringern',
+    cancelLabel: 'Abbrechen'
+  };
+}
 
 interface UseItemFormStateOptions {
   initialItem: Partial<ItemFormData>;
@@ -117,11 +164,18 @@ export function ItemDetailsFields({
 
   const handleStock = useCallback(async (op: StockOperation) => {
     if (!onChangeStock) {
-      console.warn('onChangeStock: no callback')
+      console.warn('onChangeStock: no callback');
       return;
     }
-    const confirmed = window.confirm(`Bestand ${op === 'add' ? 'erhöhen' : 'verringern'}?`);
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm(buildStockConfirmOptions(op));
+    } catch (error) {
+      console.error('Failed to confirm stock change', error);
+      return;
+    }
     if (!confirmed) {
+      console.log('Stock change cancelled', { operation: op });
       return;
     }
     try {

@@ -10,7 +10,10 @@ import {
   db,
   getItem,
   upsertBox,
-  upsertItem,
+  persistItem,
+  persistItemInstance,
+  persistItemReference,
+  persistItemWithinTransaction,
   findByMaterial,
   itemsByBox,
   getBox,
@@ -128,7 +131,10 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 type ActionContext = {
   db: typeof db;
   upsertBox: typeof upsertBox;
-  upsertItem: typeof upsertItem;
+  persistItem: typeof persistItem;
+  persistItemInstance: typeof persistItemInstance;
+  persistItemReference: typeof persistItemReference;
+  persistItemWithinTransaction: typeof persistItemWithinTransaction;
   findByMaterial: typeof findByMaterial;
   itemsByBox: typeof itemsByBox;
   getBox: typeof getBox;
@@ -153,8 +159,10 @@ type ActionContext = {
   logEvent: typeof logEvent;
   listEventsForBox: typeof listEventsForBox;
   listEventsForItem: typeof listEventsForItem;
+  listRecentActivities: typeof listRecentActivities;
   listRecentEvents: typeof listRecentEvents;
   countBoxes: typeof countBoxes;
+  countEvents: typeof countEvents;
   countItems: typeof countItems;
   countItemsNoWms: typeof countItemsNoWms;
   countItemsNoBox: typeof countItemsNoBox;
@@ -262,7 +270,10 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
         await action.handle?.(req, res, {
           db,
           upsertBox,
-          upsertItem,
+          persistItem,
+          persistItemInstance,
+          persistItemReference,
+          persistItemWithinTransaction,
           findByMaterial,
           itemsByBox,
           getBox,
