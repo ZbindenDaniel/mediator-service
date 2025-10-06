@@ -54,7 +54,6 @@ CREATE TABLE IF NOT EXISTS items (
   Shopartikel INTEGER,
   Artikeltyp TEXT,
   Einheit TEXT,
-  WmsLink TEXT,
 
   FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE
 );
@@ -252,14 +251,14 @@ export const upsertItem = db.prepare(
       Datum_erfasst, Artikel_Nummer, Grafikname, Artikelbeschreibung, Auf_Lager, Verkaufspreis,
       Kurzbeschreibung, Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
       Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
-      Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, WmsLink
+      Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit
     )
     VALUES (
       @ItemUUID, @BoxID, @Location, @UpdatedAt,
       @Datum_erfasst, @Artikel_Nummer, @Grafikname, @Artikelbeschreibung, @Auf_Lager, @Verkaufspreis,
       @Kurzbeschreibung, @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
       @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
-      @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @WmsLink
+      @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit
     )
     ON CONFLICT(ItemUUID) DO UPDATE SET
       BoxID=excluded.BoxID,
@@ -285,8 +284,7 @@ export const upsertItem = db.prepare(
       Veröffentlicht_Status=excluded.Veröffentlicht_Status,
       Shopartikel=excluded.Shopartikel,
       Artikeltyp=excluded.Artikeltyp,
-      Einheit=excluded.Einheit,
-      WmsLink=excluded.WmsLink
+      Einheit=excluded.Einheit
   `
 );
 
@@ -357,7 +355,6 @@ export const listRecentEvents = db.prepare(`
   ORDER BY e.Id DESC LIMIT 15`);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
-export const countItemsNoWms = db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
 export const listRecentBoxes = db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 8`);
 export const getMaxBoxId = db.prepare(

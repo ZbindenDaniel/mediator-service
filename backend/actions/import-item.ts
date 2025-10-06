@@ -64,6 +64,14 @@ const action: Action = {
       } catch (e) {
         console.error('Failed to save images', e);
       }
+      const deprecatedWmsLink = (p.get('WmsLink') || '').trim();
+      if (deprecatedWmsLink) {
+        console.info('Ignoring deprecated WmsLink value on import', {
+          itemUUID: ItemUUID,
+          boxId: BoxID,
+        });
+      }
+
       const data = {
         BoxID,
         ItemUUID,
@@ -90,7 +98,6 @@ const action: Action = {
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
         Einheit: (p.get('Einheit') || '').trim(),
-        WmsLink: (p.get('WmsLink') || '').trim(),
       };
 
       const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();

@@ -317,15 +317,6 @@ export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNum
         />
       </div>
 
-      <div className="row">
-        <label>
-          Kivi-Link
-        </label>
-        <input
-          value={form.WmsLink || ''}
-          onChange={(e) => onUpdate('WmsLink', e.target.value)}
-        />
-      </div>
     </>
   );
 }

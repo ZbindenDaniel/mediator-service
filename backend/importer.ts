@@ -73,21 +73,28 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
       const row = normalize(r);
       const final = applyOps(row);
       if (final.BoxID) {
-      const box: Box = {
-        BoxID: final.BoxID,
-        Location: final.Location || '',
-        CreatedAt: final.CreatedAt || '',
-        Notes: final.Notes || '',
-        PlacedBy: final.PlacedBy || '',
-        PlacedAt: final.PlacedAt || '',
-        UpdatedAt: now,
-      };
-      upsertBox.run(box);
-    }
+        const box: Box = {
+          BoxID: final.BoxID,
+          Location: final.Location || '',
+          CreatedAt: final.CreatedAt || '',
+          Notes: final.Notes || '',
+          PlacedBy: final.PlacedBy || '',
+          PlacedAt: final.PlacedAt || '',
+          UpdatedAt: now,
+        };
+        upsertBox.run(box);
+      }
       const hkA = parseInt(final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const ukA = parseInt(final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const hkB = parseInt(final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const ukB = parseInt(final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
+      if (final['WmsLink']) {
+        console.info('Dropping deprecated WmsLink column during CSV import', {
+          itemUUID: final.itemUUID,
+          artikelNummer: final['Artikel-Nummer'],
+        });
+      }
+
       const item: Item = {
         ItemUUID: final.itemUUID,
         BoxID: final.BoxID || null,
@@ -114,7 +121,6 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Shopartikel: parseInt(final['Shopartikel'] || '0', 10) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
         Einheit: final['Einheit'] || '',
-        WmsLink: final['WmsLink'] || '',
       };
       upsertItem.run({
         ...item,

@@ -84,8 +84,7 @@ describe('media asset routes', () => {
       Veröffentlicht_Status: null,
       Shopartikel: null,
       Artikeltyp: null,
-      Einheit: null,
-      WmsLink: null
+      Einheit: null
     });
 
     const res = await fetch(`${baseUrl}/api/items/${encodeURIComponent(itemId)}`);

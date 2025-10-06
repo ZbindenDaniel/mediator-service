@@ -319,7 +319,6 @@ export default function ItemDetail({ itemId }: Props) {
                       ['Höhe (mm)', item.Höhe_mm],
                       ['Gewicht (kg)', item.Gewicht_kg],
                       ['Einheit', item.Einheit],
-                      // ['Kivi-Link', item.WmsLink]
                     ] as [string, any][]).map(([k, v]) => (
                       <tr key={k} className="responsive-row">
                       <th className="responsive-th">{k}</th>
