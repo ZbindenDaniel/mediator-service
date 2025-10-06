@@ -74,18 +74,19 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
     for (const r of records) {
       const row = normalize(r);
       const final = applyOps(row);
+      const location = final.Location ? final.Location : null;
       if (final.BoxID) {
-      const box: Box = {
-        BoxID: final.BoxID,
-        Location: final.Location || '',
-        CreatedAt: final.CreatedAt || '',
-        Notes: final.Notes || '',
-        PlacedBy: final.PlacedBy || '',
-        PlacedAt: final.PlacedAt || '',
-        UpdatedAt: now,
-      };
-      upsertBox.run(box);
-    }
+        const box: Box = {
+          BoxID: final.BoxID,
+          Location: location,
+          CreatedAt: final.CreatedAt || '',
+          Notes: final.Notes || '',
+          PlacedBy: final.PlacedBy || '',
+          PlacedAt: final.PlacedAt || '',
+          UpdatedAt: now,
+        };
+        upsertBox.run(box);
+      }
       const hkA = parseInt(final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const ukA = parseInt(final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const hkB = parseInt(final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
@@ -93,7 +94,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
       const item: Item = {
         ItemUUID: final.itemUUID,
         BoxID: final.BoxID || null,
-        Location: final.Location || '',
+        Location: location,
         UpdatedAt: nowDate,
         Datum_erfasst: final['Datum erfasst'] ? new Date(final['Datum erfasst']) : undefined,
         Artikel_Nummer: final['Artikel-Nummer'] || '',

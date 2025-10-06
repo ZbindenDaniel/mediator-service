@@ -1,6 +1,6 @@
 export interface Box {
   BoxID: string;
-  Location?: string;
+  Location?: string | null;
   CreatedAt?: string;
   Notes?: string;
   PlacedBy?: string;
