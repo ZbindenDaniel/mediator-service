@@ -12,7 +12,7 @@ This document details the structure and data flow of the mediator service across
 - `actions/` – request handlers encapsulating business logic such as `move-box`, `move-item`, `save-item`, `overview`, `health`, `box-detail`, `search`, `import-item`, `csv-import`, `material-number`, and `qr-scan`.
 - `ops/` – reusable operation helpers and service abstractions for database and workflow tasks.
 - `config.ts` – central configuration surface for environment and runtime toggles.
-- `db.ts` – database connection bootstrap, migrations, and helper exports.
+- `db.ts` – database connection bootstrap and helper exports.
 
 ### Responsibilities
 - Maintain transactional data integrity when moving, importing, or deleting boxes and items.
