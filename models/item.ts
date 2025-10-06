@@ -28,7 +28,6 @@ export interface ItemRef {
   Shopartikel?: number;
   Artikeltyp?: string;
   Einheit?: string;
-  WmsLink?: string;
   EntityType?: string;
 }
 

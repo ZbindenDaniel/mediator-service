@@ -36,7 +36,6 @@ const referenceFieldKeys: (keyof ItemRef)[] = [
   'Shopartikel',
   'Artikeltyp',
   'Einheit',
-  'WmsLink',
   'EntityType'
 ];
 
@@ -661,15 +660,6 @@ export function ItemDetailsFields({
         />
       </div>
 
-      <div className="row">
-        <label>
-          Kivi-Link
-        </label>
-        <input
-          value={form.WmsLink || ''}
-          onChange={(e) => onUpdate('WmsLink', e.target.value)}
-        />
-      </div>
     </>
   );
 }

@@ -116,7 +116,6 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Shopartikel: parseInt(final['Shopartikel'] || '0', 10) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
         Einheit: final['Einheit'] || DEFAULT_EINHEIT,
-        WmsLink: final['WmsLink'] || '',
       };
       persistItem({
         ...item,

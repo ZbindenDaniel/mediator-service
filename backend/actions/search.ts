@@ -376,7 +376,6 @@ const action: Action = {
         r.Shopartikel,
         r.Artikeltyp,
         r.Einheit,
-        r.WmsLink,
         r.EntityType,
         (${itemTokenPresenceTerms}) AS token_hits,
         ${itemExactMatchExpr} AS exact_match,

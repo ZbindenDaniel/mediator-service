@@ -30,7 +30,7 @@ const importFields = [
   'Einheit'
 ];
 
-const extraFields = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt', 'WmsLink'];
+const extraFields = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt'];
 const columns = [...importFields, ...extraFields];
 
 const fieldMap: Record<string, string> = {
@@ -58,8 +58,7 @@ const fieldMap: Record<string, string> = {
   itemUUID: 'ItemUUID',
   BoxID: 'BoxID',
   Location: 'Location',
-  UpdatedAt: 'UpdatedAt',
-  WmsLink: 'WmsLink'
+  UpdatedAt: 'UpdatedAt'
 };
 
 function toCsvValue(val: any): string {
