@@ -1,5 +1,6 @@
 Datum erfasst,Artikel-Nummer,Grafikname(n),Artikelbeschreibung,Auf_Lager,Verkaufspreis,Kurzbeschreibung,Langtext,Hersteller,Länge(mm),Breite(mm),Höhe(mm),Gewicht(kg),Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop),Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop),Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop),Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop),Veröffentlicht_Status,Shopartikel,Artikeltyp,Einheit,itemUUID,BoxID,Location,UpdatedAt,WmsLink
-2025-10-06T19:06:35.722Z,00001,/media/I-061025-0001/I-061025-0001-1.png,Tisch,1,0,aaa,aaa,,,,,,,,,,no,0,,,I-061025-0001,B-061025-0001,,2025-10-06T19:06:35.722Z,
-2025-10-06T19:06:59.421Z,00002,,stuhl,2,0,,,,,,,,,,,,no,0,,,I-061025-0002,B-061025-0002,,2025-10-06T19:06:59.421Z,
-2025-10-06T19:07:58.889Z,00002,,stuhl,2,0,,,,,,,,,,,,no,0,,,I-061025-0003,B-061025-0001,,2025-10-06 19:11:31,
-2025-10-06T19:08:40.142Z,00003,/media/I-061025-0004/I-061025-0004-1.png,kleiner Tisch,5,0,,,,,,,,,,,,no,0,,,I-061025-0004,B-061025-0003,,2025-10-06T19:11:04.161Z,
+,,,,1,,,,,,,,,,,,,,,,,I-061025-0005,B-061025-0004,,2025-10-06T19:49:56.691Z,
+2025-10-06T19:06:35.722Z,00001,/media/I-061025-0001/I-061025-0001-1.png,Tisch,1,0,aaa,aaa,,0,0,0,0,,,,,no,0,,Stück,I-061025-0001,B-061025-0001,,2025-10-06T19:49:22.444Z,https://wms.example/items/00001
+2025-10-06T19:06:59.421Z,00002,,stuhl,2,0,,,,0,0,0,0,,,,,no,0,,Stück,I-061025-0002,B-061025-0002,,2025-10-06T19:49:22.444Z,https://wms.example/items/00002
+2025-10-06T19:07:58.889Z,00002,,stuhl,2,0,,,,0,0,0,0,,,,,no,0,,Stück,I-061025-0003,B-061025-0001,,2025-10-06T19:49:22.444Z,https://wms.example/items/00002
+2025-10-06T19:08:40.142Z,00003,/media/I-061025-0004/I-061025-0004-1.png,kleiner Tisch,5,0,,,,0,0,0,0,,,,,no,0,,Stück,I-061025-0004,B-061025-0003,,2025-10-06T19:49:22.444Z,https://wms.example/items/00003

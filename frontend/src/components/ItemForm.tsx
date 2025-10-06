@@ -23,7 +23,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
 
   const handleSelectSimilar = (selected: typeof similarItems[number]) => {
     try {
-      console.log('Applying similar item selection', selected.ItemUUID);
+      console.log('Applying similar item selection', selected.exemplarItemUUID);
       setForm((prev) => {
         const referenceFields = extractReferenceFields(selected);
         const { Artikelbeschreibung: _ignoredDescription, ...restReferenceFields } = referenceFields;
