@@ -1,3 +1,5 @@
+export const DEFAULT_ITEM_UNIT = 'Stück';
+
 export interface Item {
   ItemUUID: string;
   BoxID: string | null;
@@ -23,6 +25,7 @@ export interface Item {
   Veröffentlicht_Status?: boolean;
   Shopartikel?: number;
   Artikeltyp?: string;
+  /** Defaults to {@link DEFAULT_ITEM_UNIT} when no explicit value is provided. */
   Einheit?: string;
   WmsLink?: string;
   EntityType?: string;

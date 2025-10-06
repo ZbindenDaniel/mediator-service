@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
 import { upsertBox, upsertItem, queueLabel } from './db';
-import { Box, Item } from '../models';
+import { Box, Item, DEFAULT_ITEM_UNIT } from '../models';
 import { Op } from './ops/types';
 
 function loadOps(): Op[] {
@@ -88,6 +88,12 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
       const ukA = parseInt(final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const hkB = parseInt(final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
       const ukB = parseInt(final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
+      const unitRaw = (final['Einheit'] || '').trim();
+      const resolvedUnit = unitRaw || DEFAULT_ITEM_UNIT;
+      if (!unitRaw) {
+        console.warn(`Missing Einheit in CSV import for ${final.itemUUID || final['Artikel-Nummer'] || 'unknown'}, defaulting to ${DEFAULT_ITEM_UNIT}`);
+      }
+
       const item: Item = {
         ItemUUID: final.itemUUID,
         BoxID: final.BoxID || null,
@@ -113,7 +119,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Veröffentlicht_Status: ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase()),
         Shopartikel: parseInt(final['Shopartikel'] || '0', 10) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
-        Einheit: final['Einheit'] || '',
+        Einheit: resolvedUnit,
         WmsLink: final['WmsLink'] || '',
       };
       upsertItem.run({

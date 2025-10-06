@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import type { Item } from '../../../../models';
+import { DEFAULT_ITEM_UNIT } from '../../../../models';
 import { getUser } from '../../lib/user';
 
 export interface ItemFormData extends Item {
@@ -14,18 +15,53 @@ export type StockOperation = 'add' | 'remove';
 
 interface UseItemFormStateOptions {
   initialItem: Partial<ItemFormData>;
+  isNew?: boolean;
 }
 
-export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({ ...initialItem });
+function applyUnitDefault(value: Partial<ItemFormData>, isNew?: boolean) {
+  if (!isNew) {
+    return value;
+  }
+  const currentUnit = value.Einheit;
+  const trimmed = typeof currentUnit === 'string' ? currentUnit.trim() : currentUnit;
+  if (trimmed === undefined || trimmed === null || trimmed === '') {
+    return { ...value, Einheit: DEFAULT_ITEM_UNIT };
+  }
+  return value;
+}
+
+export function useItemFormState({ initialItem, isNew }: UseItemFormStateOptions) {
+  const [form, setFormState] = useState<Partial<ItemFormData>>(() => applyUnitDefault({ ...initialItem }, isNew));
+
+  const ensureUnit = useCallback(
+    (value: Partial<ItemFormData>) => applyUnitDefault(value, isNew),
+    [isNew]
+  );
 
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }, []);
+    setFormState((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === 'Einheit') {
+        return next;
+      }
+      return ensureUnit(next);
+    });
+  }, [ensureUnit]);
 
   const mergeForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm((prev) => ({ ...prev, ...next }));
-  }, []);
+    setFormState((prev) => ensureUnit({ ...prev, ...next }));
+  }, [ensureUnit]);
+
+  const setForm = useCallback<React.Dispatch<React.SetStateAction<Partial<ItemFormData>>>>(
+    (value) => {
+      if (typeof value === 'function') {
+        setFormState((prev) => ensureUnit(value(prev)));
+        return;
+      }
+      setFormState(ensureUnit(value));
+    },
+    [ensureUnit]
+  );
 
   const generateMaterialNumber = useCallback(async () => {
     try {

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import type { Action } from './index';
+import { DEFAULT_ITEM_UNIT } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -64,6 +65,15 @@ const action: Action = {
       } catch (e) {
         console.error('Failed to save images', e);
       }
+      const unitRaw = (p.get('Einheit') || '').trim();
+      const resolvedUnit = unitRaw || DEFAULT_ITEM_UNIT;
+      if (!unitRaw) {
+        console.warn(`Missing Einheit on manual import, defaulting to ${DEFAULT_ITEM_UNIT}`, {
+          ItemUUID,
+          Artikel_Nummer: (p.get('Artikel_Nummer') || '').trim() || ItemUUID
+        });
+      }
+
       const data = {
         BoxID,
         ItemUUID,
@@ -89,7 +99,7 @@ const action: Action = {
         Veröffentlicht_Status: ['yes','ja','true','1'].includes((p.get('Veröffentlicht_Status') || '').trim().toLowerCase()),
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
-        Einheit: (p.get('Einheit') || '').trim(),
+        Einheit: resolvedUnit,
         WmsLink: (p.get('WmsLink') || '').trim(),
       };
 
