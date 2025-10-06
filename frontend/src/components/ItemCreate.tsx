@@ -14,7 +14,7 @@ import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
 import { useDialog } from './dialog';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
-import { extractReferenceFields } from './forms/itemFormShared';
+import { ITEM_DEFAULT_UNIT, ensureItemUnit, extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
 
 type AgenticEnv = typeof globalThis & {
@@ -150,12 +150,12 @@ export default function ItemCreate() {
   const [params] = useSearchParams();
   const boxId = params.get('box') || null;
   const [agenticStep, setAgenticStep] = useState(1);
-  const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ensureItemUnit({ BoxID: boxId || undefined }));
   const [itemUUID, setItemUUID] = useState<string | undefined>();
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
   const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
-  const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
-  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ensureItemUnit({ BoxID: boxId || undefined }));
+  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ensureItemUnit({ BoxID: boxId || undefined }));
   const [creating, setCreating] = useState(false);
   const dialog = useDialog();
 
@@ -236,11 +236,12 @@ export default function ItemCreate() {
   }, [agenticApiBase]);
 
   const baseDraft = useMemo(
-    () => ({
-      ...draft,
-      BoxID: draft.BoxID || boxId || undefined,
-      ItemUUID: itemUUID || draft.ItemUUID
-    }),
+    () =>
+      ensureItemUnit({
+        ...draft,
+        BoxID: draft.BoxID || boxId || undefined,
+        ItemUUID: itemUUID || draft.ItemUUID
+      }),
     [boxId, draft, itemUUID]
   );
 
@@ -315,23 +316,23 @@ export default function ItemCreate() {
         if (updatedRun) {
           setDraft((prev) =>
             prev.ItemUUID === itemId
-              ? {
+              ? ensureItemUnit({
                   ...prev,
                   agenticStatus: undefined,
                   agenticSearch: updatedRun.SearchQuery || prev.agenticSearch
-                }
+                })
               : prev
           );
         } else {
-          setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+          setDraft((prev) => (prev.ItemUUID === itemId ? ensureItemUnit({ ...prev, agenticStatus: undefined }) : prev));
         }
       } else {
         console.error('Agentic failure reporting endpoint returned non-OK status', res.status);
-        setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+        setDraft((prev) => (prev.ItemUUID === itemId ? ensureItemUnit({ ...prev, agenticStatus: undefined }) : prev));
       }
     } catch (failureErr) {
       console.error('Failed to report agentic trigger failure', failureErr);
-      setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+      setDraft((prev) => (prev.ItemUUID === itemId ? ensureItemUnit({ ...prev, agenticStatus: undefined }) : prev));
     }
 
     try {
@@ -348,11 +349,11 @@ export default function ItemCreate() {
         if (refreshedRun) {
           setDraft((prev) =>
             prev.ItemUUID === itemId
-              ? {
+              ? ensureItemUnit({
                   ...prev,
                   agenticStatus: undefined,
                   agenticSearch: refreshedRun.SearchQuery || prev.agenticSearch
-                }
+                })
               : prev
           );
         }
@@ -380,7 +381,9 @@ export default function ItemCreate() {
         alertFn: showAgenticAlert,
         logger: console,
         onSkipped: (itemId) => {
-          setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+          setDraft((prev) =>
+            prev.ItemUUID === itemId ? ensureItemUnit({ ...prev, agenticStatus: undefined }) : prev
+          );
         }
       });
     } catch (err) {
@@ -395,7 +398,14 @@ export default function ItemCreate() {
   ) {
     const { removeItemUUID = true } = options;
     const params = new URLSearchParams();
-    const sanitized: Record<string, unknown> = { ...data };
+    const sanitized = ensureItemUnit({ ...data }) as Partial<ItemFormData> & Record<string, unknown>;
+    if (!sanitized.Einheit || typeof sanitized.Einheit !== 'string') {
+      console.info('Ensuring default Einheit on creation payload', { fallback: ITEM_DEFAULT_UNIT });
+      sanitized.Einheit = ITEM_DEFAULT_UNIT;
+    }
+    if (typeof sanitized.Einheit === 'string') {
+      sanitized.Einheit = sanitized.Einheit.trim() || ITEM_DEFAULT_UNIT;
+    }
     if (!sanitized.BoxID && boxId) {
       sanitized.BoxID = boxId;
     }
@@ -438,10 +448,11 @@ export default function ItemCreate() {
       }
       return;
     }
-    const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID }, actor);
+    const payload = ensureItemUnit({ ...data });
+    const params = buildCreationParams(payload, { removeItemUUID: !options.keepItemUUID }, actor);
     try {
       setCreating(true);
-      console.log('Submitting item creation payload', { context, data });
+      console.log('Submitting item creation payload', { context, data: payload });
       const response = await fetch('/api/import/item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -454,7 +465,7 @@ export default function ItemCreate() {
 
       const body = await response.json();
       const createdItem: Item | undefined = body?.item;
-      const searchText = createdItem?.Artikelbeschreibung || data.Artikelbeschreibung || '';
+      const searchText = createdItem?.Artikelbeschreibung || payload.Artikelbeschreibung || '';
       const agenticPayload: AgenticRunTriggerPayload = {
         itemId: createdItem?.ItemUUID,
         artikelbeschreibung: searchText
@@ -496,9 +507,10 @@ export default function ItemCreate() {
         Artikelbeschreibung: trimmedDescription,
         Artikel_Nummer: trimmedNumber
       };
-      console.log('Advancing to match selection with basic info', normalized);
-      setBasicInfo(normalized);
-      setManualDraft(normalized);
+      const normalizedWithUnit = ensureItemUnit(normalized);
+      console.log('Advancing to match selection with basic info', normalizedWithUnit);
+      setBasicInfo(normalizedWithUnit);
+      setManualDraft(normalizedWithUnit);
       setCreationStep('matchSelection');
     } catch (err) {
       console.error('Failed to prepare basic info for next step', err);
@@ -528,7 +540,7 @@ export default function ItemCreate() {
         delete clone.ItemUUID;
       }
       console.log('Creating item from selected duplicate', { itemUUID: item.ItemUUID });
-      await submitNewItem(clone, 'match-selection');
+      await submitNewItem(ensureItemUnit(clone), 'match-selection');
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
     }
@@ -536,7 +548,7 @@ export default function ItemCreate() {
 
   const handleSkipMatches = () => {
     console.log('No duplicate selected, switching to manual edit');
-    setManualDraft((prev) => ({ ...prev, ...basicInfo }));
+    setManualDraft((prev) => ensureItemUnit({ ...prev, ...basicInfo }));
     setCreationStep('manualEdit');
   };
 
@@ -557,19 +569,19 @@ export default function ItemCreate() {
       picture2: basicInfo.picture2,
       picture3: basicInfo.picture3
     };
-    await submitNewItem(merged, 'manual-edit');
+    await submitNewItem(ensureItemUnit(merged), 'manual-edit');
   };
 
   const handleAgenticDetails = async (data: Partial<ItemFormData>) => {
     console.log('Submitting agentic step 1 item details', data);
-    const detailPayload: Partial<ItemFormData> = {
+    const detailPayload = ensureItemUnit({
       Artikelbeschreibung: data.Artikelbeschreibung,
       Artikel_Nummer: data.Artikel_Nummer,
       Auf_Lager: data.Auf_Lager,
       BoxID: data.BoxID || boxId || undefined,
       agenticStatus: 'queued',
       agenticSearch: data.Artikelbeschreibung
-    };
+    });
 
     const actor = await ensureUser();
     if (!actor) {
@@ -602,14 +614,16 @@ export default function ItemCreate() {
       const body = await response.json();
       const createdItem: Item | undefined = body?.item;
 
-      setDraft((prev) => ({
-        ...prev,
-        ...detailPayload,
-        BoxID: createdItem?.BoxID || detailPayload.BoxID,
-        ItemUUID: createdItem?.ItemUUID || prev.ItemUUID,
-        agenticStatus: 'queued',
-        agenticSearch: detailPayload.agenticSearch
-      }));
+      setDraft((prev) =>
+        ensureItemUnit({
+          ...prev,
+          ...detailPayload,
+          BoxID: createdItem?.BoxID || detailPayload.BoxID,
+          ItemUUID: createdItem?.ItemUUID || prev.ItemUUID,
+          agenticStatus: 'queued',
+          agenticSearch: detailPayload.agenticSearch
+        })
+      );
       setItemUUID(createdItem?.ItemUUID || itemUUID);
       setAgenticStep(2);
 
@@ -637,7 +651,7 @@ export default function ItemCreate() {
       agenticSearch: baseDraft.agenticSearch || baseDraft.Artikelbeschreibung
     };
 
-    await submitNewItem(mergedData, 'agentic-step-two', { keepItemUUID: true });
+    await submitNewItem(ensureItemUnit(mergedData), 'agentic-step-two', { keepItemUUID: true });
   };
 
   const manualLockedFields = useMemo<LockedFieldConfig>(

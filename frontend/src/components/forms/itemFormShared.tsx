@@ -6,6 +6,34 @@ import type { ItemCategoryDefinition } from '../../data/itemCategories';
 import type { ConfirmDialogOptions } from '../dialog';
 import { dialogService } from '../dialog';
 
+export const ITEM_DEFAULT_UNIT = 'Stück';
+// TODO: Promote ITEM_DEFAULT_UNIT to a shared configuration source with the backend service.
+
+export function ensureItemUnit<T extends Partial<ItemFormData>>(item: T): T {
+  const maybeUnit = item?.Einheit;
+  if (typeof maybeUnit === 'string') {
+    const trimmed = maybeUnit.trim();
+    if (trimmed) {
+      if (trimmed === maybeUnit) {
+        return item;
+      }
+      return { ...item, Einheit: trimmed } as T;
+    }
+  } else if (maybeUnit != null) {
+    const normalized = String(maybeUnit).trim();
+    if (normalized) {
+      return { ...item, Einheit: normalized } as T;
+    }
+  }
+
+  if (maybeUnit === ITEM_DEFAULT_UNIT) {
+    return item;
+  }
+
+  console.info('Defaulting item unit to fallback value for form state', { fallback: ITEM_DEFAULT_UNIT });
+  return { ...item, Einheit: ITEM_DEFAULT_UNIT } as T;
+}
+
 export interface ItemFormData extends Item {
   picture1?: string | null;
   picture2?: string | null;
@@ -68,18 +96,38 @@ interface UseItemFormStateOptions {
 }
 
 export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({ ...initialItem });
+  const [form, setFormState] = useState<Partial<ItemFormData>>(() => ensureItemUnit({ ...initialItem }));
+
+  const setForm = useCallback<React.Dispatch<React.SetStateAction<Partial<ItemFormData>>>>(
+    (next) => {
+      if (typeof next === 'function') {
+        setFormState((prev) => {
+          try {
+            const resolved = (next as (value: Partial<ItemFormData>) => Partial<ItemFormData>)(prev);
+            return ensureItemUnit(resolved);
+          } catch (err) {
+            console.error('Failed to resolve item form state update', err);
+            return ensureItemUnit(prev);
+          }
+        });
+        return;
+      }
+      setFormState(ensureItemUnit(next));
+    },
+    [setFormState]
+  );
+
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  }, [setForm]);
 
   const mergeForm = useCallback((next: Partial<ItemFormData>) => {
     setForm((prev) => ({ ...prev, ...next }));
-  }, []);
+  }, [setForm]);
 
   const resetForm = useCallback((next: Partial<ItemFormData>) => {
     setForm({ ...next });
-  }, []);
+  }, [setForm]);
 
   const generateMaterialNumber = useCallback(async () => {
     try {

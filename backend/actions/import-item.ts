@@ -65,6 +65,12 @@ const action: Action = {
         console.error('Failed to save images', e);
       }
       const requestedLocation = (p.get('Location') || '').trim();
+      const defaultUnit = 'Stück';
+      const requestedUnit = (p.get('Einheit') || '').trim();
+      if (!requestedUnit) {
+        console.info('[import-item] Defaulting Einheit to fallback value', { fallback: defaultUnit, ItemUUID });
+      }
+
       const data = {
         BoxID,
         ItemUUID,
@@ -90,7 +96,7 @@ const action: Action = {
         Veröffentlicht_Status: ['yes','ja','true','1'].includes((p.get('Veröffentlicht_Status') || '').trim().toLowerCase()),
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
-        Einheit: (p.get('Einheit') || '').trim(),
+        Einheit: requestedUnit || defaultUnit,
         WmsLink: (p.get('WmsLink') || '').trim(),
       };
 
