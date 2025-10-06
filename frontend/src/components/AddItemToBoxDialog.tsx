@@ -48,7 +48,14 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Add to box aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for add-to-box action', error);
+      }
       return;
     }
     try {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { ensureUser } from '../lib/user';
@@ -12,6 +12,7 @@ import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
 import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
+import { useDialog } from './dialog';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
 import { extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
@@ -40,7 +41,7 @@ export interface AgenticTriggerHandlerOptions {
   agenticRunUrl: string | null;
   triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
   reportFailure: AgenticTriggerFailureReporter;
-  alertFn: (message: string) => void;
+  alertFn: (message: string) => Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
   onSkipped?: (itemId: string) => void;
 }
@@ -95,7 +96,7 @@ export async function handleAgenticRunTrigger({
 
       if (result.message) {
         try {
-          alertFn(result.message);
+          await alertFn(result.message);
         } catch (alertErr) {
           logger.warn?.('Failed to display skipped agentic trigger message', alertErr);
         }
@@ -122,7 +123,7 @@ export async function handleAgenticRunTrigger({
 
     if (result.message) {
       try {
-        alertFn(result.message);
+        await alertFn(result.message);
       } catch (alertErr) {
         logger.warn?.('Failed to display agentic trigger failure message', alertErr);
       }
@@ -156,6 +157,24 @@ export default function ItemCreate() {
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [creating, setCreating] = useState(false);
+  const dialog = useDialog();
+
+  const showAgenticAlert = useCallback(
+    async (message: string) => {
+      if (!message) {
+        return;
+      }
+      try {
+        await dialog.alert({
+          title: 'Hinweis',
+          message
+        });
+      } catch (alertErr) {
+        console.warn('Failed to display agentic trigger alert', alertErr);
+      }
+    },
+    [dialog]
+  );
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
@@ -351,23 +370,6 @@ export default function ItemCreate() {
       return;
     }
 
-    const showAlert = (message: string) => {
-      if (!message) {
-        return;
-      }
-      try {
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          window.alert(message);
-        } else if (typeof alert === 'function') {
-          alert(message);
-        } else {
-          console.info('Agentic trigger notice', message);
-        }
-      } catch (alertErr) {
-        console.warn('Failed to display agentic trigger alert', alertErr);
-      }
-    };
-
     try {
       await handleAgenticRunTrigger({
         agenticPayload,
@@ -375,7 +377,7 @@ export default function ItemCreate() {
         agenticRunUrl,
         triggerAgenticRunRequest,
         reportFailure: reportAgenticTriggerFailure,
-        alertFn: showAlert,
+        alertFn: showAgenticAlert,
         logger: console,
         onSkipped: (itemId) => {
           setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
@@ -426,7 +428,14 @@ export default function ItemCreate() {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Item creation aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialog.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for item creation', error);
+      }
       return;
     }
     const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID }, actor);
@@ -453,7 +462,14 @@ export default function ItemCreate() {
 
       await triggerAgenticRun(agenticPayload, context);
 
-      alert('Behälter erstellt. Bitte platzieren!');
+      try {
+        await dialog.alert({
+          title: 'Artikel erstellt',
+          message: 'Behälter erstellt. Bitte platzieren!'
+        });
+      } catch (error) {
+        console.error('Failed to display item creation success dialog', error);
+      }
       // TODO: Replace imperative navigation with centralized success handling once notification system lands.
       if (createdItem?.BoxID) {
         console.log('Navigating to created item box', { boxId: createdItem.BoxID });
@@ -558,7 +574,14 @@ export default function ItemCreate() {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Agentic step 1 submission aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialog.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for agentic details', error);
+      }
       return;
     }
 

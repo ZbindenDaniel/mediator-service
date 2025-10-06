@@ -110,7 +110,15 @@ export default function BoxDetail({ boxId }: Props) {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Box item removal aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for box item removal', error);
+      }
+    
       return;
     }
     try {
@@ -194,7 +202,14 @@ export default function BoxDetail({ boxId }: Props) {
                   const actor = await ensureUser();
                   if (!actor) {
                     console.info('Box note save aborted: missing username.');
-                    window.alert('Bitte zuerst oben den Benutzer setzen.');
+                    try {
+                      await dialogService.alert({
+                        title: 'Aktion nicht möglich',
+                        message: 'Bitte zuerst oben den Benutzer setzen.'
+                      });
+                    } catch (error) {
+                      console.error('Failed to display missing user alert for note save', error);
+                    }
                     return;
                   }
                   try {

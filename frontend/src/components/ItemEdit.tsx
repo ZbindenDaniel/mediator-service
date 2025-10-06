@@ -5,6 +5,7 @@ import ItemForm from './ItemForm';
 import { ensureUser } from '../lib/user';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemMediaGallery from './ItemMediaGallery';
+import { useDialog } from './dialog';
 
 interface Props {
   itemId: string;
@@ -14,6 +15,7 @@ export default function ItemEdit({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
+  const dialog = useDialog();
 
   useEffect(() => {
     async function load() {
@@ -42,7 +44,14 @@ export default function ItemEdit({ itemId }: Props) {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Item edit aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialog.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert while editing item', error);
+      }
       return;
     }
     try {
