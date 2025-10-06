@@ -1,6 +1,6 @@
 # Architecture Outline
 
-This document details the structure and data flow of the mediator service across backend services, frontend UI, shared models, and legacy assets.
+This document details the structure and data flow of the mediator service across backend services, frontend UI, shared models, and supporting utilities.
 
 ## Backend (`backend/`)
 
@@ -12,7 +12,7 @@ This document details the structure and data flow of the mediator service across
 - `actions/` – request handlers encapsulating business logic such as `move-box`, `move-item`, `save-item`, `overview`, `health`, `box-detail`, `search`, `import-item`, `csv-import`, `material-number`, and `qr-scan`.
 - `ops/` – reusable operation helpers and service abstractions for database and workflow tasks.
 - `config.ts` – central configuration surface for environment and runtime toggles.
-- `db.ts` – database connection bootstrap, migrations, and helper exports.
+- `db.ts` – database connection bootstrap with in-code schema definitions and helper exports.
 
 ### Responsibilities
 - Maintain transactional data integrity when moving, importing, or deleting boxes and items.
@@ -45,9 +45,8 @@ This document details the structure and data flow of the mediator service across
 - CSV seeds, import/export payloads, and runtime-generated media assets (item images, QR codes).
 - Naming conventions include `media/{ItemId}/{Artikelnummer}-{imgNumber}` for item imagery.
 
-## Legacy Scripts & Root Utilities
-- Legacy JavaScript implementation remains at the repository root for compatibility.
-- `scripts/` and `vendor/` host operational helpers, build utilities, and third-party assets required by production printers and deployment processes.
+## Root Utilities
+- `scripts/` and `vendor/` host operational helpers, build utilities, and third-party assets required by production printers and deployment processes. Legacy compatibility layers have been removed, so new work should target the TypeScript backend and React frontend directly.
 
 ## External Integrations
 - CSV import/export interacts with file system and database storage.

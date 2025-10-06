@@ -5,13 +5,7 @@ import { getUser } from '../lib/user';
 import { buildAgenticRunUrl, resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
-import ItemForm from './ItemForm';
 import type { ItemFormData } from './forms/itemFormShared';
-
-type AgenticEnv = typeof globalThis & {
-  AGENTIC_API_BASE?: string;
-  process?: { env?: Record<string, string | undefined> };
-};
 
 export default function ItemCreate() {
   const navigate = useNavigate();
@@ -20,7 +14,7 @@ export default function ItemCreate() {
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [itemUUID, setItemUUID] = useState<string | undefined>();
-  const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
+  const [agenticHealthy, setAgenticHealthy] = useState(false);
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
@@ -31,8 +25,8 @@ export default function ItemCreate() {
 
     async function checkAgenticHealth() {
       if (!agenticApiBase) {
-        console.info('Agentic API base URL not configured. Falling back to legacy item form.');
-        setShouldUseAgenticForm(false);
+        console.error('Agentic API base URL not configured. Agentic features will be disabled.');
+        setAgenticHealthy(false);
         return;
       }
 
@@ -44,7 +38,7 @@ export default function ItemCreate() {
         }
         if (!response.ok) {
           console.warn('Agentic health endpoint returned non-OK status', response.status);
-          setShouldUseAgenticForm(false);
+          setAgenticHealthy(false);
           return;
         }
 
@@ -60,16 +54,16 @@ export default function ItemCreate() {
         }
 
         if (body?.ok === true) {
-          setShouldUseAgenticForm(true);
+          setAgenticHealthy(true);
           console.log('Agentic health check succeeded.');
         } else {
           console.warn('Agentic health endpoint reported unhealthy payload', body);
-          setShouldUseAgenticForm(false);
+          setAgenticHealthy(false);
         }
       } catch (err) {
         if (!cancelled) {
           console.error('Agentic health check failed', err);
-          setShouldUseAgenticForm(false);
+          setAgenticHealthy(false);
         }
       }
     }
@@ -215,8 +209,13 @@ export default function ItemCreate() {
   }
 
   async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
-    if (!shouldUseAgenticForm) {
-      console.info(`Agentic trigger skipped (${context}): service not healthy.`);
+    if (!agenticRunUrl) {
+      console.warn(`Agentic trigger skipped (${context}): run URL is not configured.`);
+      return;
+    }
+
+    if (!agenticHealthy) {
+      console.warn(`Agentic trigger skipped (${context}): service not healthy.`);
       return;
     }
 
@@ -338,24 +337,13 @@ export default function ItemCreate() {
     await handleSubmit(mergedData);
   }
 
-  console.log(`Rendering item create form (step ${step})`, shouldUseAgenticForm);
-  if (shouldUseAgenticForm) {
-    return (
-      <ItemForm_Agentic
-        draft={baseDraft}
-        step={step}
-        onSubmitDetails={handleSubmitDetails}
-        onSubmitPhotos={handleSubmitPhotos}
-        submitLabel="Speichern"
-        isNew
-      />
-    );
-  }
-
+  console.log(`Rendering item create form (step ${step})`, { agenticHealthy });
   return (
-    <ItemForm
-      item={baseDraft}
-      onSubmit={handleSubmit}
+    <ItemForm_Agentic
+      draft={baseDraft}
+      step={step}
+      onSubmitDetails={handleSubmitDetails}
+      onSubmitPhotos={handleSubmitPhotos}
       submitLabel="Speichern"
       isNew
     />
