@@ -615,6 +615,35 @@ button:focus {
     flex-direction: column;
 }
 
+.suggestion-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+}
+
+.suggestion-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    margin: 0;
+    outline: none;
+}
+
+.suggestion-option .muted {
+    margin-top: 2px;
+}
+
+.suggestion-option:hover,
+.suggestion-option:focus-visible,
+.suggestion-option.active {
+    border-color: var(--acc);
+    box-shadow: 0 0 0 1px var(--acc);
+}
+
 .row-3 {
     display: grid;
     grid-template-columns: 1fr auto auto;
