@@ -200,43 +200,6 @@ export function ItemDetailsFields({
   const quantityHidden = isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
   const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
 
-  const quantityValue = useMemo(() => {
-    if (typeof form.Auf_Lager === 'number' && Number.isFinite(form.Auf_Lager)) {
-      return form.Auf_Lager;
-    }
-    return '';
-  }, [form.Auf_Lager]);
-
-  const stockButtonsDisabled = quantityReadonly || !onChangeStock;
-
-  const handleQuantityChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      try {
-        const { value } = event.target;
-        if (!value) {
-          console.log('Clearing quantity input');
-          onUpdate('Auf_Lager', undefined as ItemFormData['Auf_Lager']);
-          return;
-        }
-
-        const parsed = Number.parseInt(value, 10);
-        if (Number.isNaN(parsed)) {
-          console.warn('Ignoring non-numeric quantity input', { raw: value });
-          return;
-        }
-
-        const nextQuantity = Math.max(0, parsed);
-        if (nextQuantity !== parsed) {
-          console.warn('Clamped negative quantity input', { raw: parsed, clamped: nextQuantity });
-        }
-        onUpdate('Auf_Lager', nextQuantity as ItemFormData['Auf_Lager']);
-      } catch (err) {
-        console.error('Failed to handle quantity input change', err);
-      }
-    },
-    [onUpdate]
-  );
-
   const categoryLookup = useMemo(() => {
     const map = new Map<number, ItemCategoryDefinition>();
     for (const category of itemCategories) {
@@ -453,37 +416,16 @@ export function ItemDetailsFields({
           </div>
       </div>
 
-      {quantityHidden ? (
-        <input type="hidden" value={quantityValue} readOnly />
-      ) : (
+      {(
         <div className="row">
           <label>
             Anzahl*
           </label>
-          <div className="combined-input">
-            <button
-              type="button"
-              onClick={() => handleStock('remove')}
-              disabled={stockButtonsDisabled}
-            >
-              -
-            </button>
-            <input
-              type="number"
-              value={quantityValue}
-              onChange={handleQuantityChange}
-              min={0}
-              required
-              disabled={quantityReadonly}
-            />
-            <button
-              type="button"
-              onClick={() => handleStock('add')}
-              disabled={stockButtonsDisabled}
-            >
-              +
-            </button>
-          </div>
+           <div className="combined-input">
+              <button type="button" onClick={() => handleStock('remove')}>-</button>
+              <input type="number" value={form.Auf_Lager ?? 0} required />
+              <button type="button" onClick={() => handleStock('add')}>+</button>
+            </div>
         </div>
       )}
 
