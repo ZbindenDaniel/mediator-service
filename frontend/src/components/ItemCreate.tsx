@@ -146,6 +146,44 @@ export async function handleAgenticRunTrigger({
   }
 }
 
+export const MANUAL_CREATION_LOCKS: LockedFieldConfig = {
+  Artikelbeschreibung: 'readonly',
+  Artikel_Nummer: 'readonly'
+};
+
+interface ManualSubmissionOptions {
+  basicInfo: Partial<ItemFormData>;
+  manualData: Partial<ItemFormData>;
+  fallbackBoxId: string | null;
+}
+
+export function buildManualSubmissionPayload({
+  basicInfo,
+  manualData,
+  fallbackBoxId
+}: ManualSubmissionOptions): Partial<ItemFormData> {
+  const preferredDescription =
+    typeof manualData.Artikelbeschreibung === 'string' && manualData.Artikelbeschreibung.trim() !== ''
+      ? manualData.Artikelbeschreibung
+      : basicInfo.Artikelbeschreibung;
+  const preferredNumber =
+    typeof manualData.Artikel_Nummer === 'string' && manualData.Artikel_Nummer.trim() !== ''
+      ? manualData.Artikel_Nummer
+      : basicInfo.Artikel_Nummer;
+
+  const merged: Partial<ItemFormData> = {
+    ...basicInfo,
+    ...manualData,
+    BoxID: manualData.BoxID || basicInfo.BoxID || fallbackBoxId || undefined,
+    Artikelbeschreibung:
+      typeof preferredDescription === 'string' ? preferredDescription.trim() : preferredDescription,
+    Artikel_Nummer: typeof preferredNumber === 'string' ? preferredNumber.trim() : preferredNumber,
+    Auf_Lager: manualData.Auf_Lager ?? basicInfo.Auf_Lager
+  };
+
+  return merged;
+}
+
 export default function ItemCreate() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -595,25 +633,12 @@ export default function ItemCreate() {
       return;
     }
     try {
-      const preferredDescription =
-        typeof data.Artikelbeschreibung === 'string' && data.Artikelbeschreibung.trim() !== ''
-          ? data.Artikelbeschreibung
-          : basicInfo.Artikelbeschreibung;
-      const preferredNumber =
-        typeof data.Artikel_Nummer === 'string' && data.Artikel_Nummer.trim() !== ''
-          ? data.Artikel_Nummer
-          : basicInfo.Artikel_Nummer;
-
-      const merged: Partial<ItemFormData> = {
-        ...basicInfo,
-        ...data,
-        BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
-        Artikelbeschreibung:
-          typeof preferredDescription === 'string' ? preferredDescription.trim() : preferredDescription,
-        Artikel_Nummer: typeof preferredNumber === 'string' ? preferredNumber.trim() : preferredNumber,
-        Auf_Lager: data.Auf_Lager ?? basicInfo.Auf_Lager
-      };
-
+      const merged = buildManualSubmissionPayload({
+        basicInfo,
+        manualData: data,
+        fallbackBoxId: boxId
+      });
+      console.log('Prepared manual submission payload', merged);
       await submitNewItem(merged, 'manual-edit');
     } catch (err) {
       console.error('Failed to prepare manual edit payload', err);
@@ -702,11 +727,7 @@ export default function ItemCreate() {
   };
 
   const manualLockedFields = useMemo<LockedFieldConfig>(
-    () => ({
-      Artikelbeschreibung: 'readonly',
-      Artikel_Nummer: 'readonly',
-      Auf_Lager: 'readonly'
-    }),
+    () => ({ ...MANUAL_CREATION_LOCKS }),
     []
   );
 
