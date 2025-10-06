@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { AgenticRun } from '../../models';
+import type { AgenticRun, Item } from '../../models';
 import { AGENTIC_SHARED_SECRET } from '../config';
 
 const SHARED_SECRET_HEADER = 'x-agent-secret';
@@ -107,12 +107,14 @@ const action: Action = {
           merged.ItemUUID = itemUUID;
           merged.UpdatedAt = now;
 
-          ctx.upsertItem.run({
-            ...merged,
-            UpdatedAt: now,
-            Datum_erfasst: toIsoString(merged.Datum_erfasst),
-            Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status)
-          });
+          const mergedDatum = toIsoString(merged.Datum_erfasst);
+          const itemPayload: Item = {
+            ...(merged as Item),
+            UpdatedAt: new Date(now),
+            Datum_erfasst: mergedDatum ? new Date(mergedDatum) : undefined,
+            Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status) === 'yes'
+          };
+          ctx.persistItemWithinTransaction(itemPayload);
 
           const normalizedDecision = review.Decision ? review.Decision.toLowerCase() : null;
           const fallbackReviewState = existingRun?.ReviewState && existingRun.ReviewState !== 'pending'

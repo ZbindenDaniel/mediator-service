@@ -1,13 +1,17 @@
-export interface Item {
+export interface ItemInstance {
   ItemUUID: string;
+  Artikel_Nummer?: string | null;
   BoxID: string | null;
-  Location?: string;
+  Location?: string | null;
   UpdatedAt: Date;
   Datum_erfasst?: Date;
-  Artikel_Nummer?: string;
+  Auf_Lager?: number;
+}
+
+export interface ItemRef {
+  Artikel_Nummer: string;
   Grafikname?: string;
   Artikelbeschreibung?: string;
-  Auf_Lager?: number;
   Verkaufspreis?: number;
   Kurzbeschreibung?: string;
   Langtext?: string;
@@ -20,10 +24,12 @@ export interface Item {
   Unterkategorien_A?: number;
   Hauptkategorien_B?: number;
   Unterkategorien_B?: number;
-  Veröffentlicht_Status?: boolean;
+  Veröffentlicht_Status?: boolean | string;
   Shopartikel?: number;
   Artikeltyp?: string;
   Einheit?: string;
   WmsLink?: string;
   EntityType?: string;
 }
+
+export type Item = ItemInstance & Partial<ItemRef>;

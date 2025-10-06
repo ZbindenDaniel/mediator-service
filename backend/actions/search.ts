@@ -151,7 +151,7 @@ const action: Action = {
     CASE WHEN (
       lower(i.ItemUUID)            LIKE ?
       OR lower(i.Artikel_Nummer)   LIKE ?
-      OR lower(i.Artikelbeschreibung) LIKE ?
+      OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
       OR lower(i.BoxID)            LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
@@ -161,7 +161,7 @@ const action: Action = {
     CASE WHEN (
       lower(i.ItemUUID)            = ?
       OR lower(i.Artikel_Nummer)   = ?
-      OR lower(i.Artikelbeschreibung) = ?
+      OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
       OR lower(i.BoxID)            = ?
     ) THEN 1 ELSE 0 END
   `;
@@ -170,8 +170,33 @@ const action: Action = {
     SELECT *
     FROM (
       SELECT
-        i.*,
+        i.ItemUUID,
+        i.Artikel_Nummer,
+        i.BoxID,
         COALESCE(i.Location, b.Location) AS Location,
+        i.UpdatedAt,
+        i.Datum_erfasst,
+        i.Auf_Lager,
+        r.Grafikname,
+        r.Artikelbeschreibung,
+        r.Verkaufspreis,
+        r.Kurzbeschreibung,
+        r.Langtext,
+        r.Hersteller,
+        r.Länge_mm,
+        r.Breite_mm,
+        r.Höhe_mm,
+        r.Gewicht_kg,
+        r.Hauptkategorien_A,
+        r.Unterkategorien_A,
+        r.Hauptkategorien_B,
+        r.Unterkategorien_B,
+        r.Veröffentlicht_Status,
+        r.Shopartikel,
+        r.Artikeltyp,
+        r.Einheit,
+        r.WmsLink,
+        r.EntityType,
         (${itemTokenPresenceTerms}) AS token_hits,
         ${itemExactMatchExpr} AS exact_match,
         CASE
@@ -180,6 +205,7 @@ const action: Action = {
         END AS sql_score
       FROM items i
       LEFT JOIN boxes b ON i.BoxID = b.BoxID
+      LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
     )
     WHERE token_hits >= ?
     ORDER BY exact_match DESC, sql_score DESC
