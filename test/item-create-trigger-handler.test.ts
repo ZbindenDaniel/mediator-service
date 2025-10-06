@@ -25,7 +25,7 @@ describe('handleAgenticRunTrigger', () => {
     const logger = createLoggerMock();
     const triggerRequest = jest.fn().mockResolvedValue({ outcome: 'triggered', status: 202 });
     const reportFailure: AgenticTriggerFailureReporter = jest.fn().mockResolvedValue(undefined);
-    const alertFn = jest.fn();
+    const alertFn = jest.fn().mockResolvedValue(undefined);
     const payload = createPayload();
 
     await handleAgenticRunTrigger({
@@ -59,7 +59,7 @@ describe('handleAgenticRunTrigger', () => {
       .fn()
       .mockResolvedValue({ outcome: 'skipped', reason: 'missing-item-id', message: 'Trigger skipped' });
     const reportFailure: AgenticTriggerFailureReporter = jest.fn().mockResolvedValue(undefined);
-    const alertFn = jest.fn();
+    const alertFn = jest.fn().mockResolvedValue(undefined);
     const onSkipped = jest.fn();
     const payload = createPayload();
 
@@ -100,7 +100,7 @@ describe('handleAgenticRunTrigger', () => {
       error: { detail: 'kaputt' }
     });
     const reportFailure: AgenticTriggerFailureReporter = jest.fn().mockResolvedValue(undefined);
-    const alertFn = jest.fn();
+    const alertFn = jest.fn().mockResolvedValue(undefined);
     const payload = createPayload({ artikelbeschreibung: 'Agentic Artikel' });
 
     await handleAgenticRunTrigger({
