@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent = null }: Props) {
-  const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
+  const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item, isNew });
 
   const { similarItems, loading, error, hasQuery } = useSimilarItems({
     description: form.Artikelbeschreibung,

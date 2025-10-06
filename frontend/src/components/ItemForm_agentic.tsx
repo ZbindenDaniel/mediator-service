@@ -20,7 +20,7 @@ export default function ItemForm_Agentic({
   submitLabel,
   isNew
 }: Props) {
-  const { form, update, mergeForm, setForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
+  const { form, update, mergeForm, setForm, generateMaterialNumber } = useItemFormState({ initialItem: draft, isNew });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
