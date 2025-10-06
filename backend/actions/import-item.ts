@@ -98,7 +98,6 @@ const action: Action = {
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
         Einheit: coalesceEinheit(p.get('Einheit')),
-        WmsLink: (p.get('WmsLink') || '').trim(),
       };
 
       const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();

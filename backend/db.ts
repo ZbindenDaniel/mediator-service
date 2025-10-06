@@ -71,10 +71,8 @@ CREATE TABLE IF NOT EXISTS item_refs (
   Shopartikel INTEGER,
   Artikeltyp TEXT,
   Einheit TEXT,
-  WmsLink TEXT,
   EntityType TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_item_refs_wms ON item_refs(WmsLink);
 `;
 
 const CREATE_ITEMS_SQL = `
@@ -98,13 +96,13 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Artikel_Nummer, Grafikname, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
     Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
     Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
-    Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, WmsLink, EntityType
+    Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, EntityType
   )
   VALUES (
     @Artikel_Nummer, @Grafikname, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
     @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
     @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
-    @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @WmsLink, @EntityType
+    @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @EntityType
   )
   ON CONFLICT(Artikel_Nummer) DO UPDATE SET
     Grafikname=excluded.Grafikname,
@@ -125,7 +123,6 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Shopartikel=excluded.Shopartikel,
     Artikeltyp=excluded.Artikeltyp,
     Einheit=excluded.Einheit,
-    WmsLink=excluded.WmsLink,
     EntityType=excluded.EntityType
 `;
 
@@ -175,7 +172,6 @@ type ItemRefRow = {
   Shopartikel: number | null;
   Artikeltyp: string | null;
   Einheit: string | null;
-  WmsLink: string | null;
   EntityType: string | null;
 };
 
@@ -268,7 +264,6 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
     Shopartikel: asNullableInteger(ref.Shopartikel),
     Artikeltyp: asNullableString(ref.Artikeltyp),
     Einheit: asNullableString(ref.Einheit),
-    WmsLink: asNullableString(ref.WmsLink),
     EntityType: asNullableString(ref.EntityType)
   };
 }
@@ -374,7 +369,6 @@ SELECT
   r.Shopartikel AS Shopartikel,
   r.Artikeltyp AS Artikeltyp,
   r.Einheit AS Einheit,
-  r.WmsLink AS WmsLink,
   r.EntityType AS EntityType
 `;
 }
