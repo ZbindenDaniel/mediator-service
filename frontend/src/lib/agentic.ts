@@ -27,18 +27,17 @@ type AgenticEnv = typeof globalThis & {
 };
 
 export function resolveAgenticApiBase(): string | null {
-  return 'http://127.0.0.1:3000';
-  // try {
-  //   const globalScope = globalThis as AgenticEnv;
-  //   const candidate = globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE;
-  //   if (!candidate) {
-  //     return null;
-  //   }
-  //   return candidate.replace(/\/+$/, '');
-  // } catch (err) {
-  //   console.error('Failed to resolve agentic API base URL', err);
-  //   return null;
-  // }
+  try {
+    const globalScope = globalThis as AgenticEnv;
+    const candidate = globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE;
+    if (!candidate || !candidate.trim()) {
+      return null;
+    }
+    return candidate.replace(/\/+$/, '');
+  } catch (err) {
+    console.error('Failed to resolve agentic API base URL', err);
+    return null;
+  }
 }
 
 export function buildAgenticRunUrl(agenticApiBase: string | null): string | null {
