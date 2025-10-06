@@ -13,6 +13,7 @@ import ItemForm from './ItemForm';
 import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
 import { useDialog } from './dialog';
+import LoadingPage from './LoadingPage';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
 import { extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
@@ -651,47 +652,69 @@ export default function ItemCreate() {
 
   console.log(`Rendering item create form (step ${shouldUseAgenticForm ? agenticStep : creationStep})`, shouldUseAgenticForm);
   // TODO: if(isLoading) display loading state LoadingPage
+  const blockingOverlay = creating ? (
+    <div className="blocking-overlay" role="presentation">
+      <div className="blocking-overlay__surface" role="dialog" aria-modal="true" aria-live="assertive">
+        <LoadingPage message="Artikel wird gespeichert…" />
+      </div>
+    </div>
+  ) : null;
+
   if (shouldUseAgenticForm) {
     return (
-      <ItemForm_Agentic
-        draft={baseDraft}
-        step={agenticStep}
-        onSubmitDetails={handleAgenticDetails}
-        onSubmitPhotos={handleAgenticPhotos}
-        submitLabel="Speichern"
-        isNew
-      />
+      <>
+        {blockingOverlay}
+        <ItemForm_Agentic
+          draft={baseDraft}
+          step={agenticStep}
+          onSubmitDetails={handleAgenticDetails}
+          onSubmitPhotos={handleAgenticPhotos}
+          submitLabel="Speichern"
+          isNew
+        />
+      </>
     );
   }
 
   if (creationStep === 'basicInfo') {
-    return <ItemBasicInfoForm initialValues={basicInfo} onSubmit={handleBasicInfoNext} />;
+    return (
+      <>
+        {blockingOverlay}
+        <ItemBasicInfoForm initialValues={basicInfo} onSubmit={handleBasicInfoNext} />
+      </>
+    );
   }
 
   if (creationStep === 'matchSelection') {
     return (
-      <ItemMatchSelection
-        searchTerm={basicInfo.Artikelbeschreibung || ''}
-        onSelect={handleMatchSelection}
-        onSkip={handleSkipMatches}
-      />
+      <>
+        {blockingOverlay}
+        <ItemMatchSelection
+          searchTerm={basicInfo.Artikelbeschreibung || ''}
+          onSelect={handleMatchSelection}
+          onSkip={handleSkipMatches}
+        />
+      </>
     );
   }
 
   return (
-    <ItemForm
-      item={manualDraft}
-      onSubmit={handleManualSubmit}
-      submitLabel="Speichern"
-      isNew
-      headerContent={
-        <>
-          <h2>Details ergänzen</h2>
-          <p>Die Pflichtfelder wurden übernommen. Bitte ergänzen Sie bei Bedarf weitere Angaben.</p>
-        </>
-      }
-      lockedFields={manualLockedFields}
-      hidePhotoInputs
-    />
+    <>
+      {blockingOverlay}
+      <ItemForm
+        item={manualDraft}
+        onSubmit={handleManualSubmit}
+        submitLabel="Speichern"
+        isNew
+        headerContent={
+          <>
+            <h2>Details ergänzen</h2>
+            <p>Die Pflichtfelder wurden übernommen. Bitte ergänzen Sie bei Bedarf weitere Angaben.</p>
+          </>
+        }
+        lockedFields={manualLockedFields}
+        hidePhotoInputs
+      />
+    </>
   );
 }

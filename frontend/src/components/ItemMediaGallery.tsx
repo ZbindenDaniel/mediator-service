@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 // TODO: Evaluate extracting the lightbox modal into a shared component if additional consumers emerge.
 
@@ -155,6 +155,8 @@ export default function ItemMediaGallery({
     []
   );
 
+  const dialogTitleId = useId();
+
   const modalContent = useMemo(() => {
     if (!selectedAsset) {
       return null;
@@ -165,54 +167,84 @@ export default function ItemMediaGallery({
 
       return (
         <div
-          className="item-media-gallery__modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label={selectedAsset.label}
-          tabIndex={-1}
-          ref={modalContainerRef}
+          className="dialog-overlay item-media-gallery__overlay"
+          role="presentation"
+          onClick={handleModalClose}
         >
-          <div className="item-media-gallery__modal-content" role="document">
-            <button type="button" className="item-media-gallery__modal-close" onClick={handleModalClose}>
-              Schließen
-            </button>
-            {!isBroken ? (
-              <img
-                src={selectedAsset.src}
-                alt={`${selectedAsset.label} für Artikel ${itemId}`}
-                onError={handleImageError(selectedAsset.src)}
-              />
-            ) : (
-              <div className="item-media-gallery__fallback" role="status">
-                <span>Medieninhalt konnte nicht geladen werden.</span>
-                <small className="muted">{selectedAsset.src}</small>
-              </div>
-            )}
-            <figcaption>{selectedAsset.label}</figcaption>
+          <div
+            className="dialog-content item-media-gallery__dialog"
+            role={isBroken ? 'alertdialog' : 'dialog'}
+            aria-modal="true"
+            aria-labelledby={dialogTitleId}
+            tabIndex={-1}
+            ref={modalContainerRef}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="item-media-gallery__dialog-header">
+              <h2 id={dialogTitleId} className="dialog-title">
+                {selectedAsset.label}
+              </h2>
+              <button
+                type="button"
+                className="item-media-gallery__dialog-close"
+                onClick={handleModalClose}
+              >
+                Schließen
+              </button>
+            </header>
+            <div className="item-media-gallery__dialog-body">
+              {!isBroken ? (
+                <img
+                  className="item-media-gallery__dialog-image"
+                  src={selectedAsset.src}
+                  alt={`${selectedAsset.label} für Artikel ${itemId}`}
+                  onError={handleImageError(selectedAsset.src)}
+                />
+              ) : (
+                <div className="item-media-gallery__fallback" role="status">
+                  <span>Medieninhalt konnte nicht geladen werden.</span>
+                  <small className="muted">{selectedAsset.src}</small>
+                </div>
+              )}
+              <figcaption className="item-media-gallery__dialog-caption">{selectedAsset.label}</figcaption>
+            </div>
           </div>
         </div>
       );
     } catch (error) {
       console.error('Error rendering media modal', { error, itemId, selectedAsset });
       return (
-        <div
-          className="item-media-gallery__modal item-media-gallery__modal--error"
-          role="alertdialog"
-          aria-modal="true"
-          aria-live="assertive"
-          tabIndex={-1}
-          ref={modalContainerRef}
-        >
-          <div className="item-media-gallery__modal-content" role="document">
-            <p>Beim Anzeigen des Mediums ist ein Fehler aufgetreten.</p>
-            <button type="button" className="item-media-gallery__modal-close" onClick={handleModalClose}>
-              Schließen
-            </button>
+        <div className="dialog-overlay item-media-gallery__overlay" role="presentation" onClick={handleModalClose}>
+          <div
+            className="dialog-content item-media-gallery__dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={dialogTitleId}
+            aria-live="assertive"
+            tabIndex={-1}
+            ref={modalContainerRef}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="item-media-gallery__dialog-header">
+              <h2 id={dialogTitleId} className="dialog-title">
+                Medienfehler
+              </h2>
+              <button
+                type="button"
+                className="item-media-gallery__dialog-close"
+                onClick={handleModalClose}
+              >
+                Schließen
+              </button>
+            </header>
+            <div className="item-media-gallery__dialog-body">
+              <p>Beim Anzeigen des Mediums ist ein Fehler aufgetreten.</p>
+            </div>
           </div>
         </div>
       );
     }
-  }, [failedSources, handleImageError, handleModalClose, itemId, selectedAsset]);
+  }, [dialogTitleId, failedSources, handleImageError, handleModalClose, itemId, selectedAsset]);
 
   if (assets.length === 0) {
     return <p className="muted">Keine Medien verfügbar.</p>;
@@ -253,20 +285,7 @@ export default function ItemMediaGallery({
           );
         })}
       </div>
-      {selectedAsset && (
-        <div
-          className="item-media-gallery__modal-backdrop"
-          role="presentation"
-          onClick={handleModalClose}
-        >
-          <div
-            className="item-media-gallery__modal-wrapper"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {modalContent}
-          </div>
-        </div>
-      )}
+      {modalContent}
     </>
   );
 }
