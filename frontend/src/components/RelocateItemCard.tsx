@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ensureUser } from '../lib/user';
 import { dialogService } from './dialog';
+import { Link } from 'react-router-dom';
+import { GoLinkExternal } from 'react-icons/go';
 
 interface Props {
   itemId: string;
@@ -11,6 +13,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
   const [boxId, setBoxId] = useState('');
   const [suggestions, setSuggestions] = useState<{ BoxID: string; Location: string }[]>([]);
   const [status, setStatus] = useState('');
+  const [boxLink, setBoxLink] = useState('');
 
   useEffect(() => {
     const v = boxId.trim();
@@ -53,6 +56,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setStatus('Artikel verschoben');
+        setBoxLink(`/boxes/${encodeURIComponent(boxId)}`)
         console.info('Relocate item succeeded', {
           itemId,
           toBoxId: boxId,
@@ -148,9 +152,18 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
             <button type="submit">Verschieben</button>
             <button type="button" onClick={handleCreateBox}>Behälter anlegen</button>
           </div>
-          
+
           <div className='row'>
-            {status && <div>{status}</div>}
+            {status && <div>
+              <span>
+                {status}   
+              </span>
+              <span>
+                {boxLink && <Link to={boxLink}><GoLinkExternal/></Link>}
+              </span>
+            </div>}
+          </div>
+          <div className='row'>
           </div>
         </div>
       </form>
