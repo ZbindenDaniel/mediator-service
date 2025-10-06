@@ -9,6 +9,28 @@ interface Props {
 }
 
 export default function RecentBoxesCard({ boxes }: Props) {
+  const sortedBoxes = React.useMemo(() => {
+    const parseUpdatedAt = (updatedAt?: string | null) => {
+      if (!updatedAt) {
+        return 0;
+      }
+      const timestamp = Date.parse(updatedAt);
+      if (Number.isNaN(timestamp)) {
+        console.warn('Encountered invalid UpdatedAt when sorting recent boxes', { updatedAt });
+        return 0;
+      }
+      return timestamp;
+    };
+
+    return [...boxes].sort((a, b) => {
+      const updatedAtDiff = parseUpdatedAt(b.UpdatedAt) - parseUpdatedAt(a.UpdatedAt);
+      if (updatedAtDiff !== 0) {
+        return updatedAtDiff;
+      }
+      return (b.BoxID || '').localeCompare(a.BoxID || '');
+    });
+  }, [boxes]);
+
   return (
     <div className="card">
       <div
@@ -18,8 +40,8 @@ export default function RecentBoxesCard({ boxes }: Props) {
         </Link>
       </div>
       <div id="boxesOut" className="list">
-        {boxes.length ? (
-          boxes.map(b => (
+        {sortedBoxes.length ? (
+          sortedBoxes.map(b => (
             <React.Fragment key={b.BoxID}>
               <Link className="linkcard" to={`/boxes/${encodeURIComponent(b.BoxID)}`}>
                 <div className="card">
