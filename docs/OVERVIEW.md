@@ -5,12 +5,12 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Mission & Scope
 - Provide API endpoints and background workers to manage boxes, items, QR scans, and CSV imports.
 - Deliver a responsive React UI that surfaces search, detail, and import tooling for logistics teams.
-- Maintain printable label templates and legacy scripts required for production operations.
+- Maintain printable label templates and supporting scripts for production operations (legacy fallbacks have been retired).
 
 ## Current Status
 - Backend and frontend share aligned TypeScript models and rely on dynamic action loading for API routes.
 - CSV import/export, QR scanning, and print label flows are available but still receive incremental polish.
-- Legacy JavaScript scripts remain for compatibility; modernization continues incrementally.
+- The codebase now targets the modern TypeScript services exclusively; legacy JavaScript fallbacks have been removed.
 
 ## Next Steps
 - Audit remaining detail routes (e.g., BoxDetail, ItemDetail) to determine whether the shared `LoadingPage` pattern should be applied for initial fetches.
@@ -50,7 +50,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Statistics now show "Artikel ohne Behälter" and list pages use `dd.MM.yyyy` dates.
 - Item details now show the creator and current stock, remove the Standort field, and events list include article numbers and descriptions.
 - Images persist across item edits with `{Artikelnummer}-{imgNumber}` naming, and item models no longer carry picture fields.
-- Restored agentic search-query storage using the latest `backend/db.ts` migration and the new `upsertAgenticRun` helper.
+- Restored agentic search-query storage using the simplified `backend/db.ts` schema and the `upsertAgenticRun` helper.
 - Updated the item creation workflow to trigger agentic runs asynchronously via `frontend/src/components/ItemCreate.tsx` while `backend/actions/import-item.ts` handles persistence and image writes.
 
 ## Reference Links

@@ -1,16 +1,6 @@
 export interface AgenticRunTriggerPayload {
   itemId?: string | null;
   artikelbeschreibung?: string | null;
-  /**
-   * @deprecated Temporary support for legacy payloads while the UI transitions to the
-   *             new agent service contract.
-   */
-  id?: string | null;
-  /**
-   * @deprecated Temporary support for legacy payloads while the UI transitions to the
-   *             new agent service contract.
-   */
-  search?: string | null;
 }
 
 export interface AgenticRunTriggerOptions {
@@ -25,18 +15,18 @@ type AgenticEnv = typeof globalThis & {
 };
 
 export function resolveAgenticApiBase(): string | null {
-  return "Http://localhost:3000";
-  // try {
-  //   const globalScope = globalThis as AgenticEnv;
-  //   const candidate = globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE;
-  //   if (!candidate) {
-  //     return null;
-  //   }
-  //   return candidate.replace(/\/+$/, '');
-  // } catch (err) {
-  //   console.error('Failed to resolve agentic API base URL', err);
-  //   return null;
-  // }
+  try {
+    const globalScope = globalThis as AgenticEnv;
+    const candidate = globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE;
+    if (!candidate) {
+      console.warn('Agentic API base URL not configured');
+      return null;
+    }
+    return candidate.replace(/\/+$/, '');
+  } catch (err) {
+    console.error('Failed to resolve agentic API base URL', err);
+    return null;
+  }
 }
 
 export function buildAgenticRunUrl(agenticApiBase: string | null): string | null {
@@ -58,18 +48,12 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
   }
 
   const itemIdCandidate =
-    typeof payload.itemId === 'string' && payload.itemId.trim()
-      ? payload.itemId.trim()
-      : typeof payload.id === 'string' && payload.id.trim()
-        ? payload.id.trim()
-        : '';
+    typeof payload.itemId === 'string' && payload.itemId.trim() ? payload.itemId.trim() : '';
 
   const artikelbeschreibungCandidate =
     typeof payload.artikelbeschreibung === 'string' && payload.artikelbeschreibung.trim()
       ? payload.artikelbeschreibung.trim()
-      : typeof payload.search === 'string' && payload.search.trim()
-        ? payload.search.trim()
-        : '';
+      : '';
 
   if (!artikelbeschreibungCandidate) {
     console.warn(`Agentic trigger skipped (${context}): missing Artikelbeschreibung`);

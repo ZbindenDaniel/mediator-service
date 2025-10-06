@@ -28,7 +28,7 @@ components:
       - Produce printable label payloads and coordinate CSV ingestion workflows.
     ai_notes:
       - Action handlers live in `actions/` and should remain side-effect aware with robust try/catch logging.
-      - Database helpers and migrations reside in `db.ts`; consult [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+      - Database helpers and schema definitions reside in `db.ts`; consult [ARCHITECTURE.md](ARCHITECTURE.md) for details.
     agents:
       - name: backend-ci
         type: github-actions
@@ -65,7 +65,7 @@ components:
     owner: @platform-shared
     responsibilities:
       - Define entity interfaces (boxes, items, event logs, agentic runs) consumed by backend and frontend.
-      - Coordinate schema changes with migrations and UI updates.
+      - Coordinate schema changes with the shared schema definitions and UI updates.
     ai_notes:
       - Validate changes against dependent code using TypeScript compilation.
       - Reference [ARCHITECTURE.md](ARCHITECTURE.md) when introducing new entities or fields.
@@ -81,23 +81,22 @@ components:
       - Confirm CSV formats align with backend ingestion expectations.
       - Keep large files out of version control; prefer scripts that regenerate artifacts.
 
-  - name: legacy-runtime
+  - name: root-utilities
     path: ..
     language: javascript
     owner: @operations-legacy
     responsibilities:
-      - Maintain compatibility scripts, vendor assets, and deployment helpers required by production printers.
-      - Serve as fallback for workflows not yet ported to TypeScript modules.
+      - Maintain operational scripts, vendor assets, and deployment helpers required by production printers.
     ai_notes:
-      - Changes here should be conservative; prefer enhancing backend/frontend unless explicitly requested.
-      - Update documentation in [OVERVIEW.md](OVERVIEW.md) when migrating features away from legacy code.
+      - Focus on TypeScript backend/frontend enhancements; compatibility fallbacks have been removed.
+      - Update documentation in [OVERVIEW.md](OVERVIEW.md) when retiring remaining utility scripts.
 
 ai_agents:
   - name: codex
     type: ai
     capabilities:
       - generate: tests, CRUD endpoints, React components, documentation
-      - assist: refactoring, logging improvements, type validation, migration planning
+      - assist: refactoring, logging improvements, type validation, schema planning
     preferences:
       - follows repository directory conventions
       - prefers enhancing error handling and observability when modifying logic
