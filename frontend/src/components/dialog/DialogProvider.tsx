@@ -101,11 +101,11 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
     resolve: DialogResolvers[T]['resolve'],
     reject: DialogResolvers[T]['reject']
   ) => {
+    // @ts-expect-error generic mapping ensures correct types per request
     const request: DialogRequest = {
       id: createRequestId(),
       type,
       options: options as DialogRequest['options'],
-      // @ts-expect-error generic mapping ensures correct types per request
       resolve,
       reject
     };
