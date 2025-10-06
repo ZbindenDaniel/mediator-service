@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { Item } from '../../../models';
+import type { Item, ItemRef } from '../../../models';
 import { ensureUser } from '../lib/user';
 import {
   buildAgenticRunUrl,
@@ -523,21 +523,59 @@ export default function ItemCreate() {
     }
     try {
       const referenceFields = extractReferenceFields(item);
+      const basicReferenceOverrides = extractReferenceFields(basicInfo);
+      const preferredReferenceFields: Partial<ItemFormData> = { ...referenceFields };
+
+      (Object.keys(basicReferenceOverrides) as (keyof ItemRef)[]).forEach((key) => {
+        const overrideValue = basicReferenceOverrides[key];
+        const referenceValue = referenceFields[key];
+
+        if (overrideValue === undefined || overrideValue === null) {
+          return;
+        }
+
+        if (typeof overrideValue === 'string') {
+          const trimmedOverride = overrideValue.trim();
+          if (!trimmedOverride) {
+            return;
+          }
+
+          if (typeof referenceValue === 'string' && referenceValue.trim() === trimmedOverride) {
+            return;
+          }
+
+          (preferredReferenceFields as Record<string, unknown>)[key] = trimmedOverride;
+          return;
+        }
+
+        if (overrideValue !== referenceValue) {
+          (preferredReferenceFields as Record<string, unknown>)[key] = overrideValue;
+        }
+      });
+
       const clone: Partial<ItemFormData> = {
-        ...referenceFields,
         ...basicInfo,
+        ...preferredReferenceFields,
         BoxID: basicInfo.BoxID || boxId || undefined,
-        Artikelbeschreibung: basicInfo.Artikelbeschreibung,
-        Artikel_Nummer: basicInfo.Artikel_Nummer || referenceFields.Artikel_Nummer,
-        Kurzbeschreibung: basicInfo.Kurzbeschreibung || referenceFields.Kurzbeschreibung,
+        Artikelbeschreibung:
+          preferredReferenceFields.Artikelbeschreibung ?? basicInfo.Artikelbeschreibung ?? referenceFields.Artikelbeschreibung,
+        Artikel_Nummer:
+          preferredReferenceFields.Artikel_Nummer ?? basicInfo.Artikel_Nummer ?? referenceFields.Artikel_Nummer,
+        Kurzbeschreibung:
+          preferredReferenceFields.Kurzbeschreibung ?? basicInfo.Kurzbeschreibung ?? referenceFields.Kurzbeschreibung,
         Auf_Lager: basicInfo.Auf_Lager
       };
+
+      if (typeof clone.Artikelbeschreibung === 'string') {
+        clone.Artikelbeschreibung = clone.Artikelbeschreibung.trim();
+      }
       if ('ItemUUID' in clone) {
         delete clone.ItemUUID;
       }
       console.log('Creating item from selected duplicate', {
         artikelNummer: item.Artikel_Nummer,
-        exemplarItemUUID: item.exemplarItemUUID
+        exemplarItemUUID: item.exemplarItemUUID,
+        resolvedDescription: clone.Artikelbeschreibung
       });
       await submitNewItem(clone, 'match-selection');
     } catch (err) {
