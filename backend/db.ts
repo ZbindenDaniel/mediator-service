@@ -93,38 +93,6 @@ CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
 CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
 `;
 
-const EXPECTED_ITEM_COLUMNS = [
-  'ItemUUID',
-  'Artikel_Nummer',
-  'BoxID',
-  'Location',
-  'UpdatedAt',
-  'Datum_erfasst',
-  'Auf_Lager'
-];
-
-const LEGACY_ITEM_COLUMNS = [
-  'Grafikname',
-  'Artikelbeschreibung',
-  'Verkaufspreis',
-  'Kurzbeschreibung',
-  'Langtext',
-  'Hersteller',
-  'Länge_mm',
-  'Breite_mm',
-  'Höhe_mm',
-  'Gewicht_kg',
-  'Hauptkategorien_A',
-  'Unterkategorien_A',
-  'Hauptkategorien_B',
-  'Unterkategorien_B',
-  'Veröffentlicht_Status',
-  'Shopartikel',
-  'Artikeltyp',
-  'Einheit',
-  'WmsLink'
-];
-
 const UPSERT_ITEM_REFERENCE_SQL = `
   INSERT INTO item_refs (
     Artikel_Nummer, Grafikname, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
@@ -394,72 +362,6 @@ function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   return { instance, ref, cleanupKey };
 }
 
-function prepareLegacyItemPayload(row: Record<string, unknown>): ItemPersistencePayload {
-  const updatedAtRaw = row.UpdatedAt ? String(row.UpdatedAt) : '';
-  let updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : new Date();
-  if (Number.isNaN(updatedAt.getTime())) {
-    updatedAt = new Date();
-  }
-
-  const datumErfasstRaw = row.Datum_erfasst ? String(row.Datum_erfasst) : '';
-  let datumErfasst: Date | undefined;
-  if (datumErfasstRaw) {
-    const parsed = new Date(datumErfasstRaw);
-    datumErfasst = Number.isNaN(parsed.getTime()) ? undefined : parsed;
-  }
-
-  const legacyItem: Item = {
-    ItemUUID: String(row.ItemUUID ?? ''),
-    Artikel_Nummer: row.Artikel_Nummer ? String(row.Artikel_Nummer) : undefined,
-    BoxID:
-      row.BoxID === undefined || row.BoxID === null
-        ? null
-        : String(row.BoxID),
-    Location:
-      row.Location === undefined
-        ? undefined
-        : row.Location === null
-        ? null
-        : String(row.Location),
-    UpdatedAt: updatedAt,
-    Datum_erfasst: datumErfasst,
-    Auf_Lager: asNullableInteger(row.Auf_Lager) ?? undefined,
-    Grafikname: row.Grafikname ? String(row.Grafikname) : undefined,
-    Artikelbeschreibung: row.Artikelbeschreibung ? String(row.Artikelbeschreibung) : undefined,
-    Verkaufspreis: asNullableFloat(row.Verkaufspreis) ?? undefined,
-    Kurzbeschreibung: row.Kurzbeschreibung ? String(row.Kurzbeschreibung) : undefined,
-    Langtext: row.Langtext ? String(row.Langtext) : undefined,
-    Hersteller: row.Hersteller ? String(row.Hersteller) : undefined,
-    Länge_mm: asNullableInteger(row.Länge_mm) ?? undefined,
-    Breite_mm: asNullableInteger(row.Breite_mm) ?? undefined,
-    Höhe_mm: asNullableInteger(row.Höhe_mm) ?? undefined,
-    Gewicht_kg: asNullableFloat(row.Gewicht_kg) ?? undefined,
-    Hauptkategorien_A: asNullableInteger(row.Hauptkategorien_A) ?? undefined,
-    Unterkategorien_A: asNullableInteger(row.Unterkategorien_A) ?? undefined,
-    Hauptkategorien_B: asNullableInteger(row.Hauptkategorien_B) ?? undefined,
-    Unterkategorien_B: asNullableInteger(row.Unterkategorien_B) ?? undefined,
-    Shopartikel: asNullableInteger(row.Shopartikel) ?? undefined,
-    Artikeltyp: row.Artikeltyp ? String(row.Artikeltyp) : undefined,
-    Einheit: row.Einheit ? String(row.Einheit) : undefined,
-    WmsLink: row.WmsLink ? String(row.WmsLink) : undefined,
-    EntityType: row.EntityType ? String(row.EntityType) : undefined
-  };
-
-  const published = normalizePublishedValue(row.Veröffentlicht_Status);
-  if (published !== null) {
-    legacyItem.Veröffentlicht_Status = published === 'yes';
-  }
-
-  const payload = prepareItemPersistencePayload(legacyItem);
-  if (payload.instance.Auf_Lager === null && row.Auf_Lager !== undefined) {
-    payload.instance.Auf_Lager = asNullableInteger(row.Auf_Lager);
-  }
-  if (payload.ref) {
-    payload.ref.Veröffentlicht_Status = published;
-  }
-  return payload;
-}
-
 function ensureItemTables(database: Database.Database = db): void {
   try {
     database.exec(CREATE_ITEM_REFS_SQL);
@@ -468,66 +370,10 @@ function ensureItemTables(database: Database.Database = db): void {
     throw err;
   }
 
-  let tableInfo: Array<{ name: string }> = [];
   try {
-    tableInfo = database.prepare(`PRAGMA table_info(items)`).all();
+    database.exec(CREATE_ITEMS_SQL);
   } catch (err) {
-    console.error('Failed to inspect items schema', err);
-    throw err;
-  }
-
-  if (!tableInfo.length) {
-    try {
-      database.exec(CREATE_ITEMS_SQL);
-    } catch (err) {
-      console.error('Failed to create items table', err);
-      throw err;
-    }
-    return;
-  }
-
-  const columnNames = new Set(tableInfo.map((column) => column.name));
-  const hasExpected = EXPECTED_ITEM_COLUMNS.every((column) => columnNames.has(column));
-  const hasLegacy = LEGACY_ITEM_COLUMNS.some((column) => columnNames.has(column));
-
-  if (hasExpected && !hasLegacy) {
-    try {
-      database.exec(CREATE_ITEMS_SQL);
-    } catch (err) {
-      console.error('Failed to ensure items schema', err);
-      throw err;
-    }
-    return;
-  }
-
-  console.info('Migrating items table to reference/instance schema');
-
-  try {
-    database.transaction(() => {
-      database.exec('DROP INDEX IF EXISTS idx_items_mat');
-      database.exec('DROP INDEX IF EXISTS idx_items_box');
-      database.exec('ALTER TABLE items RENAME TO items_legacy');
-      database.exec(CREATE_ITEMS_SQL);
-
-      const legacyRows = database.prepare('SELECT * FROM items_legacy').all();
-      const refStmt = database.prepare(UPSERT_ITEM_REFERENCE_SQL);
-      const instanceStmt = database.prepare(UPSERT_ITEM_INSTANCE_SQL);
-
-      for (const row of legacyRows) {
-        try {
-          const payload = prepareLegacyItemPayload(row as Record<string, unknown>);
-          if (payload.ref) refStmt.run(payload.ref);
-          instanceStmt.run(payload.instance);
-        } catch (rowErr) {
-          console.error('Failed to migrate legacy item row', { row, error: rowErr });
-          throw rowErr;
-        }
-      }
-
-      database.exec('DROP TABLE IF EXISTS items_legacy');
-    })();
-  } catch (err) {
-    console.error('Failed to migrate items schema', err);
+    console.error('Failed to ensure items schema', err);
     throw err;
   }
 }
@@ -605,81 +451,6 @@ function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
     }
   }
   upsertItemInstanceStatement.run(payload.instance);
-}
-
-function reconcileFallbackArtikelNummern(database: Database.Database = db): void {
-  let rows: Array<Record<string, unknown>> = [];
-  try {
-    rows = database
-      .prepare(`
-        SELECT
-          i.ItemUUID,
-          i.Artikel_Nummer,
-          i.BoxID,
-          i.Location,
-          i.UpdatedAt,
-          i.Datum_erfasst,
-          i.Auf_Lager,
-          r.Grafikname,
-          r.Artikelbeschreibung,
-          r.Verkaufspreis,
-          r.Kurzbeschreibung,
-          r.Langtext,
-          r.Hersteller,
-          r.Länge_mm,
-          r.Breite_mm,
-          r.Höhe_mm,
-          r.Gewicht_kg,
-          r.Hauptkategorien_A,
-          r.Unterkategorien_A,
-          r.Hauptkategorien_B,
-          r.Unterkategorien_B,
-          r.Veröffentlicht_Status,
-          r.Shopartikel,
-          r.Artikeltyp,
-          r.Einheit,
-          r.WmsLink,
-          r.EntityType
-        FROM items i
-        LEFT JOIN item_refs r ON r.Artikel_Nummer = COALESCE(i.Artikel_Nummer, i.ItemUUID)
-        WHERE i.Artikel_Nummer IS NULL OR i.Artikel_Nummer = i.ItemUUID
-      `)
-      .all() as Array<Record<string, unknown>>;
-  } catch (err) {
-    console.error('Failed to load fallback Artikel_Nummer rows', err);
-    throw err;
-  }
-
-  if (!rows.length) {
-    return;
-  }
-
-  console.info('Reconciling fallback Artikel_Nummer rows', { count: rows.length });
-
-  const txn = database.transaction((row: Record<string, unknown>) => {
-    const payload = prepareLegacyItemPayload(row);
-    runItemPersistenceStatements(payload);
-  });
-
-  for (const row of rows) {
-    const itemUUID = (row as { ItemUUID?: unknown }).ItemUUID ?? null;
-    try {
-      txn(row);
-    } catch (err) {
-      console.error('Failed to reconcile fallback Artikel_Nummer row', {
-        itemUUID,
-        error: err
-      });
-      throw err;
-    }
-  }
-}
-
-try {
-  reconcileFallbackArtikelNummern();
-} catch (err) {
-  console.error('Failed to reconcile fallback Artikel_Nummer rows during initialization', err);
-  throw err;
 }
 
 const ITEM_REFERENCE_JOIN_KEY = 'i.Artikel_Nummer';
@@ -765,30 +536,6 @@ export function persistItem(item: Item): void {
   }
 }
 
-const AGENTIC_RUNS_COLUMNS = [
-  'Id',
-  'ItemUUID',
-  'SearchQuery',
-  'Status',
-  'LastModified',
-  'ReviewState',
-  'ReviewedBy'
-];
-
-const LEGACY_AGENTIC_COLUMNS = [
-  'Summary',
-  'NeedsReview',
-  'ReviewedAt',
-  'ReviewDecision',
-  'ReviewNotes',
-  'TriggeredAt',
-  'StartedAt',
-  'CompletedAt',
-  'FailedAt',
-  'LastError',
-  'ResultPayload'
-];
-
 export function ensureAgenticRunSchema(database: Database.Database = db): void {
   const createAgenticRunsSql = `
 CREATE TABLE IF NOT EXISTS agentic_runs (
@@ -804,105 +551,10 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
 
 CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
 `;
-
-  let tableInfo: Array<{ name: string }> = [];
   try {
-    tableInfo = database.prepare(`PRAGMA table_info(agentic_runs)`).all();
+    database.exec(createAgenticRunsSql);
   } catch (err) {
-    console.error('Failed to inspect agentic_runs schema', err);
-    throw err;
-  }
-
-  if (!tableInfo.length) {
-    try {
-      database.exec(createAgenticRunsSql);
-    } catch (err) {
-      console.error('Failed to create agentic_runs table', err);
-      throw err;
-    }
-    return;
-  }
-
-  const columnNames = new Set(tableInfo.map((column) => column.name));
-  const hasAllExpectedColumns = AGENTIC_RUNS_COLUMNS.every((column) => columnNames.has(column));
-  const stillHasLegacyColumns = LEGACY_AGENTIC_COLUMNS.some((column) => columnNames.has(column));
-
-  if (hasAllExpectedColumns && !stillHasLegacyColumns) {
-    try {
-      database.exec(createAgenticRunsSql);
-    } catch (err) {
-      console.error('Failed to ensure agentic_runs schema', err);
-      throw err;
-    }
-    return;
-  }
-
-  console.info('Migrating agentic_runs table to simplified schema');
-
-  try {
-    database.transaction(() => {
-      database.exec(`DROP INDEX IF EXISTS idx_agentic_runs_item`);
-      database.exec(`ALTER TABLE agentic_runs RENAME TO agentic_runs_legacy`);
-
-      database.exec(createAgenticRunsSql);
-
-      const selectColumns: string[] = [];
-      selectColumns.push('ItemUUID');
-      selectColumns.push(columnNames.has('SearchQuery') ? 'SearchQuery AS SearchQuery' : 'NULL AS SearchQuery');
-      selectColumns.push('Status');
-
-      if (columnNames.has('LastModified')) {
-        selectColumns.push(
-          "COALESCE(LastModified, datetime('now')) AS LastModified"
-        );
-      } else {
-        const timestampColumns: string[] = [];
-        if (columnNames.has('CompletedAt')) timestampColumns.push('CompletedAt');
-        if (columnNames.has('FailedAt')) timestampColumns.push('FailedAt');
-        if (columnNames.has('StartedAt')) timestampColumns.push('StartedAt');
-        if (columnNames.has('TriggeredAt')) timestampColumns.push('TriggeredAt');
-        if (columnNames.has('ReviewedAt')) timestampColumns.push('ReviewedAt');
-        const coalesce = timestampColumns.length
-          ? `COALESCE(${timestampColumns.join(', ')}, datetime('now'))`
-          : "datetime('now')";
-        selectColumns.push(`${coalesce} AS LastModified`);
-      }
-
-      if (columnNames.has('ReviewState')) {
-        selectColumns.push(
-          "CASE WHEN TRIM(IFNULL(ReviewState, '')) = '' THEN 'not_required' ELSE LOWER(ReviewState) END AS ReviewState"
-        );
-      } else if (columnNames.has('NeedsReview') || columnNames.has('ReviewDecision')) {
-        const needsReviewExpr = columnNames.has('NeedsReview') ? 'COALESCE(NeedsReview, 0)' : '0';
-        const reviewDecisionExpr = columnNames.has('ReviewDecision') ? 'LOWER(IFNULL(TRIM(ReviewDecision), \'\'))' : "''";
-        selectColumns.push(
-          `CASE
-             WHEN ${needsReviewExpr} > 0 THEN 'pending'
-             WHEN ${reviewDecisionExpr} IN ('approved', 'rejected') THEN ${reviewDecisionExpr}
-             WHEN ${reviewDecisionExpr} != '' THEN ${reviewDecisionExpr}
-             ELSE 'not_required'
-           END AS ReviewState`
-        );
-      } else {
-        selectColumns.push(`'not_required' AS ReviewState`);
-      }
-
-      selectColumns.push(columnNames.has('ReviewedBy') ? 'ReviewedBy AS ReviewedBy' : 'NULL AS ReviewedBy');
-
-      const migrateSql = `
-        INSERT INTO agentic_runs (
-          ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy
-        )
-        SELECT
-          ${selectColumns.join(',\n          ')}
-        FROM agentic_runs_legacy;
-      `;
-
-      database.exec(migrateSql);
-      database.exec('DROP TABLE agentic_runs_legacy');
-    })();
-  } catch (err) {
-    console.error('Failed to migrate agentic_runs schema', err);
+    console.error('Failed to ensure agentic_runs schema', err);
     throw err;
   }
 }
