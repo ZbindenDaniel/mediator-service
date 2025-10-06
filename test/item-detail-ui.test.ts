@@ -2,6 +2,22 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { AgenticStatusCard, AgenticStatusCardProps } from '../frontend/src/components/ItemDetail';
+import { dialogService } from '../frontend/src/components/dialog';
+import type { DialogContextValue } from '../frontend/src/components/dialog';
+
+const testDialog: DialogContextValue = {
+  alert: async () => undefined,
+  confirm: async () => true,
+  prompt: async () => ''
+};
+
+beforeAll(() => {
+  dialogService.register(testDialog);
+});
+
+afterAll(() => {
+  dialogService.unregister(testDialog);
+});
 
 describe('AgenticStatusCard cancel button visibility', () => {
   function renderCard(overrides: Partial<AgenticStatusCardProps> = {}) {
