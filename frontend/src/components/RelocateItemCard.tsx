@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ensureUser } from '../lib/user';
 import { dialogService } from './dialog';
 import { Link } from 'react-router-dom';
@@ -11,9 +11,12 @@ interface Props {
 
 export default function RelocateItemCard({ itemId, onRelocated }: Props) {
   const [boxId, setBoxId] = useState('');
-  const [suggestions, setSuggestions] = useState<{ BoxID: string; Location: string }[]>([]);
+  const [suggestions, setSuggestions] = useState<{ BoxID: string; Location?: string | null }[]>([]);
   const [status, setStatus] = useState('');
   const [boxLink, setBoxLink] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [isSuggestionVisible, setSuggestionVisible] = useState(false);
+  const hideTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const v = boxId.trim();
@@ -21,8 +24,13 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     const ctrl = new AbortController();
     async function search() {
       try {
-        const r = await fetch('/api/search?term=' + encodeURIComponent(v), { signal: ctrl.signal });
+        const r = await fetch('/api/search?scope=boxes&term=' + encodeURIComponent(v), { signal: ctrl.signal });
+        if (!r.ok) {
+          console.error('Box search HTTP error', r.status);
+          return;
+        }
         const data = await r.json().catch(() => ({}));
+        console.debug('Box search returned', (data.boxes || []).length, 'matches for', v);
         setSuggestions(data.boxes || []);
       } catch (err) {
         if ((err as any).name !== 'AbortError') console.error('box search failed', err);
@@ -125,6 +133,89 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     }
   }
 
+  const filteredSuggestions = useMemo(() => {
+    const term = boxId.trim().toLowerCase();
+    if (!term) { return suggestions; }
+    return suggestions.filter(suggestion => {
+      const id = (suggestion.BoxID || '').toLowerCase();
+      const location = (suggestion.Location || '').toLowerCase();
+      return id.includes(term) || location.includes(term);
+    });
+  }, [boxId, suggestions]);
+
+  useEffect(() => {
+    setHighlightedIndex(prev => {
+      if (filteredSuggestions.length === 0) { return -1; }
+      if (prev >= filteredSuggestions.length) { return filteredSuggestions.length - 1; }
+      return prev;
+    });
+  }, [filteredSuggestions]);
+
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [boxId]);
+
+  const applySuggestion = (idx: number) => {
+    const suggestion = filteredSuggestions[idx];
+    if (!suggestion || !suggestion.BoxID) { return; }
+    setBoxId(suggestion.BoxID);
+    setSuggestionVisible(false);
+    setHighlightedIndex(-1);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!filteredSuggestions.length) { return; }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSuggestionVisible(true);
+      setHighlightedIndex(prev => {
+        const next = prev + 1;
+        if (next >= filteredSuggestions.length) { return 0; }
+        return next;
+      });
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSuggestionVisible(true);
+      setHighlightedIndex(prev => {
+        const next = prev - 1;
+        if (next < 0) { return filteredSuggestions.length - 1; }
+        return next;
+      });
+    } else if (event.key === 'Enter' && highlightedIndex >= 0) {
+      event.preventDefault();
+      applySuggestion(highlightedIndex);
+    } else if (event.key === 'Escape') {
+      setSuggestionVisible(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setBoxId(event.target.value);
+    setSuggestionVisible(true);
+  };
+
+  const handleFocus = () => {
+    if (hideTimeoutRef.current) {
+      window.clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = undefined;
+    }
+    setSuggestionVisible(true);
+  };
+
+  const handleBlur = () => {
+    hideTimeoutRef.current = window.setTimeout(() => {
+      setSuggestionVisible(false);
+      setHighlightedIndex(-1);
+    }, 120);
+  };
+
+  useEffect(() => () => {
+    if (hideTimeoutRef.current) {
+      window.clearTimeout(hideTimeoutRef.current);
+    }
+  }, []);
+
   return (
     <div className="card relocate-card">
       <h3>Artikel umlagern</h3>
@@ -137,16 +228,40 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
           </div>
 
           <div className='row'>
-            <input list="box-suggest" value={boxId} onChange={e => setBoxId(e.target.value)} required />
+            <input
+              value={boxId}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              required
+              aria-autocomplete="list"
+              aria-expanded={isSuggestionVisible && filteredSuggestions.length > 0}
+              aria-activedescendant={highlightedIndex >= 0 ? `box-suggestion-${highlightedIndex}` : undefined}
+            />
           </div>
 
-          <div className='row'>
-            <datalist id="box-suggest">
-              {suggestions.map(b => (
-                <option key={b.BoxID} value={b.BoxID}>{b.Location}</option>
-              ))}
-            </datalist>
-          </div>
+          {isSuggestionVisible && filteredSuggestions.length > 0 && (
+            <div className='row'>
+              <div className="card suggestion-list" role="listbox">
+                {filteredSuggestions.map((b, index) => (
+                  <button
+                    type="button"
+                    key={b.BoxID}
+                    id={`box-suggestion-${index}`}
+                    className={`card suggestion-option${index === highlightedIndex ? ' active' : ''}`}
+                    onMouseDown={event => { event.preventDefault(); applySuggestion(index); }}
+                    onMouseEnter={() => setHighlightedIndex(index)}
+                    role="option"
+                    aria-selected={index === highlightedIndex}
+                  >
+                    <div className="mono">{b.BoxID}</div>
+                    {b.Location ? <div className="muted">{b.Location}</div> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className='row'>
             <button type="submit">Verschieben</button>
