@@ -26,6 +26,20 @@ export default function ItemCreate() {
 
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
 
+  const manualOverride = useMemo(() => {
+    const value = params.get('manual');
+    if (!value) {
+      return false;
+    }
+    return ['1', 'true', 'yes', 'manual'].includes(value.toLowerCase());
+  }, [params]);
+
+  useEffect(() => {
+    if (manualOverride) {
+      console.info('Manual form override enabled via query parameter');
+    }
+  }, [manualOverride]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -215,8 +229,8 @@ export default function ItemCreate() {
   }
 
   async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
-    if (!shouldUseAgenticForm) {
-      console.info(`Agentic trigger skipped (${context}): service not healthy.`);
+    if (!shouldUseAgenticForm || manualOverride) {
+      console.info(`Agentic trigger skipped (${context}): service not healthy or manually disabled.`);
       return;
     }
 
@@ -326,9 +340,11 @@ export default function ItemCreate() {
 
   async function handleSubmitPhotos(data: Partial<ItemFormData>) {
     console.log('Submitting step 2 item photos', data);
+    const { picture1: _basePicture1, picture2: _basePicture2, picture3: _basePicture3, ...baseWithoutPictures } = baseDraft;
+    const { picture1: _dataPicture1, picture2: _dataPicture2, picture3: _dataPicture3, ...dataWithoutPictures } = data;
     const mergedData: Partial<ItemFormData> = {
-      ...baseDraft,
-      ...data,
+      ...baseWithoutPictures,
+      ...dataWithoutPictures,
       BoxID: data.BoxID || baseDraft.BoxID,
       ItemUUID: itemUUID || baseDraft.ItemUUID,
       agenticStatus: 'running',
@@ -338,8 +354,10 @@ export default function ItemCreate() {
     await handleSubmit(mergedData);
   }
 
-  console.log(`Rendering item create form (step ${step})`, shouldUseAgenticForm);
-  if (shouldUseAgenticForm) {
+  const shouldRenderAgenticForm = shouldUseAgenticForm && !manualOverride;
+
+  console.log(`Rendering item create form (step ${step})`, shouldRenderAgenticForm);
+  if (shouldRenderAgenticForm) {
     return (
       <ItemForm_Agentic
         draft={baseDraft}

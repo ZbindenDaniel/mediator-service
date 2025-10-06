@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ItemDetailsFields, ItemFormData, useItemFormState } from './forms/itemFormShared';
 import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
 import { useSimilarItems } from './forms/useSimilarItems';
 
@@ -34,6 +34,12 @@ export default function ItemForm_Agentic({
       console.log('Applying similar item selection (agentic)', selected.ItemUUID);
       setForm((prev) => {
         const next = { ...prev, ...selected } as Partial<ItemFormData>;
+        if (selected?.Grafikname === undefined && prev?.Grafikname) {
+          next.Grafikname = prev.Grafikname;
+        }
+        delete (next as Partial<ItemFormData>).picture1;
+        delete (next as Partial<ItemFormData>).picture2;
+        delete (next as Partial<ItemFormData>).picture3;
         if (isNew) {
           delete (next as Partial<ItemFormData>).ItemUUID;
         }
@@ -48,18 +54,34 @@ export default function ItemForm_Agentic({
     mergeForm(draft);
   }, [draft, mergeForm]);
 
-  const handlePhoto1Change = useMemo(
-    () => createPhotoChangeHandler(update, 'picture1'),
-    [update]
-  );
-  const handlePhoto2Change = useMemo(
-    () => createPhotoChangeHandler(update, 'picture2'),
-    [update]
-  );
-  const handlePhoto3Change = useMemo(
-    () => createPhotoChangeHandler(update, 'picture3'),
-    [update]
-  );
+  const manualFormLink = useMemo(() => {
+    if (form.ItemUUID) {
+      return `/items/${encodeURIComponent(form.ItemUUID)}/edit`;
+    }
+    const params = new URLSearchParams();
+    if (form.BoxID) {
+      params.set('box', String(form.BoxID));
+    }
+    params.set('manual', '1');
+    const query = params.toString();
+    return `/items/new${query ? `?${query}` : ''}`;
+  }, [form.BoxID, form.ItemUUID]);
+
+  const handleOpenManualForm = useCallback(() => {
+    if (!manualFormLink) {
+      console.warn('Manual form link missing while trying to open it for photo upload assistance');
+      return;
+    }
+    try {
+      window.open(manualFormLink, '_blank', 'noopener,noreferrer');
+      console.info('Opened manual form for managing photos', {
+        manualFormLink,
+        itemUUID: form.ItemUUID
+      });
+    } catch (err) {
+      console.error('Failed to open manual form link', err);
+    }
+  }, [form.ItemUUID, manualFormLink]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,8 +90,9 @@ export default function ItemForm_Agentic({
       return;
     }
     try {
-      console.log('Submitting form via step 2 handler', form);
-      await onSubmitPhotos(form);
+      const { picture1: _picture1, picture2: _picture2, picture3: _picture3, ...payload } = form;
+      console.log('Submitting form via step 2 handler (photos managed manually)', payload);
+      await onSubmitPhotos(payload as Partial<ItemFormData>);
     } catch (err) {
       console.error('Item form submit failed', err);
       setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
@@ -114,55 +137,45 @@ export default function ItemForm_Agentic({
           <hr></hr>
 
           {step === 2 && (
-            <>
-              {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
+            <section className="agentic-photo-helper">
               <div className="row">
-                <label>
-                  Foto 1*
-                </label>
-                <input
-                  type="file"
-                  id="picture1"
-                  name="picture1"
-                  accept="image/*"
-                  capture="environment"
-                  required
-                  onChange={handlePhoto1Change}
-                />
+                <label>Fotos verwalten</label>
+                <p className="muted">
+                  Neue Fotos können aktuell nur im manuellen Formular hochgeladen oder ersetzt werden.
+                </p>
+                {form.Grafikname ? (
+                  <p className="muted">
+                    Aktuelles Foto:
+                    {' '}
+                    <a href={form.Grafikname} target="_blank" rel="noopener noreferrer">
+                      {form.Grafikname}
+                    </a>
+                  </p>
+                ) : (
+                  <p className="muted">Für diesen Artikel liegt noch kein Foto vor.</p>
+                )}
               </div>
-
-              {form.picture1 && (
-                <div className="row">
-                  <label>
-                    Foto 2
-                  </label>
+              <div className="row">
+                <label>Manuelles Formular</label>
+                <div className="manual-form-helper">
                   <input
-                    type="file"
-                    id="picture2"
-                    name="picture2"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhoto2Change}
+                    type="text"
+                    readOnly
+                    value={manualFormLink}
+                    onFocus={(event) => {
+                      try {
+                        event.currentTarget.select();
+                      } catch (err) {
+                        console.warn('Selecting manual form link failed', err);
+                      }
+                    }}
                   />
+                  <button type="button" onClick={handleOpenManualForm}>
+                    Öffnen
+                  </button>
                 </div>
-              )}
-
-              {form.picture2 && (
-                <div className="row">
-                  <label>
-                    Foto 3
-                  </label>
-                  <input
-                    type="file"
-                    id="picture3"
-                    name="picture3"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhoto3Change}
-                  />
-                </div>
-              )}
-            </>
+              </div>
+            </section>
           )}
 
           <div className="row">

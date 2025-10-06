@@ -46,23 +46,39 @@ const action: Action = {
       }
       const now = nowDate.toISOString();
       const images = [p.get('picture1') || '', p.get('picture2') || '', p.get('picture3') || ''];
+      const hasIncomingPictures = images.some((img) => typeof img === 'string' && img.trim() !== '');
+      const incomingGrafikname = (p.get('Grafikname') || '').trim();
       let firstImage = '';
-      try {
-        const dir = path.join(__dirname, '../../media', ItemUUID);
-        fs.mkdirSync(dir, { recursive: true });
-        const artNr = (p.get('Artikel_Nummer') || '').trim() || ItemUUID;
-        images.forEach((img, idx) => {
-          if (!img) return;
-          const m = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-          if (!m) return;
-          const ext = m[1].split('/')[1];
-          const buf = Buffer.from(m[2], 'base64');
-          const file = `${artNr}-${idx + 1}.${ext}`;
-          fs.writeFileSync(path.join(dir, file), buf);
-          if (!firstImage) firstImage = `/media/${ItemUUID}/${file}`;
-        });
-      } catch (e) {
-        console.error('Failed to save images', e);
+      if (hasIncomingPictures) {
+        try {
+          const dir = path.join(__dirname, '../../media', ItemUUID);
+          fs.mkdirSync(dir, { recursive: true });
+          const artNr = (p.get('Artikel_Nummer') || '').trim() || ItemUUID;
+          images.forEach((img, idx) => {
+            if (!img) return;
+            const m = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+            if (!m) return;
+            const ext = m[1].split('/')[1];
+            const buf = Buffer.from(m[2], 'base64');
+            const file = `${artNr}-${idx + 1}.${ext}`;
+            fs.writeFileSync(path.join(dir, file), buf);
+            if (!firstImage) firstImage = `/media/${ItemUUID}/${file}`;
+          });
+        } catch (e) {
+          console.error('Failed to save images', e);
+        }
+      } else if (incomingGrafikname) {
+        try {
+          console.info('Reusing existing Grafikname for imported item', {
+            ItemUUID,
+            Grafikname: incomingGrafikname
+          });
+        } catch (logError) {
+          console.warn('Failed to log Grafikname reuse information', logError);
+        }
+        firstImage = incomingGrafikname;
+      } else {
+        console.info('No photos provided for item import and no Grafikname supplied', { ItemUUID });
       }
       const data = {
         BoxID,
