@@ -26,7 +26,7 @@ const action: Action = {
       const actor = (data.actor || '').trim();
       if (!toBoxId || !actor) return sendJson(res, 400, { error: 'toBoxId and actor are required' });
       const dest = ctx.getBox.get(toBoxId);
-      if (!dest) return sendJson(res, 404, { error: 'destination box not found' });
+      if (!dest) return sendJson(res, 404, { error: 'Behälter nicht gefunden!' });
       const rawLocation = dest.Location;
       const normalizedLocation = typeof rawLocation === 'string' ? rawLocation.trim() : null;
       if (!normalizedLocation) {
