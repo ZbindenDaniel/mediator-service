@@ -4,7 +4,7 @@ import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
-import { getUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import {
   buildAgenticCancelUrl,
@@ -16,6 +16,7 @@ import {
 } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
+import { useDialog } from './dialog';
 
 interface Props {
   itemId: string;
@@ -29,9 +30,9 @@ export interface AgenticStatusCardProps {
   error: string | null;
   needsReview: boolean;
   hasFailure: boolean;
-  onRestart: () => void;
-  onReview: (decision: 'approved' | 'rejected') => void;
-  onCancel: () => void;
+  onRestart: () => void | Promise<void>;
+  onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
+  onCancel: () => void | Promise<void>;
 }
 
 export function AgenticStatusCard({
@@ -115,6 +116,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
+  const dialog = useDialog();
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
@@ -229,8 +231,9 @@ export default function ItemDetail({ itemId }: Props) {
 
   async function handleAgenticReview(decision: 'approved' | 'rejected') {
     if (!agentic) return;
-    const actor = getUser();
+    const actor = await ensureUser();
     if (!actor) {
+      console.info('Agentic review aborted: missing username.');
       window.alert('Bitte zuerst oben den Benutzer setzen.');
       return;
     }
@@ -239,7 +242,26 @@ export default function ItemDetail({ itemId }: Props) {
         ? 'Agentisches Ergebnis freigeben?'
         : 'Agentisches Ergebnis ablehnen?';
     if (!window.confirm(confirmMessage)) return;
-    const noteInput = window.prompt('Notiz (optional):', '') ?? '';
+
+    let noteInput = '';
+    try {
+      const noteResult = await dialog.prompt({
+        title: 'Review-Notiz',
+        message: 'Notiz (optional):',
+        defaultValue: '',
+        confirmLabel: 'Speichern',
+        cancelLabel: 'Überspringen',
+        placeholder: 'Notiz eingeben'
+      });
+      noteInput = (noteResult ?? '').trim();
+      if (!noteInput) {
+        console.info('Agentic review note prompt dismissed or empty.');
+      }
+    } catch (err) {
+      console.error('Agentic review note prompt failed', err);
+      noteInput = '';
+    }
+
     setAgenticActionPending(true);
     setAgenticError(null);
     setAgenticReviewIntent(decision);
@@ -276,8 +298,9 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const actor = getUser();
+    const actor = await ensureUser();
     if (!actor) {
+      console.info('Agentic restart aborted: missing username.');
       window.alert('Bitte zuerst oben den Benutzer setzen.');
       return;
     }
@@ -376,8 +399,9 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const actor = getUser();
+    const actor = await ensureUser();
     if (!actor) {
+      console.info('Agentic cancel aborted: missing username.');
       window.alert('Bitte zuerst oben den Benutzer setzen.');
       return;
     }
@@ -462,11 +486,17 @@ export default function ItemDetail({ itemId }: Props) {
   async function handleDelete() {
     if (!item) return;
     if (!window.confirm('Item wirklich löschen?')) return;
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Item deletion aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser(), confirm: true })
+        body: JSON.stringify({ actor, confirm: true })
       });
       if (res.ok) {
         if (item.BoxID) {
@@ -533,25 +563,37 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
               <div className='row'>
                 <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
-                <button type="button" className="btn" onClick={async () => {
-                  if (!window.confirm('Entnehmen?')) return;
-                  try {
-                    const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ actor: getUser() })
-                    });
-                    if (res.ok) {
-                      const j = await res.json();
-                      setItem({ ...item, Auf_Lager: j.quantity, BoxID: j.boxId });
-                      console.log('Item entnommen', item.ItemUUID);
-                    } else {
-                      console.error('Failed to remove item', res.status);
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={async () => {
+                    if (!window.confirm('Entnehmen?')) return;
+                    const actor = await ensureUser();
+                    if (!actor) {
+                      console.info('Item removal aborted: missing username.');
+                      window.alert('Bitte zuerst oben den Benutzer setzen.');
+                      return;
                     }
-                  } catch (err) {
-                    console.error('Entnahme fehlgeschlagen', err);
-                  }
-                }}>Entnehmen</button>
+                    try {
+                      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ actor })
+                      });
+                      if (res.ok) {
+                        const j = await res.json();
+                        setItem({ ...item, Auf_Lager: j.quantity, BoxID: j.boxId });
+                        console.log('Item entnommen', item.ItemUUID);
+                      } else {
+                        console.error('Failed to remove item', res.status);
+                      }
+                    } catch (err) {
+                      console.error('Entnahme fehlgeschlagen', err);
+                    }
+                  }}
+                >
+                  Entnehmen
+                </button>
                 <button type="button" className="btn danger" onClick={handleDelete}>Löschen</button>
               </div>
             </div>

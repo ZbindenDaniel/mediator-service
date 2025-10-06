@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 
 interface Props {
   itemId: string;
@@ -30,11 +30,17 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Relocate item aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toBoxId: boxId, actor: getUser() })
+        body: JSON.stringify({ toBoxId: boxId, actor })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -74,11 +80,17 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
   }
 
   async function handleCreateBox() {
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Create box aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       const res = await fetch(`/api/boxes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser() })
+        body: JSON.stringify({ actor })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.id) {

@@ -1,23 +1,47 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { getUser, setUser as persistUser } from '../lib/user';
+import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
+import { useDialog } from './dialog';
 import { GoArrowLeft } from 'react-icons/go';
 
 export default function Header() {
-  const [user, setUserState] = useState('');
+  const dialog = useDialog();
+  const [user, setUserState] = useState(() => getUser().trim());
 
   useEffect(() => {
-    try {
-      setUserState(getUser());
-    } catch (err) {
-      console.error('Failed to load user', err);
-    }
+    let cancelled = false;
+    const loadUser = async () => {
+      try {
+        const ensured = await ensureUser();
+        if (!cancelled) {
+          setUserState(ensured);
+          if (!ensured) {
+            console.info('No username persisted after ensureUser resolution.');
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to ensure user during header mount', err);
+        }
+      }
+    };
+
+    void loadUser();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleUserDoubleClick = useCallback(() => {
+  const handleUserDoubleClick = useCallback(async () => {
     try {
-      const next = window.prompt('Bitte geben Sie einen neuen Benutzernamen ein:', user) ?? '';
-      const trimmed = next.trim();
+      const result = await dialog.prompt({
+        title: 'Benutzername bearbeiten',
+        message: 'Bitte geben Sie einen neuen Benutzernamen ein:',
+        defaultValue: user,
+        confirmLabel: 'Speichern',
+        cancelLabel: 'Abbrechen'
+      });
+      const trimmed = (result ?? '').trim();
       if (!trimmed) {
         console.info('Username update cancelled or empty input.');
         return;
@@ -28,10 +52,11 @@ export default function Header() {
       }
       persistUser(trimmed);
       setUserState(trimmed);
+      console.log('Username updated via header dialog.');
     } catch (err) {
-      console.error('Failed to update username', err);
+      console.error('Failed to update username through dialog', err);
     }
-  }, [user]);
+  }, [dialog, user]);
 
   return (
     <header className="header">

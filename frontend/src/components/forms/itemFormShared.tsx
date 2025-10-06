@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Item } from '../../../../models';
-import { getUser } from '../../lib/user';
+import { ensureUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
 
@@ -55,12 +55,18 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
       console.warn('Cannot change stock without an ItemUUID');
       return;
     }
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Stock change aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       console.log('Changing stock quantity', { op, itemUUID: form.ItemUUID });
       const res = await fetch(`/api/items/${encodeURIComponent(form.ItemUUID)}/${op}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser() })
+        body: JSON.stringify({ actor })
       });
       if (!res.ok) {
         console.error(`Failed to ${op} stock`, res.status);

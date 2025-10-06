@@ -5,7 +5,7 @@ import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
 import type { Box, Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
-import { getUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import BoxColorTag from './BoxColorTag';
 
@@ -30,11 +30,17 @@ export default function BoxDetail({ boxId }: Props) {
   async function handleDeleteBox() {
     if (!box) return;
     if (!window.confirm('Behälter wirklich löschen?')) return;
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Box deletion aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser(), confirm: true })
+        body: JSON.stringify({ actor, confirm: true })
       });
       if (res.ok) {
         navigate('/');
@@ -56,11 +62,17 @@ export default function BoxDetail({ boxId }: Props) {
       return;
     }
     console.log('Item removal confirmed', { itemId });
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Box item removal aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/remove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser() })
+        body: JSON.stringify({ actor })
       });
       if (res.ok) {
         setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme erfolgreich' }));
@@ -134,11 +146,17 @@ export default function BoxDetail({ boxId }: Props) {
                 <h3>Notizen</h3>
                 <form onSubmit={async (e) => {
                   e.preventDefault();
+                  const actor = await ensureUser();
+                  if (!actor) {
+                    console.info('Box note save aborted: missing username.');
+                    window.alert('Bitte zuerst oben den Benutzer setzen.');
+                    return;
+                  }
                   try {
                     const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ notes: note, location: box.Location, actor: getUser() })
+                      body: JSON.stringify({ notes: note, location: box.Location, actor })
                     });
                     if (res.ok) {
                       setBox(b => b ? { ...b, Notes: note } : b);
