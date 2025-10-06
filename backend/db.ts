@@ -341,6 +341,12 @@ const ITEM_JOIN_BASE = `
   LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
 `;
 
+const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
+  LEFT JOIN boxes b ON i.BoxID = b.BoxID
+`;
+
+const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Location,''))";
+
 function itemSelectColumns(locationExpr: string): string {
   return `
 SELECT
@@ -445,10 +451,10 @@ export { db };
 
 export const upsertBox = db.prepare(
   `
-    INSERT INTO boxes (BoxID, Location, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
-    VALUES (@BoxID, @Location, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
-    ON CONFLICT(BoxID) DO UPDATE SET
-      Location=excluded.Location,
+      INSERT INTO boxes (BoxID, Location, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
+      VALUES (@BoxID, @Location, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
+      ON CONFLICT(BoxID) DO UPDATE SET
+      Location=COALESCE(excluded.Location, boxes.Location),
       CreatedAt=COALESCE(excluded.CreatedAt, boxes.CreatedAt),
       Notes=COALESCE(excluded.Notes, boxes.Notes),
       PlacedBy=COALESCE(excluded.PlacedBy, boxes.PlacedBy),
@@ -458,23 +464,23 @@ export const upsertBox = db.prepare(
 );
 
 export const queueLabel = db.prepare(`INSERT INTO label_queue (ItemUUID, CreatedAt) VALUES (?, datetime('now'))`);
-export const getItem = db.prepare(
-  `${itemSelectColumns('i.Location')}
-${ITEM_JOIN_BASE}
-WHERE i.ItemUUID = ?`
-);
-export const findByMaterial = db.prepare(
-  `${itemSelectColumns('i.Location')}
-${ITEM_JOIN_BASE}
+export const getItem = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
+WHERE i.ItemUUID = ?
+`);
+export const findByMaterial = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
 WHERE i.Artikel_Nummer = ?
-ORDER BY i.UpdatedAt DESC`
-);
-export const itemsByBox = db.prepare(
-  `${itemSelectColumns('i.Location')}
-${ITEM_JOIN_BASE}
+ORDER BY i.UpdatedAt DESC
+`);
+export const itemsByBox = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
 WHERE i.BoxID = ?
-ORDER BY i.ItemUUID`
-);
+ORDER BY i.ItemUUID
+`);
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 export const upsertAgenticRun = db.prepare(
@@ -570,21 +576,19 @@ export const updateAgenticReview = db.prepare(`
   WHERE ItemUUID = @ItemUUID
 `);
 
-export const listItems = db.prepare(
-  `${itemSelectColumns('COALESCE(i.Location, b.Location)')}
-${ITEM_JOIN_BASE}
-  LEFT JOIN boxes b ON i.BoxID = b.BoxID
- ORDER BY i.ItemUUID`
-);
+export const listItems = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
+ORDER BY i.ItemUUID
+`);
 
-export const listItemsForExport = db.prepare(
-  `${itemSelectColumns('COALESCE(i.Location, b.Location)')}
-${ITEM_JOIN_BASE}
-  LEFT JOIN boxes b ON i.BoxID = b.BoxID
- WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
-   AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
- ORDER BY i.Datum_erfasst`
-);
+export const listItemsForExport = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
+WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
+  AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
+ORDER BY i.Datum_erfasst
+`);
 
 export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
 
