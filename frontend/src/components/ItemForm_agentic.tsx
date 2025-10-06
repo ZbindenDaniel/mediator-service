@@ -31,7 +31,10 @@ export default function ItemForm_Agentic({
 
   const handleSelectSimilar = (selected: typeof similarItems[number]) => {
     try {
-      console.log('Applying similar item selection (agentic)', selected.ItemUUID);
+      console.log('Applying similar item selection (agentic)', {
+        itemUUID: selected.ItemUUID ?? null,
+        artikelNummer: selected.Artikel_Nummer
+      });
       setForm((prev) => {
         const referenceFields = extractReferenceFields(selected);
         const { Artikelbeschreibung: _ignoredDescription, ...restReferenceFields } = referenceFields;

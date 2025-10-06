@@ -32,7 +32,8 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
         setLoading(true);
         setError(null);
         console.log('Fetching duplicate candidates', trimmedTerm);
-        const response = await fetch(`/api/search?term=${encodeURIComponent(trimmedTerm)}`, {
+        const params = new URLSearchParams({ term: trimmedTerm, scope: 'refs' });
+        const response = await fetch(`/api/search?${params.toString()}`, {
           method: 'GET',
           signal: controller.signal
         });
@@ -47,8 +48,24 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
           return;
         }
         const payload = await response.json();
-        const results = Array.isArray(payload?.items) ? (payload.items as SimilarItem[]) : [];
-        setItems(results);
+        const refs = Array.isArray(payload?.refs) ? (payload.refs as SimilarItem[]) : [];
+        const seen = new Set<string>();
+        const deduped: SimilarItem[] = [];
+        for (const ref of refs) {
+          if (!ref || typeof ref.Artikel_Nummer !== 'string') {
+            continue;
+          }
+          const key = ref.Artikel_Nummer.trim().toLowerCase();
+          if (!key) {
+            continue;
+          }
+          if (seen.has(key)) {
+            continue;
+          }
+          seen.add(key);
+          deduped.push(ref);
+        }
+        setItems(deduped);
         setLoading(false);
       } catch (err) {
         if (!isMounted || controller.signal.aborted) {
@@ -73,7 +90,10 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
   const handleSelect = useCallback(
     async (item: SimilarItem) => {
       try {
-        console.log('Duplicate candidate chosen', item.ItemUUID);
+        console.log('Duplicate candidate chosen', {
+          itemUUID: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer
+        });
         await onSelect(item);
       } catch (err) {
         console.error('Failed to handle duplicate candidate selection', err);
