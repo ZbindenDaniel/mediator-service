@@ -1,7 +1,5 @@
 import React, { useMemo } from 'react';
-import { ItemDetailsFields, ItemFormData, LockedFieldConfig, createPhotoChangeHandler, extractReferenceFields, useItemFormState } from './forms/itemFormShared';
-import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
-import { useSimilarItems } from './forms/useSimilarItems';
+import { ItemDetailsFields, ItemFormData, LockedFieldConfig, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
 
 interface Props {
   item: Partial<ItemFormData>;
@@ -14,32 +12,7 @@ interface Props {
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent, lockedFields, hidePhotoInputs }: Props) {
-  const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
-
-  const { similarItems, loading, error, hasQuery } = useSimilarItems({
-    description: form.Artikelbeschreibung,
-    currentItemUUID: form.ItemUUID
-  });
-
-  const handleSelectSimilar = (selected: typeof similarItems[number]) => {
-    try {
-      console.log('Applying similar item selection', selected.exemplarItemUUID);
-      setForm((prev) => {
-        const referenceFields = extractReferenceFields(selected);
-        const { Artikelbeschreibung: _ignoredDescription, ...restReferenceFields } = referenceFields;
-        if (_ignoredDescription !== undefined) {
-          console.log('Preserving existing description while adopting reference fields');
-        }
-        const next = { ...prev, ...restReferenceFields } as Partial<ItemFormData>;
-        if (isNew) {
-          delete (next as Partial<ItemFormData>).ItemUUID;
-        }
-        return next;
-      });
-    } catch (err) {
-      console.error('Failed to apply similar item selection', err);
-    }
-  };
+  const { form, update, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -63,8 +36,6 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
     () => createPhotoChangeHandler(update, 'picture3'),
     [update]
   );
-
-  const shouldShowSuggestions = hasQuery && lockedFields?.Artikelbeschreibung !== 'hidden' && lockedFields?.Artikelbeschreibung !== 'readonly';
 
   const photoPreview = useMemo(() => {
     const photos = [form.picture1, form.picture2, form.picture3].filter(Boolean);
@@ -96,16 +67,6 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
             onUpdate={update}
             onGenerateMaterialNumber={generateMaterialNumber}
             onChangeStock={changeStock}
-            descriptionSuggestions={
-              shouldShowSuggestions ? (
-                <SimilarItemsPanel
-                  items={similarItems}
-                  loading={loading}
-                  error={error}
-                  onSelect={handleSelectSimilar}
-                />
-              ) : null
-            }
             lockedFields={lockedFields}
           />
 
