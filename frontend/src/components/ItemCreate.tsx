@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
@@ -14,6 +14,7 @@ import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
+import { useDialog } from './dialog';
 
 type AgenticEnv = typeof globalThis & {
   AGENTIC_API_BASE?: string;
@@ -39,7 +40,7 @@ export interface AgenticTriggerHandlerOptions {
   agenticRunUrl: string | null;
   triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
   reportFailure: AgenticTriggerFailureReporter;
-  alertFn: (message: string) => void;
+  alertFn: (message: string) => Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
   onSkipped?: (itemId: string) => void;
 }
@@ -94,7 +95,7 @@ export async function handleAgenticRunTrigger({
 
       if (result.message) {
         try {
-          alertFn(result.message);
+          await alertFn(result.message);
         } catch (alertErr) {
           logger.warn?.('Failed to display skipped agentic trigger message', alertErr);
         }
@@ -121,7 +122,7 @@ export async function handleAgenticRunTrigger({
 
     if (result.message) {
       try {
-        alertFn(result.message);
+        await alertFn(result.message);
       } catch (alertErr) {
         logger.warn?.('Failed to display agentic trigger failure message', alertErr);
       }
@@ -155,6 +156,30 @@ export default function ItemCreate() {
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [creating, setCreating] = useState(false);
+
+  const { alert: dialogAlert } = useDialog();
+
+  const showAgenticTriggerAlert = useCallback(
+    async (message: string) => {
+      if (!message) {
+        return;
+      }
+      try {
+        await dialogAlert({ message });
+      } catch (alertErr) {
+        console.warn('Failed to display agentic trigger alert dialog', alertErr);
+      }
+    },
+    [dialogAlert]
+  );
+
+  const showCreationConfirmationAlert = useCallback(async () => {
+    try {
+      await dialogAlert({ message: 'Behälter erstellt. Bitte platzieren!' });
+    } catch (alertErr) {
+      console.warn('Failed to display item creation confirmation dialog', alertErr);
+    }
+  }, [dialogAlert]);
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
@@ -347,23 +372,6 @@ export default function ItemCreate() {
       return;
     }
 
-    const showAlert = (message: string) => {
-      if (!message) {
-        return;
-      }
-      try {
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          window.alert(message);
-        } else if (typeof alert === 'function') {
-          alert(message);
-        } else {
-          console.info('Agentic trigger notice', message);
-        }
-      } catch (alertErr) {
-        console.warn('Failed to display agentic trigger alert', alertErr);
-      }
-    };
-
     try {
       await handleAgenticRunTrigger({
         agenticPayload,
@@ -371,7 +379,7 @@ export default function ItemCreate() {
         agenticRunUrl,
         triggerAgenticRunRequest,
         reportFailure: reportAgenticTriggerFailure,
-        alertFn: showAlert,
+        alertFn: showAgenticTriggerAlert,
         logger: console,
         onSkipped: (itemId) => {
           setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
@@ -440,7 +448,7 @@ export default function ItemCreate() {
 
       await triggerAgenticRun(agenticPayload, context);
 
-      alert('Behälter erstellt. Bitte platzieren!');
+      await showCreationConfirmationAlert();
       if (createdItem?.BoxID) {
         navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
       }

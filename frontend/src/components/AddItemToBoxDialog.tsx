@@ -1,11 +1,25 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
+import { dialogService } from './dialog';
 
 interface Props {
   boxId: string;
   onAdded: () => void;
   onClose: () => void;
+}
+
+export async function confirmItemRelocationIfNecessary(item: Item, targetBoxId: string) {
+  if (!item.BoxID || item.BoxID === targetBoxId) {
+    return true;
+  }
+
+  return dialogService.confirm({
+    title: 'Artikel verschieben',
+    message: `Artikel ist bereits in Behälter ${item.BoxID}. Verschieben?`,
+    confirmLabel: 'Verschieben',
+    cancelLabel: 'Abbrechen'
+  });
 }
 
 export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
@@ -32,9 +46,9 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
 
   async function addToBox(item: Item) {
     try {
-      if (item.BoxID && item.BoxID !== boxId) {
-        const ok = window.confirm(`Artikel ist bereits in Behälter ${item.BoxID}. Verschieben?`);
-        if (!ok) return;
+      const confirmed = await confirmItemRelocationIfNecessary(item, boxId);
+      if (!confirmed) {
+        return;
       }
       const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/move`, {
         method: 'POST',
