@@ -200,6 +200,41 @@ export function ItemDetailsFields({
   const quantityHidden = isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
   const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
 
+  const handleQuantityChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (quantityReadonly) {
+        console.info('Quantity change ignored because the field is readonly');
+        return;
+      }
+
+      try {
+        const { value } = event.target;
+
+        if (value === '') {
+          onUpdate('Auf_Lager', undefined);
+          return;
+        }
+
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isNaN(parsed)) {
+          console.warn('Received non-numeric quantity input', { value });
+          return;
+        }
+
+        if (parsed < 0) {
+          console.warn('Received negative quantity input, clamping to zero', { value: parsed });
+          onUpdate('Auf_Lager', 0);
+          return;
+        }
+
+        onUpdate('Auf_Lager', parsed);
+      } catch (error) {
+        console.error('Failed to handle quantity change', error);
+      }
+    },
+    [onUpdate, quantityReadonly]
+  );
+
   const categoryLookup = useMemo(() => {
     const map = new Map<number, ItemCategoryDefinition>();
     for (const category of itemCategories) {
@@ -416,16 +451,35 @@ export function ItemDetailsFields({
           </div>
       </div>
 
-      {(
+      {!quantityHidden && (
         <div className="row">
           <label>
             Anzahl*
           </label>
-           <div className="combined-input">
-              <button type="button" onClick={() => handleStock('remove')}>-</button>
-              <input type="number" value={form.Auf_Lager ?? 0} required />
-              <button type="button" onClick={() => handleStock('add')}>+</button>
-            </div>
+          <div className="combined-input">
+            <button
+              type="button"
+              onClick={() => handleStock('remove')}
+              disabled={quantityReadonly}
+            >
+              -
+            </button>
+            <input
+              type="number"
+              value={form.Auf_Lager ?? 0}
+              onChange={handleQuantityChange}
+              required
+              disabled={quantityReadonly}
+              min={0}
+            />
+            <button
+              type="button"
+              onClick={() => handleStock('add')}
+              disabled={quantityReadonly}
+            >
+              +
+            </button>
+          </div>
         </div>
       )}
 
