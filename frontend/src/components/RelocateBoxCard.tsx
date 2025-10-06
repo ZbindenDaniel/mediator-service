@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ensureUser } from '../lib/user';
 import { BOX_COLORS } from '../data/boxColors';
+import { dialogService } from './dialog';
 
 interface Props {
   boxId: string;
@@ -32,7 +33,14 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Relocate box aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for box relocation', error);
+      }
       return;
     }
 

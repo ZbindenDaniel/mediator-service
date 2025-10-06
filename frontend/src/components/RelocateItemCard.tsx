@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ensureUser } from '../lib/user';
+import { dialogService } from './dialog';
 
 interface Props {
   itemId: string;
@@ -33,7 +34,14 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Relocate item aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for item relocation', error);
+      }
       return;
     }
     try {
@@ -83,7 +91,14 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     const actor = await ensureUser();
     if (!actor) {
       console.info('Create box aborted: missing username.');
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for box creation', error);
+      }
       return;
     }
     try {
