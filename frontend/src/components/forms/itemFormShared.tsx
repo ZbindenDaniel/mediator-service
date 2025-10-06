@@ -14,6 +14,8 @@ export interface ItemFormData extends Item {
   agenticSearch?: string;
 }
 
+export const ITEM_FORM_DEFAULT_EINHEIT = 'Stück';
+
 const referenceFieldKeys: (keyof ItemRef)[] = [
   'Artikel_Nummer',
   'Grafikname',
@@ -68,17 +70,27 @@ interface UseItemFormStateOptions {
 }
 
 export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({ ...initialItem });
+  const [form, setForm] = useState<Partial<ItemFormData>>({
+    Einheit: ITEM_FORM_DEFAULT_EINHEIT,
+    ...initialItem
+  });
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const mergeForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm((prev) => ({ ...prev, ...next }));
+    setForm((prev) => ({
+      ...prev,
+      ...next,
+      Einheit: next.Einheit ?? prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT
+    }));
   }, []);
 
   const resetForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm({ ...next });
+    setForm({
+      Einheit: ITEM_FORM_DEFAULT_EINHEIT,
+      ...next
+    });
   }, []);
 
   const generateMaterialNumber = useCallback(async () => {
@@ -644,7 +656,7 @@ export function ItemDetailsFields({
           Einheit
         </label>
         <input
-          value={form.Einheit || ''}
+          value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
           onChange={(e) => onUpdate('Einheit', e.target.value)}
         />
       </div>
