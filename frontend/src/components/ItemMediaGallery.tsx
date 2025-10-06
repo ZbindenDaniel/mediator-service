@@ -280,7 +280,7 @@ export default function ItemMediaGallery({
                   <small className="muted">{asset.src}</small>
                 </div>
               )}
-              <figcaption>{asset.label}</figcaption>
+              {/* <figcaption>{asset.label}</figcaption> */}
             </figure>
           );
         })}

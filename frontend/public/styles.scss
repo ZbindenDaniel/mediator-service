@@ -21,7 +21,7 @@ $activity-color: #804db4;
     /* header */
     --card: #3a313429; //  #ff69b429,  #3a313429,
     /* card bg */
-    --dialog: #ffffff;
+    --dialog: floralwhite;
     /* dialog bg */
     --line: #e6e6e6;
     /* borders */
@@ -154,19 +154,14 @@ textarea {
 }
 
 .item-media-gallery__item {
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 0.5rem;
-    max-width: 140px;
     text-align: center;
-    background: #fff;
+    margin: auto;
+    max-width: 30%;
 }
 
 .item-media-gallery__item img {
     max-width: 100%;
-    border-radius: calc(var(--radius) / 2);
     display: block;
-    margin: 0 auto 0.5rem;
 }
 
 .item-media-gallery__fallback {
