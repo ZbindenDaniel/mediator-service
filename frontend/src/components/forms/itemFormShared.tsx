@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import type { Item } from '../../../../models';
 import { getUser } from '../../lib/user';
 
@@ -16,16 +16,69 @@ interface UseItemFormStateOptions {
   initialItem: Partial<ItemFormData>;
 }
 
+type QuantityCommitResult = {
+  value: number | undefined;
+  cleared: boolean;
+  valid: boolean;
+};
+
 export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
   const [form, setForm] = useState<Partial<ItemFormData>>({ ...initialItem });
+  const initialQuantityInput = useMemo(() => {
+    if (typeof initialItem.Auf_Lager === 'number') {
+      return String(initialItem.Auf_Lager);
+    }
+    return '';
+  }, [initialItem.Auf_Lager]);
+  const [quantityInput, setQuantityInput] = useState<string>(initialQuantityInput);
+  const [isQuantityDirty, setIsQuantityDirty] = useState(false);
 
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (key === 'Auf_Lager') {
+      const numericValue = typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+      setQuantityInput(numericValue);
+      setIsQuantityDirty(false);
+    }
   }, []);
 
-  const mergeForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm((prev) => ({ ...prev, ...next }));
+  const mergeForm = useCallback(
+    (next: Partial<ItemFormData>) => {
+      setForm((prev) => ({ ...prev, ...next }));
+      if (Object.prototype.hasOwnProperty.call(next, 'Auf_Lager')) {
+        const nextQuantity = next.Auf_Lager;
+        if (!isQuantityDirty) {
+          setQuantityInput(typeof nextQuantity === 'number' && Number.isFinite(nextQuantity) ? String(nextQuantity) : '');
+        }
+      }
+    },
+    [isQuantityDirty]
+  );
+
+  const setQuantityInputValue = useCallback((value: string) => {
+    setQuantityInput(value);
+    setIsQuantityDirty(true);
   }, []);
+
+  const commitQuantityInput = useCallback((): QuantityCommitResult => {
+    const trimmed = quantityInput.trim();
+    if (!trimmed) {
+      setIsQuantityDirty(false);
+      update('Auf_Lager', undefined as ItemFormData['Auf_Lager']);
+      return { value: undefined, cleared: true, valid: true };
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (Number.isNaN(parsed)) {
+      console.warn('Quantity input is not a valid number', { quantityInput });
+      setIsQuantityDirty(true);
+      return { value: undefined, cleared: false, valid: false };
+    }
+
+    update('Auf_Lager', parsed as ItemFormData['Auf_Lager']);
+    setIsQuantityDirty(false);
+    return { value: parsed, cleared: false, valid: true };
+  }, [quantityInput, update]);
 
   const generateMaterialNumber = useCallback(async () => {
     try {
@@ -66,13 +119,25 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
         }
         return next;
       });
+      setQuantityInput(typeof j.quantity === 'number' && Number.isFinite(j.quantity) ? String(j.quantity) : '');
+      setIsQuantityDirty(false);
       console.log(`Stock ${op === 'add' ? 'increase' : 'decrease'} succeeded`, j);
     } catch (err) {
       console.error(`Failed to ${op} stock`, err);
     }
   }, [form.ItemUUID]);
 
-  return { form, update, mergeForm, setForm, generateMaterialNumber, changeStock } as const;
+  return {
+    form,
+    update,
+    mergeForm,
+    setForm,
+    generateMaterialNumber,
+    changeStock,
+    quantityInput,
+    setQuantityInput: setQuantityInputValue,
+    commitQuantityInput
+  } as const;
 }
 
 interface ItemDetailsFieldsProps {
@@ -82,9 +147,22 @@ interface ItemDetailsFieldsProps {
   onGenerateMaterialNumber?: () => void | Promise<void>;
   onChangeStock?: (op: StockOperation) => void | Promise<void>;
   descriptionSuggestions?: React.ReactNode;
+  quantityInput?: string;
+  onQuantityInputChange?: (value: string) => void;
+  onQuantityCommit?: () => void;
 }
 
-export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNumber, onChangeStock, descriptionSuggestions }: ItemDetailsFieldsProps) {
+export function ItemDetailsFields({
+  form,
+  isNew,
+  onUpdate,
+  onGenerateMaterialNumber,
+  onChangeStock,
+  descriptionSuggestions,
+  quantityInput,
+  onQuantityInputChange,
+  onQuantityCommit
+}: ItemDetailsFieldsProps) {
   const handleStock = useCallback(async (op: StockOperation) => {
     if (!onChangeStock) {
       return;
@@ -150,8 +228,15 @@ export function ItemDetailsFields({ form, isNew, onUpdate, onGenerateMaterialNum
         {isNew ? (
           <input
             type="number"
-            value={form.Auf_Lager ?? 0}
-            onChange={(e) => onUpdate('Auf_Lager', parseInt(e.target.value, 10) || 0)}
+            value={quantityInput ?? ''}
+            onChange={(e) => onQuantityInputChange?.(e.target.value)}
+            onBlur={() => {
+              try {
+                onQuantityCommit?.();
+              } catch (err) {
+                console.error('Failed to commit quantity input on blur', err);
+              }
+            }}
             required
           />
         ) : onChangeStock ? (

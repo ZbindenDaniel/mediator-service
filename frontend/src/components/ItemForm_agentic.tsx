@@ -20,7 +20,8 @@ export default function ItemForm_Agentic({
   submitLabel,
   isNew
 }: Props) {
-  const { form, update, mergeForm, setForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
+  const { form, update, mergeForm, setForm, generateMaterialNumber, quantityInput, setQuantityInput, commitQuantityInput } =
+    useItemFormState({ initialItem: draft });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -68,8 +69,14 @@ export default function ItemForm_Agentic({
       return;
     }
     try {
-      console.log('Submitting form via step 2 handler', form);
-      await onSubmitPhotos(form);
+      const quantityResult = commitQuantityInput();
+      const payload = quantityResult.valid
+        ? { ...form, Auf_Lager: quantityResult.cleared ? undefined : quantityResult.value }
+        : quantityResult.cleared
+          ? { ...form, Auf_Lager: undefined }
+          : form;
+      console.log('Submitting form via step 2 handler', payload);
+      await onSubmitPhotos(payload);
     } catch (err) {
       console.error('Item form submit failed', err);
       setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
@@ -82,8 +89,14 @@ export default function ItemForm_Agentic({
       return;
     }
     try {
-      console.log('Submitting form via step 1 handler', form);
-      await onSubmitDetails(form);
+      const quantityResult = commitQuantityInput();
+      const payload = quantityResult.valid
+        ? { ...form, Auf_Lager: quantityResult.cleared ? undefined : quantityResult.value }
+        : quantityResult.cleared
+          ? { ...form, Auf_Lager: undefined }
+          : form;
+      console.log('Submitting form via step 1 handler', payload);
+      await onSubmitDetails(payload);
     } catch (err) {
       console.error('Item step 1 submit failed', err);
       setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
@@ -99,6 +112,9 @@ export default function ItemForm_Agentic({
             isNew={isNew}
             onUpdate={update}
             onGenerateMaterialNumber={generateMaterialNumber}
+            quantityInput={quantityInput}
+            onQuantityInputChange={setQuantityInput}
+            onQuantityCommit={commitQuantityInput}
             descriptionSuggestions={
               hasQuery ? (
                 <SimilarItemsPanel

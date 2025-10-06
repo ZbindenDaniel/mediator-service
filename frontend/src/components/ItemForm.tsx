@@ -12,7 +12,16 @@ interface Props {
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent = null }: Props) {
-  const { form, update, setForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
+  const {
+    form,
+    update,
+    setForm,
+    generateMaterialNumber,
+    changeStock,
+    quantityInput,
+    setQuantityInput,
+    commitQuantityInput
+  } = useItemFormState({ initialItem: item });
 
   const { similarItems, loading, error, hasQuery } = useSimilarItems({
     description: form.Artikelbeschreibung,
@@ -37,8 +46,14 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      console.log('Submitting item form', form);
-      await onSubmit(form);
+      const quantityResult = commitQuantityInput();
+      const payload = quantityResult.valid
+        ? { ...form, Auf_Lager: quantityResult.cleared ? undefined : quantityResult.value }
+        : quantityResult.cleared
+          ? { ...form, Auf_Lager: undefined }
+          : form;
+      console.log('Submitting item form', payload);
+      await onSubmit(payload);
     } catch (err) {
       console.error('Item form submit failed', err);
     }
@@ -68,6 +83,9 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
             onUpdate={update}
             onGenerateMaterialNumber={generateMaterialNumber}
             onChangeStock={!isNew ? changeStock : undefined}
+            quantityInput={quantityInput}
+            onQuantityInputChange={setQuantityInput}
+            onQuantityCommit={commitQuantityInput}
             descriptionSuggestions={
               hasQuery ? (
                 <SimilarItemsPanel
