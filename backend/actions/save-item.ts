@@ -200,13 +200,27 @@ const action: Action = {
         console.error('Failed to save item images', e);
       }
       const normalisedGrafikname = normaliseMediaReference(itemId, grafik);
-      const { picture1, picture2, picture3, ...rest } = data;
+      const { picture1, picture2, picture3, BoxID: incomingBoxId, ...rest } = data;
+      const selectedBoxId = incomingBoxId !== undefined ? incomingBoxId : existing.BoxID;
+      let normalizedBoxId: string | null = null;
+      if (selectedBoxId !== undefined && selectedBoxId !== null) {
+        const trimmedBoxId = String(selectedBoxId).trim();
+        if (trimmedBoxId) {
+          normalizedBoxId = trimmedBoxId;
+        } else {
+          console.info('Normalised blank BoxID to null', {
+            itemId,
+            previousBoxId: existing.BoxID,
+            receivedBoxId: incomingBoxId
+          });
+        }
+      }
       const item: Item = {
         ...existing,
         ...rest,
         Grafikname: normalisedGrafikname ?? undefined,
         ItemUUID: itemId,
-        BoxID: data.BoxID ?? existing.BoxID ?? '',
+        BoxID: normalizedBoxId,
         UpdatedAt: new Date()
       };
       const txn = ctx.db.transaction((it: Item, a: string) => {
