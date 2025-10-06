@@ -214,6 +214,7 @@ type ItemRefRow = {
 type ItemPersistencePayload = {
   instance: ItemInstanceRow;
   ref: ItemRefRow | null;
+  cleanupKey: string | null;
 };
 
 function asNullableString(value: unknown): string | null {
@@ -312,10 +313,32 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
 
 function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   const instance = prepareInstanceRow(item);
-  const ref = instance.Artikel_Nummer
-    ? prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: instance.Artikel_Nummer })
-    : null;
-  return { instance, ref };
+  const referenceKey = instance.Artikel_Nummer || instance.ItemUUID;
+  let cleanupKey: string | null = null;
+  let ref: ItemRefRow | null = null;
+
+  if (referenceKey) {
+    try {
+      ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: referenceKey });
+    } catch (err) {
+      console.error('Failed to prepare item reference payload', {
+        itemUUID: instance.ItemUUID,
+        error: err
+      });
+      throw err;
+    }
+    if (instance.Artikel_Nummer && instance.ItemUUID && instance.ItemUUID !== referenceKey) {
+      cleanupKey = instance.ItemUUID;
+    }
+  }
+
+  if (!instance.Artikel_Nummer && referenceKey === instance.ItemUUID) {
+    console.warn('Persisting item reference with fallback key due to missing Artikel_Nummer', {
+      itemUUID: instance.ItemUUID
+    });
+  }
+
+  return { instance, ref, cleanupKey };
 }
 
 function prepareLegacyItemPayload(row: Record<string, unknown>): ItemPersistencePayload {
@@ -460,9 +483,11 @@ ensureItemTables(db);
 
 let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
+let deleteItemReferenceByKeyStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
+  deleteItemReferenceByKeyStatement = db.prepare('DELETE FROM item_refs WHERE Artikel_Nummer = ?');
 } catch (err) {
   console.error('Failed to prepare item persistence statements', err);
   throw err;
@@ -471,13 +496,21 @@ try {
 function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
   if (payload.ref) {
     upsertItemReferenceStatement.run(payload.ref);
+    if (
+      payload.cleanupKey &&
+      payload.cleanupKey !== payload.ref.Artikel_Nummer
+    ) {
+      deleteItemReferenceByKeyStatement.run(payload.cleanupKey);
+    }
   }
   upsertItemInstanceStatement.run(payload.instance);
 }
 
+const ITEM_REFERENCE_JOIN_KEY = 'COALESCE(i.Artikel_Nummer, i.ItemUUID)';
+
 const ITEM_JOIN_BASE = `
   FROM items i
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
 `;
 
 function itemSelectColumns(locationExpr: string): string {
@@ -795,7 +828,7 @@ export const listRecentEvents = db.prepare(`
          COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
-  LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
   ORDER BY e.Id DESC LIMIT 3`);
 export const listRecentActivities = db.prepare(`
   SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Meta,
@@ -803,7 +836,7 @@ export const listRecentActivities = db.prepare(`
          COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
-  LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
   ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
 export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events`);
@@ -812,7 +845,7 @@ export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoWms = db.prepare(`
   SELECT COUNT(*) as c
   FROM items i
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
   WHERE IFNULL(r.WmsLink, '') = ''
 `);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
