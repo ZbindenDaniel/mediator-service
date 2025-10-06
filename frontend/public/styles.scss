@@ -100,10 +100,10 @@ textarea {
 }
 
 #header-back-button {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: bolder;
     text-decoration: none;
-    // border: 1px solid --muted;
+    display: contents;
     border-radius: 50%;
     padding: 4px 12px;
     background: transparent;
@@ -154,18 +154,14 @@ textarea {
 }
 
 .item-media-gallery__item {
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 0.5rem;
     text-align: center;
-    background: #fff;
+    margin: auto;
+    max-width: 30%;
 }
 
 .item-media-gallery__item img {
     max-width: 100%;
-    border-radius: calc(var(--radius) / 2);
     display: block;
-    margin: 0 auto 0.5rem;
 }
 
 .item-media-gallery__fallback {
@@ -369,6 +365,59 @@ div {
     gap: 12px;
 }
 
+.item-media-gallery__overlay {
+    z-index: 1050;
+}
+
+.item-media-gallery__dialog {
+    width: min(90vw, 720px);
+    max-height: 90vh;
+    overflow: hidden;
+    padding: 24px;
+}
+
+.item-media-gallery__dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.item-media-gallery__dialog-close {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    color: var(--acc);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.item-media-gallery__dialog-close:hover,
+.item-media-gallery__dialog-close:focus-visible {
+    text-decoration: underline;
+}
+
+.item-media-gallery__dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.item-media-gallery__dialog-image {
+    width: 100%;
+    max-height: min(70vh, 560px);
+    object-fit: contain;
+    border-radius: calc(var(--radius) / 1.5);
+    background: #f7f7f7;
+    padding: 8px;
+}
+
+.item-media-gallery__dialog-caption {
+    margin: 0;
+    text-align: center;
+    color: var(--muted);
+}
+
 /* TODO: Validate blocking overlay styling on legacy browsers when adding kiosk support. */
 .blocking-overlay {
     position: fixed;
@@ -378,7 +427,7 @@ div {
     justify-content: center;
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(3px);
-    z-index: 1100;
+    z-index: 990;
     padding: 24px;
 }
 
