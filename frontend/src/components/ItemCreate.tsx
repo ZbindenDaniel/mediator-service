@@ -397,6 +397,12 @@ export default function ItemCreate() {
     const { removeItemUUID = true } = options;
     const params = new URLSearchParams();
     const sanitized: Record<string, unknown> = { ...data };
+    if (typeof sanitized.Artikelbeschreibung === 'string') {
+      sanitized.Artikelbeschreibung = sanitized.Artikelbeschreibung.trim();
+    }
+    if (typeof sanitized.Artikel_Nummer === 'string') {
+      sanitized.Artikel_Nummer = sanitized.Artikel_Nummer.trim();
+    }
     if (!sanitized.BoxID && boxId) {
       sanitized.BoxID = boxId;
     }
@@ -551,15 +557,31 @@ export default function ItemCreate() {
       console.warn('Skipping manual submit; creation already running.');
       return;
     }
-    const merged: Partial<ItemFormData> = {
-      ...basicInfo,
-      ...data,
-      BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
-      Artikelbeschreibung: basicInfo.Artikelbeschreibung,
-      Artikel_Nummer: basicInfo.Artikel_Nummer,
-      Auf_Lager: basicInfo.Auf_Lager
-    };
-    await submitNewItem(merged, 'manual-edit');
+    try {
+      const preferredDescription =
+        typeof data.Artikelbeschreibung === 'string' && data.Artikelbeschreibung.trim() !== ''
+          ? data.Artikelbeschreibung
+          : basicInfo.Artikelbeschreibung;
+      const preferredNumber =
+        typeof data.Artikel_Nummer === 'string' && data.Artikel_Nummer.trim() !== ''
+          ? data.Artikel_Nummer
+          : basicInfo.Artikel_Nummer;
+
+      const merged: Partial<ItemFormData> = {
+        ...basicInfo,
+        ...data,
+        BoxID: data.BoxID || basicInfo.BoxID || boxId || undefined,
+        Artikelbeschreibung:
+          typeof preferredDescription === 'string' ? preferredDescription.trim() : preferredDescription,
+        Artikel_Nummer: typeof preferredNumber === 'string' ? preferredNumber.trim() : preferredNumber,
+        Auf_Lager: data.Auf_Lager ?? basicInfo.Auf_Lager
+      };
+
+      await submitNewItem(merged, 'manual-edit');
+    } catch (err) {
+      console.error('Failed to prepare manual edit payload', err);
+      throw err;
+    }
   };
 
   const handleAgenticDetails = async (data: Partial<ItemFormData>) => {
