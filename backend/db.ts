@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { DB_PATH } from './config';
-import { AgenticRun, Box, Item, LabelJob, EventLog } from '../models';
+import { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog } from '../models';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 let db: Database.Database;
@@ -15,7 +15,7 @@ try {
 }
 
 try {
-  // Schema with boxes, items, label queue, and events
+  // Schema with boxes, label queue, and events; item tables ensured separately
   db.exec(`
 CREATE TABLE IF NOT EXISTS boxes (
   BoxID TEXT PRIMARY KEY,
@@ -26,41 +26,6 @@ CREATE TABLE IF NOT EXISTS boxes (
   PlacedAt TEXT,
   UpdatedAt TEXT NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS items (
-  ItemUUID TEXT PRIMARY KEY,
-  BoxID TEXT,
-  Location TEXT,
-  UpdatedAt TEXT NOT NULL,
-
-  Datum_erfasst TEXT,
-  Artikel_Nummer TEXT,
-  Grafikname TEXT,
-  Artikelbeschreibung TEXT,
-  Auf_Lager INTEGER,
-  Verkaufspreis REAL,
-  Kurzbeschreibung TEXT,
-  Langtext TEXT,
-  Hersteller TEXT,
-  Länge_mm INTEGER,
-  Breite_mm INTEGER,
-  Höhe_mm INTEGER,
-  Gewicht_kg REAL,
-  Hauptkategorien_A TEXT,
-  Unterkategorien_A TEXT,
-  Hauptkategorien_B TEXT,
-  Unterkategorien_B TEXT,
-  Veröffentlicht_Status TEXT,
-  Shopartikel INTEGER,
-  Artikeltyp TEXT,
-  Einheit TEXT,
-  WmsLink TEXT,
-
-  FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
-CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
 
 CREATE TABLE IF NOT EXISTS label_queue (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,6 +48,512 @@ CREATE TABLE IF NOT EXISTS events (
 } catch (err) {
   console.error('Failed to create schema', err);
   throw err;
+}
+
+const CREATE_ITEM_REFS_SQL = `
+CREATE TABLE IF NOT EXISTS item_refs (
+  Artikel_Nummer TEXT PRIMARY KEY,
+  Grafikname TEXT,
+  Artikelbeschreibung TEXT,
+  Verkaufspreis REAL,
+  Kurzbeschreibung TEXT,
+  Langtext TEXT,
+  Hersteller TEXT,
+  Länge_mm INTEGER,
+  Breite_mm INTEGER,
+  Höhe_mm INTEGER,
+  Gewicht_kg REAL,
+  Hauptkategorien_A TEXT,
+  Unterkategorien_A TEXT,
+  Hauptkategorien_B TEXT,
+  Unterkategorien_B TEXT,
+  Veröffentlicht_Status TEXT,
+  Shopartikel INTEGER,
+  Artikeltyp TEXT,
+  Einheit TEXT,
+  WmsLink TEXT,
+  EntityType TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_item_refs_wms ON item_refs(WmsLink);
+`;
+
+const CREATE_ITEMS_SQL = `
+CREATE TABLE IF NOT EXISTS items (
+  ItemUUID TEXT PRIMARY KEY,
+  Artikel_Nummer TEXT,
+  BoxID TEXT,
+  Location TEXT,
+  UpdatedAt TEXT NOT NULL,
+  Datum_erfasst TEXT,
+  Auf_Lager INTEGER,
+  FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
+CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
+`;
+
+const EXPECTED_ITEM_COLUMNS = [
+  'ItemUUID',
+  'Artikel_Nummer',
+  'BoxID',
+  'Location',
+  'UpdatedAt',
+  'Datum_erfasst',
+  'Auf_Lager'
+];
+
+const LEGACY_ITEM_COLUMNS = [
+  'Grafikname',
+  'Artikelbeschreibung',
+  'Verkaufspreis',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg',
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B',
+  'Veröffentlicht_Status',
+  'Shopartikel',
+  'Artikeltyp',
+  'Einheit',
+  'WmsLink'
+];
+
+const UPSERT_ITEM_REFERENCE_SQL = `
+  INSERT INTO item_refs (
+    Artikel_Nummer, Grafikname, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
+    Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
+    Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
+    Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, WmsLink, EntityType
+  )
+  VALUES (
+    @Artikel_Nummer, @Grafikname, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
+    @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
+    @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
+    @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @WmsLink, @EntityType
+  )
+  ON CONFLICT(Artikel_Nummer) DO UPDATE SET
+    Grafikname=excluded.Grafikname,
+    Artikelbeschreibung=excluded.Artikelbeschreibung,
+    Verkaufspreis=excluded.Verkaufspreis,
+    Kurzbeschreibung=excluded.Kurzbeschreibung,
+    Langtext=excluded.Langtext,
+    Hersteller=excluded.Hersteller,
+    Länge_mm=excluded.Länge_mm,
+    Breite_mm=excluded.Breite_mm,
+    Höhe_mm=excluded.Höhe_mm,
+    Gewicht_kg=excluded.Gewicht_kg,
+    Hauptkategorien_A=excluded.Hauptkategorien_A,
+    Unterkategorien_A=excluded.Unterkategorien_A,
+    Hauptkategorien_B=excluded.Hauptkategorien_B,
+    Unterkategorien_B=excluded.Unterkategorien_B,
+    Veröffentlicht_Status=excluded.Veröffentlicht_Status,
+    Shopartikel=excluded.Shopartikel,
+    Artikeltyp=excluded.Artikeltyp,
+    Einheit=excluded.Einheit,
+    WmsLink=excluded.WmsLink,
+    EntityType=excluded.EntityType
+`;
+
+const UPSERT_ITEM_INSTANCE_SQL = `
+  INSERT INTO items (
+    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager
+  )
+  VALUES (
+    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager
+  )
+  ON CONFLICT(ItemUUID) DO UPDATE SET
+    Artikel_Nummer=excluded.Artikel_Nummer,
+    BoxID=excluded.BoxID,
+    Location=excluded.Location,
+    UpdatedAt=excluded.UpdatedAt,
+    Datum_erfasst=excluded.Datum_erfasst,
+    Auf_Lager=excluded.Auf_Lager
+`;
+
+type ItemInstanceRow = {
+  ItemUUID: string;
+  Artikel_Nummer: string | null;
+  BoxID: string | null;
+  Location: string | null;
+  UpdatedAt: string;
+  Datum_erfasst: string | null;
+  Auf_Lager: number | null;
+};
+
+type ItemRefRow = {
+  Artikel_Nummer: string;
+  Grafikname: string | null;
+  Artikelbeschreibung: string | null;
+  Verkaufspreis: number | null;
+  Kurzbeschreibung: string | null;
+  Langtext: string | null;
+  Hersteller: string | null;
+  Länge_mm: number | null;
+  Breite_mm: number | null;
+  Höhe_mm: number | null;
+  Gewicht_kg: number | null;
+  Hauptkategorien_A: number | null;
+  Unterkategorien_A: number | null;
+  Hauptkategorien_B: number | null;
+  Unterkategorien_B: number | null;
+  Veröffentlicht_Status: string | null;
+  Shopartikel: number | null;
+  Artikeltyp: string | null;
+  Einheit: string | null;
+  WmsLink: string | null;
+  EntityType: string | null;
+};
+
+type ItemPersistencePayload = {
+  instance: ItemInstanceRow;
+  ref: ItemRefRow | null;
+};
+
+function asNullableString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value);
+  return str;
+}
+
+function asNullableTrimmedString(value: unknown): string | null {
+  const raw = asNullableString(value);
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : null;
+}
+
+function asNullableInteger(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const num = typeof value === 'number' ? value : parseInt(String(value), 10);
+  return Number.isFinite(num) ? num : null;
+}
+
+function asNullableFloat(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const num = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizePublishedValue(value: unknown): string | null {
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (typeof value === 'number') return value ? 'yes' : 'no';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    return ['yes', 'ja', 'true', '1'].includes(trimmed.toLowerCase()) ? 'yes' : 'no';
+  }
+  return null;
+}
+
+function toIsoString(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = new Date(trimmed);
+    if (Number.isNaN(parsed.getTime())) {
+      return trimmed;
+    }
+    return parsed.toISOString();
+  }
+  return null;
+}
+
+function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
+  const artikelNummer = asNullableTrimmedString(instance.Artikel_Nummer);
+  return {
+    ItemUUID: instance.ItemUUID,
+    Artikel_Nummer: artikelNummer,
+    BoxID: instance.BoxID === undefined ? null : instance.BoxID,
+    Location: instance.Location === undefined ? null : instance.Location ?? null,
+    UpdatedAt: toIsoString(instance.UpdatedAt) || new Date().toISOString(),
+    Datum_erfasst: toIsoString(instance.Datum_erfasst),
+    Auf_Lager: asNullableInteger(instance.Auf_Lager)
+  };
+}
+
+function prepareRefRow(ref: ItemRef): ItemRefRow {
+  const artikelNummer = asNullableTrimmedString(ref.Artikel_Nummer);
+  if (!artikelNummer) {
+    throw new Error('Artikel_Nummer is required for item reference persistence');
+  }
+  return {
+    Artikel_Nummer: artikelNummer,
+    Grafikname: asNullableString(ref.Grafikname),
+    Artikelbeschreibung: asNullableString(ref.Artikelbeschreibung),
+    Verkaufspreis: asNullableFloat(ref.Verkaufspreis),
+    Kurzbeschreibung: asNullableString(ref.Kurzbeschreibung),
+    Langtext: asNullableString(ref.Langtext),
+    Hersteller: asNullableString(ref.Hersteller),
+    Länge_mm: asNullableInteger(ref.Länge_mm),
+    Breite_mm: asNullableInteger(ref.Breite_mm),
+    Höhe_mm: asNullableInteger(ref.Höhe_mm),
+    Gewicht_kg: asNullableFloat(ref.Gewicht_kg),
+    Hauptkategorien_A: asNullableInteger(ref.Hauptkategorien_A),
+    Unterkategorien_A: asNullableInteger(ref.Unterkategorien_A),
+    Hauptkategorien_B: asNullableInteger(ref.Hauptkategorien_B),
+    Unterkategorien_B: asNullableInteger(ref.Unterkategorien_B),
+    Veröffentlicht_Status: normalizePublishedValue(ref.Veröffentlicht_Status),
+    Shopartikel: asNullableInteger(ref.Shopartikel),
+    Artikeltyp: asNullableString(ref.Artikeltyp),
+    Einheit: asNullableString(ref.Einheit),
+    WmsLink: asNullableString(ref.WmsLink),
+    EntityType: asNullableString(ref.EntityType)
+  };
+}
+
+function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
+  const instance = prepareInstanceRow(item);
+  const ref = instance.Artikel_Nummer
+    ? prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: instance.Artikel_Nummer })
+    : null;
+  return { instance, ref };
+}
+
+function prepareLegacyItemPayload(row: Record<string, unknown>): ItemPersistencePayload {
+  const updatedAtRaw = row.UpdatedAt ? String(row.UpdatedAt) : '';
+  let updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : new Date();
+  if (Number.isNaN(updatedAt.getTime())) {
+    updatedAt = new Date();
+  }
+
+  const datumErfasstRaw = row.Datum_erfasst ? String(row.Datum_erfasst) : '';
+  let datumErfasst: Date | undefined;
+  if (datumErfasstRaw) {
+    const parsed = new Date(datumErfasstRaw);
+    datumErfasst = Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  const legacyItem: Item = {
+    ItemUUID: String(row.ItemUUID ?? ''),
+    Artikel_Nummer: row.Artikel_Nummer ? String(row.Artikel_Nummer) : undefined,
+    BoxID:
+      row.BoxID === undefined || row.BoxID === null
+        ? null
+        : String(row.BoxID),
+    Location:
+      row.Location === undefined
+        ? undefined
+        : row.Location === null
+        ? null
+        : String(row.Location),
+    UpdatedAt: updatedAt,
+    Datum_erfasst: datumErfasst,
+    Auf_Lager: asNullableInteger(row.Auf_Lager) ?? undefined,
+    Grafikname: row.Grafikname ? String(row.Grafikname) : undefined,
+    Artikelbeschreibung: row.Artikelbeschreibung ? String(row.Artikelbeschreibung) : undefined,
+    Verkaufspreis: asNullableFloat(row.Verkaufspreis) ?? undefined,
+    Kurzbeschreibung: row.Kurzbeschreibung ? String(row.Kurzbeschreibung) : undefined,
+    Langtext: row.Langtext ? String(row.Langtext) : undefined,
+    Hersteller: row.Hersteller ? String(row.Hersteller) : undefined,
+    Länge_mm: asNullableInteger(row.Länge_mm) ?? undefined,
+    Breite_mm: asNullableInteger(row.Breite_mm) ?? undefined,
+    Höhe_mm: asNullableInteger(row.Höhe_mm) ?? undefined,
+    Gewicht_kg: asNullableFloat(row.Gewicht_kg) ?? undefined,
+    Hauptkategorien_A: asNullableInteger(row.Hauptkategorien_A) ?? undefined,
+    Unterkategorien_A: asNullableInteger(row.Unterkategorien_A) ?? undefined,
+    Hauptkategorien_B: asNullableInteger(row.Hauptkategorien_B) ?? undefined,
+    Unterkategorien_B: asNullableInteger(row.Unterkategorien_B) ?? undefined,
+    Shopartikel: asNullableInteger(row.Shopartikel) ?? undefined,
+    Artikeltyp: row.Artikeltyp ? String(row.Artikeltyp) : undefined,
+    Einheit: row.Einheit ? String(row.Einheit) : undefined,
+    WmsLink: row.WmsLink ? String(row.WmsLink) : undefined,
+    EntityType: row.EntityType ? String(row.EntityType) : undefined
+  };
+
+  const published = normalizePublishedValue(row.Veröffentlicht_Status);
+  if (published !== null) {
+    legacyItem.Veröffentlicht_Status = published === 'yes';
+  }
+
+  const payload = prepareItemPersistencePayload(legacyItem);
+  if (payload.instance.Auf_Lager === null && row.Auf_Lager !== undefined) {
+    payload.instance.Auf_Lager = asNullableInteger(row.Auf_Lager);
+  }
+  if (payload.ref) {
+    payload.ref.Veröffentlicht_Status = published;
+  }
+  return payload;
+}
+
+function ensureItemTables(database: Database.Database = db): void {
+  try {
+    database.exec(CREATE_ITEM_REFS_SQL);
+  } catch (err) {
+    console.error('Failed to ensure item_refs schema', err);
+    throw err;
+  }
+
+  let tableInfo: Array<{ name: string }> = [];
+  try {
+    tableInfo = database.prepare(`PRAGMA table_info(items)`).all();
+  } catch (err) {
+    console.error('Failed to inspect items schema', err);
+    throw err;
+  }
+
+  if (!tableInfo.length) {
+    try {
+      database.exec(CREATE_ITEMS_SQL);
+    } catch (err) {
+      console.error('Failed to create items table', err);
+      throw err;
+    }
+    return;
+  }
+
+  const columnNames = new Set(tableInfo.map((column) => column.name));
+  const hasExpected = EXPECTED_ITEM_COLUMNS.every((column) => columnNames.has(column));
+  const hasLegacy = LEGACY_ITEM_COLUMNS.some((column) => columnNames.has(column));
+
+  if (hasExpected && !hasLegacy) {
+    try {
+      database.exec(CREATE_ITEMS_SQL);
+    } catch (err) {
+      console.error('Failed to ensure items schema', err);
+      throw err;
+    }
+    return;
+  }
+
+  console.info('Migrating items table to reference/instance schema');
+
+  try {
+    database.transaction(() => {
+      database.exec('DROP INDEX IF EXISTS idx_items_mat');
+      database.exec('DROP INDEX IF EXISTS idx_items_box');
+      database.exec('ALTER TABLE items RENAME TO items_legacy');
+      database.exec(CREATE_ITEMS_SQL);
+
+      const legacyRows = database.prepare('SELECT * FROM items_legacy').all();
+      const refStmt = database.prepare(UPSERT_ITEM_REFERENCE_SQL);
+      const instanceStmt = database.prepare(UPSERT_ITEM_INSTANCE_SQL);
+
+      for (const row of legacyRows) {
+        try {
+          const payload = prepareLegacyItemPayload(row as Record<string, unknown>);
+          if (payload.ref) refStmt.run(payload.ref);
+          instanceStmt.run(payload.instance);
+        } catch (rowErr) {
+          console.error('Failed to migrate legacy item row', { row, error: rowErr });
+          throw rowErr;
+        }
+      }
+
+      database.exec('DROP TABLE IF EXISTS items_legacy');
+    })();
+  } catch (err) {
+    console.error('Failed to migrate items schema', err);
+    throw err;
+  }
+}
+
+ensureItemTables(db);
+
+let upsertItemReferenceStatement: Database.Statement;
+let upsertItemInstanceStatement: Database.Statement;
+try {
+  upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
+  upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
+} catch (err) {
+  console.error('Failed to prepare item persistence statements', err);
+  throw err;
+}
+
+function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
+  if (payload.ref) {
+    upsertItemReferenceStatement.run(payload.ref);
+  }
+  upsertItemInstanceStatement.run(payload.instance);
+}
+
+const ITEM_JOIN_BASE = `
+  FROM items i
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+`;
+
+function itemSelectColumns(locationExpr: string): string {
+  return `
+SELECT
+  i.ItemUUID AS ItemUUID,
+  i.Artikel_Nummer AS Artikel_Nummer,
+  i.BoxID AS BoxID,
+  ${locationExpr} AS Location,
+  i.UpdatedAt AS UpdatedAt,
+  i.Datum_erfasst AS Datum_erfasst,
+  i.Auf_Lager AS Auf_Lager,
+  r.Grafikname AS Grafikname,
+  r.Artikelbeschreibung AS Artikelbeschreibung,
+  r.Verkaufspreis AS Verkaufspreis,
+  r.Kurzbeschreibung AS Kurzbeschreibung,
+  r.Langtext AS Langtext,
+  r.Hersteller AS Hersteller,
+  r.Länge_mm AS Länge_mm,
+  r.Breite_mm AS Breite_mm,
+  r.Höhe_mm AS Höhe_mm,
+  r.Gewicht_kg AS Gewicht_kg,
+  r.Hauptkategorien_A AS Hauptkategorien_A,
+  r.Unterkategorien_A AS Unterkategorien_A,
+  r.Hauptkategorien_B AS Hauptkategorien_B,
+  r.Unterkategorien_B AS Unterkategorien_B,
+  r.Veröffentlicht_Status AS Veröffentlicht_Status,
+  r.Shopartikel AS Shopartikel,
+  r.Artikeltyp AS Artikeltyp,
+  r.Einheit AS Einheit,
+  r.WmsLink AS WmsLink,
+  r.EntityType AS EntityType
+`;
+}
+
+export function persistItemReference(ref: ItemRef): void {
+  try {
+    const row = prepareRefRow(ref);
+    upsertItemReferenceStatement.run(row);
+  } catch (err) {
+    console.error('Failed to persist item reference', { artikelNummer: ref.Artikel_Nummer, error: err });
+    throw err;
+  }
+}
+
+export function persistItemInstance(instance: ItemInstance): void {
+  try {
+    const row = prepareInstanceRow(instance);
+    upsertItemInstanceStatement.run(row);
+  } catch (err) {
+    console.error('Failed to persist item instance', { itemUUID: instance.ItemUUID, error: err });
+    throw err;
+  }
+}
+
+export function persistItemWithinTransaction(item: Item): void {
+  const payload = prepareItemPersistencePayload(item);
+  try {
+    runItemPersistenceStatements(payload);
+  } catch (err) {
+    console.error('Failed to persist item within transaction', { itemUUID: item.ItemUUID, error: err });
+    throw err;
+  }
+}
+
+export function persistItem(item: Item): void {
+  const payload = prepareItemPersistencePayload(item);
+  const txn = db.transaction((data: ItemPersistencePayload) => {
+    runItemPersistenceStatements(data);
+  });
+  try {
+    txn(payload);
+  } catch (err) {
+    console.error('Failed to persist item', { itemUUID: item.ItemUUID, error: err });
+    throw err;
+  }
 }
 
 const AGENTIC_RUNS_COLUMNS = [
@@ -245,55 +716,24 @@ export const upsertBox = db.prepare(
   `
 );
 
-export const upsertItem = db.prepare(
-  `
-    INSERT INTO items (
-      ItemUUID, BoxID, Location, UpdatedAt,
-      Datum_erfasst, Artikel_Nummer, Grafikname, Artikelbeschreibung, Auf_Lager, Verkaufspreis,
-      Kurzbeschreibung, Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
-      Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
-      Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, WmsLink
-    )
-    VALUES (
-      @ItemUUID, @BoxID, @Location, @UpdatedAt,
-      @Datum_erfasst, @Artikel_Nummer, @Grafikname, @Artikelbeschreibung, @Auf_Lager, @Verkaufspreis,
-      @Kurzbeschreibung, @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
-      @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
-      @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @WmsLink
-    )
-    ON CONFLICT(ItemUUID) DO UPDATE SET
-      BoxID=excluded.BoxID,
-      Location=excluded.Location,
-      UpdatedAt=excluded.UpdatedAt,
-      Datum_erfasst=excluded.Datum_erfasst,
-      Artikel_Nummer=excluded.Artikel_Nummer,
-      Grafikname=excluded.Grafikname,
-      Artikelbeschreibung=excluded.Artikelbeschreibung,
-      Auf_Lager=excluded.Auf_Lager,
-      Verkaufspreis=excluded.Verkaufspreis,
-      Kurzbeschreibung=excluded.Kurzbeschreibung,
-      Langtext=excluded.Langtext,
-      Hersteller=excluded.Hersteller,
-      Länge_mm=excluded.Länge_mm,
-      Breite_mm=excluded.Breite_mm,
-      Höhe_mm=excluded.Höhe_mm,
-      Gewicht_kg=excluded.Gewicht_kg,
-      Hauptkategorien_A=excluded.Hauptkategorien_A,
-      Unterkategorien_A=excluded.Unterkategorien_A,
-      Hauptkategorien_B=excluded.Hauptkategorien_B,
-      Unterkategorien_B=excluded.Unterkategorien_B,
-      Veröffentlicht_Status=excluded.Veröffentlicht_Status,
-      Shopartikel=excluded.Shopartikel,
-      Artikeltyp=excluded.Artikeltyp,
-      Einheit=excluded.Einheit,
-      WmsLink=excluded.WmsLink
-  `
-);
-
 export const queueLabel = db.prepare(`INSERT INTO label_queue (ItemUUID, CreatedAt) VALUES (?, datetime('now'))`);
-export const getItem = db.prepare(`SELECT * FROM items WHERE ItemUUID = ?`);
-export const findByMaterial = db.prepare(`SELECT * FROM items WHERE Artikel_Nummer = ? ORDER BY UpdatedAt DESC`);
-export const itemsByBox = db.prepare(`SELECT * FROM items WHERE BoxID = ? ORDER BY ItemUUID`);
+export const getItem = db.prepare(
+  `${itemSelectColumns('i.Location')}
+${ITEM_JOIN_BASE}
+WHERE i.ItemUUID = ?`
+);
+export const findByMaterial = db.prepare(
+  `${itemSelectColumns('i.Location')}
+${ITEM_JOIN_BASE}
+WHERE i.Artikel_Nummer = ?
+ORDER BY i.UpdatedAt DESC`
+);
+export const itemsByBox = db.prepare(
+  `${itemSelectColumns('i.Location')}
+${ITEM_JOIN_BASE}
+WHERE i.BoxID = ?
+ORDER BY i.ItemUUID`
+);
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 export const upsertAgenticRun = db.prepare(
@@ -351,21 +791,30 @@ export const listEventsForBox = db.prepare(`SELECT * FROM events WHERE EntityTyp
 export const listEventsForItem = db.prepare(`SELECT * FROM events WHERE EntityType='Item' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
 export const listRecentEvents = db.prepare(`
   SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Meta,
-         i.Artikelbeschreibung, i.Artikel_Nummer
+         r.Artikelbeschreibung AS Artikelbeschreibung,
+         COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
+  LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
   ORDER BY e.Id DESC LIMIT 3`);
 export const listRecentActivities = db.prepare(`
   SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Meta,
-         i.Artikelbeschreibung, i.Artikel_Nummer
+         r.Artikelbeschreibung AS Artikelbeschreibung,
+         COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
+  LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
   ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
 export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events`);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
-export const countItemsNoWms = db.prepare(`SELECT COUNT(*) as c FROM items WHERE IFNULL(WmsLink,'') = ''`);
+export const countItemsNoWms = db.prepare(`
+  SELECT COUNT(*) as c
+  FROM items i
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+  WHERE IFNULL(r.WmsLink, '') = ''
+`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
 export const listRecentBoxes = db.prepare(`SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY UpdatedAt DESC LIMIT 5`);
 export const getMaxBoxId = db.prepare(
@@ -375,7 +824,7 @@ export const getMaxItemId = db.prepare(
   `SELECT ItemUUID FROM items ORDER BY CAST(substr(ItemUUID, 10) AS INTEGER) DESC LIMIT 1`
 );
 export const getMaxArtikelNummer = db.prepare(`
-    SELECT Artikel_Nummer FROM items
+    SELECT Artikel_Nummer FROM item_refs
     WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''
     ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
     LIMIT 1
@@ -390,20 +839,20 @@ export const updateAgenticReview = db.prepare(`
 `);
 
 export const listItems = db.prepare(
-  `SELECT i.*, COALESCE(i.Location, b.Location) AS Location
-   FROM items i
-   LEFT JOIN boxes b ON i.BoxID = b.BoxID
-   ORDER BY i.ItemUUID`
+  `${itemSelectColumns('COALESCE(i.Location, b.Location)')}
+${ITEM_JOIN_BASE}
+  LEFT JOIN boxes b ON i.BoxID = b.BoxID
+ ORDER BY i.ItemUUID`
 );
 
 export const listItemsForExport = db.prepare(
-  `SELECT i.*, COALESCE(i.Location, b.Location) AS Location
-   FROM items i
-   LEFT JOIN boxes b ON i.BoxID = b.BoxID
-   WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
-     AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
-   ORDER BY i.Datum_erfasst`
+  `${itemSelectColumns('COALESCE(i.Location, b.Location)')}
+${ITEM_JOIN_BASE}
+  LEFT JOIN boxes b ON i.BoxID = b.BoxID
+ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
+   AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
+ ORDER BY i.Datum_erfasst`
 );
 
-export type { AgenticRun, Box, Item, LabelJob, EventLog };
+export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
 
