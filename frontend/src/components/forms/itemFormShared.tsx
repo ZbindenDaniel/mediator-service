@@ -3,6 +3,8 @@ import type { Item } from '../../../../models';
 import { getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
+import type { ConfirmDialogOptions } from '../dialog';
+import { dialogService } from '../dialog';
 
 export interface ItemFormData extends Item {
   picture1?: string | null;
@@ -16,6 +18,15 @@ export type LockedFieldMode = 'readonly' | 'hidden';
 export type LockedFieldConfig = Partial<Record<keyof ItemFormData, LockedFieldMode>>;
 
 export type StockOperation = 'add' | 'remove';
+
+export function buildStockConfirmOptions(op: StockOperation): ConfirmDialogOptions {
+  return {
+    title: 'Bestandsänderung bestätigen',
+    message: `Bestand ${op === 'add' ? 'erhöhen' : 'verringern'}?`,
+    confirmLabel: op === 'add' ? 'Erhöhen' : 'Verringern',
+    cancelLabel: 'Abbrechen'
+  };
+}
 
 interface UseItemFormStateOptions {
   initialItem: Partial<ItemFormData>;
@@ -111,11 +122,18 @@ export function ItemDetailsFields({
 
   const handleStock = useCallback(async (op: StockOperation) => {
     if (!onChangeStock) {
-      console.warn('onChangeStock: no callback')
+      console.warn('onChangeStock: no callback');
       return;
     }
-    const confirmed = window.confirm(`Bestand ${op === 'add' ? 'erhöhen' : 'verringern'}?`);
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm(buildStockConfirmOptions(op));
+    } catch (error) {
+      console.error('Failed to confirm stock change', error);
+      return;
+    }
     if (!confirmed) {
+      console.log('Stock change cancelled', { operation: op });
       return;
     }
     try {
