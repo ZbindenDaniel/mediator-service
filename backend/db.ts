@@ -217,6 +217,11 @@ type ItemPersistencePayload = {
   cleanupKey: string | null;
 };
 
+type ItemInstanceLookupRow = {
+  Artikel_Nummer: string | null;
+  Datum_erfasst: string | null;
+};
+
 function asNullableString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const str = String(value);
@@ -313,29 +318,77 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
 
 function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   const instance = prepareInstanceRow(item);
-  const referenceKey = instance.Artikel_Nummer || instance.ItemUUID;
   let cleanupKey: string | null = null;
-  let ref: ItemRefRow | null = null;
 
-  if (referenceKey) {
-    try {
-      ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: referenceKey });
-    } catch (err) {
-      console.error('Failed to prepare item reference payload', {
-        itemUUID: instance.ItemUUID,
-        error: err
-      });
-      throw err;
+  let existingInstance: ItemInstanceLookupRow | undefined;
+  try {
+    existingInstance = getItemInstanceByUuidStatement.get(instance.ItemUUID) as
+      | ItemInstanceLookupRow
+      | undefined;
+  } catch (err) {
+    console.error('Failed to lookup existing item instance', {
+      itemUUID: instance.ItemUUID,
+      error: err
+    });
+    throw err;
+  }
+
+  const providedArtikel = asNullableTrimmedString(instance.Artikel_Nummer);
+  const existingArtikel = asNullableTrimmedString(existingInstance?.Artikel_Nummer ?? undefined);
+  let resolvedArtikel = providedArtikel || existingArtikel || null;
+
+  if (
+    providedArtikel === instance.ItemUUID &&
+    existingArtikel &&
+    existingArtikel !== instance.ItemUUID
+  ) {
+    resolvedArtikel = existingArtikel;
+  }
+
+  const wasFallbackArtikel = resolvedArtikel !== null && resolvedArtikel === instance.ItemUUID;
+
+  if (!resolvedArtikel || wasFallbackArtikel) {
+    const previous = resolvedArtikel;
+    resolvedArtikel = allocateArtikelNummerForItem(instance.ItemUUID, previous);
+    instance.Artikel_Nummer = resolvedArtikel;
+    if (previous === instance.ItemUUID || existingArtikel === instance.ItemUUID) {
+      cleanupKey = instance.ItemUUID;
     }
-    if (instance.Artikel_Nummer && instance.ItemUUID && instance.ItemUUID !== referenceKey) {
+  } else {
+    instance.Artikel_Nummer = resolvedArtikel;
+    if (existingArtikel && existingArtikel === instance.ItemUUID && existingArtikel !== resolvedArtikel) {
       cleanupKey = instance.ItemUUID;
     }
   }
 
-  if (!instance.Artikel_Nummer && referenceKey === instance.ItemUUID) {
-    console.warn('Persisting item reference with fallback key due to missing Artikel_Nummer', {
-      itemUUID: instance.ItemUUID
+  if (
+    !item.Artikel_Nummer ||
+    asNullableTrimmedString(item.Artikel_Nummer) === instance.ItemUUID
+  ) {
+    (item as Item).Artikel_Nummer = instance.Artikel_Nummer ?? undefined;
+  }
+
+  if (!instance.Datum_erfasst) {
+    if (existingInstance?.Datum_erfasst) {
+      instance.Datum_erfasst = existingInstance.Datum_erfasst;
+    } else {
+      instance.Datum_erfasst = instance.UpdatedAt;
+      console.info('Defaulted Datum_erfasst for new item', {
+        itemUUID: instance.ItemUUID,
+        datumErfasst: instance.Datum_erfasst
+      });
+    }
+  }
+
+  let ref: ItemRefRow | null = null;
+  try {
+    ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: instance.Artikel_Nummer || resolvedArtikel || '' });
+  } catch (err) {
+    console.error('Failed to prepare item reference payload', {
+      itemUUID: instance.ItemUUID,
+      error: err
     });
+    throw err;
   }
 
   return { instance, ref, cleanupKey };
@@ -484,13 +537,61 @@ ensureItemTables(db);
 let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
 let deleteItemReferenceByKeyStatement: Database.Statement;
+let getItemInstanceByUuidStatement: Database.Statement;
+let getMaxArtikelNummerStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
   deleteItemReferenceByKeyStatement = db.prepare('DELETE FROM item_refs WHERE Artikel_Nummer = ?');
+  getItemInstanceByUuidStatement = db.prepare(
+    'SELECT Artikel_Nummer, Datum_erfasst FROM items WHERE ItemUUID = ?'
+  );
+  getMaxArtikelNummerStatement = db.prepare(`
+    SELECT Artikel_Nummer FROM item_refs
+    WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''
+    ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
+    LIMIT 1
+  `);
 } catch (err) {
   console.error('Failed to prepare item persistence statements', err);
   throw err;
+}
+
+function parseArtikelNummer(candidate: string | null | undefined): number | null {
+  if (!candidate) return null;
+  const parsed = parseInt(candidate, 10);
+  if (!Number.isFinite(parsed)) {
+    console.warn('Encountered non-numeric Artikel_Nummer while parsing', {
+      candidate
+    });
+    return null;
+  }
+  return parsed;
+}
+
+function generateNextArtikelNummer(): string {
+  const allocator = db.transaction(() => {
+    const row = getMaxArtikelNummerStatement.get() as { Artikel_Nummer?: string } | undefined;
+    const currentMax = parseArtikelNummer(row?.Artikel_Nummer ?? null) ?? 0;
+    return String(currentMax + 1).padStart(5, '0');
+  });
+
+  try {
+    return allocator();
+  } catch (err) {
+    console.error('Failed to allocate Artikel_Nummer within transaction', err);
+    throw err;
+  }
+}
+
+function allocateArtikelNummerForItem(itemUUID: string, previous: string | null): string {
+  const next = generateNextArtikelNummer();
+  console.info('Allocated Artikel_Nummer for item', {
+    itemUUID,
+    artikelNummer: next,
+    previousArtikelNummer: previous
+  });
+  return next;
 }
 
 function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
@@ -506,7 +607,82 @@ function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
   upsertItemInstanceStatement.run(payload.instance);
 }
 
-const ITEM_REFERENCE_JOIN_KEY = 'COALESCE(i.Artikel_Nummer, i.ItemUUID)';
+function reconcileFallbackArtikelNummern(database: Database.Database = db): void {
+  let rows: Array<Record<string, unknown>> = [];
+  try {
+    rows = database
+      .prepare(`
+        SELECT
+          i.ItemUUID,
+          i.Artikel_Nummer,
+          i.BoxID,
+          i.Location,
+          i.UpdatedAt,
+          i.Datum_erfasst,
+          i.Auf_Lager,
+          r.Grafikname,
+          r.Artikelbeschreibung,
+          r.Verkaufspreis,
+          r.Kurzbeschreibung,
+          r.Langtext,
+          r.Hersteller,
+          r.Länge_mm,
+          r.Breite_mm,
+          r.Höhe_mm,
+          r.Gewicht_kg,
+          r.Hauptkategorien_A,
+          r.Unterkategorien_A,
+          r.Hauptkategorien_B,
+          r.Unterkategorien_B,
+          r.Veröffentlicht_Status,
+          r.Shopartikel,
+          r.Artikeltyp,
+          r.Einheit,
+          r.WmsLink,
+          r.EntityType
+        FROM items i
+        LEFT JOIN item_refs r ON r.Artikel_Nummer = COALESCE(i.Artikel_Nummer, i.ItemUUID)
+        WHERE i.Artikel_Nummer IS NULL OR i.Artikel_Nummer = i.ItemUUID
+      `)
+      .all() as Array<Record<string, unknown>>;
+  } catch (err) {
+    console.error('Failed to load fallback Artikel_Nummer rows', err);
+    throw err;
+  }
+
+  if (!rows.length) {
+    return;
+  }
+
+  console.info('Reconciling fallback Artikel_Nummer rows', { count: rows.length });
+
+  const txn = database.transaction((row: Record<string, unknown>) => {
+    const payload = prepareLegacyItemPayload(row);
+    runItemPersistenceStatements(payload);
+  });
+
+  for (const row of rows) {
+    const itemUUID = (row as { ItemUUID?: unknown }).ItemUUID ?? null;
+    try {
+      txn(row);
+    } catch (err) {
+      console.error('Failed to reconcile fallback Artikel_Nummer row', {
+        itemUUID,
+        error: err
+      });
+      throw err;
+    }
+  }
+}
+
+try {
+  reconcileFallbackArtikelNummern();
+} catch (err) {
+  console.error('Failed to reconcile fallback Artikel_Nummer rows during initialization', err);
+  throw err;
+}
+
+const ITEM_REFERENCE_JOIN_KEY = 'i.Artikel_Nummer';
 
 const ITEM_JOIN_BASE = `
   FROM items i
@@ -856,12 +1032,7 @@ export const getMaxBoxId = db.prepare(
 export const getMaxItemId = db.prepare(
   `SELECT ItemUUID FROM items ORDER BY CAST(substr(ItemUUID, 10) AS INTEGER) DESC LIMIT 1`
 );
-export const getMaxArtikelNummer = db.prepare(`
-    SELECT Artikel_Nummer FROM item_refs
-    WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''
-    ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
-    LIMIT 1
-  `);
+export const getMaxArtikelNummer = getMaxArtikelNummerStatement;
 
 export const updateAgenticReview = db.prepare(`
   UPDATE agentic_runs

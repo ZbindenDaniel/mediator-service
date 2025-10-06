@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
 import { getUser } from '../lib/user';
@@ -13,8 +13,8 @@ import ItemForm from './ItemForm';
 import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
+import { extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
-import { useDialog } from './dialog';
 
 type AgenticEnv = typeof globalThis & {
   AGENTIC_API_BASE?: string;
@@ -40,7 +40,7 @@ export interface AgenticTriggerHandlerOptions {
   agenticRunUrl: string | null;
   triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
   reportFailure: AgenticTriggerFailureReporter;
-  alertFn: (message: string) => Promise<void>;
+  alertFn: (message: string) => void;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
   onSkipped?: (itemId: string) => void;
 }
@@ -95,7 +95,7 @@ export async function handleAgenticRunTrigger({
 
       if (result.message) {
         try {
-          await alertFn(result.message);
+          alertFn(result.message);
         } catch (alertErr) {
           logger.warn?.('Failed to display skipped agentic trigger message', alertErr);
         }
@@ -122,7 +122,7 @@ export async function handleAgenticRunTrigger({
 
     if (result.message) {
       try {
-        await alertFn(result.message);
+        alertFn(result.message);
       } catch (alertErr) {
         logger.warn?.('Failed to display agentic trigger failure message', alertErr);
       }
@@ -156,30 +156,6 @@ export default function ItemCreate() {
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
   const [creating, setCreating] = useState(false);
-
-  const { alert: dialogAlert } = useDialog();
-
-  const showAgenticTriggerAlert = useCallback(
-    async (message: string) => {
-      if (!message) {
-        return;
-      }
-      try {
-        await dialogAlert({ message });
-      } catch (alertErr) {
-        console.warn('Failed to display agentic trigger alert dialog', alertErr);
-      }
-    },
-    [dialogAlert]
-  );
-
-  const showCreationConfirmationAlert = useCallback(async () => {
-    try {
-      await dialogAlert({ message: 'Behälter erstellt. Bitte platzieren!' });
-    } catch (alertErr) {
-      console.warn('Failed to display item creation confirmation dialog', alertErr);
-    }
-  }, [dialogAlert]);
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
@@ -372,6 +348,23 @@ export default function ItemCreate() {
       return;
     }
 
+    const showAlert = (message: string) => {
+      if (!message) {
+        return;
+      }
+      try {
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert(message);
+        } else if (typeof alert === 'function') {
+          alert(message);
+        } else {
+          console.info('Agentic trigger notice', message);
+        }
+      } catch (alertErr) {
+        console.warn('Failed to display agentic trigger alert', alertErr);
+      }
+    };
+
     try {
       await handleAgenticRunTrigger({
         agenticPayload,
@@ -379,7 +372,7 @@ export default function ItemCreate() {
         agenticRunUrl,
         triggerAgenticRunRequest,
         reportFailure: reportAgenticTriggerFailure,
-        alertFn: showAgenticTriggerAlert,
+        alertFn: showAlert,
         logger: console,
         onSkipped: (itemId) => {
           setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
@@ -448,9 +441,14 @@ export default function ItemCreate() {
 
       await triggerAgenticRun(agenticPayload, context);
 
-      await showCreationConfirmationAlert();
+      alert('Behälter erstellt. Bitte platzieren!');
+      // TODO: Replace imperative navigation with centralized success handling once notification system lands.
       if (createdItem?.BoxID) {
+        console.log('Navigating to created item box', { boxId: createdItem.BoxID });
         navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
+      } else if (createdItem?.ItemUUID) {
+        console.log('Navigating to created item detail', { itemId: createdItem.ItemUUID });
+        navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}`);
       }
     } catch (err) {
       console.error('Failed to create item', err);
@@ -485,17 +483,18 @@ export default function ItemCreate() {
       return;
     }
     try {
+      const referenceFields = extractReferenceFields(item);
       const clone: Partial<ItemFormData> = {
-        ...item,
+        ...referenceFields,
         ...basicInfo,
-        BoxID: basicInfo.BoxID || item.BoxID || boxId || undefined,
-        Artikelbeschreibung: basicInfo.Artikelbeschreibung || item.Artikelbeschreibung,
-        Artikel_Nummer: basicInfo.Artikel_Nummer || item.Artikel_Nummer,
-        Auf_Lager: basicInfo.Auf_Lager ?? item.Auf_Lager,
-        Kurzbeschreibung: basicInfo.Kurzbeschreibung || item.Kurzbeschreibung,
+        BoxID: basicInfo.BoxID || boxId || undefined,
+        Artikelbeschreibung: basicInfo.Artikelbeschreibung,
+        Artikel_Nummer: basicInfo.Artikel_Nummer || referenceFields.Artikel_Nummer,
+        Kurzbeschreibung: basicInfo.Kurzbeschreibung || referenceFields.Kurzbeschreibung,
+        Auf_Lager: basicInfo.Auf_Lager,
         picture1: basicInfo.picture1,
         picture2: basicInfo.picture2,
-        picture3: basicInfo.picture3 
+        picture3: basicInfo.picture3
       };
       if ('ItemUUID' in clone) {
         delete clone.ItemUUID;
