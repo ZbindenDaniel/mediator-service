@@ -37,6 +37,16 @@ function formatItem(item) {
   };
 }
 
+function formatReference(item) {
+  return {
+    Artikel_Nummer: item.artikelNummer,
+    Artikelbeschreibung: item.description,
+    ItemUUID: item.id,
+    BoxID: item.boxId,
+    Location: item.location
+  };
+}
+
 function getAgenticRun(itemId) {
   return agenticRuns.get(itemId) || null;
 }
@@ -172,8 +182,33 @@ function handleGetBox(res, boxId) {
   return sendJson(res, 200, { items: data });
 }
 
-function handleSearch(res, term) {
+function handleSearch(res, term, scope) {
   const query = term.toLowerCase();
+  if (scope === 'refs') {
+    const referenceMap = new Map();
+    for (const item of items.values()) {
+      if (!item.artikelNummer) {
+        continue;
+      }
+      const haystack = [
+        item.artikelNummer,
+        item.description,
+        item.location,
+        item.boxId
+      ]
+        .filter(Boolean)
+        .map((value) => value.toLowerCase());
+      if (!haystack.some((value) => value.includes(query))) {
+        continue;
+      }
+      if (!referenceMap.has(item.artikelNummer)) {
+        referenceMap.set(item.artikelNummer, formatReference(item));
+      }
+    }
+    const refs = Array.from(referenceMap.values());
+    console.log('[test server] search refs', term, 'refs returned', refs.length);
+    return sendJson(res, 200, { refs });
+  }
   const itemResults = Array.from(items.values()).filter((item) => {
     return (
       item.id.toLowerCase().includes(query) ||
@@ -359,7 +394,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && pathname === '/api/search') {
       const term = searchParams.get('term') || '';
-      return handleSearch(res, term);
+      const scope = (searchParams.get('scope') || 'default').toLowerCase();
+      return handleSearch(res, term, scope);
     }
     if (req.method === 'POST' && pathname.startsWith('/api/print/')) {
       return sendJson(res, 200, { ok: true });

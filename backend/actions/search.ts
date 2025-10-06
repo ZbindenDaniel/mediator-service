@@ -136,6 +136,146 @@ const action: Action = {
       // require at least 50% of tokens (min 1)
       const minTokenHits = Math.max(1, Math.ceil(tokens.length * 0.5));
 
+      const scope = (url.searchParams.get("scope") || "default").toLowerCase();
+
+      if (scope === "refs") {
+        const like5 = (t: string) => {
+          const p = `%${t}%`;
+          return [p, p, p, p, p] as const;
+        };
+
+        const refTokenPresenceTerms = tokens
+          .map(
+            () => `
+    CASE WHEN (
+      lower(ref.Artikel_Nummer) LIKE ?
+      OR lower(COALESCE(ref.Artikelbeschreibung, '')) LIKE ?
+      OR lower(COALESCE(ref.Kurzbeschreibung, '')) LIKE ?
+      OR lower(COALESCE(ref.Langtext, '')) LIKE ?
+      OR lower(COALESCE(ref.Hersteller, '')) LIKE ?
+    ) THEN 1 ELSE 0 END
+  `
+          )
+          .join(" + ");
+
+        const refExactMatchExpr = `
+    CASE WHEN (
+      lower(ref.Artikel_Nummer) = ?
+      OR lower(COALESCE(ref.Artikelbeschreibung, '')) = ?
+      OR lower(COALESCE(ref.Kurzbeschreibung, '')) = ?
+      OR lower(COALESCE(ref.Langtext, '')) = ?
+      OR lower(COALESCE(ref.Hersteller, '')) = ?
+    ) THEN 1 ELSE 0 END
+  `;
+
+        const refSql = `
+    WITH dedup_refs AS (
+      SELECT
+        r.Artikel_Nummer,
+        MAX(r.Grafikname) AS Grafikname,
+        MAX(r.Artikelbeschreibung) AS Artikelbeschreibung,
+        MAX(r.Verkaufspreis) AS Verkaufspreis,
+        MAX(r.Kurzbeschreibung) AS Kurzbeschreibung,
+        MAX(r.Langtext) AS Langtext,
+        MAX(r.Hersteller) AS Hersteller,
+        MAX(r.Länge_mm) AS Länge_mm,
+        MAX(r.Breite_mm) AS Breite_mm,
+        MAX(r.Höhe_mm) AS Höhe_mm,
+        MAX(r.Gewicht_kg) AS Gewicht_kg,
+        MAX(r.Hauptkategorien_A) AS Hauptkategorien_A,
+        MAX(r.Unterkategorien_A) AS Unterkategorien_A,
+        MAX(r.Hauptkategorien_B) AS Hauptkategorien_B,
+        MAX(r.Unterkategorien_B) AS Unterkategorien_B,
+        MAX(r.Veröffentlicht_Status) AS Veröffentlicht_Status,
+        MAX(r.Shopartikel) AS Shopartikel,
+        MAX(r.Artikeltyp) AS Artikeltyp,
+        MAX(r.Einheit) AS Einheit,
+        MAX(r.WmsLink) AS WmsLink,
+        MAX(r.EntityType) AS EntityType
+      FROM item_refs r
+      GROUP BY r.Artikel_Nummer
+    ), refs_with_item AS (
+      SELECT
+        d.*,
+        (
+          SELECT i.ItemUUID
+          FROM items i
+          WHERE i.Artikel_Nummer = d.Artikel_Nummer
+          ORDER BY i.UpdatedAt DESC, i.Datum_erfasst DESC
+          LIMIT 1
+        ) AS ItemUUID,
+        (
+          SELECT i.BoxID
+          FROM items i
+          WHERE i.Artikel_Nummer = d.Artikel_Nummer AND i.BoxID IS NOT NULL
+          ORDER BY i.UpdatedAt DESC, i.Datum_erfasst DESC
+          LIMIT 1
+        ) AS BoxID,
+        (
+          SELECT COALESCE(i.Location, b.Location)
+          FROM items i
+          LEFT JOIN boxes b ON i.BoxID = b.BoxID
+          WHERE i.Artikel_Nummer = d.Artikel_Nummer AND (i.Location IS NOT NULL OR b.Location IS NOT NULL)
+          ORDER BY i.UpdatedAt DESC, i.Datum_erfasst DESC
+          LIMIT 1
+        ) AS Location
+      FROM dedup_refs d
+    )
+    SELECT *
+    FROM (
+      SELECT
+        ref.*,
+        (${refTokenPresenceTerms}) AS token_hits,
+        ${refExactMatchExpr} AS exact_match,
+        CASE
+          WHEN ${refExactMatchExpr} = 1 THEN 1.0
+          ELSE (CAST((${refTokenPresenceTerms}) AS REAL) / ?) * 0.99
+        END AS sql_score
+      FROM refs_with_item ref
+    )
+    WHERE token_hits >= ?
+    ORDER BY exact_match DESC, sql_score DESC
+    LIMIT 10
+  `;
+
+        const refParams = [
+          ...tokens.flatMap(like5),
+          normalized,
+          normalized,
+          normalized,
+          normalized,
+          normalized,
+          ...tokens.flatMap(like5),
+          tokens.length,
+          minTokenHits
+        ];
+
+        const rawRefs = ctx.db.prepare(refSql).all(...refParams);
+
+        const scoredRefs = rawRefs
+          .map((ref: any) => {
+            const { token_hits, exact_match, sql_score, ...rest } = ref;
+            const normalizedRef = { ...rest };
+            return { ref: normalizedRef, score: scoreItem(normalized, tokens, normalizedRef) };
+          })
+          .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
+
+        const topRefScore = scoredRefs.length ? scoredRefs[0].score : 0;
+        console.log(
+          "search refs",
+          term,
+          "→",
+          rawRefs.length,
+          "refs",
+          "top score",
+          topRefScore.toFixed(3)
+        );
+
+        const refs = scoredRefs.map((entry: { ref: any }) => entry.ref);
+        sendJson(res, 200, { refs });
+        return;
+      }
+
       const like4 = (t: string) => {
         const p = `%${t}%`;
         return [p, p, p, p] as const;
