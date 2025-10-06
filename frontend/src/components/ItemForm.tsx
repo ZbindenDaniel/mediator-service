@@ -25,7 +25,12 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
     try {
       console.log('Applying similar item selection', selected.ItemUUID);
       setForm((prev) => {
-        const next = { ...prev, ...extractReferenceFields(selected) } as Partial<ItemFormData>;
+        const referenceFields = extractReferenceFields(selected);
+        const { Artikelbeschreibung: _ignoredDescription, ...restReferenceFields } = referenceFields;
+        if (_ignoredDescription !== undefined) {
+          console.log('Preserving existing description while adopting reference fields');
+        }
+        const next = { ...prev, ...restReferenceFields } as Partial<ItemFormData>;
         if (isNew) {
           delete (next as Partial<ItemFormData>).ItemUUID;
         }

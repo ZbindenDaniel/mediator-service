@@ -442,8 +442,13 @@ export default function ItemCreate() {
       await triggerAgenticRun(agenticPayload, context);
 
       alert('Behälter erstellt. Bitte platzieren!');
+      // TODO: Replace imperative navigation with centralized success handling once notification system lands.
       if (createdItem?.BoxID) {
+        console.log('Navigating to created item box', { boxId: createdItem.BoxID });
         navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
+      } else if (createdItem?.ItemUUID) {
+        console.log('Navigating to created item detail', { itemId: createdItem.ItemUUID });
+        navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}`);
       }
     } catch (err) {
       console.error('Failed to create item', err);
@@ -483,7 +488,7 @@ export default function ItemCreate() {
         ...referenceFields,
         ...basicInfo,
         BoxID: basicInfo.BoxID || boxId || undefined,
-        Artikelbeschreibung: basicInfo.Artikelbeschreibung || referenceFields.Artikelbeschreibung,
+        Artikelbeschreibung: basicInfo.Artikelbeschreibung,
         Artikel_Nummer: basicInfo.Artikel_Nummer || referenceFields.Artikel_Nummer,
         Kurzbeschreibung: basicInfo.Kurzbeschreibung || referenceFields.Kurzbeschreibung,
         Auf_Lager: basicInfo.Auf_Lager,
