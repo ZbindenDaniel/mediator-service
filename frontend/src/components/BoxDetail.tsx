@@ -8,6 +8,7 @@ import { formatDateTime } from '../lib/format';
 import { getUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import BoxColorTag from './BoxColorTag';
+import { dialogService } from './dialog';
 
 interface Props {
   boxId: string;
@@ -29,7 +30,24 @@ export default function BoxDetail({ boxId }: Props) {
 
   async function handleDeleteBox() {
     if (!box) return;
-    if (!window.confirm('Behälter wirklich löschen?')) return;
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Behälter löschen',
+        message: 'Behälter wirklich löschen?',
+        confirmLabel: 'Löschen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm box deletion', error);
+      return;
+    }
+
+    if (!confirmed) {
+      console.log('Box deletion cancelled', { boxId: box.BoxID });
+      return;
+    }
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/delete`, {
         method: 'POST',
@@ -40,7 +58,15 @@ export default function BoxDetail({ boxId }: Props) {
         navigate('/');
       } else {
         const j = await res.json().catch(() => ({}));
-        alert(j.error === 'box not empty' ? 'Behälter enthält noch Artikel' : 'Löschen fehlgeschlagen');
+        const message = j.error === 'box not empty' ? 'Behälter enthält noch Artikel' : 'Löschen fehlgeschlagen';
+        try {
+          await dialogService.alert({
+            title: 'Fehler',
+            message
+          });
+        } catch (error) {
+          console.error('Failed to show box deletion failure alert', error);
+        }
         console.error('Failed to delete box', res.status);
       }
     } catch (err) {
@@ -49,7 +75,20 @@ export default function BoxDetail({ boxId }: Props) {
   }
 
   async function removeItem(itemId: string) {
-    const confirmed = window.confirm('Entnehmen?');
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Entnahme bestätigen',
+        message: 'Entnehmen?',
+        confirmLabel: 'Entnehmen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm item removal', error);
+      setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme fehlgeschlagen' }));
+      return;
+    }
+
     if (!confirmed) {
       console.log('Item removal cancelled', { itemId });
       setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme abgebrochen' }));
