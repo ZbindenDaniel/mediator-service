@@ -109,7 +109,20 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
 
   const changeStock = useCallback(async (op: StockOperation) => {
     if (!form.ItemUUID) {
-      console.warn('Cannot change stock without an ItemUUID');
+      try {
+        setForm((prev) => {
+          const previousQuantity = prev.Auf_Lager ?? 0;
+          const nextQuantity = op === 'add' ? previousQuantity + 1 : Math.max(0, previousQuantity - 1);
+          console.log('Adjusting local stock quantity for unsaved item', {
+            operation: op,
+            previousQuantity,
+            nextQuantity
+          });
+          return { ...prev, Auf_Lager: nextQuantity };
+        });
+      } catch (error) {
+        console.error('Failed to adjust local stock quantity for unsaved item', error);
+      }
       return;
     }
     const actor = await ensureUser();
@@ -148,7 +161,7 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
     } catch (err) {
       console.error(`Failed to ${op} stock`, err);
     }
-  }, [form.ItemUUID]);
+  }, [form.ItemUUID, setForm]);
 
   return { form, update, mergeForm, resetForm, setForm, generateMaterialNumber, changeStock } as const;
 }
@@ -184,23 +197,29 @@ export function ItemDetailsFields({
       console.warn('onChangeStock: no callback');
       return;
     }
-    let confirmed = false;
-    try {
-      confirmed = await dialogService.confirm(buildStockConfirmOptions(op));
-    } catch (error) {
-      console.error('Failed to confirm stock change', error);
-      return;
-    }
-    if (!confirmed) {
-      console.log('Stock change cancelled', { operation: op });
-      return;
+    let confirmed = true;
+    const requiresConfirmation = Boolean(form.ItemUUID);
+    if (requiresConfirmation) {
+      confirmed = false;
+      try {
+        confirmed = await dialogService.confirm(buildStockConfirmOptions(op));
+      } catch (error) {
+        console.error('Failed to confirm stock change', error);
+        return;
+      }
+      if (!confirmed) {
+        console.log('Stock change cancelled', { operation: op });
+        return;
+      }
+    } else {
+      console.log('Skipping stock change confirmation for unsaved item', { operation: op });
     }
     try {
       await onChangeStock(op);
     } catch (err) {
       console.error('Stock change handler failed', err);
     }
-  }, [onChangeStock]);
+  }, [form.ItemUUID, onChangeStock]);
 
   const descriptionLockHidden = isFieldLocked(lockedFields, 'Artikelbeschreibung', 'hidden');
   const descriptionLockReadonly = isFieldLocked(lockedFields, 'Artikelbeschreibung', 'readonly');
