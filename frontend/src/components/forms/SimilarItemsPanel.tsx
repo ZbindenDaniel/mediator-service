@@ -21,40 +21,25 @@ export function SimilarItemsPanel({ items, loading, error, onSelect }: SimilarIt
         {error && <div className="suggestion-error">{error}</div>}
         {!loading && !error && items.length > 0 && (
           <ul>
-            {items.map((item) => {
-              const key = item.ItemUUID || item.Artikel_Nummer;
-              return (
-                <li key={key} className="suggestion-item">
-                  <div className="suggestion-item__details">
-                    <div>
-                      <span className="suggestion-item__number">{item.Artikel_Nummer || '—'}</span>
-                    </div>
-                    <div>{item.Artikelbeschreibung || 'Keine Beschreibung'}</div>
-                    {item.BoxID && (
-                      <div className="suggestion-item__box">Behälter: {item.BoxID}</div>
-                    )}
-                    {item.Hersteller && (
-                      <div className="suggestion-item__box">Hersteller: {item.Hersteller}</div>
-                    )}
-                    {item.Location && (
-                      <div className="suggestion-item__box">Lagerort: {item.Location}</div>
-                    )}
+            {items.map((item) => (
+              <li key={item.ItemUUID} className="suggestion-item">
+                <div className="suggestion-item__details">
+                  <div>
+                    <span className="suggestion-item__number">{item.Artikel_Nummer || '—'}</span>
                   </div>
-                  <div className="suggestion-item__actions">
-                    {item.ItemUUID ? (
-                      <a href={`/items/${encodeURIComponent(item.ItemUUID)}`} target="_blank" rel="noreferrer">
-                        ansehen
-                      </a>
-                    ) : (
-                      <span>kein Direktlink</span>
-                    )}
-                    <button type="button" onClick={() => onSelect(item)}>
-                      übernehmen
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
+                  <div>{item.Artikelbeschreibung || 'Keine Beschreibung'}</div>
+                  <div className="suggestion-item__box">Behälter: {item.BoxID || 'unbekannt'}</div>
+                </div>
+                <div className="suggestion-item__actions">
+                  <a href={`/items/${encodeURIComponent(item.ItemUUID)}`} target="_blank" rel="noreferrer">
+                    ansehen
+                  </a>
+                  <button type="button" onClick={() => onSelect(item)}>
+                    übernehmen
+                  </button>
+                </div>
+              </li>
+            ))}
           </ul>
         )}
       </div>

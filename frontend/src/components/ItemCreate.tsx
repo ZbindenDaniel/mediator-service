@@ -527,10 +527,7 @@ export default function ItemCreate() {
       if ('ItemUUID' in clone) {
         delete clone.ItemUUID;
       }
-      console.log('Creating item from selected duplicate', {
-        itemUUID: item.ItemUUID ?? null,
-        artikelNummer: item.Artikel_Nummer
-      });
+      console.log('Creating item from selected duplicate', { itemUUID: item.ItemUUID });
       await submitNewItem(clone, 'match-selection');
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);

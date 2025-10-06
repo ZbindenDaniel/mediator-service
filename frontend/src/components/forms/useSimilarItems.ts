@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Item, ItemRef } from '../../../../models';
+import type { Item } from '../../../../models';
 
-type SimilarItem = (Partial<Item> & Partial<ItemRef>) & {
-  Artikel_Nummer: string;
-  ItemUUID?: string | null;
-};
+type SimilarItem = Item;
 
 interface UseSimilarItemsOptions {
   description: string | undefined;
@@ -48,11 +45,7 @@ export function useSimilarItems({
         setLoading(true);
         setError(null);
         console.log('Searching for similar items', trimmedDescription);
-        const searchParams = new URLSearchParams({
-          term: trimmedDescription,
-          scope: 'refs'
-        });
-        const response = await fetch(`/api/search?${searchParams.toString()}`, {
+        const response = await fetch(`/api/search?term=${encodeURIComponent(trimmedDescription)}`, {
           signal: controller.signal
         });
         if (!isMounted) {
@@ -66,27 +59,9 @@ export function useSimilarItems({
           return;
         }
         const data = await response.json();
-        const refs = Array.isArray(data?.refs) ? (data.refs as SimilarItem[]) : [];
-        const deduped: SimilarItem[] = [];
-        const seenArtikel = new Set<string>();
-        for (const entry of refs) {
-          if (!entry || typeof entry.Artikel_Nummer !== 'string') {
-            continue;
-          }
-          const artikelKey = entry.Artikel_Nummer.trim().toLowerCase();
-          if (!artikelKey) {
-            continue;
-          }
-          if (seenArtikel.has(artikelKey)) {
-            continue;
-          }
-          seenArtikel.add(artikelKey);
-          if (entry.ItemUUID && entry.ItemUUID === currentItemUUID) {
-            continue;
-          }
-          deduped.push(entry);
-        }
-        setSimilarItems(deduped);
+        const items = Array.isArray(data?.items) ? (data.items as SimilarItem[]) : [];
+        const filtered = items.filter((item) => item.ItemUUID !== currentItemUUID);
+        setSimilarItems(filtered);
         setLoading(false);
       } catch (err) {
         if (!isMounted || controller.signal.aborted) {
