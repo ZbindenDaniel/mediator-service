@@ -2,12 +2,12 @@
 import React, { ForwardedRef, ReactNode, forwardRef, useId } from 'react';
 
 interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
-  title?: ReactNode;
+  heading?: ReactNode;
   message: ReactNode;
 }
 
 export const DialogContent = forwardRef(function DialogContent(
-  { title, message, className = '', ...rest }: DialogContentProps,
+  { heading, message, className = '', ...rest }: DialogContentProps,
   ref: ForwardedRef<HTMLDivElement>
 ) {
   const titleId = useId();
@@ -21,15 +21,15 @@ export const DialogContent = forwardRef(function DialogContent(
       {...rest}
       ref={ref}
       aria-describedby={descriptionId}
-      aria-labelledby={title ? titleId : undefined}
+      aria-labelledby={heading ? titleId : undefined}
       aria-modal="true"
       className={combinedClassName}
       role={rest.role ?? 'dialog'}
       tabIndex={-1}
     >
-      {title && (
+      {heading && (
         <h2 className="dialog-title" id={titleId}>
-          {title}
+          {heading}
         </h2>
       )}
       <div className="dialog-message" id={descriptionId}>

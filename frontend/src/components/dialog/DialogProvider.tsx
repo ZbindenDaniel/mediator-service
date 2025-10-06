@@ -327,7 +327,7 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
             ref={(node) => {
               dialogRef.current = node;
             }}
-            title={activeRequest.options.title}
+            heading={activeRequest.options.title}
             message={activeRequest.options.message}
             role="dialog"
           >
