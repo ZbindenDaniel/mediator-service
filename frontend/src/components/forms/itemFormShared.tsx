@@ -159,7 +159,6 @@ interface ItemDetailsFieldsProps {
   onUpdate: <K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => void;
   onGenerateMaterialNumber?: () => void | Promise<void>;
   onChangeStock?: (op: StockOperation) => void | Promise<void>;
-  descriptionSuggestions?: React.ReactNode;
   lockedFields?: LockedFieldConfig;
 }
 
@@ -173,7 +172,6 @@ export function ItemDetailsFields({
   onUpdate,
   onGenerateMaterialNumber,
   onChangeStock,
-  descriptionSuggestions,
   lockedFields
 }: ItemDetailsFieldsProps) {
   if(isNew && onGenerateMaterialNumber && form.Artikel_Nummer == null)
@@ -436,8 +434,6 @@ export function ItemDetailsFields({
           />
         </div>
       )}
-
-      {!descriptionLockHidden ? descriptionSuggestions : null}
 
       <div className="row">
         {form.ItemUUID && (
