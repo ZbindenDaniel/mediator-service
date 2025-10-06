@@ -101,6 +101,29 @@ function scoreBox(term: string, tokens: string[], box: any): number {
   return best;
 }
 
+function scoreReference(term: string, tokens: string[], reference: any): number {
+  const fields = [
+    reference?.Artikelbeschreibung,
+    reference?.Kurzbeschreibung,
+    reference?.Langtext,
+    reference?.Artikel_Nummer,
+    reference?.Hersteller
+  ];
+
+  let best = 0;
+  for (const field of fields) {
+    const similarity = computeSimilarityScore(term, tokens, field);
+    if (similarity > best) {
+      best = similarity;
+      if (best >= 1) {
+        break;
+      }
+    }
+  }
+
+  return best;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -135,6 +158,164 @@ const action: Action = {
 
       // require at least 50% of tokens (min 1)
       const minTokenHits = Math.max(1, Math.ceil(tokens.length * 0.5));
+
+      const scopeParam = url.searchParams.get("scope");
+      const dedupeParam = url.searchParams.get("dedupe");
+      const normalizedScope = scopeParam ? scopeParam.trim().toLowerCase() : null;
+      const normalizedDedupe = dedupeParam ? dedupeParam.trim().toLowerCase() : null;
+      const wantsRefs =
+        normalizedScope === "refs" ||
+        normalizedScope === "references" ||
+        normalizedDedupe === "true" ||
+        normalizedDedupe === "1" ||
+        normalizedDedupe === "yes";
+
+      if (wantsRefs) {
+        const like5 = (t: string) => {
+          const p = `%${t}%`;
+          return [p, p, p, p, p] as const;
+        };
+
+        const refTokenPresenceTerms = tokens
+          .map(
+            () => `
+    CASE WHEN (
+      lower(r.Artikel_Nummer) LIKE ?
+      OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
+      OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?
+      OR lower(COALESCE(r.Langtext, '')) LIKE ?
+      OR lower(COALESCE(r.Hersteller, '')) LIKE ?
+    ) THEN 1 ELSE 0 END
+  `
+          )
+          .join(" + ");
+
+        const refExactMatchExpr = `
+    CASE WHEN (
+      lower(r.Artikel_Nummer) = ?
+      OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
+    ) THEN 1 ELSE 0 END
+  `;
+
+        const refSql = `
+    SELECT *
+    FROM (
+      SELECT
+        r.*, 
+        (${refTokenPresenceTerms}) AS token_hits,
+        ${refExactMatchExpr} AS exact_match,
+        CASE
+          WHEN ${refExactMatchExpr} = 1 THEN 1.0
+          ELSE (CAST((${refTokenPresenceTerms}) AS REAL) / ?) * 0.99
+        END AS sql_score,
+        (
+          SELECT i.ItemUUID
+          FROM items i
+          WHERE i.Artikel_Nummer = r.Artikel_Nummer
+          ORDER BY i.UpdatedAt DESC
+          LIMIT 1
+        ) AS exemplar_item_uuid,
+        (
+          SELECT i.BoxID
+          FROM items i
+          WHERE i.Artikel_Nummer = r.Artikel_Nummer
+          AND i.BoxID IS NOT NULL
+          ORDER BY i.UpdatedAt DESC
+          LIMIT 1
+        ) AS exemplar_box_id,
+        (
+          SELECT COALESCE(i.Location, b.Location)
+          FROM items i
+          LEFT JOIN boxes b ON i.BoxID = b.BoxID
+          WHERE i.Artikel_Nummer = r.Artikel_Nummer
+          ORDER BY i.UpdatedAt DESC
+          LIMIT 1
+        ) AS exemplar_location
+      FROM item_refs r
+    )
+    WHERE token_hits >= ?
+    ORDER BY exact_match DESC, sql_score DESC
+    LIMIT 25
+  `;
+
+        const refParams = [
+          // token_hits params
+          ...tokens.flatMap(like5),
+          // exact_match params (equality)
+          normalized,
+          normalized,
+          // sql_score CASE exact_match params (repeat equality)
+          normalized,
+          normalized,
+          // sql_score token_hits terms again (used in ELSE)
+          ...tokens.flatMap(like5),
+          // divisor = tokens.length
+          tokens.length,
+          // WHERE threshold
+          minTokenHits
+        ];
+
+        const rawRefs = ctx.db.prepare(refSql).all(...refParams);
+
+        const deduped = new Map<
+          string,
+          { ref: Record<string, unknown>; score: number; exact: number }
+        >();
+
+        for (const row of rawRefs) {
+          const {
+            token_hits,
+            exact_match,
+            sql_score,
+            exemplar_item_uuid,
+            exemplar_box_id,
+            exemplar_location,
+            ...rest
+          } = row as Record<string, any>;
+          const reference = {
+            ...rest,
+            exemplarItemUUID: exemplar_item_uuid ?? null,
+            exemplarBoxID: exemplar_box_id ?? null,
+            exemplarLocation: exemplar_location ?? null
+          } as Record<string, unknown> & { Artikel_Nummer?: string };
+          const key = reference.Artikel_Nummer;
+          if (!key) {
+            continue;
+          }
+          const score = scoreReference(normalized, tokens, reference);
+          const exactValue = typeof exact_match === "number" ? exact_match : 0;
+          const existing = deduped.get(key);
+          if (!existing || score > existing.score || (score === existing.score && exactValue > existing.exact)) {
+            deduped.set(key, { ref: reference, score, exact: exactValue });
+          }
+        }
+
+        const sorted = Array.from(deduped.values()).sort((a, b) => {
+          if (b.exact !== a.exact) {
+            return b.exact - a.exact;
+          }
+          return b.score - a.score;
+        });
+
+        const topRefScore = sorted.length ? sorted[0].score : 0;
+        const refs = sorted.slice(0, 10).map((entry) => entry.ref);
+
+        console.log(
+          "search",
+          term,
+          "(refs) →",
+          refs.length,
+          "references",
+          "top score",
+          topRefScore.toFixed(3)
+        );
+
+        sendJson(res, 200, {
+          items: refs,
+          scope: "refs"
+        });
+        return;
+      }
 
       const like4 = (t: string) => {
         const p = `%${t}%`;

@@ -32,7 +32,8 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
         setLoading(true);
         setError(null);
         console.log('Fetching duplicate candidates', trimmedTerm);
-        const response = await fetch(`/api/search?term=${encodeURIComponent(trimmedTerm)}`, {
+        const params = new URLSearchParams({ term: trimmedTerm, scope: 'refs' });
+        const response = await fetch(`/api/search?${params.toString()}`, {
           method: 'GET',
           signal: controller.signal
         });
@@ -73,7 +74,10 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
   const handleSelect = useCallback(
     async (item: SimilarItem) => {
       try {
-        console.log('Duplicate candidate chosen', item.ItemUUID);
+        console.log('Duplicate candidate chosen', {
+          artikelNummer: item.Artikel_Nummer,
+          exemplarItemUUID: item.exemplarItemUUID
+        });
         await onSelect(item);
       } catch (err) {
         console.error('Failed to handle duplicate candidate selection', err);

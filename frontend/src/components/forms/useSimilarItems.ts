@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Item } from '../../../../models';
+import type { ItemRef } from '../../../../models';
 
-type SimilarItem = Item;
+type SimilarItem = ItemRef & {
+  exemplarItemUUID?: string | null;
+  exemplarBoxID?: string | null;
+  exemplarLocation?: string | null;
+};
 
 interface UseSimilarItemsOptions {
   description: string | undefined;
@@ -45,7 +49,8 @@ export function useSimilarItems({
         setLoading(true);
         setError(null);
         console.log('Searching for similar items', trimmedDescription);
-        const response = await fetch(`/api/search?term=${encodeURIComponent(trimmedDescription)}`, {
+        const params = new URLSearchParams({ term: trimmedDescription, scope: 'refs' });
+        const response = await fetch(`/api/search?${params.toString()}`, {
           signal: controller.signal
         });
         if (!isMounted) {
@@ -60,7 +65,9 @@ export function useSimilarItems({
         }
         const data = await response.json();
         const items = Array.isArray(data?.items) ? (data.items as SimilarItem[]) : [];
-        const filtered = items.filter((item) => item.ItemUUID !== currentItemUUID);
+        const filtered = currentItemUUID
+          ? items.filter((item) => item.exemplarItemUUID !== currentItemUUID)
+          : items;
         setSimilarItems(filtered);
         setLoading(false);
       } catch (err) {
