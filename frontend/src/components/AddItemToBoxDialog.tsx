@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { Item } from '../../../models';
-import { getUser, ensureUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 import { dialogService } from './dialog';
+import { DialogButtons, DialogContent, DialogOverlay } from './dialog/presentational';
+
+// TODO: Evaluate migrating this dialog into the shared dialog queue for automated focus management.
 
 interface Props {
   boxId: string;
@@ -25,11 +28,38 @@ export async function confirmItemRelocationIfNecessary(item: Item, targetBoxId: 
 export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Item[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const handleDismiss = useCallback(() => {
+    try {
+      onClose();
+    } catch (error) {
+      console.error('Failed to close add-item dialog', error);
+    }
+  }, [onClose]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleDismiss();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleDismiss]);
 
   async function runSearch() {
     const term = query.trim();
     setResults([]);
-    if (!term) return;
+    if (!term) {
+      setHasSearched(false);
+      return;
+    }
+    setHasSearched(true);
     try {
       console.log('Searching items for', term);
       const r = await fetch('/api/search?term=' + encodeURIComponent(term));
@@ -70,8 +100,12 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
       });
       if (res.ok) {
         console.log('Added item to box', item.ItemUUID, boxId);
-        onAdded();
-        onClose();
+        try {
+          onAdded();
+        } catch (callbackError) {
+          console.error('Failed to run add-item success callback', callbackError);
+        }
+        handleDismiss();
       } else {
         console.error('add to box failed', res.status);
       }
@@ -81,31 +115,56 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   }
 
   return (
-    <div className="overlay">
-      <div className="card modal">
-        <h3>Artikel suchen</h3>
-        <div className="row">
+    <DialogOverlay onDismiss={handleDismiss}>
+      <DialogContent
+        className="add-item-dialog"
+        heading="Artikel suchen"
+        message="Suche nach einem Artikel, um ihn in den Behälter zu legen."
+      >
+        <div className="add-item-dialog__search">
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') runSearch(); }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                runSearch();
+              }
+            }}
             autoFocus
           />
-          <button className="btn" onClick={runSearch}>Suchen</button>
+          <button
+            className="btn"
+            onClick={runSearch}
+            type="button"
+            disabled={!query.trim()}
+          >
+            Suchen
+          </button>
         </div>
-        <div className="results">
-          {results.map(it => (
-            <div key={it.ItemUUID} className="card result">
-              <div><b>{it.Artikel_Nummer || it.ItemUUID}</b></div>
-              <div>{it.Artikelbeschreibung}</div>
-              <button className="btn" onClick={() => addToBox(it)}>Auswählen</button>
-            </div>
-          ))}
+        <div className="add-item-dialog__results" role="list">
+          {results.length > 0 ? (
+            results.map(it => (
+              <div key={it.ItemUUID} className="add-item-dialog__result card" role="listitem">
+                <div className="add-item-dialog__result-heading">
+                  <strong>{it.Artikel_Nummer || it.ItemUUID}</strong>
+                </div>
+                <div className="add-item-dialog__result-description">{it.Artikelbeschreibung}</div>
+                <button className="btn" onClick={() => addToBox(it)} type="button">Auswählen</button>
+              </div>
+            ))
+          ) : (
+            <p className="add-item-dialog__empty muted">
+              {hasSearched ? 'Keine Ergebnisse gefunden.' : 'Gib einen Suchbegriff ein, um Artikel zu finden.'}
+            </p>
+          )}
         </div>
-        <div className="row mt-10">
-          <button className="btn" onClick={onClose}>Abbrechen</button>
-        </div>
-      </div>
-    </div>
+        <DialogButtons
+          type="alert"
+          confirmLabel="Abbrechen"
+          onConfirm={handleDismiss}
+          onCancel={handleDismiss}
+        />
+      </DialogContent>
+    </DialogOverlay>
   );
 }
