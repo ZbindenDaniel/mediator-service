@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { getUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 import { BOX_COLORS } from '../data/boxColors';
 
 interface Props {
@@ -29,11 +29,18 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
 
     const location = `${colorKey}`;
 
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Relocate box aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
+
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location, actor: getUser() })
+        body: JSON.stringify({ location, actor })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {

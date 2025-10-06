@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
-import { getUser } from '../lib/user';
+import { getUser, ensureUser } from '../lib/user';
 import { dialogService } from './dialog';
 
 interface Props {
@@ -45,6 +45,12 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   }
 
   async function addToBox(item: Item) {
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Add to box aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       const confirmed = await confirmItemRelocationIfNecessary(item, boxId);
       if (!confirmed) {
@@ -53,7 +59,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
       const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toBoxId: boxId, actor: getUser() })
+        body: JSON.stringify({ toBoxId: boxId, actor })
       });
       if (res.ok) {
         console.log('Added item to box', item.ItemUUID, boxId);

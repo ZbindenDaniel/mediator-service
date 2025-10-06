@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
-import { getUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 
@@ -39,11 +39,17 @@ export default function ItemEdit({ itemId }: Props) {
   }, [itemId]);
 
   async function handleSubmit(data: Partial<Item>) {
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Item edit aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, actor: getUser() })
+        body: JSON.stringify({ ...data, actor })
       });
       if (res.ok) {
         const payload = await res

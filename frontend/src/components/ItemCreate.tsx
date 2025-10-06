@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item } from '../../../models';
-import { getUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 import {
   buildAgenticRunUrl,
   resolveAgenticApiBase,
@@ -237,7 +237,10 @@ export default function ItemCreate() {
       return;
     }
 
-    const actor = getUser();
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Agentic trigger failure will be reported without actor.');
+    }
     let errorMessage = '';
     if (typeof error === 'string' && error.trim()) {
       errorMessage = error.trim();
@@ -383,7 +386,11 @@ export default function ItemCreate() {
     }
   }
 
-  function buildCreationParams(data: Partial<ItemFormData>, options: { removeItemUUID?: boolean } = {}) {
+  function buildCreationParams(
+    data: Partial<ItemFormData>,
+    options: { removeItemUUID?: boolean } = {},
+    actor?: string
+  ) {
     const { removeItemUUID = true } = options;
     const params = new URLSearchParams();
     const sanitized: Record<string, unknown> = { ...data };
@@ -393,7 +400,6 @@ export default function ItemCreate() {
     if (removeItemUUID && 'ItemUUID' in sanitized) {
       delete sanitized.ItemUUID;
     }
-    const actor = getUser();
     if (actor) {
       sanitized.actor = actor;
     }
@@ -417,7 +423,13 @@ export default function ItemCreate() {
       return;
     }
 
-    const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID });
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Item creation aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
+    const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID }, actor);
     try {
       setCreating(true);
       console.log('Submitting item creation payload', { context, data });
@@ -543,7 +555,14 @@ export default function ItemCreate() {
       agenticSearch: data.Artikelbeschreibung
     };
 
-    const params = buildCreationParams(detailPayload);
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Agentic step 1 submission aborted: missing username.');
+      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      return;
+    }
+
+    const params = buildCreationParams(detailPayload, {}, actor);
 
     try {
       const response = await fetch('/api/import/item', {

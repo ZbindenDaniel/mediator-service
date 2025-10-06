@@ -4,7 +4,7 @@ import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog, AgenticRun } from '../../../models';
 import { formatDateTime } from '../lib/format';
-import { getUser } from '../lib/user';
+import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import {
   buildAgenticCancelUrl,
@@ -16,7 +16,7 @@ import {
 } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
-import { dialogService } from './dialog';
+import { dialogService, useDialog } from './dialog';
 
 interface Props {
   itemId: string;
@@ -30,9 +30,9 @@ export interface AgenticStatusCardProps {
   error: string | null;
   needsReview: boolean;
   hasFailure: boolean;
-  onRestart: () => void;
-  onReview: (decision: 'approved' | 'rejected') => void;
-  onCancel: () => void;
+  onRestart: () => void | Promise<void>;
+  onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
+  onCancel: () => void | Promise<void>;
 }
 
 export function AgenticStatusCard({
@@ -75,12 +75,12 @@ export function AgenticStatusCard({
       {error ? (
         <p className="muted" style={{ color: '#a30000' }}>{error}</p>
       ) : null}
-      { status.label != 'Abgebrochen' ?(
+      {status.label != 'Abgebrochen' ? (
         <div className='row'>
-        <button type="button" className="btn" onClick={onCancel}>
-          Abbrechen
-        </button>
-      </div>
+          <button type="button" className="btn" onClick={onCancel}>
+            Abbrechen
+          </button>
+        </div>
       ) : null}
       {!needsReview && hasFailure ? (
         <div className='row'>
@@ -116,6 +116,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const navigate = useNavigate();
+  const dialog = useDialog();
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
@@ -282,7 +283,7 @@ export default function ItemDetail({ itemId }: Props) {
 
   async function handleAgenticReview(decision: 'approved' | 'rejected') {
     if (!agentic) return;
-    const actor = getUser();
+    const actor = await ensureUser();
     if (!actor) {
       try {
         await dialogService.alert({
@@ -355,7 +356,7 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const actor = getUser();
+    const actor = await ensureUser();
     if (!actor) {
       try {
         await dialogService.alert({
@@ -462,7 +463,7 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const actor = getUser();
+    const actor = await ensureUser();
     if (!actor) {
       try {
         await dialogService.alert({
@@ -568,6 +569,18 @@ export default function ItemDetail({ itemId }: Props) {
   async function handleDelete() {
     if (!item) return;
     let confirmed = false;
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic cancel user alert', error);
+      }
+      return;
+    }
     try {
       confirmed = await dialogService.confirm({
         title: 'Artikel löschen',
@@ -587,7 +600,7 @@ export default function ItemDetail({ itemId }: Props) {
       const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: getUser(), confirm: true })
+        body: JSON.stringify({ actor, confirm: true })
       });
       if (res.ok) {
         if (item.BoxID) {
@@ -621,7 +634,7 @@ export default function ItemDetail({ itemId }: Props) {
               <div className='row'>
 
                 <table className="details">
-                    <tbody>
+                  <tbody>
                     {([
                       [
                         'Erstellt von',
@@ -645,17 +658,29 @@ export default function ItemDetail({ itemId }: Props) {
                       // ['Kivi-Link', item.WmsLink]
                     ] as [string, any][]).map(([k, v]) => (
                       <tr key={k} className="responsive-row">
-                      <th className="responsive-th">{k}</th>
-                      <td className="responsive-td">{v ?? ''}</td>
+                        <th className="responsive-th">{k}</th>
+                        <td className="responsive-td">{v ?? ''}</td>
                       </tr>
                     ))}
-                    </tbody>
+                  </tbody>
                 </table>
               </div>
               <div className='row'>
                 <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
                 <button type="button" className="btn" onClick={async () => {
                   let confirmed = false;
+                  const actor = await ensureUser();
+                  if (!actor) {
+                    try {
+                      await dialogService.alert({
+                        title: 'Aktion nicht möglich',
+                        message: 'Bitte zuerst oben den Benutzer setzen.'
+                      });
+                    } catch (error) {
+                      console.error('Failed to display agentic cancel user alert', error);
+                    }
+                    return;
+                  }
                   try {
                     confirmed = await dialogService.confirm({
                       title: 'Artikel entnehmen',
@@ -667,14 +692,11 @@ export default function ItemDetail({ itemId }: Props) {
                     console.error('Failed to confirm inline item removal', error);
                     return;
                   }
-                  if (!confirmed) {
-                    return;
-                  }
                   try {
                     const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ actor: getUser() })
+                      body: JSON.stringify({ actor })
                     });
                     if (res.ok) {
                       const j = await res.json();
@@ -686,7 +708,10 @@ export default function ItemDetail({ itemId }: Props) {
                   } catch (err) {
                     console.error('Entnahme fehlgeschlagen', err);
                   }
-                }}>Entnehmen</button>
+                }}
+                >
+                  Entnehmen
+                </button>
                 <button type="button" className="btn danger" onClick={handleDelete}>Löschen</button>
               </div>
             </div>
