@@ -21,6 +21,8 @@ $activity-color: #804db4;
     /* header */
     --card: #3a313429; //  #ff69b429,  #3a313429,
     /* card bg */
+    --dialog: #ffffff;
+    /* dialog bg */
     --line: #e6e6e6;
     /* borders */
     --acc: #747372;
@@ -316,6 +318,56 @@ div {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+}
+
+/* Dialog */
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    z-index: 1000;
+}
+
+.dialog-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: min(520px, 100%);
+    background: var(--dialog, #ffffff);
+    color: var(--fg);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
+}
+
+.dialog-title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.dialog-message {
+    margin: 0;
+    color: var(--muted);
+    font-size: 1rem;
+}
+
+.dialog-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dialog-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 12px;
 }
 
 .qr-scanner .status {
