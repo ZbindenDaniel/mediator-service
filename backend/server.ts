@@ -6,6 +6,7 @@ import chokidar from 'chokidar';
 import { loadActions } from './actions';
 import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR } from './config';
 import { ingestCsvFile } from './importer';
+import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import {
   db,
   getItem,
@@ -76,6 +77,32 @@ try {
 
 async function handleCsv(absPath: string): Promise<void> {
   try {
+    try {
+      const baseName = path.basename(absPath);
+      const originalName = baseName.includes('_') ? baseName.slice(baseName.indexOf('_') + 1) : baseName;
+      const normalizedName = normalizeCsvFilename(originalName);
+      const fileBuffer = fs.readFileSync(absPath);
+      const checksum = computeChecksum(fileBuffer);
+      const duplicate = findArchiveDuplicate(ARCHIVE_DIR, normalizedName, checksum);
+      if (duplicate) {
+        console.warn(
+          '[watcher] Skipping duplicate CSV ingestion',
+          normalizedName,
+          'reason:',
+          duplicate.reason,
+          'match:',
+          duplicate.entry
+        );
+        try {
+          fs.rmSync(absPath, { force: true });
+        } catch (removeError) {
+          console.error('[watcher] Failed to remove duplicate CSV from inbox', absPath, removeError);
+        }
+        return;
+      }
+    } catch (duplicateError) {
+      console.error('[watcher] Failed to evaluate duplicate CSV upload', absPath, duplicateError);
+    }
     const { count, boxes } = await ingestCsvFile(absPath);
     const archived = path.join(
       ARCHIVE_DIR,
