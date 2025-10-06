@@ -16,6 +16,7 @@ import {
 } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
+import { dialogService } from './dialog';
 
 interface Props {
   itemId: string;
@@ -162,6 +163,58 @@ export default function ItemDetail({ itemId }: Props) {
     ? true
     : ['failed', 'error', 'errored', 'cancelled', 'canceled'].includes(normalizedAgenticStatus);
 
+  async function promptAgenticReviewNote(
+    decision: 'approved' | 'rejected'
+  ): Promise<string | null> {
+    while (true) {
+      let promptResult: string | null;
+      try {
+        promptResult = await dialogService.prompt({
+          title: 'Review-Notiz',
+          message:
+            decision === 'approved'
+              ? 'Bitte eine Notiz für die Freigabe hinzufügen (optional).'
+              : 'Bitte eine Notiz für die Ablehnung hinzufügen (optional).',
+          confirmLabel: 'Speichern',
+          cancelLabel: 'Ohne Notiz',
+          placeholder: 'Notiz (optional)',
+          defaultValue: ''
+        });
+      } catch (error) {
+        console.error('Failed to prompt for agentic review note', error);
+        return null;
+      }
+
+      if (promptResult === null) {
+        return '';
+      }
+
+      const trimmed = promptResult.trim();
+      if (trimmed.length === 0) {
+        let proceedWithoutNote = false;
+        try {
+          proceedWithoutNote = await dialogService.confirm({
+            title: 'Leere Notiz',
+            message: 'Ohne Notiz fortfahren?',
+            confirmLabel: 'Ohne Notiz',
+            cancelLabel: 'Zurück'
+          });
+        } catch (error) {
+          console.error('Failed to confirm empty agentic review note', error);
+          return null;
+        }
+
+        if (proceedWithoutNote) {
+          return '';
+        }
+
+        continue;
+      }
+
+      return trimmed;
+    }
+  }
+
   function agenticStatusDisplay(run: AgenticRun | null): {
     label: string;
     className: string;
@@ -231,15 +284,41 @@ export default function ItemDetail({ itemId }: Props) {
     if (!agentic) return;
     const actor = getUser();
     if (!actor) {
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic review user alert', error);
+      }
       return;
     }
     const confirmMessage =
       decision === 'approved'
         ? 'Agentisches Ergebnis freigeben?'
         : 'Agentisches Ergebnis ablehnen?';
-    if (!window.confirm(confirmMessage)) return;
-    const noteInput = window.prompt('Notiz (optional):', '') ?? '';
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Review bestätigen',
+        message: confirmMessage,
+        confirmLabel: decision === 'approved' ? 'Freigeben' : 'Ablehnen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm agentic review decision', error);
+      return;
+    }
+
+    if (!confirmed) {
+      return;
+    }
+
+    const noteInput = await promptAgenticReviewNote(decision);
+    if (noteInput === null) {
+      return;
+    }
     setAgenticActionPending(true);
     setAgenticError(null);
     setAgenticReviewIntent(decision);
@@ -278,7 +357,14 @@ export default function ItemDetail({ itemId }: Props) {
 
     const actor = getUser();
     if (!actor) {
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic restart user alert', error);
+      }
       return;
     }
 
@@ -378,11 +464,31 @@ export default function ItemDetail({ itemId }: Props) {
 
     const actor = getUser();
     if (!actor) {
-      window.alert('Bitte zuerst oben den Benutzer setzen.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic cancel user alert', error);
+      }
       return;
     }
 
-    if (!window.confirm('Agentischen Durchlauf abbrechen?')) {
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Agentischen Durchlauf abbrechen',
+        message: 'Agentischen Durchlauf abbrechen?',
+        confirmLabel: 'Abbrechen',
+        cancelLabel: 'Zurück'
+      });
+    } catch (error) {
+      console.error('Failed to confirm agentic cancellation', error);
+      return;
+    }
+
+    if (!confirmed) {
       return;
     }
 
@@ -461,7 +567,22 @@ export default function ItemDetail({ itemId }: Props) {
 
   async function handleDelete() {
     if (!item) return;
-    if (!window.confirm('Item wirklich löschen?')) return;
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Artikel löschen',
+        message: 'Item wirklich löschen?',
+        confirmLabel: 'Löschen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm item deletion', error);
+      return;
+    }
+
+    if (!confirmed) {
+      return;
+    }
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/delete`, {
         method: 'POST',
@@ -534,7 +655,21 @@ export default function ItemDetail({ itemId }: Props) {
               <div className='row'>
                 <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
                 <button type="button" className="btn" onClick={async () => {
-                  if (!window.confirm('Entnehmen?')) return;
+                  let confirmed = false;
+                  try {
+                    confirmed = await dialogService.confirm({
+                      title: 'Artikel entnehmen',
+                      message: 'Entnehmen?',
+                      confirmLabel: 'Entnehmen',
+                      cancelLabel: 'Abbrechen'
+                    });
+                  } catch (error) {
+                    console.error('Failed to confirm inline item removal', error);
+                    return;
+                  }
+                  if (!confirmed) {
+                    return;
+                  }
                   try {
                     const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
                       method: 'POST',
