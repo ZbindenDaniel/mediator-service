@@ -47,4 +47,23 @@ describe('collectMediaAssets', () => {
       warnSpy.mockRestore();
     }
   });
+
+  test('filters gallery assets to the current artikel number when available', () => {
+    ensureDir(existingDir);
+    const legacyFiles = ['07074-1.jpg', '07074-2.jpg'];
+    const currentFiles = ['07075-1.jpg', '07075-2.jpg'];
+    for (const file of [...legacyFiles, ...currentFiles]) {
+      fs.writeFileSync(path.join(existingDir, file), 'content');
+    }
+
+    const primary = `/media/${existingItemId}/${currentFiles[0]}`;
+    const assets = collectMediaAssets(existingItemId, primary, '07075');
+
+    for (const current of currentFiles) {
+      expect(assets).toContain(`/media/${existingItemId}/${current}`);
+    }
+    for (const legacy of legacyFiles) {
+      expect(assets).not.toContain(`/media/${existingItemId}/${legacy}`);
+    }
+  });
 });

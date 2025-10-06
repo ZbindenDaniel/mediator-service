@@ -101,7 +101,41 @@ function normaliseMediaReference(itemId: string, value?: string | null): string 
   return trimmed;
 }
 
-export function collectMediaAssets(itemId: string, primary?: string | null): string[] {
+function extractStemFromFilename(filename: string | null | undefined): string | null {
+  if (!filename) return null;
+  const trimmed = filename.trim();
+  if (!trimmed) return null;
+  const withoutQuery = trimmed.split('?')[0];
+  const base = path.posix.basename(withoutQuery);
+  if (!base) return null;
+  const noExt = base.replace(/\.[^/.]+$/, '');
+  if (!noExt) return null;
+  const hyphenMatch = noExt.match(/^(.*?)-\d+$/);
+  const stem = hyphenMatch ? hyphenMatch[1] : noExt;
+  const finalStem = stem.trim();
+  return finalStem ? finalStem : null;
+}
+
+function deriveExpectedStems(primary?: string | null, artikelNummer?: string | null): Set<string> {
+  const stems = new Set<string>();
+  const primaryStem = extractStemFromFilename(
+    primary && primary.startsWith(MEDIA_PREFIX) ? primary.slice(MEDIA_PREFIX.length) : primary
+  );
+  if (primaryStem) stems.add(primaryStem);
+  if (typeof artikelNummer === 'string') {
+    const trimmedArtikel = artikelNummer.trim();
+    if (trimmedArtikel) {
+      stems.add(trimmedArtikel);
+    }
+  }
+  return stems;
+}
+
+export function collectMediaAssets(
+  itemId: string,
+  primary?: string | null,
+  artikelNummer?: string | null
+): string[] {
   const assets: string[] = [];
   const seen = new Set<string>();
   const trimmedPrimary = typeof primary === 'string' ? primary.trim() : '';
@@ -110,6 +144,7 @@ export function collectMediaAssets(itemId: string, primary?: string | null): str
       ? trimmedPrimary
       : normaliseMediaReference(itemId, trimmedPrimary || null);
   pushMedia(assets, normalisedPrimary || '', seen);
+  const expectedStems = deriveExpectedStems(normalisedPrimary, artikelNummer);
 
   try {
     const dir = path.join(MEDIA_DIR, itemId);
@@ -117,7 +152,22 @@ export function collectMediaAssets(itemId: string, primary?: string | null): str
       const stat = fs.statSync(dir);
       if (stat.isDirectory()) {
         const entries = fs.readdirSync(dir).sort();
-        for (const entry of entries) {
+        const matchingEntries =
+          expectedStems.size > 0
+            ? entries.filter((entry) => {
+                const stem = extractStemFromFilename(entry);
+                return !!stem && expectedStems.has(stem);
+              })
+            : entries;
+        const entriesToPush =
+          expectedStems.size > 0 && matchingEntries.length === 0 ? entries : matchingEntries;
+        if (entriesToPush === entries && matchingEntries.length === 0 && entries.length > 0 && expectedStems.size > 0) {
+          console.info('Falling back to legacy media listing', {
+            itemId,
+            expectedStems: Array.from(expectedStems)
+          });
+        }
+        for (const entry of entriesToPush) {
           const resolved = `${MEDIA_PREFIX}${itemId}/${entry}`;
           pushMedia(assets, resolved, seen);
         }
@@ -153,7 +203,7 @@ const action: Action = {
         const events = ctx.listEventsForItem.all(itemId);
         const agentic = ctx.getAgenticRun ? ctx.getAgenticRun.get(itemId) : null;
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
-        const media = collectMediaAssets(itemId, normalisedGrafikname);
+        const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
         const responseItem =
           normalisedGrafikname && normalisedGrafikname !== item.Grafikname
             ? { ...item, Grafikname: normalisedGrafikname }
@@ -234,7 +284,7 @@ const action: Action = {
         });
       });
       txn(item, actor);
-      const media = collectMediaAssets(itemId, normalisedGrafikname);
+      const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
       sendJson(res, 200, { ok: true, media });
     } catch (err) {
       console.error('Save item failed', err);
