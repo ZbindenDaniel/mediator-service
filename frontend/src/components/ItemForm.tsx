@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ItemDetailsFields, ItemFormData, LockedFieldConfig, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
+import { ItemDetailsFields, ItemFormData, LockedFieldConfig, createPhotoChangeHandler, extractReferenceFields, useItemFormState } from './forms/itemFormShared';
 import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
 import { useSimilarItems } from './forms/useSimilarItems';
 
@@ -25,7 +25,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
     try {
       console.log('Applying similar item selection', selected.ItemUUID);
       setForm((prev) => {
-        const next = { ...prev, ...selected } as Partial<ItemFormData>;
+        const next = { ...prev, ...extractReferenceFields(selected) } as Partial<ItemFormData>;
         if (isNew) {
           delete (next as Partial<ItemFormData>).ItemUUID;
         }

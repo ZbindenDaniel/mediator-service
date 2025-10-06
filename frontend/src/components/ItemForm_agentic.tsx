@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
+import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, extractReferenceFields, useItemFormState } from './forms/itemFormShared';
 import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
 import { useSimilarItems } from './forms/useSimilarItems';
 
@@ -33,7 +33,7 @@ export default function ItemForm_Agentic({
     try {
       console.log('Applying similar item selection (agentic)', selected.ItemUUID);
       setForm((prev) => {
-        const next = { ...prev, ...selected } as Partial<ItemFormData>;
+        const next = { ...prev, ...extractReferenceFields(selected) } as Partial<ItemFormData>;
         if (isNew) {
           delete (next as Partial<ItemFormData>).ItemUUID;
         }

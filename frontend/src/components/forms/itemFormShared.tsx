@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Item } from '../../../../models';
+import type { Item, ItemRef } from '../../../../models';
 import { getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
@@ -10,6 +10,41 @@ export interface ItemFormData extends Item {
   picture3?: string | null;
   agenticStatus?: 'queued' | 'running';
   agenticSearch?: string;
+}
+
+const referenceFieldKeys: (keyof ItemRef)[] = [
+  'Artikel_Nummer',
+  'Grafikname',
+  'Artikelbeschreibung',
+  'Verkaufspreis',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg',
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B',
+  'Veröffentlicht_Status',
+  'Shopartikel',
+  'Artikeltyp',
+  'Einheit',
+  'WmsLink',
+  'EntityType'
+];
+
+export function extractReferenceFields(source: Partial<Item> | Partial<ItemRef>): Partial<ItemRef> {
+  const reference: Partial<ItemRef> = {};
+  for (const key of referenceFieldKeys) {
+    if (key in source) {
+      // Deliberately copy undefined to allow clearing inherited values
+      (reference as Record<string, unknown>)[key] = (source as Record<string, unknown>)[key];
+    }
+  }
+  return reference;
 }
 
 export type LockedFieldMode = 'readonly' | 'hidden';

@@ -13,6 +13,7 @@ import ItemForm from './ItemForm';
 import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
+import { extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
 
 type AgenticEnv = typeof globalThis & {
@@ -477,17 +478,18 @@ export default function ItemCreate() {
       return;
     }
     try {
+      const referenceFields = extractReferenceFields(item);
       const clone: Partial<ItemFormData> = {
-        ...item,
+        ...referenceFields,
         ...basicInfo,
-        BoxID: basicInfo.BoxID || item.BoxID || boxId || undefined,
-        Artikelbeschreibung: basicInfo.Artikelbeschreibung || item.Artikelbeschreibung,
-        Artikel_Nummer: basicInfo.Artikel_Nummer || item.Artikel_Nummer,
-        Auf_Lager: basicInfo.Auf_Lager ?? item.Auf_Lager,
-        Kurzbeschreibung: basicInfo.Kurzbeschreibung || item.Kurzbeschreibung,
+        BoxID: basicInfo.BoxID || boxId || undefined,
+        Artikelbeschreibung: basicInfo.Artikelbeschreibung || referenceFields.Artikelbeschreibung,
+        Artikel_Nummer: basicInfo.Artikel_Nummer || referenceFields.Artikel_Nummer,
+        Kurzbeschreibung: basicInfo.Kurzbeschreibung || referenceFields.Kurzbeschreibung,
+        Auf_Lager: basicInfo.Auf_Lager,
         picture1: basicInfo.picture1,
         picture2: basicInfo.picture2,
-        picture3: basicInfo.picture3 
+        picture3: basicInfo.picture3
       };
       if ('ItemUUID' in clone) {
         delete clone.ItemUUID;
