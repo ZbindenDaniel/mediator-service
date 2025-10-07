@@ -8,6 +8,55 @@ import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
 
 const DEFAULT_EINHEIT = 'Stück';
 
+// TODO: Extend parsing to cover additional partner provided formats once discovered.
+
+function parseDatumErfasst(rawValue: string | null | undefined): Date | undefined {
+  if (rawValue === null || rawValue === undefined) {
+    return undefined;
+  }
+
+  const trimmed = String(rawValue).trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const isoCandidate = new Date(trimmed);
+    if (!Number.isNaN(isoCandidate.getTime())) {
+      return isoCandidate;
+    }
+
+    const localizedMatch = trimmed.match(
+      /^(\d{1,2})[./](\d{1,2})[./](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+    );
+
+    if (localizedMatch) {
+      const [, dayStr, monthStr, yearStr, hourStr, minuteStr, secondStr] = localizedMatch;
+      const day = Number.parseInt(dayStr, 10);
+      const month = Number.parseInt(monthStr, 10);
+      const year = Number.parseInt(yearStr, 10);
+      const hour = hourStr ? Number.parseInt(hourStr, 10) : 0;
+      const minute = minuteStr ? Number.parseInt(minuteStr, 10) : 0;
+      const second = secondStr ? Number.parseInt(secondStr, 10) : 0;
+
+      const normalized = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+
+      if (!Number.isNaN(normalized.getTime())) {
+        return normalized;
+      }
+    }
+
+    console.warn('CSV ingestion: failed to normalize Datum erfasst value', { value: trimmed });
+    return undefined;
+  } catch (error) {
+    console.error('CSV ingestion: unexpected error while parsing Datum erfasst', {
+      value: rawValue,
+      error,
+    });
+    return undefined;
+  }
+}
+
 function loadOps(): Op[] {
   try {
     const dir = path.join(__dirname, 'ops');
@@ -104,7 +153,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         BoxID: final.BoxID || null,
         Location: location,
         UpdatedAt: nowDate,
-        Datum_erfasst: final['Datum erfasst'] ? new Date(final['Datum erfasst']) : undefined,
+        Datum_erfasst: parseDatumErfasst(final['Datum erfasst']),
         Artikel_Nummer: final['Artikel-Nummer'] || '',
         Grafikname: final['Grafikname(n)'] || '',
         Artikelbeschreibung: final['Artikelbeschreibung'] || '',
