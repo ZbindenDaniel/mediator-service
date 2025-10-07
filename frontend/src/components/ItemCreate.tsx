@@ -447,13 +447,14 @@ export default function ItemCreate() {
     }
   }
 
-  async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
+  function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
     if (!shouldUseAgenticForm) {
       return;
     }
 
     try {
-      await handleAgenticRunTrigger({
+      console.log('Scheduling asynchronous agentic trigger', { context });
+      const triggerPromise = handleAgenticRunTrigger({
         agenticPayload,
         context,
         agenticRunUrl,
@@ -465,8 +466,12 @@ export default function ItemCreate() {
           setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
         }
       });
+
+      triggerPromise.catch((err) => {
+        console.error('Unhandled error while processing agentic trigger', err);
+      });
     } catch (err) {
-      console.error('Unhandled error while processing agentic trigger', err);
+      console.error('Failed to start agentic trigger workflow', err);
     }
   }
 
@@ -552,7 +557,7 @@ export default function ItemCreate() {
         artikelbeschreibung: searchText
       };
 
-      await triggerAgenticRun(agenticPayload, context);
+      triggerAgenticRun(agenticPayload, context);
 
       try {
         await dialog.alert({
