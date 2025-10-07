@@ -261,13 +261,20 @@ function normalizePublishedValue(value: unknown): string | null {
 
 function toIsoString(value: unknown): string | null {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      console.warn('[db] Attempted to serialize invalid Date instance', { value });
+      return null;
+    }
+    return value.toISOString();
+  }
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return null;
     const parsed = new Date(trimmed);
     if (Number.isNaN(parsed.getTime())) {
-      return trimmed;
+      console.warn('[db] Attempted to normalize invalid date string', { value: trimmed });
+      return null;
     }
     return parsed.toISOString();
   }
