@@ -119,9 +119,15 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
 
   try {
     const body = {
+      itemUUID: itemId,
+      itemUuid: itemId,
+      itemUUid: itemId,
       item: {
         Artikelbeschreibung: artikelbeschreibungCandidate,
-        ItemUUID: itemId
+        ItemUUID: itemId,
+        itemUUID: itemId,
+        itemUuid: itemId,
+        itemUUid: itemId
       }
     } as const;
 
@@ -183,7 +189,15 @@ export async function cancelAgenticRun({ cancelUrl, itemId, actor, context }: Ag
 
   try {
     const body = {
-      item: { ItemUUID: trimmedItemId },
+      itemUUID: trimmedItemId,
+      itemUuid: trimmedItemId,
+      itemUUid: trimmedItemId,
+      item: {
+        ItemUUID: trimmedItemId,
+        itemUUID: trimmedItemId,
+        itemUuid: trimmedItemId,
+        itemUUid: trimmedItemId
+      },
       actor: trimmedActor || undefined
     } as const;
 
