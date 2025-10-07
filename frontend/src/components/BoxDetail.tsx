@@ -175,7 +175,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <tbody>
                   <tr>
                     <th>Standort</th>
-                    <td><BoxColorTag locationKey={box.Location} /></td>
+                    <td><BoxColorTag locationKey={box.Location} labelOverride={box.StandortLabel} /></td>
                   </tr>
                   <tr>
                     <th>Platziert am</th>

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import { BOX_COLOR_KEY_SET } from '../../models/box-colors';
+import { resolveStandortLabel } from '../standort-label';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -26,13 +26,17 @@ const action: Action = {
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const locationRaw = (data.location ?? box.Location ?? '').toString().trim().toUpperCase();
+      const standortLabel = resolveStandortLabel(locationRaw);
+      if (locationRaw && !standortLabel) {
+        console.warn('[move-box] Missing Standort label mapping for location', { location: locationRaw });
+      }
       const notes = (data.notes || '').trim();
       if (!locationRaw) return sendJson(res, 400, { error: 'location is required' });
-      const txn = ctx.db.transaction((boxId: string, loc: string, note: string, a: string) => {
-        ctx.db.prepare(`UPDATE boxes SET Location=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(loc, note, a, boxId);
-        ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Moved', Meta: JSON.stringify({ location: loc, notes: note }) });
+      const txn = ctx.db.transaction((boxId: string, loc: string, note: string, a: string, label: string | null) => {
+        ctx.db.prepare(`UPDATE boxes SET Location=?, StandortLabel=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(loc, label, note, a, boxId);
+        ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Moved', Meta: JSON.stringify({ location: loc, notes: note, standortLabel: label }) });
       });
-      txn(id, locationRaw, notes, actor);
+      txn(id, locationRaw, notes, actor, standortLabel);
       sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error('Move box failed', err);

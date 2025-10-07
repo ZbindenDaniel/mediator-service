@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { DB_PATH } from './config';
 import { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog } from '../models';
+import { resolveStandortLabel } from './standort-label';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 let db: Database.Database;
@@ -20,6 +21,7 @@ try {
 CREATE TABLE IF NOT EXISTS boxes (
   BoxID TEXT PRIMARY KEY,
   Location TEXT,
+  StandortLabel TEXT,
   CreatedAt TEXT,
   Notes TEXT,
   PlacedBy TEXT,
@@ -49,6 +51,52 @@ CREATE TABLE IF NOT EXISTS events (
   console.error('Failed to create schema', err);
   throw err;
 }
+
+function ensureStandortLabelColumn(database: Database.Database = db): void {
+  let hasColumn = false;
+  try {
+    const columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
+    hasColumn = columns.some((column) => column.name === 'StandortLabel');
+  } catch (err) {
+    console.error('Failed to inspect boxes schema for StandortLabel column', err);
+    throw err;
+  }
+
+  if (hasColumn) {
+    return;
+  }
+
+  console.info('Adding StandortLabel column to boxes table for existing deployments');
+
+  try {
+    database.prepare('ALTER TABLE boxes ADD COLUMN StandortLabel TEXT').run();
+  } catch (err) {
+    console.error('Failed to add StandortLabel column to boxes table', err);
+    throw err;
+  }
+
+  try {
+    const selectBoxes = database.prepare('SELECT BoxID, Location FROM boxes');
+    const updateLabel = database.prepare('UPDATE boxes SET StandortLabel = @StandortLabel WHERE BoxID = @BoxID');
+    const rows = selectBoxes.all() as Array<{ BoxID: string; Location: string | null }>;
+    const backfill = database.transaction((entries: Array<{ BoxID: string; Location: string | null }>) => {
+      for (const entry of entries) {
+        const label = resolveStandortLabel(entry.Location);
+        if (!label && entry.Location) {
+          console.warn('No StandortLabel mapping found during backfill', { location: entry.Location });
+        }
+        updateLabel.run({ BoxID: entry.BoxID, StandortLabel: label });
+      }
+    });
+    backfill(rows);
+    console.info('Backfilled StandortLabel for existing boxes', { count: rows.length });
+  } catch (err) {
+    console.error('Failed to backfill StandortLabel values for boxes', err);
+    throw err;
+  }
+}
+
+ensureStandortLabelColumn();
 
 const CREATE_ITEM_REFS_SQL = `
 CREATE TABLE IF NOT EXISTS item_refs (
@@ -451,10 +499,11 @@ export { db };
 
 export const upsertBox = db.prepare(
   `
-      INSERT INTO boxes (BoxID, Location, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
-      VALUES (@BoxID, @Location, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
+      INSERT INTO boxes (BoxID, Location, StandortLabel, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
+      VALUES (@BoxID, @Location, @StandortLabel, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
       ON CONFLICT(BoxID) DO UPDATE SET
       Location=COALESCE(excluded.Location, boxes.Location),
+      StandortLabel=COALESCE(excluded.StandortLabel, boxes.StandortLabel),
       CreatedAt=COALESCE(excluded.CreatedAt, boxes.CreatedAt),
       Notes=COALESCE(excluded.Notes, boxes.Notes),
       PlacedBy=COALESCE(excluded.PlacedBy, boxes.PlacedBy),
@@ -558,7 +607,7 @@ export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
 export const listRecentBoxes = db.prepare(
-  `SELECT BoxID, Location, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
+  `SELECT BoxID, Location, StandortLabel, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
 );
 export const getMaxBoxId = db.prepare(
   `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`

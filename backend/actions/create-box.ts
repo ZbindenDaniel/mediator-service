@@ -36,6 +36,7 @@ const action: Action = {
         ctx.upsertBox.run({
           BoxID: boxId,
           Location: null,
+          StandortLabel: null,
           CreatedAt: now,
           Notes: null,
           PlacedBy: a,

@@ -39,6 +39,7 @@ const action: Action = {
         type: 'box',
         id: box.BoxID,
         location: box.Location?.trim() || null,
+        standortLabel: box.StandortLabel?.trim() || null,
         description: box.Notes?.trim() || null,
         quantity: Number.isFinite(totalQuantity) ? totalQuantity : null,
         itemCount: items.length

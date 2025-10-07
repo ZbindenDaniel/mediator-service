@@ -185,7 +185,19 @@
             const notesEl = document.getElementById('box-notes');
 
             if (idEl) idEl.textContent = payload.id ? `Behälter ${payload.id}` : 'Behälter';
-            if (locEl) locEl.textContent = payload.location ? `Standort: ${payload.location}` : 'Standort unbekannt';
+            if (locEl) {
+              const rawLabel = typeof payload.standortLabel === 'string' ? payload.standortLabel.trim() : '';
+              const rawCode = typeof payload.location === 'string' ? payload.location.trim() : '';
+              const hasLabel = rawLabel.length > 0;
+              const hasCode = rawCode.length > 0;
+              let rendered = '';
+              if (hasLabel && hasCode && rawLabel.toLowerCase() !== rawCode.toLowerCase()) {
+                rendered = `${rawLabel} (${rawCode})`;
+              } else {
+                rendered = hasLabel ? rawLabel : rawCode;
+              }
+              locEl.textContent = rendered ? `Standort: ${rendered}` : 'Standort unbekannt';
+            }
             if (placedEl) {
               const by = payload.placedBy ? `von ${payload.placedBy}` : 'Unbekannt';
               const at = payload.placedAt ? new Date(payload.placedAt).toLocaleDateString('de-DE') : 'Datum offen';
