@@ -1,6 +1,8 @@
 # Open Bugs & Issues
 
-This list tracks defects that require fixes. Cross-reference the planning context in [OVERVIEW.md](OVERVIEW.md) and the component guidance in [AGENTS.md](AGENTS.md). When fixing a Bug remove it from this list.
+<!-- TODO: Audit and reprioritize remaining unchecked items after the next deployment. -->
+
+This list tracks defects that require fixes. Cross-reference the planning context in [OVERVIEW.md](OVERVIEW.md) and the component guidance in [../AGENTS.md](../AGENTS.md). When fixing a Bug remove it from this list.
 
 ## items list
 
@@ -42,7 +44,7 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 ### recent activities
 
-- [ ] The list should be move to its own page and on the landing page there should be simply a link card. the card should contain the last 3 activities.
+- [x] The list should be move to its own page and on the landing page there should be simply a link card. the card should contain the last 3 activities.
 - [x] translation issues
 - [ ] often times no actor is registered
 
@@ -52,9 +54,9 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 ### CSV import & export
 
-- [ ] the validation should return the number of parsed items
-- [ ] refresh after import
-- [ ] in the export we have to set the location of the items box into the item so when importing again the box hast the location set
+- [x] the validation should return the number of parsed items
+- [x] refresh after import
+- [x] in the export we have to set the location of the items box into the item so when importing again the box hast the location set
 
 ## Printing
 

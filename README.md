@@ -11,19 +11,36 @@ POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate pay
 
 ## Development notes
 
-- The server serves frontend static files from `dist/v2/frontend/public` when running the compiled build. During development, if `dist/v2/frontend/public/index.html` is missing the server will fall back to the workspace `v2/frontend/public` directory.
+- The server serves frontend static files from `dist/frontend/public` when running the compiled build. During development, if `dist/frontend/public/index.html` is missing the server will fall back to the workspace `frontend/public` directory.
 
-- The `build` script (see `package.json`) compiles TypeScript, bundles the frontend, and copies `v2/frontend/public` into `dist/v2/frontend/public` so the compiled server can run without requiring manual copying.
+- The `prebuild` script compiles `frontend/public/styles.scss` to CSS (or creates an empty placeholder if `sass` is unavailable) so the browser never loads a missing stylesheet during tests or CI runs.
+
+- The `build` script (see `package.json`) runs the Sass prebuild step, compiles TypeScript, bundles the frontend, and copies `frontend/public` into `dist/frontend/public` so the compiled server can run without requiring manual copying.
 
 Quick commands:
 
 ```bash
 # build (compiles TS, bundles frontend, copies public into dist)
-npm --workspace mediator-service run build
+npm run build
 
 # start
-npm --workspace mediator-service start
+npm start
+
+# run tests (prebuild + node-based harness)
+npm test
 ```
+
+## Testing
+
+<!-- TODO: Document CLI flags once watch/filter support lands in the harness. -->
+
+The custom harness in `scripts/run-tests.js` exposes Jest-style matchers and async helpers so `test/*.test.ts` specs can run without the full Jest runtime. Execute the suite with:
+
+```bash
+node scripts/run-tests.js
+```
+
+The script eagerly loads every `.test.ts` file, runs them through the in-process harness, and, when the optional Jest dependency is available, hands off to Jest using the project configuration for any suites that rely on its runtime. There is currently no built-in watch or name filtering support; rerun the command (or `npm test`) after making changes.
 
 ## Agentic migration verification
 

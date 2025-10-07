@@ -13,6 +13,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Legacy JavaScript scripts remain for compatibility; modernization continues incrementally.
 
 ## Next Steps
+<!-- TODO: Reconcile this list with docs/BUGS.md whenever major fixes land. -->
 - Audit remaining detail routes (e.g., BoxDetail, ItemDetail) to determine whether the shared `LoadingPage` pattern should be applied for initial fetches.
 - Enable switch from agentic to manual edit via button. Very simple link button from ItemForm_Agentic to ItemForm.
 - Move of items and boxes triggers reload.
@@ -33,6 +34,10 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Moved the detailed activities feed to `/activities` while limiting the landing page card to the latest three events with a shortcut link.
+- Expanded the localized event label maps to cover newly tracked agentic lifecycle steps so UI timelines render translated copy for every restart, cancelation, and QR scan.
+- Corrected the backend media directory resolution to keep item image persistence working after build outputs move into `dist/backend`.
+- Enhanced the Node-based test harness with Jest-style utilities, enabling async-friendly matchers and richer diagnostics when running `node scripts/run-tests.js`.
 - Introduced the shared `LoadingPage` experience on landing and item list routes so top-level pages display a consistent loading state while fetching data.
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.
@@ -55,5 +60,5 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
-- [Component Responsibilities](AGENTS.md)
+- [Component Responsibilities](../AGENTS.md)
 - [Open Bugs](BUGS.md)
