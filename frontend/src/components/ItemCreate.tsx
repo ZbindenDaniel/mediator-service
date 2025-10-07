@@ -23,7 +23,7 @@ type AgenticEnv = typeof globalThis & {
   process?: { env?: Record<string, string | undefined> };
 };
 
-type CreationStep = 'basicInfo' | 'matchSelection' | 'manualEdit';
+type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
 export interface AgenticTriggerFailureReportArgs {
   itemId: string;
@@ -188,9 +188,7 @@ export default function ItemCreate() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const boxId = params.get('box') || null;
-  const [agenticStep, setAgenticStep] = useState(1);
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
-  const [itemUUID, setItemUUID] = useState<string | undefined>();
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
   const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
@@ -277,10 +275,56 @@ export default function ItemCreate() {
   const baseDraft = useMemo(
     () => ({
       ...draft,
-      BoxID: draft.BoxID || boxId || undefined,
-      ItemUUID: itemUUID || draft.ItemUUID
+      BoxID: draft.BoxID || boxId || undefined
     }),
-    [boxId, draft, itemUUID]
+    [boxId, draft]
+  );
+
+  const moveToAgenticPhotos = useCallback(
+    (data: Partial<ItemFormData>, source: 'match-selection' | 'skip-matches') => {
+      try {
+        const normalized: Partial<ItemFormData> = {
+          ...data,
+          BoxID: data.BoxID || boxId || undefined
+        };
+
+        if (typeof normalized.Artikelbeschreibung === 'string') {
+          normalized.Artikelbeschreibung = normalized.Artikelbeschreibung.trim();
+        }
+        if (typeof normalized.Artikel_Nummer === 'string') {
+          normalized.Artikel_Nummer = normalized.Artikel_Nummer.trim();
+        }
+
+        const resolvedSearch =
+          typeof normalized.agenticSearch === 'string' && normalized.agenticSearch.trim()
+            ? normalized.agenticSearch.trim()
+            : typeof normalized.Artikelbeschreibung === 'string'
+            ? normalized.Artikelbeschreibung
+            : undefined;
+
+        console.log('Transitioning to agentic photo upload step', { source, normalizedDraft: normalized });
+
+        setDraft((prev) => {
+          const nextDraft: Partial<ItemFormData> = {
+            ...prev,
+            ...normalized,
+            agenticSearch: resolvedSearch ?? prev.agenticSearch,
+            agenticStatus: undefined
+          };
+
+          if ('ItemUUID' in nextDraft) {
+            delete (nextDraft as Record<string, unknown>).ItemUUID;
+          }
+
+          return nextDraft;
+        });
+        setCreationStep('agenticPhotos');
+      } catch (err) {
+        console.error('Failed to prepare data for agentic photo upload step', err);
+        throw err;
+      }
+    },
+    [boxId, setCreationStep, setDraft]
   );
 
   async function reportAgenticTriggerFailure({
@@ -403,13 +447,14 @@ export default function ItemCreate() {
     }
   }
 
-  async function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
+  function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
     if (!shouldUseAgenticForm) {
       return;
     }
 
     try {
-      await handleAgenticRunTrigger({
+      console.log('Scheduling asynchronous agentic trigger', { context });
+      const triggerPromise = handleAgenticRunTrigger({
         agenticPayload,
         context,
         agenticRunUrl,
@@ -421,8 +466,12 @@ export default function ItemCreate() {
           setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
         }
       });
+
+      triggerPromise.catch((err) => {
+        console.error('Unhandled error while processing agentic trigger', err);
+      });
     } catch (err) {
-      console.error('Unhandled error while processing agentic trigger', err);
+      console.error('Failed to start agentic trigger workflow', err);
     }
   }
 
@@ -508,7 +557,7 @@ export default function ItemCreate() {
         artikelbeschreibung: searchText
       };
 
-      await triggerAgenticRun(agenticPayload, context);
+      triggerAgenticRun(agenticPayload, context);
 
       try {
         await dialog.alert({
@@ -612,8 +661,15 @@ export default function ItemCreate() {
       console.log('Creating item from selected duplicate', {
         artikelNummer: item.Artikel_Nummer,
         exemplarItemUUID: item.exemplarItemUUID,
-        resolvedDescription: clone.Artikelbeschreibung
+        resolvedDescription: clone.Artikelbeschreibung,
+        useAgenticFlow: shouldUseAgenticForm
       });
+
+      if (shouldUseAgenticForm) {
+        moveToAgenticPhotos(clone, 'match-selection');
+        return;
+      }
+
       await submitNewItem(clone, 'match-selection');
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
@@ -621,7 +677,19 @@ export default function ItemCreate() {
   };
 
   const handleSkipMatches = () => {
-    console.log('No duplicate selected, switching to manual edit');
+    console.log('No duplicate selected, determining next creation step', { useAgenticFlow: shouldUseAgenticForm });
+
+    if (shouldUseAgenticForm) {
+      try {
+        moveToAgenticPhotos(basicInfo, 'skip-matches');
+      } catch (err) {
+        console.error('Falling back to manual edit after agentic transition failure', err);
+        setManualDraft((prev) => ({ ...prev, ...basicInfo }));
+        setCreationStep('manualEdit');
+      }
+      return;
+    }
+
     setManualDraft((prev) => ({ ...prev, ...basicInfo }));
     setCreationStep('manualEdit');
   };
@@ -646,84 +714,39 @@ export default function ItemCreate() {
     }
   };
 
-  const handleAgenticDetails = async (data: Partial<ItemFormData>) => {
-    console.log('Submitting agentic step 1 item details', data);
-    const detailPayload: Partial<ItemFormData> = {
-      Artikelbeschreibung: data.Artikelbeschreibung,
-      Artikel_Nummer: data.Artikel_Nummer,
-      Auf_Lager: data.Auf_Lager,
-      BoxID: data.BoxID || boxId || undefined,
-      agenticStatus: 'queued',
-      agenticSearch: data.Artikelbeschreibung
-    };
+  const handleAgenticPhotos = async (data: Partial<ItemFormData>) => {
+    console.log('Submitting agentic photo payload', {
+      hasPicture1: Boolean(data.picture1),
+      hasPicture2: Boolean(data.picture2),
+      hasPicture3: Boolean(data.picture3)
+    });
 
-    const actor = await ensureUser();
-    if (!actor) {
-      console.info('Agentic step 1 submission aborted: missing username.');
-      try {
-        await dialog.alert({
-          title: 'Aktion nicht möglich',
-          message: 'Bitte zuerst oben den Benutzer setzen.'
-        });
-      } catch (error) {
-        console.error('Failed to display missing user alert for agentic details', error);
-      }
+    if (creating) {
+      console.warn('Skipping agentic photo submit; creation already running.');
       return;
     }
 
-    const params = buildCreationParams(detailPayload, {}, actor);
-
     try {
-      const response = await fetch('/api/import/item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      });
-
-      if (!response.ok) {
-        console.error('Failed to create item during agentic step 1', response.status);
-        throw new Error(`Failed to create item. Status: ${response.status}`);
-      }
-
-      const body = await response.json();
-      const createdItem: Item | undefined = body?.item;
-
-      setDraft((prev) => ({
-        ...prev,
-        ...detailPayload,
-        BoxID: createdItem?.BoxID || detailPayload.BoxID,
-        ItemUUID: createdItem?.ItemUUID || prev.ItemUUID,
-        agenticStatus: 'queued',
-        agenticSearch: detailPayload.agenticSearch
-      }));
-      setItemUUID(createdItem?.ItemUUID || itemUUID);
-      setAgenticStep(2);
-
-      const searchText = createdItem?.Artikelbeschreibung || detailPayload.Artikelbeschreibung || '';
-      const agenticPayload: AgenticRunTriggerPayload = {
-        itemId: createdItem?.ItemUUID,
-        artikelbeschreibung: searchText
+      const mergedData: Partial<ItemFormData> = {
+        ...baseDraft,
+        ...data,
+        BoxID: data.BoxID || baseDraft.BoxID || boxId || undefined,
+        agenticStatus: 'running',
+        agenticSearch:
+          baseDraft.agenticSearch ||
+          baseDraft.Artikelbeschreibung ||
+          (typeof data.Artikelbeschreibung === 'string' ? data.Artikelbeschreibung : undefined)
       };
 
-      await triggerAgenticRun(agenticPayload, 'agentic-step-one');
+      if ('ItemUUID' in mergedData) {
+        delete (mergedData as Record<string, unknown>).ItemUUID;
+      }
+
+      await submitNewItem(mergedData, 'agentic-photos');
     } catch (err) {
-      console.error('Failed to submit agentic step 1 item details', err);
+      console.error('Failed to submit agentic photo payload', err);
       throw err;
     }
-  };
-
-  const handleAgenticPhotos = async (data: Partial<ItemFormData>) => {
-    console.log('Submitting agentic step 2 item photos', data);
-    const mergedData: Partial<ItemFormData> = {
-      ...baseDraft,
-      ...data,
-      BoxID: data.BoxID || baseDraft.BoxID,
-      ItemUUID: itemUUID || baseDraft.ItemUUID,
-      agenticStatus: 'running',
-      agenticSearch: baseDraft.agenticSearch || baseDraft.Artikelbeschreibung
-    };
-
-    await submitNewItem(mergedData, 'agentic-step-two', { keepItemUUID: true });
   };
 
   const manualLockedFields = useMemo<LockedFieldConfig>(
@@ -731,7 +754,7 @@ export default function ItemCreate() {
     []
   );
 
-  console.log(`Rendering item create form (step ${shouldUseAgenticForm ? agenticStep : creationStep})`, shouldUseAgenticForm);
+  console.log('Rendering item create form', { creationStep, shouldUseAgenticForm });
   // TODO: if(isLoading) display loading state LoadingPage
   const blockingOverlay = creating ? (
     <div className="blocking-overlay" role="presentation">
@@ -740,22 +763,6 @@ export default function ItemCreate() {
       </div>
     </div>
   ) : null;
-
-  if (shouldUseAgenticForm) {
-    return (
-      <>
-        {blockingOverlay}
-        <ItemForm_Agentic
-          draft={baseDraft}
-          step={agenticStep}
-          onSubmitDetails={handleAgenticDetails}
-          onSubmitPhotos={handleAgenticPhotos}
-          submitLabel="Speichern"
-          isNew
-        />
-      </>
-    );
-  }
 
   if (creationStep === 'basicInfo') {
     return (
@@ -775,6 +782,15 @@ export default function ItemCreate() {
           onSelect={handleMatchSelection}
           onSkip={handleSkipMatches}
         />
+      </>
+    );
+  }
+
+  if (creationStep === 'agenticPhotos' && shouldUseAgenticForm) {
+    return (
+      <>
+        {blockingOverlay}
+        <ItemForm_Agentic draft={baseDraft} onSubmitPhotos={handleAgenticPhotos} submitLabel="Speichern" isNew />
       </>
     );
   }
