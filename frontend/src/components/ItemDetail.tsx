@@ -715,7 +715,7 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
             </div>
 
-            {/* <AgenticStatusCard
+            <AgenticStatusCard
               status={agenticStatus}
               rows={agenticRows}
               actionPending={agenticActionPending}
@@ -726,7 +726,7 @@ export default function ItemDetail({ itemId }: Props) {
               onRestart={handleAgenticRestart}
               onReview={handleAgenticReview}
               onCancel={handleAgenticCancel}
-            /> */}
+            />
 
             <RelocateItemCard itemId={item.ItemUUID} onRelocated={load} />
 
