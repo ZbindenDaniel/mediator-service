@@ -92,18 +92,25 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
     });
   }, []);
 
-  const generateMaterialNumber = useCallback(async () => {
+  const generateMaterialNumber = useCallback(async (): Promise<string | undefined> => {
     try {
       console.log('Requesting new material number for item form');
       const res = await fetch('/api/getNewMaterialNumber');
       if (!res.ok) {
         console.error('Failed to get material number', res.status);
-        return;
+        return undefined;
       }
       const j = await res.json();
-      update('Artikel_Nummer', j.nextArtikelNummer);
+      const nextNumber = j?.nextArtikelNummer;
+      if (typeof nextNumber !== 'string' || !nextNumber.trim()) {
+        console.error('Received invalid material number payload', j);
+        return undefined;
+      }
+      update('Artikel_Nummer', nextNumber);
+      return nextNumber;
     } catch (err) {
       console.error('Failed to get material number', err);
+      return undefined;
     }
   }, [update]);
 
@@ -170,7 +177,7 @@ interface ItemDetailsFieldsProps {
   form: Partial<ItemFormData>;
   isNew?: boolean;
   onUpdate: <K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => void;
-  onGenerateMaterialNumber?: () => void | Promise<void>;
+  onGenerateMaterialNumber?: () => void | Promise<void | string>;
   onChangeStock?: (op: StockOperation) => void | Promise<void>;
   lockedFields?: LockedFieldConfig;
 }
@@ -187,8 +194,18 @@ export function ItemDetailsFields({
   onChangeStock,
   lockedFields
 }: ItemDetailsFieldsProps) {
-  if(isNew && onGenerateMaterialNumber && form.Artikel_Nummer == null)
-    onGenerateMaterialNumber();
+  if (isNew && onGenerateMaterialNumber && form.Artikel_Nummer == null) {
+    try {
+      const maybePromise = onGenerateMaterialNumber();
+      if (maybePromise && typeof (maybePromise as Promise<unknown>).catch === 'function') {
+        (maybePromise as Promise<unknown>).catch((error) => {
+          console.error('Failed to auto-generate material number during render', error);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to trigger auto material number generation', error);
+    }
+  }
 
   const handleStock = useCallback(async (op: StockOperation) => {
     if (!onChangeStock) {

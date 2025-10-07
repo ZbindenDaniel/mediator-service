@@ -20,6 +20,7 @@ export default function ItemForm_Agentic({ draft, onSubmitDetails, onSubmitPhoto
   );
   const [mode, setMode] = useState<AgenticFormMode>(hasBasicDraftInfo ? 'photos' : 'details');
   const formRef = useRef<HTMLFormElement>(null);
+  const materialNumberRequestedRef = useRef(false);
 
   useEffect(() => {
     mergeForm(draft);
@@ -31,6 +32,46 @@ export default function ItemForm_Agentic({ draft, onSubmitDetails, onSubmitPhoto
       setMode('photos');
     }
   }, [hasBasicDraftInfo, mode]);
+
+  useEffect(() => {
+    if (!isNew) {
+      materialNumberRequestedRef.current = false;
+      return;
+    }
+    if (mode !== 'photos') {
+      materialNumberRequestedRef.current = false;
+      return;
+    }
+    if (form.Artikel_Nummer) {
+      materialNumberRequestedRef.current = false;
+      return;
+    }
+    if (materialNumberRequestedRef.current) {
+      return;
+    }
+    materialNumberRequestedRef.current = true;
+    let cancelled = false;
+    const ensureMaterialNumber = async () => {
+      try {
+        const generated = await generateMaterialNumber();
+        if (!generated) {
+          console.warn('Material number request returned empty value in photo mode');
+          materialNumberRequestedRef.current = false;
+          return;
+        }
+        if (!cancelled) {
+          console.log('Generated material number while skipping details screen', { Artikel_Nummer: generated });
+        }
+      } catch (error) {
+        console.error('Failed to ensure material number during photo mode', error);
+        materialNumberRequestedRef.current = false;
+      }
+    };
+    void ensureMaterialNumber();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.Artikel_Nummer, generateMaterialNumber, isNew, mode]);
 
   const handlePhoto1Change = useMemo(
     () => createPhotoChangeHandler(update, 'picture1'),
@@ -81,12 +122,25 @@ export default function ItemForm_Agentic({ draft, onSubmitDetails, onSubmitPhoto
     }
 
     try {
+      let submissionData = form;
+      if (isNew && !form.Artikel_Nummer) {
+        console.warn('Generating material number before agentic photo submission');
+        const generated = await generateMaterialNumber();
+        if (!generated) {
+          console.error('Material number generation failed before photo submission');
+          setSubmitError('Materialnummer konnte nicht erstellt werden. Bitte erneut versuchen.');
+          return;
+        }
+        submissionData = { ...form, Artikel_Nummer: generated };
+      }
+
       console.log('Submitting agentic photos', {
-        hasPicture1: Boolean(form.picture1),
-        hasPicture2: Boolean(form.picture2),
-        hasPicture3: Boolean(form.picture3)
+        hasPicture1: Boolean(submissionData.picture1),
+        hasPicture2: Boolean(submissionData.picture2),
+        hasPicture3: Boolean(submissionData.picture3),
+        Artikel_Nummer: submissionData.Artikel_Nummer
       });
-      await onSubmitPhotos(form);
+      await onSubmitPhotos(submissionData);
     } catch (err) {
       console.error('Item photo submit failed', err);
       setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
