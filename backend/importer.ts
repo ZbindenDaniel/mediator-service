@@ -10,6 +10,161 @@ const DEFAULT_EINHEIT = 'Stück';
 
 // TODO: Extend parsing to cover additional partner provided formats once discovered.
 
+interface NumericParseOptions {
+  defaultValue?: number;
+  treatBlankAsUndefined?: boolean;
+}
+
+function determineFallbackValue(
+  options: NumericParseOptions,
+  treatBlankAsUndefined: boolean
+): number | undefined {
+  if (Object.prototype.hasOwnProperty.call(options, 'defaultValue')) {
+    return options.defaultValue;
+  }
+  return treatBlankAsUndefined ? undefined : 0;
+}
+
+function normalizeNumericValue(rawValue: string, allowDecimal: boolean): string | null {
+  const compacted = rawValue.replace(/\s+/g, '');
+  if (!compacted) {
+    return null;
+  }
+
+  let sign = '';
+  let unsigned = compacted;
+  if (unsigned.startsWith('+')) {
+    unsigned = unsigned.slice(1);
+  }
+  if (unsigned.startsWith('-')) {
+    sign = '-';
+    unsigned = unsigned.slice(1);
+  }
+
+  if (!unsigned) {
+    return null;
+  }
+
+  unsigned = unsigned.replace(/["'`´]/g, '');
+
+  const invalidFragments = unsigned.replace(/[0-9.,]/g, '');
+  if (invalidFragments.length > 0) {
+    return null;
+  }
+
+  if (allowDecimal) {
+    const lastComma = unsigned.lastIndexOf(',');
+    const lastDot = unsigned.lastIndexOf('.');
+    const decimalIndex = Math.max(lastComma, lastDot);
+
+    if (decimalIndex >= 0) {
+      const integerPartRaw = unsigned.slice(0, decimalIndex).replace(/[.,]/g, '');
+      const fractionalPartRaw = unsigned.slice(decimalIndex + 1).replace(/[.,]/g, '');
+
+      if (!integerPartRaw && !fractionalPartRaw) {
+        return null;
+      }
+
+      if (fractionalPartRaw) {
+        return `${sign}${integerPartRaw || '0'}.${fractionalPartRaw}`;
+      }
+
+      return `${sign}${integerPartRaw || '0'}`;
+    }
+  }
+
+  const digitsOnly = unsigned.replace(/[.,]/g, '');
+  if (!digitsOnly) {
+    return null;
+  }
+
+  return `${sign}${digitsOnly}`;
+}
+
+function parseIntegerField(
+  rawValue: string | null | undefined,
+  fieldName: string,
+  options: NumericParseOptions = {}
+): number | undefined {
+  const { treatBlankAsUndefined = false } = options;
+  const fallback = determineFallbackValue(options, treatBlankAsUndefined);
+
+  if (rawValue === null || rawValue === undefined) {
+    return fallback;
+  }
+
+  const trimmed = String(rawValue).trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  try {
+    const normalized = normalizeNumericValue(trimmed, false);
+    if (normalized === null) {
+      console.warn('CSV ingestion: failed to normalize integer field', { field: fieldName, value: trimmed });
+    }
+
+    const target = normalized ?? trimmed;
+    const parsed = Number.parseInt(target, 10);
+
+    if (Number.isNaN(parsed)) {
+      console.warn('CSV ingestion: integer parse produced NaN', { field: fieldName, value: trimmed, normalized });
+      return fallback;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error('CSV ingestion: unexpected error while parsing integer field', {
+      field: fieldName,
+      value: rawValue,
+      error,
+    });
+    return fallback;
+  }
+}
+
+function parseDecimalField(
+  rawValue: string | null | undefined,
+  fieldName: string,
+  options: NumericParseOptions = {}
+): number | undefined {
+  const { treatBlankAsUndefined = false } = options;
+  const fallback = determineFallbackValue(options, treatBlankAsUndefined);
+
+  if (rawValue === null || rawValue === undefined) {
+    return fallback;
+  }
+
+  const trimmed = String(rawValue).trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  try {
+    const normalized = normalizeNumericValue(trimmed, true);
+    if (normalized === null) {
+      console.warn('CSV ingestion: failed to normalize decimal field', { field: fieldName, value: trimmed });
+    }
+
+    const target = normalized ?? trimmed.replace(/,/g, '.');
+    const parsed = Number.parseFloat(target);
+
+    if (Number.isNaN(parsed)) {
+      console.warn('CSV ingestion: decimal parse produced NaN', { field: fieldName, value: trimmed, normalized });
+      return fallback;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error('CSV ingestion: unexpected error while parsing decimal field', {
+      field: fieldName,
+      value: rawValue,
+      error,
+    });
+    return fallback;
+  }
+}
+
 function parseDatumErfasst(rawValue: string | null | undefined): Date | undefined {
   if (rawValue === null || rawValue === undefined) {
     return undefined;
@@ -144,10 +299,26 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         };
         upsertBox.run(box);
       }
-      const hkA = parseInt(final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
-      const ukA = parseInt(final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
-      const hkB = parseInt(final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
-      const ukB = parseInt(final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] || '', 10);
+      const hkA = parseIntegerField(
+        final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'],
+        'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+        { treatBlankAsUndefined: true }
+      );
+      const ukA = parseIntegerField(
+        final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'],
+        'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+        { treatBlankAsUndefined: true }
+      );
+      const hkB = parseIntegerField(
+        final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'],
+        'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+        { treatBlankAsUndefined: true }
+      );
+      const ukB = parseIntegerField(
+        final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'],
+        'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+        { treatBlankAsUndefined: true }
+      );
       const item: Item = {
         ItemUUID: final.itemUUID,
         BoxID: final.BoxID || null,
@@ -157,21 +328,21 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Artikel_Nummer: final['Artikel-Nummer'] || '',
         Grafikname: final['Grafikname(n)'] || '',
         Artikelbeschreibung: final['Artikelbeschreibung'] || '',
-        Auf_Lager: parseInt(final['Auf_Lager'] || final['Qty'] || '0', 10) || 0,
-        Verkaufspreis: parseFloat(final['Verkaufspreis'] || '0') || 0,
+        Auf_Lager: parseIntegerField(final['Auf_Lager'] || final['Qty'], 'Auf_Lager', { defaultValue: 0 }) || 0,
+        Verkaufspreis: parseDecimalField(final['Verkaufspreis'], 'Verkaufspreis', { defaultValue: 0 }) || 0,
         Kurzbeschreibung: final['Kurzbeschreibung'] || '',
         Langtext: final['Langtext'] || '',
         Hersteller: final['Hersteller'] || '',
-        Länge_mm: parseInt(final['Länge(mm)'] || '0', 10) || 0,
-        Breite_mm: parseInt(final['Breite(mm)'] || '0', 10) || 0,
-        Höhe_mm: parseInt(final['Höhe(mm)'] || '0', 10) || 0,
-        Gewicht_kg: parseFloat(final['Gewicht(kg)'] || '0') || 0,
-        Hauptkategorien_A: Number.isFinite(hkA) ? hkA : undefined,
-        Unterkategorien_A: Number.isFinite(ukA) ? ukA : undefined,
-        Hauptkategorien_B: Number.isFinite(hkB) ? hkB : undefined,
-        Unterkategorien_B: Number.isFinite(ukB) ? ukB : undefined,
+        Länge_mm: parseIntegerField(final['Länge(mm)'], 'Länge(mm)', { defaultValue: 0 }) || 0,
+        Breite_mm: parseIntegerField(final['Breite(mm)'], 'Breite(mm)', { defaultValue: 0 }) || 0,
+        Höhe_mm: parseIntegerField(final['Höhe(mm)'], 'Höhe(mm)', { defaultValue: 0 }) || 0,
+        Gewicht_kg: parseDecimalField(final['Gewicht(kg)'], 'Gewicht(kg)', { defaultValue: 0 }) || 0,
+        Hauptkategorien_A: hkA,
+        Unterkategorien_A: ukA,
+        Hauptkategorien_B: hkB,
+        Unterkategorien_B: ukB,
         Veröffentlicht_Status: ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase()),
-        Shopartikel: parseInt(final['Shopartikel'] || '0', 10) || 0,
+        Shopartikel: parseIntegerField(final['Shopartikel'], 'Shopartikel', { defaultValue: 0 }) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
         Einheit: final['Einheit'] || DEFAULT_EINHEIT,
       };
