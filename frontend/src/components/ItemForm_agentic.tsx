@@ -1,30 +1,36 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
 
+type AgenticFormMode = 'details' | 'photos';
+
 interface Props {
   draft: Partial<ItemFormData>;
-  step: number;
-  onSubmitDetails: (data: Partial<ItemFormData>) => Promise<void>;
+  onSubmitDetails?: (data: Partial<ItemFormData>) => Promise<void>;
   onSubmitPhotos: (data: Partial<ItemFormData>) => Promise<void>;
   submitLabel: string;
   isNew?: boolean;
 }
 
-export default function ItemForm_Agentic({
-  draft,
-  step,
-  onSubmitDetails,
-  onSubmitPhotos,
-  submitLabel,
-  isNew
-}: Props) {
+export default function ItemForm_Agentic({ draft, onSubmitDetails, onSubmitPhotos, submitLabel, isNew }: Props) {
   const { form, update, mergeForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const hasBasicDraftInfo = useMemo(
+    () => typeof draft.Artikelbeschreibung === 'string' && draft.Artikelbeschreibung.trim().length > 0,
+    [draft.Artikelbeschreibung]
+  );
+  const [mode, setMode] = useState<AgenticFormMode>(hasBasicDraftInfo ? 'photos' : 'details');
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     mergeForm(draft);
   }, [draft, mergeForm]);
+
+  useEffect(() => {
+    if (hasBasicDraftInfo && mode !== 'photos') {
+      console.log('Agentic form detected prefilled draft, switching to photo mode');
+      setMode('photos');
+    }
+  }, [hasBasicDraftInfo, mode]);
 
   const handlePhoto1Change = useMemo(
     () => createPhotoChangeHandler(update, 'picture1'),
@@ -42,28 +48,47 @@ export default function ItemForm_Agentic({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError(null);
-    if (step !== 2) {
+    if (mode === 'details') {
+      if (formRef.current && !formRef.current.reportValidity()) {
+        return;
+      }
+
+      if (!onSubmitDetails) {
+        console.warn('Agentic details submit handler missing; falling back to photo mode');
+        setMode('photos');
+        return;
+      }
+
+      try {
+        console.log('Submitting agentic details before photos', form);
+        await onSubmitDetails(form);
+        setMode('photos');
+      } catch (err) {
+        console.error('Item details submit failed', err);
+        setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
+      }
       return;
     }
-    try {
-      console.log('Submitting form via step 2 handler', form);
-      await onSubmitPhotos(form);
-    } catch (err) {
-      console.error('Item form submit failed', err);
-      setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
-    }
-  }
 
-  async function handleStepOneSubmit() {
-    setSubmitError(null);
     if (formRef.current && !formRef.current.reportValidity()) {
       return;
     }
+
+    if (!form.picture1) {
+      console.warn('Agentic photo submit attempted without primary photo');
+      setSubmitError('Bitte mindestens ein Foto hochladen.');
+      return;
+    }
+
     try {
-      console.log('Submitting form via step 1 handler', form);
-      await onSubmitDetails(form);
+      console.log('Submitting agentic photos', {
+        hasPicture1: Boolean(form.picture1),
+        hasPicture2: Boolean(form.picture2),
+        hasPicture3: Boolean(form.picture3)
+      });
+      await onSubmitPhotos(form);
     } catch (err) {
-      console.error('Item step 1 submit failed', err);
+      console.error('Item photo submit failed', err);
       setSubmitError('Speichern fehlgeschlagen. Bitte erneut versuchen.');
     }
   }
@@ -72,16 +97,20 @@ export default function ItemForm_Agentic({
     <div className='container item'>
       <div className="card">
         <form ref={formRef} onSubmit={handleSubmit} className="item-form">
-          <ItemDetailsFields
-            form={form}
-            isNew={isNew}
-            onUpdate={update}
-            onGenerateMaterialNumber={generateMaterialNumber}
-          />
+          {mode === 'details' && (
+            <>
+              <ItemDetailsFields
+                form={form}
+                isNew={isNew}
+                onUpdate={update}
+                onGenerateMaterialNumber={generateMaterialNumber}
+              />
 
-          <hr></hr>
+              <hr></hr>
+            </>
+          )}
 
-          {step === 2 && (
+          {mode === 'photos' && (
             <>
               {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
               <div className="row">
@@ -134,13 +163,7 @@ export default function ItemForm_Agentic({
           )}
 
           <div className="row">
-            {step === 1 ? (
-              <button type="button" onClick={handleStepOneSubmit}>
-                Weiter
-              </button>
-            ) : (
-              <button type="submit">{submitLabel}</button>
-            )}
+            <button type="submit">{mode === 'details' ? 'Weiter' : submitLabel}</button>
           </div>
           {submitError && (
             <div className="row error">
