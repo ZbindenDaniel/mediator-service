@@ -3,10 +3,11 @@ import { resolveBoxColorFromLocation } from '../data/boxColors';
 
 interface BoxColorTagProps {
   locationKey?: string | null;
+  labelOverride?: string | null;
   className?: string;
 }
 
-export default function BoxColorTag({ locationKey, className }: BoxColorTagProps) {
+export default function BoxColorTag({ locationKey, labelOverride, className }: BoxColorTagProps) {
   const normalizedLocation = locationKey?.trim();
   const colorOption = useMemo(() => {
     if (!normalizedLocation) {
@@ -23,6 +24,8 @@ export default function BoxColorTag({ locationKey, className }: BoxColorTagProps
   if (!normalizedLocation) {
     return <span className={className}>(nicht gesetzt)</span>;
   }
+
+  const label = labelOverride?.trim() || colorOption?.label || normalizedLocation;
 
   return (
     <span
@@ -47,7 +50,7 @@ export default function BoxColorTag({ locationKey, className }: BoxColorTagProps
         />
       ) : null}
       <span>
-        {colorOption ? `${colorOption.label}` : normalizedLocation}
+        {label}
       </span>
     </span>
   );

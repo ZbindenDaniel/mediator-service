@@ -4,6 +4,7 @@ import { parse } from 'csv-parse';
 import { upsertBox, persistItem, queueLabel } from './db';
 import { Box, Item } from '../models';
 import { Op } from './ops/types';
+import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
 
 const DEFAULT_EINHEIT = 'Stück';
 
@@ -74,11 +75,18 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
     for (const r of records) {
       const row = normalize(r);
       const final = applyOps(row);
-      const location = final.Location ? final.Location : null;
+      const rawStandort = final.Standort || final.Location || '';
+      const normalizedStandort = normalizeStandortCode(rawStandort);
+      const location = normalizedStandort || null;
+      const standortLabel = resolveStandortLabel(normalizedStandort);
+      if (normalizedStandort && !standortLabel) {
+        console.warn('CSV ingestion: missing Standort label mapping', { standort: normalizedStandort });
+      }
       if (final.BoxID) {
         const box: Box = {
           BoxID: final.BoxID,
           Location: location,
+          StandortLabel: standortLabel,
           CreatedAt: final.CreatedAt || '',
           Notes: final.Notes || '',
           PlacedBy: final.PlacedBy || '',

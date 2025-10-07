@@ -30,7 +30,7 @@ export default function BoxList({ boxes }: Props) {
                 <tr key={box.BoxID} data-box-id={box.BoxID} className="box-list-row">
                   <td className="col-box-id">{box.BoxID}</td>
                   <td className="col-location">
-                    <BoxColorTag locationKey={box.Location} />
+                    <BoxColorTag locationKey={box.Location} labelOverride={box.StandortLabel} />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>
                   <td className="col-link">

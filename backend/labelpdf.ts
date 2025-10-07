@@ -39,6 +39,7 @@ export interface BoxLabelPayload {
   type: 'box';
   id: string;
   location?: string | null;
+  standortLabel?: string | null;
   description: string | null;
   quantity: number | null;
   itemCount?: number | null;

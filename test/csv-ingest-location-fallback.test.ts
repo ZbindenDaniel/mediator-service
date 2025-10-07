@@ -24,6 +24,7 @@ const { ingestCsvFile } = require('../backend/importer');
 
 const selectItemLocation = db.prepare('SELECT Location FROM items WHERE ItemUUID = ?');
 const selectBoxLocation = db.prepare('SELECT Location FROM boxes WHERE BoxID = ?');
+const selectBoxStandortLabel = db.prepare('SELECT StandortLabel FROM boxes WHERE BoxID = ?');
 
 function clearDatabase() {
   try {
@@ -64,12 +65,14 @@ describe('CSV ingestion Standort fallback', () => {
     const itemId = 'I-CSV-0001';
     const artikelNummer = 'CSV-REG-001';
     const boxLocation = 'CSV-BOX-STANDORT';
+    const boxStandortLabel = 'CSV-BOX-STANDORT LABEL';
     const nowIso = new Date().toISOString();
 
     try {
       upsertBox.run({
         BoxID: boxId,
         Location: boxLocation,
+        StandortLabel: boxStandortLabel,
         CreatedAt: nowIso,
         Notes: null,
         PlacedBy: null,
@@ -110,5 +113,8 @@ describe('CSV ingestion Standort fallback', () => {
 
     const persistedBoxLocation = selectBoxLocation.get(boxId) as { Location: string | null } | undefined;
     expect(persistedBoxLocation).toEqual({ Location: boxLocation });
+
+    const persistedBoxStandortLabel = selectBoxStandortLabel.get(boxId) as { StandortLabel: string | null } | undefined;
+    expect(persistedBoxStandortLabel).toEqual({ StandortLabel: boxStandortLabel });
   });
 });

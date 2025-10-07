@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import type { Action } from './index';
+import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 
 const DEFAULT_EINHEIT = 'Stück';
 
@@ -71,11 +72,16 @@ const action: Action = {
       } catch (e) {
         console.error('Failed to save images', e);
       }
-      const requestedLocation = (p.get('Location') || '').trim();
+      const requestedLocationRaw = (p.get('Location') || '').trim();
+      const normalizedLocation = normalizeStandortCode(requestedLocationRaw);
+      const requestedStandortLabel = resolveStandortLabel(normalizedLocation);
+      if (normalizedLocation && !requestedStandortLabel) {
+        console.warn('[import-item] Missing Standort label mapping for requested location', { location: normalizedLocation });
+      }
       const data = {
         BoxID,
         ItemUUID,
-        Location: requestedLocation,
+        Location: normalizedLocation,
         UpdatedAt: nowDate,
         Datum_erfasst: (p.get('Datum_erfasst') || '').trim() ? new Date((p.get('Datum_erfasst') || '').trim()) : undefined,
         Artikel_Nummer: (p.get('Artikel_Nummer') || '').trim(),
@@ -104,19 +110,24 @@ const action: Action = {
       const requestedStatus = (p.get('agenticStatus') || 'queued').trim().toLowerCase();
       const agenticStatus = ['queued', 'running'].includes(requestedStatus) ? requestedStatus : 'queued';
 
-      let boxLocationToPersist: string | null = requestedLocation || null;
-      if (!requestedLocation) {
+      let boxLocationToPersist: string | null = normalizedLocation || null;
+      let boxStandortLabelToPersist: string | null = requestedStandortLabel;
+      if (!normalizedLocation) {
         console.warn(
           '[import-item] Empty Location provided for box import; attempting to preserve existing Standort',
           { BoxID, actor }
         );
         try {
-          const existingBox = ctx.getBox?.get ? (ctx.getBox.get(BoxID) as { Location?: string } | undefined) : undefined;
+          const existingBox = ctx.getBox?.get
+            ? (ctx.getBox.get(BoxID) as { Location?: string | null; StandortLabel?: string | null } | undefined)
+            : undefined;
           if (existingBox?.Location) {
             boxLocationToPersist = existingBox.Location;
+            boxStandortLabelToPersist = existingBox.StandortLabel ?? resolveStandortLabel(existingBox.Location);
             console.info('[import-item] Preserved existing box Location', { BoxID, Location: existingBox.Location });
           } else {
             boxLocationToPersist = null;
+            boxStandortLabelToPersist = null;
             console.info('[import-item] No existing Location found to preserve for box', { BoxID });
           }
         } catch (lookupErr) {
@@ -137,6 +148,7 @@ const action: Action = {
           ctx.upsertBox.run({
             BoxID: boxId,
             Location: boxLocation,
+            StandortLabel: boxStandortLabelToPersist,
             CreatedAt: now,
             Notes: null,
             PlacedBy: null,

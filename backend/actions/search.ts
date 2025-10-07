@@ -85,8 +85,7 @@ function scoreItem(term: string, tokens: string[], item: any): number {
 }
 
 function scoreBox(term: string, tokens: string[], box: any): number {
-  console.log("scoreBox")
-  const fields = [box?.BoxID, box?.Location];
+  const fields = [box?.BoxID, box?.Location, box?.StandortLabel];
   let best = 0;
   for (const field of fields) {
     const similarity = computeSimilarityScore(term, tokens, field);
@@ -321,9 +320,9 @@ const action: Action = {
         const p = `%${t}%`;
         return [p, p, p, p] as const;
       };
-      const like2 = (t: string) => {
+      const likeBox = (t: string) => {
         const p = `%${t}%`;
-        return [p, p] as const;
+        return [p, p, p] as const;
       };
 
       // ---------------- ITEMS ----------------
@@ -414,6 +413,7 @@ const action: Action = {
     CASE WHEN (
       lower(b.BoxID)    LIKE ?
       OR lower(b.Location) LIKE ?
+      OR lower(COALESCE(b.StandortLabel, '')) LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
 
@@ -421,6 +421,7 @@ const action: Action = {
     CASE WHEN (
       lower(b.BoxID)    = ?
       OR lower(b.Location) = ?
+      OR lower(COALESCE(b.StandortLabel, '')) = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -428,7 +429,7 @@ const action: Action = {
     SELECT *
     FROM (
       SELECT
-        b.BoxID, b.Location,
+        b.BoxID, b.Location, b.StandortLabel,
         (${boxTokenPresenceTerms}) AS token_hits,
         ${boxExactMatchExpr} AS exact_match,
         CASE
@@ -444,13 +445,13 @@ const action: Action = {
 
       const boxParams = [
         // token_hits params
-        ...tokens.flatMap(like2),
+        ...tokens.flatMap(likeBox),
         // exact_match params
-        normalized, normalized,
+        normalized, normalized, normalized,
         // sql_score CASE exact_match params (repeat)
-        normalized, normalized,
+        normalized, normalized, normalized,
         // sql_score token_hits terms again
-        ...tokens.flatMap(like2),
+        ...tokens.flatMap(likeBox),
         // divisor = tokens.length
         tokens.length,
         // WHERE threshold
