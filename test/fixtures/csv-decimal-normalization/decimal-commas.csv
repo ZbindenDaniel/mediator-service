@@ -1,0 +1,2 @@
+itemUUID,BoxID,Artikel-Nummer,Auf_Lager,Qty,Verkaufspreis,Länge(mm),Breite(mm),Höhe(mm),Gewicht(kg),Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop),Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop),Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop),Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop),Shopartikel
+DEC-ITEM-001,DEC-BOX-001,DEC-ART-001,,"2.500","1.234,56","1.234","2.345","3.456","7,89","1.002","2.003","4.004","5.005","1"
