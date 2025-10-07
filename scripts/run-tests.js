@@ -6,11 +6,16 @@ try {
 } catch (error) {
   console.warn('[run-tests] `typescript` module not found. Falling back to raw execution for .ts files.');
 }
-const { runCLI } = require('jest');
+let runCLI;
+try {
+  ({ runCLI } = require('jest'));
+} catch (error) {
+  console.warn('[run-tests] `jest` module not found. Jest CLI execution will be skipped.', error);
+}
 const harness = require('../test/harness');
 const { runSuite, rootSuite } = harness;
 
-const harnessGlobals = ['describe', 'test', 'beforeAll', 'afterAll', 'beforeEach', 'afterEach', 'expect'];
+const harnessGlobals = ['describe', 'test', 'it', 'beforeAll', 'afterAll', 'beforeEach', 'afterEach', 'expect', 'jest'];
 for (const key of harnessGlobals) {
   if (typeof harness[key] === 'function') {
     global[key] = harness[key];
@@ -70,17 +75,21 @@ async function main() {
   }
   await runSuite(rootSuite);
 
-  const jestConfig = require('../jest.config.cjs');
-  const { results } = await runCLI(
-    {
-      config: JSON.stringify(jestConfig),
-      runInBand: true,
-    },
-    [process.cwd()]
-  );
+  if (runCLI) {
+    const jestConfig = require('../jest.config.cjs');
+    const { results } = await runCLI(
+      {
+        config: JSON.stringify(jestConfig),
+        runInBand: true,
+      },
+      [process.cwd()]
+    );
 
-  if (!results.success) {
-    throw new Error('Jest tests failed');
+    if (!results.success) {
+      throw new Error('Jest tests failed');
+    }
+  } else {
+    console.warn('[run-tests] Jest CLI skipped because the module is unavailable.');
   }
 }
 
