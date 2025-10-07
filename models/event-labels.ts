@@ -1,6 +1,9 @@
+// TODO: Consolidate these event label definitions with the JavaScript variant.
 export const EVENT_LABELS: Record<string, string> = {
   ManualCreateOrUpdate: 'Manuell erstellt/aktualisiert',
   Edit: 'Bearbeitet',
+  Added: 'Hinzugefügt',
+  updated: 'Aktualisiert',
   Moved: 'Verschoben',
   PrintSent: 'Etikett gedruckt',
   PrintPreviewSaved: 'Etikettenvorschau gespeichert',
@@ -15,7 +18,7 @@ export const EVENT_LABELS: Record<string, string> = {
   AgenticRunCancelled: 'Ki-Lauf abgebrochen',
   AgenticTriggerFailed: 'Ki-Auslösung fehlgeschlagen',
   AgenticSearchQueued: 'Ki-Suche eingereiht',
-  AgenticResultReceived: 'Ki-Ergebnis erhalten',
+  AgenticResultReceived: 'Agentic-Ergebnis erhalten',
   AgenticResultFailed: 'Ki-Ergebnis fehlgeschlagen',
   AgenticReviewApproved: 'Ki-Prüfung freigegeben',
   AgenticReviewRejected: 'Ki-Prüfung abgelehnt',

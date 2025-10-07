@@ -1,6 +1,9 @@
+// TODO: Consolidate these event label definitions with the TypeScript variant.
 const EVENT_LABELS = {
   ManualCreateOrUpdate: 'Manuell erstellt/aktualisiert',
   Edit: 'Bearbeitet',
+  Added: 'Hinzugefügt',
+  updated: 'Aktualisiert',
   Moved: 'Verschoben',
   PrintSent: 'Etikett gedruckt',
   PrintPreviewSaved: 'Etikettenvorschau gespeichert',
@@ -10,7 +13,16 @@ const EVENT_LABELS = {
   Removed: 'Entfernt',
   Deleted: 'Gelöscht',
   Exported: 'Exportiert',
-  Created: 'Erstellt'
+  Created: 'Erstellt',
+  AgenticRunRestarted: 'Ki-Lauf neu gestartet',
+  AgenticRunCancelled: 'Ki-Lauf abgebrochen',
+  AgenticTriggerFailed: 'Ki-Auslösung fehlgeschlagen',
+  AgenticSearchQueued: 'Ki-Suche eingereiht',
+  AgenticResultReceived: 'Agentic-Ergebnis erhalten',
+  AgenticResultFailed: 'Ki-Ergebnis fehlgeschlagen',
+  AgenticReviewApproved: 'Ki-Prüfung freigegeben',
+  AgenticReviewRejected: 'Ki-Prüfung abgelehnt',
+  QrScanned: 'QR-Code gescannt'
 };
 
 function eventLabel(eventKey) {
