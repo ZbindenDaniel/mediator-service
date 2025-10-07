@@ -5,7 +5,7 @@ import { Item } from '../../models';
 import type { Action } from './index';
 
 const MEDIA_PREFIX = '/media/';
-const MEDIA_DIR = path.join(__dirname, '../../media');
+const MEDIA_DIR = path.join(__dirname, '../media');
 
 function pushMedia(target: string[], value: string | null | undefined, seen: Set<string>): void {
   if (!value) return;
