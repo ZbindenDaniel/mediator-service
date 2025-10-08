@@ -205,7 +205,7 @@ export async function cancelAgenticRun({ cancelUrl, itemId, actor, context }: Ag
 
   try {
     const body = {
-      item: { itemUUid: trimmedItemId }, // note the mixed casing to match the agentic API contract
+      itemUUid: trimmedItemId, // note the mixed casing to match the agentic API contract
       actor: trimmedActor || undefined
     } as const;
 

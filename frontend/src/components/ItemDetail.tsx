@@ -107,6 +107,70 @@ function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
 }
 
+export interface ItemDetailAgenticCancelRequest {
+  agentic: AgenticRun;
+  actor: string;
+  agenticCancelUrl: string | null;
+  persistCancellation: typeof persistAgenticRunCancellation;
+  cancelExternalRun: typeof cancelAgenticRun;
+  logger?: Pick<typeof console, 'warn' | 'error'>;
+}
+
+export interface ItemDetailAgenticCancelResult {
+  updatedRun: AgenticRun | null;
+  error: string | null;
+}
+
+export async function performItemDetailAgenticCancel({
+  agentic,
+  actor,
+  agenticCancelUrl,
+  persistCancellation,
+  cancelExternalRun,
+  logger = console
+}: ItemDetailAgenticCancelRequest): Promise<ItemDetailAgenticCancelResult> {
+  let updatedRun: AgenticRun | null = agentic;
+  let finalError: string | null = null;
+
+  const persistence = await persistCancellation({
+    itemId: agentic.ItemUUID,
+    actor,
+    context: 'item detail cancel persistence'
+  });
+
+  if (persistence.ok) {
+    if (persistence.agentic) {
+      updatedRun = persistence.agentic;
+    }
+  } else if (persistence.status === 404) {
+    finalError = 'Kein laufender agentischer Durchlauf gefunden.';
+  } else if (persistence.status === 0) {
+    finalError = 'Agentic-Abbruch fehlgeschlagen.';
+  } else {
+    finalError = 'Agentic-Abbruch konnte nicht gespeichert werden.';
+  }
+
+  if (agenticCancelUrl) {
+    try {
+      await cancelExternalRun({
+        cancelUrl: agenticCancelUrl,
+        itemId: agentic.ItemUUID,
+        actor,
+        context: 'item detail cancel'
+      });
+    } catch (err) {
+      logger.error('Agentic external cancel failed', err);
+      if (!finalError) {
+        finalError = 'Agentic-Abbruch konnte extern nicht gestoppt werden.';
+      }
+    }
+  } else {
+    logger.warn('Agentic cancel URL not configured; external cancellation skipped.');
+  }
+
+  return { updatedRun, error: finalError };
+}
+
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -499,44 +563,14 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticReviewIntent(null);
     setAgenticError(null);
 
-    let updatedRun: AgenticRun | null = agentic;
-    let finalError: string | null = null;
-
-    const persistence = await persistAgenticRunCancellation({
-      itemId: agentic.ItemUUID,
+    const { updatedRun, error: finalError } = await performItemDetailAgenticCancel({
+      agentic,
       actor,
-      context: 'item detail cancel persistence'
+      agenticCancelUrl,
+      persistCancellation: persistAgenticRunCancellation,
+      cancelExternalRun: cancelAgenticRun,
+      logger: console
     });
-
-    if (persistence.ok) {
-      if (persistence.agentic) {
-        updatedRun = persistence.agentic;
-      }
-    } else if (persistence.status === 404) {
-      finalError = 'Kein laufender agentischer Durchlauf gefunden.';
-    } else if (persistence.status === 0) {
-      finalError = 'Agentic-Abbruch fehlgeschlagen.';
-    } else {
-      finalError = 'Agentic-Abbruch konnte nicht gespeichert werden.';
-    }
-
-    if (agenticCancelUrl) {
-      try {
-        await cancelAgenticRun({
-          cancelUrl: agenticCancelUrl,
-          itemId: agentic.ItemUUID,
-          actor,
-          context: 'item detail cancel'
-        });
-      } catch (err) {
-        console.error('Agentic external cancel failed', err);
-        if (!finalError) {
-          finalError = 'Agentic-Abbruch konnte extern nicht gestoppt werden.';
-        }
-      }
-    } else {
-      console.warn('Agentic cancel URL not configured; external cancellation skipped.');
-    }
 
     if (updatedRun) {
       setAgentic(updatedRun);
