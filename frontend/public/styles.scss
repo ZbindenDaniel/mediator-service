@@ -249,6 +249,38 @@ div {
     }
 }
 
+.list-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 12px 0 18px;
+
+    .toolbar-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 0.9rem;
+    }
+
+    input,
+    select {
+        appearance: none;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 6px 10px;
+        font-size: 1rem;
+        min-width: 220px;
+        color: var(--text);
+
+        &:focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+        }
+    }
+}
+
 .stack {
     display: grid;
     gap: 12px;
