@@ -21,8 +21,19 @@ interface Props {
   itemId: string;
 }
 
+export type AgenticBadgeVariant = 'info' | 'success' | 'error' | 'pending' | 'warning';
+
+export interface AgenticStatusDisplay {
+  label: string;
+  className: string;
+  description: string;
+  variant: AgenticBadgeVariant;
+  needsReviewBadge: boolean;
+  isTerminal: boolean;
+}
+
 export interface AgenticStatusCardProps {
-  status: { label: string; className: string; description: string };
+  status: AgenticStatusDisplay;
   rows: [string, React.ReactNode][];
   actionPending: boolean;
   reviewIntent: 'approved' | 'rejected' | null;
@@ -170,6 +181,171 @@ export async function performItemDetailAgenticCancel({
   return { updatedRun, error: finalError };
 }
 
+export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDisplay {
+  if (!run) {
+    return {
+      label: 'Keine Daten',
+      className: 'pill status status-info',
+      description: 'Es liegen keine agentischen Ergebnisse vor.',
+      variant: 'info',
+      needsReviewBadge: false,
+      isTerminal: false
+    };
+  }
+  const normalizedStatus = (run.Status || '').trim().toLowerCase();
+  const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
+
+  const failureStatuses = new Set([
+    'failed',
+    'error',
+    'errored',
+    'failure',
+    'timeout',
+    'timed_out'
+  ]);
+  const runningStatuses = new Set([
+    'running',
+    'processing',
+    'in_progress',
+    'active',
+    'executing'
+  ]);
+  const pendingStatuses = new Set([
+    'pending',
+    'queued',
+    'created',
+    'requested',
+    'waiting',
+    'scheduled',
+    'initializing'
+  ]);
+  const cancelledStatuses = new Set(['cancelled', 'canceled', 'aborted', 'stopped', 'terminated']);
+  const successStatuses = new Set(['completed', 'done', 'success', 'succeeded', 'finished', 'resolved']);
+  const reviewPendingStatuses = new Set([
+    'pending_review',
+    'review_pending',
+    'review_needed',
+    'needs_review',
+    'awaiting_review',
+    'awaiting_approval',
+    'ready_for_review',
+    'requires_review',
+    'waiting_for_review'
+  ]);
+  const reviewApprovedStatuses = new Set(['approved', 'accepted', 'published', 'released']);
+  const reviewRejectedStatuses = new Set(['rejected', 'declined', 'denied']);
+
+  const defaultLabel = run.Status && run.Status.trim() ? run.Status : 'Unbekannt';
+
+  let base: Omit<AgenticStatusDisplay, 'className'> = {
+    label: defaultLabel,
+    description: `Status: ${defaultLabel}`,
+    variant: 'info',
+    needsReviewBadge: false,
+    isTerminal: false
+  };
+
+  if (normalizedStatus) {
+    if (failureStatuses.has(normalizedStatus) || normalizedStatus.startsWith('error')) {
+      base = {
+        label: 'Fehler',
+        description: 'Der agentische Durchlauf ist fehlgeschlagen.',
+        variant: 'error',
+        needsReviewBadge: false,
+        isTerminal: true
+      };
+    } else if (runningStatuses.has(normalizedStatus)) {
+      base = {
+        label: 'In Arbeit',
+        description: 'Der agentische Durchlauf läuft derzeit.',
+        variant: 'info',
+        needsReviewBadge: false,
+        isTerminal: false
+      };
+    } else if (pendingStatuses.has(normalizedStatus)) {
+      base = {
+        label: 'Wartet',
+        description: 'Der agentische Durchlauf wartet auf Ausführung.',
+        variant: 'pending',
+        needsReviewBadge: false,
+        isTerminal: false
+      };
+    } else if (cancelledStatuses.has(normalizedStatus)) {
+      base = {
+        label: 'Abgebrochen',
+        description: 'Der agentische Durchlauf wurde abgebrochen.',
+        variant: 'info',
+        needsReviewBadge: false,
+        isTerminal: true
+      };
+    } else if (successStatuses.has(normalizedStatus)) {
+      base = {
+        label: 'Fertig',
+        description: 'Der agentische Durchlauf wurde abgeschlossen.',
+        variant: 'success',
+        needsReviewBadge: false,
+        isTerminal: true
+      };
+    } else if (reviewPendingStatuses.has(normalizedStatus)) {
+      base = {
+        label: 'Review ausstehend',
+        description: 'Das Ergebnis wartet auf Freigabe.',
+        variant: 'pending',
+        needsReviewBadge: true,
+        isTerminal: false
+      };
+    } else if (reviewApprovedStatuses.has(normalizedStatus)) {
+      base = {
+        label: 'Freigegeben',
+        description: 'Das Ergebnis wurde freigegeben.',
+        variant: 'success',
+        needsReviewBadge: false,
+        isTerminal: true
+      };
+    } else if (reviewRejectedStatuses.has(normalizedStatus)) {
+      base = {
+        label: 'Abgelehnt',
+        description: 'Das Ergebnis wurde abgelehnt.',
+        variant: 'error',
+        needsReviewBadge: false,
+        isTerminal: true
+      };
+    }
+  }
+
+  let finalMeta = base;
+  if (normalizedReview === 'pending') {
+    finalMeta = {
+      label: 'Review ausstehend',
+      description: 'Das Ergebnis wartet auf Freigabe.',
+      variant: 'pending',
+      needsReviewBadge: true,
+      isTerminal: false
+    };
+  } else if (normalizedReview === 'approved') {
+    finalMeta = {
+      label: 'Freigegeben',
+      description: 'Das Ergebnis wurde freigegeben.',
+      variant: 'success',
+      needsReviewBadge: false,
+      isTerminal: true
+    };
+  } else if (normalizedReview === 'rejected') {
+    finalMeta = {
+      label: 'Abgelehnt',
+      description: 'Das Ergebnis wurde abgelehnt.',
+      variant: 'error',
+      needsReviewBadge: false,
+      isTerminal: true
+    };
+  }
+
+  return {
+    ...finalMeta,
+    className: `pill status status-${finalMeta.variant}`
+  };
+}
+
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -279,70 +455,7 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
-  function agenticStatusDisplay(run: AgenticRun | null): {
-    label: string;
-    className: string;
-    description: string;
-  } {
-    if (!run) {
-      return {
-        label: 'Keine Daten',
-        className: 'pill status status-info',
-        description: 'Es liegen keine agentischen Ergebnisse vor.'
-      };
-    }
-    const normalized = (run.Status || '').toLowerCase();
-    let variant: 'info' | 'success' | 'error' | 'pending' = 'info';
-    let label = run.Status || 'Unbekannt';
-    let description = '';
-
-    if (['failed', 'error', 'errored'].includes(normalized)) {
-      variant = 'error';
-      label = 'Fehler';
-      description = 'Der agentische Durchlauf ist fehlgeschlagen.';
-    } else if (['running', 'processing'].includes(normalized)) {
-      variant = 'info';
-      label = 'In Arbeit';
-      description = 'Der agentische Durchlauf läuft derzeit.';
-    } else if (['pending', 'queued'].includes(normalized)) {
-      variant = 'pending';
-      label = 'Wartet';
-      description = 'Der agentische Durchlauf wartet auf Ausführung.';
-    } else if (['cancelled', 'canceled'].includes(normalized)) {
-      variant = 'info';
-      label = 'Abgebrochen';
-      description = 'Der agentische Durchlauf wurde abgebrochen.';
-    } else if (['completed', 'done', 'success'].includes(normalized)) {
-      if ((run.ReviewState || '').toLowerCase() === 'pending') {
-        variant = 'pending';
-        label = 'Fertig (Review offen)';
-        description = 'Das Ergebnis wartet auf Freigabe.';
-      } else if ((run.ReviewState || '').toLowerCase() === 'approved') {
-        variant = 'success';
-        label = 'Fertig (Freigegeben)';
-        description = 'Das Ergebnis wurde freigegeben.';
-      } else if ((run.ReviewState || '').toLowerCase() === 'rejected') {
-        variant = 'error';
-        label = 'Fertig (Abgelehnt)';
-        description = 'Das Ergebnis wurde abgelehnt.';
-      } else {
-        variant = 'success';
-        label = 'Fertig';
-        description = 'Der agentische Durchlauf wurde abgeschlossen.';
-      }
-    } else {
-      if (!label.trim()) {
-        label = 'Unbekannt';
-      }
-      description = `Status: ${label}`;
-    }
-
-    return {
-      label,
-      className: `pill status status-${variant}`,
-      description
-    };
-  }
+  
 
   async function handleAgenticReview(decision: 'approved' | 'rejected') {
     if (!agentic) return;
