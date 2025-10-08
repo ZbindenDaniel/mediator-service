@@ -142,17 +142,41 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
       optionalPayload[key] = typeof value === 'string' ? value.trim() : value;
     });
 
-    const body: Record<string, unknown> = {
-      Artikelbeschreibung: artikelbeschreibungCandidate,
-      itemUUid: itemId, // note the mixed casing to match the agentic API contract
+    const backendPayload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: artikelbeschreibungCandidate,
+      itemId,
       ...optionalPayload
     };
 
-    const response = await fetch(runUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
+    let isServerProxy = false;
+    try {
+      const parsedUrl = new URL(runUrl, 'http://localhost');
+      isServerProxy = parsedUrl.pathname.startsWith('/api/agentic/');
+    } catch (err) {
+      console.warn('Failed to parse agentic run URL; falling back to literal comparison', err);
+      isServerProxy = runUrl.startsWith('/api/agentic/');
+    }
+
+    let response: Response;
+    if (isServerProxy) {
+      response = await fetch(runUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context, payload: backendPayload })
+      });
+    } else {
+      const body: Record<string, unknown> = {
+        Artikelbeschreibung: artikelbeschreibungCandidate,
+        itemUUid: itemId, // note the mixed casing to match the agentic API contract
+        ...optionalPayload
+      };
+
+      response = await fetch(runUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
     if (!response.ok) {
       let errorDetails: unknown = null;
       try {

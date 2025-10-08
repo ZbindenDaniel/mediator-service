@@ -8,7 +8,6 @@ import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import {
   buildAgenticCancelUrl,
-  buildAgenticRunUrl,
   cancelAgenticRun,
   persistAgenticRunCancellation,
   resolveAgenticApiBase,
@@ -183,7 +182,7 @@ export default function ItemDetail({ itemId }: Props) {
   const dialog = useDialog();
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
-  const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
+  const agenticRunUrl = '/api/agentic/run';
   const agenticCancelUrl = useMemo(() => buildAgenticCancelUrl(agenticApiBase), [agenticApiBase]);
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);

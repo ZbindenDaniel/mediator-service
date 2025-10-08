@@ -31,7 +31,7 @@ describe('handleAgenticRunTrigger', () => {
     await handleAgenticRunTrigger({
       agenticPayload: payload,
       context: 'test-triggered',
-      agenticRunUrl: 'https://example.invalid/run',
+      agenticRunUrl: '/api/agentic/run',
       triggerAgenticRunRequest: triggerRequest,
       reportFailure,
       alertFn,
@@ -41,7 +41,7 @@ describe('handleAgenticRunTrigger', () => {
 
     expect(triggerRequest).toHaveBeenCalledTimes(1);
     expect(triggerRequest).toHaveBeenCalledWith({
-      runUrl: 'https://example.invalid/run',
+      runUrl: '/api/agentic/run',
       payload,
       context: 'test-triggered'
     });
@@ -73,7 +73,7 @@ describe('handleAgenticRunTrigger', () => {
     await handleAgenticRunTrigger({
       agenticPayload: payload,
       context: 'test-skipped',
-      agenticRunUrl: 'https://example.invalid/run',
+      agenticRunUrl: '/api/agentic/run',
       triggerAgenticRunRequest: triggerRequest,
       reportFailure,
       alertFn,
@@ -120,7 +120,7 @@ describe('handleAgenticRunTrigger', () => {
     await handleAgenticRunTrigger({
       agenticPayload: payload,
       context: 'test-failed',
-      agenticRunUrl: 'https://example.invalid/run',
+      agenticRunUrl: '/api/agentic/run',
       triggerAgenticRunRequest: triggerRequest,
       reportFailure,
       alertFn,
