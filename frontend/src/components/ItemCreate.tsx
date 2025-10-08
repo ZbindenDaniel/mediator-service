@@ -21,6 +21,39 @@ type AgenticEnv = typeof globalThis & {
 
 type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
+export interface AgenticHealthProxyOptions {
+  fetchImpl?: typeof fetch;
+}
+
+export interface AgenticHealthProxyResult {
+  ok: boolean;
+  status: number;
+  body: unknown;
+  parseError?: unknown;
+}
+
+export async function fetchAgenticHealthProxy(
+  options: AgenticHealthProxyOptions = {}
+): Promise<AgenticHealthProxyResult> {
+  const { fetchImpl = fetch } = options;
+
+  const response = await fetchImpl('/api/agentic/health', { method: 'GET' });
+  let body: unknown = null;
+  let parseError: unknown;
+  try {
+    body = await response.json();
+  } catch (err) {
+    parseError = err;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body,
+    parseError
+  };
+}
+
 export interface AgenticTriggerFailureReportArgs {
   itemId: string;
   search: string;
@@ -224,27 +257,25 @@ export default function ItemCreate() {
       }
 
       try {
-        const healthUrl = new URL('/health', agenticApiBase).toString();
-        const response = await fetch(healthUrl, { method: 'GET' });
+        const result = await fetchAgenticHealthProxy();
         if (cancelled) {
           return;
         }
-        if (!response.ok) {
-          console.warn('Agentic health endpoint returned non-OK status', response.status);
+        if (!result.ok) {
+          console.warn('Agentic health endpoint returned non-OK status', result.status);
           setShouldUseAgenticForm(false);
           return;
         }
 
-        const body = await response
-          .json()
-          .catch((jsonError) => {
-            console.error('Failed to parse agentic health response', jsonError);
-            return null;
-          });
+        if (result.parseError) {
+          console.error('Failed to parse agentic health response', result.parseError);
+        }
 
         if (cancelled) {
           return;
         }
+
+        const body = result.body as { ok?: boolean } | null;
 
         if (body?.ok === true) {
           setShouldUseAgenticForm(true);
