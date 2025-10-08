@@ -41,6 +41,7 @@ describe('AgenticStatusCard cancel button visibility', () => {
       error: null,
       needsReview: false,
       hasFailure: false,
+      isInProgress: false,
       onRestart: () => undefined,
       onReview: () => undefined,
       onCancel: () => undefined,
@@ -57,6 +58,43 @@ describe('AgenticStatusCard cancel button visibility', () => {
   test('renders cancel button when no review is required', () => {
     const html = renderCard({ needsReview: false, hasFailure: true });
     expect(html).toContain('Abbrechen');
+  });
+});
+
+describe('AgenticStatusCard progress spinner', () => {
+  function renderCard(overrides: Partial<AgenticStatusCardProps> = {}) {
+    const props: AgenticStatusCardProps = {
+      status: {
+        label: 'Test',
+        className: 'pill status status-info',
+        description: 'Beschreibung',
+        variant: 'info',
+        needsReviewBadge: false,
+        isTerminal: false
+      },
+      rows: [],
+      actionPending: false,
+      reviewIntent: null,
+      error: null,
+      needsReview: false,
+      hasFailure: false,
+      isInProgress: false,
+      onRestart: () => undefined,
+      onReview: () => undefined,
+      onCancel: () => undefined,
+      ...overrides
+    };
+    return renderToStaticMarkup(React.createElement(AgenticStatusCard, props));
+  }
+
+  test('renders spinner for in-progress states', () => {
+    const html = renderCard({ isInProgress: true });
+    expect(html).toContain('status-spinner');
+  });
+
+  test('hides spinner when not in progress', () => {
+    const html = renderCard({ isInProgress: false });
+    expect(html).not.toContain('status-spinner');
   });
 });
 

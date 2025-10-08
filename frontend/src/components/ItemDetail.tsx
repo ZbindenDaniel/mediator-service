@@ -32,6 +32,66 @@ export interface AgenticStatusDisplay {
   isTerminal: boolean;
 }
 
+const AGENTIC_FAILURE_STATUSES = new Set([
+  'failed',
+  'error',
+  'errored',
+  'failure',
+  'timeout',
+  'timed_out'
+]);
+
+const AGENTIC_RUNNING_STATUSES = new Set([
+  'running',
+  'processing',
+  'in_progress',
+  'active',
+  'executing'
+]);
+
+const AGENTIC_PENDING_STATUSES = new Set([
+  'pending',
+  'queued',
+  'created',
+  'requested',
+  'waiting',
+  'scheduled',
+  'initializing'
+]);
+
+const AGENTIC_CANCELLED_STATUSES = new Set([
+  'cancelled',
+  'canceled',
+  'aborted',
+  'stopped',
+  'terminated'
+]);
+
+const AGENTIC_SUCCESS_STATUSES = new Set([
+  'completed',
+  'done',
+  'success',
+  'succeeded',
+  'finished',
+  'resolved'
+]);
+
+const AGENTIC_REVIEW_PENDING_STATUSES = new Set([
+  'pending_review',
+  'review_pending',
+  'review_needed',
+  'needs_review',
+  'awaiting_review',
+  'awaiting_approval',
+  'ready_for_review',
+  'requires_review',
+  'waiting_for_review'
+]);
+
+const AGENTIC_REVIEW_APPROVED_STATUSES = new Set(['approved', 'accepted', 'published', 'released']);
+
+const AGENTIC_REVIEW_REJECTED_STATUSES = new Set(['rejected', 'declined', 'denied']);
+
 export interface AgenticStatusCardProps {
   status: AgenticStatusDisplay;
   rows: [string, React.ReactNode][];
@@ -40,6 +100,7 @@ export interface AgenticStatusCardProps {
   error: string | null;
   needsReview: boolean;
   hasFailure: boolean;
+  isInProgress: boolean;
   onRestart: () => void | Promise<void>;
   onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
   onCancel: () => void | Promise<void>;
@@ -53,6 +114,7 @@ export function AgenticStatusCard({
   error,
   needsReview,
   hasFailure,
+  isInProgress,
   onRestart,
   onReview,
   onCancel
@@ -60,8 +122,9 @@ export function AgenticStatusCard({
   return (
     <div className="card">
       <h3>Ki Status</h3>
-      <div className="row">
+      <div className="row status-row">
         <span className={status.className}>{status.label}</span>
+        {isInProgress ? <span className="status-spinner" aria-hidden="true" /> : null}
       </div>
       <p className="muted">{status.description}</p>
       {rows.length > 0 ? (
@@ -195,46 +258,6 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
   const normalizedStatus = (run.Status || '').trim().toLowerCase();
   const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
 
-  const failureStatuses = new Set([
-    'failed',
-    'error',
-    'errored',
-    'failure',
-    'timeout',
-    'timed_out'
-  ]);
-  const runningStatuses = new Set([
-    'running',
-    'processing',
-    'in_progress',
-    'active',
-    'executing'
-  ]);
-  const pendingStatuses = new Set([
-    'pending',
-    'queued',
-    'created',
-    'requested',
-    'waiting',
-    'scheduled',
-    'initializing'
-  ]);
-  const cancelledStatuses = new Set(['cancelled', 'canceled', 'aborted', 'stopped', 'terminated']);
-  const successStatuses = new Set(['completed', 'done', 'success', 'succeeded', 'finished', 'resolved']);
-  const reviewPendingStatuses = new Set([
-    'pending_review',
-    'review_pending',
-    'review_needed',
-    'needs_review',
-    'awaiting_review',
-    'awaiting_approval',
-    'ready_for_review',
-    'requires_review',
-    'waiting_for_review'
-  ]);
-  const reviewApprovedStatuses = new Set(['approved', 'accepted', 'published', 'released']);
-  const reviewRejectedStatuses = new Set(['rejected', 'declined', 'denied']);
-
   const defaultLabel = run.Status && run.Status.trim() ? run.Status : 'Unbekannt';
 
   let base: Omit<AgenticStatusDisplay, 'className'> = {
@@ -246,7 +269,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
   };
 
   if (normalizedStatus) {
-    if (failureStatuses.has(normalizedStatus) || normalizedStatus.startsWith('error')) {
+    if (AGENTIC_FAILURE_STATUSES.has(normalizedStatus) || normalizedStatus.startsWith('error')) {
       base = {
         label: 'Fehler',
         description: 'Der agentische Durchlauf ist fehlgeschlagen.',
@@ -254,7 +277,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (runningStatuses.has(normalizedStatus)) {
+    } else if (AGENTIC_RUNNING_STATUSES.has(normalizedStatus)) {
       base = {
         label: 'In Arbeit',
         description: 'Der agentische Durchlauf läuft derzeit.',
@@ -262,7 +285,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: false
       };
-    } else if (pendingStatuses.has(normalizedStatus)) {
+    } else if (AGENTIC_PENDING_STATUSES.has(normalizedStatus)) {
       base = {
         label: 'Wartet',
         description: 'Der agentische Durchlauf wartet auf Ausführung.',
@@ -270,7 +293,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: false
       };
-    } else if (cancelledStatuses.has(normalizedStatus)) {
+    } else if (AGENTIC_CANCELLED_STATUSES.has(normalizedStatus)) {
       base = {
         label: 'Abgebrochen',
         description: 'Der agentische Durchlauf wurde abgebrochen.',
@@ -278,7 +301,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (successStatuses.has(normalizedStatus)) {
+    } else if (AGENTIC_SUCCESS_STATUSES.has(normalizedStatus)) {
       base = {
         label: 'Fertig',
         description: 'Der agentische Durchlauf wurde abgeschlossen.',
@@ -286,7 +309,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (reviewPendingStatuses.has(normalizedStatus)) {
+    } else if (AGENTIC_REVIEW_PENDING_STATUSES.has(normalizedStatus)) {
       base = {
         label: 'Review ausstehend',
         description: 'Das Ergebnis wartet auf Freigabe.',
@@ -294,7 +317,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: true,
         isTerminal: false
       };
-    } else if (reviewApprovedStatuses.has(normalizedStatus)) {
+    } else if (AGENTIC_REVIEW_APPROVED_STATUSES.has(normalizedStatus)) {
       base = {
         label: 'Freigegeben',
         description: 'Das Ergebnis wurde freigegeben.',
@@ -302,7 +325,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (reviewRejectedStatuses.has(normalizedStatus)) {
+    } else if (AGENTIC_REVIEW_REJECTED_STATUSES.has(normalizedStatus)) {
       base = {
         label: 'Abgelehnt',
         description: 'Das Ergebnis wurde abgelehnt.',
@@ -344,6 +367,25 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     ...finalMeta,
     className: `pill status status-${finalMeta.variant}`
   };
+}
+
+function isAgenticRunInProgress(run: AgenticRun | null): boolean {
+  if (!run) {
+    return false;
+  }
+
+  const normalizedStatus = (run.Status || '').trim().toLowerCase();
+  const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
+
+  if (
+    AGENTIC_RUNNING_STATUSES.has(normalizedStatus) ||
+    AGENTIC_PENDING_STATUSES.has(normalizedStatus) ||
+    AGENTIC_REVIEW_PENDING_STATUSES.has(normalizedStatus)
+  ) {
+    return true;
+  }
+
+  return normalizedReview === 'pending';
 }
 
 export default function ItemDetail({ itemId }: Props) {
@@ -693,6 +735,7 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   const agenticStatus = agenticStatusDisplay(agentic);
+  const agenticIsInProgress = isAgenticRunInProgress(agentic);
   const agenticRows: [string, React.ReactNode][] = [];
   if (agentic?.LastModified) {
     agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
@@ -869,6 +912,7 @@ export default function ItemDetail({ itemId }: Props) {
               error={agenticError}
               needsReview={agenticNeedsReview}
               hasFailure={agenticHasFailure}
+              isInProgress={agenticIsInProgress}
               onRestart={handleAgenticRestart}
               onReview={handleAgenticReview}
               onCancel={handleAgenticCancel}
