@@ -39,11 +39,18 @@ describe('handleAgenticRunTrigger', () => {
       onSkipped: jest.fn()
     });
 
+    expect(triggerRequest).toHaveBeenCalledTimes(1);
     expect(triggerRequest).toHaveBeenCalledWith({
       runUrl: 'https://example.invalid/run',
       payload,
       context: 'test-triggered'
     });
+    const [[triggerArgs]] = triggerRequest.mock.calls;
+    expect(triggerArgs.payload).toEqual({
+      artikelbeschreibung: 'Beispiel Artikel',
+      itemId: 'uuid-123'
+    });
+    expect(triggerArgs.payload).not.toHaveProperty('item');
     expect(reportFailure).not.toHaveBeenCalled();
     expect(alertFn).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith('Agentic trigger result', {
@@ -74,6 +81,13 @@ describe('handleAgenticRunTrigger', () => {
       onSkipped
     });
 
+    expect(triggerRequest).toHaveBeenCalledTimes(1);
+    const [[triggerArgs]] = triggerRequest.mock.calls;
+    expect(triggerArgs.payload).toEqual({
+      artikelbeschreibung: 'Beispiel Artikel',
+      itemId: 'uuid-123'
+    });
+    expect(triggerArgs.payload).not.toHaveProperty('item');
     expect(reportFailure).toHaveBeenCalledWith({
       itemId: 'uuid-123',
       search: 'Beispiel Artikel',
@@ -113,6 +127,13 @@ describe('handleAgenticRunTrigger', () => {
       logger
     });
 
+    expect(triggerRequest).toHaveBeenCalledTimes(1);
+    const [[triggerArgs]] = triggerRequest.mock.calls;
+    expect(triggerArgs.payload).toEqual({
+      artikelbeschreibung: 'Agentic Artikel',
+      itemId: 'uuid-123'
+    });
+    expect(triggerArgs.payload).not.toHaveProperty('item');
     expect(reportFailure).toHaveBeenCalledWith({
       itemId: 'uuid-123',
       search: 'Agentic Artikel',

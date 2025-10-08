@@ -118,12 +118,22 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
   }
 
   try {
-    const body = {
-      item: {
-        Artikelbeschreibung: artikelbeschreibungCandidate,
-        itemUUid: itemId // note the mixed casing to match the agentic API contract
+    const optionalPayload: Record<string, unknown> = {};
+    Object.entries(payload).forEach(([key, value]) => {
+      if (key === 'artikelbeschreibung' || key === 'itemId') {
+        return;
       }
-    } as const;
+      if (value === undefined || value === null) {
+        return;
+      }
+      optionalPayload[key] = typeof value === 'string' ? value.trim() : value;
+    });
+
+    const body: Record<string, unknown> = {
+      Artikelbeschreibung: artikelbeschreibungCandidate,
+      itemUUid: itemId, // note the mixed casing to match the agentic API contract
+      ...optionalPayload
+    };
 
     const response = await fetch(runUrl, {
       method: 'POST',
