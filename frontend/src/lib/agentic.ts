@@ -121,7 +121,7 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
     const body = {
       item: {
         Artikelbeschreibung: artikelbeschreibungCandidate,
-        ItemUUID: itemId
+        itemUUid: itemId // note the mixed casing to match the agentic API contract
       }
     } as const;
 
@@ -183,7 +183,7 @@ export async function cancelAgenticRun({ cancelUrl, itemId, actor, context }: Ag
 
   try {
     const body = {
-      item: { ItemUUID: trimmedItemId },
+      item: { itemUUid: trimmedItemId }, // note the mixed casing to match the agentic API contract
       actor: trimmedActor || undefined
     } as const;
 
