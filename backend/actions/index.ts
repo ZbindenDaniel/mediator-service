@@ -47,3 +47,6 @@ export function loadActions(): Action[] {
 }
 
 export default { loadActions };
+
+export { default as bulkMoveItemsAction } from './bulk-move-items';
+export { default as bulkDeleteItemsAction } from './bulk-delete-items';

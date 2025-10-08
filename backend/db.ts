@@ -573,6 +573,25 @@ export const updateAgenticRunStatus = db.prepare(
 );
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
+
+type ItemMutationSnapshot = {
+  ItemUUID: string;
+  BoxID: string | null;
+  Location: string | null;
+  Auf_Lager: number | null;
+};
+
+const getItemMutationSnapshot = db.prepare(
+  `SELECT ItemUUID, BoxID, Location, Auf_Lager FROM items WHERE ItemUUID = ?`
+);
+
+const updateItemBoxPlacement = db.prepare(
+  `UPDATE items
+   SET BoxID = @BoxID,
+       Location = @Location,
+       UpdatedAt = datetime('now')
+   WHERE ItemUUID = @ItemUUID`
+);
 export const decrementItemStock = db.prepare(
   `UPDATE items
    SET Auf_Lager = Auf_Lager - 1,
@@ -590,6 +609,133 @@ export const incrementItemStock = db.prepare(
 export const deleteItem = db.prepare(`DELETE FROM items WHERE ItemUUID = ?`);
 export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
 export const logEvent = db.prepare(`INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta) VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)`);
+
+export type BulkMoveResult = {
+  itemId: string;
+  fromBoxId: string | null;
+  toBoxId: string;
+  location: string | null;
+};
+
+export type BulkRemoveResult = {
+  itemId: string;
+  fromBoxId: string | null;
+  before: number;
+  after: number;
+  clearedBox: boolean;
+};
+
+export function bulkMoveItems(
+  itemIds: string[],
+  toBoxId: string,
+  actor: string,
+  location: string | null
+): BulkMoveResult[] {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    return [];
+  }
+
+  const uniqueIds = Array.from(new Set(itemIds));
+  const normalizedLocation = location ?? null;
+
+  const runTxn = db.transaction((ids: string[]): BulkMoveResult[] => {
+    const results: BulkMoveResult[] = [];
+
+    for (const itemId of ids) {
+      const current = getItemMutationSnapshot.get(itemId) as ItemMutationSnapshot | undefined;
+      if (!current) {
+        console.warn('[db] bulkMoveItems missing item', { itemId });
+        throw new Error(`Item ${itemId} not found`);
+      }
+
+      updateItemBoxPlacement.run({ ItemUUID: itemId, BoxID: toBoxId, Location: normalizedLocation });
+      logEvent.run({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: itemId,
+        Event: 'Moved',
+        Meta: JSON.stringify({ from: current.BoxID ?? null, to: toBoxId })
+      });
+
+      results.push({
+        itemId,
+        fromBoxId: current.BoxID ?? null,
+        toBoxId,
+        location: normalizedLocation
+      });
+    }
+
+    return results;
+  });
+
+  try {
+    return runTxn(uniqueIds);
+  } catch (err) {
+    console.error('[db] bulkMoveItems transaction failed', err);
+    throw err;
+  }
+}
+
+export function bulkRemoveItemStock(itemIds: string[], actor: string): BulkRemoveResult[] {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    return [];
+  }
+
+  const uniqueIds = Array.from(new Set(itemIds));
+
+  const runTxn = db.transaction((ids: string[]): BulkRemoveResult[] => {
+    const results: BulkRemoveResult[] = [];
+
+    for (const itemId of ids) {
+      const current = getItemMutationSnapshot.get(itemId) as ItemMutationSnapshot | undefined;
+      if (!current) {
+        console.warn('[db] bulkRemoveItemStock missing item', { itemId });
+        throw new Error(`Item ${itemId} not found`);
+      }
+
+      const beforeQty = typeof current.Auf_Lager === 'number' ? current.Auf_Lager : 0;
+      if (beforeQty <= 0) {
+        console.warn('[db] bulkRemoveItemStock insufficient stock', { itemId, beforeQty });
+        throw new Error(`Item ${itemId} has no stock`);
+      }
+
+      decrementItemStock.run(itemId);
+      const updated = getItemMutationSnapshot.get(itemId) as ItemMutationSnapshot | undefined;
+      const afterQty = typeof updated?.Auf_Lager === 'number' ? updated.Auf_Lager : 0;
+      const clearedBox = afterQty <= 0;
+
+      logEvent.run({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: itemId,
+        Event: 'Removed',
+        Meta: JSON.stringify({
+          fromBox: current.BoxID ?? null,
+          before: beforeQty,
+          after: afterQty,
+          clearedBox
+        })
+      });
+
+      results.push({
+        itemId,
+        fromBoxId: current.BoxID ?? null,
+        before: beforeQty,
+        after: afterQty,
+        clearedBox
+      });
+    }
+
+    return results;
+  });
+
+  try {
+    return runTxn(uniqueIds);
+  } catch (err) {
+    console.error('[db] bulkRemoveItemStock transaction failed', err);
+    throw err;
+  }
+}
 export const listEventsForBox = db.prepare(`SELECT * FROM events WHERE EntityType='Box' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
 export const listEventsForItem = db.prepare(`SELECT * FROM events WHERE EntityType='Item' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
 export const listRecentEvents = db.prepare(`
@@ -646,5 +792,5 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY i.Datum_erfasst
 `);
 
-export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
+export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog, BulkMoveResult, BulkRemoveResult };
 

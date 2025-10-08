@@ -6,6 +6,12 @@ try {
 } catch (error) {
   console.warn('[run-tests] `typescript` module not found. Falling back to raw execution for .ts files.');
 }
+let esbuild;
+try {
+  esbuild = require('esbuild');
+} catch (error) {
+  console.warn('[run-tests] `esbuild` module not found. TypeScript tests may fail without transpilation.', error);
+}
 let runCLI;
 try {
   ({ runCLI } = require('jest'));
@@ -36,6 +42,13 @@ function transpile(module, filename) {
         fileName: filename,
       });
       module._compile(result.outputText, filename);
+    } else if (esbuild) {
+      const result = esbuild.transformSync(content, {
+        loader: filename.endsWith('.tsx') ? 'tsx' : 'ts',
+        format: 'cjs',
+        target: 'es2020'
+      });
+      module._compile(result.code, filename);
     } else {
       module._compile(content, filename);
     }
@@ -63,7 +76,10 @@ function collectTests(dir, matches) {
 }
 
 async function main() {
-  const roots = [path.join(__dirname, '..', 'test')];
+  const roots = [
+    path.join(__dirname, '..', 'test'),
+    path.join(__dirname, '..', 'backend', 'actions', '__tests__')
+  ];
   const files = [];
   for (const root of roots) {
     collectTests(root, files);

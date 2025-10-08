@@ -25,6 +25,8 @@ import {
   nextLabelJob,
   updateLabelJobStatus,
   logEvent,
+  bulkMoveItems,
+  bulkRemoveItemStock,
   listEventsForBox,
   listEventsForItem,
   listRecentActivities,
@@ -170,6 +172,8 @@ type ActionContext = {
   incrementItemStock: typeof incrementItemStock;
   deleteItem: typeof deleteItem;
   deleteBox: typeof deleteBox;
+  bulkMoveItems: typeof bulkMoveItems;
+  bulkRemoveItemStock: typeof bulkRemoveItemStock;
   upsertAgenticRun: typeof upsertAgenticRun;
   getAgenticRun: typeof getAgenticRun;
   updateAgenticRunStatus: typeof updateAgenticRunStatus;
@@ -318,6 +322,8 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           incrementItemStock,
           deleteItem,
           deleteBox,
+          bulkMoveItems,
+          bulkRemoveItemStock,
           listItems,
           pdfForBox,
           pdfForItem,

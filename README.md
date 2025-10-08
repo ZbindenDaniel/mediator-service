@@ -42,6 +42,15 @@ node scripts/run-tests.js
 
 The script eagerly loads every `.test.ts` file, runs them through the in-process harness, and, when the optional Jest dependency is available, hands off to Jest using the project configuration for any suites that rely on its runtime. There is currently no built-in watch or name filtering support; rerun the command (or `npm test`) after making changes.
 
+## Bulk inventory endpoints
+
+The backend exposes JSON APIs for multi-item adjustments that mirror the single-item move and remove flows:
+
+- `POST /api/items/bulk/move` – moves the provided `itemIds` into the target Behälter. The request requires `{ itemIds: string[], toBoxId: string, actor: string, confirm: true }`. The response reports the item identifiers that moved, the destination box, and the resolved location when available.
+- `POST /api/items/bulk/delete` – decrements stock for each `itemIds` entry while logging events per item. The request requires `{ itemIds: string[], actor: string, confirm: true }`. The response lists the pre- and post-adjustment quantities along with `clearedBox` markers when the last unit was removed.
+
+Both endpoints validate payloads, wrap database writes in transactions, and emit the same event log metadata as their single-item counterparts, keeping `Auf_Lager` counts accurate when removing stock.
+
 ## Agentic migration verification
 
 Use the verification script to ensure the agentic run schema exists and that `backend/db.ts` can be loaded without TypeScript module errors:
