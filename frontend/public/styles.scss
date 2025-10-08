@@ -647,6 +647,12 @@ button:focus {
     flex-direction: column;
 }
 
+.row.status-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
 .suggestion-list {
     display: flex;
     flex-direction: column;
@@ -715,6 +721,25 @@ button:focus {
 
     &.status-info {
         background: #dbeafe;
+    }
+}
+
+.status-spinner {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 0, 0, 0.15);
+    border-top-color: rgba(0, 0, 0, 0.6);
+    animation: status-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes status-spinner-rotate {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
     }
 }
 
