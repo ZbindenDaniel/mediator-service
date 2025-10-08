@@ -9,6 +9,6 @@ export const PRINTER_HOST = process.env.PRINTER_HOST || 'GeBE_USB_Printer_A8';
 export const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 export const BASE_QR_URL = process.env.BASE_QR_URL || 'http://localhost:8080/qr';
 export const BASE_UI_URL = process.env.BASE_UI_URL || 'http://localhost:8080/ui';
-export const AGENTIC_SHARED_SECRET = process.env.AGENTIC_SHARED_SECRET || '';
+export const AGENTIC_SHARED_SECRET = process.env.AGENTIC_SHARED_SECRET || 'revampItIsSoCool!';
 export const AGENTIC_API_BASE = process.env.AGENTIC_API_BASE || 'http://localhost:3000';
 
