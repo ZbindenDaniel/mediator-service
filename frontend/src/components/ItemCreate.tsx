@@ -2,11 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Item, ItemRef } from '../../../models';
 import { ensureUser } from '../lib/user';
-import {
-  buildAgenticRunUrl,
-  resolveAgenticApiBase,
-  triggerAgenticRun as triggerAgenticRunRequest
-} from '../lib/agentic';
+import { resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
@@ -215,7 +211,7 @@ export default function ItemCreate() {
 
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
 
-  const agenticRunUrl = useMemo(() => buildAgenticRunUrl(agenticApiBase), [agenticApiBase]);
+  const agenticRunUrl = '/api/agentic/run';
 
   useEffect(() => {
     let cancelled = false;

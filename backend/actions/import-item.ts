@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import type { Action } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
+import { forwardAgenticTrigger } from './agentic-trigger';
 
 const DEFAULT_EINHEIT = 'Stück';
 
@@ -192,6 +193,43 @@ const action: Action = {
         boxLocationToPersist,
         Boolean(ctx.agenticServiceEnabled)
       );
+
+      if (ctx.agenticServiceEnabled) {
+        const triggerPayload = {
+          itemId: ItemUUID,
+          artikelbeschreibung: agenticSearchQuery || data.Artikelbeschreibung || ''
+        };
+
+        if (!triggerPayload.artikelbeschreibung) {
+          console.warn('[import-item] Agentic trigger skipped due to missing Artikelbeschreibung', {
+            ItemUUID,
+            actor
+          });
+        } else {
+          try {
+            const result = await forwardAgenticTrigger(triggerPayload, {
+              context: 'import-item',
+              logger: console
+            });
+
+            if (!result.ok) {
+              console.error('[import-item] Agentic trigger response indicated failure', {
+                ItemUUID,
+                status: result.status,
+                details: result.body ?? result.rawBody
+              });
+            }
+          } catch (agenticErr) {
+            console.error('[import-item] Failed to trigger agentic run after import', agenticErr);
+          }
+        }
+      } else {
+        console.info('[import-item] Agentic service disabled; skipping remote trigger dispatch', {
+          ItemUUID,
+          actor
+        });
+      }
+
       sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
     } catch (err) {
       console.error('Import item failed', err);

@@ -319,6 +319,41 @@ async function handleAgenticCancel(req, res, itemId) {
   return sendJson(res, 200, { agentic: updated });
 }
 
+async function handleAgenticTriggerProxy(req, res) {
+  const body = (await parseBody(req)) as Buffer;
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(body.toString() || '{}');
+  } catch (err) {
+    return sendJson(res, 400, { error: 'invalid json' });
+  }
+
+  const payload =
+    parsed && typeof parsed === 'object' && parsed.payload && typeof parsed.payload === 'object'
+      ? parsed.payload
+      : parsed;
+
+  const artikelbeschreibung = (payload?.artikelbeschreibung || payload?.search || '').trim();
+  const itemId = (payload?.itemId || payload?.id || '').trim();
+
+  if (!artikelbeschreibung) {
+    return sendJson(res, 400, { error: 'missing artikelbeschreibung' });
+  }
+
+  if (!itemId) {
+    return sendJson(res, 400, { error: 'missing itemId' });
+  }
+
+  saveAgenticRun(itemId, {
+    Status: 'queued',
+    SearchQuery: artikelbeschreibung,
+    ReviewState: 'not_required',
+    ReviewedBy: null
+  });
+
+  return sendJson(res, 202, { ok: true });
+}
+
 function handleAgenticStatus(res, itemId) {
   const run = getAgenticRun(itemId);
   return sendJson(res, 200, { agentic: run });
@@ -352,6 +387,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && pathname === '/api/import') {
       return handleImportCsv(req, res);
+    }
+    if (req.method === 'POST' && pathname === '/api/agentic/run') {
+      return handleAgenticTriggerProxy(req, res);
     }
     if (req.method === 'GET' && pathname.startsWith('/api/boxes/')) {
       const boxId = decodeURIComponent(pathname.split('/').pop() || '');

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { AgenticRun } from '../../models';
+import { forwardAgenticTrigger } from './agentic-trigger';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -119,13 +120,50 @@ const action: Action = {
       return sendJson(res, 500, { error: 'Failed to restart agentic run' });
     }
 
+    let refreshed: AgenticRun | null = null;
     try {
-      const refreshed = ctx.getAgenticRun.get(itemId) || null;
-      return sendJson(res, 200, { agentic: refreshed });
+      refreshed = (ctx.getAgenticRun.get(itemId) as AgenticRun | undefined) || null;
     } catch (err) {
       console.error('Failed to load refreshed agentic run after restart', err);
       return sendJson(res, 500, { error: 'Failed to load refreshed agentic run' });
     }
+
+    if (ctx.agenticServiceEnabled) {
+      const triggerSearchTerm =
+        (typeof nextSearchQuery === 'string' && nextSearchQuery.trim()) ||
+        (typeof refreshed?.SearchQuery === 'string' && refreshed.SearchQuery.trim()) ||
+        null;
+
+      if (!triggerSearchTerm) {
+        console.warn('[agentic-restart] Agentic trigger skipped: missing search term after restart', {
+          itemId
+        });
+      } else {
+        try {
+          const result = await forwardAgenticTrigger(
+            { itemId, artikelbeschreibung: triggerSearchTerm },
+            {
+              context: 'agentic-restart',
+              logger: console
+            }
+          );
+
+          if (!result.ok) {
+            console.error('[agentic-restart] Agentic trigger responded with failure', {
+              itemId,
+              status: result.status,
+              details: result.body ?? result.rawBody
+            });
+          }
+        } catch (triggerErr) {
+          console.error('[agentic-restart] Failed to dispatch agentic trigger after restart', triggerErr);
+        }
+      }
+    } else {
+      console.info('[agentic-restart] Agentic service disabled; skipping trigger dispatch', { itemId });
+    }
+
+    return sendJson(res, 200, { agentic: refreshed });
   },
   view: () => '<div class="card"><p class="muted">Agentic restart API</p></div>'
 };
