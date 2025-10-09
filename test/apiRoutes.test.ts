@@ -314,3 +314,195 @@
 //   expect(itemIds).toContain(firstItem);
 //   expect(itemIds).toContain(secondItem);
 // });
+
+import { Readable } from 'stream';
+import type { IncomingMessage, ServerResponse } from 'http';
+import Database from 'better-sqlite3';
+import moveBoxAction from '../backend/actions/move-box';
+
+type BoxRow = {
+  BoxID: string;
+  Location: string | null;
+  StandortLabel: string | null;
+  CreatedAt: string | null;
+  Notes: string | null;
+  PlacedBy: string | null;
+  PlacedAt: string | null;
+  UpdatedAt: string;
+};
+
+type EventRow = {
+  Id: number;
+  CreatedAt: string;
+  Actor: string | null;
+  EntityType: string;
+  EntityId: string;
+  Event: string;
+  Meta: string | null;
+};
+
+type MoveBoxTestContext = {
+  db: Database.Database;
+  getBox: Database.Statement;
+  logEvent: Database.Statement;
+};
+
+function createMockRequest(path: string, body: unknown): IncomingMessage {
+  const stream = new Readable({ read() {} });
+  stream.push(JSON.stringify(body));
+  stream.push(null);
+  (stream as IncomingMessage).url = path;
+  (stream as IncomingMessage).method = 'POST';
+  return stream as IncomingMessage;
+}
+
+function createMockResponse() {
+  let statusCode = 0;
+  let headers: Record<string, string> = {};
+  let body = '';
+
+  const res = {
+    writeHead(status: number, responseHeaders: Record<string, string>) {
+      statusCode = status;
+      headers = { ...responseHeaders };
+      return res;
+    },
+    end(chunk?: any) {
+      if (chunk !== undefined && chunk !== null) {
+        body = Buffer.isBuffer(chunk) ? chunk.toString('utf-8') : String(chunk);
+      }
+      return res;
+    }
+  } as unknown as ServerResponse;
+
+  return {
+    res,
+    getStatus: () => statusCode,
+    getHeaders: () => headers,
+    getBody: () => body
+  };
+}
+
+function createMoveBoxContext(initialBox: Partial<BoxRow> & { BoxID: string }) {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE boxes (
+      BoxID TEXT PRIMARY KEY,
+      Location TEXT,
+      StandortLabel TEXT,
+      CreatedAt TEXT,
+      Notes TEXT,
+      PlacedBy TEXT,
+      PlacedAt TEXT,
+      UpdatedAt TEXT NOT NULL
+    );
+    CREATE TABLE events (
+      Id INTEGER PRIMARY KEY AUTOINCREMENT,
+      CreatedAt TEXT NOT NULL,
+      Actor TEXT,
+      EntityType TEXT NOT NULL,
+      EntityId TEXT NOT NULL,
+      Event TEXT NOT NULL,
+      Meta TEXT
+    );
+  `);
+
+  const insertBox = db.prepare(`
+    INSERT INTO boxes (BoxID, Location, StandortLabel, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
+    VALUES (@BoxID, @Location, @StandortLabel, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
+  `);
+
+  insertBox.run({
+    BoxID: initialBox.BoxID,
+    Location: initialBox.Location ?? null,
+    StandortLabel: initialBox.StandortLabel ?? null,
+    CreatedAt: initialBox.CreatedAt ?? '2000-01-01T00:00:00Z',
+    Notes: initialBox.Notes ?? null,
+    PlacedBy: initialBox.PlacedBy ?? null,
+    PlacedAt: initialBox.PlacedAt ?? null,
+    UpdatedAt: initialBox.UpdatedAt ?? '2000-01-01T00:00:00Z'
+  });
+
+  const getBox = db.prepare('SELECT * FROM boxes WHERE BoxID = ?');
+  const logEvent = db.prepare(`
+    INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta)
+    VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)
+  `);
+  const selectEvents = db.prepare('SELECT * FROM events WHERE EntityId = ? ORDER BY Id');
+
+  const ctx: MoveBoxTestContext = { db, getBox, logEvent };
+
+  return {
+    ctx,
+    getBox,
+    selectEvents,
+    close: () => {
+      try {
+        db.close();
+      } catch (error) {
+        console.error('Failed to close move-box test database', error);
+      }
+    }
+  };
+}
+
+describe('move-box action note updates', () => {
+  test('updates notes without requiring location', async () => {
+    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-001', Location: null });
+    const req = createMockRequest('/api/boxes/BOX-001/move', { actor: 'Tester', notes: '  Hello Note  ' });
+    const { res, getStatus, getBody } = createMockResponse();
+    let updated: BoxRow | null = null;
+    let events: EventRow[] = [];
+
+    try {
+      await moveBoxAction.handle?.(req, res, ctx);
+      updated = getBox.get('BOX-001') as BoxRow;
+      events = selectEvents.all('BOX-001') as EventRow[];
+    } finally {
+      close();
+    }
+
+    expect(getStatus()).toBe(200);
+    expect(JSON.parse(getBody())).toEqual({ ok: true });
+
+    expect(updated?.Location ?? null).toBeNull();
+    expect(updated?.Notes ?? null).toBe('Hello Note');
+    expect(updated?.PlacedBy ?? null).toBeNull();
+    expect(updated?.PlacedAt ?? null).toBeNull();
+    expect(updated?.UpdatedAt ?? '').not.toBe('2000-01-01T00:00:00Z');
+
+    expect(events.length).toBe(1);
+    expect(events[0].Event).toBe('Note');
+    expect(events[0].Actor).toBe('Tester');
+  });
+
+  test('moves box placement when location provided', async () => {
+    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-002', Location: 'A-01-01', Notes: 'Old', StandortLabel: 'Rot' });
+    const req = createMockRequest('/api/boxes/BOX-002/move', { actor: 'Mover', location: 'b-02-03', notes: 'Moved note' });
+    const { res, getStatus, getBody } = createMockResponse();
+    let updated: BoxRow | null = null;
+    let events: EventRow[] = [];
+
+    try {
+      await moveBoxAction.handle?.(req, res, ctx);
+      updated = getBox.get('BOX-002') as BoxRow;
+      events = selectEvents.all('BOX-002') as EventRow[];
+    } finally {
+      close();
+    }
+
+    expect(getStatus()).toBe(200);
+    expect(JSON.parse(getBody())).toEqual({ ok: true });
+
+    expect(updated?.Location ?? '').toBe('B-02-03');
+    expect(updated?.StandortLabel ?? null).toBe('Orange');
+    expect(updated?.Notes ?? null).toBe('Moved note');
+    expect(updated?.PlacedBy ?? null).toBe('Mover');
+    expect(updated?.PlacedAt ?? null).not.toBeNull();
+    expect(updated?.UpdatedAt ?? '').not.toBe('2000-01-01T00:00:00Z');
+
+    expect(events.length).toBe(1);
+    expect(events[0].Event).toBe('Moved');
+    expect(JSON.parse(events[0].Meta || '{}')).toMatchObject({ location: 'B-02-03', notes: 'Moved note' });
+  });
+});

@@ -22,8 +22,11 @@ export default function BoxDetail({ boxId }: Props) {
   const [box, setBox] = useState<Box | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
+  type NoteFeedback = { type: 'info' | 'success' | 'error'; message: string } | null;
+
   const [note, setNote] = useState('');
-  const [noteStatus, setNoteStatus] = useState('');
+  const [noteFeedback, setNoteFeedback] = useState<NoteFeedback>(null);
+  const [isSavingNote, setIsSavingNote] = useState(false);
   const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
   const navigate = useNavigate();
@@ -147,6 +150,7 @@ export default function BoxDetail({ boxId }: Props) {
         const data = await res.json();
         setBox(data.box);
         setNote(data.box?.Notes || '');
+        setNoteFeedback(null);
         setItems(data.items || []);
         setEvents(data.events || []);
       } else {
@@ -194,10 +198,10 @@ export default function BoxDetail({ boxId }: Props) {
 
             <RelocateBoxCard boxId={box.BoxID} onMoved={load} />
 
-            {box.Location && (
-              <><PrintLabelButton boxId={box.BoxID} /><div className="card">
-                <h3>Notizen</h3>
-                <form onSubmit={async (e) => {
+            <PrintLabelButton boxId={box.BoxID} />
+            <div className="card">
+              <h3>Notizen</h3>
+              <form onSubmit={async (e) => {
                   e.preventDefault();
                   const actor = await ensureUser();
                   if (!actor) {
@@ -213,41 +217,74 @@ export default function BoxDetail({ boxId }: Props) {
                     return;
                   }
                   try {
+                    setIsSavingNote(true);
+                    setNoteFeedback({ type: 'info', message: 'Speichern…' });
+                    console.info('Saving box note', { boxId: box.BoxID });
+                    const payload: Record<string, unknown> = { notes: note, actor };
+                    if (typeof box.Location === 'string' && box.Location.trim()) {
+                      payload.location = box.Location;
+                    }
                     const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ notes: note, location: box.Location, actor })
+                      body: JSON.stringify(payload)
                     });
                     if (res.ok) {
                       setBox(b => b ? { ...b, Notes: note } : b);
-                      setNoteStatus('gespeichert');
+                      setNoteFeedback({ type: 'success', message: 'Notiz gespeichert' });
+                      console.info('Box note saved', { boxId: box.BoxID });
                     } else {
-                      setNoteStatus('Fehler');
+                      let errorMessage = `Speichern fehlgeschlagen (Status ${res.status})`;
+                      try {
+                        const errorBody = await res.json();
+                        if (errorBody?.error) {
+                          errorMessage = `Speichern fehlgeschlagen: ${errorBody.error}`;
+                        }
+                      } catch (parseErr) {
+                        console.error('Failed to parse note save error response', parseErr);
+                      }
+                      console.error('Note save request failed', { boxId: box.BoxID, status: res.status });
+                      setNoteFeedback({ type: 'error', message: errorMessage });
                     }
                   } catch (err) {
                     console.error('Note save failed', err);
-                    setNoteStatus('Fehler');
+                    setNoteFeedback({ type: 'error', message: 'Speichern fehlgeschlagen' });
+                  } finally {
+                    setIsSavingNote(false);
                   }
                 }}>
                   <div className=''>
                     <div className='row'>
                       <textarea
                         value={note}
-                        onChange={e => setNote(e.target.value)}
+                        onChange={e => {
+                          setNote(e.target.value);
+                          if (noteFeedback && noteFeedback.type !== 'info') {
+                            setNoteFeedback(null);
+                          }
+                        }}
                         rows={Math.max(3, note.split('\n').length)} />
                     </div>
 
                     <div className='row'>
-                      <button type="submit">Speichern</button>
+                      <button type="submit" disabled={isSavingNote}>Speichern</button>
                     </div>
 
                     <div className='row'>
-                      {noteStatus && <span className="muted"> {noteStatus}</span>}
+                      {noteFeedback && (
+                        <span
+                          className="muted"
+                          role={noteFeedback.type === 'error' ? 'alert' : 'status'}
+                          style={noteFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}
+                        >
+                          {noteFeedback.message}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </form>
-              </div></>
-            )}
+              </div>
+            </div>
 
             <div className="card">
               <h3>Artikel</h3>
