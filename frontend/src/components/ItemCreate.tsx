@@ -397,14 +397,18 @@ export default function ItemCreate() {
         hasAgenticMaterialNumber
       });
 
+      let mergedManualDraft: Partial<ItemFormData> | null = null;
+
       try {
-        setManualDraft((previousManualDraft) =>
-          mergeManualDraftForFallback({
+        setManualDraft((previousManualDraft) => {
+          const nextManualDraft = mergeManualDraftForFallback({
             previousManualDraft,
             baseDraft,
             agenticData
-          })
-        );
+          });
+          mergedManualDraft = nextManualDraft;
+          return nextManualDraft;
+        });
         setDraft((prev) => {
           const nextDraft: Partial<ItemFormData> = { ...prev };
           delete (nextDraft as Record<string, unknown>).agenticStatus;
@@ -414,6 +418,11 @@ export default function ItemCreate() {
       } catch (err) {
         console.error('Failed to merge agentic draft into manual fallback state', err);
       } finally {
+        console.log('Switching to manual edit after agentic fallback', {
+          fromStep: creationStep,
+          hasMergedDescription: Boolean(mergedManualDraft?.Artikelbeschreibung),
+          hasMergedMaterialNumber: Boolean(mergedManualDraft?.Artikel_Nummer)
+        });
         setCreationStep('manualEdit');
       }
     },
