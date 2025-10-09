@@ -213,6 +213,39 @@ export function buildManualSubmissionPayload({
   return merged;
 }
 
+export interface ManualFallbackMergeOptions {
+  previousManualDraft: Partial<ItemFormData>;
+  baseDraft: Partial<ItemFormData>;
+  agenticData?: Partial<ItemFormData>;
+}
+
+export function mergeManualDraftForFallback({
+  previousManualDraft,
+  baseDraft,
+  agenticData
+}: ManualFallbackMergeOptions): Partial<ItemFormData> {
+  const sanitizedAgentic: Partial<ItemFormData> = {};
+  if (agenticData) {
+    for (const [key, value] of Object.entries(agenticData)) {
+      if (value !== undefined && value !== null) {
+        (sanitizedAgentic as Record<string, unknown>)[key] = value;
+      }
+    }
+  }
+
+  const merged: Partial<ItemFormData> = {
+    ...previousManualDraft,
+    ...baseDraft,
+    ...sanitizedAgentic
+  };
+
+  delete (merged as Record<string, unknown>).ItemUUID;
+  delete (merged as Record<string, unknown>).agenticStatus;
+  delete (merged as Record<string, unknown>).agenticSearch;
+
+  return merged;
+}
+
 export default function ItemCreate() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -352,6 +385,39 @@ export default function ItemCreate() {
       }
     },
     [boxId, setCreationStep, setDraft]
+  );
+
+  const handleAgenticFallback = useCallback(
+    (agenticData: Partial<ItemFormData>) => {
+      const hasAgenticDescription = Boolean(agenticData && agenticData.Artikelbeschreibung);
+      const hasAgenticMaterialNumber = Boolean(agenticData && agenticData.Artikel_Nummer);
+      console.log('Agentic flow fallback initiated by user', {
+        fromStep: creationStep,
+        hasAgenticDescription,
+        hasAgenticMaterialNumber
+      });
+
+      try {
+        setManualDraft((previousManualDraft) =>
+          mergeManualDraftForFallback({
+            previousManualDraft,
+            baseDraft,
+            agenticData
+          })
+        );
+        setDraft((prev) => {
+          const nextDraft: Partial<ItemFormData> = { ...prev };
+          delete (nextDraft as Record<string, unknown>).agenticStatus;
+          delete (nextDraft as Record<string, unknown>).agenticSearch;
+          return nextDraft;
+        });
+      } catch (err) {
+        console.error('Failed to merge agentic draft into manual fallback state', err);
+      } finally {
+        setCreationStep('manualEdit');
+      }
+    },
+    [baseDraft, creationStep, setCreationStep, setDraft]
   );
 
   async function reportAgenticTriggerFailure({
@@ -817,7 +883,13 @@ export default function ItemCreate() {
     return (
       <>
         {blockingOverlay}
-        <ItemForm_Agentic draft={baseDraft} onSubmitPhotos={handleAgenticPhotos} submitLabel="Speichern" isNew />
+        <ItemForm_Agentic
+          draft={baseDraft}
+          onSubmitPhotos={handleAgenticPhotos}
+          submitLabel="Speichern"
+          isNew
+          onFallbackToManual={handleAgenticFallback}
+        />
       </>
     );
   }

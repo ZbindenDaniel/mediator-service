@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemDetailsFields, ItemFormData, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
 
 type AgenticFormMode = 'details' | 'photos';
@@ -7,11 +7,19 @@ interface Props {
   draft: Partial<ItemFormData>;
   onSubmitDetails?: (data: Partial<ItemFormData>) => Promise<void>;
   onSubmitPhotos: (data: Partial<ItemFormData>) => Promise<void>;
+  onFallbackToManual?: (data: Partial<ItemFormData>) => void;
   submitLabel: string;
   isNew?: boolean;
 }
 
-export default function ItemForm_Agentic({ draft, onSubmitDetails, onSubmitPhotos, submitLabel, isNew }: Props) {
+export default function ItemForm_Agentic({
+  draft,
+  onSubmitDetails,
+  onSubmitPhotos,
+  onFallbackToManual,
+  submitLabel,
+  isNew
+}: Props) {
   const { form, update, mergeForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
   const [submitError, setSubmitError] = useState<string | null>(null);
   const hasBasicDraftInfo = useMemo(
@@ -85,6 +93,25 @@ export default function ItemForm_Agentic({ draft, onSubmitDetails, onSubmitPhoto
     () => createPhotoChangeHandler(update, 'picture3'),
     [update]
   );
+
+  const handleManualFallback = useCallback(() => {
+    if (!onFallbackToManual) {
+      console.warn('Manual fallback requested without handler; ignoring request.');
+      return;
+    }
+
+    try {
+      console.log('Agentic flow fallback requested by user', {
+        mode,
+        hasArtikelbeschreibung: Boolean(form.Artikelbeschreibung),
+        hasMaterialNumber: Boolean(form.Artikel_Nummer)
+      });
+      onFallbackToManual({ ...form });
+      setSubmitError(null);
+    } catch (error) {
+      console.error('Failed to execute manual fallback handler from agentic form', error);
+    }
+  }, [form, mode, onFallbackToManual]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -219,6 +246,14 @@ export default function ItemForm_Agentic({ draft, onSubmitDetails, onSubmitPhoto
           <div className="row">
             <button type="submit">{mode === 'details' ? 'Weiter' : submitLabel}</button>
           </div>
+          {onFallbackToManual && (
+            <div className="row">
+              {/* TODO: Replace manual fallback trigger with shared secondary button styling once design refresh lands. */}
+              <button type="button" className="button-secondary" onClick={handleManualFallback}>
+                Manuell fortfahren
+              </button>
+            </div>
+          )}
           {submitError && (
             <div className="row error">
               <span>{submitError}</span>
