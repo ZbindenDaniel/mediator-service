@@ -207,20 +207,24 @@ const action: Action = {
           });
         } else {
           try {
-            const result = await forwardAgenticTrigger(triggerPayload, {
+            void forwardAgenticTrigger(triggerPayload, {
               context: 'import-item',
               logger: console
-            });
-
-            if (!result.ok) {
-              console.error('[import-item] Agentic trigger response indicated failure', {
-                ItemUUID,
-                status: result.status,
-                details: result.body ?? result.rawBody
+            })
+              .then((result) => {
+                if (!result.ok) {
+                  console.error('[import-item] Agentic trigger response indicated failure', {
+                    ItemUUID,
+                    status: result.status,
+                    details: result.body ?? result.rawBody
+                  });
+                }
+              })
+              .catch((agenticErr) => {
+                console.error('[import-item] Failed to trigger agentic run after import', agenticErr);
               });
-            }
-          } catch (agenticErr) {
-            console.error('[import-item] Failed to trigger agentic run after import', agenticErr);
+          } catch (dispatchErr) {
+            console.error('[import-item] Failed to schedule agentic trigger dispatch', dispatchErr);
           }
         }
       } else {
