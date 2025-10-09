@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
 import type { Action } from './index';
+import { AGENTIC_API_BASE } from '../config';
 
 export class AgenticHealthRequestError extends Error {
   public readonly reason: 'network-error';
@@ -46,7 +47,7 @@ async function forwardAgenticHealth(
 ): Promise<AgenticHealthForwardResult> {
   const { agenticApiBase, fetchImpl = fetch, logger = console } = options;
 
-  const sanitizedBase = sanitizeAgenticApiBase(agenticApiBase ?? process.env.AGENTIC_API_BASE ?? null);
+  const sanitizedBase = sanitizeAgenticApiBase(agenticApiBase ?? AGENTIC_API_BASE);
   if (!sanitizedBase) {
     throw new Error('Agentic API base URL is not configured');
   }
@@ -136,7 +137,7 @@ const action: Action = {
 
     try {
       const result = await forwardAgenticHealth({
-        agenticApiBase: process.env.AGENTIC_API_BASE,
+        agenticApiBase: AGENTIC_API_BASE,
         logger: console
       });
 
