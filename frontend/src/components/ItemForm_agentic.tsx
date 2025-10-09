@@ -29,6 +29,8 @@ export default function ItemForm_Agentic({
   const [mode, setMode] = useState<AgenticFormMode>(hasBasicDraftInfo ? 'photos' : 'details');
   const formRef = useRef<HTMLFormElement>(null);
   const materialNumberRequestedRef = useRef(false);
+  const manualFallbackInFlightRef = useRef(false);
+  const [manualFallbackPending, setManualFallbackPending] = useState(false);
 
   useEffect(() => {
     mergeForm(draft);
@@ -100,6 +102,14 @@ export default function ItemForm_Agentic({
       return;
     }
 
+    if (manualFallbackInFlightRef.current) {
+      console.warn('Manual fallback already triggered. Ignoring duplicate request.');
+      return;
+    }
+
+    manualFallbackInFlightRef.current = true;
+    setManualFallbackPending(true);
+
     try {
       console.log('Agentic flow fallback requested by user', {
         mode,
@@ -109,6 +119,8 @@ export default function ItemForm_Agentic({
       onFallbackToManual({ ...form });
       setSubmitError(null);
     } catch (error) {
+      manualFallbackInFlightRef.current = false;
+      setManualFallbackPending(false);
       console.error('Failed to execute manual fallback handler from agentic form', error);
     }
   }, [form, mode, onFallbackToManual]);
@@ -244,16 +256,21 @@ export default function ItemForm_Agentic({
           )}
 
           <div className="row">
-            <button type="submit">{mode === 'details' ? 'Weiter' : submitLabel}</button>
-          </div>
-          {onFallbackToManual && (
-            <div className="row">
-              {/* TODO: Replace manual fallback trigger with shared secondary button styling once design refresh lands. */}
-              <button type="button" className="button-secondary" onClick={handleManualFallback}>
-                Manuell fortfahren
-              </button>
+            <div className="button-group">
+              <button type="submit">{mode === 'details' ? 'Weiter' : submitLabel}</button>
+              {onFallbackToManual && (
+                // TODO: Replace manual fallback trigger with shared secondary button styling once design refresh lands.
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={handleManualFallback}
+                  disabled={manualFallbackPending}
+                >
+                  Zur manuellen Erfassung
+                </button>
+              )}
             </div>
-          )}
+          </div>
           {submitError && (
             <div className="row error">
               <span>{submitError}</span>
