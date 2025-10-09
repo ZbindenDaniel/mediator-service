@@ -17,6 +17,8 @@ POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate pay
 
 - The `build` script (see `package.json`) runs the Sass prebuild step, compiles TypeScript, bundles the frontend, and copies `frontend/public` into `dist/frontend/public` so the compiled server can run without requiring manual copying.
 
+- Runtime configuration is sourced from environment variables. Create a `.env` file in the repository root to override defaults (e.g., ports or paths); the server automatically loads it on startup for both TypeScript and compiled builds.
+
 Quick commands:
 
 ```bash
