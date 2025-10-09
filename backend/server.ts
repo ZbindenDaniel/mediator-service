@@ -4,7 +4,7 @@ import http from 'http';
 import type { IncomingMessage, ServerResponse } from 'http';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
-import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR } from './config';
+import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR, AGENTIC_API_BASE } from './config';
 import { ingestCsvFile } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import {
@@ -207,10 +207,13 @@ type ActionContext = {
   agenticServiceEnabled: boolean;
 };
 
-const agenticServiceEnabled = Boolean(process.env.AGENTIC_API_BASE && process.env.AGENTIC_API_BASE.trim());
+const resolvedAgenticApiBase = AGENTIC_API_BASE.trim();
+const agenticServiceEnabled = Boolean(resolvedAgenticApiBase);
 
 if (!agenticServiceEnabled) {
-  console.info('[server] Agentic API base not configured; agentic processing disabled.');
+  console.info(
+    '[server] Agentic API base not configured; agentic processing disabled (resolved value empty after trim).'
+  );
 }
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
