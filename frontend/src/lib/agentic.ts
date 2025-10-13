@@ -27,7 +27,7 @@ type AgenticEnv = typeof globalThis & {
 };
 
 export function resolveAgenticApiBase(): string | null {
-  return 'http://localhost:3000';
+  return 'http://192.168.10.196:3000';
   // try {
   //   const globalScope = globalThis as AgenticEnv;
   //   const candidate =

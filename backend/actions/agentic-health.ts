@@ -47,7 +47,7 @@ async function forwardAgenticHealth(
 ): Promise<AgenticHealthForwardResult> {
   const { agenticApiBase, fetchImpl = fetch, logger = console } = options;
 
-  const sanitizedBase = sanitizeAgenticApiBase(agenticApiBase ?? AGENTIC_API_BASE);
+  const sanitizedBase = sanitizeAgenticApiBase(AGENTIC_API_BASE);
   if (!sanitizedBase) {
     throw new Error('Agentic API base URL is not configured');
   }
@@ -64,8 +64,8 @@ async function forwardAgenticHealth(
   try {
     response = await fetchImpl(healthUrl, { method: 'GET' });
   } catch (err) {
-    logger.error?.('[agentic-health] Network error while forwarding health check');
-    throw new AgenticHealthRequestError('Failed to reach agentic service', { cause: err });
+    logger.error?.('[agentic-health] Network error while forwarding health check', err, { url: healthUrl });
+    throw new AgenticHealthRequestError('Failed to reach agentic service', { cause: err});
   }
 
   const contentType = response.headers.get('content-type');
