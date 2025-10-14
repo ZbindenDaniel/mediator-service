@@ -162,4 +162,25 @@ describe('import-item agentic trigger dispatch', () => {
       errorSpy.mockRestore();
     }
   });
+
+  it('persists an unplaced item without upserting a box when BoxID is missing', async () => {
+    const ctx = createContext();
+    const form = createForm({});
+    form.delete('BoxID');
+    form.delete('Location');
+
+    const req = createRequest(form.toString());
+    const res = createResponse();
+
+    await importItemAction.handle(req, res, ctx as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(ctx.upsertBox.run).not.toHaveBeenCalled();
+    expect(ctx.persistItemWithinTransaction).toHaveBeenCalledTimes(1);
+    const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0][0];
+    expect(persistedItem.BoxID).toBeNull();
+
+    const parsedBody = res.body ? JSON.parse(res.body) : null;
+    expect(parsedBody?.item?.BoxID ?? null).toBeNull();
+  });
 });

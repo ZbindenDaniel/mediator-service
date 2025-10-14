@@ -28,8 +28,6 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
     <div className='container item'>
       <div className="card">
         <form onSubmit={handleSubmit} className="item-form">
-          <input type="hidden" value={form.BoxID || ''} readOnly />
-
           <div className="row">
             <label>Artikelbeschreibung*</label>
             <input
