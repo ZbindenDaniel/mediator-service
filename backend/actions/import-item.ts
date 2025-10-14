@@ -170,29 +170,41 @@ const action: Action = {
             });
           }
           ctx.persistItemWithinTransaction(itemData);
-          if (agenticEnabled) {
-            ctx.upsertAgenticRun.run({
-              ItemUUID: itemData.ItemUUID,
-              SearchQuery: search || null,
-              Status: status,
-              LastModified: now,
-              ReviewState: 'not_required',
-              ReviewedBy: null
-            });
+
+          const agenticRun = {
+            ItemUUID: itemData.ItemUUID,
+            SearchQuery: search || null,
+            Status: status,
+            LastModified: now,
+            ReviewState: 'not_required',
+            ReviewedBy: null
+          };
+
+          try {
+            ctx.upsertAgenticRun.run(agenticRun);
+          } catch (agenticPersistErr) {
+            console.error('[import-item] Failed to upsert agentic run during import transaction', agenticPersistErr);
+            throw agenticPersistErr;
           }
           ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
-          if (agenticEnabled) {
-            ctx.logEvent.run({
-              Actor: a,
-              EntityType: 'Item',
-              EntityId: itemData.ItemUUID,
-              Event: 'AgenticSearchQueued',
-              Meta: JSON.stringify({ SearchQuery: search, Status: status })
-            });
-          } else {
-            console.info('[import-item] Agentic service disabled; skipping agentic run persistence', {
+          const agenticEventMeta = {
+            SearchQuery: search,
+            Status: status,
+            QueuedLocally: true,
+            RemoteTriggerDispatched: Boolean(agenticEnabled)
+          };
+          ctx.logEvent.run({
+            Actor: a,
+            EntityType: 'Item',
+            EntityId: itemData.ItemUUID,
+            Event: 'AgenticSearchQueued',
+            Meta: JSON.stringify(agenticEventMeta)
+          });
+          if (!agenticEnabled) {
+            console.info('[import-item] Agentic service disabled; queued agentic run locally without remote trigger', {
               ItemUUID: itemData.ItemUUID,
-              Actor: a
+              Actor: a,
+              SearchQuery: search
             });
           }
         }
@@ -241,9 +253,10 @@ const action: Action = {
           }
         }
       } else {
-        console.info('[import-item] Agentic service disabled; skipping remote trigger dispatch', {
+        console.info('[import-item] Agentic service disabled; queued agentic run locally and skipped remote trigger dispatch', {
           ItemUUID,
-          actor
+          actor,
+          agenticSearchQuery
         });
       }
 
