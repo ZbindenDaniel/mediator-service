@@ -245,6 +245,42 @@ export function ItemDetailsFields({
   const quantityHidden = isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
   const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
 
+  const placementHidden = isFieldLocked(lockedFields, 'BoxID', 'hidden');
+  const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
+  const placementInputValue = typeof form.BoxID === 'string' ? form.BoxID : '';
+  const hasPlacementValue = placementInputValue.trim() !== '';
+
+  const handlePlacementChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (placementReadonly) {
+        console.info('Placement change ignored because the field is readonly.');
+        return;
+      }
+
+      try {
+        const nextValue = event.target.value;
+        onUpdate('BoxID', nextValue as ItemFormData['BoxID']);
+        console.log('Updated item placement draft value', { nextBoxId: nextValue });
+      } catch (error) {
+        console.error('Failed to handle placement change', error);
+      }
+    },
+    [onUpdate, placementReadonly]
+  );
+
+  const handlePlacementClear = useCallback(() => {
+    if (placementReadonly) {
+      console.info('Placement clear ignored because the field is readonly.');
+      return;
+    }
+    try {
+      console.log('Clearing item placement via placement controls');
+      onUpdate('BoxID', null);
+    } catch (error) {
+      console.error('Failed to clear item placement', error);
+    }
+  }, [onUpdate, placementReadonly]);
+
   const handleQuantityChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       if (quantityReadonly) {
@@ -453,8 +489,6 @@ export function ItemDetailsFields({
 
   return (
     <>
-      <input value={form.BoxID || ''} readOnly hidden />
-
       {descriptionLockHidden ? (
         <input type="hidden" value={form.Artikelbeschreibung || ''} readOnly />
       ) : (
@@ -471,27 +505,42 @@ export function ItemDetailsFields({
         </div>
       )}
 
+      {!isNew && !placementHidden && (
+        <div className="row">
+          <label>Behälter</label>
+          <div className="combined-input placement-controls">
+            <input
+              value={placementInputValue}
+              onChange={handlePlacementChange}
+              placeholder="Behälter-ID"
+              readOnly={placementReadonly}
+            />
+            <button
+              type="button"
+              onClick={handlePlacementClear}
+              disabled={placementReadonly || !hasPlacementValue}
+            >
+              Entfernen
+            </button>
+          </div>
+          <p className="muted">Leer lassen, um den Artikel ohne Behälter zu speichern.</p>
+        </div>
+      )}
+
       <div className="row">
-        {form.ItemUUID && (
-          <>
-            <label>
-              Behälter-ID
-            </label>
-            <input type="hidden" value={form.ItemUUID} />
-          </>
-        )}
+        {form.ItemUUID && <input type="hidden" value={form.ItemUUID} />}
         <label>
           Artikelnummer*
         </label>
-       
-          <div className="combined-input">
-            <input
-              value={form.Artikel_Nummer || ''}
-              onChange={(e) => onUpdate('Artikel_Nummer', e.target.value)}
-              required
-              readOnly
-            />
-          </div>
+
+        <div className="combined-input">
+          <input
+            value={form.Artikel_Nummer || ''}
+            onChange={(e) => onUpdate('Artikel_Nummer', e.target.value)}
+            required
+            readOnly
+          />
+        </div>
       </div>
 
       {!quantityHidden && (

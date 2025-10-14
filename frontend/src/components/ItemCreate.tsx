@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import type { Item, ItemRef } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
@@ -183,13 +183,11 @@ export const MANUAL_CREATION_LOCKS: LockedFieldConfig = {
 interface ManualSubmissionOptions {
   basicInfo: Partial<ItemFormData>;
   manualData: Partial<ItemFormData>;
-  fallbackBoxId: string | null;
 }
 
 export function buildManualSubmissionPayload({
   basicInfo,
-  manualData,
-  fallbackBoxId
+  manualData
 }: ManualSubmissionOptions): Partial<ItemFormData> {
   const preferredDescription =
     typeof manualData.Artikelbeschreibung === 'string' && manualData.Artikelbeschreibung.trim() !== ''
@@ -200,10 +198,21 @@ export function buildManualSubmissionPayload({
       ? manualData.Artikel_Nummer
       : basicInfo.Artikel_Nummer;
 
+  const resolvedBoxId =
+    typeof manualData.BoxID === 'string' && manualData.BoxID.trim() !== ''
+      ? manualData.BoxID.trim()
+      : typeof basicInfo.BoxID === 'string' && basicInfo.BoxID.trim() !== ''
+      ? basicInfo.BoxID.trim()
+      : undefined;
+
+  if (!resolvedBoxId) {
+    console.info('Manual submission payload missing BoxID; item will remain unplaced after creation.');
+  }
+
   const merged: Partial<ItemFormData> = {
     ...basicInfo,
     ...manualData,
-    BoxID: manualData.BoxID || basicInfo.BoxID || fallbackBoxId || undefined,
+    BoxID: resolvedBoxId,
     Artikelbeschreibung:
       typeof preferredDescription === 'string' ? preferredDescription.trim() : preferredDescription,
     Artikel_Nummer: typeof preferredNumber === 'string' ? preferredNumber.trim() : preferredNumber,
@@ -248,13 +257,11 @@ export function mergeManualDraftForFallback({
 
 export default function ItemCreate() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const boxId = params.get('box') || null;
-  const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
   const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
-  const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
-  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({ BoxID: boxId || undefined }));
+  const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({}));
+  const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [creating, setCreating] = useState(false);
   const dialog = useDialog();
 
@@ -334,18 +341,16 @@ export default function ItemCreate() {
 
   const baseDraft = useMemo(
     () => ({
-      ...draft,
-      BoxID: draft.BoxID || boxId || undefined
+      ...draft
     }),
-    [boxId, draft]
+    [draft]
   );
 
   const moveToAgenticPhotos = useCallback(
     (data: Partial<ItemFormData>, source: 'match-selection' | 'skip-matches') => {
       try {
         const normalized: Partial<ItemFormData> = {
-          ...data,
-          BoxID: data.BoxID || boxId || undefined
+          ...data
         };
 
         if (typeof normalized.Artikelbeschreibung === 'string') {
@@ -384,7 +389,7 @@ export default function ItemCreate() {
         throw err;
       }
     },
-    [boxId, setCreationStep, setDraft]
+    [setCreationStep, setDraft]
   );
 
   const handleAgenticFallback = useCallback(
@@ -591,15 +596,30 @@ export default function ItemCreate() {
     if (typeof sanitized.Artikel_Nummer === 'string') {
       sanitized.Artikel_Nummer = sanitized.Artikel_Nummer.trim();
     }
-    if (!sanitized.BoxID && boxId) {
-      sanitized.BoxID = boxId;
-    }
     if (removeItemUUID && 'ItemUUID' in sanitized) {
       delete sanitized.ItemUUID;
     }
     if (actor) {
       sanitized.actor = actor;
     }
+
+    if ('BoxID' in sanitized) {
+      const rawBoxId = sanitized.BoxID;
+      if (typeof rawBoxId === 'string') {
+        const trimmedBoxId = rawBoxId.trim();
+        if (trimmedBoxId) {
+          sanitized.BoxID = trimmedBoxId;
+        } else {
+          console.info('Removing blank BoxID from item creation payload before submission.');
+          delete sanitized.BoxID;
+        }
+      } else if (rawBoxId == null) {
+        delete sanitized.BoxID;
+      } else {
+        sanitized.BoxID = String(rawBoxId);
+      }
+    }
+
     const einheit = sanitized.Einheit;
     if (typeof einheit !== 'string' || einheit.trim() === '') {
       sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
@@ -637,6 +657,16 @@ export default function ItemCreate() {
       }
       return;
     }
+
+    const normalizedBoxId =
+      typeof data.BoxID === 'string' && data.BoxID.trim() !== '' ? data.BoxID.trim() : undefined;
+    if (!normalizedBoxId) {
+      console.info('Submitting new item without box placement; item will remain unplaced until moved.', {
+        context,
+        hasBoxIdField: Object.prototype.hasOwnProperty.call(data, 'BoxID')
+      });
+    }
+
     const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID }, actor);
     try {
       setCreating(true);
@@ -664,16 +694,16 @@ export default function ItemCreate() {
       try {
         await dialog.alert({
           title: 'Artikel erstellt',
-          message: 'Behälter erstellt. Bitte platzieren!'
+          message:
+            normalizedBoxId && createdItem?.BoxID
+              ? `Artikel wurde erfasst und dem Behälter ${createdItem.BoxID} zugeordnet.`
+              : 'Artikel wurde erfasst und ist noch keinem Behälter zugeordnet. Bitte platzieren!'
         });
       } catch (error) {
         console.error('Failed to display item creation success dialog', error);
       }
       // TODO: Replace imperative navigation with centralized success handling once notification system lands.
-      if (createdItem?.BoxID) {
-        console.log('Navigating to created item box', { boxId: createdItem.BoxID });
-        navigate(`/boxes/${encodeURIComponent(createdItem.BoxID)}`);
-      } else if (createdItem?.ItemUUID) {
+      if (createdItem?.ItemUUID) {
         console.log('Navigating to created item detail', { itemId: createdItem.ItemUUID });
         navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}`);
       }
@@ -691,7 +721,6 @@ export default function ItemCreate() {
       const trimmedNumber = data.Artikel_Nummer?.trim() || data.Artikel_Nummer;
       const normalized: Partial<ItemFormData> = {
         ...data,
-        BoxID: data.BoxID || boxId || undefined,
         Artikelbeschreibung: trimmedDescription,
         Artikel_Nummer: trimmedNumber
       };
@@ -744,7 +773,6 @@ export default function ItemCreate() {
       const clone: Partial<ItemFormData> = {
         ...basicInfo,
         ...preferredReferenceFields,
-        BoxID: basicInfo.BoxID || boxId || undefined,
         Artikelbeschreibung:
           preferredReferenceFields.Artikelbeschreibung ?? basicInfo.Artikelbeschreibung ?? referenceFields.Artikelbeschreibung,
         Artikel_Nummer:
@@ -805,8 +833,7 @@ export default function ItemCreate() {
     try {
       const merged = buildManualSubmissionPayload({
         basicInfo,
-        manualData: data,
-        fallbackBoxId: boxId
+        manualData: data
       });
       console.log('Prepared manual submission payload', merged);
       await submitNewItem(merged, 'manual-edit');
@@ -832,7 +859,6 @@ export default function ItemCreate() {
       const mergedData: Partial<ItemFormData> = {
         ...baseDraft,
         ...data,
-        BoxID: data.BoxID || baseDraft.BoxID || boxId || undefined,
         agenticStatus: 'running',
         agenticSearch:
           baseDraft.agenticSearch ||

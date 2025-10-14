@@ -33,15 +33,10 @@ const action: Action = {
       const dd = String(nowDate.getDate()).padStart(2, '0');
       const mm = String(nowDate.getMonth() + 1).padStart(2, '0');
       const yy = String(nowDate.getFullYear()).slice(-2);
-      let BoxID = (p.get('BoxID') || null);
+      const providedBoxId = (p.get('BoxID') || '').trim();
+      const BoxID = providedBoxId ? providedBoxId : null;
       if (!BoxID) {
-        const lastBox = ctx.getMaxBoxId.get() as { BoxID: string } | undefined;
-        let bSeq = 0;
-        if (lastBox?.BoxID) {
-          const m = lastBox.BoxID.match(/^B-\d{6}-(\d+)$/);
-          if (m) bSeq = parseInt(m[1], 10);
-        }
-        BoxID = `B-${dd}${mm}${yy}-${(bSeq + 1).toString().padStart(4, '0')}`;
+        console.info('[import-item] Persisting item without box placement', { actor });
       }
       let ItemUUID = (p.get('ItemUUID') || '').trim();
       if (!ItemUUID) {
@@ -73,9 +68,15 @@ const action: Action = {
       } catch (e) {
         console.error('Failed to save images', e);
       }
-      const requestedLocationRaw = (p.get('Location') || '').trim();
-      const normalizedLocation = normalizeStandortCode(requestedLocationRaw);
-      const requestedStandortLabel = resolveStandortLabel(normalizedLocation);
+      const requestedLocationRaw = BoxID ? (p.get('Location') || '').trim() : '';
+      if (!BoxID && requestedLocationRaw) {
+        console.warn('[import-item] Ignoring Location for unplaced item import', {
+          actor,
+          location: requestedLocationRaw
+        });
+      }
+      const normalizedLocation = BoxID ? normalizeStandortCode(requestedLocationRaw) : null;
+      const requestedStandortLabel = BoxID && normalizedLocation ? resolveStandortLabel(normalizedLocation) : null;
       if (normalizedLocation && !requestedStandortLabel) {
         console.warn('[import-item] Missing Standort label mapping for requested location', { location: normalizedLocation });
       }
@@ -113,32 +114,37 @@ const action: Action = {
 
       let boxLocationToPersist: string | null = normalizedLocation || null;
       let boxStandortLabelToPersist: string | null = requestedStandortLabel;
-      if (!normalizedLocation) {
-        console.warn(
-          '[import-item] Empty Location provided for box import; attempting to preserve existing Standort',
-          { BoxID, actor }
-        );
-        try {
-          const existingBox = ctx.getBox?.get
-            ? (ctx.getBox.get(BoxID) as { Location?: string | null; StandortLabel?: string | null } | undefined)
-            : undefined;
-          if (existingBox?.Location) {
-            boxLocationToPersist = existingBox.Location;
-            boxStandortLabelToPersist = existingBox.StandortLabel ?? resolveStandortLabel(existingBox.Location);
-            console.info('[import-item] Preserved existing box Location', { BoxID, Location: existingBox.Location });
-          } else {
-            boxLocationToPersist = null;
-            boxStandortLabelToPersist = null;
-            console.info('[import-item] No existing Location found to preserve for box', { BoxID });
+      if (BoxID) {
+        if (!normalizedLocation) {
+          console.warn(
+            '[import-item] Empty Location provided for box import; attempting to preserve existing Standort',
+            { BoxID, actor }
+          );
+          try {
+            const existingBox = ctx.getBox?.get
+              ? (ctx.getBox.get(BoxID) as { Location?: string | null; StandortLabel?: string | null } | undefined)
+              : undefined;
+            if (existingBox?.Location) {
+              boxLocationToPersist = existingBox.Location;
+              boxStandortLabelToPersist = existingBox.StandortLabel ?? resolveStandortLabel(existingBox.Location);
+              console.info('[import-item] Preserved existing box Location', { BoxID, Location: existingBox.Location });
+            } else {
+              boxLocationToPersist = null;
+              boxStandortLabelToPersist = null;
+              console.info('[import-item] No existing Location found to preserve for box', { BoxID });
+            }
+          } catch (lookupErr) {
+            console.error('[import-item] Failed to load box while preserving Location', lookupErr);
           }
-        } catch (lookupErr) {
-          console.error('[import-item] Failed to load box while preserving Location', lookupErr);
         }
+      } else {
+        boxLocationToPersist = null;
+        boxStandortLabelToPersist = null;
       }
 
       const txn = ctx.db.transaction(
         (
-          boxId: string,
+          boxId: string | null,
           itemData: any,
           a: string,
           search: string,
@@ -146,16 +152,23 @@ const action: Action = {
           boxLocation: string | null,
           agenticEnabled: boolean
         ) => {
-          ctx.upsertBox.run({
-            BoxID: boxId,
-            Location: boxLocation,
-            StandortLabel: boxStandortLabelToPersist,
-            CreatedAt: now,
-            Notes: null,
-            PlacedBy: null,
-            PlacedAt: null,
-            UpdatedAt: now
-          });
+          if (boxId) {
+            ctx.upsertBox.run({
+              BoxID: boxId,
+              Location: boxLocation,
+              StandortLabel: boxStandortLabelToPersist,
+              CreatedAt: now,
+              Notes: null,
+              PlacedBy: null,
+              PlacedAt: null,
+              UpdatedAt: now
+            });
+          } else {
+            console.info('[import-item] Skipping box upsert because the item is unplaced', {
+              ItemUUID: itemData.ItemUUID,
+              Actor: a
+            });
+          }
           ctx.persistItemWithinTransaction(itemData);
           if (agenticEnabled) {
             ctx.upsertAgenticRun.run({
