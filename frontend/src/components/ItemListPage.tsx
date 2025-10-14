@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { GoContainer } from 'react-icons/go';
+import { GoContainer, GoSearch } from 'react-icons/go';
 import type { Item } from '../../../models';
 import BulkItemActionBar from './BulkItemActionBar';
 import ItemList from './ItemList';
@@ -158,7 +158,7 @@ export default function ItemListPage() {
       <h2>Alle Artikel</h2>
       <div className="filter-bar">
         <label className="search-control">
-          <span>Suche</span>
+          <GoSearch />
           <input
             aria-label="Artikel suchen"
             onChange={(event) => setSearchTerm(event.target.value)}
@@ -167,7 +167,7 @@ export default function ItemListPage() {
             value={searchTerm}
           />
         </label>
-        <label className="sort-control">
+        {/* <label className="sort-control">
           <span>Sortieren nach</span>
           <select
             aria-label="Sortierkriterium wählen"
@@ -178,7 +178,7 @@ export default function ItemListPage() {
             <option value="artikelnummer">Artikelnummer</option>
             <option value="box">Behälter</option>
           </select>
-        </label>
+        </label> */}
         <label className="sort-direction-control">
           <span>Reihenfolge</span>
           <select
@@ -197,8 +197,7 @@ export default function ItemListPage() {
             onChange={(event) => setShowUnplaced(event.target.checked)}
             type="checkbox"
           />
-          <span>Nur unplatzierte Artikel</span>
-          <GoContainer />
+          <span>unplatziert</span>
         </label>
       </div>
       {error ? (

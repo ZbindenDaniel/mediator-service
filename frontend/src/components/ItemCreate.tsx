@@ -402,7 +402,7 @@ export default function ItemCreate() {
         hasAgenticMaterialNumber
       });
 
-      let mergedManualDraft: Partial<ItemFormData> | null = null;
+      let mergedManualDraft: Partial<ItemFormData> | undefined;
 
       try {
         setManualDraft((previousManualDraft) => {

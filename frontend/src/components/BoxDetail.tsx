@@ -284,7 +284,6 @@ export default function BoxDetail({ boxId }: Props) {
                   </div>
                 </form>
               </div>
-            </div>
 
             <div className="card">
               <h3>Artikel</h3>
