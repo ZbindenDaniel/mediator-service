@@ -730,87 +730,89 @@ button:focus {
 
 .bulk-item-action-bar {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 12px;
-    padding: 12px 16px;
-    align-items: center;
-    border-radius: var(--radius);
-    border: 1px solid var(--line);
-    background: var(--card);
 }
 
 .bulk-item-action-bar__summary {
-    flex: 1 1 200px;
     display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.bulk-item-action-bar__actions {
-    flex: 2 1 320px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
+.bulk-item-action-bar__field {
+    width: 100%;
+}
+
 .bulk-item-action-bar__target {
-    flex: 1 1 240px;
+    flex: 1 1 auto;
+    width: 100%;
 }
 
 .bulk-item-action-bar__target-input {
-    min-width: 180px;
+    min-width: 200px;
 }
 
 .bulk-item-action-bar__buttons {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
-.bulk-item-action-bar__icon-button {
-    width: 44px;
-    height: 44px;
+.bulk-item-action-bar__button {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    border-radius: 999px;
+    gap: 6px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
     border: 1px solid var(--line);
     background: #f6f7f9;
     color: inherit;
-    transition: transform 0.15s ease, background 0.15s ease;
+    font-weight: 600;
+    transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.bulk-item-action-bar__icon-button:hover {
+.bulk-item-action-bar__button:hover {
     background: #eef1f5;
     transform: translateY(-1px);
 }
 
-.bulk-item-action-bar__icon-button:disabled {
+.bulk-item-action-bar__button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
 }
 
-.bulk-item-action-bar__icon-button--primary {
+.bulk-item-action-bar__button--primary {
     background: var(--acc);
-    color: #fff;
     border-color: var(--acc);
-}
-
-
-.bulk-item-action-bar__icon-button--primary:hover {
-    filter: brightness(0.95);
-}
-
-.bulk-item-action-bar__icon-button--danger {
-    background: #c5221f;
     color: #fff;
-    border-color: #c5221f;
 }
 
-.bulk-item-action-bar__icon-button--danger:hover {
+.bulk-item-action-bar__button--primary:hover {
     filter: brightness(0.95);
+}
+
+.bulk-item-action-bar__button--danger {
+    background: #c5221f;
+    border-color: #c5221f;
+    color: #fff;
+}
+
+.bulk-item-action-bar__button--danger:hover {
+    filter: brightness(0.95);
+}
+
+.bulk-item-action-bar__button--ghost {
+    background: transparent;
+    border-color: transparent;
+}
+
+.bulk-item-action-bar__button--ghost:hover {
+    background: #eef1f5;
+    border-color: var(--line);
 }
 
 .bulk-item-action-bar__confirm-content {
