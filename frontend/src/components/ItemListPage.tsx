@@ -215,7 +215,6 @@ export default function ItemListPage() {
           selectedIds={Array.from(selectedIds)}
         />
       ) : null}
-      {/* TODO: Replace manual confirm dialogs in bulk actions with shared dialog service when available. */}
       <ItemList
         allVisibleSelected={allVisibleSelected}
         items={filtered}

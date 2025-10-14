@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GoLinkExternal } from 'react-icons/go';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
-import { ensureUser } from '../lib/user';
-import { dialogService } from './dialog';
+import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 
 interface Props {
   itemId: string;
@@ -19,17 +18,8 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
 
   async function handleRelocateSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const actor = await ensureUser();
+    const actor = await ensureActorOrAlert({ context: 'relocate item submit' });
     if (!actor) {
-      console.info('Relocate item aborted: missing username.');
-      try {
-        await dialogService.alert({
-          title: 'Aktion nicht möglich',
-          message: 'Bitte zuerst oben den Benutzer setzen.'
-        });
-      } catch (error) {
-        console.error('Failed to display missing user alert for item relocation', error);
-      }
       return;
     }
 
@@ -91,49 +81,25 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
   }
 
   async function handleCreateBox(): Promise<string | void> {
-    const actor = await ensureUser();
+    const actor = await ensureActorOrAlert({ context: 'relocate item create box' });
     if (!actor) {
-      console.info('Create box aborted: missing username.');
-      try {
-        await dialogService.alert({
-          title: 'Aktion nicht möglich',
-          message: 'Bitte zuerst oben den Benutzer setzen.'
-        });
-      } catch (error) {
-        console.error('Failed to display missing user alert for box creation', error);
-      }
       return;
     }
 
-    try {
-      const response = await fetch('/api/boxes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data.id) {
-        setBoxId(data.id);
-        setSelectedSuggestion({ BoxID: data.id });
-        setStatus('Behälter erstellt. Bitte platzieren!');
-        setBoxLink(`/boxes/${encodeURIComponent(data.id)}`);
-        console.info('Create box succeeded', {
-          status: response.status,
-          boxId: data.id
-        });
-        return data.id;
-      }
+    const result = await createBoxForRelocation({
+      actor,
+      context: 'relocate item create box'
+    });
 
-      const errorMessage = 'Fehler: ' + (data.error || response.status);
-      setStatus(errorMessage);
-      console.warn('Create box failed', {
-        status: response.status,
-        error: data.error ?? data
-      });
-    } catch (error) {
-      console.error('Create box request failed', error);
-      setStatus('Behälter anlegen fehlgeschlagen');
+    if (result.ok && result.boxId) {
+      setBoxId(result.boxId);
+      setSelectedSuggestion({ BoxID: result.boxId });
+      setStatus('Behälter erstellt. Bitte platzieren!');
+      setBoxLink(`/boxes/${encodeURIComponent(result.boxId)}`);
+      return result.boxId;
     }
+
+    setStatus(result.message ?? 'Behälter anlegen fehlgeschlagen');
     return undefined;
   }
 
