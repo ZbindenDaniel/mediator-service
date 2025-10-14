@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { GoArrowRight, GoTrash } from 'react-icons/go';
+import { GoArrowRight, GoTrash, GoXCircle } from 'react-icons/go';
+import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
+import { dialogService } from './dialog';
 import { ensureUser } from '../lib/user';
 
 interface BulkItemActionBarProps {
@@ -36,6 +38,7 @@ export default function BulkItemActionBar({
   resolveActor
 }: BulkItemActionBarProps) {
   const [targetBoxId, setTargetBoxId] = useState('');
+  const [selectedBoxSuggestion, setSelectedBoxSuggestion] = useState<BoxSuggestion | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const effectiveResolveActor = resolveActor ?? ensureUser;
@@ -69,8 +72,45 @@ export default function BulkItemActionBar({
       setError('Keine Artikel für die Aktion ausgewählt.');
       return;
     }
-    if (!window.confirm(`Sollen ${selectionLabel} in den Behälter ${trimmedTarget} verschoben werden?`)) {
-      console.info('Bulk move cancelled by user.');
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Artikel verschieben',
+        message: (
+          <div className="bulk-item-action-bar__confirm-content">
+            <p>Möchten Sie die Auswahl verschieben?</p>
+            <ul>
+              <li>{selectionLabel}</li>
+              <li>
+                Zielbehälter: <strong>{trimmedTarget}</strong>
+                {selectedBoxSuggestion?.Location ? (
+                  <span className="muted"> ({selectedBoxSuggestion.Location})</span>
+                ) : null}
+              </li>
+            </ul>
+          </div>
+        ),
+        confirmLabel: 'Verschieben',
+        cancelLabel: 'Abbrechen'
+      });
+      console.info('Bulk move confirmation resolved', {
+        confirmed,
+        toBoxId: trimmedTarget,
+        selectionCount: selectedCount,
+        selectedSuggestion: selectedBoxSuggestion
+      });
+    } catch (dialogError) {
+      console.error('Bulk move confirmation dialog failed', dialogError);
+      setError('Bestätigung fehlgeschlagen. Bitte erneut versuchen.');
+      return;
+    }
+
+    if (!confirmed) {
+      console.info('Bulk move cancelled via dialog', {
+        toBoxId: trimmedTarget,
+        selectionCount: selectedCount
+      });
       return;
     }
 
@@ -82,7 +122,11 @@ export default function BulkItemActionBar({
         setError('Aktion abgebrochen: Es wurde kein Benutzername angegeben.');
         return;
       }
-      console.log('bulk move requested', { count: selectedCount, toBoxId: trimmedTarget });
+      console.log('bulk move requested', {
+        count: selectedCount,
+        toBoxId: trimmedTarget,
+        selectedSuggestion: selectedBoxSuggestion
+      });
       const response = await fetch('/api/items/bulk/move', {
         method: 'POST',
         headers: {
@@ -97,11 +141,19 @@ export default function BulkItemActionBar({
       });
       if (!response.ok) {
         const message = await readErrorMessage(response);
-        console.error('Bulk move failed', { status: response.status, message });
+        console.error('Bulk move failed', {
+          status: response.status,
+          message,
+          toBoxId: trimmedTarget
+        });
         setError(message);
         return;
       }
-      console.log('Bulk move completed', { count: selectedCount, toBoxId: trimmedTarget });
+      console.log('Bulk move completed', {
+        count: selectedCount,
+        toBoxId: trimmedTarget,
+        selectedSuggestion: selectedBoxSuggestion
+      });
       await handleAfterSuccess();
     } catch (err) {
       console.error('Bulk move request failed', err);
@@ -116,10 +168,38 @@ export default function BulkItemActionBar({
       setError('Keine Artikel für die Aktion ausgewählt.');
       return;
     }
-    if (!window.confirm(`Soll der Bestand für ${selectionLabel} entfernt werden?`)) {
-      console.info('Bulk delete cancelled by user.');
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Bestand entfernen',
+        message: (
+          <div className="bulk-item-action-bar__confirm-content">
+            <p>Soll der Bestand entfernt werden?</p>
+            <p>{selectionLabel}</p>
+          </div>
+        ),
+        confirmLabel: 'Entfernen',
+        cancelLabel: 'Abbrechen'
+      });
+      console.info('Bulk delete confirmation resolved', {
+        confirmed,
+        selectionCount: selectedCount,
+        selectedSuggestion: selectedBoxSuggestion
+      });
+    } catch (dialogError) {
+      console.error('Bulk delete confirmation dialog failed', dialogError);
+      setError('Bestätigung fehlgeschlagen. Bitte erneut versuchen.');
       return;
     }
+
+    if (!confirmed) {
+      console.info('Bulk delete cancelled via dialog', {
+        selectionCount: selectedCount
+      });
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
     try {
@@ -128,7 +208,10 @@ export default function BulkItemActionBar({
         setError('Aktion abgebrochen: Es wurde kein Benutzername angegeben.');
         return;
       }
-      console.log('bulk delete requested', { count: selectedCount });
+      console.log('bulk delete requested', {
+        count: selectedCount,
+        selectedSuggestion: selectedBoxSuggestion
+      });
       const response = await fetch('/api/items/bulk/delete', {
         method: 'POST',
         headers: {
@@ -142,11 +225,17 @@ export default function BulkItemActionBar({
       });
       if (!response.ok) {
         const message = await readErrorMessage(response);
-        console.error('Bulk delete failed', { status: response.status, message });
+        console.error('Bulk delete failed', {
+          status: response.status,
+          message
+        });
         setError(message);
         return;
       }
-      console.log('Bulk delete completed', { count: selectedCount });
+      console.log('Bulk delete completed', {
+        count: selectedCount,
+        selectedSuggestion: selectedBoxSuggestion
+      });
       await handleAfterSuccess();
     } catch (err) {
       console.error('Bulk delete request failed', err);
@@ -163,50 +252,55 @@ export default function BulkItemActionBar({
         {isProcessing ? <span className="muted"> Verarbeitung…</span> : null}
       </div>
       <div className="bulk-item-action-bar__actions">
-        <label className="bulk-item-action-bar__target">
-          <span>Ziel-Box</span>
-          <input
-            aria-label="Ziel-Box-ID"
-            disabled={isProcessing}
-            onChange={(event) => setTargetBoxId(event.target.value)}
-            placeholder="Box-ID für Verschiebung"
-            type="text"
-            value={targetBoxId}
-          />
-        </label>
-        <button
-          className="btn btn-primary"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => { void handleBulkMove(); }}
-          type="button"
-        >
-          <GoArrowRight aria-hidden="true" />
-          <span>Verschieben</span>
-        </button>
-        <button
-          className="btn btn-danger"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => { void handleBulkDelete(); }}
-          type="button"
-        >
-          <GoTrash aria-hidden="true" />
-          <span>Bestand entfernen</span>
-        </button>
-        <button
-          className="btn"
+        <BoxSearchInput
+          value={targetBoxId}
+          onValueChange={setTargetBoxId}
+          onSuggestionSelected={setSelectedBoxSuggestion}
+          placeholder="Box-ID für Verschiebung"
+          label="Ziel-Box"
           disabled={isProcessing}
-          onClick={onClearSelection}
-          type="button"
-        >
-          Auswahl aufheben
-        </button>
+          allowCreate={false}
+          className="bulk-item-action-bar__target"
+          inputClassName="bulk-item-action-bar__target-input"
+        />
+        <div className="bulk-item-action-bar__buttons">
+          <button
+            className="bulk-item-action-bar__icon-button bulk-item-action-bar__icon-button--primary"
+            disabled={isProcessing || !hasSelection}
+            onClick={() => { void handleBulkMove(); }}
+            type="button"
+            title="Ausgewählte Artikel verschieben"
+            aria-label="Ausgewählte Artikel verschieben"
+          >
+            <GoArrowRight aria-hidden="true" />
+          </button>
+          <button
+            className="bulk-item-action-bar__icon-button bulk-item-action-bar__icon-button--danger"
+            disabled={isProcessing || !hasSelection}
+            onClick={() => { void handleBulkDelete(); }}
+            type="button"
+            title="Bestand für Auswahl entfernen"
+            aria-label="Bestand für Auswahl entfernen"
+          >
+            <GoTrash aria-hidden="true" />
+          </button>
+          <button
+            className="bulk-item-action-bar__icon-button"
+            disabled={isProcessing}
+            onClick={onClearSelection}
+            type="button"
+            title="Auswahl aufheben"
+            aria-label="Auswahl aufheben"
+          >
+            <GoXCircle aria-hidden="true" />
+          </button>
+        </div>
       </div>
       {error ? (
         <div aria-live="assertive" className="alert alert-error" role="alert">
           {error}
         </div>
       ) : null}
-      {/* TODO: Replace window.confirm usage with shared dialog service for consistent UX. */}
     </div>
   );
 }
