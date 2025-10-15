@@ -8,7 +8,8 @@
     "bundle": "node frontend/bundle.js",
     "prestart": "npm run build",
     "start": "node dist/backend/server.js",
-    "test": "npm run prebuild && node scripts/run-tests.js"
+    "test": "npm run prebuild && node scripts/run-tests.js",
+    "smoke": "ts-node --transpile-only scripts/smoke-server.ts"
   },
   "dependencies": {
     "@types/string-similarity": "^4.0.2",

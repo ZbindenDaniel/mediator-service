@@ -1,5 +1,6 @@
 import { URL } from 'url';
 import type { IncomingMessage, ServerResponse } from 'http';
+import { PUBLIC_ORIGIN } from '../config';
 import type { Action } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -17,7 +18,7 @@ const action: Action = {
   matches: (path, method) => path === '/api/activities' && method === 'GET',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const requestUrl = new URL(req.url || '/', 'http://localhost');
+      const requestUrl = new URL(req.url || '/', PUBLIC_ORIGIN);
       const requestedLimit = requestUrl.searchParams.get('limit');
       const parsedLimit = requestedLimit ? Number(requestedLimit) : DEFAULT_LIMIT;
       const limit = Number.isFinite(parsedLimit)

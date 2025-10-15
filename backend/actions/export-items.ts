@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { PUBLIC_ORIGIN } from '../config';
 import type { Action } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -74,7 +75,7 @@ const action: Action = {
   matches: (path, method) => path === '/api/export/items' && method === 'GET',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const url = new URL(req.url || '', 'http://localhost');
+      const url = new URL(req.url || '', PUBLIC_ORIGIN);
       const actor = (url.searchParams.get('actor') || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const createdAfter = url.searchParams.get('createdAfter');

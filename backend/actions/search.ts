@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
+import { PUBLIC_ORIGIN } from '../config';
 import type { Action } from './index';
 
 function normalize(value: unknown): string {
@@ -136,7 +137,7 @@ const action: Action = {
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       console.log("search...");
-      const url = new URL(req.url || "", "http://localhost");
+      const url = new URL(req.url || '', PUBLIC_ORIGIN);
       const term =
         url.searchParams.get("term") ||
         url.searchParams.get("q") ||
