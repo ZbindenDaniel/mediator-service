@@ -487,6 +487,10 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
   LastModified TEXT NOT NULL DEFAULT (datetime('now')),
   ReviewState TEXT NOT NULL DEFAULT 'not_required',
   ReviewedBy TEXT,
+  RetryCount INTEGER NOT NULL DEFAULT 0,
+  NextRetryAt TEXT,
+  LastError TEXT,
+  LastAttemptAt TEXT,
   FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -497,6 +501,44 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
   } catch (err) {
     console.error('Failed to ensure agentic_runs schema', err);
     throw err;
+  }
+
+  ensureAgenticRunQueueColumns(database);
+}
+
+function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
+  let columns: Array<{ name: string }> = [];
+  try {
+    columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect agentic_runs schema for queue metadata columns', err);
+    throw err;
+  }
+
+  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
+
+  const alterations: Array<{ name: string; sql: string }> = [];
+  if (!hasColumn('RetryCount')) {
+    alterations.push({ name: 'RetryCount', sql: 'ALTER TABLE agentic_runs ADD COLUMN RetryCount INTEGER NOT NULL DEFAULT 0' });
+  }
+  if (!hasColumn('NextRetryAt')) {
+    alterations.push({ name: 'NextRetryAt', sql: "ALTER TABLE agentic_runs ADD COLUMN NextRetryAt TEXT" });
+  }
+  if (!hasColumn('LastError')) {
+    alterations.push({ name: 'LastError', sql: "ALTER TABLE agentic_runs ADD COLUMN LastError TEXT" });
+  }
+  if (!hasColumn('LastAttemptAt')) {
+    alterations.push({ name: 'LastAttemptAt', sql: "ALTER TABLE agentic_runs ADD COLUMN LastAttemptAt TEXT" });
+  }
+
+  for (const { name, sql } of alterations) {
+    try {
+      database.prepare(sql).run();
+      console.info('[db] Added missing agentic_runs column', name);
+    } catch (err) {
+      console.error('Failed to add agentic_runs column', name, err);
+      throw err;
+    }
   }
 }
 
@@ -552,11 +594,16 @@ export const upsertAgenticRun = db.prepare(
       Status=excluded.Status,
       LastModified=excluded.LastModified,
       ReviewState=excluded.ReviewState,
-      ReviewedBy=excluded.ReviewedBy
+      ReviewedBy=excluded.ReviewedBy,
+      RetryCount=CASE WHEN excluded.Status = 'queued' THEN 0 ELSE agentic_runs.RetryCount END,
+      NextRetryAt=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.NextRetryAt END,
+      LastError=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.LastError END,
+      LastAttemptAt=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.LastAttemptAt END
   `
 );
 export const getAgenticRun = db.prepare(`
-  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy
+  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+         RetryCount, NextRetryAt, LastError, LastAttemptAt
   FROM agentic_runs
   WHERE ItemUUID = ?
 `);
@@ -571,6 +618,66 @@ export const updateAgenticRunStatus = db.prepare(
      WHERE ItemUUID=@ItemUUID
   `
 );
+
+const selectQueuedAgenticRuns = db.prepare(`
+  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+         RetryCount, NextRetryAt, LastError, LastAttemptAt
+  FROM agentic_runs
+  WHERE Status = 'queued'
+    AND (NextRetryAt IS NULL OR datetime(NextRetryAt) <= datetime('now'))
+  ORDER BY datetime(LastModified) ASC, Id ASC
+  LIMIT @limit
+`);
+
+const updateQueuedAgenticRunQueueStatement = db.prepare(`
+  UPDATE agentic_runs
+     SET Status = COALESCE(@Status, Status),
+         LastModified = @LastModified,
+         RetryCount = @RetryCount,
+         NextRetryAt = @NextRetryAt,
+         LastError = @LastError,
+         LastAttemptAt = @LastAttemptAt
+   WHERE ItemUUID = @ItemUUID
+`);
+
+export type AgenticRunQueueUpdate = {
+  ItemUUID: string;
+  Status?: string | null;
+  LastModified: string;
+  RetryCount: number;
+  NextRetryAt: string | null;
+  LastError: string | null;
+  LastAttemptAt: string;
+};
+
+export function fetchQueuedAgenticRuns(limit = 5): AgenticRun[] {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
+  try {
+    return selectQueuedAgenticRuns.all({ limit: effectiveLimit }) as AgenticRun[];
+  } catch (err) {
+    console.error('[db] Failed to fetch queued agentic runs', err);
+    throw err;
+  }
+}
+
+export function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate): void {
+  const payload = {
+    ...update,
+    Status: update.Status ?? null,
+    NextRetryAt: update.NextRetryAt ?? null,
+    LastError: update.LastError ?? null
+  };
+
+  try {
+    const result = updateQueuedAgenticRunQueueStatement.run(payload);
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Agentic run queue update had no effect', { itemUUID: update.ItemUUID });
+    }
+  } catch (err) {
+    console.error('[db] Failed to update queued agentic run state', { itemUUID: update.ItemUUID, error: err });
+    throw err;
+  }
+}
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
 
@@ -792,5 +899,5 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY i.Datum_erfasst
 `);
 
-export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
+export type { AgenticRun, AgenticRunQueueUpdate, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
 
