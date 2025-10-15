@@ -1,0 +1,41 @@
+version: '3.9'
+
+services:
+  mediator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediator
+    ports:
+      - "8080:8080"
+      # Uncomment the following line to expose the optional HTTPS listener once TLS_CERT_PATH/TLS_KEY_PATH are configured.
+      # - "8443:8443"
+    environment:
+      # Storage locations for persistent state.
+      DB_PATH: /var/lib/mediator/mediator.sqlite
+      INBOX_DIR: /var/lib/mediator/inbox
+      ARCHIVE_DIR: /var/lib/mediator/archive
+      # Set to the externally reachable hostname or IP for generated links.
+      PUBLIC_HOSTNAME: localhost
+      # Additional environment variables may be supplied here to override defaults from backend/config.ts,
+      # such as HTTP_PORT, HTTPS_PORT, PUBLIC_PORT, PUBLIC_ORIGIN, BASE_QR_URL, BASE_UI_URL, PUBLIC_PROTOCOL, etc.
+      # Operators can also override the agent integration endpoint by setting AGENTIC_API_BASE.
+      # Configure printing by setting PRINTER_HOST and PRINTER_PORT as needed for the deployment.
+      # Provide AGENTIC_SHARED_SECRET or other secrets through an env_file or external secrets manager.
+    volumes:
+      # Persist the mediator application state and inbox/archive content.
+      - mediator-data:/var/lib/mediator
+      # Persist generated media assets served by the backend.
+      - mediator-media:/app/dist/backend/media
+      # Optional: mount TLS key/cert files and set TLS_CERT_PATH/TLS_KEY_PATH when enabling HTTPS support.
+      # - ./secrets/tls/server.crt:/etc/mediator/tls/server.crt:ro
+      # - ./secrets/tls/server.key:/etc/mediator/tls/server.key:ro
+      # Optional: mount printer configuration files or device mappings if required for the target printer setup.
+      # - ./config/printers:/etc/mediator/printers:ro
+    restart: unless-stopped
+
+volumes:
+  mediator-data:
+    name: mediator-data
+  mediator-media:
+    name: mediator-media
