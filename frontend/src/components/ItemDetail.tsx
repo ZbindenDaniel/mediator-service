@@ -148,7 +148,7 @@ export function AgenticStatusCard({
       {error ? (
         <p className="muted" style={{ color: '#a30000' }}>{error}</p>
       ) : null}
-      {status.label != 'Abgebrochen' ? (
+      {!status.isTerminal && isInProgress ? (
         <div className='row'>
           <button type="button" className="btn" onClick={onCancel}>
             Abbrechen
@@ -369,13 +369,26 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
   };
 }
 
-function isAgenticRunInProgress(run: AgenticRun | null): boolean {
+export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
   if (!run) {
     return false;
   }
 
   const normalizedStatus = (run.Status || '').trim().toLowerCase();
   const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
+
+  if (normalizedReview === 'approved' || normalizedReview === 'rejected' || normalizedReview === 'not_required') {
+    return false;
+  }
+
+  if (
+    AGENTIC_SUCCESS_STATUSES.has(normalizedStatus) ||
+    AGENTIC_CANCELLED_STATUSES.has(normalizedStatus) ||
+    AGENTIC_REVIEW_APPROVED_STATUSES.has(normalizedStatus) ||
+    AGENTIC_REVIEW_REJECTED_STATUSES.has(normalizedStatus)
+  ) {
+    return false;
+  }
 
   if (
     AGENTIC_RUNNING_STATUSES.has(normalizedStatus) ||
