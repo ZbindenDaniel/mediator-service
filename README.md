@@ -19,6 +19,65 @@ POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate pay
 
 - Runtime configuration is sourced from environment variables. Create a `.env` file in the repository root to override defaults (e.g., ports or paths); the server automatically loads it on startup for both TypeScript and compiled builds.
 
+## Container deployment
+
+### Build the image
+
+```bash
+docker build -t mediator-service .
+```
+
+### Run the container
+
+Use `docker run` to launch the service with explicit environment and volume mappings:
+
+```bash
+docker run --rm \
+  -p 8080:8080 \
+  -e HTTP_PORT=8080 \
+  -e PUBLIC_HOSTNAME=mediator.local \
+  -e DB_PATH=/var/lib/mediator/mediator.sqlite \
+  -e INBOX_DIR=/var/lib/mediator/inbox \
+  -e ARCHIVE_DIR=/var/lib/mediator/archive \
+  -e AGENTIC_API_BASE=https://agentic.example/api \
+  -e TLS_CERT_PATH=/etc/mediator/tls/server.crt \
+  -e TLS_KEY_PATH=/etc/mediator/tls/server.key \
+  -v mediator-data:/var/lib/mediator \
+  -v mediator-media:/app/dist/backend/media \
+  -v /etc/mediator/tls:/etc/mediator/tls:ro \
+  mediator-service
+```
+
+The provided [`docker-compose.yml`](./docker-compose.yml) offers the same defaults and can be started with:
+
+```bash
+docker-compose up --build
+```
+
+Override values by editing the `environment` block, supplying a Compose `env_file`, or creating a repository-level `.env` file that the runtime automatically reads.
+
+### Critical runtime environment
+
+- `HTTP_PORT` – HTTP listener inside the container (default `8080`). Update published ports when changing this value.
+- `PUBLIC_HOSTNAME` – externally reachable hostname or IP embedded into generated links and QR codes.
+- `DB_PATH` – filesystem path to the SQLite database; map it onto persistent storage so data survives container restarts.
+- `INBOX_DIR` – directory where imported CSV files are staged; persist or share this path with automation that drops new files.
+- `ARCHIVE_DIR` – directory that receives processed CSV files; persist alongside the inbox for auditing.
+- `AGENTIC_API_BASE` – base URL for the external agent integration; expose the network so the container can reach the service.
+- `TLS_CERT_PATH` / `TLS_KEY_PATH` – PEM-encoded certificate and key that enable the optional HTTPS listener when both are present.
+
+### Recommended volumes
+
+- SQLite database and CSV state: mount a host path or Docker volume at `/var/lib/mediator` (or the directories referenced by `DB_PATH`, `INBOX_DIR`, and `ARCHIVE_DIR`).
+- Media assets: mount persistent storage at `/app/dist/backend/media` to retain uploaded files and generated label PDFs.
+- TLS material: mount certificate and key files read-only at the paths supplied via `TLS_CERT_PATH` and `TLS_KEY_PATH`.
+
+### Optional dependencies
+
+- **Printing:** The runtime image includes `cups-client` so the `lp` command is available. Provide printer access by configuring `PRINTER_HOST`/`PRINTER_PORT` and ensuring the container can reach the target CUPS server or USB-forwarded device. Mount any additional printer profiles under a directory of your choice and reference it in the Compose file if needed.
+- **TLS certificates:** Mount certificate and key files (see volume recommendations above) and set `TLS_CERT_PATH`/`TLS_KEY_PATH` to their in-container locations.
+- **Additional automation:** Any process that feeds the inbox or consumes exports should use bind mounts or shared volumes pointed at `INBOX_DIR`, `ARCHIVE_DIR`, and the media directory.
+
 ### TLS and public URL configuration
 
 - `PUBLIC_HOSTNAME` controls the hostname used in generated URLs and log messages. It defaults to the historical `192.168.10.196` value when not provided.
