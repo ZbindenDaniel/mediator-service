@@ -273,7 +273,7 @@ if (agenticServiceEnabled) {
     void runAgenticQueueWorker();
   }, AGENTIC_QUEUE_WORKER_INTERVAL_MS);
 }
-async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<any> {
   try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     if (!req.url) {
