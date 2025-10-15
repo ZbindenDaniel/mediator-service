@@ -691,19 +691,34 @@ export default function ItemCreate() {
 
       triggerAgenticRun(agenticPayload, context);
 
+      const successMessage =
+        normalizedBoxId && createdItem?.BoxID
+          ? `Artikel wurde erfasst und dem Behälter ${createdItem.BoxID} zugeordnet.`
+          : 'Artikel wurde erfasst und ist noch keinem Behälter zugeordnet. Bitte platzieren!';
+
+      let shouldNavigateToCreatedItem = Boolean(createdItem?.ItemUUID);
       try {
-        await dialog.alert({
+        const goToCreatedItem = await dialog.confirm({
           title: 'Artikel erstellt',
-          message:
-            normalizedBoxId && createdItem?.BoxID
-              ? `Artikel wurde erfasst und dem Behälter ${createdItem.BoxID} zugeordnet.`
-              : 'Artikel wurde erfasst und ist noch keinem Behälter zugeordnet. Bitte platzieren!'
+          message: successMessage,
+          confirmLabel: 'Zum Artikel',
+          cancelLabel: 'Weiter erfassen'
         });
+        if (goToCreatedItem) {
+          shouldNavigateToCreatedItem = Boolean(createdItem?.ItemUUID);
+        } else {
+          shouldNavigateToCreatedItem = false;
+          console.log('Resetting item creation form for additional entry after success dialog choice.');
+          setCreationStep('basicInfo');
+          setDraft(() => ({}));
+          setBasicInfo(() => ({}));
+          setManualDraft(() => ({}));
+        }
       } catch (error) {
         console.error('Failed to display item creation success dialog', error);
       }
       // TODO: Replace imperative navigation with centralized success handling once notification system lands.
-      if (createdItem?.ItemUUID) {
+      if (shouldNavigateToCreatedItem && createdItem?.ItemUUID) {
         console.log('Navigating to created item detail', { itemId: createdItem.ItemUUID });
         navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}`);
       }
