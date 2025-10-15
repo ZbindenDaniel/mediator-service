@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GoLinkExternal, GoMoveToEnd, GoPackageDependents } from 'react-icons/go';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
-import { ensureUser } from '../lib/user';
+import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { dialogService } from './dialog';
 
 interface Props {
@@ -71,20 +71,10 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
       setBoxLink('');
     }
   }
-
-  async function handleRelocateSubmit(event?: React.FormEvent<HTMLFormElement>, destinationOverride?: string) {
-    event?.preventDefault();
-    const actor = await ensureUser();
+  async function handleRelocateSubmit(event: React.FormEvent<HTMLFormElement>, destinationOverride?: string) {
+    event.preventDefault();
+    const actor = await ensureActorOrAlert({ context: 'relocate item submit' });
     if (!actor) {
-      console.info('Relocate item aborted: missing username.');
-      try {
-        await dialogService.alert({
-          title: 'Aktion nicht möglich',
-          message: 'Bitte zuerst oben den Benutzer setzen.'
-        });
-      } catch (error) {
-        console.error('Failed to display missing user alert for item relocation', error);
-      }
       return;
     }
 
@@ -141,12 +131,35 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     return undefined;
   }
 
+  async function handleCreateBox(): Promise<string | void> {
+    const actor = await ensureActorOrAlert({ context: 'relocate item create box' });
+    if (!actor) {
+      return;
+    }
+
+    const result = await createBoxForRelocation({
+      actor,
+      context: 'relocate item create box'
+    });
+
+    if (result.ok && result.boxId) {
+      setBoxId(result.boxId);
+      setSelectedSuggestion({ BoxID: result.boxId });
+      setStatus('Behälter erstellt. Bitte platzieren!');
+      setBoxLink(`/boxes/${encodeURIComponent(result.boxId)}`);
+      return result.boxId;
+    }
+
+    setStatus(result.message ?? 'Behälter anlegen fehlgeschlagen');
+    return undefined;
+  }
+
   async function handleCreateBoxAndRelocate() {
     if (isSubmitting) {
       return;
     }
 
-    const actor = await ensureUser();
+    const actor = await ensureActorOrAlert({ context: 'relocate item create box' });
     if (!actor) {
       console.info('Create box and relocate aborted: missing username.');
       try {

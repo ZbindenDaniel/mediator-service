@@ -47,6 +47,7 @@ import {
   deleteItem,
   deleteBox
 } from './db';
+import { processQueuedAgenticRuns } from './agentic-queue-worker';
 import type { Item, LabelJob } from './db';
 import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
@@ -214,6 +215,33 @@ if (!agenticServiceEnabled) {
   console.info(
     '[server] Agentic API base not configured; agentic processing disabled (resolved value empty after trim).'
   );
+}
+
+const AGENTIC_QUEUE_WORKER_INTERVAL_MS = 5000;
+let agenticQueueWorkerRunning = false;
+
+async function runAgenticQueueWorker(): Promise<void> {
+  if (!agenticServiceEnabled || agenticQueueWorkerRunning) {
+    return;
+  }
+
+  agenticQueueWorkerRunning = true;
+  try {
+    await processQueuedAgenticRuns({
+      agenticApiBase: resolvedAgenticApiBase,
+      logger: console
+    });
+  } catch (err) {
+    console.error('[server] Agentic queue worker crashed', err);
+  } finally {
+    agenticQueueWorkerRunning = false;
+  }
+}
+
+if (agenticServiceEnabled) {
+  setInterval(() => {
+    void runAgenticQueueWorker();
+  }, AGENTIC_QUEUE_WORKER_INTERVAL_MS);
 }
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
