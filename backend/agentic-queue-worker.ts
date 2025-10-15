@@ -132,9 +132,8 @@ export async function processQueuedAgenticRuns(options: AgenticQueueWorkerOption
     try {
       const result = await forward(payload, {
         context: 'agentic-queue-worker',
-        agenticApiBase: options.agenticApiBase,
-        logger
-      });
+        agenticApiBase: options.agenticApiBase
+            });
 
       if (result.ok) {
         const completionTime = options.now?.() ?? new Date();

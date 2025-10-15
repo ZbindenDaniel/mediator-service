@@ -899,5 +899,5 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY i.Datum_erfasst
 `);
 
-export type { AgenticRun, AgenticRunQueueUpdate, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
+export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
 
