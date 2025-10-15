@@ -1,0 +1,23 @@
+# Node dependencies
+node_modules
+
+# Build outputs
+.dist
+build
+coverage
+dist
+
+# Logs and temp files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store
+.cache
+.tmp
+.DS_Store
+
+# Git and editor files
+.git
+.gitignore
+.vscode
+.idea
