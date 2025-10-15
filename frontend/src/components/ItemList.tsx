@@ -56,7 +56,7 @@ export default function ItemList({
                 type="checkbox"
               />
             </th>
-            <th className="col-number">Artikelnummer</th>
+            <th className="col-number">Artikel-nummer</th>
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>

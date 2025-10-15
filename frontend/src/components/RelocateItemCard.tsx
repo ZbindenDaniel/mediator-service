@@ -218,14 +218,14 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
           />
         </div>
         <div className="row">
-          <div className="row status-row">
+          <div className="button-group">
             <button
               type="submit"
               className="icon-button"
               disabled={isSubmitting || !boxId.trim()}
               title="Artikel in den ausgewählten Behälter verschieben"
             >
-              <GoMoveToEnd aria-hidden="true" />
+              {/* <GoMoveToEnd aria-hidden="true" /> */}
               <span>Verschieben</span>
             </button>
             <button
@@ -237,7 +237,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
               disabled={isSubmitting}
               title="Neuen Behälter erstellen und Artikel sofort verschieben"
             >
-              <GoPackageDependents aria-hidden="true" />
+              {/* <GoPackageDependents aria-hidden="true" /> */}
               <span>In neuen Behälter verschieben</span>
             </button>
           </div>

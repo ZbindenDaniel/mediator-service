@@ -921,7 +921,7 @@ export default function ItemCreate() {
         <ItemForm_Agentic
           draft={baseDraft}
           onSubmitPhotos={handleAgenticPhotos}
-          submitLabel="Speichern"
+          submitLabel="Speichern & Ki Vervollständigung"
           isNew
           onFallbackToManual={handleAgenticFallback}
         />

@@ -157,8 +157,10 @@ export default function ItemListPage() {
     <div className="list-container item">
       <h2>Alle Artikel</h2>
       <div className="filter-bar">
-        <label className="search-control">
-          <GoSearch />
+        <div className='row'>
+          <label className="search-control">
+            <GoSearch />
+          </label>
           <input
             aria-label="Artikel suchen"
             onChange={(event) => setSearchTerm(event.target.value)}
@@ -166,7 +168,7 @@ export default function ItemListPage() {
             type="search"
             value={searchTerm}
           />
-        </label>
+        </div>
         {/* <label className="sort-control">
           <span>Sortieren nach</span>
           <select
@@ -179,8 +181,10 @@ export default function ItemListPage() {
             <option value="box">Behälter</option>
           </select>
         </label> */}
-        <label className="sort-direction-control">
-          <span>Reihenfolge</span>
+        {/* <div className='row'>
+          <label className="sort-direction-control">
+            <span>Reihenfolge</span>
+          </label>
           <select
             aria-label="Sortierreihenfolge"
             onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
@@ -189,16 +193,20 @@ export default function ItemListPage() {
             <option value="asc">Aufsteigend</option>
             <option value="desc">Absteigend</option>
           </select>
-        </label>
-        <label className="unplaced-filter">
+        </div> */}
+
+        <div className='row'>
           <input
             checked={showUnplaced}
             id="unplaced"
+            name='unplaced'
             onChange={(event) => setShowUnplaced(event.target.checked)}
             type="checkbox"
           />
-          <span>unplatziert</span>
-        </label>
+          <label className="unplaced-filter" htmlFor="unplaced">
+            <span>unplatziert</span>
+          </label>
+        </div>
       </div>
       {error ? (
         <div aria-live="assertive" className="alert alert-error" role="alert">

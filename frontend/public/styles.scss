@@ -269,7 +269,7 @@ div {
         background: var(--card);
         border: 1px solid var(--line);
         border-radius: var(--radius);
-        padding: 6px 10px;
+        padding: 6px var(--pad);
         font-size: 1rem;
         min-width: 220px;
         color: var(--text);
@@ -291,6 +291,13 @@ div {
     display: flex;
     flex-direction: column;
     gap: 12px
+}
+
+.button-group {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0px;
+      gap: var(--pad);
 }
 
 .details th {
@@ -639,7 +646,7 @@ button:focus {
 .row {
     display: flex;
     grid-template-columns: 1fr auto;
-    gap: 10px;
+    gap: var(--pad);
     padding: 5px 0px;
     width: 100%;
     max-width: 460px;
@@ -765,7 +772,7 @@ button:focus {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 10px 14px;
+    padding: var(--pad) 14px;
     border-radius: var(--radius);
     border: 1px solid var(--line);
     background: #f6f7f9;
@@ -829,12 +836,12 @@ button:focus {
 .row-3 {
     display: grid;
     grid-template-columns: 1fr auto auto;
-    gap: 10px
+    gap: var(--pad)
 }
 
 .pill {
     display: inline-block;
-    padding: 3px 10px;
+    padding: 3px var(--pad);
     border-radius: 999px;
 
     &.Item {
@@ -901,7 +908,7 @@ button:focus {
     display: flex;
     gap: 16px;
     align-items: center;
-    padding: 10px var(--pad);
+    padding: var(--pad);
     max-width: var(--maxw);
     margin: 0 auto
 }
