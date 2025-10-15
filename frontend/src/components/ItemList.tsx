@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 import BoxColorTag from './BoxColorTag';
-import { GoLinkExternal } from "react-icons/go";
 
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
 
@@ -15,6 +14,15 @@ interface Props {
   someVisibleSelected: boolean;
 }
 
+function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  const interactiveSelector = 'button, input, select, textarea, label, a';
+  return Boolean(target.closest(interactiveSelector));
+}
+
 export default function ItemList({
   items,
   selectedItemIds,
@@ -25,6 +33,19 @@ export default function ItemList({
 }: Props) {
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const navigate = useNavigate();
+  const navigateToItemDetail = useCallback((itemId: string, source: 'click' | 'keyboard') => {
+    try {
+      console.info('Navigating to item detail from item list row', { itemId, source });
+      navigate(`/items/${encodeURIComponent(itemId)}`);
+    } catch (navigationError) {
+      console.error('Failed to navigate to item detail from item list row', {
+        itemId,
+        source,
+        navigationError
+      });
+    }
+  }, [navigate]);
   const headerLabel = useMemo(() => {
     if (allVisibleSelected) {
       return 'Alle sichtbaren Artikel abwählen';
@@ -60,7 +81,6 @@ export default function ItemList({
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
-            <th className="col-link"></th>
           </tr>
         </thead>
         <tbody>
@@ -74,9 +94,35 @@ export default function ItemList({
             const checkboxLabel = it.Artikelbeschreibung?.trim()
               ? `Artikel ${it.Artikelbeschreibung} auswählen`
               : `Artikel ${it.ItemUUID} auswählen`;
+            const rowLabel = it.Artikelbeschreibung?.trim()
+              ? `Details für ${it.Artikelbeschreibung} öffnen`
+              : `Details für Artikel ${it.ItemUUID} öffnen`;
 
             return (
-              <tr key={it.ItemUUID} data-item-uuid={it.ItemUUID} className="item-list-row">
+              <tr
+                key={it.ItemUUID}
+                data-item-uuid={it.ItemUUID}
+                className="item-list-row"
+                role="button"
+                tabIndex={0}
+                aria-label={rowLabel}
+                onClick={(event) => {
+                  if (shouldIgnoreInteractiveTarget(event.target)) {
+                    return;
+                  }
+                  event.preventDefault();
+                  navigateToItemDetail(it.ItemUUID, 'click');
+                }}
+                onKeyDown={(event) => {
+                  if (shouldIgnoreInteractiveTarget(event.target)) {
+                    return;
+                  }
+                  if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                    event.preventDefault();
+                    navigateToItemDetail(it.ItemUUID, 'keyboard');
+                  }
+                }}
+              >
                 <td className="col-id" style={{ display: 'none' }}>{it.ItemUUID}</td>
                 <td className="col-select">
                   <input
@@ -95,11 +141,6 @@ export default function ItemList({
                 </td>
                 <td className="col-location">
                   <BoxColorTag locationKey={locationKey} />
-                </td>
-                <td className="col-link">
-                  <Link to={`/items/${encodeURIComponent(it.ItemUUID)}`}>
-                    <GoLinkExternal />
-                  </Link>
                 </td>
               </tr>
             );
