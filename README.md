@@ -19,6 +19,14 @@ POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate pay
 
 - Runtime configuration is sourced from environment variables. Create a `.env` file in the repository root to override defaults (e.g., ports or paths); the server automatically loads it on startup for both TypeScript and compiled builds.
 
+### TLS and public URL configuration
+
+- `PUBLIC_HOSTNAME` controls the hostname used in generated URLs and log messages. It defaults to the historical `192.168.10.196` value when not provided.
+- `PUBLIC_PROTOCOL` and `PUBLIC_PORT` allow overriding the protocol/port pair that appears in generated QR codes and links. When unset the server will automatically prefer `https` whenever both `TLS_CERT_PATH` and `TLS_KEY_PATH` are supplied; otherwise it falls back to `http` on the configured `HTTP_PORT`.
+- `PUBLIC_ORIGIN` can be used to override the entire origin (protocol + hostname + port) if finer control is required. When absent the origin is derived from the protocol/host/port variables above.
+- `TLS_CERT_PATH` and `TLS_KEY_PATH` should point to PEM-encoded certificate and key files. When both are provided the server launches an HTTPS listener on `HTTPS_PORT` (default `8443`) in addition to the HTTP listener. Missing or unreadable files are logged and HTTPS is skipped.
+- `BASE_QR_URL` and `BASE_UI_URL` still accept explicit overrides, but now default to `${PUBLIC_ORIGIN}/qr` and `${PUBLIC_ORIGIN}/ui` respectively so generated QR codes and labels remain consistent with the configured public endpoint.
+
 Quick commands:
 
 ```bash
@@ -30,6 +38,9 @@ npm start
 
 # run tests (prebuild + node-based harness)
 npm test
+
+# run HTTP/HTTPS smoke checks (requires `npm run build` first)
+npm run smoke
 ```
 
 ## Testing

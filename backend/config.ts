@@ -55,15 +55,73 @@ if (!envLoaded) {
 
 // TODO: Consider enforcing schema validation for required environment variables.
 
-export const HOSTNAME = 'http://192.168.10.196';
 export const HTTP_PORT = parseInt(process.env.HTTP_PORT || '8080', 10);
 export const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data/mediator.sqlite');
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
 export const PRINTER_HOST = process.env.PRINTER_HOST || 'GeBE_USB_Printer_A8';
 export const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
-export const BASE_QR_URL = process.env.BASE_QR_URL || 'http://localhost:8080/qr';
-export const BASE_UI_URL = process.env.BASE_UI_URL || 'http://localhost:8080/ui';
 export const AGENTIC_SHARED_SECRET = process.env.AGENTIC_SHARED_SECRET || 'revampItIsSoCool!';
 export const AGENTIC_API_BASE = process.env.AGENTIC_API_BASE || 'http://localhost:3000';
+
+const DEFAULT_PUBLIC_HOSTNAME = '192.168.10.196';
+
+function parsePort(raw: string | undefined, fallback: number, label: string): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  if (raw && raw.trim()) {
+    console.warn(`[config] Invalid ${label} value "${raw}" supplied; falling back to ${fallback}.`);
+  }
+
+  return fallback;
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/u, '');
+}
+
+function formatOrigin(protocol: 'http' | 'https', host: string, port: number): string {
+  const normalizedHost = host.replace(/\/+$|^\/+/, '');
+  const needsPort = !((protocol === 'https' && port === 443) || (protocol === 'http' && port === 80));
+  return `${protocol}://${normalizedHost}${needsPort ? `:${port}` : ''}`;
+}
+
+export const TLS_CERT_PATH = (process.env.TLS_CERT_PATH || '').trim();
+export const TLS_KEY_PATH = (process.env.TLS_KEY_PATH || '').trim();
+export const HTTPS_PORT = parsePort(process.env.HTTPS_PORT, 8443, 'HTTPS_PORT');
+export const PUBLIC_HOSTNAME =
+  (process.env.PUBLIC_HOSTNAME && process.env.PUBLIC_HOSTNAME.trim()) || DEFAULT_PUBLIC_HOSTNAME;
+const protocolOverride = (process.env.PUBLIC_PROTOCOL || '').trim().toLowerCase();
+export const TLS_ENABLED = Boolean(TLS_CERT_PATH && TLS_KEY_PATH);
+export const PUBLIC_PROTOCOL =
+  protocolOverride === 'https' || protocolOverride === 'http'
+    ? (protocolOverride as 'http' | 'https')
+    : TLS_ENABLED
+    ? 'https'
+    : 'http';
+export const PUBLIC_PORT = parsePort(
+  process.env.PUBLIC_PORT,
+  PUBLIC_PROTOCOL === 'https' ? HTTPS_PORT : HTTP_PORT,
+  'PUBLIC_PORT'
+);
+
+const publicOriginOverride = stripTrailingSlash((process.env.PUBLIC_ORIGIN || '').trim());
+export const PUBLIC_ORIGIN = publicOriginOverride
+  ? publicOriginOverride
+  : stripTrailingSlash(formatOrigin(PUBLIC_PROTOCOL, PUBLIC_HOSTNAME, PUBLIC_PORT));
+
+function resolveBaseUrl(envValue: string | undefined, fallbackPath: string): string {
+  const trimmed = stripTrailingSlash((envValue || '').trim());
+  if (trimmed) {
+    return trimmed;
+  }
+  return `${PUBLIC_ORIGIN}${fallbackPath}`;
+}
+
+export const HOSTNAME = PUBLIC_ORIGIN;
+export const BASE_QR_URL = resolveBaseUrl(process.env.BASE_QR_URL, '/qr');
+export const BASE_UI_URL = resolveBaseUrl(process.env.BASE_UI_URL, '/ui');
 

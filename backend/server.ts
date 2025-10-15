@@ -2,9 +2,22 @@ import fs from 'fs';
 import path from 'path';
 import http from 'http';
 import type { IncomingMessage, ServerResponse } from 'http';
+import https from 'https';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
-import { HOSTNAME, HTTP_PORT, INBOX_DIR, ARCHIVE_DIR, AGENTIC_API_BASE } from './config';
+import {
+  HTTP_PORT,
+  INBOX_DIR,
+  ARCHIVE_DIR,
+  AGENTIC_API_BASE,
+  TLS_CERT_PATH,
+  TLS_KEY_PATH,
+  HTTPS_PORT,
+  TLS_ENABLED,
+  PUBLIC_HOSTNAME,
+  PUBLIC_PROTOCOL,
+  PUBLIC_ORIGIN
+} from './config';
 import { ingestCsvFile } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import {
@@ -54,6 +67,23 @@ import { pdfForBox, pdfForItem } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 
 const actions = loadActions();
+
+function resolveRequestBase(req: IncomingMessage): string {
+  const hostHeader = req.headers.host;
+  const forwardedProtoHeader = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+  const normalizedForwarded =
+    forwardedProtoHeader && ['http', 'https'].includes(forwardedProtoHeader.toLowerCase())
+      ? (forwardedProtoHeader.toLowerCase() as 'http' | 'https')
+      : null;
+  const socketEncrypted = Boolean((req.socket as { encrypted?: boolean }).encrypted);
+  const inferredProtocol = normalizedForwarded || (socketEncrypted ? 'https' : PUBLIC_PROTOCOL);
+
+  if (hostHeader) {
+    return `${inferredProtocol}://${hostHeader}`;
+  }
+
+  return PUBLIC_ORIGIN;
+}
 
 // public directory selection: prefer dist/public, fall back to repo frontend/public
 const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
@@ -243,12 +273,15 @@ if (agenticServiceEnabled) {
     void runAgenticQueueWorker();
   }, AGENTIC_QUEUE_WORKER_INTERVAL_MS);
 }
-export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    if (!req.url) return sendJson(res, 400, { error: 'Bad request' });
+    if (!req.url) {
+      sendJson(res, 400, { error: 'Bad request' });
+      return;
+    }
 
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    const url = new URL(req.url, resolveRequestBase(req));
     if (url.pathname === '/' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
@@ -396,14 +429,62 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     console.error('Unexpected server error', err);
     sendJson(res, 500, { error: 'Internal error' });
   }
+}
+
+export const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
+  void handleRequest(req, res);
 });
+
+function formatListenerUrl(protocol: 'http' | 'https', hostname: string, port: number): string {
+  const needsPort = !((protocol === 'http' && port === 80) || (protocol === 'https' && port === 443));
+  return `${protocol}://${hostname}${needsPort ? `:${port}` : ''}`;
+}
 
 if (process.env.NODE_ENV !== 'test') {
   try {
     server.listen(HTTP_PORT, () => {
-      console.log(`Server running at ${HOSTNAME}:${HTTP_PORT}`);
+      console.log(`[server] HTTP server listening at ${formatListenerUrl('http', PUBLIC_HOSTNAME, HTTP_PORT)}`);
     });
   } catch (err) {
-    console.error('Failed to start server', err);
+    console.error('[server] Failed to start HTTP server', err);
+  }
+
+  if (TLS_ENABLED) {
+    let key: Buffer | undefined;
+    let cert: Buffer | undefined;
+
+    try {
+      key = fs.readFileSync(TLS_KEY_PATH);
+    } catch (err) {
+      console.error(`[server] Unable to read TLS key at ${TLS_KEY_PATH}`, err);
+    }
+
+    try {
+      cert = fs.readFileSync(TLS_CERT_PATH);
+    } catch (err) {
+      console.error(`[server] Unable to read TLS certificate at ${TLS_CERT_PATH}`, err);
+    }
+
+    if (key && cert) {
+      try {
+        const httpsServer = https.createServer({ key, cert }, (req, res) => {
+          void handleRequest(req, res);
+        });
+
+        httpsServer.listen(HTTPS_PORT, () => {
+          console.log(`[server] HTTPS server listening at ${formatListenerUrl('https', PUBLIC_HOSTNAME, HTTPS_PORT)}`);
+        });
+      } catch (err) {
+        console.error('[server] Failed to start HTTPS server', err);
+      }
+    } else {
+      console.error('[server] TLS configuration detected but certificate or key could not be read; HTTPS server disabled.');
+    }
+  } else if (TLS_CERT_PATH || TLS_KEY_PATH) {
+    console.warn(
+      '[server] Partial TLS configuration detected (both TLS_CERT_PATH and TLS_KEY_PATH are required); HTTPS listener disabled.'
+    );
+  } else {
+    console.info('[server] TLS configuration not provided; HTTPS listener disabled.');
   }
 }
