@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { resolveBoxColorFromLocation } from '../data/boxColors';
+import { isUnplacedLocation, resolveBoxColorFromLocation } from '../data/boxColors';
 
 interface BoxColorTagProps {
   locationKey?: string | null;
@@ -8,9 +8,10 @@ interface BoxColorTagProps {
 }
 
 export default function BoxColorTag({ locationKey, labelOverride, className }: BoxColorTagProps) {
-  const normalizedLocation = locationKey?.trim();
+  const normalizedLocation = locationKey?.trim() ?? '';
+  const unplaced = useMemo(() => isUnplacedLocation(normalizedLocation), [normalizedLocation]);
   const colorOption = useMemo(() => {
-    if (!normalizedLocation) {
+    if (!normalizedLocation || unplaced) {
       return undefined;
     }
 
@@ -19,13 +20,13 @@ export default function BoxColorTag({ locationKey, labelOverride, className }: B
       console.warn('No color mapping found for location', { location: normalizedLocation });
     }
     return resolved;
-  }, [normalizedLocation]);
+  }, [normalizedLocation, unplaced]);
 
-  if (!normalizedLocation) {
+  if (unplaced || !colorOption) {
     return <span className={className}>(nicht gesetzt)</span>;
   }
 
-  const label = labelOverride?.trim() || colorOption?.label || normalizedLocation;
+  const label = labelOverride?.trim() || colorOption.label || normalizedLocation;
 
   return (
     <span
