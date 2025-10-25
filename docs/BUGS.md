@@ -3,9 +3,9 @@
 
 - Kategorien
 - Foto upload
-- Einheit
+- Einheit: ENUM<Stk,Mix>
 - agentic fail when creating manually
-- logs, logmessages
+- logs, logmessages besser und deutsch
 - location + number
 - checkn^box itemlist
 - QR result show no json
