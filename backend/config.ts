@@ -64,7 +64,7 @@ export const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
 export const AGENTIC_SHARED_SECRET = process.env.AGENTIC_SHARED_SECRET || 'revampItIsSoCool!';
 export const AGENTIC_API_BASE = process.env.AGENTIC_API_BASE || 'http://localhost:3000';
 
-const DEFAULT_PUBLIC_HOSTNAME = '192.168.10.196';
+const DEFAULT_PUBLIC_HOSTNAME = 'localhost';
 
 function parsePort(raw: string | undefined, fallback: number, label: string): number {
   const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
