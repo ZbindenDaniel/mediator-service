@@ -6,7 +6,9 @@ import type { Item, EventLog, AgenticRun } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_QUEUED,
-  AGENTIC_RUN_STATUS_RUNNING
+  AGENTIC_RUN_STATUS_RUNNING,
+  ItemEinheit,
+  isItemEinheit
 } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
@@ -41,6 +43,34 @@ export interface AgenticStatusDisplay {
   variant: AgenticBadgeVariant;
   needsReviewBadge: boolean;
   isTerminal: boolean;
+}
+
+const DEFAULT_DETAIL_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+
+function resolveDetailEinheit(value: unknown): ItemEinheit {
+  try {
+    if (isItemEinheit(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (isItemEinheit(trimmed)) {
+        return trimmed;
+      }
+      if (trimmed.length > 0) {
+        console.warn('ItemDetail: Invalid Einheit encountered, reverting to default.', {
+          provided: trimmed
+        });
+      }
+    } else if (value !== null && value !== undefined) {
+      console.warn('ItemDetail: Unexpected Einheit type encountered, reverting to default.', {
+        providedType: typeof value
+      });
+    }
+  } catch (error) {
+    console.error('ItemDetail: Failed to resolve Einheit value, using default.', error);
+  }
+  return DEFAULT_DETAIL_EINHEIT;
 }
 
 const AGENTIC_FAILURE_STATUSES = new Set([
@@ -603,7 +633,7 @@ export default function ItemDetail({ itemId }: Props) {
       ['Breite (mm)', item.Breite_mm ?? null],
       ['Höhe (mm)', item.Höhe_mm ?? null],
       ['Gewicht (kg)', item.Gewicht_kg ?? null],
-      ['Einheit', item.Einheit ?? null]
+      ['Einheit', resolveDetailEinheit(item.Einheit)]
     ];
   }, [events, item, resolveHauptkategorieLabel, resolveUnterkategorieLabel]);
 

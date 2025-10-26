@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import type { Item, ItemRef } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
-  AGENTIC_RUN_STATUS_RUNNING
+  AGENTIC_RUN_STATUS_RUNNING,
+  isItemEinheit
 } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
@@ -371,7 +372,31 @@ export function buildCreationParams(
   }
 
   const einheit = sanitized.Einheit;
-  if (typeof einheit !== 'string' || einheit.trim() === '') {
+  try {
+    if (isItemEinheit(einheit)) {
+      sanitized.Einheit = einheit;
+    } else if (typeof einheit === 'string') {
+      const trimmedEinheit = einheit.trim();
+      if (isItemEinheit(trimmedEinheit)) {
+        sanitized.Einheit = trimmedEinheit;
+      } else {
+        if (trimmedEinheit.length > 0) {
+          console.warn('Invalid Einheit provided during item creation; falling back to default.', {
+            provided: trimmedEinheit
+          });
+        }
+        sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
+      }
+    } else {
+      if (einheit !== undefined) {
+        console.warn('Unexpected Einheit type during item creation; falling back to default.', {
+          providedType: typeof einheit
+        });
+      }
+      sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
+    }
+  } catch (error) {
+    console.error('Failed to normalize Einheit for item creation payload; using default.', error);
     sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
   }
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AgenticRunStatus, Item, ItemRef } from '../../../../models';
+import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../../models';
 import { ensureUser, getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
@@ -14,7 +15,33 @@ export interface ItemFormData extends Item {
   agenticSearch?: string;
 }
 
-export const ITEM_FORM_DEFAULT_EINHEIT = 'Stück';
+export const ITEM_FORM_DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+
+function resolveFormEinheit(value: unknown, context: string): ItemEinheit {
+  try {
+    if (isItemEinheit(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (isItemEinheit(trimmed)) {
+        return trimmed;
+      }
+      if (trimmed.length > 0) {
+        console.warn('[itemForm] Invalid Einheit encountered, falling back to default', {
+          context,
+          provided: trimmed
+        });
+      }
+    }
+  } catch (error) {
+    console.error('[itemForm] Failed to resolve Einheit value, using default', {
+      context,
+      error
+    });
+  }
+  return ITEM_FORM_DEFAULT_EINHEIT;
+}
 
 const referenceFieldKeys: (keyof ItemRef)[] = [
   'Artikel_Nummer',
@@ -69,26 +96,33 @@ interface UseItemFormStateOptions {
 }
 
 export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({
-    Einheit: ITEM_FORM_DEFAULT_EINHEIT,
-    ...initialItem
+  const [form, setForm] = useState<Partial<ItemFormData>>(() => {
+    const initialEinheit = initialItem ? resolveFormEinheit(initialItem.Einheit, 'initialState') : ITEM_FORM_DEFAULT_EINHEIT;
+    return {
+      ...initialItem,
+      Einheit: initialEinheit
+    };
   });
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const mergeForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm((prev) => ({
-      ...prev,
-      ...next,
-      Einheit: next.Einheit ?? prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT
-    }));
+    setForm((prev) => {
+      const requestedEinheit = next.Einheit ?? prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT;
+      const normalizedEinheit = resolveFormEinheit(requestedEinheit, 'mergeForm');
+      return {
+        ...prev,
+        ...next,
+        Einheit: normalizedEinheit
+      };
+    });
   }, []);
 
   const resetForm = useCallback((next: Partial<ItemFormData>) => {
     setForm({
-      Einheit: ITEM_FORM_DEFAULT_EINHEIT,
-      ...next
+      ...next,
+      Einheit: resolveFormEinheit(next.Einheit, 'resetForm')
     });
   }, []);
 
@@ -782,10 +816,33 @@ export function ItemDetailsFields({
         <label>
           Einheit
         </label>
-        <input
+        <select
           value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
-          onChange={(e) => onUpdate('Einheit', e.target.value)}
-        />
+          onChange={(event) => {
+            try {
+              const value = event.target.value;
+              if (isItemEinheit(value)) {
+                onUpdate('Einheit', value);
+                return;
+              }
+              const trimmed = value.trim();
+              if (isItemEinheit(trimmed)) {
+                onUpdate('Einheit', trimmed);
+                return;
+              }
+              console.warn('[itemForm] Invalid Einheit selection, reverting to default', { value });
+            } catch (error) {
+              console.error('[itemForm] Failed to process Einheit selection', error);
+            }
+            onUpdate('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
+          }}
+        >
+          {ITEM_EINHEIT_VALUES.map((value) => (
+            <option key={`einheit-option-${value}`} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
       </div>
 
     </>
