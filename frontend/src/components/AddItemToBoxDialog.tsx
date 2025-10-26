@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Item } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { dialogService } from './dialog';
@@ -11,6 +11,49 @@ interface Props {
   boxId: string;
   onAdded: () => void;
   onClose: () => void;
+}
+
+export const SEARCH_PROMPT_MESSAGE = 'Gib einen Suchbegriff ein, um Artikel zu finden.';
+export const NO_RESULTS_MESSAGE = 'Keine Ergebnisse gefunden.';
+export const FILTERED_RESULTS_HIDDEN_MESSAGE =
+  'Alle gefundenen Artikel sind bereits einem Behälter zugeordnet. Filter deaktivieren, um sie anzuzeigen.';
+
+export function filterSearchResults(items: Item[], hidePlaced: boolean): Item[] {
+  if (!hidePlaced) {
+    return items;
+  }
+
+  return items.filter(item => !item.BoxID);
+}
+
+export interface EmptyStateOptions {
+  hasSearched: boolean;
+  totalResults: number;
+  visibleResults: number;
+  hidePlaced: boolean;
+  hiddenResultCount: number;
+}
+
+export function getEmptyStateMessage({
+  hasSearched,
+  totalResults,
+  visibleResults,
+  hidePlaced,
+  hiddenResultCount
+}: EmptyStateOptions): string {
+  if (!hasSearched) {
+    return SEARCH_PROMPT_MESSAGE;
+  }
+
+  if (visibleResults > 0) {
+    return '';
+  }
+
+  if (hidePlaced && totalResults > 0 && hiddenResultCount === totalResults) {
+    return FILTERED_RESULTS_HIDDEN_MESSAGE;
+  }
+
+  return NO_RESULTS_MESSAGE;
 }
 
 export async function confirmItemRelocationIfNecessary(item: Item, targetBoxId: string) {
@@ -30,6 +73,22 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Item[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  // TODO: Persist filter preferences for the add-item dialog per user session to reduce repetitive toggling.
+  const [hidePlaced, setHidePlaced] = useState(true);
+
+  const filteredResults = useMemo(() => filterSearchResults(results, hidePlaced), [results, hidePlaced]);
+  const hiddenResultCount = hidePlaced ? results.length - filteredResults.length : 0;
+  const emptyStateMessage = useMemo(
+    () =>
+      getEmptyStateMessage({
+        hasSearched,
+        totalResults: results.length,
+        visibleResults: filteredResults.length,
+        hidePlaced,
+        hiddenResultCount
+      }),
+    [filteredResults.length, hasSearched, hidePlaced, hiddenResultCount, results.length]
+  );
 
   const handleDismiss = useCallback(() => {
     try {
@@ -53,6 +112,32 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
     };
   }, [handleDismiss]);
 
+  useEffect(() => {
+    if (!hasSearched) {
+      return;
+    }
+
+    console.log(
+      'AddItemToBoxDialog: displaying search results',
+      {
+        visible: filteredResults.length,
+        total: results.length,
+        hidePlaced,
+        hidden: hiddenResultCount
+      }
+    );
+  }, [filteredResults.length, hasSearched, hidePlaced, hiddenResultCount, results.length]);
+
+  const handleHidePlacedChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const { checked } = event.target;
+      console.log('AddItemToBoxDialog: hide placed items toggled', { hidePlaced: checked });
+      setHidePlaced(checked);
+    } catch (error) {
+      console.error('Failed to toggle hide placed items filter', error);
+    }
+  }, []);
+
   async function runSearch() {
     const term = query.trim();
     setResults([]);
@@ -69,7 +154,9 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
         return;
       }
       const data = await r.json();
-      setResults((data.items || []) as Item[]);
+      const items = (data.items || []) as Item[];
+      console.log('AddItemToBoxDialog: raw search results received', { total: items.length });
+      setResults(items);
     } catch (err) {
       console.error('search failed', err);
     }
@@ -133,6 +220,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
               }
             }}
             autoFocus
+            aria-label="Artikel suchen"
           />
           <button
             className="btn"
@@ -143,9 +231,20 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
             <GoSearch />
           </button>
         </div>
+        <div className="add-item-dialog__filters">
+          <label htmlFor="hide-placed-items-toggle" className="add-item-dialog__filter-option">
+            <input
+              id="hide-placed-items-toggle"
+              type="checkbox"
+              checked={hidePlaced}
+              onChange={handleHidePlacedChange}
+            />
+            Bereits zugeordnete Artikel ausblenden
+          </label>
+        </div>
         <div className="add-item-dialog__results" role="list">
-          {results.length > 0 ? (
-            results.map(it => (
+          {filteredResults.length > 0 ? (
+            filteredResults.map(it => (
               <div key={it.ItemUUID} className="add-item-dialog__result card" role="listitem">
                 <div className="add-item-dialog__result-heading">
                   <strong>{it.Artikel_Nummer || it.ItemUUID}</strong>
@@ -156,7 +255,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
             ))
           ) : (
             <p className="add-item-dialog__empty muted">
-              {hasSearched ? 'Keine Ergebnisse gefunden.' : 'Gib einen Suchbegriff ein, um Artikel zu finden.'}
+              {emptyStateMessage || NO_RESULTS_MESSAGE}
             </p>
           )}
         </div>
