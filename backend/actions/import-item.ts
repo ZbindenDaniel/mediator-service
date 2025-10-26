@@ -135,8 +135,13 @@ const action: Action = {
 
       const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();
       const requestedStatus = (p.get('agenticStatus') || '').trim();
-      const agenticStatus: AgenticRunStatus = resolveAgenticRunStatus(requestedStatus);
-      const agenticRunManuallySkipped = agenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
+      const manualFallbackFlag = (p.get('agenticManualFallback') || '').trim().toLowerCase();
+      const agenticManualFallback = manualFallbackFlag === 'true';
+      const resolvedAgenticStatus: AgenticRunStatus = resolveAgenticRunStatus(requestedStatus);
+      const agenticStatus: AgenticRunStatus = agenticManualFallback
+        ? AGENTIC_RUN_STATUS_NOT_STARTED
+        : resolvedAgenticStatus;
+      const agenticRunManuallySkipped = agenticManualFallback || agenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
 
       let boxLocationToPersist: string | null = normalizedLocation || null;
       let boxStandortLabelToPersist: string | null = requestedStandortLabel;
@@ -229,7 +234,8 @@ const action: Action = {
           if (manuallySkipped) {
             console.info('[import-item] Agentic run persisted as notStarted due to manual submission', {
               ItemUUID: itemData.ItemUUID,
-              Actor: a
+              Actor: a,
+              agenticManualFallback
             });
           } else {
             const agenticEventMeta = {
