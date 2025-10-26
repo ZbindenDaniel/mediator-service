@@ -26,10 +26,6 @@
           <input id="BoxID" name="BoxID" placeholder="Eine neue Box wird angelegt" readonly />
         </div>
         <div class="row">
-          <input id="uuidField" name="ItemUUID" hidden />
-        </div>
-
-        <div class="row">
           <label>Artikelnummer*</label>
           <div class="combined-input">
             <input id="Artikel_Nummer" name="Artikel_Nummer" placeholder="0012345" required />
@@ -207,6 +203,10 @@
 
       status.textContent = 'Speichern…';
       const body = new URLSearchParams(new FormData(e.target));
+      if (body.has('ItemUUID')) {
+        console.log('Removing ItemUUID from single item import payload before submission.');
+        body.delete('ItemUUID');
+      }
       const r = await fetch('/ui/api/import/item', { method: 'POST', body });
       const j = await r.json().catch(() => ({}));
       if (r.ok) {
