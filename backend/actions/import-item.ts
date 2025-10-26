@@ -171,6 +171,15 @@ const action: Action = {
           }
           ctx.persistItemWithinTransaction(itemData);
 
+          let previousAgenticRun: { Status?: string | null } | null = null;
+          try {
+            previousAgenticRun = ctx.getAgenticRun?.get
+              ? ((ctx.getAgenticRun.get(itemData.ItemUUID) as { Status?: string | null } | undefined) ?? null)
+              : null;
+          } catch (agenticLookupErr) {
+            console.error('[import-item] Failed to load existing agentic run before upsert', agenticLookupErr);
+          }
+
           const agenticRun = {
             ItemUUID: itemData.ItemUUID,
             SearchQuery: search || null,
@@ -194,13 +203,23 @@ const action: Action = {
             QueuedLocally: true,
             RemoteTriggerDispatched: Boolean(agenticEnabled)
           };
-          ctx.logEvent.run({
-            Actor: a,
-            EntityType: 'Item',
-            EntityId: itemData.ItemUUID,
-            Event: 'AgenticSearchQueued',
-            Meta: JSON.stringify(agenticEventMeta)
-          });
+          const previousStatus = (previousAgenticRun?.Status || '').toLowerCase();
+          const shouldEmitAgenticQueuedEvent = !previousAgenticRun || previousStatus !== 'queued';
+
+          if (shouldEmitAgenticQueuedEvent) {
+            ctx.logEvent.run({
+              Actor: a,
+              EntityType: 'Item',
+              EntityId: itemData.ItemUUID,
+              Event: 'AgenticSearchQueued',
+              Meta: JSON.stringify(agenticEventMeta)
+            });
+          } else {
+            console.info('[import-item] Skipping AgenticSearchQueued log for already queued run', {
+              ItemUUID: itemData.ItemUUID,
+              Actor: a
+            });
+          }
           if (!agenticEnabled) {
             console.info('[import-item] Agentic service disabled; queued agentic run locally without remote trigger', {
               ItemUUID: itemData.ItemUUID,
