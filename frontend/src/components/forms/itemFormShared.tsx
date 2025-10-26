@@ -791,9 +791,83 @@ export function ItemDetailsFields({
   );
 }
 
+export const PHOTO_INPUT_FIELDS = ['picture1', 'picture2', 'picture3'] as const;
+export type PhotoFieldKey = (typeof PHOTO_INPUT_FIELDS)[number];
+export type PhotoInputMode = 'camera' | 'file';
+
+export type PhotoInputModeState = Record<PhotoFieldKey, PhotoInputMode>;
+
+export function initializePhotoInputModes(initial?: Partial<PhotoInputModeState>): PhotoInputModeState {
+  const base: PhotoInputModeState = {
+    picture1: 'camera',
+    picture2: 'camera',
+    picture3: 'camera'
+  };
+  if (!initial) {
+    return base;
+  }
+  const resolved: PhotoInputModeState = { ...base };
+  for (const field of PHOTO_INPUT_FIELDS) {
+    const mode = initial[field];
+    if (mode === 'camera' || mode === 'file') {
+      resolved[field] = mode;
+    }
+  }
+  return resolved;
+}
+
+export function resolvePhotoCaptureAttribute(mode: PhotoInputMode): 'environment' | undefined {
+  return mode === 'camera' ? 'environment' : undefined;
+}
+
+export function getNextPhotoInputMode(current: PhotoInputMode): PhotoInputMode {
+  return current === 'camera' ? 'file' : 'camera';
+}
+
+export function usePhotoInputModes(initial?: Partial<PhotoInputModeState>) {
+  const [modes, setModes] = useState<PhotoInputModeState>(() => initializePhotoInputModes(initial));
+
+  const setMode = useCallback((field: PhotoFieldKey, mode: PhotoInputMode) => {
+    setModes((prev) => {
+      if (prev[field] === mode) {
+        return prev;
+      }
+      const next = { ...prev, [field]: mode };
+      try {
+        console.log('Photo input mode updated', { field, mode });
+      } catch (logError) {
+        console.error('Failed to log photo input mode update', logError);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleMode = useCallback((field: PhotoFieldKey) => {
+    setModes((prev) => {
+      const nextMode = getNextPhotoInputMode(prev[field]);
+      const next = { ...prev, [field]: nextMode };
+      try {
+        console.log('Photo input mode toggled', { field, mode: nextMode });
+      } catch (logError) {
+        console.error('Failed to log photo input mode toggle', logError);
+      }
+      return next;
+    });
+  }, []);
+
+  const isCameraMode = useCallback((field: PhotoFieldKey) => modes[field] === 'camera', [modes]);
+
+  const getCapture = useCallback(
+    (field: PhotoFieldKey) => resolvePhotoCaptureAttribute(modes[field]),
+    [modes]
+  );
+
+  return { modes, setMode, toggleMode, isCameraMode, getCapture } as const;
+}
+
 export function createPhotoChangeHandler(
   onUpdate: <K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => void,
-  field: 'picture1' | 'picture2' | 'picture3'
+  field: PhotoFieldKey
 ) {
   return (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

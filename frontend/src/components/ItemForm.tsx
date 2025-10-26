@@ -1,5 +1,13 @@
-import React, { useMemo } from 'react';
-import { ItemDetailsFields, ItemFormData, LockedFieldConfig, createPhotoChangeHandler, useItemFormState } from './forms/itemFormShared';
+import React, { useCallback, useMemo } from 'react';
+import {
+  ItemDetailsFields,
+  ItemFormData,
+  LockedFieldConfig,
+  PhotoFieldKey,
+  createPhotoChangeHandler,
+  useItemFormState,
+  usePhotoInputModes
+} from './forms/itemFormShared';
 
 interface Props {
   item: Partial<ItemFormData>;
@@ -13,6 +21,18 @@ interface Props {
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent, lockedFields, hidePhotoInputs }: Props) {
   const { form, update, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
+  const { getCapture, isCameraMode, toggleMode } = usePhotoInputModes();
+
+  const handlePhotoModeToggle = useCallback(
+    (field: PhotoFieldKey) => {
+      try {
+        toggleMode(field);
+      } catch (error) {
+        console.error('Failed to toggle photo input mode in standard item form', error);
+      }
+    },
+    [toggleMode]
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,49 +95,82 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
               {photoPreview}
               {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
               <div className="row">
-                <label>
+                <label htmlFor="picture1">
                   Foto 1{isNew ? '*' : ''}
                 </label>
-                <input
-                  type="file"
-                  id="picture1"
-                  name="picture1"
-                  accept="image/*"
-                  capture="environment"
-                  required={isNew}
-                  onChange={handlePhoto1Change}
-                />
+                <div className="photo-input-controls">
+                  <input
+                    type="file"
+                    id="picture1"
+                    name="picture1"
+                    accept="image/*"
+                    capture={getCapture('picture1')}
+                    required={isNew}
+                    onChange={handlePhoto1Change}
+                  />
+                  <button
+                    type="button"
+                    className="button-secondary photo-input-toggle"
+                    onClick={() => handlePhotoModeToggle('picture1')}
+                    aria-pressed={!isCameraMode('picture1')}
+                    aria-label="Foto 1 Eingabemodus umschalten"
+                  >
+                    {isCameraMode('picture1') ? 'Datei auswählen' : 'Kamera verwenden'}
+                  </button>
+                </div>
               </div>
 
               {form.picture1 && (
                 <div className="row">
-                  <label>
+                  <label htmlFor="picture2">
                     Foto 2
                   </label>
-                  <input
-                    type="file"
-                    id="picture2"
-                    name="picture2"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhoto2Change}
-                  />
+                  <div className="photo-input-controls">
+                    <input
+                      type="file"
+                      id="picture2"
+                      name="picture2"
+                      accept="image/*"
+                      capture={getCapture('picture2')}
+                      onChange={handlePhoto2Change}
+                    />
+                    <button
+                      type="button"
+                      className="button-secondary photo-input-toggle"
+                      onClick={() => handlePhotoModeToggle('picture2')}
+                      aria-pressed={!isCameraMode('picture2')}
+                      aria-label="Foto 2 Eingabemodus umschalten"
+                    >
+                      {isCameraMode('picture2') ? 'Datei auswählen' : 'Kamera verwenden'}
+                    </button>
+                  </div>
                 </div>
               )}
 
               {form.picture2 && (
                 <div className="row">
-                  <label>
+                  <label htmlFor="picture3">
                     Foto 3
                   </label>
-                  <input
-                    type="file"
-                    id="picture3"
-                    name="picture3"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhoto3Change}
-                  />
+                  <div className="photo-input-controls">
+                    <input
+                      type="file"
+                      id="picture3"
+                      name="picture3"
+                      accept="image/*"
+                      capture={getCapture('picture3')}
+                      onChange={handlePhoto3Change}
+                    />
+                    <button
+                      type="button"
+                      className="button-secondary photo-input-toggle"
+                      onClick={() => handlePhotoModeToggle('picture3')}
+                      aria-pressed={!isCameraMode('picture3')}
+                      aria-label="Foto 3 Eingabemodus umschalten"
+                    >
+                      {isCameraMode('picture3') ? 'Datei auswählen' : 'Kamera verwenden'}
+                    </button>
+                  </div>
                 </div>
               )}
             </>
