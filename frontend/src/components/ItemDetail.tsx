@@ -11,6 +11,11 @@ import {
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
+import { itemCategories } from '../data/itemCategories';
+import type {
+  ItemCategoryDefinition,
+  ItemSubcategoryDefinition
+} from '../data/itemCategories';
 import {
   buildAgenticCancelUrl,
   cancelAgenticRun,
@@ -114,6 +119,72 @@ export interface AgenticStatusCardProps {
   onCancel: () => void | Promise<void>;
 }
 
+interface NormalizedDetailValue {
+  content: React.ReactNode;
+  isPlaceholder: boolean;
+}
+
+const DETAIL_PLACEHOLDER_TEXT = 'Nicht gesetzt';
+
+interface ItemSubcategoryWithParent extends ItemSubcategoryDefinition {
+  parentCode: number;
+  parentLabel: string;
+}
+
+function buildPlaceholder(): NormalizedDetailValue {
+  return {
+    content: <span className="details-placeholder">{DETAIL_PLACEHOLDER_TEXT}</span>,
+    isPlaceholder: true
+  };
+}
+
+function normalizeDetailValue(value: React.ReactNode): NormalizedDetailValue {
+  if (value === null || value === undefined) {
+    return buildPlaceholder();
+  }
+
+  if (typeof value === 'boolean') {
+    return {
+      content: value ? 'Ja' : 'Nein',
+      isPlaceholder: false
+    };
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return buildPlaceholder();
+    }
+    return { content: value, isPlaceholder: false };
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return buildPlaceholder();
+    }
+    return { content: trimmed, isPlaceholder: false };
+  }
+
+  if (Array.isArray(value)) {
+    return { content: value, isPlaceholder: false };
+  }
+
+  if (React.isValidElement(value)) {
+    return { content: value, isPlaceholder: false };
+  }
+
+  return { content: value, isPlaceholder: false };
+}
+
+function humanizeCategoryLabel(label: string): string {
+  try {
+    return label.replace(/_/g, ' ');
+  } catch (error) {
+    console.error('Failed to humanize category label', { label }, error);
+    return label;
+  }
+}
+
 export function AgenticStatusCard({
   status,
   rows,
@@ -139,10 +210,17 @@ export function AgenticStatusCard({
         <table className="details">
           <tbody>
             {rows.map(([k, v], idx) => (
-              <tr key={`${k}-${idx}`} className="responsive-row">
-                <th className="responsive-th">{k}</th>
-                <td className="responsive-td">{v ?? ''}</td>
-              </tr>
+              (() => {
+                const cell = normalizeDetailValue(v);
+                return (
+                  <tr key={`${k}-${idx}`} className="responsive-row">
+                    <th className="responsive-th">{k}</th>
+                    <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                      {cell.content}
+                    </td>
+                  </tr>
+                );
+              })()
             ))}
           </tbody>
         </table>
@@ -434,8 +512,100 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = '/api/agentic/run';
   const agenticCancelUrl = useMemo(() => buildAgenticCancelUrl(agenticApiBase), [agenticApiBase]);
+  // TODO: Share category lookup building logic between item detail and forms.
+  const categoryLookups = useMemo(() => {
+    const haupt = new Map<number, ItemCategoryDefinition>();
+    const unter = new Map<number, ItemSubcategoryWithParent>();
+    try {
+      for (const category of itemCategories) {
+        if (haupt.has(category.code)) {
+          console.warn('Duplicate Hauptkategorie code detected while building detail lookup', category.code);
+        }
+        haupt.set(category.code, category);
+        for (const sub of category.subcategories) {
+          if (unter.has(sub.code)) {
+            console.warn('Duplicate Unterkategorie code detected while building detail lookup', sub.code);
+          }
+          unter.set(sub.code, {
+            ...sub,
+            parentCode: category.code,
+            parentLabel: category.label
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to build item detail category lookup maps', error);
+    }
+    return { haupt, unter };
+  }, []);
+
+  const { haupt: hauptCategoryLookup, unter: unterCategoryLookup } = categoryLookups;
+
+  const resolveHauptkategorieLabel = useCallback(
+    (code?: number | null): React.ReactNode => {
+      if (typeof code !== 'number' || Number.isNaN(code)) {
+        return null;
+      }
+      const category = hauptCategoryLookup.get(code);
+      if (!category) {
+        console.warn('Missing Hauptkategorie mapping for item detail view', { code });
+        return `Unbekannte Kategorie (${code})`;
+      }
+      return `${humanizeCategoryLabel(category.label)} (${category.code})`;
+    },
+    [hauptCategoryLookup]
+  );
+
+  const resolveUnterkategorieLabel = useCallback(
+    (code?: number | null): React.ReactNode => {
+      if (typeof code !== 'number' || Number.isNaN(code)) {
+        return null;
+      }
+      const subCategory = unterCategoryLookup.get(code);
+      if (!subCategory) {
+        console.warn('Missing Unterkategorie mapping for item detail view', { code });
+        return `Unbekannte Kategorie (${code})`;
+      }
+      return `${humanizeCategoryLabel(subCategory.label)} (${subCategory.code})`;
+    },
+    [unterCategoryLookup]
+  );
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
+
+  const detailRows = useMemo<[string, React.ReactNode][]>(() => {
+    if (!item) {
+      return [];
+    }
+
+    const creator = resolveActorName(events.length ? events[events.length - 1].Actor : null);
+
+    return [
+      ['Erstellt von', creator],
+      ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],
+      ['Artikelnummer', item.Artikel_Nummer ?? null],
+      ['Anzahl', item.Auf_Lager ?? null],
+      [
+        'Behälter',
+        item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
+      ],
+      ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
+      ['Hauptkategorie A', resolveHauptkategorieLabel(item.Hauptkategorien_A)],
+      ['Unterkategorie A', resolveUnterkategorieLabel(item.Unterkategorien_A)],
+      ['Hauptkategorie B', resolveHauptkategorieLabel(item.Hauptkategorien_B)],
+      ['Unterkategorie B', resolveUnterkategorieLabel(item.Unterkategorien_B)],
+      ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
+      ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
+      ['Verkaufspreis', item.Verkaufspreis ?? null],
+      ['Langtext', item.Langtext ?? null],
+      ['Hersteller', item.Hersteller ?? null],
+      ['Länge (mm)', item.Länge_mm ?? null],
+      ['Breite (mm)', item.Breite_mm ?? null],
+      ['Höhe (mm)', item.Höhe_mm ?? null],
+      ['Gewicht (kg)', item.Gewicht_kg ?? null],
+      ['Einheit', item.Einheit ?? null]
+    ];
+  }, [events, item, resolveHauptkategorieLabel, resolveUnterkategorieLabel]);
 
   const load = useCallback(async ({ showSpinner = false }: { showSpinner?: boolean } = {}) => {
     if (showSpinner) {
@@ -892,35 +1062,19 @@ export default function ItemDetail({ itemId }: Props) {
                 />
               </section>
               <div className='row'>
-
                 <table className="details">
                   <tbody>
-                    {([
-                      [
-                        'Erstellt von',
-                        resolveActorName(events.length ? events[events.length - 1].Actor : null)
-                      ],
-                      ['Artikelbeschreibung', item.Artikelbeschreibung],
-                      ['Artikelnummer', item.Artikel_Nummer],
-                      ['Anzahl', item.Auf_Lager],
-                      ['Behälter', item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : '-'],
-                      ['Kurzbeschreibung', item.Kurzbeschreibung],
-                      ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : '-'],
-                      ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : '-'],
-                      ['Verkaufspreis', item.Verkaufspreis],
-                      ['Langtext', item.Langtext],
-                      ['Hersteller', item.Hersteller],
-                      ['Länge (mm)', item.Länge_mm],
-                      ['Breite (mm)', item.Breite_mm],
-                      ['Höhe (mm)', item.Höhe_mm],
-                      ['Gewicht (kg)', item.Gewicht_kg],
-                      ['Einheit', item.Einheit],
-                    ] as [string, any][]).map(([k, v]) => (
-                      <tr key={k} className="responsive-row">
-                        <th className="responsive-th">{k}</th>
-                        <td className="responsive-td">{v ?? ''}</td>
-                      </tr>
-                    ))}
+                    {detailRows.map(([k, v], idx) => {
+                      const cell = normalizeDetailValue(v);
+                      return (
+                        <tr key={`${k}-${idx}`} className="responsive-row">
+                          <th className="responsive-th">{k}</th>
+                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                            {cell.content}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
