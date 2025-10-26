@@ -3,6 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog, AgenticRun } from '../../../models';
+import {
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_RUNNING
+} from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -43,7 +48,7 @@ const AGENTIC_FAILURE_STATUSES = new Set([
 ]);
 
 const AGENTIC_RUNNING_STATUSES = new Set([
-  'running',
+  AGENTIC_RUN_STATUS_RUNNING,
   'processing',
   'in_progress',
   'active',
@@ -52,7 +57,7 @@ const AGENTIC_RUNNING_STATUSES = new Set([
 
 const AGENTIC_PENDING_STATUSES = new Set([
   'pending',
-  'queued',
+  AGENTIC_RUN_STATUS_QUEUED,
   'created',
   'requested',
   'waiting',
@@ -76,6 +81,8 @@ const AGENTIC_SUCCESS_STATUSES = new Set([
   'finished',
   'resolved'
 ]);
+
+const AGENTIC_NOT_STARTED_STATUSES = new Set([AGENTIC_RUN_STATUS_NOT_STARTED.toLowerCase()]);
 
 const AGENTIC_REVIEW_PENDING_STATUSES = new Set([
   'pending_review',
@@ -270,7 +277,15 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
   };
 
   if (normalizedStatus) {
-    if (AGENTIC_FAILURE_STATUSES.has(normalizedStatus) || normalizedStatus.startsWith('error')) {
+    if (AGENTIC_NOT_STARTED_STATUSES.has(normalizedStatus)) {
+      base = {
+        label: 'Nicht gestartet',
+        description: 'Der agentische Durchlauf wurde nicht gestartet.',
+        variant: 'info',
+        needsReviewBadge: false,
+        isTerminal: true
+      };
+    } else if (AGENTIC_FAILURE_STATUSES.has(normalizedStatus) || normalizedStatus.startsWith('error')) {
       base = {
         label: 'Fehler',
         description: 'Der agentische Durchlauf ist fehlgeschlagen.',
@@ -386,7 +401,8 @@ export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
     AGENTIC_SUCCESS_STATUSES.has(normalizedStatus) ||
     AGENTIC_CANCELLED_STATUSES.has(normalizedStatus) ||
     AGENTIC_REVIEW_APPROVED_STATUSES.has(normalizedStatus) ||
-    AGENTIC_REVIEW_REJECTED_STATUSES.has(normalizedStatus)
+    AGENTIC_REVIEW_REJECTED_STATUSES.has(normalizedStatus) ||
+    AGENTIC_NOT_STARTED_STATUSES.has(normalizedStatus)
   ) {
     return false;
   }

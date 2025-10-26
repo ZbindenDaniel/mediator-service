@@ -1,6 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
+import {
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUS_QUEUED,
+  resolveAgenticRunStatus
+} from '../../models';
+import type { AgenticRunStatus } from '../../models';
 import type { Action } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
@@ -109,8 +115,9 @@ const action: Action = {
       };
 
       const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();
-      const requestedStatus = (p.get('agenticStatus') || 'queued').trim().toLowerCase();
-      const agenticStatus = ['queued', 'running'].includes(requestedStatus) ? requestedStatus : 'queued';
+      const requestedStatus = (p.get('agenticStatus') || '').trim();
+      const agenticStatus: AgenticRunStatus = resolveAgenticRunStatus(requestedStatus);
+      const agenticRunManuallySkipped = agenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
 
       let boxLocationToPersist: string | null = normalizedLocation || null;
       let boxStandortLabelToPersist: string | null = requestedStandortLabel;
@@ -150,7 +157,8 @@ const action: Action = {
           search: string,
           status: string,
           boxLocation: string | null,
-          agenticEnabled: boolean
+          agenticEnabled: boolean,
+          manuallySkipped: boolean
         ) => {
           if (boxId) {
             ctx.upsertBox.run({
@@ -172,12 +180,14 @@ const action: Action = {
           ctx.persistItemWithinTransaction(itemData);
 
           let previousAgenticRun: { Status?: string | null } | null = null;
-          try {
-            previousAgenticRun = ctx.getAgenticRun?.get
-              ? ((ctx.getAgenticRun.get(itemData.ItemUUID) as { Status?: string | null } | undefined) ?? null)
-              : null;
-          } catch (agenticLookupErr) {
-            console.error('[import-item] Failed to load existing agentic run before upsert', agenticLookupErr);
+          if (!manuallySkipped) {
+            try {
+              previousAgenticRun = ctx.getAgenticRun?.get
+                ? ((ctx.getAgenticRun.get(itemData.ItemUUID) as { Status?: string | null } | undefined) ?? null)
+                : null;
+            } catch (agenticLookupErr) {
+              console.error('[import-item] Failed to load existing agentic run before upsert', agenticLookupErr);
+            }
           }
 
           const agenticRun = {
@@ -197,35 +207,43 @@ const action: Action = {
           }
           const itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
           ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: itemExists == undefined ? 'Updated' : 'Created', Meta: JSON.stringify({ BoxID: boxId }) });
-          const agenticEventMeta = {
-            SearchQuery: search,
-            Status: status,
-            QueuedLocally: true,
-            RemoteTriggerDispatched: Boolean(agenticEnabled)
-          };
-          const previousStatus = (previousAgenticRun?.Status || '').toLowerCase();
-          const shouldEmitAgenticQueuedEvent = !previousAgenticRun || previousStatus !== 'queued';
-
-          if (shouldEmitAgenticQueuedEvent) {
-            ctx.logEvent.run({
-              Actor: a,
-              EntityType: 'Item',
-              EntityId: itemData.ItemUUID,
-              Event: 'AgenticSearchQueued',
-              Meta: JSON.stringify(agenticEventMeta)
-            });
-          } else {
-            console.info('[import-item] Skipping AgenticSearchQueued log for already queued run', {
+          if (manuallySkipped) {
+            console.info('[import-item] Agentic run persisted as notStarted due to manual submission', {
               ItemUUID: itemData.ItemUUID,
               Actor: a
             });
-          }
-          if (!agenticEnabled) {
-            console.info('[import-item] Agentic service disabled; queued agentic run locally without remote trigger', {
-              ItemUUID: itemData.ItemUUID,
-              Actor: a,
-              SearchQuery: search
-            });
+          } else {
+            const agenticEventMeta = {
+              SearchQuery: search,
+              Status: status,
+              QueuedLocally: true,
+              RemoteTriggerDispatched: Boolean(agenticEnabled)
+            };
+            const previousStatus = (previousAgenticRun?.Status || '').toLowerCase();
+            const shouldEmitAgenticQueuedEvent =
+              !previousAgenticRun || previousStatus !== AGENTIC_RUN_STATUS_QUEUED;
+
+            if (shouldEmitAgenticQueuedEvent) {
+              ctx.logEvent.run({
+                Actor: a,
+                EntityType: 'Item',
+                EntityId: itemData.ItemUUID,
+                Event: 'AgenticSearchQueued',
+                Meta: JSON.stringify(agenticEventMeta)
+              });
+            } else {
+              console.info('[import-item] Skipping AgenticSearchQueued log for already queued run', {
+                ItemUUID: itemData.ItemUUID,
+                Actor: a
+              });
+            }
+            if (!agenticEnabled) {
+              console.info('[import-item] Agentic service disabled; queued agentic run locally without remote trigger', {
+                ItemUUID: itemData.ItemUUID,
+                Actor: a,
+                SearchQuery: search
+              });
+            }
           }
         }
       );
@@ -236,12 +254,13 @@ const action: Action = {
         agenticSearchQuery,
         agenticStatus,
         boxLocationToPersist,
-        Boolean(ctx.agenticServiceEnabled)
+        Boolean(ctx.agenticServiceEnabled),
+        agenticRunManuallySkipped
       );
 
       let agenticTriggerDispatched = false;
 
-      if (ctx.agenticServiceEnabled) {
+      if (ctx.agenticServiceEnabled && !agenticRunManuallySkipped) {
         const triggerPayload = {
           itemId: ItemUUID,
           artikelbeschreibung: agenticSearchQuery || data.Artikelbeschreibung || ''
@@ -275,6 +294,11 @@ const action: Action = {
             console.error('[import-item] Failed to schedule agentic trigger dispatch', dispatchErr);
           }
         }
+      } else if (ctx.agenticServiceEnabled && agenticRunManuallySkipped) {
+        console.info('[import-item] Agentic trigger skipped due to manual submission status', {
+          ItemUUID,
+          actor
+        });
       } else {
         console.info('[import-item] Agentic service disabled; queued agentic run locally and skipped remote trigger dispatch', {
           ItemUUID,

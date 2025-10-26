@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Item, ItemRef } from '../../../../models';
+import type { AgenticRunStatus, Item, ItemRef } from '../../../../models';
 import { ensureUser, getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
@@ -10,7 +10,7 @@ export interface ItemFormData extends Item {
   picture1?: string | null;
   picture2?: string | null;
   picture3?: string | null;
-  agenticStatus?: 'queued' | 'running';
+  agenticStatus?: AgenticRunStatus;
   agenticSearch?: string;
 }
 
