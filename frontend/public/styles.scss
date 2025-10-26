@@ -1019,23 +1019,24 @@ button:focus {
 }
 
 /* Loading page */
+// TODO: Align loading page styling tokens with the shared design scale when available.
 .loading-page {
     position: relative;
-    min-height: min(100vh, 680px);
+    min-height: min(100vh, 560px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 32px;
+    padding: clamp(18px, 6vw, 32px);
     text-align: center;
-    gap: 24px;
+    gap: clamp(18px, 5vw, 24px);
     overflow: hidden;
 }
 
 .loading-page__spinner {
     position: relative;
-    width: clamp(200px, 32vw, 280px);
-    height: clamp(200px, 32vw, 280px);
+    width: clamp(160px, 36vw, 260px);
+    height: clamp(160px, 36vw, 260px);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -1052,14 +1053,14 @@ button:focus {
 }
 
 .loading-page__message {
-    max-width: 360px;
-    font-size: clamp(1rem, 2vw, 1.2rem);
+    max-width: min(360px, 90vw);
+    font-size: clamp(1rem, 2.4vw, 1.2rem);
     color: var(--muted);
 }
 
 .loading-page__flyers {
     position: absolute;
-    inset: -20% -10%;
+    inset: -16% -8%;
     pointer-events: none;
     overflow: hidden;
 }
@@ -1103,6 +1104,27 @@ button:focus {
     animation-duration: var(--flyer-speed, 7.5s);
     animation-timing-function: linear;
     animation-iteration-count: infinite;
+}
+
+@media (max-width: 600px) {
+    .loading-page {
+        min-height: 100vh;
+        padding: clamp(16px, 8vw, 26px);
+        gap: clamp(16px, 7vw, 22px);
+    }
+
+    .loading-page__spinner {
+        width: clamp(140px, 48vw, 220px);
+        height: clamp(140px, 48vw, 220px);
+    }
+
+    .loading-page__message {
+        font-size: clamp(0.95rem, 4.2vw, 1.1rem);
+    }
+
+    .loading-page__flyers {
+        inset: -12% -6%;
+    }
 }
 
 @keyframes loading-revamp-spin {
