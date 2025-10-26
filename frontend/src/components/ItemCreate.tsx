@@ -955,7 +955,7 @@ export default function ItemCreate() {
         headerContent={
           <>
             <h2>Details ergänzen</h2>
-            <p>Die Pflichtfelder wurden übernommen. Bitte ergänzen Sie bei Bedarf weitere Angaben.</p>
+            <p>Die Pflichtfelder wurden übernommen. Bitte ergänze bei Bedarf weitere Angaben.</p>
           </>
         }
         lockedFields={manualLockedFields}

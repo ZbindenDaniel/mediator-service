@@ -127,6 +127,16 @@ textarea {
     color: $activity-color;
 }
 
+.events {
+    display: inline;
+
+    li {
+        margin-left: 12px;
+        font-size: 10px;
+    }
+
+}
+
 .header .user {
     font-weight: bold;
 }
@@ -297,7 +307,7 @@ div {
     display: flex;
     flex-direction: column;
     flex: 1 1 0px;
-      gap: var(--pad);
+    gap: var(--pad);
 }
 
 .details th {
@@ -325,6 +335,13 @@ div {
     padding: calc(var(--pad) + 2px);
     margin-bottom: 8px;
 }
+
+.event-card {
+    * {
+        font-size: 14px;
+    }
+}
+
 
 .qr-scanner .card {
     display: flex;
@@ -599,7 +616,14 @@ button {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 12px 14px;
-    min-height: 44px;
+    // min-height: 44px;
+}
+
+.status-info {
+    width: 30%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 button {
@@ -733,6 +757,10 @@ button:focus {
     max-height: 220px;
     overflow-y: auto;
     z-index: 4;
+}
+
+#item-search-input {
+    padding: 12px 6px;
 }
 
 .bulk-item-action-bar {
@@ -982,6 +1010,12 @@ button:focus {
 
 .filter-bar {
     margin-bottom: 10px;
+}
+
+.filter-bar-row {
+    label {
+        padding-right: 8px;
+    }
 }
 
 /* Loading page */

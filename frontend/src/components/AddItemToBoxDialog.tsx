@@ -3,6 +3,7 @@ import type { Item } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { dialogService } from './dialog';
 import { DialogButtons, DialogContent, DialogOverlay } from './dialog/presentational';
+import { GoSearch } from 'react-icons/go';
 
 // TODO: Evaluate migrating this dialog into the shared dialog queue for automated focus management.
 
@@ -123,6 +124,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
       >
         <div className="add-item-dialog__search">
           <input
+            id='item-search-input'
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => {
@@ -138,7 +140,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
             type="button"
             disabled={!query.trim()}
           >
-            Suchen
+            <GoSearch />
           </button>
         </div>
         <div className="add-item-dialog__results" role="list">

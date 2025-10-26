@@ -1,6 +1,5 @@
 // TODO: Consolidate these event label definitions with the TypeScript variant.
 const EVENT_LABELS = {
-  ManualCreateOrUpdate: 'Manuell erstellt/aktualisiert',
   Edit: 'Bearbeitet',
   Added: 'Hinzugefügt',
   updated: 'Aktualisiert',

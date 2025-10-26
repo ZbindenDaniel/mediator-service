@@ -157,7 +157,7 @@ export default function ItemListPage() {
     <div className="list-container item">
       <h2>Alle Artikel</h2>
       <div className="filter-bar">
-        <div className='row'>
+        <div className='filter-bar-row'>
           <label className="search-control">
             <GoSearch />
           </label>
@@ -195,7 +195,10 @@ export default function ItemListPage() {
           </select>
         </div> */}
 
-        <div className='row'>
+        <div className='filter-bar-row'>
+          <label className="unplaced-filter" htmlFor="unplaced">
+            <span>unplatziert</span>
+          </label>
           <input
             checked={showUnplaced}
             id="unplaced"
@@ -203,9 +206,6 @@ export default function ItemListPage() {
             onChange={(event) => setShowUnplaced(event.target.checked)}
             type="checkbox"
           />
-          <label className="unplaced-filter" htmlFor="unplaced">
-            <span>unplatziert</span>
-          </label>
         </div>
       </div>
       {error ? (

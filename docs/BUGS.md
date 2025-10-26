@@ -1,31 +1,6 @@
 # Open Bugs & Issues
 
 
-- Kategorien
-- Foto upload
-- Einheit: ENUM<Stk,Mix>
-- agentic fail when creating manually
-- logs, logmessages besser und deutsch
-- location + number
-- checkn^box itemlist
-- QR result show no json
-- entnahme not logged
-- different event log levels
-- stats card status - AI status
-- on matchselection/duplicateCHeck incorporate shopware search
-- extend shopware api integration. Sync
-- box list also clickable
-- manual create double foto tacking
-- item landet nicht in box wenn man es von 'neu' erzeugt
-- 'Hinzufüge' Checkbox für unplazierte items
-- 'hinzufügen' ugly search button layout
-- 'Hinweis' nach erzeugung ist english
-- foto editing is bad
-
-ai-flow
-
-- health includes ollama and API connections
-- 
 <!-- TODO: Audit and reprioritize remaining unchecked items after the next deployment. -->
 
 This list tracks defects that require fixes. Cross-reference the planning context in [OVERVIEW.md](OVERVIEW.md) and the component guidance in [../AGENTS.md](../AGENTS.md). When fixing a Bug remove it from this list.

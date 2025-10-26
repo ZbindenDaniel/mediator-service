@@ -1,274 +1,218 @@
+# Computer_und_Komplettsysteme
+
+Komplettsysteme
+Standard-PC
+Server
+Barebones, Mini-PC
+MAC
+Workstation etc.
+Exoten
+Thin-Client
 
 
-Komplettsysteme	Laptop
-Drucker	
-Flachbildschirm
-	
-Tastatur
-	
-Mainboard
-	
-Graphikkarte
-	
-PC-Gehäuse
 
-	
-Festplatte
-	
-CD/DVD/BluRay
-	
-Schrauben
-und
-Muttern
-	
-Fix-Telefone
-und
--anlagen
-	
-Halbleiter
-	Kabel
-extern	5G-,
-LTE-,
-UMTS-,
-GPRS-,
-GMS-Modems
-	Internet-TV
-	Ventilator
-	Lasertoner
-	Disketten
+# Laptop_und_Zubehör
 
-Standard-PC	Laptop-Ersatzteile
-	Multifunktionsgerät
-	
-TV
-	
-Maus
-	
-Prozessor
-	
-Netzwerkkarte
-(Kabel)
-	
-Festplattengehäuse
-	
-USB-Stick
-	
-ZIP-Laufwerk
-	
-Diverses
-	
-Handy,
-Smartphone
-	
+Laptop 
+Laptop-Ersatzteile 
+Netbook 
+Tablet PC 
+Laptop-Steckkarte 
+Laptop-Akku 
+Docking-Station 
+Laptop-Tasche 
+Laptop-Zubehör 
+
+
+
+# Drucker_Fax_Scanner
+
+Drucker 
+Multifunktionsgerät 
+Scanner 
+Faxgerät 
+Druckereinzelteile 
+Kopierer 
+
+
+# Monitor_Beamer_Kamera
+
+ Flachbildschirm 
+ TV 
+ Digitale Bilderrahmen 
+ Röhrenbildschirm 
+ Beamer 
+ Digital-Kamera 
+ Webcam 
+ Videokamera 
+ Ersatzteile für Monitore, TVs etc. 
+
+
+# Tastatur_Maus_Spielsteuerung_Virtual_Reality
+
+ Tastatur 
+ Maus 
+ Desktop-Set (Tastatur und Maus) 
+ Spielsteuerung 
+ Graphik Tablett, Digital Pen 
+ 3D-Brillen 
+ Presenter 
+
+# Mainboard_CPU_Ram
+
+ Mainboard 
+ Prozessor 
+ Arbeitsspeicher 
+
+
+# Steckkarten
+
+ Graphikkarte 
+ Netzwerkkarte (Kabel) 
+ Soundkarte 
+ Schnittstellenkarte 
+ TV-Karte 
+ Analog-Modemkarte 
+ ISDN-Modemkarte 
+ Festplattenkontroller 
+ Multifunktionskarte 
+ Wireless-Karte 
+ CPU-Karten 
+
+
+# Gehäuse_Netzteile_Umschalter_USB_Hubs_USV_Serverracks
+
+ PC-Gehäuse 
+ Festplattengehäuse 
+ Laufwerksgehäuse 
+ Netzteil extern 
+ Netzteil intern 
+ Gehäuseteile 
+ Umschalt-Switches 
+ Festplatten-Schubladen 
+ Serverracks 
+ USB-Hubs 
+ USV 
+
+# Festplatten_Flashcards_Sticks
+
+ Festplatte 
+ USB-Stick 
+ Flashspeicher 
+ Kartenlesegerät 
+ Externe Festplatte 
+
+
+# Laufwerke_fuer_Medien
+
+ CD/DVD/BluRay 
+ ZIP-Laufwerk 
+ Diskettenlaufwerk 
+ JAZ-Laufwerk 
+ MO-Laufwerk 
+ Bandlaufwerk 
+Sonstige Laufwerke
+
+
+
+# Medien
+
+Disketten 
+CD / DVD / BluRay-Disk 
+Zip-Medien
+JAZ-Medien 
+MO-Medien 
+Bandkasetten 
+sonstige Medien 
+
+
+
+# Externe_Netzwerkgeräte
+
+5G-, LTE-, UMTS-, GPRS-, GMS-Modems 
+Wireless Adapter 
+ Switch, Hub 
+Router, DSL-Modem, Wireless-AP 
+Netzwerkspeicher (NAS) 
+ Analog-Modem 
+ISDN-Modem 
+ Powerline Adapter 
+Print-Server 
+Firewall 
+Kabelmodem 
+ Medienkonverter 
+
+
+# Soundgeraete_Multimedia
+
+Internet-TV 
+Mikrophon 
+Video-Player
+Lautsprecher 
+Kopfhörer 
+Headset 
+interne Lautsprecher 
+Sonstiges
+
+
+
+# Kühlung
+
+Ventilator 
 Kühlkörper
-	Kabel
-Intern	Wireless
+Kühlkörper mit Ventilator 
+
+
+# Verbrauchsmaterial
+
+Lasertoner 
+Diverses Verbauchsmaterial Laserdrucker 
+Wärmeleitpaste
+Tintenpatronen 
+Batterien 
+Farbbänder 
+Sonstiges 
+
+
+# Kabel_Adapter_Montage
+
+Kabel extern
+Kabel Intern
 Adapter
-	Mikrophon
-	Kühlkörper	Diverses
-Verbauchsmaterial
-Laserdrucker
-	CD
-/
-DVD
-/
-BluRay-Disk
+Serverschienen
+Frontblenden
+Slot- und Mainboardblenden
+Befestigungsmaterial
+Frontpanel (USB etc.)
 
-Server	Netbook
-	Scanner
-	
-Digitale
-Bilderrahmen
-	
-Desktop-Set
-(Tastatur
-und
-Maus)
-	
-Arbeitsspeicher
-	
-Soundkarte
-	
-Laufwerksgehäuse
-	
-Flashspeicher
-	
-Diskettenlaufwerk
-	
-Schutzhüllen
-etc.
-	
-Handheld,
-Pager
-	
-passive
-Komponenten
-	Adapter	
-Switch,
-Hub
-	Video-Player	Kühlkörper
-mit
-Ventilator
-	Wärmeleitpaste	Zip-Medien
-Barebones,
-Mini-PC	Tablet
-PC
-	Faxgerät
-	
-Röhrenbildschirm
-	
-Spielsteuerung
-		
-Schnittstellenkarte
-	
-Netzteil
-extern
-	
-Kartenlesegerät
-	
-JAZ-Laufwerk
-		
-Sonstige
-ext.
-Geräte
-	
-Stecker
-	Serverschienen	Router,
-DSL-Modem,
-Wireless-AP
-	Lautsprecher
-		Tintenpatronen
-	JAZ-Medien
 
-MAC	Laptop-Steckkarte
-	Druckereinzelteile
-	
-Beamer
-	
-Graphik
-Tablett,
-Digital
-Pen
-		
-TV-Karte
-	
-Netzteil
-intern
-	
-Externe
-Festplatte
-	
-MO-Laufwerk
-		
-Spielekonsolen
-und
-Zubehör
-	
-diverse
-Elektronik-Komponenten
-	Frontblenden	Netzwerkspeicher
-(NAS)
-	Kopfhörer
-		Batterien
-	MO-Medien
+# Kleinteile
 
-Workstation
-etc.	Laptop-Akku
-	Kopierer
-	
-Digital-Kamera
-	
-3D-Brillen
-		
-Analog-Modemkarte
-	
-Gehäuseteile
-		
-Bandlaufwerk
-		
-Taschenrechner
-&
-Tischrechner
-	
-Kabel
-ohne
-Stecker
-	Slot-
-und
-Mainboardblenden	
-Analog-Modem
-	Headset
-		Farbbänder
-	Bandkasetten
+ Schrauben und Muttern 
+ Diverses 
+ Schutzhüllen etc. 
 
-Exoten	Docking-Station
-		
-Webcam
-	
-Presenter
-		
-ISDN-Modemkarte
-	
-Umschalt-Switches
-		Sonstige
-Laufwerke			
-Elektronik-Gehäuse
-	Befestigungsmaterial	ISDN-Modem
-	interne
-Lautsprecher
-		Sonstiges
-Verbrauchsmaterial
-	sonstige
-Medien
 
-Thin-Client	Laptop-Tasche
-		
-Videokamera
-			
-Festplattenkontroller
-	
-Festplatten-Schubladen
-					
-Messgeräte
-	Frontpanel
-(USB
-etc.)	
-Powerline
-Adapter
-	Sonstige
-Soundgeräte			
-	Laptop-Zubehör
-		
-Ersatzteile
-für
-Monitore,
-TVs
-etc.
-			
-Multifunktionskarte
-	
-Serverracks
-							Print-Server
-				
-						
-Wireless-Karte
-	
-USB-Hubs
-							Firewall
-				
-						
-CPU-Karten
-	
-USV
-							Kabelmodem
-				
-														
-Medienkonverter
-				
+# Spielkonsolen_Telefone_diverse_ext_Geraete
 
-<img
-width="2077"
-height="545"
-alt="image"
-src="https://github.com/user-attachments/assets/4245cef0-7fa4-4487-9aba-aa1b340c06b6"
-/>
+ Fix-Telefone und -anlagen 
+ Handy, Smartphone 
+ Handheld, Pager 
+ Sonstige ext. Geräte 
+ Spielekonsolen und Zubehör 
+ Taschenrechner & Tischrechner 
+
+
+# Elektronik_Komponenten_und_Laborbedarf
+
+Disketten 
+CD / DVD / BluRay-Disk 
+Zip-Medien
+JAZ-Medien 
+MO-Medien 
+Bandkasetten 
+sonstige Medien 
+
+
+
+# Non_IT

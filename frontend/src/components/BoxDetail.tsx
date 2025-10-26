@@ -343,7 +343,7 @@ export default function BoxDetail({ boxId }: Props) {
               <ul className="events">
                 {displayedEvents.map((ev) => (
                   <li key={ev.Id}>
-                    {formatDateTime(ev.CreatedAt)}: {resolveActorName(ev.Actor)}{' hat ' + eventLabel(ev.Event)}
+                    <span className='muted'>[{formatDateTime(ev.CreatedAt)}]</span> {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>

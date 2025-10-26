@@ -25,7 +25,7 @@ export default function StatsCard({ counts, printerOk, health }: Props) {
       ) : (
         <div className="muted">Übersicht konnte nicht geladen werden</div>
       )}
-      <div className="muted">
+      <div className="muted status-info">
         Drucker:{' '}
         <span
           style={{
@@ -37,7 +37,17 @@ export default function StatsCard({ counts, printerOk, health }: Props) {
           }}
         ></span>
       </div>
-      <div className="muted">Status: <span>{health}</span></div>
+      <div className="muted status-info">Status: 
+         <span
+          style={{
+            display: 'inline-block',
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            background: printerOk == null ? '#999' : health === 'oik' ? '#1cbc2c' : '#d22'
+          }}
+        ></span>
+      </div>
     </div>
   );
 }

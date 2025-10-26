@@ -186,7 +186,8 @@ const action: Action = {
             console.error('[import-item] Failed to upsert agentic run during import transaction', agenticPersistErr);
             throw agenticPersistErr;
           }
-          ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: 'ManualCreateOrUpdate', Meta: JSON.stringify({ BoxID: boxId }) });
+          const itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
+          ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: itemExists == undefined ? 'Updated' : 'Created', Meta: JSON.stringify({ BoxID: boxId }) });
           const agenticEventMeta = {
             SearchQuery: search,
             Status: status,

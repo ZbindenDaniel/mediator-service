@@ -75,24 +75,22 @@ export function RecentEventsList({ events }: Props) {
           const { path, ariaSuffix } = resolveEventLink(e);
           const formattedDate = formatDate(e.CreatedAt);
           const label = eventLabel(e.Event);
-          const actorText = e.Actor ? ` von ${e.Actor}` : '';
+          const actorText = e.Actor ? `${e.Actor}: ` : '[?]';
           const ariaLabel = `${label}${actorText} am ${formattedDate} – ${ariaSuffix}`;
 
           return (
             <React.Fragment key={e.Id}>
               <Link className="linkcard" to={path} tabIndex={0} aria-label={ariaLabel}>
-                <div className="card">
+                <div className="card event-card">
                   <div>
-                    <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Behälter' : 'Artikel'}</span>
+                    <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Behälter  ' : 'Artikel  '}</span>
                     <br />
                   </div>
-                  <div>{formattedDate} </div>
+                  <div className="muted">{e.EntityId}</div>
+                  <div className='muted'>{formattedDate} </div>
                   <div>
-                    {label}
                     {actorText}
-                  </div>
-                  <div className="muted">
-                    {e.EntityId}
+                    {label}
                   </div>
                 </div>
               </Link>

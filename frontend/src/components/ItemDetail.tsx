@@ -845,10 +845,10 @@ export default function ItemDetail({ itemId }: Props) {
                       ['Artikelbeschreibung', item.Artikelbeschreibung],
                       ['Artikelnummer', item.Artikel_Nummer],
                       ['Anzahl', item.Auf_Lager],
-                      ['Behälter', item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : ''],
+                      ['Behälter', item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : '-'],
                       ['Kurzbeschreibung', item.Kurzbeschreibung],
-                      ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : ''],
-                      ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : ''],
+                      ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : '-'],
+                      ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : '-'],
                       ['Verkaufspreis', item.Verkaufspreis],
                       ['Langtext', item.Langtext],
                       ['Hersteller', item.Hersteller],
@@ -940,7 +940,7 @@ export default function ItemDetail({ itemId }: Props) {
               <ul className="events">
                 {displayedEvents.map((ev) => (
                   <li key={ev.Id}>
-                    {formatDateTime(ev.CreatedAt)}: {resolveActorName(ev.Actor)}{' hat ' + eventLabel(ev.Event)}
+                    <span className='muted'>[{formatDateTime(ev.CreatedAt)}]</span> {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>

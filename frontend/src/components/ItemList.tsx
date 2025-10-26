@@ -77,7 +77,7 @@ export default function ItemList({
                 type="checkbox"
               />
             </th>
-            <th className="col-number">Artikel-nummer</th>
+            <th className="col-number">A-Nr</th>
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
@@ -86,7 +86,7 @@ export default function ItemList({
         <tbody>
           {safeItems.map(it => {
             const locationKey = it.Location?.trim() || it.BoxID?.trim() || undefined;
-            const boxLabel = it.BoxID?.trim() || 'Unbekannter Behälter';
+            const boxLabel = it.BoxID?.trim() || '?';
             const boxLinkTarget = it.BoxID
               ? `/boxes/${encodeURIComponent(it.BoxID)}`
               : '/boxes';

@@ -279,7 +279,7 @@ const action: Action = {
           Actor: a,
           EntityType: 'Item',
           EntityId: it.ItemUUID,
-          Event: 'updated',
+          Event: 'Updated',
           Meta: null
         });
       });
