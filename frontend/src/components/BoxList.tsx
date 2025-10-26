@@ -1,9 +1,8 @@
-import React, { ChangeEvent } from 'react';
-import { Link } from 'react-router-dom';
+import React, { ChangeEvent, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Box } from '../../../models/box';
 import BoxColorTag from './BoxColorTag';
 import { formatDate } from '../lib/format';
-import { GoLinkExternal } from 'react-icons/go';
 
 export type BoxSortKey = 'BoxID' | 'StandortLabel' | 'UpdatedAt';
 
@@ -21,8 +20,33 @@ const SORT_LABELS: Record<BoxSortKey, string> = {
   UpdatedAt: 'Zuletzt aktualisiert',
 };
 
+function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  const interactiveSelector = 'button, input, select, textarea, label, a';
+  return Boolean(target.closest(interactiveSelector));
+}
+
 export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, onSortChange }: Props) {
   console.log('[BoxList] rendering boxes', { count: boxes.length });
+
+  const navigate = useNavigate();
+  const navigateToBoxDetail = useCallback((boxId: string, source: 'click' | 'keyboard') => {
+    try {
+      console.info('Navigating to box detail from box list row', { boxId, source });
+      navigate(`/boxes/${encodeURIComponent(boxId)}`);
+    } catch (navigationError) {
+      console.error('Failed to navigate to box detail from box list row', {
+        boxId,
+        source,
+        navigationError,
+      });
+    }
+  }, [navigate]);
+
+  const safeBoxes = useMemo(() => boxes ?? [], [boxes]);
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     try {
@@ -74,22 +98,45 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
             <th className="col-box-id">Box</th>
             <th className="col-location">Standort</th>
             <th className="col-updated">Aktualisiert</th>
-            <th className="col-link"></th>
           </tr>
         </thead>
         <tbody>
-          {boxes.map((box) => {
+          {safeBoxes.map((box) => {
             try {
+              const rowLabel = box.StandortLabel?.trim()
+                ? `Details für Box ${box.BoxID} in ${box.StandortLabel} öffnen`
+                : `Details für Box ${box.BoxID} öffnen`;
+
               return (
-                <tr key={box.BoxID} data-box-id={box.BoxID} className="box-list-row">
+                <tr
+                  key={box.BoxID}
+                  data-box-id={box.BoxID}
+                  className="box-list-row"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={rowLabel}
+                  onClick={(event) => {
+                    if (shouldIgnoreInteractiveTarget(event.target)) {
+                      return;
+                    }
+                    event.preventDefault();
+                    navigateToBoxDetail(box.BoxID, 'click');
+                  }}
+                  onKeyDown={(event) => {
+                    if (shouldIgnoreInteractiveTarget(event.target)) {
+                      return;
+                    }
+                    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                      event.preventDefault();
+                      navigateToBoxDetail(box.BoxID, 'keyboard');
+                    }
+                  }}
+                >
                   <td className="col-box-id">{box.BoxID}</td>
                   <td className="col-location">
                     <BoxColorTag locationKey={box.Location} labelOverride={box.StandortLabel} />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>
-                  <td className="col-link">
-                    <Link to={`/boxes/${encodeURIComponent(box.BoxID)}`}><GoLinkExternal /></Link>
-                  </td>
                 </tr>
               );
             } catch (err) {
