@@ -63,15 +63,40 @@ const action: Action = {
       if (!BoxID) {
         console.info('[import-item] Persisting item without box placement', { actor });
       }
-      let ItemUUID = (p.get('ItemUUID') || '').trim();
-      if (!ItemUUID) {
-        const lastItem = ctx.getMaxItemId.get() as { ItemUUID: string } | undefined;
-        let iSeq = 0;
-        if (lastItem?.ItemUUID) {
-          const m = lastItem.ItemUUID.match(/^I-\d{6}-(\d+)$/);
-          if (m) iSeq = parseInt(m[1], 10);
+      const incomingItemUUID = (p.get('ItemUUID') || '').trim();
+      let ItemUUID = '';
+      if (incomingItemUUID) {
+        try {
+          const existingItem = ctx.getItem?.get
+            ? ((ctx.getItem.get(incomingItemUUID) as { ItemUUID: string } | undefined) ?? null)
+            : null;
+          if (existingItem) {
+            ItemUUID = existingItem.ItemUUID;
+            console.info('[import-item] Preserving existing ItemUUID from payload', { ItemUUID });
+          } else {
+            console.info('[import-item] Incoming ItemUUID not found; generating new identifier', {
+              ItemUUID: incomingItemUUID
+            });
+          }
+        } catch (lookupErr) {
+          console.error('[import-item] Failed to verify incoming ItemUUID; generating new identifier instead', lookupErr);
         }
-        ItemUUID = `I-${dd}${mm}${yy}-${(iSeq + 1).toString().padStart(4, '0')}`;
+      }
+
+      if (!ItemUUID) {
+        try {
+          const lastItem = ctx.getMaxItemId.get() as { ItemUUID: string } | undefined;
+          let iSeq = 0;
+          if (lastItem?.ItemUUID) {
+            const m = lastItem.ItemUUID.match(/^I-\d{6}-(\d+)$/);
+            if (m) iSeq = parseInt(m[1], 10);
+          }
+          ItemUUID = `I-${dd}${mm}${yy}-${(iSeq + 1).toString().padStart(4, '0')}`;
+          console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID });
+        } catch (idGenerationErr) {
+          console.error('[import-item] Failed to generate ItemUUID for item import', idGenerationErr);
+          throw idGenerationErr;
+        }
       }
       const now = nowDate.toISOString();
       const images = [p.get('picture1') || '', p.get('picture2') || '', p.get('picture3') || ''];
