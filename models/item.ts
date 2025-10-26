@@ -1,3 +1,17 @@
+export enum ItemEinheit {
+  Stk = 'Stk',
+  Mix = 'Mix'
+}
+
+export const ITEM_EINHEIT_VALUES = Object.freeze([ItemEinheit.Stk, ItemEinheit.Mix] as const);
+
+export function isItemEinheit(value: unknown): value is ItemEinheit {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return (ITEM_EINHEIT_VALUES as readonly string[]).includes(value);
+}
+
 export interface ItemInstance {
   ItemUUID: string;
   Artikel_Nummer?: string | null;
@@ -27,7 +41,7 @@ export interface ItemRef {
   Veröffentlicht_Status?: boolean | string;
   Shopartikel?: number;
   Artikeltyp?: string;
-  Einheit?: string;
+  Einheit?: ItemEinheit;
   EntityType?: string;
 }
 

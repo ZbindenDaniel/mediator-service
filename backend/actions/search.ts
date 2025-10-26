@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import type { Action } from './index';
+import { ItemEinheit, isItemEinheit } from '../../models';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -28,6 +29,39 @@ function computeTokenScore(tokens: string[], candidateTokens: string[]): number 
   }
 
   return aggregate / tokens.length;
+}
+
+const DEFAULT_SEARCH_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+
+function normalizeSearchEinheit(value: unknown, context: string): ItemEinheit {
+  try {
+    if (isItemEinheit(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (isItemEinheit(trimmed)) {
+        return trimmed;
+      }
+      if (trimmed.length > 0) {
+        console.warn('[search] Invalid Einheit encountered while preparing response; falling back to default.', {
+          context,
+          provided: trimmed
+        });
+      }
+    } else if (value !== null && value !== undefined) {
+      console.warn('[search] Unexpected Einheit type encountered while preparing response; falling back to default.', {
+        context,
+        providedType: typeof value
+      });
+    }
+  } catch (error) {
+    console.error('[search] Failed to normalize Einheit for response; using default.', {
+      context,
+      error
+    });
+  }
+  return DEFAULT_SEARCH_EINHEIT;
 }
 
 function computeSimilarityScore(term: string, tokens: string[], candidate: unknown): number {
@@ -463,7 +497,13 @@ const action: Action = {
 
       // ----- same JS scoring + response -----
       const scoredItems = rawItems
-        .map((item: any) => ({ item, score: scoreItem(normalized, tokens, item) }))
+        .map((item: any, index: number) => {
+          const sanitizedItem = {
+            ...item,
+            Einheit: normalizeSearchEinheit(item.Einheit, `item-${index}`)
+          };
+          return { item: sanitizedItem, score: scoreItem(normalized, tokens, sanitizedItem) };
+        })
         .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
 
       const scoredBoxes = rawBoxes

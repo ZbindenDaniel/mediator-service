@@ -4,18 +4,37 @@ import path from 'path';
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_QUEUED,
-  resolveAgenticRunStatus
+  ItemEinheit,
+  resolveAgenticRunStatus,
+  isItemEinheit
 } from '../../models';
 import type { AgenticRunStatus } from '../../models';
 import type { Action } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
 
-const DEFAULT_EINHEIT = 'Stück';
+const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
-function coalesceEinheit(value: string | null): string {
-  const trimmed = (value || '').trim();
-  return trimmed || DEFAULT_EINHEIT;
+function coalesceEinheit(value: string | null): ItemEinheit {
+  const raw = value ?? '';
+  const trimmed = raw.trim();
+  try {
+    if (isItemEinheit(trimmed)) {
+      return trimmed;
+    }
+  } catch (error) {
+    console.error('[import-item] Failed to evaluate Einheit payload, defaulting to Stk', {
+      provided: value,
+      error
+    });
+    return DEFAULT_EINHEIT;
+  }
+  console.warn('[import-item] Falling back to default Einheit value', {
+    provided: value,
+    trimmed,
+    defaultValue: DEFAULT_EINHEIT
+  });
+  return DEFAULT_EINHEIT;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

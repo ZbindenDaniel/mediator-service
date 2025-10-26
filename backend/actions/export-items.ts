@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
+import { ItemEinheit, isItemEinheit } from '../../models';
 import type { Action } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -62,10 +63,43 @@ const fieldMap: Record<string, string> = {
   UpdatedAt: 'UpdatedAt'
 };
 
+const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+
 function toCsvValue(val: any): string {
   if (val === null || val === undefined) return '';
   const s = String(val);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function resolveExportValue(column: string, rawRow: Record<string, unknown>): unknown {
+  const field = fieldMap[column];
+  const value = rawRow[field];
+  if (column !== 'Einheit') {
+    return value;
+  }
+  try {
+    if (isItemEinheit(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (isItemEinheit(trimmed)) {
+        return trimmed;
+      }
+      if (trimmed.length > 0) {
+        console.warn('[export-items] Invalid Einheit value encountered during export, falling back to default.', {
+          provided: trimmed
+        });
+      }
+    } else if (value !== null && value !== undefined) {
+      console.warn('[export-items] Unexpected Einheit type encountered during export, falling back to default.', {
+        providedType: typeof value
+      });
+    }
+  } catch (error) {
+    console.error('[export-items] Failed to normalize Einheit for export, using default.', error);
+  }
+  return DEFAULT_EINHEIT;
 }
 
 const action: Action = {
@@ -97,7 +131,14 @@ const action: Action = {
       });
       log(items, actor);
       const header = columns.join(',');
-      const lines = items.map((row: any) => columns.map((c) => toCsvValue(row[fieldMap[c]])).join(','));
+      const lines = items.map((row: any) =>
+        columns
+          .map((column) => {
+            const resolvedValue = resolveExportValue(column, row);
+            return toCsvValue(resolvedValue);
+          })
+          .join(',')
+      );
       const csv = [header, ...lines].join('\n');
       res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8' });
       res.end(csv);

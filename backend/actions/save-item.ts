@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
-import { Item } from '../../models';
+import { Item, ItemEinheit, isItemEinheit } from '../../models';
 import type { Action } from './index';
 
 const MEDIA_PREFIX = '/media/';
@@ -185,6 +185,39 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+const DEFAULT_ITEM_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+
+function resolveItemEinheitValue(value: unknown, context: string): ItemEinheit {
+  try {
+    if (isItemEinheit(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (isItemEinheit(trimmed)) {
+        return trimmed;
+      }
+      if (trimmed.length > 0) {
+        console.warn('[save-item] Invalid Einheit encountered; falling back to default.', {
+          context,
+          provided: trimmed
+        });
+      }
+    } else if (value !== null && value !== undefined) {
+      console.warn('[save-item] Unexpected Einheit type encountered; falling back to default.', {
+        context,
+        providedType: typeof value
+      });
+    }
+  } catch (error) {
+    console.error('[save-item] Failed to resolve Einheit value; using default.', {
+      context,
+      error
+    });
+  }
+  return DEFAULT_ITEM_EINHEIT;
+}
+
 const action: Action = {
   key: 'save-item',
   label: 'Save item',
@@ -204,10 +237,11 @@ const action: Action = {
         const agentic = ctx.getAgenticRun ? ctx.getAgenticRun.get(itemId) : null;
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
+        const sanitizedItem = { ...item, Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse') };
         const responseItem =
-          normalisedGrafikname && normalisedGrafikname !== item.Grafikname
-            ? { ...item, Grafikname: normalisedGrafikname }
-            : item;
+          normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
+            ? { ...sanitizedItem, Grafikname: normalisedGrafikname }
+            : sanitizedItem;
         return sendJson(res, 200, { item: responseItem, box, events, agentic, media });
       } catch (err) {
         console.error('Fetch item failed', err);
@@ -250,7 +284,7 @@ const action: Action = {
         console.error('Failed to save item images', e);
       }
       const normalisedGrafikname = normaliseMediaReference(itemId, grafik);
-      const { picture1, picture2, picture3, BoxID: incomingBoxId, ...rest } = data;
+      const { picture1, picture2, picture3, BoxID: incomingBoxId, Einheit: incomingEinheit, ...rest } = data;
       const selectedBoxId = incomingBoxId !== undefined ? incomingBoxId : existing.BoxID;
       let normalizedBoxId: string | null = null;
       if (selectedBoxId !== undefined && selectedBoxId !== null) {
@@ -265,13 +299,18 @@ const action: Action = {
           });
         }
       }
+      const resolvedEinheit =
+        incomingEinheit !== undefined
+          ? resolveItemEinheitValue(incomingEinheit, 'updatePayload')
+          : resolveItemEinheitValue(existing.Einheit, 'existingRecord');
       const item: Item = {
         ...existing,
         ...rest,
         Grafikname: normalisedGrafikname ?? undefined,
         ItemUUID: itemId,
         BoxID: normalizedBoxId,
-        UpdatedAt: new Date()
+        UpdatedAt: new Date(),
+        Einheit: resolvedEinheit
       };
       const txn = ctx.db.transaction((it: Item, a: string) => {
         ctx.persistItemWithinTransaction(it);

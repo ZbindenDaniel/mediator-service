@@ -2,11 +2,39 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
 import { upsertBox, persistItem, queueLabel } from './db';
-import { Box, Item } from '../models';
+import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
 
-const DEFAULT_EINHEIT = 'Stück';
+const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+
+function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
+  let candidate = '';
+  if (typeof value === 'string') {
+    candidate = value.trim();
+  } else if (value != null) {
+    candidate = String(value).trim();
+  }
+  try {
+    if (isItemEinheit(candidate)) {
+      return candidate;
+    }
+  } catch (error) {
+    console.error('[importer] Failed to verify Einheit from CSV row, defaulting to Stk', {
+      rowNumber,
+      provided: value,
+      error
+    });
+    return DEFAULT_EINHEIT;
+  }
+  console.warn('[importer] Falling back to default Einheit for CSV row', {
+    rowNumber,
+    provided: value,
+    normalized: candidate,
+    defaultValue: DEFAULT_EINHEIT
+  });
+  return DEFAULT_EINHEIT;
+}
 
 // TODO: Extend parsing to cover additional partner provided formats once discovered.
 
@@ -276,7 +304,8 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
     let count = 0;
     const boxesTouched = new Set<string>();
 
-    for (const r of records) {
+    for (const [index, r] of records.entries()) {
+      const rowNumber = index + 1;
       const row = normalize(r);
       const final = applyOps(row);
       const rawStandort = final.Standort || final.Location || '';
@@ -344,7 +373,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Veröffentlicht_Status: ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase()),
         Shopartikel: parseIntegerField(final['Shopartikel'], 'Shopartikel', { defaultValue: 0 }) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
-        Einheit: final['Einheit'] || DEFAULT_EINHEIT,
+        Einheit: resolveCsvEinheit(final['Einheit'], rowNumber),
       };
       persistItem({
         ...item,
