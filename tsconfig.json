@@ -9,6 +9,7 @@
     "skipLibCheck": true,
     "jsx": "react-jsx",
     "allowJs": true,
+    "resolveJsonModule": true,
     "outDir": "dist",
     "rootDir": "."
   },

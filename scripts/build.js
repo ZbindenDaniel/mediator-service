@@ -1,25 +1,72 @@
 const fs = require('fs');
 const path = require('path');
 
-const src = path.join(__dirname, '..', 'frontend', 'public');
-const dest = path.join(__dirname, '..', 'dist', 'frontend', 'public');
+function copyDirectory(src, dest) {
+  try {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+      const sourcePath = path.join(src, entry.name);
+      const targetPath = path.join(dest, entry.name);
 
-if (fs.existsSync(src)) {
-  fs.mkdirSync(dest, { recursive: true });
-  const copy = (s, d) => {
-    for (const f of fs.readdirSync(s)) {
-      const sp = path.join(s, f);
-      const dp = path.join(d, f);
-      if (fs.statSync(sp).isDirectory()) {
-        fs.mkdirSync(dp, { recursive: true });
-        copy(sp, dp);
+      if (entry.isDirectory()) {
+        copyDirectory(sourcePath, targetPath);
       } else {
-        fs.copyFileSync(sp, dp);
+        fs.copyFileSync(sourcePath, targetPath);
       }
     }
-  };
-  copy(src, dest);
-  console.log('Copied frontend public to', dest);
-} else {
-  console.log('No frontend public to copy at', src);
+  } catch (error) {
+    console.error('[build] Failed to copy directory', { src, dest, error });
+    throw error;
+  }
+}
+
+function copyFrontendPublic() {
+  const src = path.join(__dirname, '..', 'frontend', 'public');
+  const dest = path.join(__dirname, '..', 'dist', 'frontend', 'public');
+
+  if (!fs.existsSync(src)) {
+    console.log('[build] No frontend public directory to copy.', { src });
+    return;
+  }
+
+  try {
+    copyDirectory(src, dest);
+    console.log('Copied frontend public to', dest);
+  } catch (error) {
+    console.error('[build] Failed to copy frontend public assets.', error);
+    throw error;
+  }
+}
+
+function copyModelResources() {
+  const src = path.join(__dirname, '..', 'models');
+  const dest = path.join(__dirname, '..', 'dist', 'models');
+  const resources = ['event-resources.json'];
+
+  try {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const resource of resources) {
+      const resourceSource = path.join(src, resource);
+      const resourceDest = path.join(dest, resource);
+
+      if (!fs.existsSync(resourceSource)) {
+        console.warn('[build] Model resource missing; skipping copy.', { resource, resourceSource });
+        continue;
+      }
+
+      fs.copyFileSync(resourceSource, resourceDest);
+      console.log('[build] Copied model resource.', { resource, resourceDest });
+    }
+  } catch (error) {
+    console.error('[build] Failed to copy model resources.', error);
+    throw error;
+  }
+}
+
+try {
+  copyFrontendPublic();
+  copyModelResources();
+} catch (error) {
+  console.error('[build] Build script encountered an unrecoverable error.', error);
+  process.exit(1);
 }
