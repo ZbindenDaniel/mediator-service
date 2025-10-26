@@ -238,6 +238,19 @@ const action: Action = {
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
         const sanitizedItem = { ...item, Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse') };
+        const categoryValues = [
+          sanitizedItem.Hauptkategorien_A,
+          sanitizedItem.Unterkategorien_A,
+          sanitizedItem.Hauptkategorien_B,
+          sanitizedItem.Unterkategorien_B
+        ];
+        const hasCategoryMetadata = categoryValues.some((value) => value !== null && value !== undefined);
+        if (!hasCategoryMetadata) {
+          console.warn('[save-item] Category metadata missing for fetched item', {
+            itemId,
+            artikelNummer: sanitizedItem.Artikel_Nummer ?? null
+          });
+        }
         const responseItem =
           normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
             ? { ...sanitizedItem, Grafikname: normalisedGrafikname }
