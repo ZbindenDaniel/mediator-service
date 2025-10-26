@@ -1,5 +1,14 @@
+jest.mock('../backend/actions/agentic-trigger', () => ({
+  forwardAgenticTrigger: jest.fn().mockResolvedValue({ ok: true, status: 202, body: null })
+}));
+
+import { forwardAgenticTrigger } from '../backend/actions/agentic-trigger';
 import { Readable } from 'stream';
 import importItemAction from '../backend/actions/import-item';
+import {
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUS_QUEUED
+} from '../models';
 
 type ImportContext = {
   getMaxBoxId: { get: () => { BoxID: string } | undefined };
@@ -70,12 +79,17 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
 }
 
 describe('import-item agentic persistence', () => {
+  beforeEach(() => {
+    (forwardAgenticTrigger as jest.Mock).mockClear();
+  });
+
   test('deduplicates AgenticSearchQueued events when status remains queued', async () => {
     const itemUUID = 'I-240101-0002';
     const boxId = 'B-240101-0002';
-    const getAgenticRunMock = jest.fn()
+    const getAgenticRunMock = jest
+      .fn()
       .mockReturnValueOnce(undefined)
-      .mockReturnValue({ Status: 'queued' });
+      .mockReturnValue({ Status: AGENTIC_RUN_STATUS_QUEUED });
     const getItemMock = jest
       .fn()
       .mockReturnValueOnce(undefined)
@@ -123,9 +137,50 @@ describe('import-item agentic persistence', () => {
     const queuedMeta = queuedEvents[0]?.[0]?.Meta ? JSON.parse(queuedEvents[0][0].Meta) : null;
     expect(queuedMeta).toEqual({
       SearchQuery: 'Persistent Query',
-      Status: 'queued',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
       QueuedLocally: true,
       RemoteTriggerDispatched: false
     });
+  });
+
+  test('skips agentic trigger and queue logging when status notStarted', async () => {
+    const ctx = createContext({
+      agenticServiceEnabled: true,
+      getAgenticRun: { get: jest.fn() },
+      getItem: { get: jest.fn() }
+    });
+
+    const form = new URLSearchParams({
+      actor: 'manual-user',
+      Artikelbeschreibung: 'Manual Only Item',
+      agenticStatus: AGENTIC_RUN_STATUS_NOT_STARTED
+    });
+
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const req = createRequest(form.toString());
+      const res = createResponse();
+      await importItemAction.handle(req as any, res as any, ctx as any);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toContain('"ok":true');
+    } finally {
+      infoSpy.mockRestore();
+    }
+
+    const agenticQueuedEvents = ctx.logEvent.run.mock.calls.filter(([payload]) => payload?.Event === 'AgenticSearchQueued');
+    expect(agenticQueuedEvents).toHaveLength(0);
+
+    expect(ctx.logEvent.run).toHaveBeenCalledTimes(1);
+    const [loggedEvent] = ctx.logEvent.run.mock.calls[0] ?? [];
+    expect(loggedEvent?.Event).not.toBe('AgenticSearchQueued');
+
+    expect(ctx.getAgenticRun.get).not.toHaveBeenCalled();
+
+    expect(forwardAgenticTrigger).not.toHaveBeenCalled();
+
+    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(1);
+    const persistedRun = ctx.upsertAgenticRun.run.mock.calls[0]?.[0];
+    expect(persistedRun).toMatchObject({ Status: AGENTIC_RUN_STATUS_NOT_STARTED });
   });
 });

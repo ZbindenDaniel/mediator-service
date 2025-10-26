@@ -5,4 +5,5 @@ export * from './label-job';
 export * from './event-log';
 export * from './entity';
 export * from './agentic-run';
+export * from './agentic-statuses';
 export * from './box-colors';

@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { Item, ItemRef } from '../../../models';
+import {
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUS_RUNNING
+} from '../../../models';
 import { ensureUser } from '../lib/user';
 import { resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
@@ -277,6 +281,10 @@ export function buildManualSubmissionPayload({
     Auf_Lager: manualData.Auf_Lager ?? basicInfo.Auf_Lager
   };
 
+  if (merged.agenticStatus == null || merged.agenticStatus === '') {
+    merged.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
+  }
+
   return merged;
 }
 
@@ -309,6 +317,8 @@ export function mergeManualDraftForFallback({
   delete (merged as Record<string, unknown>).ItemUUID;
   delete (merged as Record<string, unknown>).agenticStatus;
   delete (merged as Record<string, unknown>).agenticSearch;
+
+  merged.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
 
   if (typeof merged.BoxID === 'string') {
     const trimmedBoxId = merged.BoxID.trim();
@@ -622,6 +632,7 @@ export default function ItemCreate() {
           const nextDraft: Partial<ItemFormData> = { ...prev };
           delete (nextDraft as Record<string, unknown>).agenticStatus;
           delete (nextDraft as Record<string, unknown>).agenticSearch;
+          nextDraft.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
           return nextDraft;
         });
       } catch (err) {
@@ -812,7 +823,16 @@ export default function ItemCreate() {
       });
     }
 
-    const params = buildCreationParams(data, { removeItemUUID: !options.keepItemUUID }, actor);
+    const isManualSubmission = !shouldUseAgenticForm || context === 'manual-edit';
+    const submissionData: Partial<ItemFormData> = {
+      ...data
+    };
+
+    if (isManualSubmission) {
+      submissionData.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
+    }
+
+    const params = buildCreationParams(submissionData, { removeItemUUID: !options.keepItemUUID }, actor);
     try {
       setCreating(true);
       console.log('Submitting item creation payload', { context, data });
@@ -829,17 +849,24 @@ export default function ItemCreate() {
       const body = await response.json();
       const createdItem: Item | undefined = body?.item;
       const searchText = createdItem?.Artikelbeschreibung || data.Artikelbeschreibung || '';
-      const agenticPayload: AgenticRunTriggerPayload = {
-        itemId: createdItem?.ItemUUID,
-        artikelbeschreibung: searchText
-      };
-
       const backendDispatched = body?.agenticTriggerDispatched === true;
       if (backendDispatched) {
         console.info('Skipping client-side agentic trigger because backend already dispatched.', { context });
       }
 
-      triggerAgenticRun(agenticPayload, context, { backendDispatched });
+      if (isManualSubmission) {
+        console.info('Manual submission detected; skipping agentic trigger dispatch.', {
+          context,
+          backendDispatched
+        });
+      } else {
+        const agenticPayload: AgenticRunTriggerPayload = {
+          itemId: createdItem?.ItemUUID,
+          artikelbeschreibung: searchText
+        };
+
+        triggerAgenticRun(agenticPayload, context, { backendDispatched });
+      }
 
       const successMessage =
         normalizedBoxId && createdItem?.BoxID
@@ -1028,7 +1055,7 @@ export default function ItemCreate() {
       const mergedData: Partial<ItemFormData> = {
         ...baseDraft,
         ...data,
-        agenticStatus: 'running',
+        agenticStatus: AGENTIC_RUN_STATUS_RUNNING,
         agenticSearch:
           baseDraft.agenticSearch ||
           baseDraft.Artikelbeschreibung ||
