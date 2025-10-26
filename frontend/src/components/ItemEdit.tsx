@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Item } from '../../../models';
 import ItemForm from './ItemForm';
@@ -17,6 +17,68 @@ export default function ItemEdit({ itemId }: Props) {
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const dialog = useDialog();
+
+  const initialPhotos = useMemo(() => {
+    try {
+      const seen = new Set<string>();
+      const primarySource = typeof item?.Grafikname === 'string' ? item.Grafikname.trim() : '';
+      const ordered: string[] = [];
+
+      const addPhoto = (candidate: unknown, isPrimary = false) => {
+        if (typeof candidate !== 'string') {
+          return;
+        }
+        const trimmed = candidate.trim();
+        if (!trimmed || seen.has(trimmed)) {
+          return;
+        }
+        seen.add(trimmed);
+        if (isPrimary) {
+          ordered.unshift(trimmed);
+        } else {
+          ordered.push(trimmed);
+        }
+      };
+
+      addPhoto(primarySource, true);
+
+      const secondary: string[] = [];
+      for (const asset of mediaAssets) {
+        if (typeof asset !== 'string') {
+          continue;
+        }
+        const trimmed = asset.trim();
+        if (!trimmed || trimmed === primarySource) {
+          continue;
+        }
+        if (seen.has(trimmed)) {
+          continue;
+        }
+        seen.add(trimmed);
+        secondary.push(trimmed);
+      }
+
+      secondary.sort((a, b) => a.localeCompare(b));
+      if (ordered.length > 0) {
+        const [primary] = ordered;
+        const result = [primary, ...secondary];
+        console.log('Derived initial photo ordering for item edit', {
+          itemId: item?.ItemUUID,
+          photoCount: result.length
+        });
+        return result;
+      }
+
+      console.log('Derived initial photo ordering for item edit without primary asset', {
+        itemId: item?.ItemUUID,
+        photoCount: secondary.length
+      });
+      return secondary;
+    } catch (error) {
+      console.error('Failed to derive initial photo list for item edit form', error);
+      return [];
+    }
+  }, [item?.Grafikname, mediaAssets]);
 
   useEffect(() => {
     async function load() {
@@ -128,7 +190,13 @@ export default function ItemEdit({ itemId }: Props) {
   return (
     <>
       {blockingOverlay}
-      <ItemForm item={item} onSubmit={handleSubmit} submitLabel="Speichern" headerContent={gallery} />
+      <ItemForm
+        item={item}
+        onSubmit={handleSubmit}
+        submitLabel="Speichern"
+        headerContent={gallery}
+        initialPhotos={initialPhotos}
+      />
     </>
   );
 }

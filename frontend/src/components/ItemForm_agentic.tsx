@@ -17,6 +17,7 @@ interface Props {
   onFallbackToManual?: (data: Partial<ItemFormData>) => void;
   submitLabel: string;
   isNew?: boolean;
+  initialPhotos?: readonly string[];
 }
 
 export default function ItemForm_Agentic({
@@ -25,9 +26,13 @@ export default function ItemForm_Agentic({
   onSubmitPhotos,
   onFallbackToManual,
   submitLabel,
-  isNew
+  isNew,
+  initialPhotos
 }: Props) {
-  const { form, update, mergeForm, generateMaterialNumber } = useItemFormState({ initialItem: draft });
+  const { form, update, mergeForm, generateMaterialNumber, seedPhotos, seededPhotos } = useItemFormState({
+    initialItem: draft,
+    initialPhotos
+  });
   const { getCapture, isCameraMode, toggleMode } = usePhotoInputModes();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const hasBasicDraftInfo = useMemo(
@@ -43,6 +48,14 @@ export default function ItemForm_Agentic({
   useEffect(() => {
     mergeForm(draft);
   }, [draft, mergeForm]);
+
+  useEffect(() => {
+    try {
+      seedPhotos(initialPhotos);
+    } catch (error) {
+      console.error('Failed to apply initial photos to agentic item form state', error);
+    }
+  }, [initialPhotos, seedPhotos]);
 
   useEffect(() => {
     if (hasBasicDraftInfo && mode !== 'photos') {
@@ -251,7 +264,7 @@ export default function ItemForm_Agentic({
                 </div>
               </div>
 
-              {form.picture1 && (
+              {(form.picture1 || seededPhotos[0]) && (
                 <div className="row">
                   <label htmlFor="picture2">
                     Foto 2
@@ -278,7 +291,7 @@ export default function ItemForm_Agentic({
                 </div>
               )}
 
-              {form.picture2 && (
+              {(form.picture2 || seededPhotos[1]) && (
                 <div className="row">
                   <label htmlFor="picture3">
                     Foto 3
