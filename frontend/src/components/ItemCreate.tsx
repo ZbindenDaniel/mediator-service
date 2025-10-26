@@ -175,6 +175,64 @@ export async function handleAgenticRunTrigger({
   }
 }
 
+export interface AgenticTriggerInvocationOptions {
+  agenticPayload: AgenticRunTriggerPayload;
+  context: string;
+  shouldUseAgenticForm: boolean;
+  backendDispatched?: boolean;
+  agenticRunUrl: string | null;
+  triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
+  reportFailure: AgenticTriggerFailureReporter;
+  alertFn: (message: string) => Promise<void>;
+  logger?: Pick<Console, 'info' | 'warn' | 'error'>;
+  onSkipped?: (itemId: string) => void;
+  handleTrigger?: typeof handleAgenticRunTrigger;
+}
+
+export function maybeTriggerAgenticRun({
+  agenticPayload,
+  context,
+  shouldUseAgenticForm,
+  backendDispatched = false,
+  agenticRunUrl,
+  triggerAgenticRunRequest,
+  reportFailure,
+  alertFn,
+  logger = console,
+  onSkipped,
+  handleTrigger = handleAgenticRunTrigger
+}: AgenticTriggerInvocationOptions): void {
+  if (!shouldUseAgenticForm) {
+    logger.info?.('Skipping agentic trigger because agentic form is not active', { context });
+    return;
+  }
+
+  if (backendDispatched) {
+    logger.info?.('Skipping agentic trigger because backend already dispatched run', { context });
+    return;
+  }
+
+  try {
+    logger.info?.('Scheduling asynchronous agentic trigger', { context });
+    const triggerPromise = handleTrigger({
+      agenticPayload,
+      context,
+      agenticRunUrl,
+      triggerAgenticRunRequest,
+      reportFailure,
+      alertFn,
+      logger,
+      onSkipped
+    });
+
+    triggerPromise.catch((err) => {
+      logger.error?.('Unhandled error while processing agentic trigger', err);
+    });
+  } catch (err) {
+    logger.error?.('Failed to start agentic trigger workflow', err);
+  }
+}
+
 export const MANUAL_CREATION_LOCKS: LockedFieldConfig = {
   Artikelbeschreibung: 'readonly',
   Artikel_Nummer: 'readonly'
@@ -554,32 +612,25 @@ export default function ItemCreate() {
     }
   }
 
-  function triggerAgenticRun(agenticPayload: AgenticRunTriggerPayload, context: string) {
-    if (!shouldUseAgenticForm) {
-      return;
-    }
-
-    try {
-      console.log('Scheduling asynchronous agentic trigger', { context });
-      const triggerPromise = handleAgenticRunTrigger({
-        agenticPayload,
-        context,
-        agenticRunUrl,
-        triggerAgenticRunRequest,
-        reportFailure: reportAgenticTriggerFailure,
-        alertFn: showAgenticAlert,
-        logger: console,
-        onSkipped: (itemId) => {
-          setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
-        }
-      });
-
-      triggerPromise.catch((err) => {
-        console.error('Unhandled error while processing agentic trigger', err);
-      });
-    } catch (err) {
-      console.error('Failed to start agentic trigger workflow', err);
-    }
+  function triggerAgenticRun(
+    agenticPayload: AgenticRunTriggerPayload,
+    context: string,
+    options: { backendDispatched?: boolean } = {}
+  ) {
+    maybeTriggerAgenticRun({
+      agenticPayload,
+      context,
+      shouldUseAgenticForm,
+      backendDispatched: options.backendDispatched,
+      agenticRunUrl,
+      triggerAgenticRunRequest,
+      reportFailure: reportAgenticTriggerFailure,
+      alertFn: showAgenticAlert,
+      logger: console,
+      onSkipped: (itemId) => {
+        setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+      }
+    });
   }
 
   function buildCreationParams(
@@ -689,7 +740,12 @@ export default function ItemCreate() {
         artikelbeschreibung: searchText
       };
 
-      triggerAgenticRun(agenticPayload, context);
+      const backendDispatched = body?.agenticTriggerDispatched === true;
+      if (backendDispatched) {
+        console.info('Skipping client-side agentic trigger because backend already dispatched.', { context });
+      }
+
+      triggerAgenticRun(agenticPayload, context, { backendDispatched });
 
       const successMessage =
         normalizedBoxId && createdItem?.BoxID

@@ -1,6 +1,7 @@
 import type { AgenticRunTriggerPayload } from '../frontend/src/lib/agentic';
 import {
   handleAgenticRunTrigger,
+  maybeTriggerAgenticRun,
   type AgenticTriggerFailureReporter
 } from '../frontend/src/components/ItemCreate';
 
@@ -148,5 +149,34 @@ describe('handleAgenticRunTrigger', () => {
       outcome: 'failed',
       status: 500
     });
+  });
+
+  it('skips triggering agentic run when backend already dispatched', () => {
+    const logger = createLoggerMock();
+    const triggerRequest = jest.fn();
+    const reportFailure: AgenticTriggerFailureReporter = jest.fn().mockResolvedValue(undefined);
+    const alertFn = jest.fn().mockResolvedValue(undefined);
+    const handleTrigger = jest.fn();
+
+    maybeTriggerAgenticRun({
+      agenticPayload: createPayload(),
+      context: 'backend-dispatched',
+      shouldUseAgenticForm: true,
+      backendDispatched: true,
+      agenticRunUrl: '/api/agentic/run',
+      triggerAgenticRunRequest: triggerRequest,
+      reportFailure,
+      alertFn,
+      logger,
+      onSkipped: jest.fn(),
+      handleTrigger
+    });
+
+    expect(handleTrigger).not.toHaveBeenCalled();
+    expect(triggerRequest).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      'Skipping agentic trigger because backend already dispatched run',
+      { context: 'backend-dispatched' }
+    );
   });
 });
