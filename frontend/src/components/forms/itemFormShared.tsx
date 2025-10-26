@@ -249,6 +249,7 @@ export function ItemDetailsFields({
   const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
   const placementInputValue = typeof form.BoxID === 'string' ? form.BoxID : '';
   const hasPlacementValue = placementInputValue.trim() !== '';
+  const shouldDisplayPlacement = !placementHidden && (!isNew || hasPlacementValue);
 
   const handlePlacementChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -551,7 +552,7 @@ export function ItemDetailsFields({
         </div>
       )}
 
-      {!isNew && !placementHidden && (
+      {shouldDisplayPlacement && (
         <div className="row">
           <label>Behälter</label>
           <div className="combined-input placement-controls">

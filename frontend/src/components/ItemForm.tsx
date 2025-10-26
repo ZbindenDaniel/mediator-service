@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   ItemDetailsFields,
   ItemFormData,
@@ -20,8 +20,16 @@ interface Props {
 }
 
 export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent, lockedFields, hidePhotoInputs }: Props) {
-  const { form, update, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
+  const { form, update, mergeForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
   const { getCapture, isCameraMode, toggleMode } = usePhotoInputModes();
+
+  useEffect(() => {
+    try {
+      mergeForm(item);
+    } catch (error) {
+      console.error('Failed to merge updated item draft into item form state', error);
+    }
+  }, [item, mergeForm]);
 
   const handlePhotoModeToggle = useCallback(
     (field: PhotoFieldKey) => {

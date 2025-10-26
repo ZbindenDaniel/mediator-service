@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { Item, ItemRef } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
@@ -310,11 +310,73 @@ export function mergeManualDraftForFallback({
   delete (merged as Record<string, unknown>).agenticStatus;
   delete (merged as Record<string, unknown>).agenticSearch;
 
+  if (typeof merged.BoxID === 'string') {
+    const trimmedBoxId = merged.BoxID.trim();
+    if (trimmedBoxId) {
+      merged.BoxID = trimmedBoxId;
+    } else {
+      delete (merged as Record<string, unknown>).BoxID;
+    }
+  }
+
   return merged;
+}
+
+export function buildCreationParams(
+  data: Partial<ItemFormData>,
+  options: { removeItemUUID?: boolean } = {},
+  actor?: string
+) {
+  const { removeItemUUID = true } = options;
+  const params = new URLSearchParams();
+  const sanitized: Record<string, unknown> = { ...data };
+  if (typeof sanitized.Artikelbeschreibung === 'string') {
+    sanitized.Artikelbeschreibung = sanitized.Artikelbeschreibung.trim();
+  }
+  if (typeof sanitized.Artikel_Nummer === 'string') {
+    sanitized.Artikel_Nummer = sanitized.Artikel_Nummer.trim();
+  }
+  if (removeItemUUID && 'ItemUUID' in sanitized) {
+    delete sanitized.ItemUUID;
+  }
+  if (actor) {
+    sanitized.actor = actor;
+  }
+
+  if ('BoxID' in sanitized) {
+    const rawBoxId = sanitized.BoxID;
+    if (typeof rawBoxId === 'string') {
+      const trimmedBoxId = rawBoxId.trim();
+      if (trimmedBoxId) {
+        sanitized.BoxID = trimmedBoxId;
+      } else {
+        console.info('Removing blank BoxID from item creation payload before submission.');
+        delete sanitized.BoxID;
+      }
+    } else if (rawBoxId == null) {
+      delete sanitized.BoxID;
+    } else {
+      sanitized.BoxID = String(rawBoxId);
+    }
+  }
+
+  const einheit = sanitized.Einheit;
+  if (typeof einheit !== 'string' || einheit.trim() === '') {
+    sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
+  }
+
+  Object.entries(sanitized).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, String(value));
+    }
+  });
+
+  return params;
 }
 
 export default function ItemCreate() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
   const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
@@ -322,6 +384,82 @@ export default function ItemCreate() {
   const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [creating, setCreating] = useState(false);
   const dialog = useDialog();
+  const queryPrefilledBoxRef = useRef<string | null>(null);
+
+  const preselectedBoxId = useMemo(() => {
+    if (!location.search) {
+      return undefined;
+    }
+
+    try {
+      const params = new URLSearchParams(location.search);
+      if (!params.has('box')) {
+        return undefined;
+      }
+
+      const rawBoxId = params.get('box');
+      if (rawBoxId == null) {
+        return undefined;
+      }
+
+      const trimmedBoxId = rawBoxId.trim();
+      if (!trimmedBoxId) {
+        console.info('Ignoring empty box query parameter for item creation workflow.', { rawBoxId });
+        return undefined;
+      }
+
+      console.log('Detected box query parameter for item creation workflow.', {
+        rawBoxId,
+        normalizedBoxId: trimmedBoxId
+      });
+
+      return trimmedBoxId;
+    } catch (error) {
+      console.error('Failed to parse query parameters for item creation workflow.', {
+        search: location.search,
+        error
+      });
+      return undefined;
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!preselectedBoxId) {
+      if (queryPrefilledBoxRef.current !== null) {
+        queryPrefilledBoxRef.current = null;
+        console.log('Cleared box query parameter prefill tracking after parameter removal.');
+      }
+      return;
+    }
+
+    if (queryPrefilledBoxRef.current === preselectedBoxId) {
+      return;
+    }
+
+    try {
+      const applyBoxId = (previous: Partial<ItemFormData>): Partial<ItemFormData> => {
+        const previousBoxId =
+          typeof previous.BoxID === 'string' && previous.BoxID.trim() ? previous.BoxID.trim() : undefined;
+
+        if (previousBoxId === preselectedBoxId) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          BoxID: preselectedBoxId
+        };
+      };
+
+      setDraft(applyBoxId);
+      setBasicInfo(applyBoxId);
+      setManualDraft(applyBoxId);
+      queryPrefilledBoxRef.current = preselectedBoxId;
+      console.log('Applied box query parameter to item creation draft state.', { boxId: preselectedBoxId });
+    } catch (error) {
+      console.error('Failed to apply box query parameter to item creation draft state.', error);
+    }
+  }, [preselectedBoxId]);
 
   const showAgenticAlert = useCallback(
     async (message: string) => {
@@ -416,6 +554,14 @@ export default function ItemCreate() {
         }
         if (typeof normalized.Artikel_Nummer === 'string') {
           normalized.Artikel_Nummer = normalized.Artikel_Nummer.trim();
+        }
+        if (typeof normalized.BoxID === 'string') {
+          const trimmedBoxId = normalized.BoxID.trim();
+          if (trimmedBoxId) {
+            normalized.BoxID = trimmedBoxId;
+          } else {
+            delete normalized.BoxID;
+          }
         }
 
         const resolvedSearch =
@@ -633,58 +779,6 @@ export default function ItemCreate() {
     });
   }
 
-  function buildCreationParams(
-    data: Partial<ItemFormData>,
-    options: { removeItemUUID?: boolean } = {},
-    actor?: string
-  ) {
-    const { removeItemUUID = true } = options;
-    const params = new URLSearchParams();
-    const sanitized: Record<string, unknown> = { ...data };
-    if (typeof sanitized.Artikelbeschreibung === 'string') {
-      sanitized.Artikelbeschreibung = sanitized.Artikelbeschreibung.trim();
-    }
-    if (typeof sanitized.Artikel_Nummer === 'string') {
-      sanitized.Artikel_Nummer = sanitized.Artikel_Nummer.trim();
-    }
-    if (removeItemUUID && 'ItemUUID' in sanitized) {
-      delete sanitized.ItemUUID;
-    }
-    if (actor) {
-      sanitized.actor = actor;
-    }
-
-    if ('BoxID' in sanitized) {
-      const rawBoxId = sanitized.BoxID;
-      if (typeof rawBoxId === 'string') {
-        const trimmedBoxId = rawBoxId.trim();
-        if (trimmedBoxId) {
-          sanitized.BoxID = trimmedBoxId;
-        } else {
-          console.info('Removing blank BoxID from item creation payload before submission.');
-          delete sanitized.BoxID;
-        }
-      } else if (rawBoxId == null) {
-        delete sanitized.BoxID;
-      } else {
-        sanitized.BoxID = String(rawBoxId);
-      }
-    }
-
-    const einheit = sanitized.Einheit;
-    if (typeof einheit !== 'string' || einheit.trim() === '') {
-      sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
-    }
-
-    Object.entries(sanitized).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        params.append(key, String(value));
-      }
-    });
-
-    return params;
-  }
-
   async function submitNewItem(
     data: Partial<ItemFormData>,
     context: string,
@@ -769,6 +863,10 @@ export default function ItemCreate() {
           setDraft(() => ({}));
           setBasicInfo(() => ({}));
           setManualDraft(() => ({}));
+          queryPrefilledBoxRef.current = null;
+          if (preselectedBoxId) {
+            console.log('Cleared applied box prefill to allow reapplication.', { boxId: preselectedBoxId });
+          }
         }
       } catch (error) {
         console.error('Failed to display item creation success dialog', error);
