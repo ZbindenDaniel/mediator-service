@@ -22,6 +22,8 @@ describe('ItemCreate box handling', () => {
     });
 
     expect(payload.BoxID).toBe('BOX-MANUAL');
+    expect(payload.agenticManualFallback).toBe(true);
+    expect(payload.agenticStatus).toBe('notStarted');
   });
 
   it('falls back to basic info BoxID when manual data omits it', () => {
@@ -59,6 +61,8 @@ describe('ItemCreate box handling', () => {
     });
 
     expect(merged.BoxID).toBe('BOX-BASE');
+    expect(merged.agenticManualFallback).toBe(true);
+    expect(merged.agenticStatus).toBe('notStarted');
   });
 
   it('includes a normalized BoxID in the creation payload parameters', () => {

@@ -153,7 +153,8 @@ describe('import-item agentic persistence', () => {
     const form = new URLSearchParams({
       actor: 'manual-user',
       Artikelbeschreibung: 'Manual Only Item',
-      agenticStatus: AGENTIC_RUN_STATUS_NOT_STARTED
+      agenticStatus: AGENTIC_RUN_STATUS_NOT_STARTED,
+      agenticManualFallback: 'true'
     });
 
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
@@ -164,6 +165,8 @@ describe('import-item agentic persistence', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.body).toContain('"ok":true');
+      const parsed = JSON.parse(res.body);
+      expect(parsed.agenticTriggerDispatched).toBe(false);
     } finally {
       infoSpy.mockRestore();
     }
@@ -180,6 +183,38 @@ describe('import-item agentic persistence', () => {
     expect(forwardAgenticTrigger).not.toHaveBeenCalled();
 
     expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(1);
+    const persistedRun = ctx.upsertAgenticRun.run.mock.calls[0]?.[0];
+    expect(persistedRun).toMatchObject({ Status: AGENTIC_RUN_STATUS_NOT_STARTED });
+  });
+
+  test('forces agentic status to notStarted when manual fallback flag provided', async () => {
+    const ctx = createContext({
+      agenticServiceEnabled: true,
+      getAgenticRun: { get: jest.fn() },
+      getItem: { get: jest.fn() }
+    });
+
+    const form = new URLSearchParams({
+      actor: 'manual-user',
+      Artikelbeschreibung: 'Manual Fallback Item',
+      agenticStatus: AGENTIC_RUN_STATUS_QUEUED,
+      agenticManualFallback: 'true'
+    });
+
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const req = createRequest(form.toString());
+      const res = createResponse();
+      await importItemAction.handle(req as any, res as any, ctx as any);
+
+      expect(res.statusCode).toBe(200);
+      const parsed = JSON.parse(res.body);
+      expect(parsed.agenticTriggerDispatched).toBe(false);
+    } finally {
+      infoSpy.mockRestore();
+    }
+
+    expect(forwardAgenticTrigger).not.toHaveBeenCalled();
     const persistedRun = ctx.upsertAgenticRun.run.mock.calls[0]?.[0];
     expect(persistedRun).toMatchObject({ Status: AGENTIC_RUN_STATUS_NOT_STARTED });
   });

@@ -285,6 +285,8 @@ export function buildManualSubmissionPayload({
     merged.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
   }
 
+  merged.agenticManualFallback = true;
+
   return merged;
 }
 
@@ -317,8 +319,10 @@ export function mergeManualDraftForFallback({
   delete (merged as Record<string, unknown>).ItemUUID;
   delete (merged as Record<string, unknown>).agenticStatus;
   delete (merged as Record<string, unknown>).agenticSearch;
+  delete (merged as Record<string, unknown>).agenticManualFallback;
 
   merged.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
+  merged.agenticManualFallback = true;
 
   if (typeof merged.BoxID === 'string') {
     const trimmedBoxId = merged.BoxID.trim();
@@ -588,7 +592,8 @@ export default function ItemCreate() {
             ...prev,
             ...normalized,
             agenticSearch: resolvedSearch ?? prev.agenticSearch,
-            agenticStatus: undefined
+            agenticStatus: undefined,
+            agenticManualFallback: undefined
           };
 
           if ('ItemUUID' in nextDraft) {
@@ -632,7 +637,9 @@ export default function ItemCreate() {
           const nextDraft: Partial<ItemFormData> = { ...prev };
           delete (nextDraft as Record<string, unknown>).agenticStatus;
           delete (nextDraft as Record<string, unknown>).agenticSearch;
+          delete (nextDraft as Record<string, unknown>).agenticManualFallback;
           nextDraft.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
+          nextDraft.agenticManualFallback = true;
           return nextDraft;
         });
       } catch (err) {
@@ -723,20 +730,33 @@ export default function ItemCreate() {
               ? {
                   ...prev,
                   agenticStatus: undefined,
-                  agenticSearch: updatedRun.SearchQuery || prev.agenticSearch
+                  agenticSearch: updatedRun.SearchQuery || prev.agenticSearch,
+                  agenticManualFallback: undefined
                 }
               : prev
           );
         } else {
-          setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+          setDraft((prev) =>
+            prev.ItemUUID === itemId
+              ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
+              : prev
+          );
         }
       } else {
         console.error('Agentic failure reporting endpoint returned non-OK status', res.status);
-        setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+        setDraft((prev) =>
+          prev.ItemUUID === itemId
+            ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
+            : prev
+        );
       }
     } catch (failureErr) {
       console.error('Failed to report agentic trigger failure', failureErr);
-      setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+      setDraft((prev) =>
+        prev.ItemUUID === itemId
+          ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
+          : prev
+      );
     }
 
     try {
@@ -756,7 +776,8 @@ export default function ItemCreate() {
               ? {
                   ...prev,
                   agenticStatus: undefined,
-                  agenticSearch: refreshedRun.SearchQuery || prev.agenticSearch
+                  agenticSearch: refreshedRun.SearchQuery || prev.agenticSearch,
+                  agenticManualFallback: undefined
                 }
               : prev
           );
@@ -785,7 +806,11 @@ export default function ItemCreate() {
       alertFn: showAgenticAlert,
       logger: console,
       onSkipped: (itemId) => {
-        setDraft((prev) => (prev.ItemUUID === itemId ? { ...prev, agenticStatus: undefined } : prev));
+        setDraft((prev) =>
+          prev.ItemUUID === itemId
+            ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
+            : prev
+        );
       }
     });
   }
@@ -830,6 +855,9 @@ export default function ItemCreate() {
 
     if (isManualSubmission) {
       submissionData.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
+      submissionData.agenticManualFallback = true;
+    } else if ('agenticManualFallback' in submissionData) {
+      delete (submissionData as Record<string, unknown>).agenticManualFallback;
     }
 
     const params = buildCreationParams(submissionData, { removeItemUUID: !options.keepItemUUID }, actor);
@@ -865,7 +893,16 @@ export default function ItemCreate() {
           artikelbeschreibung: searchText
         };
 
-        triggerAgenticRun(agenticPayload, context, { backendDispatched });
+        try {
+          console.info('Attempting to trigger agentic workflow after item creation', {
+            context,
+            backendDispatched,
+            hasSearchText: Boolean(agenticPayload.artikelbeschreibung)
+          });
+          triggerAgenticRun(agenticPayload, context, { backendDispatched });
+        } catch (triggerErr) {
+          console.error('Failed to schedule agentic trigger after item creation', triggerErr);
+        }
       }
 
       const successMessage =

@@ -12,6 +12,7 @@ export interface ItemFormData extends Item {
   picture3?: string | null;
   agenticStatus?: AgenticRunStatus;
   agenticSearch?: string;
+  agenticManualFallback?: boolean;
 }
 
 export const ITEM_FORM_DEFAULT_EINHEIT = 'Stück';
