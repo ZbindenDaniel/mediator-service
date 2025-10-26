@@ -40,6 +40,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Enhanced the Node-based test harness with Jest-style utilities, enabling async-friendly matchers and richer diagnostics when running `node scripts/run-tests.js`.
 - Added a manual fallback control to the agentic item creation form so users can exit to manual editing while preserving draft data.
 - Introduced the shared `LoadingPage` experience on landing and item list routes so top-level pages display a consistent loading state while fetching data.
+- Ensured item categories persist and round-trip correctly even without Artikelnummer assignments, with logging to surface missing metadata.
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.
 - Wrapped removal and deletion in database transactions and added unit tests to verify item stock and box deletion logic.
