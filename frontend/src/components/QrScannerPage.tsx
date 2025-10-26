@@ -25,6 +25,7 @@ export default function QrScannerPage() {
   const [message, setMessage] = useState('Kamera wird vorbereitet…');
   const [payload, setPayload] = useState<BoxQrPayload | null>(null);
   const [rawContent, setRawContent] = useState('');
+  const [showRawDetails, setShowRawDetails] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -103,6 +104,7 @@ export default function QrScannerPage() {
     setPayload(null);
     setRawContent('');
     setLogError(null);
+    setShowRawDetails(false);
     setStatus('scanning');
     setMessage('Kamera wird initialisiert… Bitte Zugriff erlauben.');
 
@@ -190,6 +192,12 @@ export default function QrScannerPage() {
     }
   }, [navigate, payload]);
 
+  const handleRawToggle = useCallback((event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    setShowRawDetails(event.currentTarget.open);
+  }, []);
+
+  const additionalFieldCount = payload ? Object.keys(payload).filter((key) => key !== 'id').length : 0;
+
   return (
     <div className="container qr-scanner">
       <h1>QR-Scanner</h1>
@@ -202,7 +210,11 @@ export default function QrScannerPage() {
         {payload ? (
           <div className="result">
             <h2>Behälter {payload.id}</h2>
-            <pre>{JSON.stringify(payload, null, 2)}</pre>
+            <p className="result-meta">
+              {additionalFieldCount > 0
+                ? `Der QR-Code enthält ${additionalFieldCount} weitere ${additionalFieldCount === 1 ? 'Feld' : 'Felder'}.`
+                : 'Der QR-Code enthält keine weiteren Felder.'}
+            </p>
             <div className="actions">
               <button type="button" onClick={handleNavigate}>Behälter öffnen</button>
               <button type="button" onClick={handleRetry}>Nochmal scannen</button>
@@ -215,10 +227,15 @@ export default function QrScannerPage() {
             </button>
           </div>
         )}
-        {rawContent && (
-          <details className="raw">
+        {(rawContent || payload) && (
+          <details className="raw" onToggle={handleRawToggle}>
             <summary>Rohdaten anzeigen</summary>
-            <pre>{rawContent}</pre>
+            {showRawDetails && (
+              <>
+                {payload && <pre>{JSON.stringify(payload, null, 2)}</pre>}
+                {rawContent && <pre>{rawContent}</pre>}
+              </>
+            )}
           </details>
         )}
       </div>
