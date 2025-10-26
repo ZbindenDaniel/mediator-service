@@ -9,6 +9,7 @@ import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import BoxColorTag from './BoxColorTag';
 import { dialogService } from './dialog';
+import LoadingPage from './LoadingPage';
 
 interface Props {
   boxId: string;
@@ -29,6 +30,8 @@ export default function BoxDetail({ boxId }: Props) {
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   async function handleDeleteBox() {
@@ -132,7 +135,7 @@ export default function BoxDetail({ boxId }: Props) {
       });
       if (res.ok) {
         setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme erfolgreich' }));
-        await load();
+        await load({ showSpinner: false });
         console.log('Item removal succeeded', { itemId });
       } else {
         console.error('Failed to remove item', res.status);
@@ -143,7 +146,13 @@ export default function BoxDetail({ boxId }: Props) {
       setRemovalStatus(prev => ({ ...prev, [itemId]: 'Entnahme fehlgeschlagen' }));
     }
   }
-  async function load() {
+  async function load(options?: { showSpinner?: boolean }) {
+    const showSpinner = Boolean(options?.showSpinner);
+    if (showSpinner) {
+      setIsLoading(true);
+    }
+    setLoadError(null);
+    console.info('Loading box details', { boxId, showSpinner });
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}`);
       if (res.ok) {
@@ -153,20 +162,54 @@ export default function BoxDetail({ boxId }: Props) {
         setNoteFeedback(null);
         setItems(data.items || []);
         setEvents(data.events || []);
+        setLoadError(null);
       } else {
         console.error('Failed to fetch box', res.status);
+        setBox(null);
+        setItems([]);
+        setEvents([]);
+        setNote('');
+        setLoadError(res.status === 404 ? 'Behälter wurde nicht gefunden.' : 'Behälter konnte nicht geladen werden.');
       }
     } catch (err) {
       console.error('Failed to fetch box', err);
+      setLoadError('Behälter konnte nicht geladen werden.');
+    } finally {
+      if (showSpinner) {
+        setIsLoading(false);
+      }
     }
   }
 
   useEffect(() => {
-    load();
+    void load({ showSpinner: true });
   }, [boxId]);
 
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
+
+  if (isLoading) {
+    return <LoadingPage message="Behälter wird geladen…" />;
+  }
+
+  if (loadError && !box) {
+    // TODO: Replace basic retry UI with shared error boundary once available.
+    return (
+      <div className="container box">
+        <div className="grid landing-grid">
+          <div className="card">
+            <h2>Fehler beim Laden</h2>
+            <p className="muted">{loadError}</p>
+            <div className='row'>
+              <button type="button" className="btn" onClick={() => void load({ showSpinner: true })}>
+                Erneut versuchen
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container box">
@@ -196,7 +239,7 @@ export default function BoxDetail({ boxId }: Props) {
               </div>
             </div>
 
-            <RelocateBoxCard boxId={box.BoxID} onMoved={load} />
+            <RelocateBoxCard boxId={box.BoxID} onMoved={() => { void load({ showSpinner: false }); }} />
 
             <PrintLabelButton boxId={box.BoxID} />
             <div className="card">
@@ -331,7 +374,7 @@ export default function BoxDetail({ boxId }: Props) {
                 {showAdd && (
                   <AddItemToBoxDialog
                     boxId={boxId}
-                    onAdded={load}
+                    onAdded={() => { void load({ showSpinner: false }); }}
                     onClose={() => setShowAdd(false)}
                   />
                 )}

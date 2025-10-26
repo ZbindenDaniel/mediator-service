@@ -16,6 +16,7 @@ import {
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
+import LoadingPage from './LoadingPage';
 
 interface Props {
   itemId: string;
@@ -409,6 +410,8 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticActionPending, setAgenticActionPending] = useState(false);
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
   const dialog = useDialog();
 
@@ -418,7 +421,12 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ showSpinner = false }: { showSpinner?: boolean } = {}) => {
+    if (showSpinner) {
+      setIsLoading(true);
+    }
+    setLoadError(null);
+    console.info('Loading item details', { itemId, showSpinner });
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
       if (res.ok) {
@@ -432,25 +440,59 @@ export default function ItemDetail({ itemId }: Props) {
         setMediaAssets(media);
         setAgenticError(null);
         setAgenticReviewIntent(null);
+        setLoadError(null);
       } else {
         console.error('Failed to fetch item', res.status);
+        setItem(null);
+        setEvents([]);
         setAgentic(null);
         setAgenticError('Agentic-Status konnte nicht geladen werden.');
         setMediaAssets([]);
         setAgenticReviewIntent(null);
+        setLoadError(res.status === 404 ? 'Artikel wurde nicht gefunden.' : 'Artikel konnte nicht geladen werden.');
       }
     } catch (err) {
       console.error('Failed to fetch item', err);
+      setItem(null);
+      setEvents([]);
       setAgentic(null);
       setAgenticError('Agentic-Status konnte nicht geladen werden.');
       setMediaAssets([]);
       setAgenticReviewIntent(null);
+      setLoadError('Artikel konnte nicht geladen werden.');
+    } finally {
+      if (showSpinner) {
+        setIsLoading(false);
+      }
     }
   }, [itemId]);
 
   useEffect(() => {
-    load();
+    void load({ showSpinner: true });
   }, [load]);
+
+  if (isLoading) {
+    return <LoadingPage message="Artikel wird geladen…" />;
+  }
+
+  if (loadError && !item) {
+    // TODO: Replace basic retry UI with shared error boundary once available.
+    return (
+      <div className="container item">
+        <div className="grid landing-grid">
+          <div className="card">
+            <h2>Fehler beim Laden</h2>
+            <p className="muted">{loadError}</p>
+            <div className='row'>
+              <button type="button" className="btn" onClick={() => void load({ showSpinner: true })}>
+                Erneut versuchen
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const agenticNeedsReview = agentic ? (agentic.ReviewState || '').toLowerCase() === 'pending' : false;
   const normalizedAgenticStatus = (agentic?.Status || '').toLowerCase();
@@ -931,7 +973,7 @@ export default function ItemDetail({ itemId }: Props) {
               onCancel={handleAgenticCancel}
             />
 
-            <RelocateItemCard itemId={item.ItemUUID} onRelocated={load} />
+            <RelocateItemCard itemId={item.ItemUUID} onRelocated={() => load({ showSpinner: false })} />
 
             <PrintLabelButton itemId={item.ItemUUID} />
 
@@ -947,7 +989,7 @@ export default function ItemDetail({ itemId }: Props) {
             </div>
           </>
         ) : (
-          <p>Loading...</p>
+          <p className="muted">Artikel steht nicht zur Verfügung.</p>
         )}
       </div>
     </div>
