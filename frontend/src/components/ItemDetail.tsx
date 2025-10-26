@@ -11,11 +11,7 @@ import {
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
-import { itemCategories } from '../data/itemCategories';
-import type {
-  ItemCategoryDefinition,
-  ItemSubcategoryDefinition
-} from '../data/itemCategories';
+import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
   buildAgenticCancelUrl,
   cancelAgenticRun,
@@ -125,11 +121,6 @@ interface NormalizedDetailValue {
 }
 
 const DETAIL_PLACEHOLDER_TEXT = 'Nicht gesetzt';
-
-interface ItemSubcategoryWithParent extends ItemSubcategoryDefinition {
-  parentCode: number;
-  parentLabel: string;
-}
 
 function buildPlaceholder(): NormalizedDetailValue {
   return {
@@ -512,32 +503,7 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticApiBase = useMemo(resolveAgenticApiBase, []);
   const agenticRunUrl = '/api/agentic/run';
   const agenticCancelUrl = useMemo(() => buildAgenticCancelUrl(agenticApiBase), [agenticApiBase]);
-  // TODO: Share category lookup building logic between item detail and forms.
-  const categoryLookups = useMemo(() => {
-    const haupt = new Map<number, ItemCategoryDefinition>();
-    const unter = new Map<number, ItemSubcategoryWithParent>();
-    try {
-      for (const category of itemCategories) {
-        if (haupt.has(category.code)) {
-          console.warn('Duplicate Hauptkategorie code detected while building detail lookup', category.code);
-        }
-        haupt.set(category.code, category);
-        for (const sub of category.subcategories) {
-          if (unter.has(sub.code)) {
-            console.warn('Duplicate Unterkategorie code detected while building detail lookup', sub.code);
-          }
-          unter.set(sub.code, {
-            ...sub,
-            parentCode: category.code,
-            parentLabel: category.label
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Failed to build item detail category lookup maps', error);
-    }
-    return { haupt, unter };
-  }, []);
+  const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
   const { haupt: hauptCategoryLookup, unter: unterCategoryLookup } = categoryLookups;
 
@@ -551,7 +517,13 @@ export default function ItemDetail({ itemId }: Props) {
         console.warn('Missing Hauptkategorie mapping for item detail view', { code });
         return `Unbekannte Kategorie (${code})`;
       }
-      return `${humanizeCategoryLabel(category.label)} (${category.code})`;
+      const label = humanizeCategoryLabel(category.label);
+      return (
+        <span className="details-category" aria-label={`${label} (${category.code})`}>
+          <span className="details-category__name">{label}</span>
+          <span className="details-category__code">({category.code})</span>
+        </span>
+      );
     },
     [hauptCategoryLookup]
   );
@@ -566,7 +538,23 @@ export default function ItemDetail({ itemId }: Props) {
         console.warn('Missing Unterkategorie mapping for item detail view', { code });
         return `Unbekannte Kategorie (${code})`;
       }
-      return `${humanizeCategoryLabel(subCategory.label)} (${subCategory.code})`;
+      const parentLabel = humanizeCategoryLabel(subCategory.parentLabel);
+      const subLabel = humanizeCategoryLabel(subCategory.label);
+      return (
+        <span
+          className="details-category"
+          aria-label={`${parentLabel} → ${subLabel} (${subCategory.code})`}
+        >
+          <span className="details-category__path">
+            <span className="details-category__name">{parentLabel}</span>
+            <span className="details-category__separator" aria-hidden="true">
+              →
+            </span>
+            <span className="details-category__name">{subLabel}</span>
+          </span>
+          <span className="details-category__code">({subCategory.code})</span>
+        </span>
+      );
     },
     [unterCategoryLookup]
   );
