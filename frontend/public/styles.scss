@@ -1294,6 +1294,15 @@ button:focus {
     word-break: break-word;
 }
 
+.details .responsive-td.is-placeholder {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.details .details-placeholder {
+    color: inherit;
+}
+
 @media (max-width: 600px) {
     .details {
         width: 100%;
@@ -1312,6 +1321,8 @@ button:focus {
         border-bottom: 1px solid var(--line);
         margin-bottom: 8px;
         padding-bottom: 4px;
+        gap: 4px;
+        align-items: flex-start;
     }
 
     .details .responsive-th {
