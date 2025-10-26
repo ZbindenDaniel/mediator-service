@@ -1325,6 +1325,29 @@ button:focus {
     color: inherit;
 }
 
+.details .details-category {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.details .details-category__path {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.details .details-category__code {
+    color: var(--muted);
+    font-size: 0.9em;
+}
+
+.details .details-category__separator {
+    color: var(--muted);
+}
+
 @media (max-width: 600px) {
     .details {
         width: 100%;
@@ -1355,5 +1378,9 @@ button:focus {
 
     .details .responsive-td {
         padding-left: 0;
+    }
+
+    .details .details-category {
+        gap: 0.25rem;
     }
 }
