@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
 import type { Action } from './index';
+import { normalizeItemEinheit, type ItemEinheit } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -68,6 +69,28 @@ function toCsvValue(val: any): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function resolveExportEinheit(rawValue: unknown, context: { itemUUID: string }): ItemEinheit {
+  const result = normalizeItemEinheit(rawValue);
+  if (!result.reason) {
+    return result.value;
+  }
+
+  const payload = {
+    itemUUID: context.itemUUID,
+    provided: rawValue,
+    normalizedValue: result.value,
+    normalizedFrom: result.normalizedFrom
+  };
+
+  if (result.reason === 'invalid' || result.reason === 'non-string') {
+    console.warn('[export-items] Normalized invalid Einheit value during export', payload);
+  } else {
+    console.info('[export-items] Adjusted Einheit value during export', payload);
+  }
+
+  return result.value;
+}
+
 const action: Action = {
   key: 'export-items',
   label: 'Export items',
@@ -84,6 +107,10 @@ const action: Action = {
         createdAfter: createdAfter || null,
         updatedAfter: updatedAfter || null
       });
+      const normalizedItems = items.map((row: any) => ({
+        ...row,
+        Einheit: resolveExportEinheit(row.Einheit, { itemUUID: row.ItemUUID })
+      }));
       const log = ctx.db.transaction((rows: any[], a: string) => {
         for (const row of rows) {
           ctx.logEvent.run({
@@ -95,9 +122,9 @@ const action: Action = {
           });
         }
       });
-      log(items, actor);
+      log(normalizedItems, actor);
       const header = columns.join(',');
-      const lines = items.map((row: any) => columns.map((c) => toCsvValue(row[fieldMap[c]])).join(','));
+      const lines = normalizedItems.map((row: any) => columns.map((c) => toCsvValue(row[fieldMap[c]])).join(','));
       const csv = [header, ...lines].join('\n');
       res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8' });
       res.end(csv);

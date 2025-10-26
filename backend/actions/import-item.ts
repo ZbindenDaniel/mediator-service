@@ -4,12 +4,43 @@ import path from 'path';
 import type { Action } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
+import { DEFAULT_ITEM_EINHEIT, normalizeItemEinheit, type ItemEinheit } from '../../models';
 
-const DEFAULT_EINHEIT = 'Stück';
+function resolveIncomingEinheit(
+  rawValue: string | null,
+  context: { actor: string; itemUUID: string }
+): ItemEinheit {
+  const result = normalizeItemEinheit(rawValue);
+  const payload = {
+    actor: context.actor,
+    itemUUID: context.itemUUID,
+    provided: rawValue,
+    normalizedValue: result.value,
+    normalizedFrom: result.normalizedFrom,
+    fallback: DEFAULT_ITEM_EINHEIT
+  };
 
-function coalesceEinheit(value: string | null): string {
-  const trimmed = (value || '').trim();
-  return trimmed || DEFAULT_EINHEIT;
+  if (!result.reason) {
+    return result.value;
+  }
+
+  switch (result.reason) {
+    case 'normalized':
+      console.info('[import-item] Normalized Einheit value from request payload', payload);
+      break;
+    case 'blank':
+    case 'missing':
+      console.info('[import-item] Defaulting missing Einheit to fallback', payload);
+      break;
+    case 'invalid':
+    case 'non-string':
+      console.warn('[import-item] Received invalid Einheit value, using fallback', payload);
+      break;
+    default:
+      break;
+  }
+
+  return result.value;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -80,6 +111,8 @@ const action: Action = {
       if (normalizedLocation && !requestedStandortLabel) {
         console.warn('[import-item] Missing Standort label mapping for requested location', { location: normalizedLocation });
       }
+      const einheit = resolveIncomingEinheit(p.get('Einheit'), { actor, itemUUID: ItemUUID });
+
       const data = {
         BoxID,
         ItemUUID,
@@ -105,7 +138,7 @@ const action: Action = {
         Veröffentlicht_Status: ['yes','ja','true','1'].includes((p.get('Veröffentlicht_Status') || '').trim().toLowerCase()),
         Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
         Artikeltyp: (p.get('Artikeltyp') || '').trim(),
-        Einheit: coalesceEinheit(p.get('Einheit')),
+        Einheit: einheit,
       };
 
       const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();

@@ -2,13 +2,47 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
 import { upsertBox, persistItem, queueLabel } from './db';
-import { Box, Item } from '../models';
+import { Box, Item, normalizeItemEinheit, type ItemEinheit } from '../models';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
 
-const DEFAULT_EINHEIT = 'Stück';
-
 // TODO: Extend parsing to cover additional partner provided formats once discovered.
+
+function resolveCsvEinheit(
+  rawValue: unknown,
+  context: { rowNumber: number; artikelNummer?: string | null }
+): ItemEinheit {
+  const result = normalizeItemEinheit(rawValue);
+  const payload = {
+    rowNumber: context.rowNumber,
+    artikelNummer: context.artikelNummer,
+    provided: rawValue,
+    normalizedValue: result.value,
+    normalizedFrom: result.normalizedFrom
+  };
+
+  if (!result.reason) {
+    return result.value;
+  }
+
+  switch (result.reason) {
+    case 'normalized':
+      console.info('CSV ingestion: normalized Einheit value', payload);
+      break;
+    case 'blank':
+    case 'missing':
+      console.info('CSV ingestion: defaulting missing Einheit to fallback', payload);
+      break;
+    case 'invalid':
+    case 'non-string':
+      console.warn('CSV ingestion: invalid Einheit encountered, applying fallback', payload);
+      break;
+    default:
+      break;
+  }
+
+  return result.value;
+}
 
 interface NumericParseOptions {
   defaultValue?: number;
@@ -276,7 +310,9 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
     let count = 0;
     const boxesTouched = new Set<string>();
 
-    for (const r of records) {
+    for (let recordIndex = 0; recordIndex < records.length; recordIndex += 1) {
+      const r = records[recordIndex];
+      const rowNumber = recordIndex + 1;
       const row = normalize(r);
       const final = applyOps(row);
       const rawStandort = final.Standort || final.Location || '';
@@ -319,6 +355,11 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
         { treatBlankAsUndefined: true }
       );
+      const einheit = resolveCsvEinheit(final['Einheit'], {
+        rowNumber,
+        artikelNummer: final['Artikel-Nummer'] || final.Artikel_Nummer
+      });
+
       const item: Item = {
         ItemUUID: final.itemUUID,
         BoxID: final.BoxID || null,
@@ -344,7 +385,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         Veröffentlicht_Status: ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase()),
         Shopartikel: parseIntegerField(final['Shopartikel'], 'Shopartikel', { defaultValue: 0 }) || 0,
         Artikeltyp: final['Artikeltyp'] || '',
-        Einheit: final['Einheit'] || DEFAULT_EINHEIT,
+        Einheit: einheit,
       };
       persistItem({
         ...item,

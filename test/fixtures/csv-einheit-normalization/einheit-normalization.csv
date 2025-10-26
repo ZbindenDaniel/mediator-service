@@ -1,0 +1,6 @@
+itemUUID,BoxID,Artikel-Nummer,Artikelbeschreibung,Auf_Lager,Verkaufspreis,Einheit,Datum erfasst
+CSV-EIN-001,CSV-BOX-001,EIN-001,Standard Einheit,1,0,Stk,2024-01-01
+CSV-EIN-002,CSV-BOX-002,EIN-002,Legacy Unit,1,0,Stück,2024-01-02
+CSV-EIN-003,CSV-BOX-003,EIN-003,Mix Preserved,1,0,Mix,2024-01-03
+CSV-EIN-004,CSV-BOX-004,EIN-004,Unknown Unit,1,0,? ? ?,2024-01-04
+CSV-EIN-005,CSV-BOX-005,EIN-005,Missing Unit,1,0,,2024-01-05

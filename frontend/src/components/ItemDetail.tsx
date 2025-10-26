@@ -15,6 +15,7 @@ import {
 } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
+import { ITEM_FORM_DEFAULT_EINHEIT } from './forms/itemFormShared';
 import { dialogService, useDialog } from './dialog';
 
 interface Props {
@@ -856,7 +857,7 @@ export default function ItemDetail({ itemId }: Props) {
                       ['Breite (mm)', item.Breite_mm],
                       ['Höhe (mm)', item.Höhe_mm],
                       ['Gewicht (kg)', item.Gewicht_kg],
-                      ['Einheit', item.Einheit],
+                      ['Einheit', item.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT],
                     ] as [string, any][]).map(([k, v]) => (
                       <tr key={k} className="responsive-row">
                         <th className="responsive-th">{k}</th>

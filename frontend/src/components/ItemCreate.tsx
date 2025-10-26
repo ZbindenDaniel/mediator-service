@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Item, ItemRef } from '../../../models';
+import { normalizeItemEinheit, type Item, type ItemRef } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
@@ -620,10 +620,21 @@ export default function ItemCreate() {
       }
     }
 
-    const einheit = sanitized.Einheit;
-    if (typeof einheit !== 'string' || einheit.trim() === '') {
-      sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
+    const einheitResolution = normalizeItemEinheit(sanitized.Einheit);
+    if (einheitResolution.reason) {
+      const payload = {
+        context: 'buildCreationParams',
+        provided: sanitized.Einheit,
+        resolved: einheitResolution.value,
+        normalizedFrom: einheitResolution.normalizedFrom
+      };
+      if (einheitResolution.reason === 'invalid' || einheitResolution.reason === 'non-string') {
+        console.warn('Normalizing unexpected Einheit before submission', payload);
+      } else {
+        console.info('Adjusting Einheit before submission', payload);
+      }
     }
+    sanitized.Einheit = einheitResolution.value;
 
     Object.entries(sanitized).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {

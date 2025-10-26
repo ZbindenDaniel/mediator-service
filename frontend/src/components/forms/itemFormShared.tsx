@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Item, ItemRef } from '../../../../models';
+import {
+  DEFAULT_ITEM_EINHEIT,
+  ITEM_EINHEIT_VALUES,
+  normalizeItemEinheit,
+  type Item,
+  type ItemEinheit,
+  type ItemRef,
+  type NormalizedEinheitResult
+} from '../../../../models';
 import { ensureUser, getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import type { ItemCategoryDefinition } from '../../data/itemCategories';
@@ -12,9 +20,50 @@ export interface ItemFormData extends Item {
   picture3?: string | null;
   agenticStatus?: 'queued' | 'running';
   agenticSearch?: string;
+  Einheit?: ItemEinheit;
 }
 
-export const ITEM_FORM_DEFAULT_EINHEIT = 'Stück';
+export const ITEM_FORM_DEFAULT_EINHEIT = DEFAULT_ITEM_EINHEIT;
+
+const ITEM_EINHEIT_LABELS: Record<ItemEinheit, string> = {
+  Stk: 'Stk (Stück)',
+  Mix: 'Mix'
+};
+
+function logEinheitResolution(result: NormalizedEinheitResult, context: string, rawValue: unknown) {
+  if (!result.reason) {
+    return;
+  }
+
+  const payload = {
+    context,
+    rawValue,
+    normalizedValue: result.value,
+    normalizedFrom: result.normalizedFrom
+  };
+
+  switch (result.reason) {
+    case 'normalized':
+      console.info?.('Normalized Einheit value in form state', payload);
+      break;
+    case 'blank':
+    case 'missing':
+      console.info?.('Using default Einheit for empty form value', payload);
+      break;
+    case 'invalid':
+    case 'non-string':
+      console.warn?.('Falling back to default Einheit for invalid form value', payload);
+      break;
+    default:
+      break;
+  }
+}
+
+function resolveFormEinheit(rawValue: unknown, context: string): ItemEinheit {
+  const result = normalizeItemEinheit(rawValue);
+  logEinheitResolution(result, context, rawValue);
+  return result.value;
+}
 
 const referenceFieldKeys: (keyof ItemRef)[] = [
   'Artikel_Nummer',
@@ -69,26 +118,39 @@ interface UseItemFormStateOptions {
 }
 
 export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
-  const [form, setForm] = useState<Partial<ItemFormData>>({
-    Einheit: ITEM_FORM_DEFAULT_EINHEIT,
-    ...initialItem
-  });
+  const [form, setForm] = useState<Partial<ItemFormData>>(() => ({
+    ...initialItem,
+    Einheit: resolveFormEinheit(initialItem.Einheit, 'useItemFormState:init')
+  }));
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      if (key === 'Einheit') {
+        const nextValue = resolveFormEinheit(value, 'useItemFormState:update');
+        if (prev.Einheit === nextValue) {
+          return prev;
+        }
+        return { ...prev, Einheit: nextValue };
+      }
+      return { ...prev, [key]: value };
+    });
   }, []);
 
   const mergeForm = useCallback((next: Partial<ItemFormData>) => {
-    setForm((prev) => ({
-      ...prev,
-      ...next,
-      Einheit: next.Einheit ?? prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT
-    }));
+    setForm((prev) => {
+      const merged = { ...prev, ...next } as Partial<ItemFormData>;
+      if (Object.prototype.hasOwnProperty.call(next, 'Einheit')) {
+        merged.Einheit = resolveFormEinheit(next.Einheit, 'useItemFormState:merge');
+      } else if (!merged.Einheit) {
+        merged.Einheit = prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT;
+      }
+      return merged;
+    });
   }, []);
 
   const resetForm = useCallback((next: Partial<ItemFormData>) => {
     setForm({
-      Einheit: ITEM_FORM_DEFAULT_EINHEIT,
-      ...next
+      ...next,
+      Einheit: resolveFormEinheit(next.Einheit, 'useItemFormState:reset')
     });
   }, []);
 
@@ -247,6 +309,8 @@ export function ItemDetailsFields({
 
   const placementHidden = isFieldLocked(lockedFields, 'BoxID', 'hidden');
   const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
+  const einheitHidden = isFieldLocked(lockedFields, 'Einheit', 'hidden');
+  const einheitReadonly = isFieldLocked(lockedFields, 'Einheit', 'readonly');
   const placementInputValue = typeof form.BoxID === 'string' ? form.BoxID : '';
   const hasPlacementValue = placementInputValue.trim() !== '';
 
@@ -777,15 +841,32 @@ export function ItemDetailsFields({
 
       <hr></hr>
 
-      <div className="row">
-        <label>
-          Einheit
-        </label>
-        <input
-          value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
-          onChange={(e) => onUpdate('Einheit', e.target.value)}
-        />
-      </div>
+      {!einheitHidden && (
+        <div className="row">
+          <label>
+            Einheit
+          </label>
+          <select
+            value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
+            onChange={(event) => {
+              const { value } = event.target;
+              if ((ITEM_EINHEIT_VALUES as readonly string[]).includes(value)) {
+                onUpdate('Einheit', value as ItemEinheit);
+              } else {
+                console.warn('Encountered unexpected Einheit selection value, using default.', { value });
+                onUpdate('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
+              }
+            }}
+            disabled={einheitReadonly}
+          >
+            {ITEM_EINHEIT_VALUES.map((value) => (
+              <option key={`einheit-${value}`} value={value}>
+                {ITEM_EINHEIT_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
     </>
   );
