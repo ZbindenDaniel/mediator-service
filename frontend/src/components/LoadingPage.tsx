@@ -31,7 +31,7 @@ const FLYER_WORD = 'revamp';
 '💻']
 
 const COLORES = ['#ff4d4d', '#ffb84d', '#ffff4d', '#4dff4d', '#4dffff', '#4d4dff', '#ff4dff'];
-const FLYER_COUNT = 6*10; // FLYER_LETTERS.length * N
+const FLYER_COUNT = 6 * 10; // FLYER_LETTERS.length * N
 const FLYER_SPEED_SECONDS = 6.5;
 const FLYER_FREQUENCY_SECONDS = 0.4;
 
@@ -40,6 +40,35 @@ type FlyerConfig = {
   variant: number;
   delay: number;
   color: string;
+  position: {
+    top: number;
+    left: number;
+  };
+};
+
+type SafeArea = {
+  top: [number, number];
+  left: [number, number];
+};
+
+const getSafeFlyerArea = (): SafeArea => {
+  const defaultArea: SafeArea = {
+    top: [12, 88],
+    left: [8, 92],
+  };
+
+  if (typeof window === 'undefined') {
+    return defaultArea;
+  }
+
+  const isCompactWidth = window.innerWidth <= 600;
+  const verticalBuffer = isCompactWidth ? 18 : 12;
+  const horizontalBuffer = isCompactWidth ? 10 : 8;
+
+  return {
+    top: [verticalBuffer, Math.max(verticalBuffer, 100 - verticalBuffer)],
+    left: [horizontalBuffer, Math.max(horizontalBuffer, 100 - horizontalBuffer)],
+  };
 };
 
 const LoadingPage: React.FC<LoadingPageProps> = ({
@@ -60,19 +89,63 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
     ],
   );
 
+  const [safeArea, setSafeArea] = React.useState<SafeArea>(() => getSafeFlyerArea());
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      try {
+        setSafeArea((previous) => {
+          const nextArea = getSafeFlyerArea();
+          const isUnchanged =
+            previous.top[0] === nextArea.top[0]
+            && previous.top[1] === nextArea.top[1]
+            && previous.left[0] === nextArea.left[0]
+            && previous.left[1] === nextArea.left[1];
+
+          return isUnchanged ? previous : nextArea;
+        });
+      } catch (error) {
+        console.error('[LoadingPage] Failed to update flyer safe area', error);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   const flyers = React.useMemo(() => {
     try {
+      const [minTop, maxTop] = safeArea.top;
+      const [minLeft, maxLeft] = safeArea.left;
+
+      const randomWithinRange = (min: number, max: number) => min + Math.random() * (max - min);
+
       return Array.from({ length: FLYER_COUNT }).map((_, index) => ({
         character: FLYER_LETTERS[index % FLYER_LETTERS.length],
         variant: index % 6 + 1, // between 1 and 6
         delay: Math.random() * FLYER_LETTERS.length * FLYER_FREQUENCY_SECONDS,
-        color: COLORES[Math.floor(Math.random() * COLORES.length)]
+        color: COLORES[Math.floor(Math.random() * COLORES.length)],
+        position: {
+          top: randomWithinRange(minTop, maxTop),
+          left: randomWithinRange(minLeft, maxLeft),
+        },
       })) as FlyerConfig[];
     } catch (error) {
       console.error('[LoadingPage] Failed to build flyers', error);
       return [] as FlyerConfig[];
     }
-  }, [FLYER_COUNT, FLYER_FREQUENCY_SECONDS, FLYER_LETTERS]);
+  }, [safeArea]);
+
+  React.useEffect(() => {
+    console.debug('[LoadingPage] flyer safe area updated', safeArea);
+  }, [safeArea]);
 
   React.useEffect(() => {
     console.debug('[LoadingPage] flyer configuration', {
@@ -81,9 +154,14 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
       totalFlyers: FLYER_COUNT,
       word: FLYER_WORD,
     });
-  }, [FLYER_COUNT, FLYER_FREQUENCY_SECONDS, FLYER_SPEED_SECONDS, FLYER_WORD]);
+  }, []);
 
-  console.debug(flyers)
+  React.useEffect(() => {
+    console.debug('[LoadingPage] flyer batch prepared', {
+      count: flyers.length,
+    });
+  }, [flyers]);
+
   return (
     <div className={rootClassName} role="status" aria-live="polite" style={rootStyle}>
       <div className="loading-page__flyers" aria-hidden="true">
@@ -93,8 +171,8 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
             className={`loading-page__flyer loading-page__flyer--${flyer.variant}`}
             style={{
               animationDelay: `${flyer.delay}s`,
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
+              top: `${flyer.position.top.toFixed(2)}%`,
+              left: `${flyer.position.left.toFixed(2)}%`,
               color: `${flyer.color}`
             }}
           >
@@ -103,7 +181,7 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
         ))}
       </div>
 
-      {/* <div className="loading-page__spinner" aria-hidden="true" /> */}
+      <div className="loading-page__spinner" aria-hidden="true" />
 
       {(children || message) && (
         <div className="loading-page__message">
