@@ -1,102 +1,131 @@
-// const fs = require('fs');
-// const path = require('path');
-// const { Readable } = require('stream');
-// const importItemAction = require('../backend/actions/import-item').default || require('../backend/actions/import-item');
+import { Readable } from 'stream';
+import importItemAction from '../backend/actions/import-item';
 
-// function createRequest(body) {
-//   const stream = Readable.from([body]);
-//   stream.method = 'POST';
-//   stream.headers = {};
-//   return stream;
-// }
+type ImportContext = {
+  getMaxBoxId: { get: () => { BoxID: string } | undefined };
+  getMaxItemId: { get: () => { ItemUUID: string } | undefined };
+  getBox: { get: (id: string) => unknown };
+  getItem: { get: jest.Mock };
+  getAgenticRun: { get: jest.Mock };
+  db: { transaction: <T extends (...args: any[]) => any>(fn: T) => T };
+  upsertBox: { run: jest.Mock };
+  persistItemWithinTransaction: jest.Mock;
+  upsertAgenticRun: { run: jest.Mock };
+  logEvent: { run: jest.Mock };
+  agenticServiceEnabled: boolean;
+};
 
-// function createResponse() {
-//   const chunks = [];
-//   const res = {
-//     statusCode: 0,
-//     headers: {},
-//     writeHead(status, headers) {
-//       this.statusCode = status;
-//       this.headers = headers;
-//     },
-//     end(chunk) {
-//       if (chunk) {
-//         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-//       }
-//     }
-//   };
+type MockResponse = {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: string;
+  writeHead: (status: number, headers: Record<string, string>) => void;
+  end: (chunk?: unknown) => void;
+};
 
-//   Object.defineProperty(res, 'body', {
-//     get() {
-//       return Buffer.concat(chunks).toString('utf8');
-//     }
-//   });
+function createRequest(body: string): Readable & { method: string; headers: Record<string, string> } {
+  const stream = Readable.from([body]);
+  (stream as any).method = 'POST';
+  (stream as any).headers = { 'content-type': 'application/x-www-form-urlencoded' };
+  return stream as Readable & { method: string; headers: Record<string, string> };
+}
 
-//   return res;
-// }
+function createResponse(): MockResponse {
+  const chunks: Buffer[] = [];
+  return {
+    statusCode: 0,
+    headers: {},
+    body: '',
+    writeHead(status, headers) {
+      this.statusCode = status;
+      this.headers = headers;
+    },
+    end(chunk) {
+      if (chunk) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+        this.body = Buffer.concat(chunks).toString('utf8');
+      }
+    }
+  };
+}
 
-// describe('import-item action persistence', () => {
-//   const itemUUID = 'I-010101-0001';
-//   const boxId = 'B-010101-0001';
-//   const mediaDir = path.join(__dirname, '..', 'media', itemUUID);
+function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
+  const ctx: ImportContext = {
+    getMaxBoxId: { get: () => ({ BoxID: 'B-240101-0001' }) },
+    getMaxItemId: { get: () => ({ ItemUUID: 'I-240101-0001' }) },
+    getBox: { get: () => undefined },
+    getItem: { get: jest.fn() },
+    getAgenticRun: { get: jest.fn() },
+    db: {
+      transaction: ((fn: (...args: any[]) => any) => ((...args: any[]) => fn(...args))) as any
+    },
+    upsertBox: { run: jest.fn() },
+    persistItemWithinTransaction: jest.fn(),
+    upsertAgenticRun: { run: jest.fn() },
+    logEvent: { run: jest.fn() },
+    agenticServiceEnabled: false
+  };
 
-//   afterEach(() => {
-//     fs.rmSync(mediaDir, { force: true, recursive: true });
-//   });
+  return { ...ctx, ...overrides };
+}
 
-//   test('persists reference data when Artikel_Nummer is provided', async () => {
-//     const actor = 'agentic-user';
-//     const artikelNummer = 'MAT-5000';
-//     const description = 'Agentic Flow Item';
-//     const encodedImage = Buffer.from('agentic-image').toString('base64');
+describe('import-item agentic persistence', () => {
+  test('deduplicates AgenticSearchQueued events when status remains queued', async () => {
+    const itemUUID = 'I-240101-0002';
+    const boxId = 'B-240101-0002';
+    const getAgenticRunMock = jest.fn()
+      .mockReturnValueOnce(undefined)
+      .mockReturnValue({ Status: 'queued' });
+    const getItemMock = jest
+      .fn()
+      .mockReturnValueOnce(undefined)
+      .mockReturnValue({ ItemUUID: itemUUID });
 
-//     const form = new URLSearchParams({
-//       actor,
-//       BoxID: boxId,
-//       ItemUUID: itemUUID,
-//       Artikel_Nummer: artikelNummer,
-//       Artikelbeschreibung: description,
-//       Kurzbeschreibung: 'Kurz',
-//       Langtext: 'Lang',
-//       picture1: `data:image/png;base64,${encodedImage}`,
-//       agenticStatus: 'running',
-//       agenticSearch: 'Agentic Flow Item'
-//     });
+    const ctx = createContext({
+      getMaxBoxId: { get: () => ({ BoxID: boxId }) },
+      getMaxItemId: { get: () => ({ ItemUUID: itemUUID }) },
+      getAgenticRun: { get: getAgenticRunMock },
+      getItem: { get: getItemMock }
+    });
 
-//     const ctx = {
-//       getMaxBoxId: { get: () => ({ BoxID: boxId }) },
-//       getMaxItemId: { get: () => ({ ItemUUID: itemUUID }) },
-//       getBox: { get: () => undefined },
-//       db: {
-//         transaction: (fn) => (...args) => fn(...args)
-//       },
-//       upsertBox: { run: jest.fn() },
-//       persistItemWithinTransaction: jest.fn(),
-//       upsertAgenticRun: { run: jest.fn() },
-//       logEvent: { run: jest.fn() },
-//       agenticServiceEnabled: true
-//     };
+    const form = new URLSearchParams({
+      actor: 'importer',
+      BoxID: boxId,
+      ItemUUID: itemUUID,
+      Artikelbeschreibung: 'Queue Persistence Item',
+      agenticSearch: 'Persistent Query',
+      Location: 'A-01-01'
+    });
 
-//     const req = createRequest(form.toString());
-//     const res = createResponse();
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-//     await importItemAction.handle(req, res, ctx);
+    try {
+      const firstReq = createRequest(form.toString());
+      const firstRes = createResponse();
+      await importItemAction.handle(firstReq as any, firstRes as any, ctx as any);
+      expect(firstRes.statusCode).toBe(200);
 
-//     expect(res.statusCode).toBe(200);
-//     const body = JSON.parse(res.body || '{}');
-//     expect(body.ok).toBe(true);
+      const secondReq = createRequest(form.toString());
+      const secondRes = createResponse();
+      await importItemAction.handle(secondReq as any, secondRes as any, ctx as any);
+      expect(secondRes.statusCode).toBe(200);
+    } finally {
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
 
-//     expect(ctx.persistItemWithinTransaction).toHaveBeenCalledTimes(1);
-//     const persisted = ctx.persistItemWithinTransaction.mock.calls[0][0];
+    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(2);
+    expect(getAgenticRunMock).toHaveBeenCalledTimes(2);
 
-//     expect(persisted.Artikel_Nummer).toBe(artikelNummer);
-//     expect(persisted.Artikelbeschreibung).toBe(description);
-//     expect(typeof persisted.Grafikname).toBe('string');
-//     expect(persisted.Grafikname).toContain(`${itemUUID}/`);
-//     expect(persisted.Grafikname).toContain(`${artikelNummer}-1`);
-
-//     expect(fs.existsSync(mediaDir)).toBe(true);
-//     const savedFiles = fs.readdirSync(mediaDir);
-//     expect(savedFiles.some((file) => file.includes(`${artikelNummer}-1`))).toBe(true);
-//   });
-// });
+    const queuedEvents = ctx.logEvent.run.mock.calls.filter(([payload]) => payload?.Event === 'AgenticSearchQueued');
+    expect(queuedEvents).toHaveLength(1);
+    const queuedMeta = queuedEvents[0]?.[0]?.Meta ? JSON.parse(queuedEvents[0][0].Meta) : null;
+    expect(queuedMeta).toEqual({
+      SearchQuery: 'Persistent Query',
+      Status: 'queued',
+      QueuedLocally: true,
+      RemoteTriggerDispatched: false
+    });
+  });
+});
