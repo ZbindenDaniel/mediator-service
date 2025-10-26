@@ -239,6 +239,8 @@ const action: Action = {
         Boolean(ctx.agenticServiceEnabled)
       );
 
+      let agenticTriggerDispatched = false;
+
       if (ctx.agenticServiceEnabled) {
         const triggerPayload = {
           itemId: ItemUUID,
@@ -252,6 +254,7 @@ const action: Action = {
           });
         } else {
           try {
+            agenticTriggerDispatched = true;
             void forwardAgenticTrigger(triggerPayload, {
               context: 'import-item',
               logger: console
@@ -280,7 +283,7 @@ const action: Action = {
         });
       }
 
-      sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID } });
+      sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID }, agenticTriggerDispatched });
     } catch (err) {
       console.error('Import item failed', err);
       sendJson(res, 500, { error: (err as Error).message });
