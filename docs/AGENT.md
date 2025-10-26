@@ -28,3 +28,5 @@ When implementing a plan:
 3. **Maintain observability** – extend the established logging helpers in `backend/src/lib/logger.ts` and `frontend/src/utils/logger.ts`; include try/catch blocks where they provide meaningful recovery paths.
 4. **Keep changes scoped** – update only the components, routes, or scripts necessary for the task, favouring incremental diffs that are easy to review.
 5. **Update TODOs and documentation** – resolve or refresh adjacent TODO comments and mirror substantive changes in this documentation so future planning stays accurate.
+
+These planning responses should be explicit enough that another developer can implement them without additional clarification.

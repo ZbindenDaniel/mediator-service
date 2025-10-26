@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgenticRunStatus, Item, ItemRef } from '../../../../models';
 import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../../models';
 import { ensureUser, getUser } from '../../lib/user';
@@ -6,6 +6,24 @@ import { itemCategories } from '../../data/itemCategories';
 import { buildItemCategoryLookups } from '../../lib/categoryLookup';
 import type { ConfirmDialogOptions } from '../dialog';
 import { dialogService } from '../dialog';
+
+const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
+export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
+export const PHOTO_INPUT_FIELDS: readonly PhotoFieldKey[] = PHOTO_FIELD_KEYS;
+
+type PhotoSeedCandidate = string | null | undefined;
+
+function normalisePhotoSeedValue(candidate: unknown): string | null {
+  if (typeof candidate !== 'string') {
+    return null;
+  }
+  const trimmed = candidate.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalisePhotoSeedList(seeds?: readonly PhotoSeedCandidate[]): (string | null)[] {
+  return PHOTO_FIELD_KEYS.map((_, index) => normalisePhotoSeedValue(seeds?.[index]));
+}
 
 export interface ItemFormData extends Item {
   picture1?: string | null;
@@ -94,15 +112,30 @@ export function buildStockConfirmOptions(op: StockOperation): ConfirmDialogOptio
 
 interface UseItemFormStateOptions {
   initialItem: Partial<ItemFormData>;
+  initialPhotos?: readonly PhotoSeedCandidate[];
 }
 
-export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
+export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStateOptions) {
+  const initialPhotoSeedsRef = useRef<(string | null)[]>(normalisePhotoSeedList(initialPhotos));
+  const seededPhotosRef = useRef<(string | null)[]>(initialPhotoSeedsRef.current);
+  const [seededPhotos, setSeededPhotos] = useState<(string | null)[]>(initialPhotoSeedsRef.current);
   const [form, setForm] = useState<Partial<ItemFormData>>(() => {
     const initialEinheit = initialItem ? resolveFormEinheit(initialItem.Einheit, 'initialState') : ITEM_FORM_DEFAULT_EINHEIT;
-    return {
+    const draft: Partial<ItemFormData> = {
       ...initialItem,
       Einheit: initialEinheit
     };
+    const draftRecord = draft as Record<PhotoFieldKey, string | null | undefined>;
+    initialPhotoSeedsRef.current.forEach((seed, index) => {
+      if (!seed) {
+        return;
+      }
+      const key = PHOTO_FIELD_KEYS[index];
+      if (draftRecord[key] == null) {
+        draftRecord[key] = seed;
+      }
+    });
+    return draft;
   });
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -205,7 +238,59 @@ export function useItemFormState({ initialItem }: UseItemFormStateOptions) {
     }
   }, [form.ItemUUID, setForm]);
 
-  return { form, update, mergeForm, resetForm, setForm, generateMaterialNumber, changeStock } as const;
+  const seedPhotos = useCallback(
+    (photos?: readonly PhotoSeedCandidate[]) => {
+      try {
+        const normalized = normalisePhotoSeedList(photos);
+        const previousSeeds = seededPhotosRef.current;
+        const seedsChanged = normalized.some((value, index) => value !== previousSeeds[index]);
+        let formChanged = false;
+        setForm((prev) => {
+          const nextDraft: Partial<ItemFormData> = { ...prev };
+          const draftRecord = nextDraft as Record<PhotoFieldKey, string | null | undefined>;
+          let changed = false;
+          PHOTO_FIELD_KEYS.forEach((key, index) => {
+            const incoming = normalized[index];
+            const priorSeed = previousSeeds[index];
+            const currentValue = draftRecord[key];
+            const shouldReplace = currentValue == null || currentValue === priorSeed;
+            if (incoming) {
+              if (shouldReplace && currentValue !== incoming) {
+                draftRecord[key] = incoming;
+                changed = true;
+              }
+            } else if (shouldReplace && currentValue != null) {
+              draftRecord[key] = null;
+              changed = true;
+            }
+          });
+          if (!changed) {
+            return prev;
+          }
+          formChanged = true;
+          return nextDraft;
+        });
+        if (seedsChanged) {
+          seededPhotosRef.current = normalized;
+          setSeededPhotos(normalized);
+        }
+        if (formChanged) {
+          console.log('Seeded initial photos into item form state', {
+            seededCount: normalized.filter(Boolean).length
+          });
+        }
+      } catch (error) {
+        console.error('Failed to seed initial photos into item form state', error);
+      }
+    },
+    [setForm]
+  );
+
+  useEffect(() => {
+    seedPhotos(initialPhotos);
+  }, [initialPhotos, seedPhotos]);
+
+  return { form, update, mergeForm, resetForm, setForm, generateMaterialNumber, changeStock, seedPhotos, seededPhotos } as const;
 }
 
 interface ItemDetailsFieldsProps {
@@ -798,8 +883,6 @@ export function ItemDetailsFields({
   );
 }
 
-export const PHOTO_INPUT_FIELDS = ['picture1', 'picture2', 'picture3'] as const;
-export type PhotoFieldKey = (typeof PHOTO_INPUT_FIELDS)[number];
 export type PhotoInputMode = 'camera' | 'file';
 
 export type PhotoInputModeState = Record<PhotoFieldKey, PhotoInputMode>;

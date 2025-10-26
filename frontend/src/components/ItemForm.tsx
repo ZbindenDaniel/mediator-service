@@ -17,10 +17,23 @@ interface Props {
   headerContent?: React.ReactNode;
   lockedFields?: LockedFieldConfig;
   hidePhotoInputs?: boolean;
+  initialPhotos?: readonly string[];
 }
 
-export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerContent, lockedFields, hidePhotoInputs }: Props) {
-  const { form, update, mergeForm, generateMaterialNumber, changeStock } = useItemFormState({ initialItem: item });
+export default function ItemForm({
+  item,
+  onSubmit,
+  submitLabel,
+  isNew,
+  headerContent,
+  lockedFields,
+  hidePhotoInputs,
+  initialPhotos
+}: Props) {
+  const { form, update, mergeForm, generateMaterialNumber, changeStock, seedPhotos, seededPhotos } = useItemFormState({
+    initialItem: item,
+    initialPhotos
+  });
   const { getCapture, isCameraMode, toggleMode } = usePhotoInputModes();
 
   useEffect(() => {
@@ -30,6 +43,14 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
       console.error('Failed to merge updated item draft into item form state', error);
     }
   }, [item, mergeForm]);
+
+  useEffect(() => {
+    try {
+      seedPhotos(initialPhotos);
+    } catch (error) {
+      console.error('Failed to apply initial photos to item form state', error);
+    }
+  }, [initialPhotos, seedPhotos]);
 
   const handlePhotoModeToggle = useCallback(
     (field: PhotoFieldKey) => {
@@ -128,7 +149,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
                 </div>
               </div>
 
-              {form.picture1 && (
+              {(form.picture1 || seededPhotos[0]) && (
                 <div className="row">
                   <label htmlFor="picture2">
                     Foto 2
@@ -155,7 +176,7 @@ export default function ItemForm({ item, onSubmit, submitLabel, isNew, headerCon
                 </div>
               )}
 
-              {form.picture2 && (
+              {(form.picture2 || seededPhotos[1]) && (
                 <div className="row">
                   <label htmlFor="picture3">
                     Foto 3

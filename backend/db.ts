@@ -331,12 +331,17 @@ type ItemPersistencePayload = {
 function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   const instance = prepareInstanceRow(item);
 
+  const referenceKey = instance.Artikel_Nummer ?? instance.ItemUUID;
+
   if (!instance.Artikel_Nummer) {
-    return { instance, ref: null };
+    // TODO: Backfill existing deployments to remove duplicate item_ref rows once Artikel_Nummer values are assigned.
+    console.info('[db] Persisting item reference with ItemUUID fallback key', {
+      itemUUID: instance.ItemUUID
+    });
   }
 
   try {
-    const ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: instance.Artikel_Nummer });
+    const ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: referenceKey });
     return { instance, ref };
   } catch (err) {
     console.error('Failed to prepare item reference payload', {
@@ -389,7 +394,7 @@ function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
   upsertItemInstanceStatement.run(payload.instance);
 }
 
-const ITEM_REFERENCE_JOIN_KEY = 'i.Artikel_Nummer';
+const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
 
 const ITEM_JOIN_BASE = `
   FROM items i
