@@ -318,8 +318,54 @@ export function ItemDetailsFields({
 
   const categoryLookup = useMemo(() => {
     const map = new Map<number, ItemCategoryDefinition>();
-    for (const category of itemCategories) {
-      map.set(category.code, category);
+    try {
+      let previousCategoryCode = -Infinity;
+      for (const category of itemCategories) {
+        if (category.code <= previousCategoryCode) {
+          console.warn('Item categories are not strictly ascending by code', {
+            current: category.code,
+            previous: previousCategoryCode
+          });
+        }
+
+        if (map.has(category.code)) {
+          console.error('Duplicate Hauptkategorie code detected', category.code);
+        }
+
+        previousCategoryCode = category.code;
+        map.set(category.code, category);
+
+        let previousSubCode = -Infinity;
+        const seenSubCodes = new Set<number>();
+        for (const subCategory of category.subcategories) {
+          if (subCategory.code <= previousSubCode) {
+            console.warn('Unterkategorie codes are not strictly ascending', {
+              hauptkategorie: category.code,
+              current: subCategory.code,
+              previous: previousSubCode
+            });
+          }
+
+          if (seenSubCodes.has(subCategory.code)) {
+            console.error('Duplicate Unterkategorie code detected', {
+              hauptkategorie: category.code,
+              code: subCategory.code
+            });
+          }
+
+          seenSubCodes.add(subCategory.code);
+          previousSubCode = subCategory.code;
+        }
+      }
+
+      if (map.size !== itemCategories.length) {
+        console.error('Item category lookup size mismatch', {
+          expected: itemCategories.length,
+          actual: map.size
+        });
+      }
+    } catch (error) {
+      console.error('Failed to build item category lookup map', error);
     }
     return map;
   }, []);
