@@ -339,10 +339,8 @@ export function mergeManualDraftForFallback({
 
 export function buildCreationParams(
   data: Partial<ItemFormData>,
-  options: { removeItemUUID?: boolean } = {},
   actor?: string
 ) {
-  const { removeItemUUID = true } = options;
   const params = new URLSearchParams();
   const sanitized: Record<string, unknown> = { ...data };
   if (typeof sanitized.Artikelbeschreibung === 'string') {
@@ -351,7 +349,7 @@ export function buildCreationParams(
   if (typeof sanitized.Artikel_Nummer === 'string') {
     sanitized.Artikel_Nummer = sanitized.Artikel_Nummer.trim();
   }
-  if (removeItemUUID && 'ItemUUID' in sanitized) {
+  if ('ItemUUID' in sanitized) {
     delete sanitized.ItemUUID;
   }
   if (actor) {
@@ -842,8 +840,7 @@ export default function ItemCreate() {
 
   async function submitNewItem(
     data: Partial<ItemFormData>,
-    context: string,
-    options: { keepItemUUID?: boolean } = {}
+    context: string
   ) {
     if (creating) {
       console.warn('Item creation already running. Ignoring duplicate submit.', { context });
@@ -885,7 +882,7 @@ export default function ItemCreate() {
       delete (submissionData as Record<string, unknown>).agenticManualFallback;
     }
 
-    const params = buildCreationParams(submissionData, { removeItemUUID: !options.keepItemUUID }, actor);
+    const params = buildCreationParams(submissionData, actor);
     try {
       setCreating(true);
       console.log('Submitting item creation payload', { context, data });

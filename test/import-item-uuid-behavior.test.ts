@@ -4,9 +4,11 @@ jest.mock('../backend/actions/agentic-trigger', () => ({
 
 import { Readable } from 'stream';
 import importItemAction from '../backend/actions/import-item';
+import { __TESTING__ } from '../backend/lib/itemIds';
+
+const { ITEM_ID_PREFIX } = __TESTING__;
 
 type ImportContext = {
-  getMaxItemId: { get: () => { ItemUUID: string } | undefined };
   getItem: { get: jest.Mock };
   getBox: { get: jest.Mock };
   db: { transaction: <T extends (...args: any[]) => any>(fn: T) => T };
@@ -15,6 +17,7 @@ type ImportContext = {
   upsertAgenticRun: { run: jest.Mock };
   logEvent: jest.Mock;
   agenticServiceEnabled: boolean;
+  getMaxItemId: { get: jest.Mock };
 };
 
 type MockResponse = {
@@ -25,11 +28,17 @@ type MockResponse = {
   end: (chunk?: unknown) => void;
 };
 
-function createRequest(body: string): Readable & { method: string; headers: Record<string, string> } {
+function createRequest(
+  body: string,
+  options: { url?: string } = {}
+): Readable & { method: string; headers: Record<string, string>; url?: string } {
   const stream = Readable.from([body]);
   (stream as any).method = 'POST';
   (stream as any).headers = { 'content-type': 'application/x-www-form-urlencoded' };
-  return stream as Readable & { method: string; headers: Record<string, string> };
+  if (options.url) {
+    (stream as any).url = options.url;
+  }
+  return stream as Readable & { method: string; headers: Record<string, string>; url?: string };
 }
 
 function createResponse(): MockResponse {
@@ -53,7 +62,6 @@ function createResponse(): MockResponse {
 
 function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
   const ctx: ImportContext = {
-    getMaxItemId: { get: () => ({ ItemUUID: 'I-010124-0001' }) },
     getItem: { get: jest.fn() },
     getBox: { get: jest.fn() },
     db: {
@@ -63,7 +71,8 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
     persistItemWithinTransaction: jest.fn(),
     upsertAgenticRun: { run: jest.fn() },
     logEvent: jest.fn(),
-    agenticServiceEnabled: false
+    agenticServiceEnabled: false,
+    getMaxItemId: { get: jest.fn() }
   };
 
   return { ...ctx, ...overrides };
@@ -81,10 +90,11 @@ describe('import-item ItemUUID handling', () => {
 
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     const ctx = createContext({
-      getMaxItemId: { get: () => ({ ItemUUID: 'I-050424-0007' }) },
-      getItem: { get: jest.fn().mockReturnValue(undefined) }
+      getItem: { get: jest.fn().mockReturnValue(undefined) },
+      getMaxItemId: { get: jest.fn().mockReturnValue({ ItemUUID: 'I-040424-0027' }) }
     });
 
     const form = new URLSearchParams({
@@ -93,23 +103,37 @@ describe('import-item ItemUUID handling', () => {
       Artikelbeschreibung: 'Referenced item clone'
     });
 
-    const req = createRequest(form.toString());
+    const req = createRequest(form.toString(), { url: '/api/import/item' });
     const res = createResponse();
 
+    let infoCalls: any[][] = [];
     try {
       await importItemAction.handle(req as any, res as any, ctx as any);
     } finally {
+      infoCalls = infoSpy.mock.calls.slice();
       infoSpy.mockRestore();
       errorSpy.mockRestore();
+      warnSpy.mockRestore();
     }
 
     expect(res.statusCode).toBe(200);
     const payload = JSON.parse(res.body);
-    expect(payload?.item?.ItemUUID).toBe('I-050424-0008');
-    expect(payload?.item?.ItemUUID).not.toBe('I-REFERENCE-1234');
+    const mintedId = payload?.item?.ItemUUID;
+    expect(mintedId).toMatch(/^I-\d{6}-\d{4}$/);
+    expect(mintedId).not.toBe('I-REFERENCE-1234');
+    expect(mintedId?.slice(-4)).toBe('0028');
+
+    const dateSegment = mintedId?.slice(ITEM_ID_PREFIX.length, ITEM_ID_PREFIX.length + 6);
+    expect(dateSegment).toBe('050424');
 
     const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0]?.[0];
-    expect(persistedItem?.ItemUUID).toBe('I-050424-0008');
+    expect(persistedItem?.ItemUUID).toBe(mintedId);
+    expect(ctx.getMaxItemId.get).toHaveBeenCalledTimes(1);
+    expect(
+      infoCalls.some(([message]) =>
+        typeof message === 'string' && message.includes('Discarding ItemUUID provided for new item import')
+      )
+    ).toBe(true);
   });
 
   test('preserves ItemUUID for existing items during updates', async () => {
@@ -118,6 +142,7 @@ describe('import-item ItemUUID handling', () => {
 
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     const existingUUID = 'I-010124-0042';
     const ctx = createContext({
@@ -126,18 +151,21 @@ describe('import-item ItemUUID handling', () => {
 
     const form = new URLSearchParams({
       actor: 'editor',
-      ItemUUID: existingUUID,
+      ItemUUID: 'I-IGNORED-FROM-PAYLOAD',
       Artikelbeschreibung: 'Updated existing item'
     });
 
-    const req = createRequest(form.toString());
+    const req = createRequest(form.toString(), { url: `/api/items/${encodeURIComponent(existingUUID)}` });
     const res = createResponse();
 
+    let warnCalls: any[][] = [];
     try {
       await importItemAction.handle(req as any, res as any, ctx as any);
     } finally {
       infoSpy.mockRestore();
       errorSpy.mockRestore();
+      warnCalls = warnSpy.mock.calls.slice();
+      warnSpy.mockRestore();
     }
 
     expect(res.statusCode).toBe(200);
@@ -146,5 +174,11 @@ describe('import-item ItemUUID handling', () => {
 
     const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0]?.[0];
     expect(persistedItem?.ItemUUID).toBe(existingUUID);
+    expect(ctx.getMaxItemId.get).not.toHaveBeenCalled();
+    expect(
+      warnCalls.some(([message]) =>
+        typeof message === 'string' && message.includes('Ignoring mismatched ItemUUID')
+      )
+    ).toBe(true);
   });
 });

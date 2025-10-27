@@ -72,7 +72,6 @@ describe('ItemCreate box handling', () => {
         BoxID: '  BOX-123  ',
         Auf_Lager: 1
       },
-      { removeItemUUID: true },
       'tester'
     );
 
