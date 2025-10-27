@@ -111,23 +111,19 @@ const action: Action = {
         return sendJson(res, 500, { error: 'Failed to update agentic run' });
       }
 
-      try {
-        ctx.logEvent.run({
-          Actor: actor,
-          EntityType: 'Item',
-          EntityId: itemId,
-          Event: 'AgenticTriggerFailed',
-          Meta: JSON.stringify({
-            context: contextLabel,
-            searchTerm,
-            error: failureSummary,
-            status: statusCode,
-            responseBody
-          })
-        });
-      } catch (logErr) {
-        console.error('Failed to log agentic trigger failure event', logErr);
-      }
+      ctx.logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: itemId,
+        Event: 'AgenticTriggerFailed',
+        Meta: JSON.stringify({
+          context: contextLabel,
+          searchTerm,
+          error: failureSummary,
+          status: statusCode,
+          responseBody
+        })
+      });
 
       let updatedRun: any = null;
       try {

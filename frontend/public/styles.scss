@@ -342,6 +342,13 @@ div {
     }
 }
 
+.event-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 
 .qr-scanner .card {
     display: flex;

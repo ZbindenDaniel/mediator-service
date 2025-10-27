@@ -81,17 +81,13 @@ const action: Action = {
         return sendJson(res, 500, { error: (err as Error).message });
       }
 
-      try {
-        ctx.logEvent.run({
-          Actor: actor,
-          EntityType: 'Item',
-          EntityId: itemId,
-          Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
-          Meta: JSON.stringify({ decision, notes })
-        });
-      } catch (err) {
-        console.error('Failed to log agentic review event', err);
-      }
+      ctx.logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: itemId,
+        Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
+        Meta: JSON.stringify({ decision, notes })
+      });
 
       try {
         const updated = ctx.getAgenticRun.get(itemId) || null;

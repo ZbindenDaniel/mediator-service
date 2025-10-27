@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { EventLog } from '../../../models';
 import RecentEventsCard, { RecentEventsList } from './RecentEventsCard';
+import { filterAllowedEvents } from '../utils/eventLogLevels';
 
 const DEFAULT_LIMIT = 50;
 
@@ -20,7 +21,7 @@ export default function RecentActivitiesPage() {
           throw new Error(`Aktivitäten konnten nicht geladen werden (Status ${response.status}).`);
         }
         const data = await response.json();
-        const receivedEvents = Array.isArray(data?.events) ? data.events : [];
+        const receivedEvents = Array.isArray(data?.events) ? filterAllowedEvents(data.events) : [];
         if (!cancelled) {
           setEvents(receivedEvents);
           setError(null);

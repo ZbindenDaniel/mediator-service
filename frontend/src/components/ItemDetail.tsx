@@ -13,6 +13,7 @@ import {
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
+import { filterAllowedEvents } from '../utils/eventLogLevels';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
   buildAgenticCancelUrl,
@@ -636,7 +637,7 @@ export default function ItemDetail({ itemId }: Props) {
       if (res.ok) {
         const data = await res.json();
         setItem(data.item);
-        setEvents(data.events || []);
+        setEvents(Array.isArray(data.events) ? filterAllowedEvents(data.events) : []);
         setAgentic(data.agentic ?? null);
         const media = Array.isArray(data.media)
           ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
@@ -1170,7 +1171,8 @@ export default function ItemDetail({ itemId }: Props) {
               <ul className="events">
                 {displayedEvents.map((ev) => (
                   <li key={ev.Id}>
-                    <span className='muted'>[{formatDateTime(ev.CreatedAt)}]</span> {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
+                    <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
+                    {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>

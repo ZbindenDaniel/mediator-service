@@ -34,7 +34,13 @@ const action: Action = {
       if (!hasLocation && hasNotesField) {
         const noteTxn = ctx.db.transaction((boxId: string, note: string, a: string) => {
           ctx.db.prepare(`UPDATE boxes SET Notes=?, UpdatedAt=datetime('now') WHERE BoxID=?`).run(note, boxId);
-          ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Note', Meta: JSON.stringify({ notes: note }) });
+        ctx.logEvent({
+          Actor: a,
+          EntityType: 'Box',
+          EntityId: boxId,
+          Event: 'Note',
+          Meta: JSON.stringify({ notes: note })
+        });
         });
         try {
           noteTxn(id, notes, actor);
@@ -57,7 +63,13 @@ const action: Action = {
       }
       const txn = ctx.db.transaction((boxId: string, loc: string, note: string, a: string, label: string | null) => {
         ctx.db.prepare(`UPDATE boxes SET Location=?, StandortLabel=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(loc, label, note, a, boxId);
-        ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Moved', Meta: JSON.stringify({ location: loc, notes: note, standortLabel: label }) });
+        ctx.logEvent({
+          Actor: a,
+          EntityType: 'Box',
+          EntityId: boxId,
+          Event: 'Moved',
+          Meta: JSON.stringify({ location: loc, notes: note, standortLabel: label })
+        });
       });
       txn(id, locationRaw, notes, actor, standortLabel);
       console.info('[move-box] Processed move update', { boxId: id, actor, location: locationRaw });

@@ -13,7 +13,7 @@ type ImportContext = {
   upsertBox: { run: jest.Mock };
   persistItemWithinTransaction: jest.Mock;
   upsertAgenticRun: { run: jest.Mock };
-  logEvent: { run: jest.Mock };
+  logEvent: jest.Mock;
   agenticServiceEnabled: boolean;
 };
 
@@ -62,7 +62,7 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
     upsertBox: { run: jest.fn() },
     persistItemWithinTransaction: jest.fn(),
     upsertAgenticRun: { run: jest.fn() },
-    logEvent: { run: jest.fn() },
+    logEvent: jest.fn(),
     agenticServiceEnabled: false
   };
 

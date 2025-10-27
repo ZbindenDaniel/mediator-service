@@ -29,7 +29,13 @@ const action: Action = {
         if (!item) return sendJson(res, 404, { error: 'item not found' });
         ctx.db.transaction(() => {
           ctx.deleteItem.run(id);
-          ctx.logEvent.run({ Actor: actor, EntityType: 'Item', EntityId: id, Event: 'Deleted', Meta: null });
+          ctx.logEvent({
+            Actor: actor,
+            EntityType: 'Item',
+            EntityId: id,
+            Event: 'Deleted',
+            Meta: null
+          });
         })();
       } else {
         const box = ctx.getBox.get(id);
@@ -38,7 +44,13 @@ const action: Action = {
         if (items.length) return sendJson(res, 400, { error: 'box not empty' });
         ctx.db.transaction(() => {
           ctx.deleteBox.run(id);
-          ctx.logEvent.run({ Actor: actor, EntityType: 'Box', EntityId: id, Event: 'Deleted', Meta: null });
+          ctx.logEvent({
+            Actor: actor,
+            EntityType: 'Box',
+            EntityId: id,
+            Event: 'Deleted',
+            Meta: null
+          });
         })();
       }
       sendJson(res, 200, { ok: true });

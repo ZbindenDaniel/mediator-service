@@ -51,14 +51,26 @@ const action: Action = {
         fs.mkdirSync(path.dirname(out), { recursive: true });
         await ctx.pdfForBox({ boxData, outPath: out });
         previewUrl = `/prints/${path.basename(out)}`;
-        ctx.logEvent.run({ Actor: null, EntityType: 'Box', EntityId: box.BoxID, Event: 'PrintPreviewSaved', Meta: JSON.stringify({ file: previewUrl, qrPayload: boxData }) });
+        ctx.logEvent({
+          Actor: null,
+          EntityType: 'Box',
+          EntityId: box.BoxID,
+          Event: 'PrintPreviewSaved',
+          Meta: JSON.stringify({ file: previewUrl, qrPayload: boxData })
+        });
         console.log('Box label preview generated', { boxId: box.BoxID, previewUrl, qrPayload: boxData });
       } catch (err) {
         console.error('Preview generation failed', err);
       }
       const result = await ctx.sendZpl(zpl);
       if (result.sent) {
-        ctx.logEvent.run({ Actor: null, EntityType: 'Box', EntityId: box.BoxID, Event: 'PrintSent', Meta: JSON.stringify({ transport: 'tcp' }) });
+        ctx.logEvent({
+          Actor: null,
+          EntityType: 'Box',
+          EntityId: box.BoxID,
+          Event: 'PrintSent',
+          Meta: JSON.stringify({ transport: 'tcp' })
+        });
       }
       return sendJson(res, 200, { sent: !!result.sent, previewUrl, reason: result.reason, qrPayload: boxData });
     } catch (err) {

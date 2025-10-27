@@ -319,6 +319,7 @@ import { Readable } from 'stream';
 import type { IncomingMessage, ServerResponse } from 'http';
 import Database from 'better-sqlite3';
 import moveBoxAction from '../backend/actions/move-box';
+import { resolveEventLogLevel } from '../models';
 
 type BoxRow = {
   BoxID: string;
@@ -338,13 +339,20 @@ type EventRow = {
   EntityType: string;
   EntityId: string;
   Event: string;
+  Level: string;
   Meta: string | null;
 };
 
 type MoveBoxTestContext = {
   db: Database.Database;
   getBox: Database.Statement;
-  logEvent: Database.Statement;
+  logEvent: (payload: {
+    Actor?: string | null;
+    EntityType: string;
+    EntityId: string;
+    Event: string;
+    Meta?: string | null;
+  }) => void;
 };
 
 function createMockRequest(path: string, body: unknown): IncomingMessage {
@@ -403,6 +411,7 @@ function createMoveBoxContext(initialBox: Partial<BoxRow> & { BoxID: string }) {
       EntityType TEXT NOT NULL,
       EntityId TEXT NOT NULL,
       Event TEXT NOT NULL,
+      Level TEXT NOT NULL DEFAULT 'Information',
       Meta TEXT
     );
   `);
@@ -424,10 +433,20 @@ function createMoveBoxContext(initialBox: Partial<BoxRow> & { BoxID: string }) {
   });
 
   const getBox = db.prepare('SELECT * FROM boxes WHERE BoxID = ?');
-  const logEvent = db.prepare(`
-    INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta)
-    VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)
+  const insertEvent = db.prepare(`
+    INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
+    VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
   `);
+  const logEvent: MoveBoxTestContext['logEvent'] = (payload) => {
+    insertEvent.run({
+      Actor: payload.Actor ?? null,
+      EntityType: payload.EntityType,
+      EntityId: payload.EntityId,
+      Event: payload.Event,
+      Level: resolveEventLogLevel(payload.Event),
+      Meta: payload.Meta ?? null
+    });
+  };
   const selectEvents = db.prepare('SELECT * FROM events WHERE EntityId = ? ORDER BY Id');
 
   const ctx: MoveBoxTestContext = { db, getBox, logEvent };

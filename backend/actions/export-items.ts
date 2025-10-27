@@ -120,7 +120,7 @@ const action: Action = {
       });
       const log = ctx.db.transaction((rows: any[], a: string) => {
         for (const row of rows) {
-          ctx.logEvent.run({
+          ctx.logEvent({
             Actor: a,
             EntityType: 'Item',
             EntityId: row.ItemUUID,

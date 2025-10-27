@@ -3,6 +3,7 @@ import type { EventLog } from '../../../models';
 import { formatDate } from '../lib/format';
 import { eventLabel } from '../../../models/event-labels';
 import { Link } from 'react-router-dom';
+import { filterAllowedEvents } from '../utils/eventLogLevels';
 
 interface ResolvedEventLink {
   path: string;
@@ -68,15 +69,17 @@ interface Props {
 }
 
 export function RecentEventsList({ events }: Props) {
+  const allowedEvents = filterAllowedEvents(events);
   return (
     <div id="eventsOut" className="list">
-      {events.length ? (
-        events.map((e) => {
+      {allowedEvents.length ? (
+        allowedEvents.map((e) => {
           const { path, ariaSuffix } = resolveEventLink(e);
           const formattedDate = formatDate(e.CreatedAt);
           const label = eventLabel(e.Event);
-          const actorText = e.Actor ? `${e.Actor}: ` : '[?]';
-          const ariaLabel = `${label}${actorText} am ${formattedDate} – ${ariaSuffix}`;
+          const actorText = e.Actor ? `${e.Actor}: ` : '[?] ';
+          const ariaActor = e.Actor ? `${e.Actor}: ` : 'Unbekannt: ';
+          const ariaLabel = `${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`;
 
           return (
             <React.Fragment key={e.Id}>
@@ -87,10 +90,12 @@ export function RecentEventsList({ events }: Props) {
                     <br />
                   </div>
                   <div className="muted">{e.EntityId}</div>
-                  <div className='muted'>{formattedDate} </div>
-                  <div>
-                    {actorText}
-                    {label}
+                  <div className="muted">{formattedDate} </div>
+                  <div className="event-row">
+                    <span>
+                      {actorText}
+                      {label}
+                    </span>
                   </div>
                 </div>
               </Link>

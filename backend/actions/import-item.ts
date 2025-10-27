@@ -255,7 +255,13 @@ const action: Action = {
             throw agenticPersistErr;
           }
           const itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
-          ctx.logEvent.run({ Actor: a, EntityType: 'Item', EntityId: itemData.ItemUUID, Event: itemExists == undefined ? 'Updated' : 'Created', Meta: JSON.stringify({ BoxID: boxId }) });
+          ctx.logEvent({
+            Actor: a,
+            EntityType: 'Item',
+            EntityId: itemData.ItemUUID,
+            Event: itemExists == undefined ? 'Updated' : 'Created',
+            Meta: JSON.stringify({ BoxID: boxId })
+          });
           if (manuallySkipped) {
             console.info('[import-item] Agentic run persisted as notStarted due to manual submission', {
               ItemUUID: itemData.ItemUUID,
@@ -274,7 +280,7 @@ const action: Action = {
               !previousAgenticRun || previousStatus !== AGENTIC_RUN_STATUS_QUEUED;
 
             if (shouldEmitAgenticQueuedEvent) {
-              ctx.logEvent.run({
+              ctx.logEvent({
                 Actor: a,
                 EntityType: 'Item',
                 EntityId: itemData.ItemUUID,
