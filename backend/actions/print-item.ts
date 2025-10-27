@@ -56,7 +56,7 @@ const action: Action = {
         fs.mkdirSync(path.dirname(out), { recursive: true });
         await ctx.pdfForItem({ itemData, outPath: out });
         previewUrl = `/prints/${path.basename(out)}`;
-        ctx.logEvent.run({
+        ctx.logEvent({
           Actor: null,
           EntityType: 'Item',
           EntityId: item.ItemUUID,
@@ -69,7 +69,13 @@ const action: Action = {
       }
       const result = await ctx.sendZpl(zpl);
       if (result.sent) {
-        ctx.logEvent.run({ Actor: null, EntityType: 'Item', EntityId: item.ItemUUID, Event: 'PrintSent', Meta: JSON.stringify({ transport: 'tcp' }) });
+        ctx.logEvent({
+          Actor: null,
+          EntityType: 'Item',
+          EntityId: item.ItemUUID,
+          Event: 'PrintSent',
+          Meta: JSON.stringify({ transport: 'tcp' })
+        });
       }
       return sendJson(res, 200, { sent: !!result.sent, previewUrl, reason: result.reason, qrPayload: itemData });
     } catch (err) {

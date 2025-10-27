@@ -144,7 +144,7 @@ const action: Action = {
             ctx.upsertAgenticRun.run(runUpdate);
           }
 
-          ctx.logEvent.run({
+          ctx.logEvent({
             Actor: actor,
             EntityType: 'Item',
             EntityId: itemUUID,

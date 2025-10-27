@@ -43,23 +43,18 @@ const action: Action = {
         : new Date().toISOString();
       const source = typeof data.source === 'string' && data.source ? data.source : 'qr-scanner';
 
-      try {
-        ctx.logEvent.run({
-          Actor: actor,
-          EntityType: 'Box',
-          EntityId: boxId,
-          Event: 'QrScanned',
-          Meta: JSON.stringify({
-            payload,
-            scannedAt,
-            source,
-            userAgent: req.headers['user-agent'] || null
-          })
-        });
-      } catch (err) {
-        console.error('Failed to persist QR scan event', err);
-        return sendJson(res, 500, { error: 'Failed to persist log entry' });
-      }
+      ctx.logEvent({
+        Actor: actor,
+        EntityType: 'Box',
+        EntityId: boxId,
+        Event: 'QrScanned',
+        Meta: JSON.stringify({
+          payload,
+          scannedAt,
+          source,
+          userAgent: req.headers['user-agent'] || null
+        })
+      });
 
       console.log('Logged QR scan event', { boxId, scannedAt, source });
       return sendJson(res, 200, { ok: true });

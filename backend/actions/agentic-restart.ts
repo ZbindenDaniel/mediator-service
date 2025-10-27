@@ -99,17 +99,13 @@ const action: Action = {
           }
         }
 
-        try {
-          ctx.logEvent.run({
-            Actor: actor,
-            EntityType: 'Item',
-            EntityId: itemUUID,
-            Event: 'AgenticRunRestarted',
-            Meta: JSON.stringify({ previousStatus: prevStatus, searchQuery, created: !hasExisting })
-          });
-        } catch (logErr) {
-          console.error('Failed to log agentic restart event', logErr);
-        }
+        ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Item',
+          EntityId: itemUUID,
+          Event: 'AgenticRunRestarted',
+          Meta: JSON.stringify({ previousStatus: prevStatus, searchQuery, created: !hasExisting })
+        });
       }
     );
 

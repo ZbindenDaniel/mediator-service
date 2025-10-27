@@ -20,7 +20,7 @@ type ImportContext = {
   upsertBox: { run: jest.Mock };
   persistItemWithinTransaction: jest.Mock;
   upsertAgenticRun: { run: jest.Mock };
-  logEvent: { run: jest.Mock };
+  logEvent: jest.Mock;
   agenticServiceEnabled: boolean;
 };
 
@@ -71,7 +71,7 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
     upsertBox: { run: jest.fn() },
     persistItemWithinTransaction: jest.fn(),
     upsertAgenticRun: { run: jest.fn() },
-    logEvent: { run: jest.fn() },
+    logEvent: jest.fn(),
     agenticServiceEnabled: false
   };
 
@@ -132,7 +132,7 @@ describe('import-item agentic persistence', () => {
     expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(2);
     expect(getAgenticRunMock).toHaveBeenCalledTimes(2);
 
-    const queuedEvents = ctx.logEvent.run.mock.calls.filter(([payload]) => payload?.Event === 'AgenticSearchQueued');
+    const queuedEvents = ctx.logEvent.mock.calls.filter(([payload]) => payload?.Event === 'AgenticSearchQueued');
     expect(queuedEvents).toHaveLength(1);
     const queuedMeta = queuedEvents[0]?.[0]?.Meta ? JSON.parse(queuedEvents[0][0].Meta) : null;
     expect(queuedMeta).toEqual({
@@ -171,11 +171,11 @@ describe('import-item agentic persistence', () => {
       infoSpy.mockRestore();
     }
 
-    const agenticQueuedEvents = ctx.logEvent.run.mock.calls.filter(([payload]) => payload?.Event === 'AgenticSearchQueued');
+    const agenticQueuedEvents = ctx.logEvent.mock.calls.filter(([payload]) => payload?.Event === 'AgenticSearchQueued');
     expect(agenticQueuedEvents).toHaveLength(0);
 
-    expect(ctx.logEvent.run).toHaveBeenCalledTimes(1);
-    const [loggedEvent] = ctx.logEvent.run.mock.calls[0] ?? [];
+    expect(ctx.logEvent).toHaveBeenCalledTimes(1);
+    const [loggedEvent] = ctx.logEvent.mock.calls[0] ?? [];
     expect(loggedEvent?.Event).not.toBe('AgenticSearchQueued');
 
     expect(ctx.getAgenticRun.get).not.toHaveBeenCalled();

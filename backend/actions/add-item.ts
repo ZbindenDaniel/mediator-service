@@ -28,7 +28,7 @@ const action: Action = {
       const txn = ctx.db.transaction((u: string, a: string) => {
         ctx.incrementItemStock.run(u);
         const updated = ctx.getItem.get(u);
-        ctx.logEvent.run({
+        ctx.logEvent({
           Actor: a,
           EntityType: 'Item',
           EntityId: u,

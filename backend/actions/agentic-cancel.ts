@@ -82,17 +82,13 @@ const action: Action = {
           throw new Error('Failed to update agentic run during cancel');
         }
 
-        try {
-          ctx.logEvent.run({
-            Actor: actorName,
-            EntityType: 'Item',
-            EntityId: itemUUID,
-            Event: 'AgenticRunCancelled',
-            Meta: JSON.stringify({ previousStatus, cancelledAt: nowIso })
-          });
-        } catch (logErr) {
-          console.error('Failed to log agentic cancel event', logErr);
-        }
+        ctx.logEvent({
+          Actor: actorName,
+          EntityType: 'Item',
+          EntityId: itemUUID,
+          Event: 'AgenticRunCancelled',
+          Meta: JSON.stringify({ previousStatus, cancelledAt: nowIso })
+        });
       }
     );
 

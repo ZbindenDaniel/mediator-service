@@ -7,6 +7,7 @@ import type { Box, Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
+import { filterAllowedEvents } from '../utils/eventLogLevels';
 import BoxColorTag from './BoxColorTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
@@ -161,7 +162,7 @@ export default function BoxDetail({ boxId }: Props) {
         setNote(data.box?.Notes || '');
         setNoteFeedback(null);
         setItems(data.items || []);
-        setEvents(data.events || []);
+        setEvents(Array.isArray(data.events) ? filterAllowedEvents(data.events) : []);
         setLoadError(null);
       } else {
         console.error('Failed to fetch box', res.status);
@@ -386,7 +387,8 @@ export default function BoxDetail({ boxId }: Props) {
               <ul className="events">
                 {displayedEvents.map((ev) => (
                   <li key={ev.Id}>
-                    <span className='muted'>[{formatDateTime(ev.CreatedAt)}]</span> {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
+                    <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
+                    {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
                   </li>
                 ))}
               </ul>

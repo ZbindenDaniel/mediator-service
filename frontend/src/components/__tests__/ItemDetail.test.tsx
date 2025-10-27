@@ -5,6 +5,7 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ItemDetail from '../ItemDetail';
 import { DialogProvider } from '../dialog';
+import { EventLogLevel } from '../../../models';
 
 describe('ItemDetail category rendering', () => {
   const originalFetch = global.fetch;
@@ -37,9 +38,14 @@ describe('ItemDetail category rendering', () => {
         },
         events: [
           {
+            Id: 1,
             Actor: 'tester',
-            Action: 'create',
-            CreatedAt: '2024-01-01T12:00:00Z'
+            Event: 'Created',
+            Level: EventLogLevel.Information,
+            EntityType: 'Item',
+            EntityId: 'item-1',
+            CreatedAt: '2024-01-01T12:00:00Z',
+            Meta: null
           }
         ],
         agentic: null,

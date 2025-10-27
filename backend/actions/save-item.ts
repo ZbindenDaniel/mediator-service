@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
-import { Item, ItemEinheit, isItemEinheit } from '../../models';
+import { ItemEinheit, isItemEinheit } from '../../models';
+import type { Item } from '../../models';
 import type { Action } from './index';
 
 const MEDIA_PREFIX = '/media/';
@@ -314,7 +315,7 @@ const action: Action = {
       };
       const txn = ctx.db.transaction((it: Item, a: string) => {
         ctx.persistItemWithinTransaction(it);
-        ctx.logEvent.run({
+        ctx.logEvent({
           Actor: a,
           EntityType: 'Item',
           EntityId: it.ItemUUID,

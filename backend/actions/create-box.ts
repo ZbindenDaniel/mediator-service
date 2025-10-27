@@ -43,7 +43,13 @@ const action: Action = {
           PlacedAt: null,
           UpdatedAt: now
         });
-        ctx.logEvent.run({ Actor: a, EntityType: 'Box', EntityId: boxId, Event: 'Created', Meta: null });
+        ctx.logEvent({
+          Actor: a,
+          EntityType: 'Box',
+          EntityId: boxId,
+          Event: 'Created',
+          Meta: null
+        });
         console.log('Created box', boxId);
       });
       txn(id, actor);

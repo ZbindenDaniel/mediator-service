@@ -2,7 +2,19 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { DB_PATH } from './config';
-import { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog } from '../models';
+import {
+  AgenticRun,
+  Box,
+  Item,
+  ItemInstance,
+  ItemRef,
+  LabelJob,
+  EventLog,
+  EventLogLevel,
+  EVENT_LOG_LEVELS,
+  parseEventLogLevelAllowList,
+  resolveEventLogLevel
+} from '../models';
 import { resolveStandortLabel } from './standort-label';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -44,6 +56,7 @@ CREATE TABLE IF NOT EXISTS events (
   EntityType TEXT NOT NULL,
   EntityId TEXT NOT NULL,
   Event TEXT NOT NULL,
+  Level TEXT NOT NULL DEFAULT 'Information',
   Meta TEXT
 );
 `);
@@ -97,6 +110,50 @@ function ensureStandortLabelColumn(database: Database.Database = db): void {
 }
 
 ensureStandortLabelColumn();
+
+const rawEventLogLevels = process.env.EVENT_LOG_LEVELS ?? null;
+const {
+  levels: resolvedLevels,
+  invalid: invalidEventLogLevels,
+  hadInput: hadEventLogLevelInput,
+  usedFallback: usedEventLogFallback
+} = parseEventLogLevelAllowList(rawEventLogLevels);
+
+if (!hadEventLogLevelInput) {
+  console.info('[db] EVENT_LOG_LEVELS not configured; defaulting to all event levels.');
+} else {
+  if (invalidEventLogLevels.length > 0) {
+    console.warn('[db] EVENT_LOG_LEVELS contains unknown values; ignoring invalid entries.', {
+      invalid: invalidEventLogLevels
+    });
+  }
+  if (usedEventLogFallback) {
+    console.warn('[db] EVENT_LOG_LEVELS produced no recognized levels; defaulting to all levels.');
+  }
+}
+
+const computedAllowList = resolvedLevels.length > 0 ? resolvedLevels : [...EVENT_LOG_LEVELS];
+
+if (resolvedLevels.length === 0) {
+  console.warn('[db] EVENT_LOG_LEVEL_ALLOW_LIST resolved empty; reverting to full level set.');
+}
+
+export const EVENT_LOG_LEVEL_ALLOW_LIST: readonly EventLogLevel[] = Object.freeze([
+  ...computedAllowList
+]);
+
+const EVENT_LOG_LEVEL_SQL_LIST = EVENT_LOG_LEVEL_ALLOW_LIST
+  .map((level) => `'${level.replace(/'/g, "''")}'`)
+  .join(', ');
+
+function levelFilterExpression(alias?: string): string {
+  if (EVENT_LOG_LEVEL_ALLOW_LIST.length === 0) {
+    return '0';
+  }
+
+  const column = alias ? `${alias}.Level` : 'Level';
+  return `${column} IN (${EVENT_LOG_LEVEL_SQL_LIST})`;
+}
 
 const CREATE_ITEM_REFS_SQL = `
 CREATE TABLE IF NOT EXISTS item_refs (
@@ -715,7 +772,42 @@ export const incrementItemStock = db.prepare(
 );
 export const deleteItem = db.prepare(`DELETE FROM items WHERE ItemUUID = ?`);
 export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
-export const logEvent = db.prepare(`INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Meta) VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Meta)`);
+const insertEventStatement = db.prepare(`
+  INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
+  VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
+`);
+
+export type LogEventPayload = {
+  Actor?: string | null;
+  EntityType: string;
+  EntityId: string;
+  Event: string;
+  Meta?: string | null;
+};
+
+export function logEvent(payload: LogEventPayload): void {
+  const resolvedLevel = resolveEventLogLevel(payload.Event);
+  const entry = {
+    Actor: payload.Actor ?? null,
+    EntityType: payload.EntityType,
+    EntityId: payload.EntityId,
+    Event: payload.Event,
+    Level: resolvedLevel,
+    Meta: payload.Meta ?? null
+  };
+
+  try {
+    insertEventStatement.run(entry);
+  } catch (err) {
+    console.warn('[db] Failed to persist event log entry', {
+      entityType: entry.EntityType,
+      entityId: entry.EntityId,
+      event: entry.Event,
+      level: entry.Level,
+      error: err
+    });
+  }
+}
 
 export type BulkMoveResult = {
   itemId: string;
@@ -756,7 +848,7 @@ export function bulkMoveItems(
       }
 
       updateItemBoxPlacement.run({ ItemUUID: itemId, BoxID: toBoxId, Location: normalizedLocation });
-      logEvent.run({
+      logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: itemId,
@@ -811,7 +903,7 @@ export function bulkRemoveItemStock(itemIds: string[], actor: string): BulkRemov
       const afterQty = typeof updated?.Auf_Lager === 'number' ? updated.Auf_Lager : 0;
       const clearedBox = afterQty <= 0;
 
-      logEvent.run({
+      logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: itemId,
@@ -843,26 +935,42 @@ export function bulkRemoveItemStock(itemIds: string[], actor: string): BulkRemov
     throw err;
   }
 }
-export const listEventsForBox = db.prepare(`SELECT * FROM events WHERE EntityType='Box' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
-export const listEventsForItem = db.prepare(`SELECT * FROM events WHERE EntityType='Item' AND EntityId=? ORDER BY Id DESC LIMIT 200`);
+export const listEventsForBox = db.prepare(`
+  SELECT *
+  FROM events
+  WHERE EntityType='Box'
+    AND EntityId=?
+    AND ${levelFilterExpression()}
+  ORDER BY Id DESC
+  LIMIT 200`);
+export const listEventsForItem = db.prepare(`
+  SELECT *
+  FROM events
+  WHERE EntityType='Item'
+    AND EntityId=?
+    AND ${levelFilterExpression()}
+  ORDER BY Id DESC
+  LIMIT 200`);
 export const listRecentEvents = db.prepare(`
-  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Meta,
+  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
          r.Artikelbeschreibung AS Artikelbeschreibung,
          COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
   LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
+  WHERE ${levelFilterExpression('e')}
   ORDER BY e.Id DESC LIMIT 3`);
 export const listRecentActivities = db.prepare(`
-  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Meta,
+  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
          r.Artikelbeschreibung AS Artikelbeschreibung,
          COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
   FROM events e
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
   LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
+  WHERE ${levelFilterExpression('e')}
   ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
-export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events`);
+export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events WHERE ${levelFilterExpression()}`);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
@@ -899,5 +1007,5 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY i.Datum_erfasst
 `);
 
-export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
+export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog, LogEventPayload };
 
