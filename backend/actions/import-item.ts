@@ -12,6 +12,7 @@ import type { AgenticRunStatus } from '../../models';
 import type { Action } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
+import { generateItemUUID } from '../lib/itemIds';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -42,6 +43,47 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function resolveRequestPath(req: IncomingMessage): string {
+  const raw = req.url ?? '';
+  if (!raw) {
+    return '';
+  }
+
+  try {
+    const candidate = new URL(raw, 'http://localhost');
+    return candidate.pathname;
+  } catch (error) {
+    console.error('[import-item] Failed to parse request URL; falling back to raw path fragment', {
+      rawUrl: raw,
+      error
+    });
+    const trimmed = raw.split('?')[0];
+    return trimmed;
+  }
+}
+
+function extractItemUUIDFromPath(pathname: string): string | null {
+  if (!pathname) {
+    return null;
+  }
+
+  const match = pathname.match(/^\/api\/items\/([^/]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch (error) {
+    console.error('[import-item] Failed to decode ItemUUID from request path', {
+      pathname,
+      segment: match[1],
+      error
+    });
+    return match[1];
+  }
+}
+
 const action: Action = {
   key: 'import-item',
   label: 'Import item',
@@ -55,44 +97,39 @@ const action: Action = {
       const actor = (p.get('actor') || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const nowDate = new Date();
-      const dd = String(nowDate.getDate()).padStart(2, '0');
-      const mm = String(nowDate.getMonth() + 1).padStart(2, '0');
-      const yy = String(nowDate.getFullYear()).slice(-2);
       const providedBoxId = (p.get('BoxID') || '').trim();
       const BoxID = providedBoxId ? providedBoxId : null;
       if (!BoxID) {
         console.info('[import-item] Persisting item without box placement', { actor });
       }
       const incomingItemUUID = (p.get('ItemUUID') || '').trim();
-      let ItemUUID = '';
-      if (incomingItemUUID) {
-        try {
-          const existingItem = ctx.getItem?.get
-            ? ((ctx.getItem.get(incomingItemUUID) as { ItemUUID: string } | undefined) ?? null)
-            : null;
-          if (existingItem) {
-            ItemUUID = existingItem.ItemUUID;
-            console.info('[import-item] Preserving existing ItemUUID from payload', { ItemUUID });
-          } else {
-            console.info('[import-item] Incoming ItemUUID not found; generating new identifier', {
-              ItemUUID: incomingItemUUID
-            });
-          }
-        } catch (lookupErr) {
-          console.error('[import-item] Failed to verify incoming ItemUUID; generating new identifier instead', lookupErr);
-        }
-      }
+      const requestPath = resolveRequestPath(req);
+      const pathItemUUID = extractItemUUIDFromPath(requestPath);
+      const isUpdateRequest = Boolean(pathItemUUID);
 
-      if (!ItemUUID) {
+      let ItemUUID = '';
+      if (isUpdateRequest && pathItemUUID) {
+        ItemUUID = pathItemUUID;
+        if (incomingItemUUID && incomingItemUUID !== pathItemUUID) {
+          console.warn('[import-item] Ignoring mismatched ItemUUID in payload for update request', {
+            requestPath,
+            incomingItemUUID,
+            pathItemUUID
+          });
+        } else {
+          console.info('[import-item] Processing item update based on request path', { ItemUUID });
+        }
+      } else {
+        if (incomingItemUUID) {
+          console.info('[import-item] Discarding ItemUUID provided for new item import', {
+            incomingItemUUID,
+            requestPath
+          });
+        }
+
         try {
-          const lastItem = ctx.getMaxItemId.get() as { ItemUUID: string } | undefined;
-          let iSeq = 0;
-          if (lastItem?.ItemUUID) {
-            const m = lastItem.ItemUUID.match(/^I-\d{6}-(\d+)$/);
-            if (m) iSeq = parseInt(m[1], 10);
-          }
-          ItemUUID = `I-${dd}${mm}${yy}-${(iSeq + 1).toString().padStart(4, '0')}`;
-          console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID });
+          ItemUUID = generateItemUUID();
+          console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID, requestPath });
         } catch (idGenerationErr) {
           console.error('[import-item] Failed to generate ItemUUID for item import', idGenerationErr);
           throw idGenerationErr;
@@ -254,12 +291,20 @@ const action: Action = {
             console.error('[import-item] Failed to upsert agentic run during import transaction', agenticPersistErr);
             throw agenticPersistErr;
           }
-          const itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
+          let itemExists: { ItemUUID: string } | undefined;
+          if (!isUpdateRequest) {
+            try {
+              itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
+            } catch (lookupErr) {
+              console.error('[import-item] Failed to check existing item state during event logging', lookupErr);
+            }
+          }
+          const eventType = isUpdateRequest || itemExists ? 'Updated' : 'Created';
           ctx.logEvent({
             Actor: a,
             EntityType: 'Item',
             EntityId: itemData.ItemUUID,
-            Event: itemExists == undefined ? 'Updated' : 'Created',
+            Event: eventType,
             Meta: JSON.stringify({ BoxID: boxId })
           });
           if (manuallySkipped) {
