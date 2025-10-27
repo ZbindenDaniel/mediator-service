@@ -232,11 +232,17 @@ const action: Action = {
             });
           }
 
-          if (!ctx?.getMaxItemId?.get) {
-            throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
+          let mintedUUID: string;
+          try {
+            mintedUUID = generateItemUUID();
+          } catch (mintErr) {
+            console.error('[import-item] Failed to mint ItemUUID for creation-by-reference branch', {
+              artikelNummer: incomingArtikelNummer,
+              requestPath,
+              error: mintErr
+            });
+            throw new Error('Failed to generate ItemUUID for new item import');
           }
-
-          const mintedUUID = generateItemUUID();
           console.info('[import-item] Creating new item instance from existing reference', {
             ItemUUID: mintedUUID,
             Artikel_Nummer: normalizedReference.Artikel_Nummer,
@@ -268,11 +274,16 @@ const action: Action = {
             });
           }
 
-          if (!ctx?.getMaxItemId?.get) {
-            throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
+          let mintedUUID: string;
+          try {
+            mintedUUID = generateItemUUID();
+          } catch (mintErr) {
+            console.error('[import-item] Failed to mint ItemUUID for new item import', {
+              requestPath,
+              error: mintErr
+            });
+            throw new Error('Failed to generate ItemUUID for new item import');
           }
-
-          const mintedUUID = generateItemUUID();
           console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID: mintedUUID, requestPath });
 
           branch = {
