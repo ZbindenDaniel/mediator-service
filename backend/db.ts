@@ -544,10 +544,10 @@ SELECT
   r.Breite_mm AS Breite_mm,
   r.Höhe_mm AS Höhe_mm,
   r.Gewicht_kg AS Gewicht_kg,
-  r.Hauptkategorien_A AS Hauptkategorien_A,
-  r.Unterkategorien_A AS Unterkategorien_A,
-  r.Hauptkategorien_B AS Hauptkategorien_B,
-  r.Unterkategorien_B AS Unterkategorien_B,
+  CAST(r.Hauptkategorien_A AS INTEGER) AS Hauptkategorien_A,
+  CAST(r.Unterkategorien_A AS INTEGER) AS Unterkategorien_A,
+  CAST(r.Hauptkategorien_B AS INTEGER) AS Hauptkategorien_B,
+  CAST(r.Unterkategorien_B AS INTEGER) AS Unterkategorien_B,
   r.Veröffentlicht_Status AS Veröffentlicht_Status,
   r.Shopartikel AS Shopartikel,
   r.Artikeltyp AS Artikeltyp,
@@ -1045,6 +1045,13 @@ export const listRecentBoxes = db.prepare(
 );
 export const getMaxBoxId = db.prepare(
   `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`
+);
+export const getMaxItemId = db.prepare(
+  `SELECT ItemUUID
+   FROM items
+   WHERE ItemUUID GLOB 'I-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]'
+   ORDER BY substr(ItemUUID, 3, 6) DESC, CAST(substr(ItemUUID, 10, 4) AS INTEGER) DESC
+   LIMIT 1`
 );
 export const getMaxArtikelNummer = getMaxArtikelNummerStatement;
 

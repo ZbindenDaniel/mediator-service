@@ -181,6 +181,86 @@ export function collectMediaAssets(
   return assets;
 }
 
+type CategoryFieldName =
+  | 'Hauptkategorien_A'
+  | 'Unterkategorien_A'
+  | 'Hauptkategorien_B'
+  | 'Unterkategorien_B';
+
+function normaliseCategoryValue(
+  itemId: string,
+  field: CategoryFieldName,
+  rawValue: unknown
+): number | null {
+  if (rawValue === null || rawValue === undefined) {
+    return null;
+  }
+
+  try {
+    if (typeof rawValue === 'number') {
+      if (!Number.isFinite(rawValue)) {
+        console.warn('[save-item] Encountered non-finite numeric category value', {
+          itemId,
+          field,
+          value: rawValue
+        });
+        return null;
+      }
+      if (!Number.isInteger(rawValue)) {
+        const truncated = Math.trunc(rawValue);
+        console.warn('[save-item] Truncated non-integer category value to integer', {
+          itemId,
+          field,
+          original: rawValue,
+          normalised: truncated
+        });
+        return truncated;
+      }
+      return rawValue;
+    }
+
+    if (typeof rawValue === 'string') {
+      const trimmed = rawValue.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const parsed = Number.parseInt(trimmed, 10);
+      if (Number.isNaN(parsed)) {
+        console.warn('[save-item] Failed to parse category value from string', {
+          itemId,
+          field,
+          value: trimmed
+        });
+        return null;
+      }
+      if (trimmed !== String(parsed)) {
+        console.info('[save-item] Normalised category string to integer value', {
+          itemId,
+          field,
+          original: rawValue,
+          normalised: parsed
+        });
+      }
+      return parsed;
+    }
+
+    console.warn('[save-item] Unsupported category value type encountered', {
+      itemId,
+      field,
+      valueType: typeof rawValue
+    });
+  } catch (error) {
+    console.error('[save-item] Unexpected failure while normalising category value', {
+      itemId,
+      field,
+      value: rawValue,
+      error
+    });
+  }
+
+  return null;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -239,23 +319,24 @@ const action: Action = {
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
         const sanitizedItem = { ...item, Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse') };
-        const categoryValues = [
-          sanitizedItem.Hauptkategorien_A,
-          sanitizedItem.Unterkategorien_A,
-          sanitizedItem.Hauptkategorien_B,
-          sanitizedItem.Unterkategorien_B
-        ];
-        const hasCategoryMetadata = categoryValues.some((value) => value !== null && value !== undefined);
+        const normalisedCategories = {
+          Hauptkategorien_A: normaliseCategoryValue(itemId, 'Hauptkategorien_A', sanitizedItem.Hauptkategorien_A),
+          Unterkategorien_A: normaliseCategoryValue(itemId, 'Unterkategorien_A', sanitizedItem.Unterkategorien_A),
+          Hauptkategorien_B: normaliseCategoryValue(itemId, 'Hauptkategorien_B', sanitizedItem.Hauptkategorien_B),
+          Unterkategorien_B: normaliseCategoryValue(itemId, 'Unterkategorien_B', sanitizedItem.Unterkategorien_B)
+        };
+        const hasCategoryMetadata = Object.values(normalisedCategories).some((value) => value !== null);
         if (!hasCategoryMetadata) {
           console.warn('[save-item] Category metadata missing for fetched item', {
             itemId,
             artikelNummer: sanitizedItem.Artikel_Nummer ?? null
           });
         }
+        const itemWithCategories = { ...sanitizedItem, ...normalisedCategories };
         const responseItem =
           normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
-            ? { ...sanitizedItem, Grafikname: normalisedGrafikname }
-            : sanitizedItem;
+            ? { ...itemWithCategories, Grafikname: normalisedGrafikname }
+            : itemWithCategories;
         return sendJson(res, 200, { item: responseItem, box, events, agentic, media });
       } catch (err) {
         console.error('Fetch item failed', err);

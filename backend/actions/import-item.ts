@@ -173,8 +173,25 @@ const action: Action = {
 
       let branch: BranchResolution | null = null;
 
-      const prepareNewItemCreationBranch = (artikelNummerCandidate: string | null): BranchResolution => {
-        const mintedUUID = generateItemUUID();
+      const prepareNewItemCreationBranch = async (
+        artikelNummerCandidate: string | null
+      ): Promise<BranchResolution> => {
+        if (!ctx || typeof ctx.generateItemUUID !== 'function') {
+          throw new Error('Missing generateItemUUID dependency for new item creation');
+        }
+
+        let mintedUUID: string;
+        try {
+          mintedUUID = await ctx.generateItemUUID();
+        } catch (error) {
+          console.error('[import-item] Failed to mint ItemUUID for new item import', {
+            Artikel_Nummer: artikelNummerCandidate || undefined,
+            requestPath,
+            error
+          });
+          throw new Error('Failed to mint ItemUUID for new item import');
+        }
+
         console.info('[import-item] Generated new ItemUUID for item import', {
           ItemUUID: mintedUUID,
           Artikel_Nummer: artikelNummerCandidate || undefined,
@@ -248,9 +265,23 @@ const action: Action = {
               Artikel_Nummer: incomingArtikelNummer,
               requestPath
             });
-            branch = prepareNewItemCreationBranch(incomingArtikelNummer || null);
+            branch = await prepareNewItemCreationBranch(incomingArtikelNummer || null);
           } else {
-            const mintedUUID = generateItemUUID();
+            if (!ctx || typeof ctx.generateItemUUID !== 'function') {
+              throw new Error('Missing generateItemUUID dependency for creation-by-reference branch');
+            }
+
+            let mintedUUID: string;
+            try {
+              mintedUUID = await ctx.generateItemUUID();
+            } catch (error) {
+              console.error('[import-item] Failed to mint ItemUUID for creation-by-reference branch', {
+                Artikel_Nummer: normalizedReference.Artikel_Nummer,
+                requestPath,
+                error
+              });
+              throw new Error('Failed to mint ItemUUID for creation-by-reference branch');
+            }
             console.info('[import-item] Creating new item instance from existing reference', {
               ItemUUID: mintedUUID,
               Artikel_Nummer: normalizedReference.Artikel_Nummer,
@@ -282,7 +313,7 @@ const action: Action = {
               requestPath
             });
           }
-          branch = prepareNewItemCreationBranch(incomingArtikelNummer ? incomingArtikelNummer : null);
+          branch = await prepareNewItemCreationBranch(incomingArtikelNummer ? incomingArtikelNummer : null);
         } catch (branchErr) {
           console.error('[import-item] Failed to prepare new item creation branch', branchErr);
           return sendJson(res, 500, { error: (branchErr as Error).message });

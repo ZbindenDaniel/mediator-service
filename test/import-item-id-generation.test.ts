@@ -1,184 +1,88 @@
-// import { Readable } from 'stream';
-// import * as crypto from 'crypto';
-// import importItemAction from '../backend/actions/import-item';
-// import { ItemEinheit } from '../models';
+import { generateItemUUID, parseSequentialItemUUID } from '../backend/lib/itemIds';
 
-// type ImportContext = {
-//   getItem: { get: jest.Mock };
-//   getBox: { get: jest.Mock };
-//   getItemReference: { get: jest.Mock };
-//   getAgenticRun: { get: jest.Mock };
-//   db: { transaction: <T extends (...args: any[]) => any>(fn: T) => T };
-//   upsertBox: { run: jest.Mock };
-//   persistItemWithinTransaction: jest.Mock;
-//   upsertAgenticRun: { run: jest.Mock };
-//   logEvent: jest.Mock;
-//   agenticServiceEnabled: boolean;
-// };
+type Logger = Pick<Console, 'info' | 'warn' | 'error'> & {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
-// type MockResponse = {
-//   statusCode: number;
-//   headers: Record<string, string>;
-//   body: string;
-//   writeHead: (status: number, headers: Record<string, string>) => void;
-//   end: (chunk?: unknown) => void;
-// };
+function createLogger(): Logger {
+  return {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn()
+  } as Logger;
+}
 
-// function createRequest(
-//   body: string,
-//   options: { url?: string } = {}
-// ): Readable & { method: string; headers: Record<string, string>; url?: string } {
-//   const stream = Readable.from([body]);
-//   (stream as any).method = 'POST';
-//   (stream as any).headers = { 'content-type': 'application/x-www-form-urlencoded' };
-//   if (options.url) {
-//     (stream as any).url = options.url;
-//   }
-//   return stream as Readable & { method: string; headers: Record<string, string>; url?: string };
-// }
+describe('sequential ItemUUID generation', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
 
-// function createResponse(): MockResponse {
-//   const chunks: Buffer[] = [];
-//   return {
-//     statusCode: 0,
-//     headers: {},
-//     body: '',
-//     writeHead(status, headers) {
-//       this.statusCode = status;
-//       this.headers = headers;
-//     },
-//     end(chunk) {
-//       if (chunk) {
-//         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
-//         this.body = Buffer.concat(chunks).toString('utf8');
-//       }
-//     }
-//   };
-// }
+  test('mints the first identifier of the day when no prior ItemUUID exists', async () => {
+    const logger = createLogger();
 
-// function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
-//   const ctx: ImportContext = {
-//     getItem: { get: jest.fn() },
-//     getBox: { get: jest.fn() },
-//     getItemReference: { get: jest.fn() },
-//     getAgenticRun: { get: jest.fn() },
-//     db: {
-//       transaction: ((fn: (...args: any[]) => any) => ((...args: any[]) => fn(...args))) as any
-//     },
-//     upsertBox: { run: jest.fn() },
-//     persistItemWithinTransaction: jest.fn(),
-//     upsertAgenticRun: { run: jest.fn() },
-//     logEvent: jest.fn(),
-//     agenticServiceEnabled: false
-//   };
+    const id = await generateItemUUID(
+      {
+        now: () => new Date('2024-06-02T10:15:00.000Z'),
+        getMaxItemId: () => undefined
+      },
+      logger
+    );
 
-//   return { ...ctx, ...overrides };
-// }
+    expect(id).toBe('I-020624-0001');
+    const parsed = parseSequentialItemUUID(id);
+    expect(parsed).toEqual({ dateSegment: '020624', sequence: 1 });
+    expect(logger.error).not.toHaveBeenCalled();
+  });
 
-// describe('import-item ItemUUID minting', () => {
-//   afterEach(() => {
-//     jest.clearAllMocks();
-//   });
+  test('increments the daily sequence when a prior ItemUUID exists for the same day', async () => {
+    const logger = createLogger();
 
-//   test('mints a new ItemUUID without relying on getMaxItemId', async () => {
-//     const randomSpy = jest.spyOn(crypto, 'randomUUID').mockReturnValue('minted-uuid' as any);
-//     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => undefined);
-//     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-//     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const id = await generateItemUUID(
+      {
+        now: () => new Date('2024-06-02T23:45:00.000Z'),
+        getMaxItemId: () => ({ ItemUUID: 'I-020624-0042' })
+      },
+      logger
+    );
 
-//     const ctx = createContext({
-//       getItem: { get: jest.fn().mockReturnValue(undefined) }
-//     });
+    expect(id).toBe('I-020624-0043');
+    const parsed = parseSequentialItemUUID(id);
+    expect(parsed).toEqual({ dateSegment: '020624', sequence: 43 });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
 
-//     const form = new URLSearchParams({
-//       actor: 'creator',
-//       Artikelbeschreibung: 'Minted item description'
-//     });
+  test('resets the sequence when the latest stored ItemUUID belongs to a previous day', async () => {
+    const logger = createLogger();
 
-//     const req = createRequest(form.toString(), { url: '/api/import/item' });
-//     const res = createResponse();
+    const id = await generateItemUUID(
+      {
+        now: () => new Date('2024-06-03T00:05:00.000Z'),
+        getMaxItemId: () => ({ ItemUUID: 'I-020624-0100' })
+      },
+      logger
+    );
 
-//     try {
-//       await importItemAction.handle(req as any, res as any, ctx as any);
-//     } finally {
-//       randomSpy.mockRestore();
-//       infoSpy.mockRestore();
-//       errorSpy.mockRestore();
-//       warnSpy.mockRestore();
-//     }
+    expect(id).toBe('I-030624-0001');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
 
-//     expect(res.statusCode).toBe(200);
-//     const payload = JSON.parse(res.body);
-//     expect(payload?.item?.ItemUUID).toBe('I-minted-uuid');
+  test('logs a warning and starts a new sequence when the latest ItemUUID is not sequential', async () => {
+    const logger = createLogger();
 
-//     expect(ctx.persistItemWithinTransaction).toHaveBeenCalledTimes(1);
-//     const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0]?.[0];
-//     expect(persistedItem?.ItemUUID).toBe('I-minted-uuid');
-//     expect(ctx.getItemReference.get).not.toHaveBeenCalled();
+    const id = await generateItemUUID(
+      {
+        now: () => new Date('2024-06-02T12:00:00.000Z'),
+        getMaxItemId: () => ({ ItemUUID: 'I-not-a-sequential-id' })
+      },
+      logger
+    );
 
-//     const loggedMint = infoSpy.mock.calls.some(([message]) =>
-//       typeof message === 'string' && message.includes('Generated new ItemUUID for item import')
-//     );
-//     expect(loggedMint).toBe(true);
-//   });
-
-//   test('mints a new ItemUUID when creating from an existing reference', async () => {
-//     const randomSpy = jest.spyOn(crypto, 'randomUUID').mockReturnValue('reference-uuid' as any);
-//     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => undefined);
-//     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-//     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-//     const referenceRow = {
-//       Artikel_Nummer: 'REF-1001',
-//       Artikelbeschreibung: 'Referenzierter Artikel',
-//       Kurzbeschreibung: 'Kurztext',
-//       Langtext: 'Langtext',
-//       Hersteller: 'Referenz GmbH',
-//       Verkaufspreis: 12.5,
-//       Einheit: ItemEinheit.Stk,
-//       Shopartikel: 1
-//     };
-
-//     const ctx = createContext({
-//       getItemReference: { get: jest.fn().mockReturnValue(referenceRow) }
-//     });
-
-//     const form = new URLSearchParams({
-//       actor: 'linker',
-//       Artikel_Nummer: referenceRow.Artikel_Nummer,
-//       Artikelbeschreibung: '',
-//       Kurzbeschreibung: '',
-//       Langtext: '',
-//       Hersteller: '',
-//       Location: 'A-01-01'
-//     });
-
-//     const req = createRequest(form.toString(), { url: '/api/import/item' });
-//     const res = createResponse();
-
-//     try {
-//       await importItemAction.handle(req as any, res as any, ctx as any);
-//     } finally {
-//       randomSpy.mockRestore();
-//       infoSpy.mockRestore();
-//       errorSpy.mockRestore();
-//       warnSpy.mockRestore();
-//     }
-
-//     expect(res.statusCode).toBe(200);
-//     const payload = JSON.parse(res.body);
-//     expect(payload?.item?.ItemUUID).toBe('I-reference-uuid');
-
-//     expect(ctx.getItemReference.get).toHaveBeenCalledWith(referenceRow.Artikel_Nummer);
-//     expect(ctx.persistItemWithinTransaction).toHaveBeenCalledTimes(1);
-//     const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0]?.[0];
-//     expect(persistedItem?.ItemUUID).toBe('I-reference-uuid');
-//     expect(persistedItem?.__skipReferencePersistence).toBe(true);
-//     expect(persistedItem?.__referenceRowOverride).toEqual(referenceRow);
-
-//     const loggedMint = infoSpy.mock.calls.some(([message]) =>
-//       typeof message === 'string' && message.includes('Creating new item instance from existing reference')
-//     );
-//     expect(loggedMint).toBe(true);
-//   });
-// });
+    expect(id).toBe('I-020624-0001');
+    const warned = logger.warn.mock.calls.some(([message]) =>
+      typeof message === 'string' && message.includes('Ignoring non-sequential ItemUUID')
+    );
+    expect(warned).toBe(true);
+  });
+});
