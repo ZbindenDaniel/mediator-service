@@ -1070,5 +1070,5 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY i.Datum_erfasst
 `);
 
-export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog, LogEventPayload };
+export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
 

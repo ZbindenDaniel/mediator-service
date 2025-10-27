@@ -282,7 +282,7 @@ export function buildManualSubmissionPayload({
     Auf_Lager: manualData.Auf_Lager ?? basicInfo.Auf_Lager
   };
 
-  if (merged.agenticStatus == null || merged.agenticStatus === '') {
+  if (merged.agenticStatus == null) {
     merged.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
   }
 

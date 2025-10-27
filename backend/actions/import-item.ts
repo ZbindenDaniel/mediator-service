@@ -236,7 +236,7 @@ const action: Action = {
             throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
           }
 
-          const mintedUUID = generateItemUUID({ getMaxItemId: ctx.getMaxItemId });
+          const mintedUUID = generateItemUUID();
           console.info('[import-item] Creating new item instance from existing reference', {
             ItemUUID: mintedUUID,
             Artikel_Nummer: normalizedReference.Artikel_Nummer,
@@ -272,7 +272,7 @@ const action: Action = {
             throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
           }
 
-          const mintedUUID = generateItemUUID({ getMaxItemId: ctx.getMaxItemId });
+          const mintedUUID = generateItemUUID();
           console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID: mintedUUID, requestPath });
 
           branch = {

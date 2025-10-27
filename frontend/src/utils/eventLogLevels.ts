@@ -58,7 +58,7 @@ export function isEventLevelAllowed(level: EventLogLevel | string | null | undef
   return FRONTEND_LEVEL_SET.has(level);
 }
 
-export function filterAllowedEvents<T extends Pick<EventLog, 'Level'>>(events: T[]): T[] {
+export function filterAllowedEvents(events: EventLog[]): EventLog[] {
   return events.filter((event) => isEventLevelAllowed(event.Level));
 }
 
