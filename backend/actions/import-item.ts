@@ -5,6 +5,7 @@ import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_QUEUED,
   ItemEinheit,
+  ItemRef,
   resolveAgenticRunStatus,
   isItemEinheit
 } from '../../models';
@@ -36,6 +37,60 @@ function coalesceEinheit(value: string | null): ItemEinheit {
     defaultValue: DEFAULT_EINHEIT
   });
   return DEFAULT_EINHEIT;
+}
+
+function normalizeItemReferenceRow(row: unknown): ItemRef | null {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+
+  const record = row as Record<string, unknown>;
+  const artikelValue = record.Artikel_Nummer;
+  const artikelNummer = typeof artikelValue === 'string' ? artikelValue.trim() : '';
+
+  if (!artikelNummer) {
+    return null;
+  }
+
+  const normalized: ItemRef = { Artikel_Nummer: artikelNummer };
+
+  if (typeof record.Grafikname === 'string') normalized.Grafikname = record.Grafikname;
+  if (typeof record.Artikelbeschreibung === 'string') normalized.Artikelbeschreibung = record.Artikelbeschreibung;
+  if (typeof record.Verkaufspreis === 'number' && Number.isFinite(record.Verkaufspreis)) {
+    normalized.Verkaufspreis = record.Verkaufspreis;
+  }
+  if (typeof record.Kurzbeschreibung === 'string') normalized.Kurzbeschreibung = record.Kurzbeschreibung;
+  if (typeof record.Langtext === 'string') normalized.Langtext = record.Langtext;
+  if (typeof record.Hersteller === 'string') normalized.Hersteller = record.Hersteller;
+  if (typeof record.Länge_mm === 'number' && Number.isFinite(record.Länge_mm)) normalized.Länge_mm = record.Länge_mm;
+  if (typeof record.Breite_mm === 'number' && Number.isFinite(record.Breite_mm)) normalized.Breite_mm = record.Breite_mm;
+  if (typeof record.Höhe_mm === 'number' && Number.isFinite(record.Höhe_mm)) normalized.Höhe_mm = record.Höhe_mm;
+  if (typeof record.Gewicht_kg === 'number' && Number.isFinite(record.Gewicht_kg)) normalized.Gewicht_kg = record.Gewicht_kg;
+  if (typeof record.Hauptkategorien_A === 'number' && Number.isFinite(record.Hauptkategorien_A)) {
+    normalized.Hauptkategorien_A = record.Hauptkategorien_A;
+  }
+  if (typeof record.Unterkategorien_A === 'number' && Number.isFinite(record.Unterkategorien_A)) {
+    normalized.Unterkategorien_A = record.Unterkategorien_A;
+  }
+  if (typeof record.Hauptkategorien_B === 'number' && Number.isFinite(record.Hauptkategorien_B)) {
+    normalized.Hauptkategorien_B = record.Hauptkategorien_B;
+  }
+  if (typeof record.Unterkategorien_B === 'number' && Number.isFinite(record.Unterkategorien_B)) {
+    normalized.Unterkategorien_B = record.Unterkategorien_B;
+  }
+  if (typeof record.Veröffentlicht_Status === 'string') {
+    normalized.Veröffentlicht_Status = record.Veröffentlicht_Status;
+  }
+  if (typeof record.Shopartikel === 'number' && Number.isFinite(record.Shopartikel)) {
+    normalized.Shopartikel = record.Shopartikel;
+  }
+  if (typeof record.Artikeltyp === 'string') normalized.Artikeltyp = record.Artikeltyp;
+  if (typeof record.Einheit === 'string' && isItemEinheit(record.Einheit)) {
+    normalized.Einheit = record.Einheit;
+  }
+  if (typeof record.EntityType === 'string') normalized.EntityType = record.EntityType;
+
+  return normalized;
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -103,39 +158,152 @@ const action: Action = {
         console.info('[import-item] Persisting item without box placement', { actor });
       }
       const incomingItemUUID = (p.get('ItemUUID') || '').trim();
+      const incomingArtikelNummer = (p.get('Artikel_Nummer') || '').trim();
       const requestPath = resolveRequestPath(req);
       const pathItemUUID = extractItemUUIDFromPath(requestPath);
       const isUpdateRequest = Boolean(pathItemUUID);
 
-      let ItemUUID = '';
-      if (isUpdateRequest && pathItemUUID) {
-        ItemUUID = pathItemUUID;
-        if (incomingItemUUID && incomingItemUUID !== pathItemUUID) {
-          console.warn('[import-item] Ignoring mismatched ItemUUID in payload for update request', {
-            requestPath,
-            incomingItemUUID,
-            pathItemUUID
-          });
-        } else {
-          console.info('[import-item] Processing item update based on request path', { ItemUUID });
-        }
-      } else {
-        if (incomingItemUUID) {
-          console.info('[import-item] Discarding ItemUUID provided for new item import', {
-            incomingItemUUID,
-            requestPath
-          });
-        }
+      type BranchResolution = {
+        itemUUID: string;
+        artikelNummer: string | null;
+        skipReferencePersistence: boolean;
+        referenceOverride: ItemRef | null;
+      };
 
+      let branch: BranchResolution | null = null;
+
+      if (isUpdateRequest && pathItemUUID) {
         try {
+          branch = {
+            itemUUID: pathItemUUID,
+            artikelNummer: incomingArtikelNummer || null,
+            skipReferencePersistence: false,
+            referenceOverride: null
+          };
+
+          if (incomingItemUUID && incomingItemUUID !== pathItemUUID) {
+            console.warn('[import-item] Ignoring mismatched ItemUUID in payload for update request', {
+              requestPath,
+              incomingItemUUID,
+              pathItemUUID
+            });
+          } else {
+            console.info('[import-item] Processing item update based on request path', { ItemUUID: pathItemUUID });
+          }
+        } catch (branchErr) {
+          console.error('[import-item] Failed to resolve update branch context', {
+            pathItemUUID,
+            error: branchErr
+          });
+          return sendJson(res, 500, { error: 'Failed to resolve update request context' });
+        }
+      } else if (incomingItemUUID && !incomingArtikelNummer) {
+        console.warn('[import-item] Rejecting new item import due to missing Artikel_Nummer for provided ItemUUID', {
+          incomingItemUUID,
+          requestPath
+        });
+        return sendJson(res, 400, {
+          error: 'Artikel_Nummer is required when providing ItemUUID for new item imports'
+        });
+      } else if (incomingArtikelNummer && !incomingItemUUID) {
+        try {
+          if (!ctx?.getItemReference?.get) {
+            throw new Error('Missing getItemReference dependency for reference lookup');
+          }
+
+          let referenceRow: unknown;
+          try {
+            referenceRow = ctx.getItemReference.get(incomingArtikelNummer);
+          } catch (lookupErr) {
+            console.error('[import-item] Failed to fetch item reference for creation-by-reference branch', {
+              artikelNummer: incomingArtikelNummer,
+              error: lookupErr
+            });
+            throw new Error('Failed to load item reference for provided Artikel_Nummer');
+          }
+
+          const normalizedReference = normalizeItemReferenceRow(referenceRow);
+          if (!normalizedReference) {
+            console.warn('[import-item] No item reference found for creation-by-reference request', {
+              artikelNummer: incomingArtikelNummer
+            });
+            return sendJson(res, 404, {
+              error: `Artikel_Nummer ${incomingArtikelNummer} not found`
+            });
+          }
+
           if (!ctx?.getMaxItemId?.get) {
             throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
           }
-          ItemUUID = generateItemUUID({ getMaxItemId: ctx.getMaxItemId });
-          console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID, requestPath });
-        } catch (idGenerationErr) {
-          console.error('[import-item] Failed to generate ItemUUID for item import', idGenerationErr);
-          throw idGenerationErr;
+
+          const mintedUUID = generateItemUUID({ getMaxItemId: ctx.getMaxItemId });
+          console.info('[import-item] Creating new item instance from existing reference', {
+            ItemUUID: mintedUUID,
+            Artikel_Nummer: normalizedReference.Artikel_Nummer,
+            requestPath
+          });
+
+          branch = {
+            itemUUID: mintedUUID,
+            artikelNummer: normalizedReference.Artikel_Nummer,
+            skipReferencePersistence: true,
+            referenceOverride: normalizedReference
+          };
+        } catch (branchErr) {
+          if (!res.writableEnded) {
+            console.error('[import-item] Failed to resolve creation-by-reference branch', {
+              artikelNummer: incomingArtikelNummer,
+              error: branchErr
+            });
+            return sendJson(res, 500, { error: (branchErr as Error).message });
+          }
+          return;
+        }
+      } else {
+        try {
+          if (incomingItemUUID) {
+            console.info('[import-item] Discarding ItemUUID provided for new item import', {
+              incomingItemUUID,
+              requestPath
+            });
+          }
+
+          if (!ctx?.getMaxItemId?.get) {
+            throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
+          }
+
+          const mintedUUID = generateItemUUID({ getMaxItemId: ctx.getMaxItemId });
+          console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID: mintedUUID, requestPath });
+
+          branch = {
+            itemUUID: mintedUUID,
+            artikelNummer: incomingArtikelNummer || null,
+            skipReferencePersistence: false,
+            referenceOverride: null
+          };
+        } catch (branchErr) {
+          console.error('[import-item] Failed to prepare new item creation branch', branchErr);
+          return sendJson(res, 500, { error: (branchErr as Error).message });
+        }
+      }
+
+      if (!branch) {
+        console.error('[import-item] Unable to resolve persistence branch for item import', {
+          requestPath,
+          incomingItemUUID,
+          incomingArtikelNummer
+        });
+        return sendJson(res, 500, { error: 'Failed to resolve item import strategy' });
+      }
+
+      const ItemUUID = branch.itemUUID;
+      const resolvedArtikelNummer = branch.artikelNummer ?? '';
+      const referenceDefaults = branch.referenceOverride;
+      const persistenceMetadata: Record<string, unknown> = {};
+      if (branch.skipReferencePersistence) {
+        persistenceMetadata.__skipReferencePersistence = true;
+        if (referenceDefaults) {
+          persistenceMetadata.__referenceRowOverride = referenceDefaults;
         }
       }
       const now = nowDate.toISOString();
@@ -144,7 +312,7 @@ const action: Action = {
       try {
         const dir = path.join(__dirname, '../../media', ItemUUID);
         fs.mkdirSync(dir, { recursive: true });
-        const artNr = (p.get('Artikel_Nummer') || '').trim() || ItemUUID;
+        const artNr = resolvedArtikelNummer || ItemUUID;
         images.forEach((img, idx) => {
           if (!img) return;
           const m = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
@@ -170,32 +338,115 @@ const action: Action = {
       if (normalizedLocation && !requestedStandortLabel) {
         console.warn('[import-item] Missing Standort label mapping for requested location', { location: normalizedLocation });
       }
+      const artikelbeschreibungInput = (p.get('Artikelbeschreibung') || '').trim();
+      const kurzbeschreibungInput = (p.get('Kurzbeschreibung') || '').trim();
+      const langtextInput = (p.get('Langtext') || '').trim();
+      const herstellerInput = (p.get('Hersteller') || '').trim();
+      const verkaufspreisRaw = (p.get('Verkaufspreis') || '').replace(',', '.').trim();
+      const gewichtRaw = (p.get('Gewicht_kg') || '').replace(',', '.').trim();
+      const laengeRaw = (p.get('Länge_mm') || '').trim();
+      const breiteRaw = (p.get('Breite_mm') || '').trim();
+      const hoeheRaw = (p.get('Höhe_mm') || '').trim();
+      const hauptkategorieARaw = (p.get('Hauptkategorien_A') || '').trim();
+      const unterkategorieARaw = (p.get('Unterkategorien_A') || '').trim();
+      const hauptkategorieBRaw = (p.get('Hauptkategorien_B') || '').trim();
+      const unterkategorieBRaw = (p.get('Unterkategorien_B') || '').trim();
+      const shopartikelRaw = (p.get('Shopartikel') || '').trim();
+      const artikeltypInput = (p.get('Artikeltyp') || '').trim();
+      const publishedRaw = (p.get('Veröffentlicht_Status') || '').trim();
+      const datumErfasstRaw = (p.get('Datum_erfasst') || '').trim();
+
+      const artikelbeschreibung = artikelbeschreibungInput || referenceDefaults?.Artikelbeschreibung || '';
+      const kurzbeschreibung = kurzbeschreibungInput || referenceDefaults?.Kurzbeschreibung || '';
+      const langtext = langtextInput || referenceDefaults?.Langtext || '';
+      const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
+
+      let verkaufspreis = referenceDefaults?.Verkaufspreis ?? 0;
+      if (verkaufspreisRaw) {
+        const parsedVerkaufspreis = parseFloat(verkaufspreisRaw);
+        if (Number.isFinite(parsedVerkaufspreis)) {
+          verkaufspreis = parsedVerkaufspreis;
+        } else if (referenceDefaults?.Verkaufspreis === undefined) {
+          verkaufspreis = 0;
+        }
+      }
+
+      let gewichtKg: number | null = referenceDefaults?.Gewicht_kg ?? null;
+      if (gewichtRaw) {
+        const parsedGewicht = parseFloat(gewichtRaw);
+        if (Number.isFinite(parsedGewicht)) {
+          gewichtKg = parsedGewicht;
+        } else if (referenceDefaults?.Gewicht_kg === undefined) {
+          gewichtKg = null;
+        }
+      }
+
+      const resolveInteger = (raw: string, fallback: number | null | undefined): number | null | undefined => {
+        if (!raw) {
+          return fallback ?? null;
+        }
+        const parsed = parseInt(raw, 10);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+        return fallback ?? null;
+      };
+
+      const laenge = resolveInteger(laengeRaw, referenceDefaults?.Länge_mm ?? null);
+      const breite = resolveInteger(breiteRaw, referenceDefaults?.Breite_mm ?? null);
+      const hoehe = resolveInteger(hoeheRaw, referenceDefaults?.Höhe_mm ?? null);
+      const hauptkategorienA = resolveInteger(hauptkategorieARaw, referenceDefaults?.Hauptkategorien_A);
+      const unterkategorienA = resolveInteger(unterkategorieARaw, referenceDefaults?.Unterkategorien_A);
+      const hauptkategorienB = resolveInteger(hauptkategorieBRaw, referenceDefaults?.Hauptkategorien_B);
+      const unterkategorienB = resolveInteger(unterkategorieBRaw, referenceDefaults?.Unterkategorien_B);
+
+      let shopartikel = referenceDefaults?.Shopartikel ?? 0;
+      if (shopartikelRaw) {
+        const parsedShopartikel = parseInt(shopartikelRaw, 10);
+        if (Number.isFinite(parsedShopartikel)) {
+          shopartikel = parsedShopartikel;
+        } else if (referenceDefaults?.Shopartikel === undefined) {
+          shopartikel = 0;
+        }
+      }
+
+      const artikeltyp = artikeltypInput || referenceDefaults?.Artikeltyp || '';
+      const veröffentlichtStatus = publishedRaw
+        ? ['yes', 'ja', 'true', '1'].includes(publishedRaw.toLowerCase())
+        : referenceDefaults?.Veröffentlicht_Status ?? false;
+
+      const einheitParam = p.get('Einheit');
+      const einheit = einheitParam ? coalesceEinheit(einheitParam) : referenceDefaults?.Einheit ?? DEFAULT_EINHEIT;
+
+      const datumErfasst = datumErfasstRaw ? new Date(datumErfasstRaw) : undefined;
+
       const data = {
         BoxID,
         ItemUUID,
         Location: normalizedLocation,
         UpdatedAt: nowDate,
-        Datum_erfasst: (p.get('Datum_erfasst') || '').trim() ? new Date((p.get('Datum_erfasst') || '').trim()) : undefined,
-        Artikel_Nummer: (p.get('Artikel_Nummer') || '').trim(),
-        Grafikname: firstImage,
-        Artikelbeschreibung: (p.get('Artikelbeschreibung') || '').trim(),
+        Datum_erfasst: datumErfasst,
+        Artikel_Nummer: resolvedArtikelNummer,
+        Grafikname: firstImage || referenceDefaults?.Grafikname || '',
+        Artikelbeschreibung: artikelbeschreibung,
         Auf_Lager: parseInt((p.get('Auf_Lager') || '1').trim(), 10) || 1,
-        Verkaufspreis: parseFloat((p.get('Verkaufspreis') || '0').replace(',', '.').trim()) || 0,
-        Kurzbeschreibung: (p.get('Kurzbeschreibung') || '').trim(),
-        Langtext: (p.get('Langtext') || '').trim(),
-        Hersteller: (p.get('Hersteller') || '').trim(),
-        Länge_mm: parseInt((p.get('Länge_mm') || '').trim(), 10) || null,
-        Breite_mm: parseInt((p.get('Breite_mm') || '').trim(), 10) || null,
-        Höhe_mm: parseInt((p.get('Höhe_mm') || '').trim(), 10) || null,
-        Gewicht_kg: parseFloat((p.get('Gewicht_kg') || '').replace(',', '.').trim()) || null,
-        Hauptkategorien_A: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Hauptkategorien_A') || '').trim()),
-        Unterkategorien_A: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Unterkategorien_A') || '').trim()),
-        Hauptkategorien_B: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Hauptkategorien_B') || '').trim()),
-        Unterkategorien_B: ((v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : undefined; })((p.get('Unterkategorien_B') || '').trim()),
-        Veröffentlicht_Status: ['yes','ja','true','1'].includes((p.get('Veröffentlicht_Status') || '').trim().toLowerCase()),
-        Shopartikel: parseInt((p.get('Shopartikel') || '0').trim(), 10) || 0,
-        Artikeltyp: (p.get('Artikeltyp') || '').trim(),
-        Einheit: coalesceEinheit(p.get('Einheit')),
+        Verkaufspreis: verkaufspreis,
+        Kurzbeschreibung: kurzbeschreibung,
+        Langtext: langtext,
+        Hersteller: hersteller,
+        Länge_mm: laenge,
+        Breite_mm: breite,
+        Höhe_mm: hoehe,
+        Gewicht_kg: gewichtKg,
+        Hauptkategorien_A: hauptkategorienA === null ? undefined : hauptkategorienA ?? undefined,
+        Unterkategorien_A: unterkategorienA === null ? undefined : unterkategorienA ?? undefined,
+        Hauptkategorien_B: hauptkategorienB === null ? undefined : hauptkategorienB ?? undefined,
+        Unterkategorien_B: unterkategorienB === null ? undefined : unterkategorienB ?? undefined,
+        Veröffentlicht_Status: veröffentlichtStatus,
+        Shopartikel: shopartikel,
+        Artikeltyp: artikeltyp,
+        Einheit: einheit,
+        ...persistenceMetadata
       };
 
       const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();
