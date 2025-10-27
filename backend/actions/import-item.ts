@@ -128,7 +128,10 @@ const action: Action = {
         }
 
         try {
-          ItemUUID = generateItemUUID();
+          if (!ctx?.getMaxItemId?.get) {
+            throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
+          }
+          ItemUUID = generateItemUUID({ getMaxItemId: ctx.getMaxItemId });
           console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID, requestPath });
         } catch (idGenerationErr) {
           console.error('[import-item] Failed to generate ItemUUID for item import', idGenerationErr);
