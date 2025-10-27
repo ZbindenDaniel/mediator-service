@@ -1046,6 +1046,13 @@ export const listRecentBoxes = db.prepare(
 export const getMaxBoxId = db.prepare(
   `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`
 );
+export const getMaxItemId = db.prepare(
+  `SELECT ItemUUID
+   FROM items
+   WHERE ItemUUID GLOB 'I-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]'
+   ORDER BY substr(ItemUUID, 3, 6) DESC, CAST(substr(ItemUUID, 10, 4) AS INTEGER) DESC
+   LIMIT 1`
+);
 export const getMaxArtikelNummer = getMaxArtikelNummerStatement;
 
 export const updateAgenticReview = db.prepare(`
