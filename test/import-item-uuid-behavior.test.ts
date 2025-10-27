@@ -7,7 +7,6 @@ type ImportContext = {
   db: { transaction: <T extends (...args: any[]) => any>(fn: T) => T };
   getItem: { get: MockFn };
   getItemReference: { get: MockFn };
-  getMaxItemId: { get: MockFn };
   getAgenticRun: { get: MockFn };
   getBox: { get: MockFn };
   upsertBox: { run: MockFn };
@@ -64,7 +63,6 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
     },
     getItem: { get: jest.fn(() => undefined) },
     getItemReference: { get: jest.fn(() => null) },
-    getMaxItemId: { get: jest.fn(() => ({ ItemUUID: 'I-000000-0000' })) },
     getAgenticRun: { get: jest.fn(() => undefined) },
     getBox: { get: jest.fn(() => undefined) },
     upsertBox: { run: jest.fn() },
