@@ -4,10 +4,7 @@ jest.mock('../backend/actions/agentic-trigger', () => ({
 
 import { Readable } from 'stream';
 import importItemAction from '../backend/actions/import-item';
-import { __TESTING__ } from '../backend/lib/itemIds';
-
-const { ITEM_ID_PREFIX } = __TESTING__;
-
+import * as crypto from 'crypto';
 type ImportContext = {
   getItem: { get: jest.Mock };
   getBox: { get: jest.Mock };
@@ -17,7 +14,6 @@ type ImportContext = {
   upsertAgenticRun: { run: jest.Mock };
   logEvent: jest.Mock;
   agenticServiceEnabled: boolean;
-  getMaxItemId: { get: jest.Mock };
 };
 
 type MockResponse = {
@@ -71,8 +67,7 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
     persistItemWithinTransaction: jest.fn(),
     upsertAgenticRun: { run: jest.fn() },
     logEvent: jest.fn(),
-    agenticServiceEnabled: false,
-    getMaxItemId: { get: jest.fn() }
+    agenticServiceEnabled: false
   };
 
   return { ...ctx, ...overrides };
@@ -85,16 +80,16 @@ describe('import-item ItemUUID handling', () => {
   });
 
   test('generates a fresh ItemUUID when incoming payload references a different item', async () => {
-    const systemTime = new Date('2024-04-05T10:30:00Z');
-    jest.useFakeTimers().setSystemTime(systemTime);
+    jest.useFakeTimers().setSystemTime(new Date('2024-04-05T10:30:00Z'));
+
+    const uuidSpy = jest.spyOn(crypto, 'randomUUID').mockReturnValue('mocked-uuid-value' as any);
 
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     const ctx = createContext({
-      getItem: { get: jest.fn().mockReturnValue(undefined) },
-      getMaxItemId: { get: jest.fn().mockReturnValue({ ItemUUID: 'I-040424-0027' }) }
+      getItem: { get: jest.fn().mockReturnValue(undefined) }
     });
 
     const form = new URLSearchParams({
@@ -110,6 +105,7 @@ describe('import-item ItemUUID handling', () => {
     try {
       await importItemAction.handle(req as any, res as any, ctx as any);
     } finally {
+      uuidSpy.mockRestore();
       infoCalls = infoSpy.mock.calls.slice();
       infoSpy.mockRestore();
       errorSpy.mockRestore();
@@ -119,16 +115,12 @@ describe('import-item ItemUUID handling', () => {
     expect(res.statusCode).toBe(200);
     const payload = JSON.parse(res.body);
     const mintedId = payload?.item?.ItemUUID;
-    expect(mintedId).toMatch(/^I-\d{6}-\d{4}$/);
+    expect(mintedId).toBe('I-mocked-uuid-value');
     expect(mintedId).not.toBe('I-REFERENCE-1234');
-    expect(mintedId?.slice(-4)).toBe('0028');
-
-    const dateSegment = mintedId?.slice(ITEM_ID_PREFIX.length, ITEM_ID_PREFIX.length + 6);
-    expect(dateSegment).toBe('050424');
 
     const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0]?.[0];
     expect(persistedItem?.ItemUUID).toBe(mintedId);
-    expect(ctx.getMaxItemId.get).toHaveBeenCalledTimes(1);
+    expect(uuidSpy).toHaveBeenCalledTimes(1);
     expect(
       infoCalls.some(([message]) =>
         typeof message === 'string' && message.includes('Discarding ItemUUID provided for new item import')
@@ -137,12 +129,12 @@ describe('import-item ItemUUID handling', () => {
   });
 
   test('preserves ItemUUID for existing items during updates', async () => {
-    const systemTime = new Date('2024-04-05T11:15:00Z');
-    jest.useFakeTimers().setSystemTime(systemTime);
+    jest.useFakeTimers().setSystemTime(new Date('2024-04-05T11:15:00Z'));
 
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const uuidSpy = jest.spyOn(crypto, 'randomUUID').mockReturnValue('should-not-be-used' as any);
 
     const existingUUID = 'I-010124-0042';
     const ctx = createContext({
@@ -162,6 +154,7 @@ describe('import-item ItemUUID handling', () => {
     try {
       await importItemAction.handle(req as any, res as any, ctx as any);
     } finally {
+      uuidSpy.mockRestore();
       infoSpy.mockRestore();
       errorSpy.mockRestore();
       warnCalls = warnSpy.mock.calls.slice();
@@ -174,7 +167,7 @@ describe('import-item ItemUUID handling', () => {
 
     const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0]?.[0];
     expect(persistedItem?.ItemUUID).toBe(existingUUID);
-    expect(ctx.getMaxItemId.get).not.toHaveBeenCalled();
+    expect(uuidSpy).not.toHaveBeenCalled();
     expect(
       warnCalls.some(([message]) =>
         typeof message === 'string' && message.includes('Ignoring mismatched ItemUUID')

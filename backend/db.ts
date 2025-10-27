@@ -985,9 +985,6 @@ export const listRecentBoxes = db.prepare(
 export const getMaxBoxId = db.prepare(
   `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`
 );
-export const getMaxItemId = db.prepare(
-  `SELECT ItemUUID FROM items ORDER BY CAST(substr(ItemUUID, 10) AS INTEGER) DESC LIMIT 1`
-);
 export const getMaxArtikelNummer = getMaxArtikelNummerStatement;
 
 export const updateAgenticReview = db.prepare(`
