@@ -12,7 +12,6 @@ import {
 
 type ImportContext = {
   getMaxBoxId: { get: () => { BoxID: string } | undefined };
-  getMaxItemId: { get: () => { ItemUUID: string } | undefined };
   getBox: { get: (id: string) => unknown };
   getItem: { get: jest.Mock };
   getAgenticRun: { get: jest.Mock };
@@ -61,7 +60,6 @@ function createResponse(): MockResponse {
 function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
   const ctx: ImportContext = {
     getMaxBoxId: { get: () => ({ BoxID: 'B-240101-0001' }) },
-    getMaxItemId: { get: () => ({ ItemUUID: 'I-240101-0001' }) },
     getBox: { get: () => undefined },
     getItem: { get: jest.fn() },
     getAgenticRun: { get: jest.fn() },
@@ -95,12 +93,11 @@ describe('import-item agentic persistence', () => {
       .mockReturnValueOnce(undefined)
       .mockReturnValue({ ItemUUID: itemUUID });
 
-    const ctx = createContext({
-      getMaxBoxId: { get: () => ({ BoxID: boxId }) },
-      getMaxItemId: { get: () => ({ ItemUUID: itemUUID }) },
-      getAgenticRun: { get: getAgenticRunMock },
-      getItem: { get: getItemMock }
-    });
+  const ctx = createContext({
+    getMaxBoxId: { get: () => ({ BoxID: boxId }) },
+    getAgenticRun: { get: getAgenticRunMock },
+    getItem: { get: getItemMock }
+  });
 
     const form = new URLSearchParams({
       actor: 'importer',
