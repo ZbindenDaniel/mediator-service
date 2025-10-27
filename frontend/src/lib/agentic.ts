@@ -27,31 +27,31 @@ type AgenticEnv = typeof globalThis & {
 };
 
 export function resolveAgenticApiBase(): string | null {
-  return 'http://192.168.10.196:3000';
-  // try {
-  //   const globalScope = globalThis as AgenticEnv;
-  //   const candidate =
-  //     globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE ?? null;
+  // return 'http://192.168.10.196:3000';
+  try {
+    const globalScope = globalThis as AgenticEnv;
+    const candidate =
+      globalScope.AGENTIC_API_BASE ?? globalScope.process?.env?.AGENTIC_API_BASE ?? null;
 
-  //   if (!candidate) {
-  //     return null;
-  //   }
+    if (!candidate) {
+      return null;
+    }
 
-  //   const trimmed = candidate.trim();
-  //   if (!trimmed) {
-  //     return null;
-  //   }
+    const trimmed = candidate.trim();
+    if (!trimmed) {
+      return null;
+    }
 
-  //   const sanitized = trimmed.replace(/\/+$/, '');
-  //   if (!sanitized) {
-  //     return trimmed;
-  //   }
+    const sanitized = trimmed.replace(/\/+$/, '');
+    if (!sanitized) {
+      return trimmed;
+    }
 
-  //   return sanitized;
-  // } catch (err) {
-  //   console.error('Failed to resolve agentic API base URL', err);
-  //   return null;
-  // }
+    return sanitized;
+  } catch (err) {
+    console.error('Failed to resolve agentic API base URL', err);
+    return null;
+  }
 }
 
 export function buildAgenticRunUrl(agenticApiBase: string | null): string | null {

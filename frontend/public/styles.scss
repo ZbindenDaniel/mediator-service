@@ -680,7 +680,7 @@ button:focus {
     gap: var(--pad);
     padding: 5px 0px;
     width: 100%;
-    max-width: 460px;
+    // max-width: 460px;
     justify-content: space-between;
     flex-direction: column;
 }
@@ -1321,6 +1321,7 @@ button:focus {
     padding: 8px 6px;
     font-size: 1rem;
     word-break: break-word;
+    min-width: 10%;
 }
 
 .details .responsive-td.is-placeholder {

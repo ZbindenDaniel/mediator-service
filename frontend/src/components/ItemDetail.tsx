@@ -151,7 +151,7 @@ interface NormalizedDetailValue {
   isPlaceholder: boolean;
 }
 
-const DETAIL_PLACEHOLDER_TEXT = 'Nicht gesetzt';
+const DETAIL_PLACEHOLDER_TEXT = '-';
 
 function buildPlaceholder(): NormalizedDetailValue {
   return {
