@@ -380,6 +380,11 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
   };
 }
 
+type ItemPersistenceDirectives = {
+  __skipReferencePersistence?: boolean;
+  __referenceRowOverride?: ItemRef | null;
+};
+
 type ItemPersistencePayload = {
   instance: ItemInstanceRow;
   ref: ItemRefRow | null;
@@ -388,9 +393,38 @@ type ItemPersistencePayload = {
 function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   const instance = prepareInstanceRow(item);
 
-  const referenceKey = instance.Artikel_Nummer ?? instance.ItemUUID;
+  const directives = item as Item & ItemPersistenceDirectives;
+  const skipReferencePersistence = directives.__skipReferencePersistence === true;
+  const referenceOverride = directives.__referenceRowOverride ?? null;
 
-  if (!instance.Artikel_Nummer) {
+  if ('__skipReferencePersistence' in directives) {
+    delete directives.__skipReferencePersistence;
+  }
+  if ('__referenceRowOverride' in directives) {
+    delete directives.__referenceRowOverride;
+  }
+
+  let preparedOverride: ItemRefRow | null = null;
+  if (referenceOverride) {
+    try {
+      preparedOverride = prepareRefRow(referenceOverride);
+    } catch (err) {
+      console.error('[db] Failed to normalize reference override for item persistence', {
+        artikelNummer: referenceOverride.Artikel_Nummer,
+        itemUUID: instance.ItemUUID,
+        error: err
+      });
+      throw err;
+    }
+  }
+
+  if (!instance.Artikel_Nummer && preparedOverride) {
+    instance.Artikel_Nummer = preparedOverride.Artikel_Nummer;
+  }
+
+  const referenceKey = instance.Artikel_Nummer ?? preparedOverride?.Artikel_Nummer ?? instance.ItemUUID;
+
+  if (!instance.Artikel_Nummer && !preparedOverride) {
     // TODO: Backfill existing deployments to remove duplicate item_ref rows once Artikel_Nummer values are assigned.
     console.info('[db] Persisting item reference with ItemUUID fallback key', {
       itemUUID: instance.ItemUUID
@@ -398,8 +432,8 @@ function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   }
 
   try {
-    const ref = prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: referenceKey });
-    return { instance, ref };
+    const ref = preparedOverride ?? prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: referenceKey });
+    return { instance, ref: skipReferencePersistence ? null : ref };
   } catch (err) {
     console.error('Failed to prepare item reference payload', {
       itemUUID: instance.ItemUUID,
@@ -429,10 +463,36 @@ ensureItemTables(db);
 
 let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
+let getItemReferenceStatement: Database.Statement;
 let getMaxArtikelNummerStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
+  getItemReferenceStatement = db.prepare(`
+    SELECT
+      Artikel_Nummer,
+      Grafikname,
+      Artikelbeschreibung,
+      Verkaufspreis,
+      Kurzbeschreibung,
+      Langtext,
+      Hersteller,
+      Länge_mm,
+      Breite_mm,
+      Höhe_mm,
+      Gewicht_kg,
+      Hauptkategorien_A,
+      Unterkategorien_A,
+      Hauptkategorien_B,
+      Unterkategorien_B,
+      Veröffentlicht_Status,
+      Shopartikel,
+      Artikeltyp,
+      Einheit,
+      EntityType
+    FROM item_refs
+    WHERE Artikel_Nummer = ?
+  `);
   getMaxArtikelNummerStatement = db.prepare(`
     SELECT Artikel_Nummer FROM item_refs
     WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''
@@ -629,6 +689,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
 WHERE i.ItemUUID = ?
 `);
+export const getItemReference = getItemReferenceStatement;
 export const findByMaterial = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}

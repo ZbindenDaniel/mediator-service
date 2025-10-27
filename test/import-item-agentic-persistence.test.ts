@@ -15,6 +15,7 @@ type ImportContext = {
   getBox: { get: (id: string) => unknown };
   getItem: { get: jest.Mock };
   getAgenticRun: { get: jest.Mock };
+  getItemReference: { get: jest.Mock };
   db: { transaction: <T extends (...args: any[]) => any>(fn: T) => T };
   upsertBox: { run: jest.Mock };
   persistItemWithinTransaction: jest.Mock;
@@ -63,6 +64,7 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
     getBox: { get: () => undefined },
     getItem: { get: jest.fn() },
     getAgenticRun: { get: jest.fn() },
+    getItemReference: { get: jest.fn() },
     db: {
       transaction: ((fn: (...args: any[]) => any) => ((...args: any[]) => fn(...args))) as any
     },

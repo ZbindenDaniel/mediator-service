@@ -4,7 +4,12 @@ jest.mock('../backend/actions/agentic-trigger', () => ({
 
 import { Readable } from 'stream';
 import importItemAction from '../backend/actions/import-item';
+import { __TESTING__ } from '../backend/lib/itemIds';
+import { ItemEinheit } from '../models';
 import * as crypto from 'crypto';
+
+const { ITEM_ID_PREFIX } = __TESTING__;
+
 type ImportContext = {
   getItem: { get: jest.Mock };
   getBox: { get: jest.Mock };
@@ -14,6 +19,8 @@ type ImportContext = {
   upsertAgenticRun: { run: jest.Mock };
   logEvent: jest.Mock;
   agenticServiceEnabled: boolean;
+  getMaxItemId: { get: jest.Mock };
+  getItemReference: { get: jest.Mock };
 };
 
 type MockResponse = {
@@ -67,6 +74,9 @@ function createContext(overrides: Partial<ImportContext> = {}): ImportContext {
     persistItemWithinTransaction: jest.fn(),
     upsertAgenticRun: { run: jest.fn() },
     logEvent: jest.fn(),
+    agenticServiceEnabled: false,
+    getMaxItemId: { get: jest.fn() },
+    getItemReference: { get: jest.fn() }
     agenticServiceEnabled: false
   };
 
@@ -173,5 +183,93 @@ describe('import-item ItemUUID handling', () => {
         typeof message === 'string' && message.includes('Ignoring mismatched ItemUUID')
       )
     ).toBe(true);
+  });
+
+  test('rejects new imports that only provide ItemUUID without Artikel_Nummer', async () => {
+    const ctx = createContext();
+
+    const form = new URLSearchParams({
+      actor: 'creator',
+      ItemUUID: 'I-REJECT-0001'
+    });
+
+    const req = createRequest(form.toString(), { url: '/api/import/item' });
+    const res = createResponse();
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await importItemAction.handle(req as any, res as any, ctx as any);
+    } finally {
+      warnSpy.mockRestore();
+    }
+
+    expect(res.statusCode).toBe(400);
+    const payload = JSON.parse(res.body);
+    expect(typeof payload?.error).toBe('string');
+    expect(payload.error).toMatch(/Artikel_Nummer/i);
+    expect(ctx.persistItemWithinTransaction).not.toHaveBeenCalled();
+  });
+
+  test('creates a new item instance from an existing reference without persisting reference changes', async () => {
+    const systemTime = new Date('2024-04-05T10:45:00Z');
+    jest.useFakeTimers().setSystemTime(systemTime);
+
+    const existingReference = {
+      Artikel_Nummer: 'REF-1001',
+      Artikelbeschreibung: 'Referenzierter Artikel',
+      Kurzbeschreibung: 'Kurztext',
+      Langtext: 'Ausführliche Beschreibung',
+      Hersteller: 'Referenz GmbH',
+      Verkaufspreis: 12.5,
+      Grafikname: '/media/ref/ref-1001.png',
+      Veröffentlicht_Status: 'yes',
+      Shopartikel: 1,
+      Artikeltyp: 'Referenz',
+      Einheit: ItemEinheit.Stk
+    };
+
+    const ctx = createContext({
+      getMaxItemId: { get: jest.fn().mockReturnValue({ ItemUUID: 'I-040424-0027' }) },
+      getItemReference: { get: jest.fn().mockReturnValue(existingReference) }
+    });
+
+    const form = new URLSearchParams({
+      actor: 'linker',
+      Artikel_Nummer: existingReference.Artikel_Nummer,
+      Artikelbeschreibung: '',
+      Kurzbeschreibung: '',
+      Langtext: '',
+      Hersteller: '',
+      Verkaufspreis: '',
+      Einheit: '',
+      agenticSearch: ''
+    });
+
+    const req = createRequest(form.toString(), { url: '/api/import/item' });
+    const res = createResponse();
+
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      await importItemAction.handle(req as any, res as any, ctx as any);
+    } finally {
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+
+    expect(res.statusCode).toBe(200);
+    expect(ctx.getItemReference.get).toHaveBeenCalledWith(existingReference.Artikel_Nummer);
+    expect(ctx.persistItemWithinTransaction).toHaveBeenCalledTimes(1);
+
+    const persistedItem = ctx.persistItemWithinTransaction.mock.calls[0]?.[0];
+    expect(persistedItem?.ItemUUID).toMatch(/^I-\d{6}-\d{4}$/);
+    expect(persistedItem?.ItemUUID?.slice(-4)).toBe('0028');
+    expect(persistedItem?.Artikel_Nummer).toBe(existingReference.Artikel_Nummer);
+    expect(persistedItem?.Artikelbeschreibung).toBe(existingReference.Artikelbeschreibung);
+    expect(persistedItem?.__skipReferencePersistence).toBe(true);
+    expect(persistedItem?.__referenceRowOverride).toEqual(existingReference);
   });
 });
