@@ -173,10 +173,6 @@ const action: Action = {
       let branch: BranchResolution | null = null;
 
       const prepareNewItemCreationBranch = (artikelNummerCandidate: string | null): BranchResolution => {
-        if (!ctx?.getMaxItemId?.get) {
-          throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
-        }
-
         const mintedUUID = generateItemUUID();
         console.info('[import-item] Generated new ItemUUID for item import', {
           ItemUUID: mintedUUID,
@@ -253,10 +249,6 @@ const action: Action = {
             });
             branch = prepareNewItemCreationBranch(incomingArtikelNummer || null);
           } else {
-            if (!ctx?.getMaxItemId?.get) {
-              throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
-            }
-
             const mintedUUID = generateItemUUID();
             console.info('[import-item] Creating new item instance from existing reference', {
               ItemUUID: mintedUUID,
