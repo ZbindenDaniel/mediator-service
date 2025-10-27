@@ -13,6 +13,8 @@ import type { AgenticRunStatus } from '../../models';
 import type { Action } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
+import { generateItemUUID } from '../lib/itemIds';
+import { MEDIA_DIR } from '../lib/media';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -341,7 +343,7 @@ const action: Action = {
       const images = [p.get('picture1') || '', p.get('picture2') || '', p.get('picture3') || ''];
       let firstImage = '';
       try {
-        const dir = path.join(__dirname, '../../media', ItemUUID);
+        const dir = path.join(MEDIA_DIR, ItemUUID);
         fs.mkdirSync(dir, { recursive: true });
         const artNr = resolvedArtikelNummer || ItemUUID;
         images.forEach((img, idx) => {

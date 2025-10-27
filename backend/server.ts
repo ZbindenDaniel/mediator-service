@@ -5,6 +5,9 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import https from 'https';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
+import { MEDIA_DIR } from './lib/media';
+
+export { MEDIA_DIR } from './lib/media';
 import {
   HTTP_PORT,
   INBOX_DIR,
@@ -92,7 +95,6 @@ const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
 const REPO_PUBLIC = path.join(__dirname, '../../..', 'frontend', 'public');
 export let PUBLIC_DIR = DIST_PUBLIC;
 export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
-export const MEDIA_DIR = path.join(__dirname, '../media');
 
 try {
   fs.mkdirSync(INBOX_DIR, { recursive: true });
