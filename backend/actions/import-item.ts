@@ -172,6 +172,26 @@ const action: Action = {
 
       let branch: BranchResolution | null = null;
 
+      const prepareNewItemCreationBranch = (artikelNummerCandidate: string | null): BranchResolution => {
+        if (!ctx?.getMaxItemId?.get) {
+          throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
+        }
+
+        const mintedUUID = generateItemUUID();
+        console.info('[import-item] Generated new ItemUUID for item import', {
+          ItemUUID: mintedUUID,
+          Artikel_Nummer: artikelNummerCandidate || undefined,
+          requestPath
+        });
+
+        return {
+          itemUUID: mintedUUID,
+          artikelNummer: artikelNummerCandidate,
+          skipReferencePersistence: false,
+          referenceOverride: null
+        };
+      };
+
       if (isUpdateRequest && pathItemUUID) {
         try {
           branch = {
@@ -227,34 +247,30 @@ const action: Action = {
             console.warn('[import-item] No item reference found for creation-by-reference request', {
               artikelNummer: incomingArtikelNummer
             });
-            return sendJson(res, 404, {
-              error: `Artikel_Nummer ${incomingArtikelNummer} not found`
+            console.info('[import-item] Falling back to direct item creation due to missing reference lookup', {
+              Artikel_Nummer: incomingArtikelNummer,
+              requestPath
             });
-          }
+            branch = prepareNewItemCreationBranch(incomingArtikelNummer || null);
+          } else {
+            if (!ctx?.getMaxItemId?.get) {
+              throw new Error('Missing getMaxItemId dependency for ItemUUID generation');
+            }
 
-          let mintedUUID: string;
-          try {
-            mintedUUID = generateItemUUID();
-          } catch (mintErr) {
-            console.error('[import-item] Failed to mint ItemUUID for creation-by-reference branch', {
-              artikelNummer: incomingArtikelNummer,
-              requestPath,
-              error: mintErr
+            const mintedUUID = generateItemUUID();
+            console.info('[import-item] Creating new item instance from existing reference', {
+              ItemUUID: mintedUUID,
+              Artikel_Nummer: normalizedReference.Artikel_Nummer,
+              requestPath
             });
-            throw new Error('Failed to generate ItemUUID for new item import');
-          }
-          console.info('[import-item] Creating new item instance from existing reference', {
-            ItemUUID: mintedUUID,
-            Artikel_Nummer: normalizedReference.Artikel_Nummer,
-            requestPath
-          });
 
-          branch = {
-            itemUUID: mintedUUID,
-            artikelNummer: normalizedReference.Artikel_Nummer,
-            skipReferencePersistence: true,
-            referenceOverride: normalizedReference
-          };
+            branch = {
+              itemUUID: mintedUUID,
+              artikelNummer: normalizedReference.Artikel_Nummer,
+              skipReferencePersistence: true,
+              referenceOverride: normalizedReference
+            };
+          }
         } catch (branchErr) {
           if (!res.writableEnded) {
             console.error('[import-item] Failed to resolve creation-by-reference branch', {
@@ -273,25 +289,7 @@ const action: Action = {
               requestPath
             });
           }
-
-          let mintedUUID: string;
-          try {
-            mintedUUID = generateItemUUID();
-          } catch (mintErr) {
-            console.error('[import-item] Failed to mint ItemUUID for new item import', {
-              requestPath,
-              error: mintErr
-            });
-            throw new Error('Failed to generate ItemUUID for new item import');
-          }
-          console.info('[import-item] Generated new ItemUUID for item import', { ItemUUID: mintedUUID, requestPath });
-
-          branch = {
-            itemUUID: mintedUUID,
-            artikelNummer: incomingArtikelNummer || null,
-            skipReferencePersistence: false,
-            referenceOverride: null
-          };
+          branch = prepareNewItemCreationBranch(incomingArtikelNummer ? incomingArtikelNummer : null);
         } catch (branchErr) {
           console.error('[import-item] Failed to prepare new item creation branch', branchErr);
           return sendJson(res, 500, { error: (branchErr as Error).message });
