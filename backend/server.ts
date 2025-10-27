@@ -51,6 +51,7 @@ import {
   countItemsNoBox,
   listRecentBoxes,
   getMaxBoxId,
+  getMaxItemId,
   getMaxArtikelNummer,
   listItemsForExport,
   updateAgenticReview,
@@ -65,6 +66,7 @@ import type { Item, LabelJob } from './db';
 import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
+import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
 
 const actions = loadActions();
 
@@ -366,6 +368,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (action) {
       try {
         console.log('Handling action', action.key);
+        const generateItemId = () =>
+          generateSequentialItemUUID({
+            getMaxItemId: () => getMaxItemId.get() as { ItemUUID: string } | undefined,
+            now: () => new Date()
+          });
         await action.handle?.(req, res, {
           db,
           upsertBox,
@@ -408,13 +415,15 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           countItemsNoBox,
           listRecentBoxes,
           getMaxBoxId,
+          getMaxItemId,
           getMaxArtikelNummer,
           listItemsForExport,
           updateAgenticReview,
           INBOX_DIR,
           PUBLIC_DIR,
           PREVIEW_DIR,
-          agenticServiceEnabled
+          agenticServiceEnabled,
+          generateItemUUID: generateItemId
         });
       } catch (err) {
         console.error('Action handler failed', err);
