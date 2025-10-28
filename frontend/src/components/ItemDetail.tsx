@@ -560,6 +560,65 @@ export default function ItemDetail({ itemId }: Props) {
     ];
   }, [events, item, resolveHauptkategorieLabel, resolveUnterkategorieLabel]);
 
+  const latestAgenticReviewNote = useMemo(() => {
+    let latestNote: string | null = null;
+    let latestTimestamp = -Infinity;
+
+    for (const ev of events) {
+      if (ev.Event !== 'AgenticReviewApproved' && ev.Event !== 'AgenticReviewRejected') {
+        continue;
+      }
+      const rawMeta = typeof ev.Meta === 'string' ? ev.Meta.trim() : '';
+      if (!rawMeta) {
+        continue;
+      }
+
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(rawMeta);
+      } catch (parseError) {
+        console.error('Failed to parse agentic review meta for note display', parseError);
+        continue;
+      }
+
+      const candidate = typeof parsed.notes === 'string' ? parsed.notes.trim() : '';
+      if (!candidate) {
+        continue;
+      }
+
+      const createdAt = Date.parse(ev.CreatedAt);
+      const timestamp = Number.isNaN(createdAt) ? Date.now() : createdAt;
+      if (timestamp >= latestTimestamp) {
+        latestTimestamp = timestamp;
+        latestNote = candidate;
+      }
+    }
+
+    return latestNote;
+  }, [events]);
+
+  const agenticRows: [string, React.ReactNode][] = [];
+  if (agentic?.LastModified) {
+    agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
+  }
+  if (agentic?.ReviewState) {
+    const reviewStateNormalized = agentic.ReviewState.toLowerCase();
+    let reviewLabel = 'Nicht erforderlich';
+    if (reviewStateNormalized === 'pending') reviewLabel = 'Ausstehend';
+    else if (reviewStateNormalized === 'approved') reviewLabel = 'Freigegeben';
+    else if (reviewStateNormalized === 'rejected') reviewLabel = 'Abgelehnt';
+    else if (reviewStateNormalized && reviewStateNormalized !== 'not_required') {
+      reviewLabel = agentic.ReviewState;
+    }
+    agenticRows.push(['Review-Status', reviewLabel]);
+  }
+  if (agentic?.ReviewedBy) {
+    agenticRows.push(['Geprüft von', agentic.ReviewedBy]);
+  }
+  if (latestAgenticReviewNote) {
+    agenticRows.push(['Kommentar', latestAgenticReviewNote]);
+  }
+
   const load = useCallback(async ({ showSpinner = false }: { showSpinner?: boolean } = {}) => {
     if (showSpinner) {
       setIsLoading(true);
@@ -937,63 +996,6 @@ export default function ItemDetail({ itemId }: Props) {
 
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
-  const latestAgenticReviewNote = useMemo(() => {
-    let latestNote: string | null = null;
-    let latestTimestamp = -Infinity;
-
-    for (const ev of events) {
-      if (ev.Event !== 'AgenticReviewApproved' && ev.Event !== 'AgenticReviewRejected') {
-        continue;
-      }
-      const rawMeta = typeof ev.Meta === 'string' ? ev.Meta.trim() : '';
-      if (!rawMeta) {
-        continue;
-      }
-
-      let parsed: any = null;
-      try {
-        parsed = JSON.parse(rawMeta);
-      } catch (parseError) {
-        console.error('Failed to parse agentic review meta for note display', parseError);
-        continue;
-      }
-
-      const candidate = typeof parsed.notes === 'string' ? parsed.notes.trim() : '';
-      if (!candidate) {
-        continue;
-      }
-
-      const createdAt = Date.parse(ev.CreatedAt);
-      const timestamp = Number.isNaN(createdAt) ? Date.now() : createdAt;
-      if (timestamp >= latestTimestamp) {
-        latestTimestamp = timestamp;
-        latestNote = candidate;
-      }
-    }
-
-    return latestNote;
-  }, [events]);
-  const agenticRows: [string, React.ReactNode][] = [];
-  if (agentic?.LastModified) {
-    agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
-  }
-  if (agentic?.ReviewState) {
-    const reviewStateNormalized = agentic.ReviewState.toLowerCase();
-    let reviewLabel = 'Nicht erforderlich';
-    if (reviewStateNormalized === 'pending') reviewLabel = 'Ausstehend';
-    else if (reviewStateNormalized === 'approved') reviewLabel = 'Freigegeben';
-    else if (reviewStateNormalized === 'rejected') reviewLabel = 'Abgelehnt';
-    else if (reviewStateNormalized && reviewStateNormalized !== 'not_required') {
-      reviewLabel = agentic.ReviewState;
-    }
-    agenticRows.push(['Review-Status', reviewLabel]);
-  }
-  if (agentic?.ReviewedBy) {
-    agenticRows.push(['Geprüft von', agentic.ReviewedBy]);
-  }
-  if (latestAgenticReviewNote) {
-    agenticRows.push(['Kommentar', latestAgenticReviewNote]);
-  }
 
   async function handleDelete() {
     if (!item) return;
