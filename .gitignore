@@ -19,3 +19,6 @@ README.md
 .vscode/.env
 backend/config.ts
 backend/data/mediator.sqlite
+data/mediator.db
+data/mediator.db-shm
+data/mediator.db-wal

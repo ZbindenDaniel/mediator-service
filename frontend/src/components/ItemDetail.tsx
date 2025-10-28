@@ -19,7 +19,6 @@ import {
   buildAgenticCancelUrl,
   cancelAgenticRun,
   persistAgenticRunCancellation,
-  resolveAgenticApiBase,
   triggerAgenticRun
 } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
@@ -531,7 +530,7 @@ export default function ItemDetail({ itemId }: Props) {
   const navigate = useNavigate();
   const dialog = useDialog();
 
-  const agenticApiBase = useMemo(resolveAgenticApiBase, []);
+  const agenticApiBase = 'http://127.0.0.1:3000'; // TODO: extract this to cental class (Also used in ItemCreate)
   const agenticRunUrl = '/api/agentic/run';
   const agenticCancelUrl = useMemo(() => buildAgenticCancelUrl(agenticApiBase), [agenticApiBase]);
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);

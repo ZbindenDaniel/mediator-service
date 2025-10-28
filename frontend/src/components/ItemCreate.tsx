@@ -7,7 +7,7 @@ import {
   isItemEinheit
 } from '../../../models';
 import { ensureUser } from '../lib/user';
-import { resolveAgenticApiBase, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
+import { triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
@@ -515,7 +515,7 @@ export default function ItemCreate() {
     [dialog]
   );
 
-  const agenticApiBase = useMemo(resolveAgenticApiBase, []);
+  const agenticApiBase ='http://127.0.0.1:8080';
 
   const agenticRunUrl = '/api/agentic/run';
 

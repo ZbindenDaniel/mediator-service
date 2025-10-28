@@ -37,14 +37,14 @@ export default function StatsCard({ counts, printerOk, health }: Props) {
           }}
         ></span>
       </div>
-      <div className="muted status-info">Status: 
+      <div className="muted status-info">Ki-Status: 
          <span
           style={{
             display: 'inline-block',
             width: 10,
             height: 10,
             borderRadius: '50%',
-            background: printerOk == null ? '#999' : health === 'oik' ? '#1cbc2c' : '#d22'
+            background: health == null ? '#999' : health === 'ok' ? '#1cbc2c' : '#d22'
           }}
         ></span>
       </div>
