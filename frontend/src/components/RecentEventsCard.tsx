@@ -99,7 +99,6 @@ export function RecentEventsList({ events }: Props) {
                   </div>
                 </div>
               </Link>
-              <div className="spacer"></div>
             </React.Fragment>
           );
         })

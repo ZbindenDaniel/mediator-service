@@ -380,6 +380,7 @@ div {
 /* Dialog */
 .dialog-overlay {
     position: fixed;
+    width: 100vw;
     inset: 0;
     display: flex;
     align-items: center;
@@ -483,6 +484,7 @@ div {
 /* TODO: Validate blocking overlay styling on legacy browsers when adding kiosk support. */
 .blocking-overlay {
     position: fixed;
+    width: 100vw;
     inset: 0;
     display: flex;
     align-items: center;
@@ -577,11 +579,6 @@ div {
     border-radius: var(--radius);
     padding: 8px;
     font-family: monospace;
-}
-
-.spacer {
-    height: 20px;
-    width: 100%;
 }
 
 .btn-container {

@@ -50,7 +50,6 @@ export default function RecentBoxesCard({ boxes }: Props) {
                   <div className="muted">Aktualisiert: {b.UpdatedAt ? formatDate(b.UpdatedAt) : ''}</div>
                 </div>
               </Link>
-              <div className="spacer"></div>
             </React.Fragment>
           ))
         ) : (

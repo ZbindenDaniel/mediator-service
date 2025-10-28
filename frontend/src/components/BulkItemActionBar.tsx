@@ -386,7 +386,7 @@ export default function BulkItemActionBar({
   }
 
   return (
-    <div className="card relocate-card bulk-item-action-bar" data-testid="bulk-item-action-bar">
+    <div id="bulk-item-action-bar" className="card relocate-card bulk-item-action-bar" data-testid="bulk-item-action-bar">
       <div className="bulk-item-action-bar__summary">
         <strong>{selectionLabel}</strong>
         {isProcessing ? <span className="muted"> Verarbeitung…</span> : null}
