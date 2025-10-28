@@ -1059,7 +1059,8 @@ export const updateAgenticReview = db.prepare(`
   UPDATE agentic_runs
   SET ReviewState = @ReviewState,
       ReviewedBy = @ReviewedBy,
-      LastModified = @LastModified
+      LastModified = @LastModified,
+      Status = COALESCE(@Status, Status)
   WHERE ItemUUID = @ItemUUID
 `);
 

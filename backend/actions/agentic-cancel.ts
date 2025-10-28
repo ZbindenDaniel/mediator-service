@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { AgenticRun } from '../../models';
+import { AGENTIC_RUN_STATUS_CANCELLED } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -72,7 +73,7 @@ const action: Action = {
         const nowIso = new Date().toISOString();
         const result = ctx.updateAgenticRunStatus.run({
           ItemUUID: itemUUID,
-          Status: 'cancelled',
+          Status: AGENTIC_RUN_STATUS_CANCELLED,
           SearchQuery: searchQuery,
           LastModified: nowIso,
           ReviewState: 'not_required',

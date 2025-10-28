@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { AGENTIC_RUN_STATUS_FAILED } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -91,7 +92,7 @@ const action: Action = {
       const nowIso = failedAt || new Date().toISOString();
       const runUpdate = {
         ItemUUID: itemId,
-        Status: 'failed',
+        Status: AGENTIC_RUN_STATUS_FAILED,
         SearchQuery: searchTerm,
         LastModified: nowIso,
         ReviewState: 'not_required',

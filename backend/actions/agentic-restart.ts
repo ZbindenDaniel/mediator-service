@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { AgenticRun } from '../../models';
+import { AGENTIC_RUN_STATUS_QUEUED } from '../../models';
 import { forwardAgenticTrigger } from './agentic-trigger';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -76,7 +77,7 @@ const action: Action = {
         if (hasExisting) {
           const result = ctx.updateAgenticRunStatus.run({
             ItemUUID: itemUUID,
-            Status: 'queued',
+            Status: AGENTIC_RUN_STATUS_QUEUED,
             SearchQuery: searchQuery,
             LastModified: nowIso,
             ReviewState: 'not_required',
@@ -89,7 +90,7 @@ const action: Action = {
           const result = ctx.upsertAgenticRun.run({
             ItemUUID: itemUUID,
             SearchQuery: searchQuery,
-            Status: 'queued',
+            Status: AGENTIC_RUN_STATUS_QUEUED,
             LastModified: nowIso,
             ReviewState: 'not_required',
             ReviewedBy: null
