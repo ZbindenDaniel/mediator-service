@@ -176,7 +176,8 @@ CREATE TABLE IF NOT EXISTS item_refs (
   Shopartikel INTEGER,
   Artikeltyp TEXT,
   Einheit TEXT,
-  EntityType TEXT
+  EntityType TEXT,
+  ShopwareProductId TEXT
 );
 `;
 
@@ -189,6 +190,7 @@ CREATE TABLE IF NOT EXISTS items (
   UpdatedAt TEXT NOT NULL,
   Datum_erfasst TEXT,
   Auf_Lager INTEGER,
+  ShopwareVariantId TEXT,
   FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE SET NULL ON UPDATE CASCADE,
   FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE
 );
@@ -201,13 +203,13 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Artikel_Nummer, Grafikname, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
     Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
     Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
-    Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, EntityType
+    Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, EntityType, ShopwareProductId
   )
   VALUES (
     @Artikel_Nummer, @Grafikname, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
     @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
     @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
-    @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @EntityType
+    @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @ShopwareProductId
   )
   ON CONFLICT(Artikel_Nummer) DO UPDATE SET
     Grafikname=excluded.Grafikname,
@@ -228,15 +230,16 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Shopartikel=excluded.Shopartikel,
     Artikeltyp=excluded.Artikeltyp,
     Einheit=excluded.Einheit,
-    EntityType=excluded.EntityType
+    EntityType=excluded.EntityType,
+    ShopwareProductId=excluded.ShopwareProductId
 `;
 
 const UPSERT_ITEM_INSTANCE_SQL = `
   INSERT INTO items (
-    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager
+    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager, ShopwareVariantId
   )
   VALUES (
-    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager
+    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager, @ShopwareVariantId
   )
   ON CONFLICT(ItemUUID) DO UPDATE SET
     Artikel_Nummer=excluded.Artikel_Nummer,
@@ -244,7 +247,8 @@ const UPSERT_ITEM_INSTANCE_SQL = `
     Location=excluded.Location,
     UpdatedAt=excluded.UpdatedAt,
     Datum_erfasst=excluded.Datum_erfasst,
-    Auf_Lager=excluded.Auf_Lager
+    Auf_Lager=excluded.Auf_Lager,
+    ShopwareVariantId=excluded.ShopwareVariantId
 `;
 
 type ItemInstanceRow = {
@@ -255,6 +259,7 @@ type ItemInstanceRow = {
   UpdatedAt: string;
   Datum_erfasst: string | null;
   Auf_Lager: number | null;
+  ShopwareVariantId: string | null;
 };
 
 type ItemRefRow = {
@@ -278,6 +283,7 @@ type ItemRefRow = {
   Artikeltyp: string | null;
   Einheit: string | null;
   EntityType: string | null;
+  ShopwareProductId: string | null;
 };
 
 function asNullableString(value: unknown): string | null {
@@ -347,7 +353,8 @@ function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
     Location: instance.Location === undefined ? null : instance.Location ?? null,
     UpdatedAt: toIsoString(instance.UpdatedAt) || new Date().toISOString(),
     Datum_erfasst: toIsoString(instance.Datum_erfasst),
-    Auf_Lager: asNullableInteger(instance.Auf_Lager)
+    Auf_Lager: asNullableInteger(instance.Auf_Lager),
+    ShopwareVariantId: asNullableTrimmedString((instance as ItemInstance & { ShopwareVariantId?: string | null }).ShopwareVariantId)
   };
 }
 
@@ -376,7 +383,8 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
     Shopartikel: asNullableInteger(ref.Shopartikel),
     Artikeltyp: asNullableString(ref.Artikeltyp),
     Einheit: asNullableString(ref.Einheit),
-    EntityType: asNullableString(ref.EntityType)
+    EntityType: asNullableString(ref.EntityType),
+    ShopwareProductId: asNullableString((ref as ItemRef & { ShopwareProductId?: string | null }).ShopwareProductId)
   };
 }
 
@@ -461,6 +469,46 @@ function ensureItemTables(database: Database.Database = db): void {
 
 ensureItemTables(db);
 
+function ensureItemShopwareColumns(database: Database.Database = db): void {
+  let refColumns: Array<{ name: string }> = [];
+  try {
+    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+  } catch (err) {
+    console.error('Failed to inspect item_refs schema for Shopware columns', err);
+    throw err;
+  }
+
+  if (!refColumns.some((column) => column.name === 'ShopwareProductId')) {
+    try {
+      database.prepare('ALTER TABLE item_refs ADD COLUMN ShopwareProductId TEXT').run();
+      console.info('[db] Added ShopwareProductId column to item_refs');
+    } catch (err) {
+      console.error('Failed to add ShopwareProductId column to item_refs', err);
+      throw err;
+    }
+  }
+
+  let itemColumns: Array<{ name: string }> = [];
+  try {
+    itemColumns = database.prepare(`PRAGMA table_info(items)`).all() as Array<{ name: string }>; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+  } catch (err) {
+    console.error('Failed to inspect items schema for Shopware columns', err);
+    throw err;
+  }
+
+  if (!itemColumns.some((column) => column.name === 'ShopwareVariantId')) {
+    try {
+      database.prepare('ALTER TABLE items ADD COLUMN ShopwareVariantId TEXT').run();
+      console.info('[db] Added ShopwareVariantId column to items');
+    } catch (err) {
+      console.error('Failed to add ShopwareVariantId column to items', err);
+      throw err;
+    }
+  }
+}
+
+ensureItemShopwareColumns(db);
+
 let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
 let getItemReferenceStatement: Database.Statement;
@@ -489,7 +537,8 @@ try {
       Shopartikel,
       Artikeltyp,
       Einheit,
-      EntityType
+      EntityType,
+      ShopwareProductId
     FROM item_refs
     WHERE Artikel_Nummer = ?
   `);
@@ -534,6 +583,7 @@ SELECT
   i.UpdatedAt AS UpdatedAt,
   i.Datum_erfasst AS Datum_erfasst,
   i.Auf_Lager AS Auf_Lager,
+  i.ShopwareVariantId AS ShopwareVariantId,
   r.Grafikname AS Grafikname,
   r.Artikelbeschreibung AS Artikelbeschreibung,
   r.Verkaufspreis AS Verkaufspreis,
@@ -552,7 +602,8 @@ SELECT
   r.Shopartikel AS Shopartikel,
   r.Artikeltyp AS Artikeltyp,
   r.Einheit AS Einheit,
-  r.EntityType AS EntityType
+  r.EntityType AS EntityType,
+  r.ShopwareProductId AS ShopwareProductId
 `;
 }
 
@@ -665,6 +716,41 @@ function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
 }
 
 ensureAgenticRunSchema(db);
+
+function ensureShopwareSyncQueueSchema(database: Database.Database = db): void {
+  const createShopwareQueueSql = `
+CREATE TABLE IF NOT EXISTS shopware_sync_queue (
+  Id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ItemUUID TEXT NOT NULL,
+  Operation TEXT NOT NULL,
+  Payload TEXT,
+  Status TEXT NOT NULL DEFAULT 'pending',
+  AttemptCount INTEGER NOT NULL DEFAULT 0,
+  LastError TEXT,
+  AvailableAt TEXT NOT NULL DEFAULT (datetime('now')),
+  CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+  UpdatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+  ShopwareProductId TEXT,
+  ShopwareVariantId TEXT,
+  FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_available
+  ON shopware_sync_queue(Status, AvailableAt);
+
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_item
+  ON shopware_sync_queue(ItemUUID);
+`;
+
+  try {
+    database.exec(createShopwareQueueSql);
+  } catch (err) {
+    console.error('Failed to ensure shopware_sync_queue schema', err);
+    throw err;
+  }
+}
+
+ensureShopwareSyncQueueSchema(db);
 
 export { db };
 
@@ -800,6 +886,323 @@ export function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate):
     console.error('[db] Failed to update queued agentic run state', { itemUUID: update.ItemUUID, error: err });
     throw err;
   }
+}
+
+type ShopwareSyncQueueRow = {
+  Id: number;
+  ItemUUID: string;
+  Operation: string;
+  Payload: string | null;
+  Status: string;
+  AttemptCount: number;
+  LastError: string | null;
+  AvailableAt: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+  ShopwareProductId: string | null;
+  ShopwareVariantId: string | null;
+};
+
+export type ShopwareSyncQueueJob = {
+  Id: number;
+  ItemUUID: string;
+  Operation: string;
+  Payload: unknown;
+  Status: string;
+  AttemptCount: number;
+  LastError: string | null;
+  AvailableAt: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+  ShopwareProductId: string | null;
+  ShopwareVariantId: string | null;
+};
+
+const selectShopwareSyncQueueById = db.prepare(`
+  SELECT Id, ItemUUID, Operation, Payload, Status, AttemptCount, LastError,
+         AvailableAt, CreatedAt, UpdatedAt, ShopwareProductId, ShopwareVariantId
+    FROM shopware_sync_queue
+   WHERE Id = ?
+`);
+
+const selectPendingShopwareSyncJob = db.prepare(`
+  SELECT Id, ItemUUID, Operation, Payload, Status, AttemptCount, LastError,
+         AvailableAt, CreatedAt, UpdatedAt, ShopwareProductId, ShopwareVariantId
+    FROM shopware_sync_queue
+   WHERE Status = 'pending'
+     AND datetime(AvailableAt) <= datetime('now')
+   ORDER BY datetime(AvailableAt) ASC, Id ASC
+   LIMIT 1
+`);
+
+const markShopwareSyncJobProcessingStatement = db.prepare(`
+  UPDATE shopware_sync_queue
+     SET Status = 'processing',
+         AttemptCount = AttemptCount + 1,
+         UpdatedAt = datetime('now'),
+         LastError = NULL
+   WHERE Id = @Id
+     AND Status = 'pending'
+`);
+
+const insertShopwareSyncQueueStatement = db.prepare(`
+  INSERT INTO shopware_sync_queue (
+    ItemUUID, Operation, Payload, Status, AttemptCount, LastError, AvailableAt, ShopwareProductId, ShopwareVariantId
+  ) VALUES (
+    @ItemUUID, @Operation, @Payload, 'pending', 0, NULL, COALESCE(@AvailableAt, datetime('now')), @ShopwareProductId, @ShopwareVariantId
+  )
+`);
+
+const updateShopwareSyncQueueRetryStatement = db.prepare(`
+  UPDATE shopware_sync_queue
+     SET Status = @Status,
+         AvailableAt = @AvailableAt,
+         LastError = @LastError,
+         UpdatedAt = datetime('now')
+   WHERE Id = @Id
+     AND Status = 'processing'
+`);
+
+const completeShopwareSyncQueueStatement = db.prepare(`
+  UPDATE shopware_sync_queue
+     SET Status = @Status,
+         LastError = NULL,
+         UpdatedAt = datetime('now'),
+         AvailableAt = @AvailableAt,
+         ShopwareProductId = COALESCE(@ShopwareProductId, ShopwareProductId),
+         ShopwareVariantId = COALESCE(@ShopwareVariantId, ShopwareVariantId)
+   WHERE Id = @Id
+     AND Status = 'processing'
+`);
+
+function serializeShopwareQueuePayload(payload: unknown): string | null {
+  if (payload === null || payload === undefined) {
+    return null;
+  }
+  try {
+    return JSON.stringify(payload);
+  } catch (err) {
+    console.error('[db] Failed to serialize Shopware sync payload', { error: err });
+    throw err;
+  }
+}
+
+function deserializeShopwareQueuePayload(raw: string | null, jobId: number): unknown {
+  if (raw === null || raw === undefined || raw === '') {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('[db] Failed to parse Shopware sync payload', { jobId, error: err });
+    return raw;
+  }
+}
+
+function mapShopwareSyncQueueRow(row: ShopwareSyncQueueRow | undefined): ShopwareSyncQueueJob | null {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    Payload: deserializeShopwareQueuePayload(row.Payload, row.Id)
+  };
+}
+
+export type ShopwareSyncJobInsert = {
+  itemUUID: string;
+  operation: string;
+  payload?: unknown;
+  availableAt?: Date | string | null;
+  shopwareProductId?: string | null;
+  shopwareVariantId?: string | null;
+};
+
+function resolveQueueTimestamp(input: Date | string | null | undefined): string | null {
+  if (input === null || input === undefined) {
+    return null;
+  }
+  const normalized = toIsoString(input);
+  if (!normalized) {
+    console.warn('[db] Ignoring invalid Shopware queue timestamp input', { value: input });
+    return null;
+  }
+  return normalized;
+}
+
+export function enqueueShopwareSyncJob(input: ShopwareSyncJobInsert): ShopwareSyncQueueJob {
+  const record = {
+    ItemUUID: input.itemUUID,
+    Operation: input.operation,
+    Payload: serializeShopwareQueuePayload(input.payload ?? null),
+    AvailableAt: resolveQueueTimestamp(input.availableAt),
+    ShopwareProductId: input.shopwareProductId ?? null,
+    ShopwareVariantId: input.shopwareVariantId ?? null
+  };
+
+  try {
+    const result = insertShopwareSyncQueueStatement.run(record);
+    const row = selectShopwareSyncQueueById.get(result.lastInsertRowid) as ShopwareSyncQueueRow | undefined;
+    const job = mapShopwareSyncQueueRow(row);
+    if (!job) {
+      throw new Error('Unable to load enqueued Shopware sync job');
+    }
+    console.info('[db] Shopware sync job enqueued', {
+      id: job.Id,
+      itemUUID: job.ItemUUID,
+      operation: job.Operation,
+      availableAt: job.AvailableAt
+    });
+    return job;
+  } catch (err) {
+    console.error('[db] Failed to enqueue Shopware sync job', {
+      itemUUID: input.itemUUID,
+      operation: input.operation,
+      error: err
+    });
+    throw err;
+  }
+}
+
+export function dequeueShopwareSyncJob(): ShopwareSyncQueueJob | null {
+  let row: ShopwareSyncQueueRow | undefined;
+  try {
+    const runTxn = db.transaction(() => {
+      const pending = selectPendingShopwareSyncJob.get() as ShopwareSyncQueueRow | undefined;
+      if (!pending) {
+        return undefined;
+      }
+      const updateResult = markShopwareSyncJobProcessingStatement.run({ Id: pending.Id });
+      if ((updateResult?.changes ?? 0) === 0) {
+        return undefined;
+      }
+      const refreshed = selectShopwareSyncQueueById.get(pending.Id) as ShopwareSyncQueueRow | undefined;
+      return refreshed;
+    });
+    row = runTxn();
+  } catch (err) {
+    console.error('[db] Failed to dequeue Shopware sync job', err);
+    throw err;
+  }
+
+  const job = mapShopwareSyncQueueRow(row);
+  if (job) {
+    console.info('[db] Shopware sync job dequeued', {
+      id: job.Id,
+      itemUUID: job.ItemUUID,
+      operation: job.Operation,
+      attempt: job.AttemptCount
+    });
+  }
+  return job;
+}
+
+function resolveRetryAvailableAt(update: ShopwareSyncJobRetryUpdate): string {
+  const provided = resolveQueueTimestamp(update.availableAt ?? null);
+  if (provided) {
+    return provided;
+  }
+  if (typeof update.delayMs === 'number' && Number.isFinite(update.delayMs)) {
+    const safeDelay = Math.max(0, Math.floor(update.delayMs));
+    return new Date(Date.now() + safeDelay).toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function stringifyJobError(error: unknown): string {
+  if (error === null || error === undefined) {
+    return 'Unknown error';
+  }
+  if (error instanceof Error) {
+    return error.message || error.toString();
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch (err) {
+    console.warn('[db] Failed to stringify Shopware sync job error', { error, serializationError: err });
+    return String(error);
+  }
+}
+
+export type ShopwareSyncJobRetryUpdate = {
+  id: number;
+  error: unknown;
+  delayMs?: number;
+  availableAt?: Date | string | null;
+  markAsFailed?: boolean;
+};
+
+export function recordShopwareSyncJobFailure(update: ShopwareSyncJobRetryUpdate): ShopwareSyncQueueJob | null {
+  const payload = {
+    Id: update.id,
+    Status: update.markAsFailed ? 'failed' : 'pending',
+    AvailableAt: resolveRetryAvailableAt(update),
+    LastError: stringifyJobError(update.error)
+  };
+
+  try {
+    const result = updateShopwareSyncQueueRetryStatement.run(payload);
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Shopware sync retry update had no effect', { id: update.id, status: payload.Status });
+      return mapShopwareSyncQueueRow(selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined);
+    }
+  } catch (err) {
+    console.error('[db] Failed to update Shopware sync retry state', { id: update.id, error: err });
+    throw err;
+  }
+
+  const row = selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined;
+  const job = mapShopwareSyncQueueRow(row);
+  console.warn('[db] Shopware sync job scheduled for retry', {
+    id: update.id,
+    status: payload.Status,
+    nextAttempt: job?.AvailableAt,
+    attempts: job?.AttemptCount,
+    lastError: payload.LastError
+  });
+  return job;
+}
+
+export type ShopwareSyncJobCompletionUpdate = {
+  id: number;
+  status?: 'completed' | 'skipped';
+  shopwareProductId?: string | null;
+  shopwareVariantId?: string | null;
+};
+
+export function markShopwareSyncJobCompleted(update: ShopwareSyncJobCompletionUpdate): ShopwareSyncQueueJob | null {
+  const payload = {
+    Id: update.id,
+    Status: update.status ?? 'completed',
+    AvailableAt: new Date().toISOString(),
+    ShopwareProductId: update.shopwareProductId ?? null,
+    ShopwareVariantId: update.shopwareVariantId ?? null
+  };
+
+  try {
+    const result = completeShopwareSyncQueueStatement.run(payload);
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Shopware sync completion update had no effect', { id: update.id, status: payload.Status });
+      return mapShopwareSyncQueueRow(selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined);
+    }
+  } catch (err) {
+    console.error('[db] Failed to mark Shopware sync job completed', { id: update.id, error: err });
+    throw err;
+  }
+
+  const row = selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined;
+  const job = mapShopwareSyncQueueRow(row);
+  console.info('[db] Shopware sync job completed', {
+    id: update.id,
+    status: payload.Status,
+    shopwareProductId: job?.ShopwareProductId,
+    shopwareVariantId: job?.ShopwareVariantId
+  });
+  return job;
 }
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
@@ -1078,5 +1481,5 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY i.Datum_erfasst
 `);
 
-export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog };
+export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog, ShopwareSyncQueueJob };
 
