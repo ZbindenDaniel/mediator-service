@@ -19,8 +19,12 @@ import {
   TLS_ENABLED,
   PUBLIC_HOSTNAME,
   PUBLIC_PROTOCOL,
-  PUBLIC_ORIGIN
+  PUBLIC_ORIGIN,
+  SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
+  getShopwareConfig,
+  logShopwareConfigIssues
 } from './config';
+import type { ShopwareConfig } from './config';
 import { ingestCsvFile } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import {
@@ -73,6 +77,25 @@ import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
 
 const actions = loadActions();
+
+let shopwareConfig: ShopwareConfig = {
+  enabled: false,
+  baseUrl: null,
+  salesChannelId: null,
+  requestTimeoutMs: SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
+  credentials: {}
+};
+let shopwareConfigIssues: string[] = [];
+let shopwareConfigReady = false;
+
+try {
+  shopwareConfig = getShopwareConfig();
+  shopwareConfigIssues = logShopwareConfigIssues(console, shopwareConfig);
+  shopwareConfigReady = shopwareConfig.enabled && shopwareConfigIssues.length === 0;
+} catch (err) {
+  console.error('[server] Failed to initialize Shopware configuration', err);
+  shopwareConfigIssues = ['Shopware configuration evaluation failed; integration disabled.'];
+}
 
 function resolveRequestBase(req: IncomingMessage): string {
   const hostHeader = req.headers.host;
@@ -263,6 +286,7 @@ type ActionContext = {
   findByMaterial: typeof findByMaterial;
   itemsByBox: typeof itemsByBox;
   getBox: typeof getBox;
+  getItemReference: typeof getItemReference;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
   decrementItemStock: typeof decrementItemStock;
@@ -299,6 +323,11 @@ type ActionContext = {
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
   agenticServiceEnabled: boolean;
+  shopware: {
+    config: ShopwareConfig;
+    issues: string[];
+    ready: boolean;
+  };
 };
 
 const resolvedAgenticApiBase = AGENTIC_API_BASE.trim();
@@ -483,6 +512,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           PUBLIC_DIR,
           PREVIEW_DIR,
           agenticServiceEnabled,
+          shopware: {
+            config: shopwareConfig,
+            issues: [...shopwareConfigIssues],
+            ready: shopwareConfigReady
+          },
           generateItemUUID: generateItemId
         });
       } catch (err) {
