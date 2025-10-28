@@ -36,6 +36,22 @@ const action: Action = {
             Event: 'Deleted',
             Meta: null
           });
+          try {
+            ctx.enqueueShopwareSyncJob({
+              itemUUID: id,
+              operation: 'item-delete',
+              triggerSource: 'delete-entity',
+              payload: {
+                actor,
+                boxId: item.BoxID ?? null
+              }
+            });
+          } catch (queueErr) {
+            console.error('[delete-entity] Failed to enqueue Shopware sync job', {
+              itemId: id,
+              error: queueErr
+            });
+          }
         })();
       } else {
         const box = ctx.getBox.get(id);
