@@ -65,8 +65,13 @@ module.exports = {
   DB_PATH: process.env.DB_PATH || "./data/mediator.sqlite",
   INBOX_DIR: process.env.INBOX_DIR || "./data/inbox",
   ARCHIVE_DIR: process.env.ARCHIVE_DIR || "./data/archive",
-  PRINTER_HOST: process.env.PRINTER_HOST || "GeBE_USB_Printer_A8", //Hewlett_Packard_HP_LaserJet_P3010_Series_pingu_ltsp", //"Brother DCP-7030",
-  PRINTER_PORT: parseInt(process.env.PRINTER_PORT || "9100", 10),
+  PRINTER_QUEUE: (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || "").trim(),
+  LP_COMMAND: (process.env.LP_COMMAND || 'lp').trim() || 'lp',
+  LPSTAT_COMMAND: (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat',
+  PRINT_TIMEOUT_MS: (() => {
+    const parsed = parseInt(process.env.PRINT_TIMEOUT_MS || '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 15000;
+  })(),
   BASE_QR_URL: process.env.BASE_QR_URL || "http://localhost:8080/qr",
   BASE_UI_URL: process.env.BASE_UI_URL || "http://localhost:8080/ui"  // ← NEW, used for box QR
 };
