@@ -19,7 +19,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - **Imports & ERP Bridge** – CSV uploads seeded from an external ERP initialize the catalogue. Future integrations (e.g.,
   Shopware) will build on the same ingestion path.
 - **Printing & QR Labels** – Boxes and larger standalone items receive QR codes and human-readable stickers. The printing stack
-  generates HTML templates and dispatches jobs to CUPS-compatible printers.
+  generates label PDFs, stores previews, and dispatches jobs to CUPS-compatible printers.
 
 ## Architectural Patterns in Practice
 - **Action architecture** – The backend dynamically loads `backend/actions/*` modules that wrap database calls in
@@ -56,7 +56,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Upcoming Opportunities
 - Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
-- Replace shell `exec` in the printing helper with a safer spawn approach and validate printer commands.
+- Capture dispatched CUPS job identifiers in logs so support staff can correlate queue issues with individual label requests.
 - Enforce size limits and validate content for uploaded CSV files prior to writing them to disk.
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
@@ -68,6 +68,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added a manual fallback control to the agentic item creation form so users can exit to manual editing while preserving draft data.
 - Introduced the shared `LoadingPage` experience on landing and item list routes so top-level pages display a consistent loading state while fetching data.
 - Ensured item categories persist and round-trip correctly even without Artikelnummer assignments, with logging to surface missing metadata.
+- Item and box label printing now share a single PDF per request, leave previews downloadable, and route jobs through the configured CUPS queue with structured error reporting.
 - Added backend support to remove items from boxes and delete items or boxes via new API endpoints.
 - Exposed removal and deletion controls in the React UI and made stock counts read-only when editing items.
 - Wrapped removal and deletion in database transactions and added unit tests to verify item stock and box deletion logic.

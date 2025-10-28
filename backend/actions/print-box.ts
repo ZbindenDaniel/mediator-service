@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { Box, Item } from '../../models';
 import type { BoxLabelPayload } from '../labelpdf';
+import type { PrintPdfResult } from '../print';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -22,8 +23,6 @@ const action: Action = {
       if (!id) return sendJson(res, 400, { error: 'invalid box id' });
       const box = ctx.getBox.get(id) as Box | undefined;
       if (!box) return sendJson(res, 404, { error: 'box not found' });
-      const zpl = ctx.zplForBox({ boxId: box.BoxID, location: box.Location || '' });
-
       const items = (ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [];
       const totalQuantity = items.reduce((sum, item) => {
         const raw = (item as Item)?.Auf_Lager as unknown;
@@ -46,11 +45,13 @@ const action: Action = {
       };
 
       let previewUrl = '';
+      let pdfPath = '';
       try {
-        const out = path.join(ctx.PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, '_'));
-        fs.mkdirSync(path.dirname(out), { recursive: true });
-        await ctx.pdfForBox({ boxData, outPath: out });
-        previewUrl = `/prints/${path.basename(out)}`;
+        pdfPath = path
+          .join(ctx.PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, '_'));
+        fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
+        await ctx.pdfForBox({ boxData, outPath: pdfPath });
+        previewUrl = `/prints/${path.basename(pdfPath)}`;
         ctx.logEvent({
           Actor: null,
           EntityType: 'Box',
@@ -58,21 +59,52 @@ const action: Action = {
           Event: 'PrintPreviewSaved',
           Meta: JSON.stringify({ file: previewUrl, qrPayload: boxData })
         });
-        console.log('Box label preview generated', { boxId: box.BoxID, previewUrl, qrPayload: boxData });
+        console.log('Box label preview generated', {
+          boxId: box.BoxID,
+          previewUrl,
+          qrPayload: boxData,
+          pdfPath
+        });
       } catch (err) {
         console.error('Preview generation failed', err);
+        return sendJson(res, 500, { error: 'preview_generation_failed' });
       }
-      const result = await ctx.sendZpl(zpl);
-      if (result.sent) {
+
+      let printResult: PrintPdfResult = { sent: false, reason: 'print_not_attempted' };
+      try {
+        printResult = await ctx.printPdf({
+          filePath: pdfPath,
+          jobName: `Box ${box.BoxID}`
+        });
+      } catch (err) {
+        console.error('Box label print invocation failed', { boxId: box.BoxID, error: err });
+        printResult = { sent: false, reason: (err as Error).message };
+      }
+
+      if (printResult.sent) {
         ctx.logEvent({
           Actor: null,
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintSent',
-          Meta: JSON.stringify({ transport: 'tcp' })
+          Meta: JSON.stringify({ transport: 'pdf', file: previewUrl })
+        });
+      } else {
+        ctx.logEvent({
+          Actor: null,
+          EntityType: 'Box',
+          EntityId: box.BoxID,
+          Event: 'PrintFailed',
+          Meta: JSON.stringify({ transport: 'pdf', file: previewUrl, reason: printResult.reason })
         });
       }
-      return sendJson(res, 200, { sent: !!result.sent, previewUrl, reason: result.reason, qrPayload: boxData });
+
+      return sendJson(res, 200, {
+        sent: !!printResult.sent,
+        previewUrl,
+        reason: printResult.reason,
+        qrPayload: boxData
+      });
     } catch (err) {
       console.error('Print box failed', err);
       sendJson(res, 500, { error: (err as Error).message });

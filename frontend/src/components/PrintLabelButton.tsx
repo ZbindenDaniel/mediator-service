@@ -20,7 +20,13 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setPreview(data.previewUrl || '');
-        setStatus(data.sent ? 'Gesendet an Drucker' : 'Vorschau bereit');
+        if (data.sent) {
+          setStatus('Gesendet an Drucker');
+        } else if (data.reason) {
+          setStatus(`Druckfehler: ${data.reason}`);
+        } else {
+          setStatus('Vorschau bereit');
+        }
       } else {
         setStatus('Error: ' + (data.error || res.status));
       }
