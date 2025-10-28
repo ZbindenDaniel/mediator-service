@@ -1,14 +1,30 @@
 # Architecture Outline
 
-<!-- TODO: Add sequence diagrams for import, agentic, and printing flows. -->
-
 This document details the structure and data flow of the mediator service across backend services, frontend UI, shared models, and legacy assets.
+
+_Diagram follow-up:_ Import, agentic, and printing sequence diagrams remain outstanding. Track this under `docs/` with
+Design:owner@mediator and target the Q4 documentation refresh.
+
+## Mediator Architecture Principles
+- **Action-first orchestration** – Every API route resolves to a module in `backend/actions/`. Actions own validation,
+  transaction scope, audit logging, and error shaping so behaviour stays consistent across the service.
+- **Shared contracts** – Models in `models/` define items, boxes, and agentic metadata. Both backend and frontend import these
+  TypeScript types directly to prevent drift.
+- **Structured observability** – Logging relies on `backend/src/lib/logger.ts` and `frontend/src/utils/logger.ts` helpers.
+  Actions wrap risky operations in `try/catch` blocks that surface context and rethrow typed errors for the HTTP layer.
+  Frontend components use the logger to annotate asynchronous effects, agentic polling, and printing triggers.
+- **Separation of rendering** – Printing flows reuse HTML templates under `frontend/public/print/`. The backend renders these
+  templates for both preview and printer jobs, avoiding duplication and keeping box/item labels in sync.
+- **Progressive automation** – Agentic enrichment runs asynchronously, persisting state transitions so manual fallbacks remain
+  available. Background workers build on the same event log to integrate with future services (e.g., Shopware).
 
 ## Backend (`backend/`)
 
 ### Runtime & Framework
 - Node.js with TypeScript for API handlers, workers, and supporting utilities.
-- Actions are dynamically loaded from the `actions/` directory and mapped to HTTP routes.
+- Actions are dynamically loaded from the `actions/` directory and mapped to HTTP routes via the central loader in `server.ts`.
+- Error handling centralises around the loader: actions throw typed `HttpError` variants while the loader logs structured
+  metadata before formatting responses.
 
 ### Key Directories
 - `actions/` – request handlers grouped by concern:
@@ -23,6 +39,13 @@ This document details the structure and data flow of the mediator service across
 - `utils/` – shared helpers (such as `image.ts`) used across actions to normalize persistence and formatting logic.
 - `server.ts` – HTTP entry point wiring the dynamic action loader, static asset serving, and API error handling.
 
+### Logging & Error Handling Expectations
+- Actions log at `info` for state transitions (e.g., move, remove, import) and `warn`/`error` for failures. Logging helpers
+  automatically attach correlation IDs when available.
+- Database mutations execute inside `try/catch` blocks. Failures trigger rollbacks, emit structured errors, and surface
+  user-friendly messages to the frontend.
+- Printing and external integrations guard shell or HTTP calls with retries and detailed logging to ease on-call diagnosis.
+
 ### Responsibilities
 - Maintain transactional data integrity when moving, importing, or deleting boxes and items.
 - Persist agentic run metadata, image uploads, and QR scan events.
@@ -32,7 +55,9 @@ This document details the structure and data flow of the mediator service across
 
 ### Runtime & Framework
 - React with TypeScript bundled via `esbuild`.
-- Routing handled by `react-router-dom`.
+- Routing handled by `react-router-dom` and centralised in `frontend/src/index.tsx`.
+- Shared hooks and context providers (e.g., loading states, agentic polling) live alongside components to keep side effects
+  encapsulated.
 
 ### Directory Structure
 - `public/` – static assets (`index.html`, bundled JS/CSS) plus standalone `print/` templates for box and item labels.
@@ -44,7 +69,9 @@ This document details the structure and data flow of the mediator service across
 ### Responsibilities
 - Surface inventory overviews, search, and statistics for logistics operators.
 - Provide item/box detail pages, editing experiences, and CSV import/export flows.
-- Trigger agentic runs asynchronously while reflecting status and error handling in the UI.
+- Trigger agentic runs asynchronously while reflecting status and error handling in the UI. UI components wrap agentic calls in
+  `try/catch` blocks to show inline toasts and persist draft edits on failure.
+- Integrate printing controls (preview + send) by calling backend print actions and presenting the rendered templates.
 
 ## Shared Models (`models/`)
 - TypeScript interfaces describing entities such as boxes, items, event logs, and agentic run metadata.

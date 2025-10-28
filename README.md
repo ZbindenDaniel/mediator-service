@@ -1,6 +1,13 @@
-a small service to map items to the boxes their stored in and the location they're placed.
-the workflow is very basic: items are created according to a predefined scheme. items are either placed on a new or existing box. boxes are linked to a location.
-when creating a box a label with key values and a qr code is printed to allow for inspection of a boxes content.
+a small service to map items to the boxes they're stored in and the location they're placed.
+
+## What the mediator does
+- Catalogues IT equipment (`ItemRef` + `itemInstances`) and tracks stock over time.
+- Groups inventory into colour-coded boxes (Behälter) that link to warehouse sections for easy retrieval.
+- Imports seed data from CSV (mirroring the ERP export) and supports future integrations such as Shopware.
+- Offers an AI-assisted (agentic) enrichment workflow so partially known items can be completed via web research before human approval.
+- Prints QR labels for boxes and larger items so warehouse staff can scan and inspect contents quickly.
+
+See the refreshed [project overview](docs/OVERVIEW.md) and [architecture outline](docs/ARCHITECTURE.md) for the complete domain map, guiding principles, and current priorities.
 
 ## QR scanning
 
@@ -8,6 +15,11 @@ Generated QR codes encode a JSON payload that always contains the Behälter iden
 metadata (e.g., `label`, `location`, or `items`). The new `/scan` route in the React application uses the browser camera via the
 `BarcodeDetector` API to read the QR code, validate the JSON, and route to `/boxes/{id}` after a successful scan. Every scan is
 POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate payload metadata with existing Behälterdaten.
+
+## Documentation quick links
+- [Project overview & roadmap](docs/OVERVIEW.md)
+- [Architecture principles](docs/ARCHITECTURE.md)
+- [Shopware integration plan](docs/Shopware\ integration.md)
 
 ## Development notes
 
@@ -104,7 +116,7 @@ npm run smoke
 
 ## Testing
 
-<!-- TODO: Document CLI flags once watch/filter support lands in the harness. -->
+_Follow-up:_ Document CLI flags once watch/filter support lands in the harness (Testing:owner@mediator, align with harness improvements milestone).
 
 The custom harness in `scripts/run-tests.js` exposes Jest-style matchers and async helpers so `test/*.test.ts` specs can run without the full Jest runtime. Execute the suite with:
 
