@@ -1,114 +1,246 @@
-import net from 'net';
-import { exec } from 'child_process';
-import { PRINTER_HOST, PRINTER_PORT, BASE_QR_URL, BASE_UI_URL } from './config';
+import fs from 'fs';
+import path from 'path';
+import { spawn } from 'child_process';
+import {
+  PRINTER_QUEUE,
+  LP_COMMAND,
+  LPSTAT_COMMAND,
+  PRINT_TIMEOUT_MS
+} from './config';
 
-export interface ItemLabelParams {
-  materialNumber?: string;
-  itemUUID: string;
+export interface PrintPdfOptions {
+  filePath: string;
+  jobName?: string;
+  printerQueue?: string;
+  timeoutMs?: number;
 }
 
-export interface BoxLabelParams {
-  boxId: string;
-  location?: string;
+export interface PrintPdfResult {
+  sent: boolean;
+  reason?: string;
+  code?: number | null;
+  signal?: NodeJS.Signals | null;
 }
 
-export function zplForItem({ materialNumber, itemUUID }: ItemLabelParams): string {
-  const shortUid = (itemUUID || '').slice(-6).toUpperCase();
-  const url = `${BASE_QR_URL}/${encodeURIComponent(itemUUID)}`;
-  return `^XA
-^CI28
-^PW600^LL380
-^FO30,30^A0N,40,40^FDMatNr: ${materialNumber || '-'}^FS
-^FO30,80^A0N,30,30^FDUID: ${shortUid}^FS
-^FO30,130^BQN,2,8^FDLA,${url}^FS
-^XZ`;
+function validatePdfPath(filePath: string): { ok: boolean; reason?: string } {
+  if (!filePath) {
+    return { ok: false, reason: 'missing_file_path' };
+  }
+
+  const absolute = path.resolve(filePath);
+  if (!fs.existsSync(absolute)) {
+    return { ok: false, reason: 'file_not_found' };
+  }
+
+  const stat = fs.statSync(absolute);
+  if (!stat.isFile()) {
+    return { ok: false, reason: 'invalid_file' };
+  }
+
+  return { ok: true };
 }
 
-export function zplForBox({ boxId, location }: BoxLabelParams): string {
-  const url = `${BASE_UI_URL}/box/${encodeURIComponent(boxId)}`;
-  const loc = location ? `Loc: ${location}` : '';
-  return `^XA
-^CI28
-^PW600^LL380
-^FO30,30^A0N,48,48^FDBOX ${boxId}^FS
-^FO30,90^A0N,32,32^FD${loc}^FS
-^FO30,150^BQN,2,8^FDLA,${url}^FS
-^XZ`;
-}
-
-export function sendZpl(zpl: string): Promise<{ sent: boolean; reason?: string }> {
-  return new Promise((resolve) => {
-    // TODO: replace exec with spawn and validate printer command to avoid injection
-    const printProcess = exec(`lp -d ${PRINTER_HOST}`, (error, stdout, stderr) => {
-      if (error) {
-        console.error('Print command failed', error);
-        return resolve({ sent: false, reason: stderr || error.message });
-      }
-      resolve({ sent: true });
+export async function printPdf(options: PrintPdfOptions): Promise<PrintPdfResult> {
+  const { filePath, jobName, timeoutMs, printerQueue } = options;
+  const effectiveQueue = (printerQueue || PRINTER_QUEUE || '').trim();
+  const resolvedTimeout = Number.isFinite(timeoutMs) && timeoutMs ? timeoutMs : PRINT_TIMEOUT_MS;
+  const validation = validatePdfPath(filePath);
+  if (!validation.ok) {
+    console.error('[print] Refusing to send PDF; invalid file path', {
+      filePath,
+      reason: validation.reason
     });
-    printProcess.stdin?.write(zpl);
-    printProcess.stdin?.end();
+    return { sent: false, reason: validation.reason };
+  }
+
+  if (!effectiveQueue) {
+    console.error('[print] Printer queue not configured; aborting print', {
+      filePath
+    });
+    return { sent: false, reason: 'printer_queue_not_configured' };
+  }
+
+  const absolute = path.resolve(filePath);
+  const args = ['-d', effectiveQueue];
+  if (jobName && jobName.trim()) {
+    args.push('-t', jobName.trim());
+  }
+  args.push(absolute);
+
+  console.log('[print] Dispatching PDF to printer', {
+    command: LP_COMMAND,
+    args,
+    timeoutMs: resolvedTimeout
+  });
+
+  return await new Promise<PrintPdfResult>((resolve) => {
+    try {
+      const child = spawn(LP_COMMAND, args, {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      const timer = setTimeout(() => {
+        console.error('[print] Print command timed out; terminating process', {
+          command: LP_COMMAND,
+          args,
+          timeoutMs: resolvedTimeout
+        });
+        try {
+          child.kill('SIGKILL');
+        } catch (killError) {
+          console.error('[print] Failed to terminate timed-out print process', killError);
+        }
+        if (!settled) {
+          settled = true;
+          resolve({ sent: false, reason: 'print_timeout' });
+        }
+      }, resolvedTimeout);
+
+      const finish = (result: PrintPdfResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.once('error', (err) => {
+        console.error('[print] Print process failed to start', {
+          command: LP_COMMAND,
+          args,
+          error: err
+        });
+        finish({ sent: false, reason: err.message });
+      });
+
+      child.once('close', (code, signal) => {
+        if (code === 0) {
+          console.log('[print] Print command completed successfully', {
+            command: LP_COMMAND,
+            args,
+            stdout: stdout.trim()
+          });
+          finish({ sent: true, code, signal: signal ?? null });
+          return;
+        }
+
+        console.error('[print] Print command exited with failure', {
+          command: LP_COMMAND,
+          args,
+          code,
+          signal,
+          stdout: stdout.trim(),
+          stderr: stderr.trim()
+        });
+        finish({
+          sent: false,
+          reason: stderr.trim() || stdout.trim() || `exit_code_${code ?? 'unknown'}`,
+          code,
+          signal: signal ?? null
+        });
+      });
+    } catch (err) {
+      console.error('[print] Unexpected error while spawning print command', {
+        command: LP_COMMAND,
+        args,
+        error: err
+      });
+      resolve({ sent: false, reason: (err as Error).message });
+    }
   });
 }
-
-const PROBE = "\x1B%-12345X@PJL INFO STATUS\r\n@PJL INFO ID\r\n@PJL EOJ\r\n\x1B%-12345X";
 
 export function testPrinterConnection(
-  host: string,
-  port = 9100,
-  timeoutMs = 3000
+  queue: string = PRINTER_QUEUE,
+  timeoutMs: number = PRINT_TIMEOUT_MS
 ): Promise<{ ok: boolean; reason?: string }> {
+  const normalizedQueue = (queue || '').trim();
+  if (!normalizedQueue) {
+    console.warn('[print] testPrinterConnection invoked without a configured queue');
+    return Promise.resolve({ ok: false, reason: 'printer_queue_not_configured' });
+  }
+
   return new Promise((resolve) => {
-    const socket = net.createConnection({ host, port });
-    let resolved = false;
-    let gotData = false;
-    let buf = "";
-
-    const finish = (res: { ok: boolean; reason?: string }) => {
-      if (resolved) return;
-      resolved = true;
-      try { socket.destroy(); } catch {}
-      resolve(res);
-    };
-
-    socket.setTimeout(timeoutMs);
-
-    socket.once("connect", () => {
-      // Write PJL probe and wait for data
-      socket.write(PROBE, (err) => {
-        if (err) return finish({ ok: false, reason: err.message || "write_error" });
+    try {
+      const child = spawn(LPSTAT_COMMAND, ['-p', normalizedQueue], {
+        stdio: ['ignore', 'pipe', 'pipe']
       });
-    });
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
 
-    socket.on("data", (chunk) => {
-      gotData = true;
-      buf += chunk.toString("ascii");
+      const timer = setTimeout(() => {
+        console.error('[print] lpstat command timed out', {
+          command: LPSTAT_COMMAND,
+          queue: normalizedQueue,
+          timeoutMs
+        });
+        try {
+          child.kill('SIGKILL');
+        } catch (killError) {
+          console.error('[print] Failed to terminate timed-out lpstat process', killError);
+        }
+        if (!settled) {
+          settled = true;
+          resolve({ ok: false, reason: 'status_timeout' });
+        }
+      }, timeoutMs);
 
-      // Heuristics: look for READY/ONLINE or INFO payloads
-      if (/READY|ONLINE|@PJL\s+INFO/i.test(buf)) {
-        finish({ ok: true });
-      } else if (/OFFLINE|ERROR|JAM|OUT\s+OF\s+PAPER/i.test(buf)) {
-        finish({ ok: false, reason: "printer_error_state" });
-      }
-    });
+      const finish = (result: { ok: boolean; reason?: string }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
 
-    socket.once("timeout", () => {
-      // Connected but no useful reply
-      finish({ ok: false, reason: gotData ? "inconclusive" : "timeout_no_response" });
-    });
+      child.stdout?.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
 
-    socket.once("error", (err) => {
-      finish({ ok: false, reason: err.message || "socket_error" });
-    });
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
 
-    socket.once("close", (hadError) => {
-      if (!resolved) {
-        // Closed with no data → treat as failure
-        finish({ ok: false, reason: hadError ? "socket_closed_with_error" : "closed_no_response" });
-      }
-    });
+      child.once('error', (err) => {
+        console.error('[print] lpstat failed to start', {
+          command: LPSTAT_COMMAND,
+          queue: normalizedQueue,
+          error: err
+        });
+        finish({ ok: false, reason: err.message });
+      });
+
+      child.once('close', (code) => {
+        if (code === 0) {
+          const output = stdout.trim();
+          const online = /printer\s+\S+\s+is\s+idle|ready/i.test(output);
+          finish({ ok: online, reason: online ? undefined : 'printer_not_ready' });
+          return;
+        }
+
+        console.error('[print] lpstat command failed', {
+          command: LPSTAT_COMMAND,
+          queue: normalizedQueue,
+          code,
+          stderr: stderr.trim()
+        });
+        finish({ ok: false, reason: stderr.trim() || `lpstat_exit_${code ?? 'unknown'}` });
+      });
+    } catch (err) {
+      console.error('[print] Unexpected error during printer status probe', err);
+      resolve({ ok: false, reason: (err as Error).message });
+    }
   });
 }
 
-
-export default { zplForItem, zplForBox, sendZpl, testPrinterConnection };
+export default { printPdf, testPrinterConnection };

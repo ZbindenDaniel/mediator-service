@@ -66,8 +66,9 @@ import {
 } from './db';
 import { processQueuedAgenticRuns } from './agentic-queue-worker';
 import type { Item, LabelJob } from './db';
-import { zplForItem, zplForBox, sendZpl, testPrinterConnection } from './print';
+import { printPdf, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
+import type { ItemLabelPayload } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
 
@@ -172,13 +173,74 @@ async function runPrintWorker(): Promise<void> {
       updateLabelJobStatus.run('Error', 'item not found', job.Id);
       return;
     }
-      const zpl = zplForItem({
-        materialNumber: item.Artikel_Nummer,
-        itemUUID: item.ItemUUID
-      });
-    await sendZpl(zpl);
-    updateLabelJobStatus.run('Done', null, job.Id);
-    console.log(`Printed label for ${item.ItemUUID}`);
+    const quantityRaw = item.Auf_Lager as unknown;
+    let parsedQuantity = 0;
+    if (typeof quantityRaw === 'number' && Number.isFinite(quantityRaw)) {
+      parsedQuantity = quantityRaw;
+    } else if (typeof quantityRaw === 'string') {
+      const parsed = Number.parseFloat(quantityRaw);
+      if (Number.isFinite(parsed)) parsedQuantity = parsed;
+    }
+
+    const description =
+      item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim() || item.Langtext?.trim() || null;
+
+    const toIsoString = (value: unknown): string | null => {
+      if (!value) return null;
+      const date = value instanceof Date ? value : new Date(value as string);
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    };
+
+    const itemData: ItemLabelPayload = {
+      type: 'item',
+      id: item.ItemUUID,
+      materialNumber: item.Artikel_Nummer?.trim() || null,
+      boxId: item.BoxID || null,
+      location: item.Location?.trim() || null,
+      description,
+      quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
+      addedAt: toIsoString(item.Datum_erfasst || item.UpdatedAt),
+      updatedAt: toIsoString(item.UpdatedAt)
+    };
+
+    const outPath = path.join(
+      PREVIEW_DIR,
+      `queue-item-${item.ItemUUID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, '_')
+    );
+
+    try {
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    } catch (dirErr) {
+      console.error('Print worker failed to prepare preview directory', dirErr);
+      updateLabelJobStatus.run('Error', 'preview_directory_unavailable', job.Id);
+      return;
+    }
+
+    try {
+      await pdfForItem({ itemData, outPath });
+    } catch (pdfErr) {
+      console.error('Print worker failed to generate PDF', pdfErr);
+      updateLabelJobStatus.run('Error', (pdfErr as Error).message, job.Id);
+      return;
+    }
+
+    try {
+      const result = await printPdf({ filePath: outPath, jobName: `Item ${item.ItemUUID}` });
+      if (!result.sent) {
+        console.error('Print worker failed to dispatch PDF', {
+          itemId: item.ItemUUID,
+          jobId: job.Id,
+          reason: result.reason
+        });
+        updateLabelJobStatus.run('Error', result.reason || 'print_failed', job.Id);
+        return;
+      }
+      updateLabelJobStatus.run('Done', null, job.Id);
+      console.log(`Printed label for ${item.ItemUUID}`);
+    } catch (err) {
+      console.error('Print worker encountered an unexpected error during print dispatch', err);
+      updateLabelJobStatus.run('Error', (err as Error).message, job.Id);
+    }
   } catch (e) {
     console.error('Print worker failed', e);
     updateLabelJobStatus.run('Error', (e as Error).message, job.Id);
@@ -215,9 +277,7 @@ type ActionContext = {
   listItems: typeof listItems;
   pdfForBox: typeof pdfForBox;
   pdfForItem: typeof pdfForItem;
-  zplForItem: typeof zplForItem;
-  zplForBox: typeof zplForBox;
-  sendZpl: typeof sendZpl;
+  printPdf: typeof printPdf;
   testPrinterConnection: typeof testPrinterConnection;
   EVENT_LABELS: typeof EVENT_LABELS;
   eventLabel: typeof eventLabel;
@@ -400,9 +460,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           listItems,
           pdfForBox,
           pdfForItem,
-          zplForItem,
-          zplForBox,
-          sendZpl,
+          printPdf,
           testPrinterConnection,
           EVENT_LABELS,
           eventLabel,

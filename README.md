@@ -86,7 +86,7 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 
 ### Optional dependencies
 
-- **Printing:** The runtime image includes `cups-client` so the `lp` command is available. Provide printer access by configuring `PRINTER_HOST`/`PRINTER_PORT` and ensuring the container can reach the target CUPS server or USB-forwarded device. Mount any additional printer profiles under a directory of your choice and reference it in the Compose file if needed.
+- **Printing:** The runtime image includes `cups-client` so the `lp` command is available. Provide printer access by configuring `PRINTER_QUEUE` (optionally overriding `LP_COMMAND`, `LPSTAT_COMMAND`, and `PRINT_TIMEOUT_MS`) and ensuring the container can reach the target CUPS server or USB-forwarded device. Mount any additional printer profiles under a directory of your choice and reference it in the Compose file if needed.
 - **TLS certificates:** Mount certificate and key files (see volume recommendations above) and set `TLS_CERT_PATH`/`TLS_KEY_PATH` to their in-container locations.
 - **Additional automation:** Any process that feeds the inbox or consumes exports should use bind mounts or shared volumes pointed at `INBOX_DIR`, `ARCHIVE_DIR`, and the media directory.
 
