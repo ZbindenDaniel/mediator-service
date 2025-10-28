@@ -1,6 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import type { AgenticRun, Item } from '../../models';
+import {
+  AGENTIC_RUN_ACTIVE_STATUSES,
+  AGENTIC_RUN_RESTARTABLE_STATUSES,
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_CANCELLED,
+  AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_REJECTED,
+  AGENTIC_RUN_STATUS_REVIEW,
+  normalizeAgenticRunStatus
+} from '../../models';
 import { AGENTIC_SHARED_SECRET } from '../config';
 
 const SHARED_SECRET_HEADER = 'x-agent-secret';
@@ -65,8 +75,8 @@ const action: Action = {
         return sendJson(res, 400, { error: 'Payload is required' });
       }
 
-      const statusInput = typeof payload.status === 'string' ? payload.status.trim().toLowerCase() : 'completed';
-      const agentStatus = statusInput || 'completed';
+      const statusInput = typeof payload.status === 'string' ? payload.status : '';
+      const normalizedIncomingStatus = normalizeAgenticRunStatus(statusInput);
       const errorMessage = typeof payload.error === 'string' ? payload.error.trim() || null : null;
       const needsReview = Boolean(payload.needsReview);
       const summaryInputRaw = typeof payload.summary === 'string' ? payload.summary.trim() : '';
@@ -80,7 +90,31 @@ const action: Action = {
       };
       const agenticActor = typeof payload.actor === 'string' && payload.actor ? payload.actor : 'agentic-service';
       const nowIso = new Date().toISOString();
-      const eventName = errorMessage ? 'AgenticResultFailed' : 'AgenticResultReceived';
+      let statusForPersistence = normalizedIncomingStatus;
+
+      const normalizedDecision = reviewDecisionInput ? reviewDecisionInput.toLowerCase() : null;
+      if (AGENTIC_RUN_ACTIVE_STATUSES.has(statusForPersistence)) {
+        // queued and running statuses remain untouched
+      } else if (errorMessage || statusForPersistence === AGENTIC_RUN_STATUS_FAILED) {
+        statusForPersistence = AGENTIC_RUN_STATUS_FAILED;
+      } else if (statusForPersistence === AGENTIC_RUN_STATUS_CANCELLED) {
+        statusForPersistence = AGENTIC_RUN_STATUS_CANCELLED;
+      } else if (normalizedDecision === 'approved') {
+        statusForPersistence = AGENTIC_RUN_STATUS_APPROVED;
+      } else if (normalizedDecision === 'rejected') {
+        statusForPersistence = AGENTIC_RUN_STATUS_REJECTED;
+      } else if (needsReview) {
+        statusForPersistence = AGENTIC_RUN_STATUS_REVIEW;
+      } else if (statusForPersistence === AGENTIC_RUN_STATUS_REVIEW) {
+        statusForPersistence = AGENTIC_RUN_STATUS_REVIEW;
+      } else if (AGENTIC_RUN_RESTARTABLE_STATUSES.has(statusForPersistence)) {
+        // allow explicit webhook overrides into approved/rejected/failed/cancelled
+      } else {
+        statusForPersistence = AGENTIC_RUN_STATUS_APPROVED;
+      }
+
+      const eventName =
+        statusForPersistence === AGENTIC_RUN_STATUS_FAILED ? 'AgenticResultFailed' : 'AgenticResultReceived';
       const txn = ctx.db.transaction(
         (
           itemUUID: string,
@@ -116,16 +150,18 @@ const action: Action = {
           };
           ctx.persistItemWithinTransaction(itemPayload);
 
-          const normalizedDecision = review.Decision ? review.Decision.toLowerCase() : null;
-          const fallbackReviewState = existingRun?.ReviewState && existingRun.ReviewState !== 'pending'
-            ? existingRun.ReviewState
-            : 'not_required';
-          const effectiveReviewState = needsHumanReview
-            ? 'pending'
-            : normalizedDecision || fallbackReviewState;
-          const effectiveReviewedBy = effectiveReviewState === 'pending'
-            ? null
-            : review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
+          const effectiveReviewState =
+            status === AGENTIC_RUN_STATUS_REVIEW
+              ? 'pending'
+              : status === AGENTIC_RUN_STATUS_APPROVED
+                ? 'approved'
+                : status === AGENTIC_RUN_STATUS_REJECTED
+                  ? 'rejected'
+                  : 'not_required';
+          const effectiveReviewedBy =
+            effectiveReviewState === 'pending'
+              ? null
+              : review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
           const searchQueryUpdate = typeof agenticPayload?.searchQuery === 'string' && agenticPayload.searchQuery.trim()
             ? agenticPayload.searchQuery.trim()
             : existingRun?.SearchQuery ?? null;
@@ -166,7 +202,7 @@ const action: Action = {
         txn(
           itemId,
           payload.item,
-          agentStatus,
+          statusForPersistence,
           nowIso,
           errorMessage,
           needsReview,

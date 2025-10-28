@@ -4,11 +4,20 @@ import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog, AgenticRun } from '../../../models';
 import {
+  AGENTIC_RUN_ACTIVE_STATUSES,
+  AGENTIC_RUN_RESTARTABLE_STATUSES,
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_CANCELLED,
+  AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_REJECTED,
+  AGENTIC_RUN_STATUS_REVIEW,
   AGENTIC_RUN_STATUS_RUNNING,
+  AGENTIC_RUN_TERMINAL_STATUSES,
   ItemEinheit,
-  isItemEinheit
+  isItemEinheit,
+  normalizeAgenticRunStatus
 } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
@@ -69,68 +78,6 @@ function resolveDetailEinheit(value: unknown): ItemEinheit {
   return DEFAULT_DETAIL_EINHEIT;
 }
 
-const AGENTIC_FAILURE_STATUSES = new Set([
-  'failed',
-  'error',
-  'errored',
-  'failure',
-  'timeout',
-  'timed_out'
-]);
-
-const AGENTIC_RUNNING_STATUSES = new Set([
-  AGENTIC_RUN_STATUS_RUNNING,
-  'processing',
-  'in_progress',
-  'active',
-  'executing'
-]);
-
-const AGENTIC_PENDING_STATUSES = new Set([
-  'pending',
-  AGENTIC_RUN_STATUS_QUEUED,
-  'created',
-  'requested',
-  'waiting',
-  'scheduled',
-  'initializing'
-]);
-
-const AGENTIC_CANCELLED_STATUSES = new Set([
-  'cancelled',
-  'canceled',
-  'aborted',
-  'stopped',
-  'terminated'
-]);
-
-const AGENTIC_SUCCESS_STATUSES = new Set([
-  'completed',
-  'done',
-  'success',
-  'succeeded',
-  'finished',
-  'resolved'
-]);
-
-const AGENTIC_NOT_STARTED_STATUSES = new Set([AGENTIC_RUN_STATUS_NOT_STARTED.toLowerCase()]);
-
-const AGENTIC_REVIEW_PENDING_STATUSES = new Set([
-  'pending_review',
-  'review_pending',
-  'review_needed',
-  'needs_review',
-  'awaiting_review',
-  'awaiting_approval',
-  'ready_for_review',
-  'requires_review',
-  'waiting_for_review'
-]);
-
-const AGENTIC_REVIEW_APPROVED_STATUSES = new Set(['approved', 'accepted', 'published', 'released']);
-
-const AGENTIC_REVIEW_REJECTED_STATUSES = new Set(['rejected', 'declined', 'denied']);
-
 export interface AgenticStatusCardProps {
   status: AgenticStatusDisplay;
   rows: [string, React.ReactNode][];
@@ -138,7 +85,9 @@ export interface AgenticStatusCardProps {
   reviewIntent: 'approved' | 'rejected' | null;
   error: string | null;
   needsReview: boolean;
-  hasFailure: boolean;
+  canCancel: boolean;
+  canStart: boolean;
+  canRestart: boolean;
   isInProgress: boolean;
   onRestart: () => void | Promise<void>;
   onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
@@ -213,7 +162,9 @@ export function AgenticStatusCard({
   reviewIntent,
   error,
   needsReview,
-  hasFailure,
+  canCancel,
+  canStart,
+  canRestart,
   isInProgress,
   onRestart,
   onReview,
@@ -255,18 +206,25 @@ export function AgenticStatusCard({
       {error ? (
         <p className="muted" style={{ color: '#a30000' }}>{error}</p>
       ) : null}
-      {!status.isTerminal && isInProgress ? (
+      {canCancel ? (
         <div className='row'>
-          <button type="button" className="btn" onClick={onCancel}>
+          <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>
             Abbrechen
           </button>
         </div>
       ) : null}
-      {!needsReview && hasFailure ? (
+      {!needsReview && (canStart || canRestart) ? (
         <div className='row'>
-          <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
-            Wiederholen
-          </button>
+          {canStart ? (
+            <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
+              Starten
+            </button>
+          ) : null}
+          {canRestart ? (
+            <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
+              Wiederholen
+            </button>
+          ) : null}
         </div>
       ) : null}
       {needsReview ? (
@@ -362,37 +320,39 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
       isTerminal: false
     };
   }
-  const normalizedStatus = (run.Status || '').trim().toLowerCase();
-  const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
 
-  const defaultLabel = run.Status && run.Status.trim() ? run.Status : 'Unbekannt';
+  const normalizedStatus = normalizeAgenticRunStatus(run.Status);
+  const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
+  const defaultLabel = run.Status && run.Status.trim() ? run.Status.trim() : 'Unbekannt';
 
   let base: Omit<AgenticStatusDisplay, 'className'> = {
     label: defaultLabel,
     description: `Status: ${defaultLabel}`,
     variant: 'info',
     needsReviewBadge: false,
-    isTerminal: false
+    isTerminal: AGENTIC_RUN_TERMINAL_STATUSES.has(normalizedStatus)
   };
 
-  if (normalizedStatus) {
-    if (AGENTIC_NOT_STARTED_STATUSES.has(normalizedStatus)) {
+  switch (normalizedStatus) {
+    case AGENTIC_RUN_STATUS_NOT_STARTED:
       base = {
         label: 'Nicht gestartet',
-        description: 'Der agentische Durchlauf wurde nicht gestartet.',
+        description: 'Der agentische Durchlauf wurde noch nicht gestartet.',
         variant: 'info',
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (AGENTIC_FAILURE_STATUSES.has(normalizedStatus) || normalizedStatus.startsWith('error')) {
+      break;
+    case AGENTIC_RUN_STATUS_FAILED:
       base = {
-        label: 'Fehler',
+        label: 'Fehlgeschlagen',
         description: 'Der agentische Durchlauf ist fehlgeschlagen.',
         variant: 'error',
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (AGENTIC_RUNNING_STATUSES.has(normalizedStatus)) {
+      break;
+    case AGENTIC_RUN_STATUS_RUNNING:
       base = {
         label: 'In Arbeit',
         description: 'Der agentische Durchlauf läuft derzeit.',
@@ -400,7 +360,8 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: false
       };
-    } else if (AGENTIC_PENDING_STATUSES.has(normalizedStatus)) {
+      break;
+    case AGENTIC_RUN_STATUS_QUEUED:
       base = {
         label: 'Wartet',
         description: 'Der agentische Durchlauf wartet auf Ausführung.',
@@ -408,7 +369,8 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: false
       };
-    } else if (AGENTIC_CANCELLED_STATUSES.has(normalizedStatus)) {
+      break;
+    case AGENTIC_RUN_STATUS_CANCELLED:
       base = {
         label: 'Abgebrochen',
         description: 'Der agentische Durchlauf wurde abgebrochen.',
@@ -416,15 +378,8 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (AGENTIC_SUCCESS_STATUSES.has(normalizedStatus)) {
-      base = {
-        label: 'Fertig',
-        description: 'Der agentische Durchlauf wurde abgeschlossen.',
-        variant: 'success',
-        needsReviewBadge: false,
-        isTerminal: true
-      };
-    } else if (AGENTIC_REVIEW_PENDING_STATUSES.has(normalizedStatus)) {
+      break;
+    case AGENTIC_RUN_STATUS_REVIEW:
       base = {
         label: 'Review ausstehend',
         description: 'Das Ergebnis wartet auf Freigabe.',
@@ -432,7 +387,8 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: true,
         isTerminal: false
       };
-    } else if (AGENTIC_REVIEW_APPROVED_STATUSES.has(normalizedStatus)) {
+      break;
+    case AGENTIC_RUN_STATUS_APPROVED:
       base = {
         label: 'Freigegeben',
         description: 'Das Ergebnis wurde freigegeben.',
@@ -440,7 +396,8 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: true
       };
-    } else if (AGENTIC_REVIEW_REJECTED_STATUSES.has(normalizedStatus)) {
+      break;
+    case AGENTIC_RUN_STATUS_REJECTED:
       base = {
         label: 'Abgelehnt',
         description: 'Das Ergebnis wurde abgelehnt.',
@@ -448,7 +405,9 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
         needsReviewBadge: false,
         isTerminal: true
       };
-    }
+      break;
+    default:
+      break;
   }
 
   let finalMeta = base;
@@ -489,32 +448,8 @@ export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
     return false;
   }
 
-  const normalizedStatus = (run.Status || '').trim().toLowerCase();
-  const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
-
-  if (normalizedReview === 'approved' || normalizedReview === 'rejected' || normalizedReview === 'not_required') {
-    return false;
-  }
-
-  if (
-    AGENTIC_SUCCESS_STATUSES.has(normalizedStatus) ||
-    AGENTIC_CANCELLED_STATUSES.has(normalizedStatus) ||
-    AGENTIC_REVIEW_APPROVED_STATUSES.has(normalizedStatus) ||
-    AGENTIC_REVIEW_REJECTED_STATUSES.has(normalizedStatus) ||
-    AGENTIC_NOT_STARTED_STATUSES.has(normalizedStatus)
-  ) {
-    return false;
-  }
-
-  if (
-    AGENTIC_RUNNING_STATUSES.has(normalizedStatus) ||
-    AGENTIC_PENDING_STATUSES.has(normalizedStatus) ||
-    AGENTIC_REVIEW_PENDING_STATUSES.has(normalizedStatus)
-  ) {
-    return true;
-  }
-
-  return normalizedReview === 'pending';
+  const normalizedStatus = normalizeAgenticRunStatus(run.Status);
+  return AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedStatus);
 }
 
 export default function ItemDetail({ itemId }: Props) {
@@ -698,11 +633,18 @@ export default function ItemDetail({ itemId }: Props) {
     );
   }
 
-  const agenticNeedsReview = agentic ? (agentic.ReviewState || '').toLowerCase() === 'pending' : false;
-  const normalizedAgenticStatus = (agentic?.Status || '').toLowerCase();
-  const agenticHasFailure = !agentic
-    ? true
-    : ['failed', 'error', 'errored', 'cancelled', 'canceled'].includes(normalizedAgenticStatus);
+  const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
+  const normalizedAgenticReview = agentic ? (agentic.ReviewState || '').trim().toLowerCase() : null;
+  const agenticNeedsReview = Boolean(
+    normalizedAgenticStatus === AGENTIC_RUN_STATUS_REVIEW || normalizedAgenticReview === 'pending'
+  );
+  const agenticCanRestart = normalizedAgenticStatus
+    ? AGENTIC_RUN_RESTARTABLE_STATUSES.has(normalizedAgenticStatus)
+    : false;
+  const agenticCanStart = normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
+  const agenticCanCancel = normalizedAgenticStatus
+    ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
+    : false;
 
   async function promptAgenticReviewNote(
     decision: 'approved' | 'rejected'
@@ -995,6 +937,42 @@ export default function ItemDetail({ itemId }: Props) {
 
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
+  const latestAgenticReviewNote = useMemo(() => {
+    let latestNote: string | null = null;
+    let latestTimestamp = -Infinity;
+
+    for (const ev of events) {
+      if (ev.Event !== 'AgenticReviewApproved' && ev.Event !== 'AgenticReviewRejected') {
+        continue;
+      }
+      const rawMeta = typeof ev.Meta === 'string' ? ev.Meta.trim() : '';
+      if (!rawMeta) {
+        continue;
+      }
+
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(rawMeta);
+      } catch (parseError) {
+        console.error('Failed to parse agentic review meta for note display', parseError);
+        continue;
+      }
+
+      const candidate = typeof parsed.notes === 'string' ? parsed.notes.trim() : '';
+      if (!candidate) {
+        continue;
+      }
+
+      const createdAt = Date.parse(ev.CreatedAt);
+      const timestamp = Number.isNaN(createdAt) ? Date.now() : createdAt;
+      if (timestamp >= latestTimestamp) {
+        latestTimestamp = timestamp;
+        latestNote = candidate;
+      }
+    }
+
+    return latestNote;
+  }, [events]);
   const agenticRows: [string, React.ReactNode][] = [];
   if (agentic?.LastModified) {
     agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
@@ -1012,6 +990,9 @@ export default function ItemDetail({ itemId }: Props) {
   }
   if (agentic?.ReviewedBy) {
     agenticRows.push(['Geprüft von', agentic.ReviewedBy]);
+  }
+  if (latestAgenticReviewNote) {
+    agenticRows.push(['Kommentar', latestAgenticReviewNote]);
   }
 
   async function handleDelete() {
@@ -1154,7 +1135,9 @@ export default function ItemDetail({ itemId }: Props) {
               reviewIntent={agenticReviewIntent}
               error={agenticError}
               needsReview={agenticNeedsReview}
-              hasFailure={agenticHasFailure}
+              canCancel={agenticCanCancel}
+              canStart={agenticCanStart}
+              canRestart={agenticCanRestart}
               isInProgress={agenticIsInProgress}
               onRestart={handleAgenticRestart}
               onReview={handleAgenticReview}

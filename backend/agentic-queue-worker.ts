@@ -1,4 +1,5 @@
 import type { AgenticRun } from '../models';
+import { AGENTIC_RUN_STATUS_QUEUED, AGENTIC_RUN_STATUS_RUNNING } from '../models';
 import {
   fetchQueuedAgenticRuns,
   getItem,
@@ -112,7 +113,7 @@ export async function processQueuedAgenticRuns(options: AgenticQueueWorkerOption
       recordQueueUpdate(
         {
           ItemUUID: run.ItemUUID,
-          Status: 'queued',
+          Status: AGENTIC_RUN_STATUS_QUEUED,
           LastModified: attemptTime.toISOString(),
           RetryCount: newRetryCount,
           NextRetryAt: nextRetryAt,
@@ -140,7 +141,7 @@ export async function processQueuedAgenticRuns(options: AgenticQueueWorkerOption
         recordQueueUpdate(
           {
             ItemUUID: run.ItemUUID,
-            Status: 'running',
+            Status: AGENTIC_RUN_STATUS_RUNNING,
             LastModified: completionTime.toISOString(),
             RetryCount: 0,
             NextRetryAt: null,
@@ -198,7 +199,7 @@ function handleForwardingFailure(
   recordQueueUpdate(
     {
       ItemUUID: run.ItemUUID,
-      Status: 'queued',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
       LastModified: attemptTime.toISOString(),
       RetryCount: newRetryCount,
       NextRetryAt: nextRetryAt,

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -65,12 +66,15 @@ const action: Action = {
       }
 
       const reviewedAt = new Date().toISOString();
+      const status = decision === 'approved' ? AGENTIC_RUN_STATUS_APPROVED : AGENTIC_RUN_STATUS_REJECTED;
+
       try {
         const result = ctx.updateAgenticReview.run({
           ItemUUID: itemId,
           ReviewState: decision,
           ReviewedBy: actor,
-          LastModified: reviewedAt
+          LastModified: reviewedAt,
+          Status: status
         });
         if (!result || result.changes === 0) {
           console.error('Agentic review update had no effect for', itemId);
