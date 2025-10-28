@@ -12,6 +12,7 @@
   { "key": "Note", "label": "Notiz", "level": "info", "topic": "general" },
   { "key": "QrScanned", "label": "QR-Code gescannt", "level": "info", "topic": "general" },
   { "key": "PrintSent", "label": "Etikett gedruckt", "level": "info", "topic": "general" },
+  { "key": "PrintFailed", "label": "Etikett konnte nicht gedruckt werden", "level": "error", "topic": "general" },
   { "key": "PrintPreviewSaved", "label": "Etikettenvorschau gespeichert", "level": "info", "topic": "general" },
   { "key": "TestPrinted", "label": "Testdruck gesendet", "level": "info", "topic": "general" },
   { "key": "TestPreviewSaved", "label": "Testvorschau gespeichert", "level": "info", "topic": "general" },

@@ -59,8 +59,12 @@ export const HTTP_PORT = parseInt(process.env.HTTP_PORT || '8080', 10);
 export const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data/mediator.sqlite');
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
-export const PRINTER_HOST = process.env.PRINTER_HOST || 'GeBE_USB_Printer_A8';
-export const PRINTER_PORT = parseInt(process.env.PRINTER_PORT || '9100', 10);
+const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || '').trim();
+export const PRINTER_QUEUE = resolvedQueue;
+export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
+export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
+const parsedPrintTimeout = Number.parseInt(process.env.PRINT_TIMEOUT_MS || '', 10);
+export const PRINT_TIMEOUT_MS = Number.isFinite(parsedPrintTimeout) && parsedPrintTimeout > 0 ? parsedPrintTimeout : 15000;
 export const AGENTIC_SHARED_SECRET = process.env.AGENTIC_SHARED_SECRET || 'revampItIsSoCool!';
 export const AGENTIC_API_BASE = process.env.AGENTIC_API_BASE || 'http://localhost:3000';
 

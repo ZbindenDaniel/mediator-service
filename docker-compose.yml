@@ -20,7 +20,7 @@ services:
       # Additional environment variables may be supplied here to override defaults from backend/config.ts,
       # such as HTTP_PORT, HTTPS_PORT, PUBLIC_PORT, PUBLIC_ORIGIN, BASE_QR_URL, BASE_UI_URL, PUBLIC_PROTOCOL, etc.
       # Operators can also override the agent integration endpoint by setting AGENTIC_API_BASE.
-      # Configure printing by setting PRINTER_HOST and PRINTER_PORT as needed for the deployment.
+      # Configure printing by setting PRINTER_QUEUE (and optionally LP_COMMAND / LPSTAT_COMMAND / PRINT_TIMEOUT_MS).
       # Provide AGENTIC_SHARED_SECRET or other secrets through an env_file or external secrets manager.
     volumes:
       # Persist the mediator application state and inbox/archive content.
