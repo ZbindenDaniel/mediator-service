@@ -906,13 +906,6 @@ export function initializePhotoInputModes(initial?: Partial<PhotoInputModeState>
   return resolved;
 }
 
-export function resolvePhotoCaptureAttribute(mode: PhotoInputMode): 'environment' | undefined {
-  return mode === 'camera' ? 'environment' : undefined;
-}
-
-export function getNextPhotoInputMode(current: PhotoInputMode): PhotoInputMode {
-  return current === 'camera' ? 'file' : 'camera';
-}
 
 export function usePhotoInputModes(initial?: Partial<PhotoInputModeState>) {
   const [modes, setModes] = useState<PhotoInputModeState>(() => initializePhotoInputModes(initial));

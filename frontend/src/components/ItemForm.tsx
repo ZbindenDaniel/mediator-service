@@ -133,19 +133,10 @@ export default function ItemForm({
                     id="picture1"
                     name="picture1"
                     accept="image/*"
-                    capture={getCapture('picture1')}
+                    capture={undefined}
                     required={isNew}
                     onChange={handlePhoto1Change}
                   />
-                  <button
-                    type="button"
-                    className="button-secondary photo-input-toggle"
-                    onClick={() => handlePhotoModeToggle('picture1')}
-                    aria-pressed={!isCameraMode('picture1')}
-                    aria-label="Foto 1 Eingabemodus umschalten"
-                  >
-                    {isCameraMode('picture1') ? 'Datei auswählen' : 'Kamera verwenden'}
-                  </button>
                 </div>
               </div>
 
@@ -160,18 +151,9 @@ export default function ItemForm({
                       id="picture2"
                       name="picture2"
                       accept="image/*"
-                      capture={getCapture('picture2')}
+                    capture={undefined}
                       onChange={handlePhoto2Change}
                     />
-                    <button
-                      type="button"
-                      className="button-secondary photo-input-toggle"
-                      onClick={() => handlePhotoModeToggle('picture2')}
-                      aria-pressed={!isCameraMode('picture2')}
-                      aria-label="Foto 2 Eingabemodus umschalten"
-                    >
-                      {isCameraMode('picture2') ? 'Datei auswählen' : 'Kamera verwenden'}
-                    </button>
                   </div>
                 </div>
               )}
@@ -187,18 +169,9 @@ export default function ItemForm({
                       id="picture3"
                       name="picture3"
                       accept="image/*"
-                      capture={getCapture('picture3')}
+                    capture={undefined}
                       onChange={handlePhoto3Change}
                     />
-                    <button
-                      type="button"
-                      className="button-secondary photo-input-toggle"
-                      onClick={() => handlePhotoModeToggle('picture3')}
-                      aria-pressed={!isCameraMode('picture3')}
-                      aria-label="Foto 3 Eingabemodus umschalten"
-                    >
-                      {isCameraMode('picture3') ? 'Datei auswählen' : 'Kamera verwenden'}
-                    </button>
                   </div>
                 </div>
               )}
