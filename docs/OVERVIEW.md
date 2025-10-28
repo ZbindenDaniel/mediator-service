@@ -16,7 +16,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Audit remaining detail routes (e.g., BoxDetail, ItemDetail) to determine whether the shared `LoadingPage` pattern should be applied for initial fetches.
 - Enable switch from agentic to manual edit via button. Very simple link button from ItemForm_Agentic to ItemForm.
 - Move of items and boxes triggers reload.
-- Monitor persisted image writes and `agenticSearchQuery` handling in `backend/actions/import-item.ts` for follow-up polish.
+- Verify the refactored `backend/ops/import-item/*` helpers under production load and expand structured logging if additional insights are required.
 - Kurzbeschreibung needs better layout.
 - 'entnehmen' has no confirmation. It should have.
 - On double click on the username it should be possible to change the user name.

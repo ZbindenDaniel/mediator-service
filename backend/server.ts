@@ -41,6 +41,8 @@ import {
 } from './db';
 import type { Item, LabelJob } from './db';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
+import { createLogger } from './utils/logger';
+import type { Logger } from './utils/logger';
 
 const actions = loadActions();
 
@@ -151,7 +153,9 @@ type ActionContext = {
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
+  MEDIA_DIR: typeof MEDIA_DIR;
   CSV_MAX_UPLOAD_BYTES: typeof CSV_MAX_UPLOAD_BYTES;
+  logger: Logger;
 };
 export const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
@@ -274,7 +278,11 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));
     if (action) {
       try {
-        console.log('Handling action', action.key);
+        const actionLogger = createLogger({ scope: `action:${action.key}` });
+        actionLogger.info('Handling action request', {
+          method: req.method,
+          url: req.url || ''
+        });
         await action.handle?.(req, res, {
           db,
           upsertBox,
@@ -309,7 +317,9 @@ export const server = http.createServer(async (req: IncomingMessage, res: Server
           updateAgenticReview,
           INBOX_DIR,
           PUBLIC_DIR,
+          MEDIA_DIR,
           CSV_MAX_UPLOAD_BYTES
+          logger: actionLogger
         });
       } catch (err) {
         console.error('Action handler failed', err);

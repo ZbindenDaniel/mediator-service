@@ -30,3 +30,8 @@ export interface Item {
   WmsLink?: string;
   EntityType?: string;
 }
+
+export interface ItemRef {
+  ItemUUID: string;
+  BoxID: string;
+}

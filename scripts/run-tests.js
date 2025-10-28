@@ -58,7 +58,10 @@ function collectTests(dir, matches) {
 }
 
 async function main() {
-  const roots = [path.join(__dirname, '..', 'test')];
+  const roots = [
+    path.join(__dirname, '..', 'test'),
+    path.join(__dirname, '..', 'backend', 'actions', '__tests__')
+  ];
   const files = [];
   for (const root of roots) {
     collectTests(root, files);

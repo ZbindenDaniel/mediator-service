@@ -8,3 +8,5 @@ export interface AgenticRun {
   ReviewedBy: string | null;
 }
 
+export type AgenticRunStatus = 'queued' | 'running' | 'completed' | 'failed';
+
