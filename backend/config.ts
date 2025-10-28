@@ -83,6 +83,19 @@ function parsePort(raw: string | undefined, fallback: number, label: string): nu
   return fallback;
 }
 
+function parsePositiveInt(raw: string | undefined, fallback: number, label: string): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  if (raw && raw.trim()) {
+    console.warn(`[config] Invalid ${label} value "${raw}" supplied; falling back to ${fallback}.`);
+  }
+
+  return fallback;
+}
+
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/u, '');
 }
@@ -128,4 +141,158 @@ function resolveBaseUrl(envValue: string | undefined, fallbackPath: string): str
 export const HOSTNAME = PUBLIC_ORIGIN;
 export const BASE_QR_URL = resolveBaseUrl(process.env.BASE_QR_URL, '/qr');
 export const BASE_UI_URL = resolveBaseUrl(process.env.BASE_UI_URL, '/ui');
+
+function parseBooleanFlag(raw: string | undefined, label: string): boolean | undefined {
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  console.warn(`[config] Unrecognized boolean value "${raw}" for ${label}; defaulting to false.`);
+  return false;
+}
+
+export interface ShopwareCredentialsConfig {
+  clientId?: string;
+  clientSecret?: string;
+  accessToken?: string;
+}
+
+export interface ShopwareConfig {
+  enabled: boolean;
+  baseUrl: string | null;
+  salesChannelId: string | null;
+  requestTimeoutMs: number;
+  credentials: ShopwareCredentialsConfig;
+}
+
+export const SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS = 10000;
+
+const shopwareEnabled = parseBooleanFlag(process.env.SHOPWARE_ENABLED, 'SHOPWARE_ENABLED') ?? false;
+const resolvedShopwareBaseUrl = stripTrailingSlash((process.env.SHOPWARE_BASE_URL || '').trim());
+const shopwareBaseUrl = resolvedShopwareBaseUrl ? resolvedShopwareBaseUrl : null;
+const resolvedShopwareSalesChannelId = (process.env.SHOPWARE_SALES_CHANNEL_ID || '').trim();
+const shopwareSalesChannelId = resolvedShopwareSalesChannelId ? resolvedShopwareSalesChannelId : null;
+
+const shopwareCredentials: ShopwareCredentialsConfig = {};
+const resolvedShopwareClientId = (process.env.SHOPWARE_CLIENT_ID || '').trim();
+const resolvedShopwareClientSecret = (process.env.SHOPWARE_CLIENT_SECRET || '').trim();
+const resolvedShopwareAccessToken = (process.env.SHOPWARE_ACCESS_TOKEN || '').trim();
+
+if (resolvedShopwareClientId) {
+  shopwareCredentials.clientId = resolvedShopwareClientId;
+}
+
+if (resolvedShopwareClientSecret) {
+  shopwareCredentials.clientSecret = resolvedShopwareClientSecret;
+}
+
+if (resolvedShopwareAccessToken) {
+  shopwareCredentials.accessToken = resolvedShopwareAccessToken;
+}
+
+const shopwareRequestTimeoutMs = parsePositiveInt(
+  process.env.SHOPWARE_REQUEST_TIMEOUT_MS,
+  SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
+  'SHOPWARE_REQUEST_TIMEOUT_MS'
+);
+
+const computedShopwareConfig: ShopwareConfig = {
+  enabled: shopwareEnabled,
+  baseUrl: shopwareBaseUrl,
+  salesChannelId: shopwareSalesChannelId,
+  requestTimeoutMs: shopwareRequestTimeoutMs,
+  credentials: shopwareCredentials
+};
+
+export const SHOPWARE_CONFIG: ShopwareConfig = Object.freeze(computedShopwareConfig);
+
+function gatherShopwareConfigIssues(config: ShopwareConfig): string[] {
+  const issues: string[] = [];
+  const hasBaseUrl = Boolean(config.baseUrl);
+  const hasSalesChannelId = Boolean(config.salesChannelId);
+  const hasClientId = Boolean(config.credentials.clientId);
+  const hasClientSecret = Boolean(config.credentials.clientSecret);
+  const hasAccessToken = Boolean(config.credentials.accessToken);
+  const hasClientCredentials = hasClientId && hasClientSecret;
+
+  if (config.enabled) {
+    if (!hasBaseUrl) {
+      issues.push('SHOPWARE_BASE_URL is required when SHOPWARE_ENABLED=true.');
+    } else if (config.baseUrl && !/^https?:\/\//iu.test(config.baseUrl)) {
+      issues.push('SHOPWARE_BASE_URL must start with http:// or https://.');
+    }
+
+    if (!hasSalesChannelId) {
+      issues.push('SHOPWARE_SALES_CHANNEL_ID is required when SHOPWARE_ENABLED=true.');
+    }
+
+    if (hasClientId !== hasClientSecret) {
+      issues.push('SHOPWARE_CLIENT_ID and SHOPWARE_CLIENT_SECRET must both be provided to use client credentials.');
+    }
+
+    if (!hasClientCredentials && !hasAccessToken) {
+      issues.push('Provide either SHOPWARE_ACCESS_TOKEN or both SHOPWARE_CLIENT_ID and SHOPWARE_CLIENT_SECRET.');
+    }
+  } else {
+    const providedValues =
+      hasBaseUrl || hasSalesChannelId || hasClientId || hasClientSecret || hasAccessToken;
+    if (providedValues) {
+      issues.push('Shopware variables are configured but SHOPWARE_ENABLED is not true; integration remains disabled.');
+    }
+  }
+
+  return issues;
+}
+
+export function getShopwareConfig(): ShopwareConfig {
+  return SHOPWARE_CONFIG;
+}
+
+export function getShopwareConfigIssues(config: ShopwareConfig = SHOPWARE_CONFIG): string[] {
+  return gatherShopwareConfigIssues(config);
+}
+
+export function isShopwareConfigReady(config: ShopwareConfig = SHOPWARE_CONFIG): boolean {
+  return config.enabled && gatherShopwareConfigIssues(config).length === 0;
+}
+
+export function logShopwareConfigIssues(
+  logger: Pick<Console, 'info' | 'warn'> = console,
+  config: ShopwareConfig = SHOPWARE_CONFIG
+): string[] {
+  const issues = gatherShopwareConfigIssues(config);
+
+  if (config.enabled) {
+    if (issues.length === 0) {
+      logger.info('[config][shopware] Shopware integration enabled.');
+    } else {
+      logger.warn('[config][shopware] Shopware integration enabled but incomplete:');
+      for (const issue of issues) {
+        logger.warn(`  - ${issue}`);
+      }
+    }
+  } else if (issues.length === 0) {
+    logger.info('[config][shopware] Shopware integration disabled.');
+  } else {
+    logger.info('[config][shopware] SHOPWARE_ENABLED is false; ignoring Shopware configuration values:');
+    for (const issue of issues) {
+      logger.info(`  - ${issue}`);
+    }
+  }
+
+  return issues;
+}
 
