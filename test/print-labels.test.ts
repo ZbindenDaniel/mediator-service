@@ -2,6 +2,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { EventEmitter } from 'events';
+import type { IncomingMessage } from 'http';
 import printBoxAction from '../backend/actions/print-box';
 import printItemAction from '../backend/actions/print-item';
 
@@ -29,6 +31,19 @@ function createResponse(): MockResponse {
   };
 }
 
+function createJsonRequest(url: string, payload: unknown): IncomingMessage {
+  const emitter = new EventEmitter();
+  const req = emitter as unknown as IncomingMessage;
+  req.method = 'POST';
+  req.url = url;
+  process.nextTick(() => {
+    const buffer = Buffer.from(JSON.stringify(payload));
+    emitter.emit('data', buffer);
+    emitter.emit('end');
+  });
+  return req;
+}
+
 describe('print label actions', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -42,8 +57,9 @@ describe('print label actions', () => {
     Date.now = () => 1700000000000;
 
     try {
-      const req = { url: '/api/print/box/BOX-1', method: 'POST' } as any;
+      const req = createJsonRequest('/api/print/box/BOX-1', { actor: 'TestUser' });
       const res = createResponse();
+      const logEvent = jest.fn();
       const ctx = {
         PREVIEW_DIR: previewDir,
         getBox: { get: () => ({ BoxID: 'BOX-1', Location: 'A-01', Notes: 'Spare parts' }) },
@@ -58,7 +74,7 @@ describe('print label actions', () => {
           printCalls.push({ filePath, jobName });
           return { sent: true };
         },
-        logEvent: jest.fn()
+        logEvent
       };
 
       await printBoxAction.handle(req, res as any, ctx);
@@ -84,6 +100,10 @@ describe('print label actions', () => {
         }
       ]);
       expect(fs.existsSync(path.join(previewDir, 'box-BOX-1-1700000000000.pdf'))).toBe(true);
+      expect(logEvent).toHaveBeenCalledTimes(2);
+      logEvent.mock.calls.forEach(([eventPayload]: [{ Actor: string }]) => {
+        expect(eventPayload.Actor).toBe('TestUser');
+      });
     } finally {
       Date.now = originalNow;
       fs.rmSync(previewDir, { recursive: true, force: true });
@@ -98,8 +118,9 @@ describe('print label actions', () => {
     Date.now = () => 1700000001000;
 
     try {
-      const req = { url: '/api/print/item/ITEM-1', method: 'POST' } as any;
+      const req = createJsonRequest('/api/print/item/ITEM-1', { actor: 'TestUser' });
       const res = createResponse();
+      const logEvent = jest.fn();
       const ctx = {
         PREVIEW_DIR: previewDir,
         getItem: {
@@ -122,7 +143,7 @@ describe('print label actions', () => {
           printCalls.push({ filePath, jobName });
           return { sent: false, reason: 'printer_offline' };
         },
-        logEvent: jest.fn()
+        logEvent
       };
 
       await printItemAction.handle(req, res as any, ctx);
@@ -140,6 +161,10 @@ describe('print label actions', () => {
       ]);
       expect(pdfCalls).toHaveLength(1);
       expect(fs.existsSync(path.join(previewDir, 'item-ITEM-1-1700000001000.pdf'))).toBe(true);
+      expect(logEvent).toHaveBeenCalledTimes(2);
+      logEvent.mock.calls.forEach(([eventPayload]: [{ Actor: string }]) => {
+        expect(eventPayload.Actor).toBe('TestUser');
+      });
     } finally {
       Date.now = originalNow;
       fs.rmSync(previewDir, { recursive: true, force: true });

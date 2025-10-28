@@ -33,6 +33,9 @@ Design:owner@mediator and target the Q4 documentation refresh.
   - **Data services**: `overview`, `list-boxes`, `list-items`, `box-detail`, `recent-activities`, `search`, and `material-number` expose read models for the UI.
   - **Import/Export**: `import-item`, `csv-import`, `validate-csv`, and `export-items` handle CSV ingestion, validation with aggregate counts, and historical exports.
   - **Printing & status**: `print-box`, `print-item`, `print-label`, `printer-status`, `qr-scan`, and `health` power label rendering, printer diagnostics, and QR logging.
+  - **Printing actor attribution** – Interactive print endpoints (`/api/print/box/:id`, `/api/print/item/:id`) now require a JSON body containing the triggering `actor` so audit logs capture the human operator. Legacy surfaces still POST without an actor:
+    - The queued worker in `backend/server.ts` dispatches labels automatically when CSV imports enqueue jobs; no actor metadata is available for those background tasks.
+    - The legacy admin card rendered via `backend/actions/print-label.ts` issues fetch requests without a JSON payload (and without sanitising the preview link per the existing TODO). Follow-up work should align that UI with the actor prompt used in the React frontend.
 - `ops/` – reusable operation helpers and service abstractions for database and workflow tasks.
 - `config.ts` – central configuration surface for environment and runtime toggles.
 - `db.ts` – database connection bootstrap and helper exports.
