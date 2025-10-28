@@ -11,6 +11,17 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  return await new Promise<Buffer>((resolve, reject) => {
+    req.on('data', (chunk) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', (err) => reject(err));
+  });
+}
+
 const action: Action = {
   key: 'print-box',
   label: 'Print box label',
@@ -18,6 +29,31 @@ const action: Action = {
   matches: (p, m) => /^\/api\/print\/box\/[^/]+$/.test(p) && m === 'POST',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
+      let actor = '';
+      try {
+        const body = await readRequestBody(req);
+        if (!body.length) {
+          return sendJson(res, 400, { error: 'actor required' });
+        }
+        let payload: { actor?: unknown };
+        try {
+          payload = JSON.parse(body.toString() || '{}');
+        } catch (err) {
+          console.error('Invalid JSON payload for box print request', err);
+          return sendJson(res, 400, { error: 'invalid json' });
+        }
+        if (typeof payload.actor !== 'string') {
+          return sendJson(res, 400, { error: 'actor required' });
+        }
+        actor = payload.actor.trim();
+        if (!actor) {
+          return sendJson(res, 400, { error: 'actor required' });
+        }
+      } catch (bodyErr) {
+        console.error('Failed to parse request body for box print', bodyErr);
+        return sendJson(res, 400, { error: 'invalid body' });
+      }
+
       const m = req.url?.match(/^\/api\/print\/box\/([^/]+)$/);
       const id = m ? decodeURIComponent(m[1]) : '';
       if (!id) return sendJson(res, 400, { error: 'invalid box id' });
@@ -53,7 +89,7 @@ const action: Action = {
         await ctx.pdfForBox({ boxData, outPath: pdfPath });
         previewUrl = `/prints/${path.basename(pdfPath)}`;
         ctx.logEvent({
-          Actor: null,
+          Actor: actor,
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintPreviewSaved',
@@ -83,7 +119,7 @@ const action: Action = {
 
       if (printResult.sent) {
         ctx.logEvent({
-          Actor: null,
+          Actor: actor,
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintSent',
@@ -91,7 +127,7 @@ const action: Action = {
         });
       } else {
         ctx.logEvent({
-          Actor: null,
+          Actor: actor,
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintFailed',

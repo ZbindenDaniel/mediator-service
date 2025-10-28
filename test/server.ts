@@ -417,7 +417,21 @@ const server = http.createServer(async (req, res) => {
       return handleSearch(res, term);
     }
     if (req.method === 'POST' && pathname.startsWith('/api/print/')) {
-      return sendJson(res, 200, { ok: true });
+      const rawBody = (await parseBody(req)) as Buffer;
+      let payload: { actor?: string } = {};
+      if (rawBody.length) {
+        try {
+          payload = JSON.parse(rawBody.toString() || '{}');
+        } catch (err) {
+          console.error('[test server] invalid json for print request', err);
+          return sendJson(res, 400, { error: 'invalid json' });
+        }
+      }
+      const actor = typeof payload.actor === 'string' ? payload.actor.trim() : '';
+      if (!actor) {
+        return sendJson(res, 400, { error: 'actor required' });
+      }
+      return sendJson(res, 200, { ok: true, actor });
     }
     if (req.method === 'PUT' && pathname.startsWith('/api/items/')) {
       const itemId = decodeURIComponent(pathname.split('/')[3]);

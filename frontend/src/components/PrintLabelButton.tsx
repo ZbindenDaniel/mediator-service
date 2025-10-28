@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ensureUser } from '../lib/user';
 
 interface Props {
   boxId?: string;
@@ -13,10 +14,20 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
   async function handleClick() {
     try {
       setStatus('drucken...');
+      const actor = (await ensureUser()).trim();
+      if (!actor) {
+        console.warn('Print request blocked: no actor resolved for label print');
+        setStatus('Kein Benutzername gesetzt.');
+        return;
+      }
       const url = boxId
         ? `/api/print/box/${encodeURIComponent(boxId)}`
         : `/api/print/item/${encodeURIComponent(itemId || '')}`;
-      const res = await fetch(url, { method: 'POST' });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor })
+      });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setPreview(data.previewUrl || '');
