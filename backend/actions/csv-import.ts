@@ -40,11 +40,33 @@ const action: Action = {
               : 'An identical CSV payload has already been processed.'
         });
       }
+      const requestUrl = new URL(req.url || '', 'http://localhost');
+      const zeroStockParam = requestUrl.searchParams.get('zeroStock');
+      const zeroStockRequested =
+        typeof zeroStockParam === 'string'
+        && ['1', 'true', 'yes', 'on'].includes(zeroStockParam.toLowerCase());
+      if (zeroStockRequested && typeof ctx?.registerCsvIngestionOptions === 'function') {
+        try {
+          ctx.registerCsvIngestionOptions(tmpPath, { zeroStock: true });
+          console.info('[csv-import] Zero stock override requested for uploaded CSV', {
+            filename: normalizedName,
+          });
+        } catch (registrationError) {
+          console.error('[csv-import] Failed to register zero stock ingestion option', registrationError);
+        }
+      }
       try {
         fs.writeFileSync(tmpPath, body, 'utf8');
         sendJson(res, 200, { ok: true, message: `Saved to inbox as ${path.basename(tmpPath)}` });
       } catch (e) {
         console.error('CSV write failed', e);
+        if (zeroStockRequested && typeof ctx?.clearCsvIngestionOptions === 'function') {
+          try {
+            ctx.clearCsvIngestionOptions(tmpPath);
+          } catch (cleanupError) {
+            console.error('[csv-import] Failed to clear zero stock ingestion option after write error', cleanupError);
+          }
+        }
         sendJson(res, 500, { error: (e as Error).message });
       }
     } catch (err) {
