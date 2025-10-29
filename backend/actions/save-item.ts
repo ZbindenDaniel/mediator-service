@@ -418,7 +418,7 @@ const action: Action = {
           Meta: null
         });
         try {
-          const correlationId = generateShopwareCorrelationId('save-item', itemUUID);
+          const correlationId = generateShopwareCorrelationId('save-item', itemId);
           const payload = JSON.stringify({
             actor: a,
             artikelNummer: it.Artikel_Nummer ?? null,

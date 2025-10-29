@@ -100,6 +100,7 @@ export const apply: Op['apply'] = (row, ctx) => {
     const datumErfasst = normalizeValue(row.itime);
     if (datumErfasst) {
       mappedRow['Datum erfasst'] = datumErfasst;
+      mappedRow.idate = datumErfasst;
     }
 
     const image = sanitizeImageName(normalizeValue(row.image));

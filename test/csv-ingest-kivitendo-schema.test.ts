@@ -72,15 +72,15 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     }
 
     expect(initialResult.count).toBe(1);
-    expect(initialResult.boxes).toEqual(['BIN-A-01']);
+    expect(initialResult.boxes).toEqual(['B-010424-0001']);
 
     const initialItem = selectItemByArtikel.get('KIV-001') as
       | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
       | undefined;
     expect(initialItem).toEqual({
-      ItemUUID: 'kivitendo-101',
+      ItemUUID: 'I-010424-0001',
       ArtikelNummer: 'KIV-001',
-      BoxID: 'BIN-A-01',
+      BoxID: 'B-010424-0001',
       AufLager: 5,
     });
 
@@ -107,8 +107,8 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       Shopartikel: 1,
     });
 
-    const initialBox = selectBox.get('BIN-A-01') as { BoxID: string; Notes: string | null } | undefined;
-    expect(initialBox).toEqual({ BoxID: 'BIN-A-01', Notes: '' });
+    const initialBox = selectBox.get('B-010424-0001') as { BoxID: string; Notes: string | null } | undefined;
+    expect(initialBox).toEqual({ BoxID: 'B-010424-0001', Notes: '' });
 
     let updateResult: { count: number; boxes: string[] };
     try {
@@ -119,15 +119,15 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     }
 
     expect(updateResult.count).toBe(1);
-    expect(updateResult.boxes).toEqual(['BIN-A-01']);
+    expect(updateResult.boxes).toEqual(['B-010424-0001']);
 
     const updatedItem = selectItemByArtikel.get('KIV-001') as
       | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
       | undefined;
     expect(updatedItem).toEqual({
-      ItemUUID: 'kivitendo-101',
+      ItemUUID: 'I-010424-0001',
       ArtikelNummer: 'KIV-001',
-      BoxID: 'BIN-A-01',
+      BoxID: 'B-010424-0001',
       AufLager: 8,
     });
 
@@ -154,8 +154,8 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       Shopartikel: 0,
     });
 
-    const updatedBox = selectBox.get('BIN-A-01') as { BoxID: string; Notes: string | null } | undefined;
-    expect(updatedBox).toEqual({ BoxID: 'BIN-A-01', Notes: '' });
+    const updatedBox = selectBox.get('B-010424-0001') as { BoxID: string; Notes: string | null } | undefined;
+    expect(updatedBox).toEqual({ BoxID: 'B-010424-0001', Notes: '' });
   });
 
   test('skips zero quantity rows but persists references', async () => {

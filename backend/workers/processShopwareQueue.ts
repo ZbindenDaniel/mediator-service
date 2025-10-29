@@ -2,9 +2,9 @@ import {
   claimShopwareSyncJobs,
   markShopwareSyncJobFailed,
   markShopwareSyncJobSucceeded,
-  rescheduleShopwareSyncJob,
-  type ShopwareSyncQueueEntry
+  rescheduleShopwareSyncJob
 } from '../db';
+import type { ShopwareSyncQueueEntry } from '../shopware/queueTypes';
 import {
   normalizeShopwareQueueClientError,
   type ShopwareQueueClient,
