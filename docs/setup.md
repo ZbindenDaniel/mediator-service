@@ -3,12 +3,13 @@
 ## Environment configuration
 
 1. Copy `.env.example` to `.env` for local development.
-2. Populate the Shopware variables before enabling the integration:
+2. Populate the Shopware **search** variables before enabling read-only lookups:
    - `SHOPWARE_BASE_URL` must include the protocol (e.g. `https://shopware.example.com`).
    - Provide either `SHOPWARE_CLIENT_ID` and `SHOPWARE_CLIENT_SECRET`, or set a pre-generated `SHOPWARE_ACCESS_TOKEN`.
    - Set `SHOPWARE_SALES_CHANNEL_ID` to the channel that should receive mediator updates.
    - Adjust `SHOPWARE_REQUEST_TIMEOUT_MS` if the default 10s window is too short for your environment.
-3. Flip `SHOPWARE_ENABLED=true` only after all required values are in place. Leaving it as `false` keeps the integration disabled even if credentials are present.
+3. Flip `SHOPWARE_ENABLED=true` only after all required values are in place. Leaving it as `false` keeps Shopware search disabled even if credentials are present.
+4. Leave the queue-related flags (`SHOPWARE_SYNC_ENABLED`, `SHOPWARE_API_BASE_URL`, `SHOPWARE_QUEUE_POLL_INTERVAL_MS`) at their defaults. The background worker is intentionally disabled until the HTTP dispatch client is implemented.
 
 > **Tip:** Variables can also be injected directly via your process manager or deployment platform if you prefer not to use a `.env` file.
 

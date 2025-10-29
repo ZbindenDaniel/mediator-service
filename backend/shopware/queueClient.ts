@@ -1,4 +1,4 @@
-import type { ShopwareSyncQueueEntry } from '../db';
+import type { ShopwareSyncQueueEntry } from './queueTypes';
 
 export interface ShopwareQueueClientLogger {
   debug?: Console['debug'];
@@ -91,7 +91,6 @@ export function normalizeShopwareQueueClientError(
   return normalized;
 }
 
-// TODO: Replace placeholder implementation with HTTP client once Shopware API credentials are wired up.
 export function createShopwareQueueClient(options: ShopwareQueueClientOptions): ShopwareQueueClient {
   const logger = options.logger ?? console;
   if (!options.baseUrl) {
@@ -100,8 +99,11 @@ export function createShopwareQueueClient(options: ShopwareQueueClientOptions): 
 
   return {
     async dispatchJob() {
-      logger.error?.('[shopware-queue-client] dispatchJob invoked without implementation');
-      throw new ShopwareQueueClientError('Shopware queue client dispatchJob not implemented', { retryable: false });
+      const error = new ShopwareQueueClientError('Shopware queue client dispatchJob not implemented', {
+        retryable: false
+      });
+      logger.error?.('[shopware-queue-client] dispatchJob invoked without implementation', error);
+      throw error;
     }
   };
 }

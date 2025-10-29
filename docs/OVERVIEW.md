@@ -38,6 +38,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Backend and frontend share aligned TypeScript models and rely on dynamic action loading for API routes.
 - CSV import/export, QR scanning, and print label flows are available but still receive incremental polish.
 - Legacy JavaScript scripts remain for compatibility; modernization continues incrementally.
+- Shopware support currently covers read-only product search plus a queued sync pipeline awaiting a real dispatch client.
 
 ## Next Steps
 - _Follow-up:_ Reconcile this list with `docs/BUGS.md` whenever major fixes land (Docs:owner@mediator, track for Q4 release).
