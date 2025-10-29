@@ -401,7 +401,8 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         };
         upsertBox.run(box);
       }
-      const artikelNummer = final['Artikel-Nummer'] || '';
+      const rawArtikelNummer = final['Artikel-Nummer'];
+      const artikelNummer = typeof rawArtikelNummer === 'string' ? rawArtikelNummer.trim() : '';
       const grafikname = final['Grafikname(n)'] || '';
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
@@ -488,7 +489,7 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         }
 
         continue;
-      const artikelNummer = (final['Artikel-Nummer'] || '').trim();
+      }
       let itemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
       if (artikelNummer) {
         try {
