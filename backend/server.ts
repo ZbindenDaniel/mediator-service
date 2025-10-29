@@ -19,8 +19,15 @@ import {
   TLS_ENABLED,
   PUBLIC_HOSTNAME,
   PUBLIC_PROTOCOL,
-  PUBLIC_ORIGIN
+  PUBLIC_ORIGIN,
+  SHOPWARE_SYNC_ENABLED,
+  SHOPWARE_API_BASE_URL,
+  SHOPWARE_QUEUE_POLL_INTERVAL_MS
+  SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS, // TODO: HERE doub check this
+  getShopwareConfig,
+  logShopwareConfigIssues
 } from './config';
+import type { ShopwareConfig } from './config';
 import { ingestCsvFile } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import {
@@ -66,14 +73,35 @@ import {
   enqueueShopwareSyncJob
 } from './db';
 import { processQueuedAgenticRuns } from './agentic-queue-worker';
+import { processShopwareQueue, type ShopwareQueueMetrics } from './workers/processShopwareQueue';
 import type { Item, LabelJob } from './db';
 import { printPdf, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
 import type { ItemLabelPayload } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
+import { createShopwareClient } from './shopware/client';
 
 const actions = loadActions();
+
+let shopwareConfig: ShopwareConfig = {
+  enabled: false,
+  baseUrl: null,
+  salesChannelId: null,
+  requestTimeoutMs: SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
+  credentials: {}
+};
+let shopwareConfigIssues: string[] = [];
+let shopwareConfigReady = false;
+
+try {
+  shopwareConfig = getShopwareConfig();
+  shopwareConfigIssues = logShopwareConfigIssues(console, shopwareConfig);
+  shopwareConfigReady = shopwareConfig.enabled && shopwareConfigIssues.length === 0;
+} catch (err) {
+  console.error('[server] Failed to initialize Shopware configuration', err);
+  shopwareConfigIssues = ['Shopware configuration evaluation failed; integration disabled.'];
+}
 
 function resolveRequestBase(req: IncomingMessage): string {
   const hostHeader = req.headers.host;
@@ -264,6 +292,7 @@ type ActionContext = {
   findByMaterial: typeof findByMaterial;
   itemsByBox: typeof itemsByBox;
   getBox: typeof getBox;
+  getItemReference: typeof getItemReference;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
   decrementItemStock: typeof decrementItemStock;
@@ -300,6 +329,11 @@ type ActionContext = {
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
   agenticServiceEnabled: boolean;
+  shopware: {
+    config: ShopwareConfig;
+    issues: string[];
+    ready: boolean;
+  };
 };
 
 const resolvedAgenticApiBase = AGENTIC_API_BASE.trim();
@@ -336,6 +370,64 @@ if (agenticServiceEnabled) {
   setInterval(() => {
     void runAgenticQueueWorker();
   }, AGENTIC_QUEUE_WORKER_INTERVAL_MS);
+}
+
+const shopwareSyncEnabled = SHOPWARE_SYNC_ENABLED && Boolean(SHOPWARE_API_BASE_URL);
+
+if (!SHOPWARE_SYNC_ENABLED) {
+  console.info('[server] Shopware sync worker disabled via SHOPWARE_SYNC_ENABLED flag.');
+} else if (!SHOPWARE_API_BASE_URL) {
+  console.warn('[server] Shopware sync worker disabled because SHOPWARE_API_BASE_URL is empty.');
+}
+
+const shopwareClient = createShopwareClient({ baseUrl: SHOPWARE_API_BASE_URL, logger: console });
+
+const shopwareWorkerMetrics: ShopwareQueueMetrics = {
+  recordDispatched(jobType, correlationId) {
+    console.debug?.('[shopware-worker][metrics] dispatched', { jobType, correlationId });
+  },
+  recordSucceeded(jobType, correlationId) {
+    console.debug?.('[shopware-worker][metrics] succeeded', { jobType, correlationId });
+  },
+  recordRetried(jobType, correlationId) {
+    console.debug?.('[shopware-worker][metrics] retry', { jobType, correlationId });
+  },
+  recordFailed(jobType, correlationId) {
+    console.debug?.('[shopware-worker][metrics] failed', { jobType, correlationId });
+  },
+  recordBatchDuration(durationMs, metadata) {
+    console.debug?.('[shopware-worker][metrics] batch', { durationMs, ...metadata });
+  }
+};
+
+let shopwareQueueWorkerRunning = false;
+
+async function runShopwareQueueWorker(): Promise<void> {
+  if (!shopwareSyncEnabled || shopwareQueueWorkerRunning) {
+    return;
+  }
+
+  shopwareQueueWorkerRunning = true;
+  try {
+    await processShopwareQueue({
+      client: shopwareClient,
+      logger: console,
+      metrics: shopwareWorkerMetrics
+    });
+  } catch (err) {
+    console.error('[server] Shopware queue worker crashed', err);
+  } finally {
+    shopwareQueueWorkerRunning = false;
+  }
+}
+
+if (shopwareSyncEnabled) {
+  console.info(
+    `[server] Shopware sync worker enabled; polling interval ${SHOPWARE_QUEUE_POLL_INTERVAL_MS}ms.`
+  );
+  setInterval(() => {
+    void runShopwareQueueWorker();
+  }, SHOPWARE_QUEUE_POLL_INTERVAL_MS);
 }
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<any> {
   try {
@@ -485,6 +577,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           PUBLIC_DIR,
           PREVIEW_DIR,
           agenticServiceEnabled,
+          shopware: {
+            config: shopwareConfig,
+            issues: [...shopwareConfigIssues],
+            ready: shopwareConfigReady
+          },
           generateItemUUID: generateItemId
         });
       } catch (err) {

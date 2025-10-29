@@ -20,6 +20,7 @@ export interface ItemInstance {
   UpdatedAt: Date;
   Datum_erfasst?: Date;
   Auf_Lager?: number;
+  ShopwareVariantId?: string | null;
 }
 
 export interface ItemRef {
@@ -43,6 +44,7 @@ export interface ItemRef {
   Artikeltyp?: string;
   Einheit?: ItemEinheit;
   EntityType?: string;
+  ShopwareProductId?: string | null;
 }
 
 export type Item = ItemInstance & Partial<ItemRef>;
