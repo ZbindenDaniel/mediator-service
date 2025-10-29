@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
-import { upsertBox, persistItem, queueLabel, findByMaterial } from './db';
+import { upsertBox, persistItem, queueLabel, persistItemReference, findByMaterial } from './db';
 import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
@@ -401,6 +401,12 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         };
         upsertBox.run(box);
       }
+      const artikelNummer = final['Artikel-Nummer'] || '';
+      const grafikname = final['Grafikname(n)'] || '';
+      const artikelbeschreibung = final['Artikelbeschreibung'] || '';
+      const kurzbeschreibung = final['Kurzbeschreibung'] || '';
+      const langtext = final['Langtext'] || '';
+      const hersteller = final['Hersteller'] || '';
       const hkA = parseIntegerField(
         final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'],
         'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
@@ -421,6 +427,67 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
         { treatBlankAsUndefined: true }
       );
+      const publishedStatus = ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase());
+      const shopartikel =
+        parseIntegerField(final['Shopartikel'], 'Shopartikel', { defaultValue: 0 }) ?? 0;
+      const einheit = resolveCsvEinheit(final['Einheit'], rowNumber);
+      const lengthMm =
+        parseIntegerField(final['Länge(mm)'], 'Länge(mm)', { defaultValue: 0 }) ?? 0;
+      const widthMm =
+        parseIntegerField(final['Breite(mm)'], 'Breite(mm)', { defaultValue: 0 }) ?? 0;
+      const heightMm =
+        parseIntegerField(final['Höhe(mm)'], 'Höhe(mm)', { defaultValue: 0 }) ?? 0;
+      const weightKg =
+        parseDecimalField(final['Gewicht(kg)'], 'Gewicht(kg)', { defaultValue: 0 }) ?? 0;
+      const verkaufspreis =
+        parseDecimalField(final['Verkaufspreis'], 'Verkaufspreis', { defaultValue: 0 }) ?? 0;
+      const aufLager =
+        parseIntegerField(final['Auf_Lager'] || final['Qty'], 'Auf_Lager', { defaultValue: 0 }) ?? 0;
+
+      if (aufLager <= 0) {
+        console.info('CSV ingestion: skipping item persistence due to non-positive quantity', {
+          rowNumber,
+          artikelNummer,
+          aufLager,
+        });
+
+        if (!artikelNummer) {
+          console.warn('CSV ingestion: unable to persist item reference without Artikel-Nummer', {
+            rowNumber,
+          });
+        } else {
+          try {
+            persistItemReference({
+              Artikel_Nummer: artikelNummer,
+              Grafikname: grafikname,
+              Artikelbeschreibung: artikelbeschreibung,
+              Verkaufspreis: verkaufspreis,
+              Kurzbeschreibung: kurzbeschreibung,
+              Langtext: langtext,
+              Hersteller: hersteller,
+              Länge_mm: lengthMm,
+              Breite_mm: widthMm,
+              Höhe_mm: heightMm,
+              Gewicht_kg: weightKg,
+              Hauptkategorien_A: hkA,
+              Unterkategorien_A: ukA,
+              Hauptkategorien_B: hkB,
+              Unterkategorien_B: ukB,
+              Veröffentlicht_Status: publishedStatus,
+              Shopartikel: shopartikel,
+              Artikeltyp: final['Artikeltyp'] || '',
+              Einheit: einheit,
+            });
+          } catch (error) {
+            console.error('CSV ingestion: failed to persist zero-quantity item reference', {
+              rowNumber,
+              artikelNummer,
+              error,
+            });
+          }
+        }
+
+        continue;
       const artikelNummer = (final['Artikel-Nummer'] || '').trim();
       let itemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
       if (artikelNummer) {
@@ -453,27 +520,27 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         BoxID: normalizedBoxId,
         Location: location,
         UpdatedAt: nowDate,
-        Datum_erfasst: parseDatumErfasst(final['Datum erfasst'] ?? final.idate),
-        Artikel_Nummer: final['Artikel-Nummer'] || '',
-        Grafikname: final['Grafikname(n)'] || '',
-        Artikelbeschreibung: final['Artikelbeschreibung'] || '',
-        Auf_Lager: parseIntegerField(final['Auf_Lager'] || final['Qty'], 'Auf_Lager', { defaultValue: 0 }) || 0,
-        Verkaufspreis: parseDecimalField(final['Verkaufspreis'], 'Verkaufspreis', { defaultValue: 0 }) || 0,
-        Kurzbeschreibung: final['Kurzbeschreibung'] || '',
-        Langtext: final['Langtext'] || '',
-        Hersteller: final['Hersteller'] || '',
-        Länge_mm: parseIntegerField(final['Länge(mm)'], 'Länge(mm)', { defaultValue: 0 }) || 0,
-        Breite_mm: parseIntegerField(final['Breite(mm)'], 'Breite(mm)', { defaultValue: 0 }) || 0,
-        Höhe_mm: parseIntegerField(final['Höhe(mm)'], 'Höhe(mm)', { defaultValue: 0 }) || 0,
-        Gewicht_kg: parseDecimalField(final['Gewicht(kg)'], 'Gewicht(kg)', { defaultValue: 0 }) || 0,
+        Datum_erfasst: parseDatumErfasst(final['Datum erfasst']),
+        Artikel_Nummer: artikelNummer,
+        Grafikname: grafikname,
+        Artikelbeschreibung: artikelbeschreibung,
+        Auf_Lager: aufLager,
+        Verkaufspreis: verkaufspreis,
+        Kurzbeschreibung: kurzbeschreibung,
+        Langtext: langtext,
+        Hersteller: hersteller,
+        Länge_mm: lengthMm,
+        Breite_mm: widthMm,
+        Höhe_mm: heightMm,
+        Gewicht_kg: weightKg,
         Hauptkategorien_A: hkA,
         Unterkategorien_A: ukA,
         Hauptkategorien_B: hkB,
         Unterkategorien_B: ukB,
-        Veröffentlicht_Status: ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase()),
-        Shopartikel: parseIntegerField(final['Shopartikel'], 'Shopartikel', { defaultValue: 0 }) || 0,
+        Veröffentlicht_Status: publishedStatus,
+        Shopartikel: shopartikel,
         Artikeltyp: final['Artikeltyp'] || '',
-        Einheit: resolveCsvEinheit(final['Einheit'], rowNumber),
+        Einheit: einheit,
       };
       persistItem({
         ...item,
