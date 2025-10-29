@@ -580,7 +580,7 @@ export default function ItemCreate() {
   );
 
   const moveToAgenticPhotos = useCallback(
-    (data: Partial<ItemFormData>, source: 'match-selection' | 'skip-matches') => {
+    (data: Partial<ItemFormData>, source: 'skip-matches') => {
       try {
         const normalized: Partial<ItemFormData> = {
           ...data
@@ -870,7 +870,8 @@ export default function ItemCreate() {
       });
     }
 
-    const isManualSubmission = !shouldUseAgenticForm || context === 'manual-edit';
+    const isManualSubmission =
+      !shouldUseAgenticForm || context === 'manual-edit' || context === 'match-selection';
     const submissionData: Partial<ItemFormData> = {
       ...data
     };
@@ -1050,10 +1051,7 @@ export default function ItemCreate() {
         useAgenticFlow: shouldUseAgenticForm
       });
 
-      if (shouldUseAgenticForm) {
-        moveToAgenticPhotos(clone, 'match-selection');
-        return;
-      }
+      console.info('Submitting duplicate selection via legacy item creation flow.');
 
       await submitNewItem(clone, 'match-selection');
     } catch (err) {
