@@ -197,7 +197,7 @@ export function AgenticStatusCard({
           </tbody>
         </table>
       ) : null}
-      {actionPending ? <p className="muted">Agentic-Aktion wird ausgeführt…</p> : null}
+      {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
       {reviewIntent ? (
         <p className="muted">
           Review-Aktion "{reviewIntent === 'approved' ? 'Freigeben' : 'Ablehnen'}" vorbereitet.
@@ -281,11 +281,11 @@ export async function performItemDetailAgenticCancel({
       updatedRun = persistence.agentic;
     }
   } else if (persistence.status === 404) {
-    finalError = 'Kein laufender agentischer Durchlauf gefunden.';
+    finalError = 'Kein laufender Ki-Durchlauf gefunden.';
   } else if (persistence.status === 0) {
-    finalError = 'Agentic-Abbruch fehlgeschlagen.';
+    finalError = 'Ki-Abbruch fehlgeschlagen.';
   } else {
-    finalError = 'Agentic-Abbruch konnte nicht gespeichert werden.';
+    finalError = 'Ki-Abbruch konnte nicht gespeichert werden.';
   }
 
   if (agenticCancelUrl) {
@@ -299,7 +299,7 @@ export async function performItemDetailAgenticCancel({
     } catch (err) {
       logger.error('Agentic external cancel failed', err);
       if (!finalError) {
-        finalError = 'Agentic-Abbruch konnte extern nicht gestoppt werden.';
+        finalError = 'Ki-Abbruch konnte extern nicht gestoppt werden.';
       }
     }
   } else {
@@ -644,7 +644,7 @@ export default function ItemDetail({ itemId }: Props) {
         setItem(null);
         setEvents([]);
         setAgentic(null);
-        setAgenticError('Agentic-Status konnte nicht geladen werden.');
+        setAgenticError('Ki-Status konnte nicht geladen werden.');
         setMediaAssets([]);
         setAgenticReviewIntent(null);
         setLoadError(res.status === 404 ? 'Artikel wurde nicht gefunden.' : 'Artikel konnte nicht geladen werden.');
@@ -654,7 +654,7 @@ export default function ItemDetail({ itemId }: Props) {
       setItem(null);
       setEvents([]);
       setAgentic(null);
-      setAgenticError('Agentic-Status konnte nicht geladen werden.');
+      setAgenticError('Ki-Status konnte nicht geladen werden.');
       setMediaAssets([]);
       setAgenticReviewIntent(null);
       setLoadError('Artikel konnte nicht geladen werden.');
@@ -865,7 +865,7 @@ export default function ItemDetail({ itemId }: Props) {
 
       if (!restartResponse.ok) {
         console.error('Agentic restart failed', restartResponse.status);
-        setAgenticError('Agentic-Neustart fehlgeschlagen.');
+        setAgenticError('Ki-Neustart fehlgeschlagen.');
         return;
       }
 
@@ -881,7 +881,7 @@ export default function ItemDetail({ itemId }: Props) {
 
       if (!refreshedRun) {
         console.warn('Agentic restart succeeded without returning a run');
-        setAgenticError('Agentic-Neustart lieferte keine Daten.');
+        setAgenticError('Ki-Neustart lieferte keine Daten.');
         return;
       }
 
@@ -892,7 +892,7 @@ export default function ItemDetail({ itemId }: Props) {
         '';
       if (!searchTerm) {
         console.warn('Agentic restart skipped: missing search term');
-        setAgenticError('Agentic-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
+        setAgenticError('Ki-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
         return;
       }
       const triggerPayload: AgenticRunTriggerPayload = {
@@ -916,8 +916,8 @@ export default function ItemDetail({ itemId }: Props) {
         }
         const baseMessage =
           triggerResult.outcome === 'skipped' && triggerResult.reason === 'run-url-missing'
-            ? 'Agentic-Konfiguration fehlt. Durchlauf wurde abgebrochen.'
-            : 'Agentic-Neustart konnte nicht gestartet werden. Durchlauf wurde abgebrochen.';
+            ? 'Ki-Konfiguration fehlt. Durchlauf wurde abgebrochen.'
+            : 'Ki-Neustart konnte nicht gestartet werden. Durchlauf wurde abgebrochen.';
         if (!cancelResult.ok) {
           setAgenticError(`${baseMessage} (Abbruch konnte nicht gespeichert werden.)`);
         } else {
@@ -926,8 +926,8 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
     } catch (err) {
-      console.error('Agentic restart request failed', err);
-      setAgenticError('Agentic-Neustart fehlgeschlagen.');
+      console.error('Ki-Neustart request failed', err);
+      setAgenticError('Ki-Neustart fehlgeschlagen.');
     } finally {
       setAgenticReviewIntent(null);
       setAgenticActionPending(false);
