@@ -803,41 +803,6 @@ function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
 
 ensureAgenticRunSchema(db);
 
-function ensureShopwareSyncQueueSchema(database: Database.Database = db): void {
-  const createShopwareQueueSql = `
-CREATE TABLE IF NOT EXISTS shopware_sync_queue (
-  Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ItemUUID TEXT NOT NULL,
-  Operation TEXT NOT NULL,
-  Payload TEXT,
-  Status TEXT NOT NULL DEFAULT 'pending',
-  AttemptCount INTEGER NOT NULL DEFAULT 0,
-  LastError TEXT,
-  AvailableAt TEXT NOT NULL DEFAULT (datetime('now')),
-  CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  UpdatedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  ShopwareProductId TEXT,
-  ShopwareVariantId TEXT,
-  FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_available
-  ON shopware_sync_queue(Status, AvailableAt);
-
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_item
-  ON shopware_sync_queue(ItemUUID);
-`;
-
-  try {
-    database.exec(createShopwareQueueSql);
-  } catch (err) {
-    console.error('Failed to ensure shopware_sync_queue schema', err);
-    throw err;
-  }
-}
-
-ensureShopwareSyncQueueSchema(db);
-
 export { db };
 
 export const upsertBox = db.prepare(
