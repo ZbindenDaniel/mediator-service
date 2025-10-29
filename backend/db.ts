@@ -3,6 +3,11 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { DB_PATH } from './config';
+import type {
+  ShopwareSyncQueueEntry,
+  ShopwareSyncQueueInsert,
+  ShopwareSyncQueueStatus
+} from './shopware/queueTypes';
 import {
   AgenticRun,
   Box,
@@ -940,33 +945,6 @@ export function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate):
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
 
-export type ShopwareSyncQueueStatus = 'queued' | 'processing' | 'succeeded' | 'failed';
-
-export interface ShopwareSyncQueueEntry {
-  Id: number;
-  CorrelationId: string;
-  JobType: string;
-  Payload: string;
-  Status: ShopwareSyncQueueStatus;
-  RetryCount: number;
-  LastError: string | null;
-  LastAttemptAt: string | null;
-  NextAttemptAt: string | null;
-  CreatedAt: string;
-  UpdatedAt: string;
-}
-
-export interface ShopwareSyncQueueInsert {
-  CorrelationId: string;
-  JobType: string;
-  Payload: string;
-  Status?: ShopwareSyncQueueStatus;
-  RetryCount?: number;
-  LastError?: string | null;
-  LastAttemptAt?: string | null;
-  NextAttemptAt?: string | null;
-}
-
 const insertShopwareSyncJob = db.prepare(`
   INSERT INTO shopware_sync_queue (
     CorrelationId,
@@ -1512,9 +1490,8 @@ export type {
   ItemInstance,
   ItemRef,
   LabelJob,
-  EventLog,
-  ShopwareSyncQueueEntry,
-  ShopwareSyncQueueInsert,
-  ShopwareSyncQueueStatus
+  EventLog
 };
+
+export type { ShopwareSyncQueueEntry, ShopwareSyncQueueInsert, ShopwareSyncQueueStatus } from './shopware/queueTypes';
 
