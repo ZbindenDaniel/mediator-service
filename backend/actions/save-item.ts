@@ -5,6 +5,7 @@ import { ItemEinheit, isItemEinheit } from '../../models';
 import type { Item } from '../../models';
 import type { Action } from './index';
 import { MEDIA_DIR } from '../lib/media';
+import { generateShopwareCorrelationId } from '../db';
 
 const MEDIA_PREFIX = '/media/';
 
@@ -417,16 +418,19 @@ const action: Action = {
           Meta: null
         });
         try {
-          ctx.enqueueShopwareSyncJob({
+          const correlationId = generateShopwareCorrelationId('save-item', itemUUID);
+          const payload = JSON.stringify({
+            actor: a,
+            artikelNummer: it.Artikel_Nummer ?? null,
+            boxId: it.BoxID ?? null,
+            location: it.Location ?? null,
             itemUUID: it.ItemUUID,
-            operation: 'item-upsert',
-            triggerSource: 'save-item',
-            payload: {
-              actor: a,
-              artikelNummer: it.Artikel_Nummer ?? null,
-              boxId: it.BoxID ?? null,
-              location: it.Location ?? null
-            }
+            trigger: 'save-item'
+          });
+          ctx.enqueueShopwareSyncJob({
+            CorrelationId: correlationId,
+            JobType: 'item-upsert',
+            Payload: payload
           });
         } catch (queueErr) {
           console.error('[save-item] Failed to enqueue Shopware sync job', {

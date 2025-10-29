@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { generateShopwareCorrelationId } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -42,16 +43,19 @@ const action: Action = {
           Meta: JSON.stringify({ from, to })
         });
         try {
-          ctx.enqueueShopwareSyncJob({
+          const correlationId = generateShopwareCorrelationId('move-item', u);
+          const payload = JSON.stringify({
+            actor: a,
+            fromBoxId: from || null,
+            toBoxId: to,
+            location,
             itemUUID: u,
-            operation: 'item-move',
-            triggerSource: 'move-item',
-            payload: {
-              actor: a,
-              fromBoxId: from || null,
-              toBoxId: to,
-              location
-            }
+            trigger: 'move-item'
+          });
+          ctx.enqueueShopwareSyncJob({
+            CorrelationId: correlationId,
+            JobType: 'item-move',
+            Payload: payload
           });
         } catch (queueErr) {
           console.error('[move-item] Failed to enqueue Shopware sync job', {

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { generateShopwareCorrelationId } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -43,16 +44,19 @@ const action: Action = {
           })
         });
         try {
-          ctx.enqueueShopwareSyncJob({
+          const correlationId = generateShopwareCorrelationId('remove-item', u);
+          const payload = JSON.stringify({
+            actor: a,
+            quantityBefore: currentQty,
+            quantityAfter: updated?.Auf_Lager ?? 0,
+            clearedBox,
             itemUUID: u,
-            operation: 'stock-decrement',
-            triggerSource: 'remove-item',
-            payload: {
-              actor: a,
-              quantityBefore: currentQty,
-              quantityAfter: updated?.Auf_Lager ?? 0,
-              clearedBox
-            }
+            trigger: 'remove-item'
+          });
+          ctx.enqueueShopwareSyncJob({
+            CorrelationId: correlationId,
+            JobType: 'stock-decrement',
+            Payload: payload
           });
         } catch (queueErr) {
           console.error('[remove-item] Failed to enqueue Shopware sync job', {

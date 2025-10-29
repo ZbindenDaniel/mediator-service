@@ -6,11 +6,11 @@ import {
   type ShopwareSyncQueueEntry
 } from '../db';
 import {
-  normalizeShopwareClientError,
-  type ShopwareClient,
-  type ShopwareClientDispatchResult,
+  normalizeShopwareQueueClientError,
+  type ShopwareQueueClient,
+  type ShopwareQueueDispatchResult,
   type ShopwareSyncJobDescriptor
-} from '../shopware/client';
+} from '../shopware/queueClient';
 
 export interface ShopwareQueueWorkerLogger {
   debug?: Console['debug'];
@@ -29,7 +29,7 @@ export interface ShopwareQueueMetrics {
 }
 
 export interface ProcessShopwareQueueOptions {
-  client: ShopwareClient;
+  client: ShopwareQueueClient;
   logger?: ShopwareQueueWorkerLogger;
   metrics?: ShopwareQueueMetrics;
   now?: () => Date;
@@ -82,7 +82,7 @@ function parsePayload(rawPayload: string, job: ShopwareSyncQueueEntry, logger: S
 
 function resolveResultCorrelationId(
   job: ShopwareSyncQueueEntry,
-  result: ShopwareClientDispatchResult | undefined
+  result: ShopwareQueueDispatchResult | undefined
 ): string {
   if (result?.correlationId && result.correlationId.trim()) {
     return result.correlationId;
@@ -256,7 +256,7 @@ export async function processShopwareQueue(options: ProcessShopwareQueueOptions)
         await handlePermanentFailure(job, logger, metrics, options, message, correlationId);
       }
     } catch (err) {
-      const normalized = normalizeShopwareClientError(err, job.CorrelationId);
+      const normalized = normalizeShopwareQueueClientError(err, job.CorrelationId);
       const correlationId = normalized.correlationId ?? job.CorrelationId;
       const message = serializeError(normalized);
       if (normalized.retryable) {

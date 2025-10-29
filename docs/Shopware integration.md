@@ -27,7 +27,7 @@ This document decomposes the work required to integrate the application with Sho
 - [ ] Inject the configuration into the server context so actions and workers can access it safely.
 
 ### 2. Shopware Integration Module
-- [ ] Create `backend/shopware/` (or `backend/integrations/shopware/`) to house reusable logic.
+- [ ] Create `backend/shopware/` to house reusable logic.
 - [ ] Implement a `ShopwareClient` that handles authentication/token refresh, HTTP requests, retry/backoff, and structured logging. Wrap outbound calls in `try/catch` blocks with meaningful error messages.
 - [ ] Define mapper utilities to translate between local `Item`/`ItemRef` structures and Shopware payloads (stock updates, product creation). Ensure data-structure changes are type-safe.
 - [ ] Add unit tests covering request signing, retries, and mapping edge cases using mocked HTTP responses.

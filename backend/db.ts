@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
@@ -13,11 +14,7 @@ import {
   EventLogLevel,
   EVENT_LOG_LEVELS,
   parseEventLogLevelAllowList,
-  resolveEventLogLevel,
-  ShopwareSyncJob,
-  ShopwareSyncJobInsert,
-  ShopwareSyncOperation,
-  ShopwareSyncJobStatus
+  resolveEventLogLevel
 } from '../models';
 import { resolveStandortLabel } from './standort-label';
 
@@ -66,15 +63,6 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE TABLE IF NOT EXISTS shopware_sync_queue (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ItemUUID TEXT NOT NULL,
-  Operation TEXT NOT NULL,
-  TriggerSource TEXT,
-  Payload TEXT,
-  Status TEXT NOT NULL DEFAULT 'queued',
-  AttemptCount INTEGER NOT NULL DEFAULT 0,
-  LastError TEXT,
-  LastAttemptAt TEXT,
-  ShopwareId TEXT,
   CorrelationId TEXT NOT NULL,
   JobType TEXT NOT NULL,
   Payload TEXT NOT NULL,
@@ -88,7 +76,6 @@ CREATE TABLE IF NOT EXISTS shopware_sync_queue (
 );
 
 CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status ON shopware_sync_queue(Status);
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_item ON shopware_sync_queue(ItemUUID);
 CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_attempt
   ON shopware_sync_queue (Status, COALESCE(NextAttemptAt, '1970-01-01'), Id);
 
@@ -595,6 +582,45 @@ function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
   upsertItemInstanceStatement.run(payload.instance);
 }
 
+function createShopwareQueuePayload(payload: unknown, context: string): string {
+  try {
+    return JSON.stringify(payload ?? null);
+  } catch (err) {
+    console.error('[db] Failed to serialize Shopware queue payload', { context, error: err });
+    throw err;
+  }
+}
+
+let shopwareCorrelationCounter = 0;
+
+function normaliseCorrelationSegment(value: string, fallback: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return fallback;
+  }
+  const sanitized = trimmed.replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+  return sanitized || fallback;
+}
+
+function nextShopwareCorrelationSequence(): string {
+  shopwareCorrelationCounter = (shopwareCorrelationCounter + 1) % 1679616; // 36^5 ~= 60M rotations
+  return shopwareCorrelationCounter.toString(36).padStart(5, '0');
+}
+
+export function generateShopwareCorrelationId(context: string, itemUUID: string | undefined): string {
+  try {
+    const contextSegment = normaliseCorrelationSegment(context, 'job');
+    const itemSegment = itemUUID ? normaliseCorrelationSegment(itemUUID, 'item') : 'item';
+    const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 17);
+    const sequence = nextShopwareCorrelationSequence();
+    const entropy = randomBytes(3).toString('hex');
+    return `${contextSegment}:${itemSegment}:${timestamp}:${sequence}:${entropy}`;
+  } catch (err) {
+    console.error('[db] Failed to generate Shopware queue correlation id', { context, itemUUID, error: err });
+    throw err;
+  }
+}
+
 const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
 
 const ITEM_JOIN_BASE = `
@@ -607,145 +633,6 @@ const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
 `;
 
 const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Location,''))";
-
-type ShopwareSyncQueueRow = {
-  Id: number;
-  ItemUUID: string;
-  Operation: ShopwareSyncOperation;
-  TriggerSource: string | null;
-  Payload: string | null;
-  Status: ShopwareSyncJobStatus;
-  AttemptCount: number;
-  LastError: string | null;
-  LastAttemptAt: string | null;
-  ShopwareId: string | null;
-  CreatedAt: string;
-  UpdatedAt: string;
-};
-
-const insertShopwareSyncJobStatement = db.prepare(`
-  INSERT INTO shopware_sync_queue (
-    ItemUUID,
-    Operation,
-    TriggerSource,
-    Payload,
-    ShopwareId,
-    CreatedAt,
-    UpdatedAt
-  )
-  VALUES (
-    @ItemUUID,
-    @Operation,
-    @TriggerSource,
-    @Payload,
-    @ShopwareId,
-    datetime('now'),
-    datetime('now')
-  )
-`);
-
-const listShopwareSyncJobsStatement = db.prepare(`
-  SELECT
-    Id,
-    ItemUUID,
-    Operation,
-    TriggerSource,
-    Payload,
-    Status,
-    AttemptCount,
-    LastError,
-    LastAttemptAt,
-    ShopwareId,
-    CreatedAt,
-    UpdatedAt
-  FROM shopware_sync_queue
-  ORDER BY Id
-`);
-
-const clearShopwareSyncJobsStatement = db.prepare(`DELETE FROM shopware_sync_queue`);
-
-function serializeShopwarePayload(value: unknown): string | null {
-  if (value === undefined) {
-    return null;
-  }
-
-  if (value === null) {
-    return 'null';
-  }
-
-  try {
-    return JSON.stringify(value);
-  } catch (error) {
-    console.error('[db] Failed to serialize Shopware sync payload', error);
-    throw error;
-  }
-}
-
-function parseShopwarePayload(serialized: string | null): unknown {
-  if (!serialized) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(serialized);
-  } catch (error) {
-    console.warn('[db] Failed to parse Shopware sync payload; returning raw string', error);
-    return serialized;
-  }
-}
-
-export function enqueueShopwareSyncJob(entry: ShopwareSyncJobInsert): void {
-  const payload = {
-    ItemUUID: entry.itemUUID,
-    Operation: entry.operation,
-    TriggerSource: entry.triggerSource ?? null,
-    Payload: serializeShopwarePayload(entry.payload ?? null),
-    ShopwareId: entry.shopwareId ?? null
-  };
-
-  try {
-    insertShopwareSyncJobStatement.run(payload);
-  } catch (error) {
-    console.error('[db] Failed to enqueue Shopware sync job', {
-      itemUUID: entry.itemUUID,
-      operation: entry.operation,
-      error
-    });
-    throw error;
-  }
-}
-
-export function listShopwareSyncJobs(): ShopwareSyncJob[] {
-  try {
-    const rows = listShopwareSyncJobsStatement.all() as ShopwareSyncQueueRow[];
-    return rows.map((row) => ({
-      Id: row.Id,
-      ItemUUID: row.ItemUUID,
-      Operation: row.Operation,
-      TriggerSource: row.TriggerSource,
-      Payload: parseShopwarePayload(row.Payload),
-      Status: row.Status,
-      AttemptCount: row.AttemptCount,
-      LastError: row.LastError,
-      LastAttemptAt: row.LastAttemptAt,
-      ShopwareId: row.ShopwareId,
-      CreatedAt: row.CreatedAt,
-      UpdatedAt: row.UpdatedAt
-    }));
-  } catch (error) {
-    console.error('[db] Failed to list Shopware sync jobs', error);
-    throw error;
-  }
-}
-
-export function clearShopwareSyncJobs(): void {
-  try {
-    clearShopwareSyncJobsStatement.run();
-  } catch (error) {
-    console.error('[db] Failed to clear Shopware sync jobs', error);
-    throw error;
-  }
-}
 
 function itemSelectColumns(locationExpr: string): string {
   return `
@@ -816,14 +703,20 @@ export function persistItem(item: Item): void {
   const txn = db.transaction((data: ItemPersistencePayload) => {
     runItemPersistenceStatements(data);
     try {
-      enqueueShopwareSyncJob({
-        itemUUID: data.instance.ItemUUID,
-        operation: 'item-upsert',
-        triggerSource: 'persistItem',
-        payload: {
+      const correlationId = generateShopwareCorrelationId('persistItem', data.instance.ItemUUID);
+      const payload = createShopwareQueuePayload(
+        {
           artikelNummer: data.instance.Artikel_Nummer ?? null,
-          boxId: data.instance.BoxID ?? null
-        }
+          boxId: data.instance.BoxID ?? null,
+          itemUUID: data.instance.ItemUUID,
+          trigger: 'persistItem'
+        },
+        'persistItem'
+      );
+      enqueueShopwareSyncJob({
+        CorrelationId: correlationId,
+        JobType: 'item-upsert',
+        Payload: payload
       });
     } catch (error) {
       console.error('[db] Failed to enqueue Shopware sync job during persistItem transaction', {
@@ -906,41 +799,6 @@ function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
 }
 
 ensureAgenticRunSchema(db);
-
-function ensureShopwareSyncQueueSchema(database: Database.Database = db): void {
-  const createShopwareQueueSql = `
-CREATE TABLE IF NOT EXISTS shopware_sync_queue (
-  Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ItemUUID TEXT NOT NULL,
-  Operation TEXT NOT NULL,
-  Payload TEXT,
-  Status TEXT NOT NULL DEFAULT 'pending',
-  AttemptCount INTEGER NOT NULL DEFAULT 0,
-  LastError TEXT,
-  AvailableAt TEXT NOT NULL DEFAULT (datetime('now')),
-  CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  UpdatedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  ShopwareProductId TEXT,
-  ShopwareVariantId TEXT,
-  FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_available
-  ON shopware_sync_queue(Status, AvailableAt);
-
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_item
-  ON shopware_sync_queue(ItemUUID);
-`;
-
-  try {
-    database.exec(createShopwareQueueSql);
-  } catch (err) {
-    console.error('Failed to ensure shopware_sync_queue schema', err);
-    throw err;
-  }
-}
-
-ensureShopwareSyncQueueSchema(db);
 
 export { db };
 
@@ -1078,322 +936,7 @@ export function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate):
   }
 }
 
-type ShopwareSyncQueueRow = {
-  Id: number;
-  ItemUUID: string;
-  Operation: string;
-  Payload: string | null;
-  Status: string;
-  AttemptCount: number;
-  LastError: string | null;
-  AvailableAt: string;
-  CreatedAt: string;
-  UpdatedAt: string;
-  ShopwareProductId: string | null;
-  ShopwareVariantId: string | null;
-};
 
-export type ShopwareSyncQueueJob = {
-  Id: number;
-  ItemUUID: string;
-  Operation: string;
-  Payload: unknown;
-  Status: string;
-  AttemptCount: number;
-  LastError: string | null;
-  AvailableAt: string;
-  CreatedAt: string;
-  UpdatedAt: string;
-  ShopwareProductId: string | null;
-  ShopwareVariantId: string | null;
-};
-
-const selectShopwareSyncQueueById = db.prepare(`
-  SELECT Id, ItemUUID, Operation, Payload, Status, AttemptCount, LastError,
-         AvailableAt, CreatedAt, UpdatedAt, ShopwareProductId, ShopwareVariantId
-    FROM shopware_sync_queue
-   WHERE Id = ?
-`);
-
-const selectPendingShopwareSyncJob = db.prepare(`
-  SELECT Id, ItemUUID, Operation, Payload, Status, AttemptCount, LastError,
-         AvailableAt, CreatedAt, UpdatedAt, ShopwareProductId, ShopwareVariantId
-    FROM shopware_sync_queue
-   WHERE Status = 'pending'
-     AND datetime(AvailableAt) <= datetime('now')
-   ORDER BY datetime(AvailableAt) ASC, Id ASC
-   LIMIT 1
-`);
-
-const markShopwareSyncJobProcessingStatement = db.prepare(`
-  UPDATE shopware_sync_queue
-     SET Status = 'processing',
-         AttemptCount = AttemptCount + 1,
-         UpdatedAt = datetime('now'),
-         LastError = NULL
-   WHERE Id = @Id
-     AND Status = 'pending'
-`);
-
-const insertShopwareSyncQueueStatement = db.prepare(`
-  INSERT INTO shopware_sync_queue (
-    ItemUUID, Operation, Payload, Status, AttemptCount, LastError, AvailableAt, ShopwareProductId, ShopwareVariantId
-  ) VALUES (
-    @ItemUUID, @Operation, @Payload, 'pending', 0, NULL, COALESCE(@AvailableAt, datetime('now')), @ShopwareProductId, @ShopwareVariantId
-  )
-`);
-
-const updateShopwareSyncQueueRetryStatement = db.prepare(`
-  UPDATE shopware_sync_queue
-     SET Status = @Status,
-         AvailableAt = @AvailableAt,
-         LastError = @LastError,
-         UpdatedAt = datetime('now')
-   WHERE Id = @Id
-     AND Status = 'processing'
-`);
-
-const completeShopwareSyncQueueStatement = db.prepare(`
-  UPDATE shopware_sync_queue
-     SET Status = @Status,
-         LastError = NULL,
-         UpdatedAt = datetime('now'),
-         AvailableAt = @AvailableAt,
-         ShopwareProductId = COALESCE(@ShopwareProductId, ShopwareProductId),
-         ShopwareVariantId = COALESCE(@ShopwareVariantId, ShopwareVariantId)
-   WHERE Id = @Id
-     AND Status = 'processing'
-`);
-
-function serializeShopwareQueuePayload(payload: unknown): string | null {
-  if (payload === null || payload === undefined) {
-    return null;
-  }
-  try {
-    return JSON.stringify(payload);
-  } catch (err) {
-    console.error('[db] Failed to serialize Shopware sync payload', { error: err });
-    throw err;
-  }
-}
-
-function deserializeShopwareQueuePayload(raw: string | null, jobId: number): unknown {
-  if (raw === null || raw === undefined || raw === '') {
-    return null;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('[db] Failed to parse Shopware sync payload', { jobId, error: err });
-    return raw;
-  }
-}
-
-function mapShopwareSyncQueueRow(row: ShopwareSyncQueueRow | undefined): ShopwareSyncQueueJob | null {
-  if (!row) {
-    return null;
-  }
-
-  return {
-    ...row,
-    Payload: deserializeShopwareQueuePayload(row.Payload, row.Id)
-  };
-}
-
-export type ShopwareSyncJobInsert = {
-  itemUUID: string;
-  operation: string;
-  payload?: unknown;
-  availableAt?: Date | string | null;
-  shopwareProductId?: string | null;
-  shopwareVariantId?: string | null;
-};
-
-function resolveQueueTimestamp(input: Date | string | null | undefined): string | null {
-  if (input === null || input === undefined) {
-    return null;
-  }
-  const normalized = toIsoString(input);
-  if (!normalized) {
-    console.warn('[db] Ignoring invalid Shopware queue timestamp input', { value: input });
-    return null;
-  }
-  return normalized;
-}
-
-export function enqueueShopwareSyncJob(input: ShopwareSyncJobInsert): ShopwareSyncQueueJob {
-  const record = {
-    ItemUUID: input.itemUUID,
-    Operation: input.operation,
-    Payload: serializeShopwareQueuePayload(input.payload ?? null),
-    AvailableAt: resolveQueueTimestamp(input.availableAt),
-    ShopwareProductId: input.shopwareProductId ?? null,
-    ShopwareVariantId: input.shopwareVariantId ?? null
-  };
-
-  try {
-    const result = insertShopwareSyncQueueStatement.run(record);
-    const row = selectShopwareSyncQueueById.get(result.lastInsertRowid) as ShopwareSyncQueueRow | undefined;
-    const job = mapShopwareSyncQueueRow(row);
-    if (!job) {
-      throw new Error('Unable to load enqueued Shopware sync job');
-    }
-    console.info('[db] Shopware sync job enqueued', {
-      id: job.Id,
-      itemUUID: job.ItemUUID,
-      operation: job.Operation,
-      availableAt: job.AvailableAt
-    });
-    return job;
-  } catch (err) {
-    console.error('[db] Failed to enqueue Shopware sync job', {
-      itemUUID: input.itemUUID,
-      operation: input.operation,
-      error: err
-    });
-    throw err;
-  }
-}
-
-export function dequeueShopwareSyncJob(): ShopwareSyncQueueJob | null {
-  let row: ShopwareSyncQueueRow | undefined;
-  try {
-    const runTxn = db.transaction(() => {
-      const pending = selectPendingShopwareSyncJob.get() as ShopwareSyncQueueRow | undefined;
-      if (!pending) {
-        return undefined;
-      }
-      const updateResult = markShopwareSyncJobProcessingStatement.run({ Id: pending.Id });
-      if ((updateResult?.changes ?? 0) === 0) {
-        return undefined;
-      }
-      const refreshed = selectShopwareSyncQueueById.get(pending.Id) as ShopwareSyncQueueRow | undefined;
-      return refreshed;
-    });
-    row = runTxn();
-  } catch (err) {
-    console.error('[db] Failed to dequeue Shopware sync job', err);
-    throw err;
-  }
-
-  const job = mapShopwareSyncQueueRow(row);
-  if (job) {
-    console.info('[db] Shopware sync job dequeued', {
-      id: job.Id,
-      itemUUID: job.ItemUUID,
-      operation: job.Operation,
-      attempt: job.AttemptCount
-    });
-  }
-  return job;
-}
-
-function resolveRetryAvailableAt(update: ShopwareSyncJobRetryUpdate): string {
-  const provided = resolveQueueTimestamp(update.availableAt ?? null);
-  if (provided) {
-    return provided;
-  }
-  if (typeof update.delayMs === 'number' && Number.isFinite(update.delayMs)) {
-    const safeDelay = Math.max(0, Math.floor(update.delayMs));
-    return new Date(Date.now() + safeDelay).toISOString();
-  }
-  return new Date().toISOString();
-}
-
-function stringifyJobError(error: unknown): string {
-  if (error === null || error === undefined) {
-    return 'Unknown error';
-  }
-  if (error instanceof Error) {
-    return error.message || error.toString();
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  try {
-    return JSON.stringify(error);
-  } catch (err) {
-    console.warn('[db] Failed to stringify Shopware sync job error', { error, serializationError: err });
-    return String(error);
-  }
-}
-
-export type ShopwareSyncJobRetryUpdate = {
-  id: number;
-  error: unknown;
-  delayMs?: number;
-  availableAt?: Date | string | null;
-  markAsFailed?: boolean;
-};
-
-export function recordShopwareSyncJobFailure(update: ShopwareSyncJobRetryUpdate): ShopwareSyncQueueJob | null {
-  const payload = {
-    Id: update.id,
-    Status: update.markAsFailed ? 'failed' : 'pending',
-    AvailableAt: resolveRetryAvailableAt(update),
-    LastError: stringifyJobError(update.error)
-  };
-
-  try {
-    const result = updateShopwareSyncQueueRetryStatement.run(payload);
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Shopware sync retry update had no effect', { id: update.id, status: payload.Status });
-      return mapShopwareSyncQueueRow(selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined);
-    }
-  } catch (err) {
-    console.error('[db] Failed to update Shopware sync retry state', { id: update.id, error: err });
-    throw err;
-  }
-
-  const row = selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined;
-  const job = mapShopwareSyncQueueRow(row);
-  console.warn('[db] Shopware sync job scheduled for retry', {
-    id: update.id,
-    status: payload.Status,
-    nextAttempt: job?.AvailableAt,
-    attempts: job?.AttemptCount,
-    lastError: payload.LastError
-  });
-  return job;
-}
-
-export type ShopwareSyncJobCompletionUpdate = {
-  id: number;
-  status?: 'completed' | 'skipped';
-  shopwareProductId?: string | null;
-  shopwareVariantId?: string | null;
-};
-
-export function markShopwareSyncJobCompleted(update: ShopwareSyncJobCompletionUpdate): ShopwareSyncQueueJob | null {
-  const payload = {
-    Id: update.id,
-    Status: update.status ?? 'completed',
-    AvailableAt: new Date().toISOString(),
-    ShopwareProductId: update.shopwareProductId ?? null,
-    ShopwareVariantId: update.shopwareVariantId ?? null
-  };
-
-  try {
-    const result = completeShopwareSyncQueueStatement.run(payload);
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Shopware sync completion update had no effect', { id: update.id, status: payload.Status });
-      return mapShopwareSyncQueueRow(selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined);
-    }
-  } catch (err) {
-    console.error('[db] Failed to mark Shopware sync job completed', { id: update.id, error: err });
-    throw err;
-  }
-
-  const row = selectShopwareSyncQueueById.get(update.id) as ShopwareSyncQueueRow | undefined;
-  const job = mapShopwareSyncQueueRow(row);
-  console.info('[db] Shopware sync job completed', {
-    id: update.id,
-    status: payload.Status,
-    shopwareProductId: job?.ShopwareProductId,
-    shopwareVariantId: job?.ShopwareVariantId
-  });
-  return job;
-}
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
 
@@ -1454,12 +997,22 @@ const insertShopwareSyncJob = db.prepare(`
 const getShopwareSyncJobByIdStatement = db.prepare(`SELECT * FROM shopware_sync_queue WHERE Id = ?`);
 
 const clearShopwareSyncQueueStatement = db.prepare(`DELETE FROM shopware_sync_queue`);
+const listShopwareSyncQueueStatement = db.prepare(`SELECT * FROM shopware_sync_queue ORDER BY Id`);
 
 export function clearShopwareSyncQueue(): void {
   try {
     clearShopwareSyncQueueStatement.run();
   } catch (err) {
     console.error('[db] Failed to clear Shopware sync queue', err);
+    throw err;
+  }
+}
+
+export function listShopwareSyncQueue(): ShopwareSyncQueueEntry[] {
+  try {
+    return listShopwareSyncQueueStatement.all() as ShopwareSyncQueueEntry[];
+  } catch (err) {
+    console.error('[db] Failed to list Shopware sync queue entries', err);
     throw err;
   }
 }
@@ -1750,16 +1303,22 @@ export function bulkMoveItems(
       });
 
       try {
-        enqueueShopwareSyncJob({
-          itemUUID: itemId,
-          operation: 'item-move',
-          triggerSource: 'bulk-move-items',
-          payload: {
+        const correlationId = generateShopwareCorrelationId('bulkMoveItems', itemId);
+        const payload = createShopwareQueuePayload(
+          {
             actor,
             fromBoxId: current.BoxID ?? null,
             toBoxId,
-            location: normalizedLocation
-          }
+            location: normalizedLocation,
+            itemUUID: itemId,
+            trigger: 'bulk-move-items'
+          },
+          'bulkMoveItems'
+        );
+        enqueueShopwareSyncJob({
+          CorrelationId: correlationId,
+          JobType: 'item-move',
+          Payload: payload
         });
       } catch (error) {
         console.error('[db] Failed to enqueue Shopware sync job for bulk move', { itemId, error });
@@ -1826,16 +1385,22 @@ export function bulkRemoveItemStock(itemIds: string[], actor: string): BulkRemov
       });
 
       try {
-        enqueueShopwareSyncJob({
-          itemUUID: itemId,
-          operation: 'stock-decrement',
-          triggerSource: 'bulk-delete-items',
-          payload: {
+        const correlationId = generateShopwareCorrelationId('bulkRemoveItemStock', itemId);
+        const payload = createShopwareQueuePayload(
+          {
             actor,
             before: beforeQty,
             after: afterQty,
-            clearedBox
-          }
+            clearedBox,
+            itemUUID: itemId,
+            trigger: 'bulk-delete-items'
+          },
+          'bulkRemoveItemStock'
+        );
+        enqueueShopwareSyncJob({
+          CorrelationId: correlationId,
+          JobType: 'stock-decrement',
+          Payload: payload
         });
       } catch (error) {
         console.error('[db] Failed to enqueue Shopware sync job for bulk stock removal', {
@@ -1949,6 +1514,7 @@ export type {
   LabelJob,
   EventLog,
   ShopwareSyncQueueEntry,
-  ShopwareSyncQueueJob
+  ShopwareSyncQueueInsert,
+  ShopwareSyncQueueStatus
 };
 
