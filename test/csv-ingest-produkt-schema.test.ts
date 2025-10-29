@@ -179,4 +179,30 @@ describe('CSV ingestion schema compatibility', () => {
     const updatedNotes = selectBoxNotes.get('BX-200') as { Notes: string | null } | undefined;
     expect(updatedNotes).toEqual({ Notes: 'Lager-Behältnis: Regal A | Lagerraum: Raum 1' });
   });
+
+  test('allows forcing zero stock ingestion via options', async () => {
+    let zeroResult: { count: number; boxes: string[] };
+    try {
+      zeroResult = await ingestCsvFile(PRODUKT_INITIAL, { zeroStock: true });
+    } catch (error) {
+      console.error('[csv-ingest-produkt-schema.test] Zero stock override ingestion failed', error);
+      throw error;
+    }
+
+    expect(zeroResult.count).toBe(0);
+    expect(zeroResult.boxes).toEqual([]);
+
+    const zeroItem = selectItemByArtikel.get('PROD-001') as
+      | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
+      | undefined;
+    expect(zeroItem).toBeUndefined();
+
+    const zeroRef = selectItemRef.get('PROD-001') as
+      | { Artikelbeschreibung: string | null; Langtext: string | null }
+      | undefined;
+    expect(zeroRef).toEqual({
+      Artikelbeschreibung: 'Produkt Artikel',
+      Langtext: 'Aus Kurzbeschreibung'
+    });
+  });
 });

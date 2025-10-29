@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
 import { upsertBox, persistItem, queueLabel, persistItemReference, findByMaterial } from './db';
+import { IMPORTER_FORCE_ZERO_STOCK } from './config';
 import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
@@ -324,6 +325,10 @@ function loadOps(): Op[] {
 
 const ops = loadOps();
 
+export interface IngestCsvFileOptions {
+  zeroStock?: boolean;
+}
+
 function applyOps(row: Record<string, string>): Record<string, string> {
   const ctx = {
     queueLabel: (itemUUID: string) => queueLabel.run(itemUUID),
@@ -346,12 +351,16 @@ function applyOps(row: Record<string, string>): Record<string, string> {
   return current;
 }
 
-export async function ingestCsvFile(absPath: string): Promise<{ count: number; boxes: string[] }> {
+export async function ingestCsvFile(
+  absPath: string,
+  options: IngestCsvFileOptions = {}
+): Promise<{ count: number; boxes: string[] }> {
   console.log(`Ingesting CSV file: ${absPath}`);
   try {
     const nowDate = new Date();
     const now = nowDate.toISOString();
     const records = await readCsv(absPath);
+    const zeroStockRequested = options.zeroStock ?? IMPORTER_FORCE_ZERO_STOCK;
     let count = 0;
     const boxesTouched = new Set<string>();
     const itemSequenceByDate = new Map<string, number>();
@@ -362,6 +371,17 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
       const rowNumber = index + 1;
       const row = normalize(r);
       const final = applyOps(row);
+      if (zeroStockRequested) {
+        const originalQuantity = final['Auf_Lager'] || final['Qty'] || '';
+        final['Auf_Lager'] = '0';
+        final['Qty'] = '0';
+        if (originalQuantity !== '0') {
+          console.info('[importer] Overriding quantity to zero for CSV row', {
+            rowNumber,
+            artikelNummer: typeof final['Artikel-Nummer'] === 'string' ? final['Artikel-Nummer'].trim() : null,
+          });
+        }
+      }
       const identifierDate = resolveImportDate(final, nowDate, rowNumber);
       const rawStandort = final.Standort || final.Location || '';
       const normalizedStandort = normalizeStandortCode(rawStandort);

@@ -23,10 +23,11 @@ import {
   SHOPWARE_SYNC_ENABLED,
   SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
   getShopwareConfig,
-  logShopwareConfigIssues
+  logShopwareConfigIssues,
+  IMPORTER_FORCE_ZERO_STOCK
 } from './config';
 import type { ShopwareConfig } from './config';
-import { ingestCsvFile } from './importer';
+import { ingestCsvFile, type IngestCsvFileOptions } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import {
   db,
@@ -79,6 +80,16 @@ import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
 
 const actions = loadActions();
+
+const pendingCsvIngestionOptions = new Map<string, IngestCsvFileOptions>();
+
+function registerCsvIngestionOptions(absPath: string, options: IngestCsvFileOptions): void {
+  pendingCsvIngestionOptions.set(absPath, options);
+}
+
+function clearCsvIngestionOptions(absPath: string): void {
+  pendingCsvIngestionOptions.delete(absPath);
+}
 
 let shopwareConfig: ShopwareConfig = {
   enabled: false,
@@ -139,6 +150,14 @@ try {
 }
 
 async function handleCsv(absPath: string): Promise<void> {
+  const pendingOptions = pendingCsvIngestionOptions.get(absPath);
+  const zeroStock = pendingOptions?.zeroStock ?? IMPORTER_FORCE_ZERO_STOCK;
+  if (zeroStock) {
+    console.info('[watcher] Zero stock mode active for CSV ingestion', {
+      file: absPath,
+      source: pendingOptions ? 'request' : 'config'
+    });
+  }
   try {
     try {
       const baseName = path.basename(absPath);
@@ -166,7 +185,7 @@ async function handleCsv(absPath: string): Promise<void> {
     } catch (duplicateError) {
       console.error('[watcher] Failed to evaluate duplicate CSV upload', absPath, duplicateError);
     }
-    const { count, boxes } = await ingestCsvFile(absPath);
+    const { count, boxes } = await ingestCsvFile(absPath, { zeroStock });
     const archived = path.join(
       ARCHIVE_DIR,
       path.basename(absPath).replace(/\.csv$/i, `.${Date.now()}.csv`)
@@ -177,6 +196,8 @@ async function handleCsv(absPath: string): Promise<void> {
     );
   } catch (e) {
     console.error(`Failed ingest ${absPath}:`, (e as Error).message);
+  } finally {
+    clearCsvIngestionOptions(absPath);
   }
 }
 
@@ -325,6 +346,8 @@ type ActionContext = {
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
   agenticServiceEnabled: boolean;
+  registerCsvIngestionOptions: typeof registerCsvIngestionOptions;
+  clearCsvIngestionOptions: typeof clearCsvIngestionOptions;
   shopware: {
     config: ShopwareConfig;
     issues: string[];
@@ -519,6 +542,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           PUBLIC_DIR,
           PREVIEW_DIR,
           agenticServiceEnabled,
+          registerCsvIngestionOptions,
+          clearCsvIngestionOptions,
           shopware: {
             config: shopwareConfig,
             issues: [...shopwareConfigIssues],

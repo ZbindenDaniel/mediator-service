@@ -176,6 +176,10 @@ function parseBooleanFlag(raw: string | undefined, label: string): boolean | und
   return false;
 }
 
+const importerForceZeroStockFlag =
+  parseBooleanFlag(process.env.IMPORTER_FORCE_ZERO_STOCK, 'IMPORTER_FORCE_ZERO_STOCK') ?? false;
+export const IMPORTER_FORCE_ZERO_STOCK = importerForceZeroStockFlag;
+
 export interface ShopwareCredentialsConfig {
   clientId?: string;
   clientSecret?: string;
