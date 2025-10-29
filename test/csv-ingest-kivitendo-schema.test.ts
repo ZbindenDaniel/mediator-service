@@ -5,6 +5,7 @@ const TEST_DB_FILE = path.join(__dirname, 'csv-ingest-kivitendo-schema.test.sqli
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'csv-kivitendo-schema');
 const KIVITENDO_INITIAL = path.join(FIXTURE_DIR, 'kivitendo-initial.csv');
 const KIVITENDO_UPDATE = path.join(FIXTURE_DIR, 'kivitendo-update.csv');
+const KIVITENDO_ZERO_QUANTITY = path.join(FIXTURE_DIR, 'kivitendo-zero-quantity.csv');
 
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
 
@@ -155,5 +156,46 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
 
     const updatedBox = selectBox.get('BIN-A-01') as { BoxID: string; Notes: string | null } | undefined;
     expect(updatedBox).toEqual({ BoxID: 'BIN-A-01', Notes: '' });
+  });
+
+  test('skips zero quantity rows but persists references', async () => {
+    let result: { count: number; boxes: string[] };
+    try {
+      result = await ingestCsvFile(KIVITENDO_ZERO_QUANTITY);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Zero quantity ingestion failed', error);
+      throw error;
+    }
+
+    expect(result.count).toBe(0);
+    expect(result.boxes).toEqual([]);
+
+    const zeroItem = selectItemByArtikel.get('KIV-002') as
+      | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
+      | undefined;
+    expect(zeroItem).toBeUndefined();
+
+    const zeroRef = selectItemRef.get('KIV-002') as
+      | {
+          Grafikname: string | null;
+          Artikelbeschreibung: string | null;
+          Langtext: string | null;
+          Verkaufspreis: number | null;
+          GewichtKg: number | null;
+          Einheit: string | null;
+          VStatus: string | null;
+          Shopartikel: number | null;
+        }
+      | undefined;
+    expect(zeroRef).toEqual({
+      Grafikname: 'kivi-image-zero.jpg',
+      Artikelbeschreibung: 'Kivitendo Nullbestand',
+      Langtext: 'Hinweis Nullbestand',
+      Verkaufspreis: 8.49,
+      GewichtKg: 0.75,
+      Einheit: 'Stk',
+      VStatus: 'no',
+      Shopartikel: 0,
+    });
   });
 });
