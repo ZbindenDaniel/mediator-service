@@ -31,8 +31,13 @@ const {
   incrementItemStock,
   decrementItemStock,
   enqueueShopwareSyncJob,
-  listShopwareSyncJobs,
-  clearShopwareSyncJobs
+  listShopwareSyncQueue,
+  clearShopwareSyncQueue,
+  claimShopwareSyncJobs,
+  markShopwareSyncJobSucceeded,
+  rescheduleShopwareSyncJob,
+  markShopwareSyncJobFailed,
+  getShopwareSyncJobById
 } = require('../backend/db');
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -101,7 +106,7 @@ beforeEach(() => {
     Auf_Lager: 1,
     Artikelbeschreibung: 'Initial item'
   });
-  clearShopwareSyncJobs();
+  clearShopwareSyncQueue();
 });
 
 afterAll(() => {
@@ -118,6 +123,14 @@ afterAll(() => {
   }
 });
 
+function parsePayload(entry: { Payload: string }): any {
+  try {
+    return JSON.parse(entry.Payload);
+  } catch (error) {
+    throw new Error(`Failed to parse Shopware queue payload: ${(error as Error).message}`);
+  }
+}
+
 describe('Shopware sync queue triggers', () => {
   test('add-item enqueues stock increment job', async () => {
     const req = createJsonRequest(`/api/items/${ITEM_ID}/add`, { actor: 'tester' });
@@ -132,13 +145,13 @@ describe('Shopware sync queue triggers', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const jobs = listShopwareSyncJobs();
+    const jobs = listShopwareSyncQueue();
     expect(jobs.length).toBe(1);
     const job = jobs[0];
-    expect(job.Operation).toBe('stock-increment');
-    expect(job.TriggerSource).toBe('add-item');
-    expect(job.ItemUUID).toBe(ITEM_ID);
-    const payload = job.Payload as { quantityBefore?: number; quantityAfter?: number };
+    expect(job.JobType).toBe('stock-increment');
+    expect(job.Status).toBe('queued');
+    const payload = parsePayload(job) as { quantityBefore?: number; quantityAfter?: number; trigger?: string };
+    expect(payload.trigger).toBe('add-item');
     expect(payload.quantityBefore).toBe(1);
     expect(payload.quantityAfter).toBe(2);
   });
@@ -156,12 +169,12 @@ describe('Shopware sync queue triggers', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const jobs = listShopwareSyncJobs();
+    const jobs = listShopwareSyncQueue();
     expect(jobs.length).toBe(1);
     const job = jobs[0];
-    expect(job.Operation).toBe('stock-decrement');
-    expect(job.TriggerSource).toBe('remove-item');
-    const payload = job.Payload as { quantityBefore?: number; quantityAfter?: number; clearedBox?: boolean };
+    expect(job.JobType).toBe('stock-decrement');
+    const payload = parsePayload(job) as { quantityBefore?: number; quantityAfter?: number; clearedBox?: boolean; trigger?: string };
+    expect(payload.trigger).toBe('remove-item');
     expect(payload.quantityBefore).toBe(1);
     expect(payload.quantityAfter).toBe(0);
     expect(payload.clearedBox).toBe(true);
@@ -192,43 +205,20 @@ describe('Shopware sync queue triggers', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const jobs = listShopwareSyncJobs();
+    const jobs = listShopwareSyncQueue();
     expect(jobs.length).toBe(1);
     const job = jobs[0];
-    expect(job.Operation).toBe('item-upsert');
-    expect(job.TriggerSource).toBe('save-item');
-    const payload = job.Payload as { actor?: string; artikelNummer?: string | null };
+    expect(job.JobType).toBe('item-upsert');
+    const payload = parsePayload(job) as { actor?: string; artikelNummer?: string | null; trigger?: string };
+    expect(payload.trigger).toBe('save-item');
     expect(payload.actor).toBe('editor');
     expect(payload.artikelNummer).toBe('SKU-100');
-  persistItemWithinTransaction,
-  enqueueShopwareSyncJob,
-  dequeueShopwareSyncJob,
-  recordShopwareSyncJobFailure,
-  markShopwareSyncJobCompleted
-} = require('../backend/db');
-
-const selectQueueMetadata = db.prepare(
-  `SELECT Status, AttemptCount, LastError, AvailableAt, ShopwareProductId, ShopwareVariantId
-     FROM shopware_sync_queue
-    WHERE Id = ?`
-);
-
-function clearDatabase(): void {
-  db.exec(
-    [
-      'DELETE FROM shopware_sync_queue;',
-      'DELETE FROM events;',
-      'DELETE FROM item_refs;',
-      'DELETE FROM items;',
-      'DELETE FROM boxes;',
-      'DELETE FROM label_queue;'
-    ].join('\n')
-  );
-}
+  });
+});
 
 describe('shopware sync queue helpers', () => {
   beforeEach(() => {
-    clearDatabase();
+    clearShopwareSyncQueue();
     persistItemWithinTransaction({
       ItemUUID: 'I-SHOP-0001',
       Artikel_Nummer: null,
@@ -240,113 +230,69 @@ describe('shopware sync queue helpers', () => {
     });
   });
 
-  afterAll(() => {
-    try {
-      db.close();
-    } catch (error) {
-      console.warn('[shopware-sync-queue.test] Failed to close database', error);
-    }
-    removeTestDatabase();
-    if (ORIGINAL_DB_PATH === undefined) {
-      delete process.env.DB_PATH;
-    } else {
-      process.env.DB_PATH = ORIGINAL_DB_PATH;
-    }
+  function enqueueTestJob(correlationId: string, jobType: string, payload: unknown): number {
+    const entry = enqueueShopwareSyncJob({
+      CorrelationId: correlationId,
+      JobType: jobType,
+      Payload: JSON.stringify(payload)
+    });
+    return entry.Id;
+  }
+
+  test('claimShopwareSyncJobs marks entries as processing', () => {
+    const jobId = enqueueTestJob('corr-claim', 'sync-stock', { attempt: 0 });
+    const claimed = claimShopwareSyncJobs(1, '2024-04-05T12:00:00.000Z');
+    expect(claimed.length).toBe(1);
+    expect(claimed[0].Id).toBe(jobId);
+    expect(claimed[0].Status).toBe('processing');
+    expect(claimed[0].LastAttemptAt).toBe('2024-04-05T12:00:00.000Z');
   });
 
-  test('enqueue and dequeue updates attempt count atomically', () => {
-    const enqueued = enqueueShopwareSyncJob({
-      itemUUID: 'I-SHOP-0001',
-      operation: 'sync-stock',
-      payload: { delta: 3 },
-      shopwareProductId: 'prod-123'
+  test('rescheduleShopwareSyncJob updates retry metadata', () => {
+    const jobId = enqueueTestJob('corr-retry', 'sync-stock', { attempt: 0 });
+    const [job] = claimShopwareSyncJobs(1, '2024-04-05T12:00:00.000Z');
+    expect(job?.Id).toBe(jobId);
+
+    rescheduleShopwareSyncJob({
+      id: jobId,
+      retryCount: 1,
+      error: 'temporary failure',
+      nextAttemptAt: '2024-04-05T12:05:00.000Z',
+      updatedAt: '2024-04-05T12:00:10.000Z'
     });
 
-    expect(enqueued.Status).toBe('pending');
-    expect(enqueued.AttemptCount).toBe(0);
-    expect(enqueued.ShopwareProductId).toBe('prod-123');
-
-    const dequeued = dequeueShopwareSyncJob();
-    expect(dequeued).toBeDefined();
-    expect(dequeued?.Status).toBe('processing');
-    expect(dequeued?.AttemptCount).toBe(1);
-    expect(dequeued?.Payload).toEqual({ delta: 3 });
-
-    const secondAttempt = dequeueShopwareSyncJob();
-    expect(secondAttempt).toBeNull();
+    const updated = getShopwareSyncJobById(jobId);
+    expect(updated).toBeDefined();
+    expect(updated?.Status).toBe('queued');
+    expect(updated?.RetryCount).toBe(1);
+    expect(updated?.LastError).toBe('temporary failure');
+    expect(updated?.NextAttemptAt).toBe('2024-04-05T12:05:00.000Z');
   });
 
-  test('failed jobs record errors and schedule retries', () => {
-    enqueueShopwareSyncJob({
-      itemUUID: 'I-SHOP-0001',
-      operation: 'sync-stock',
-      payload: { quantity: 2 }
-    });
+  test('markShopwareSyncJobSucceeded clears retry fields', () => {
+    const jobId = enqueueTestJob('corr-success', 'sync-stock', {});
+    claimShopwareSyncJobs(1, '2024-04-05T12:00:00.000Z');
 
-    const dequeued = dequeueShopwareSyncJob();
-    expect(dequeued).toBeDefined();
-    expect(dequeued?.AttemptCount).toBe(1);
+    markShopwareSyncJobSucceeded(jobId, '2024-04-05T12:01:00.000Z');
 
-    const failureTime = Date.now();
-    const retryJob = recordShopwareSyncJobFailure({
-      id: dequeued!.Id,
-      error: new Error('rate limit exceeded'),
-      delayMs: 60_000
-    });
-
-    expect(retryJob).toBeDefined();
-    expect(retryJob?.Status).toBe('pending');
-    expect(retryJob?.LastError).toContain('rate limit exceeded');
-
-    const nextAttemptTime = new Date(retryJob!.AvailableAt).getTime();
-    expect(nextAttemptTime).toBeGreaterThanOrEqual(failureTime + 55_000);
-
-    db.prepare(`UPDATE shopware_sync_queue SET AvailableAt = datetime('now', '-1 second') WHERE Id = ?`).run(dequeued!.Id);
-
-    const retryDequeued = dequeueShopwareSyncJob();
-    expect(retryDequeued).toBeDefined();
-    expect(retryDequeued?.AttemptCount).toBe(2);
+    const updated = getShopwareSyncJobById(jobId);
+    expect(updated).toBeDefined();
+    expect(updated?.Status).toBe('succeeded');
+    expect(updated?.RetryCount).toBe(0);
+    expect(updated?.NextAttemptAt).toBeNull();
+    expect(updated?.LastError).toBeNull();
   });
 
-  test('completion clears errors and persists identifiers', () => {
-    enqueueShopwareSyncJob({
-      itemUUID: 'I-SHOP-0001',
-      operation: 'sync-product',
-      payload: { sku: 'SKU-1' },
-      shopwareVariantId: 'variant-initial'
-    });
+  test('markShopwareSyncJobFailed records permanent errors', () => {
+    const jobId = enqueueTestJob('corr-fail', 'sync-stock', {});
+    claimShopwareSyncJobs(1, '2024-04-05T12:00:00.000Z');
 
-    const dequeued = dequeueShopwareSyncJob();
-    expect(dequeued).toBeDefined();
+    markShopwareSyncJobFailed({ id: jobId, error: 'permanent failure', updatedAt: '2024-04-05T12:02:00.000Z' });
 
-    const completed = markShopwareSyncJobCompleted({
-      id: dequeued!.Id,
-      status: 'completed',
-      shopwareProductId: 'prod-final',
-      shopwareVariantId: 'variant-final'
-    });
-
-    expect(completed).toBeDefined();
-    expect(completed?.Status).toBe('completed');
-    expect(completed?.LastError).toBeNull();
-    expect(completed?.ShopwareProductId).toBe('prod-final');
-    expect(completed?.ShopwareVariantId).toBe('variant-final');
-
-    const stored = selectQueueMetadata.get(dequeued!.Id) as
-      | {
-          Status: string;
-          AttemptCount: number;
-          LastError: string | null;
-          AvailableAt: string;
-          ShopwareProductId: string | null;
-          ShopwareVariantId: string | null;
-        }
-      | undefined;
-
-    expect(stored).toBeDefined();
-    expect(stored?.Status).toBe('completed');
-    expect(stored?.LastError).toBeNull();
-    expect(stored?.ShopwareProductId).toBe('prod-final');
-    expect(stored?.ShopwareVariantId).toBe('variant-final');
+    const updated = getShopwareSyncJobById(jobId);
+    expect(updated).toBeDefined();
+    expect(updated?.Status).toBe('failed');
+    expect(updated?.LastError).toBe('permanent failure');
+    expect(updated?.NextAttemptAt).toBeNull();
   });
 });
