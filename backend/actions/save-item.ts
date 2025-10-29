@@ -416,6 +416,24 @@ const action: Action = {
           Event: 'Updated',
           Meta: null
         });
+        try {
+          ctx.enqueueShopwareSyncJob({
+            itemUUID: it.ItemUUID,
+            operation: 'item-upsert',
+            triggerSource: 'save-item',
+            payload: {
+              actor: a,
+              artikelNummer: it.Artikel_Nummer ?? null,
+              boxId: it.BoxID ?? null,
+              location: it.Location ?? null
+            }
+          });
+        } catch (queueErr) {
+          console.error('[save-item] Failed to enqueue Shopware sync job', {
+            itemId: it.ItemUUID,
+            error: queueErr
+          });
+        }
       });
       txn(item, actor);
       const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);

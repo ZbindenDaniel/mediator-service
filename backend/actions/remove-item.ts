@@ -42,6 +42,24 @@ const action: Action = {
             clearedBox
           })
         });
+        try {
+          ctx.enqueueShopwareSyncJob({
+            itemUUID: u,
+            operation: 'stock-decrement',
+            triggerSource: 'remove-item',
+            payload: {
+              actor: a,
+              quantityBefore: currentQty,
+              quantityAfter: updated?.Auf_Lager ?? 0,
+              clearedBox
+            }
+          });
+        } catch (queueErr) {
+          console.error('[remove-item] Failed to enqueue Shopware sync job', {
+            itemId: u,
+            error: queueErr
+          });
+        }
         return updated;
       });
       const updated = txn(uuid, actor);

@@ -39,6 +39,23 @@ const action: Action = {
             after: updated?.Auf_Lager ?? 0
           })
         });
+        try {
+          ctx.enqueueShopwareSyncJob({
+            itemUUID: u,
+            operation: 'stock-increment',
+            triggerSource: 'add-item',
+            payload: {
+              actor: a,
+              quantityBefore: currentQty,
+              quantityAfter: updated?.Auf_Lager ?? 0
+            }
+          });
+        } catch (queueErr) {
+          console.error('[add-item] Failed to enqueue Shopware sync job', {
+            itemId: u,
+            error: queueErr
+          });
+        }
         return updated;
       });
       const updated = txn(uuid, actor);

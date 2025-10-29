@@ -13,7 +13,11 @@ import {
   EventLogLevel,
   EVENT_LOG_LEVELS,
   parseEventLogLevelAllowList,
-  resolveEventLogLevel
+  resolveEventLogLevel,
+  ShopwareSyncJob,
+  ShopwareSyncJobInsert,
+  ShopwareSyncOperation,
+  ShopwareSyncJobStatus
 } from '../models';
 import { resolveStandortLabel } from './standort-label';
 
@@ -62,6 +66,15 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE TABLE IF NOT EXISTS shopware_sync_queue (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ItemUUID TEXT NOT NULL,
+  Operation TEXT NOT NULL,
+  TriggerSource TEXT,
+  Payload TEXT,
+  Status TEXT NOT NULL DEFAULT 'queued',
+  AttemptCount INTEGER NOT NULL DEFAULT 0,
+  LastError TEXT,
+  LastAttemptAt TEXT,
+  ShopwareId TEXT,
   CorrelationId TEXT NOT NULL,
   JobType TEXT NOT NULL,
   Payload TEXT NOT NULL,
@@ -74,6 +87,8 @@ CREATE TABLE IF NOT EXISTS shopware_sync_queue (
   UpdatedAt TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status ON shopware_sync_queue(Status);
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_item ON shopware_sync_queue(ItemUUID);
 CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_attempt
   ON shopware_sync_queue (Status, COALESCE(NextAttemptAt, '1970-01-01'), Id);
 
@@ -593,6 +608,145 @@ const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
 
 const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Location,''))";
 
+type ShopwareSyncQueueRow = {
+  Id: number;
+  ItemUUID: string;
+  Operation: ShopwareSyncOperation;
+  TriggerSource: string | null;
+  Payload: string | null;
+  Status: ShopwareSyncJobStatus;
+  AttemptCount: number;
+  LastError: string | null;
+  LastAttemptAt: string | null;
+  ShopwareId: string | null;
+  CreatedAt: string;
+  UpdatedAt: string;
+};
+
+const insertShopwareSyncJobStatement = db.prepare(`
+  INSERT INTO shopware_sync_queue (
+    ItemUUID,
+    Operation,
+    TriggerSource,
+    Payload,
+    ShopwareId,
+    CreatedAt,
+    UpdatedAt
+  )
+  VALUES (
+    @ItemUUID,
+    @Operation,
+    @TriggerSource,
+    @Payload,
+    @ShopwareId,
+    datetime('now'),
+    datetime('now')
+  )
+`);
+
+const listShopwareSyncJobsStatement = db.prepare(`
+  SELECT
+    Id,
+    ItemUUID,
+    Operation,
+    TriggerSource,
+    Payload,
+    Status,
+    AttemptCount,
+    LastError,
+    LastAttemptAt,
+    ShopwareId,
+    CreatedAt,
+    UpdatedAt
+  FROM shopware_sync_queue
+  ORDER BY Id
+`);
+
+const clearShopwareSyncJobsStatement = db.prepare(`DELETE FROM shopware_sync_queue`);
+
+function serializeShopwarePayload(value: unknown): string | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (value === null) {
+    return 'null';
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    console.error('[db] Failed to serialize Shopware sync payload', error);
+    throw error;
+  }
+}
+
+function parseShopwarePayload(serialized: string | null): unknown {
+  if (!serialized) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(serialized);
+  } catch (error) {
+    console.warn('[db] Failed to parse Shopware sync payload; returning raw string', error);
+    return serialized;
+  }
+}
+
+export function enqueueShopwareSyncJob(entry: ShopwareSyncJobInsert): void {
+  const payload = {
+    ItemUUID: entry.itemUUID,
+    Operation: entry.operation,
+    TriggerSource: entry.triggerSource ?? null,
+    Payload: serializeShopwarePayload(entry.payload ?? null),
+    ShopwareId: entry.shopwareId ?? null
+  };
+
+  try {
+    insertShopwareSyncJobStatement.run(payload);
+  } catch (error) {
+    console.error('[db] Failed to enqueue Shopware sync job', {
+      itemUUID: entry.itemUUID,
+      operation: entry.operation,
+      error
+    });
+    throw error;
+  }
+}
+
+export function listShopwareSyncJobs(): ShopwareSyncJob[] {
+  try {
+    const rows = listShopwareSyncJobsStatement.all() as ShopwareSyncQueueRow[];
+    return rows.map((row) => ({
+      Id: row.Id,
+      ItemUUID: row.ItemUUID,
+      Operation: row.Operation,
+      TriggerSource: row.TriggerSource,
+      Payload: parseShopwarePayload(row.Payload),
+      Status: row.Status,
+      AttemptCount: row.AttemptCount,
+      LastError: row.LastError,
+      LastAttemptAt: row.LastAttemptAt,
+      ShopwareId: row.ShopwareId,
+      CreatedAt: row.CreatedAt,
+      UpdatedAt: row.UpdatedAt
+    }));
+  } catch (error) {
+    console.error('[db] Failed to list Shopware sync jobs', error);
+    throw error;
+  }
+}
+
+export function clearShopwareSyncJobs(): void {
+  try {
+    clearShopwareSyncJobsStatement.run();
+  } catch (error) {
+    console.error('[db] Failed to clear Shopware sync jobs', error);
+    throw error;
+  }
+}
+
 function itemSelectColumns(locationExpr: string): string {
   return `
 SELECT
@@ -661,6 +815,22 @@ export function persistItem(item: Item): void {
   const payload = prepareItemPersistencePayload(item);
   const txn = db.transaction((data: ItemPersistencePayload) => {
     runItemPersistenceStatements(data);
+    try {
+      enqueueShopwareSyncJob({
+        itemUUID: data.instance.ItemUUID,
+        operation: 'item-upsert',
+        triggerSource: 'persistItem',
+        payload: {
+          artikelNummer: data.instance.Artikel_Nummer ?? null,
+          boxId: data.instance.BoxID ?? null
+        }
+      });
+    } catch (error) {
+      console.error('[db] Failed to enqueue Shopware sync job during persistItem transaction', {
+        itemUUID: data.instance.ItemUUID,
+        error
+      });
+    }
   });
   try {
     txn(payload);
@@ -1579,6 +1749,22 @@ export function bulkMoveItems(
         Meta: JSON.stringify({ from: current.BoxID ?? null, to: toBoxId })
       });
 
+      try {
+        enqueueShopwareSyncJob({
+          itemUUID: itemId,
+          operation: 'item-move',
+          triggerSource: 'bulk-move-items',
+          payload: {
+            actor,
+            fromBoxId: current.BoxID ?? null,
+            toBoxId,
+            location: normalizedLocation
+          }
+        });
+      } catch (error) {
+        console.error('[db] Failed to enqueue Shopware sync job for bulk move', { itemId, error });
+      }
+
       results.push({
         itemId,
         fromBoxId: current.BoxID ?? null,
@@ -1638,6 +1824,25 @@ export function bulkRemoveItemStock(itemIds: string[], actor: string): BulkRemov
           clearedBox
         })
       });
+
+      try {
+        enqueueShopwareSyncJob({
+          itemUUID: itemId,
+          operation: 'stock-decrement',
+          triggerSource: 'bulk-delete-items',
+          payload: {
+            actor,
+            before: beforeQty,
+            after: afterQty,
+            clearedBox
+          }
+        });
+      } catch (error) {
+        console.error('[db] Failed to enqueue Shopware sync job for bulk stock removal', {
+          itemId,
+          error
+        });
+      }
 
       results.push({
         itemId,

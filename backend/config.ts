@@ -142,6 +142,43 @@ export const HOSTNAME = PUBLIC_ORIGIN;
 export const BASE_QR_URL = resolveBaseUrl(process.env.BASE_QR_URL, '/qr');
 export const BASE_UI_URL = resolveBaseUrl(process.env.BASE_UI_URL, '/ui');
 
+// ------- THERE
+const SHOPWARE_BASE_URL = (process.env.SHOPWARE_BASE_URL || '').trim();
+const SHOPWARE_CLIENT_ID = (process.env.SHOPWARE_CLIENT_ID || '').trim();
+const SHOPWARE_CLIENT_SECRET = (process.env.SHOPWARE_CLIENT_SECRET || '').trim();
+const SHOPWARE_SALES_CHANNEL_KEY = (process.env.SHOPWARE_SALES_CHANNEL_KEY || '').trim();
+const parsedShopwareTimeout = Number.parseInt(process.env.SHOPWARE_TIMEOUT_MS || '', 10);
+export const SHOPWARE_TIMEOUT_MS = Number.isFinite(parsedShopwareTimeout) && parsedShopwareTimeout > 0
+  ? parsedShopwareTimeout
+  : 10000;
+
+export type ShopwareConfiguration = {
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  salesChannelKey: string;
+  timeoutMs: number;
+};
+
+function isShopwareConfigComplete(): boolean {
+  return Boolean(
+    SHOPWARE_BASE_URL &&
+      SHOPWARE_CLIENT_ID &&
+      SHOPWARE_CLIENT_SECRET &&
+      SHOPWARE_SALES_CHANNEL_KEY
+  );
+}
+
+export const SHOPWARE_CONFIG: ShopwareConfiguration | null = isShopwareConfigComplete()
+  ? Object.freeze({
+      baseUrl: SHOPWARE_BASE_URL,
+      clientId: SHOPWARE_CLIENT_ID,
+      clientSecret: SHOPWARE_CLIENT_SECRET,
+      salesChannelKey: SHOPWARE_SALES_CHANNEL_KEY,
+      timeoutMs: SHOPWARE_TIMEOUT_MS
+    })
+  : null;
+// ------- THERE
 
 // ------- HERE
 const SHOPWARE_ENABLE_VALUES = new Set(['1', 'true', 'yes', 'on']);

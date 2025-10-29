@@ -41,6 +41,24 @@ const action: Action = {
           Event: 'Moved',
           Meta: JSON.stringify({ from, to })
         });
+        try {
+          ctx.enqueueShopwareSyncJob({
+            itemUUID: u,
+            operation: 'item-move',
+            triggerSource: 'move-item',
+            payload: {
+              actor: a,
+              fromBoxId: from || null,
+              toBoxId: to,
+              location
+            }
+          });
+        } catch (queueErr) {
+          console.error('[move-item] Failed to enqueue Shopware sync job', {
+            itemId: u,
+            error: queueErr
+          });
+        }
       });
       txn(uuid, toBoxId, actor, item.BoxID, normalizedLocation);
       sendJson(res, 200, { ok: true });

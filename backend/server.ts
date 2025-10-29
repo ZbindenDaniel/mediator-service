@@ -69,7 +69,8 @@ import {
   decrementItemStock,
   incrementItemStock,
   deleteItem,
-  deleteBox
+  deleteBox,
+  enqueueShopwareSyncJob
 } from './db';
 import { processQueuedAgenticRuns } from './agentic-queue-worker';
 import { processShopwareQueue, type ShopwareQueueMetrics } from './workers/processShopwareQueue';
@@ -547,6 +548,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           incrementItemStock,
           deleteItem,
           deleteBox,
+          enqueueShopwareSyncJob,
           bulkMoveItems,
           bulkRemoveItemStock,
           listItems,
