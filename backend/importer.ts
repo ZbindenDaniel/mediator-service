@@ -1,12 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
-import { upsertBox, persistItem, queueLabel } from './db';
+import { upsertBox, persistItem, queueLabel, findByMaterial } from './db';
 import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
+import { formatItemIdDateSegment } from './lib/itemIds';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+
+const ITEM_ID_PREFIX = 'I-';
+const BOX_ID_PREFIX = 'B-';
+const ID_SEQUENCE_WIDTH = 4;
 
 function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
   let candidate = '';
@@ -193,6 +198,52 @@ function parseDecimalField(
   }
 }
 
+function resolveImportDate(
+  row: Record<string, string>,
+  fallback: Date,
+  rowNumber: number
+): Date {
+  const candidateKeys = ['idate', 'Datum erfasst', 'Datum_erfasst', 'itime', 'mtime'] as const;
+  for (const key of candidateKeys) {
+    const raw = row[key as keyof typeof row];
+    if (typeof raw !== 'string') {
+      continue;
+    }
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      const parsed = parseDatumErfasst(trimmed);
+      if (parsed) {
+        return parsed;
+      }
+    } catch (error) {
+      console.error('[importer] Failed to parse identifier date candidate', {
+        rowNumber,
+        field: key,
+        value: raw,
+        error,
+      });
+    }
+  }
+  console.warn('[importer] Falling back to ingestion timestamp for identifier date segment', { rowNumber });
+  return fallback;
+}
+
+function mintSequentialIdentifier(
+  prefix: string,
+  date: Date,
+  sequences: Map<string, number>
+): string {
+  const segment = formatItemIdDateSegment(date);
+  const previous = sequences.get(segment) ?? 0;
+  const next = previous + 1;
+  sequences.set(segment, next);
+  const sequenceSegment = String(next).padStart(ID_SEQUENCE_WIDTH, '0');
+  return `${prefix}${segment}-${sequenceSegment}`;
+}
+
 function parseDatumErfasst(rawValue: string | null | undefined): Date | undefined {
   if (rawValue === null || rawValue === undefined) {
     return undefined;
@@ -303,11 +354,15 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
     const records = await readCsv(absPath);
     let count = 0;
     const boxesTouched = new Set<string>();
+    const itemSequenceByDate = new Map<string, number>();
+    const boxSequenceByDate = new Map<string, number>();
+    const mintedBoxByOriginal = new Map<string, string>();
 
     for (const [index, r] of records.entries()) {
       const rowNumber = index + 1;
       const row = normalize(r);
       const final = applyOps(row);
+      const identifierDate = resolveImportDate(final, nowDate, rowNumber);
       const rawStandort = final.Standort || final.Location || '';
       const normalizedStandort = normalizeStandortCode(rawStandort);
       const location = normalizedStandort || null;
@@ -315,9 +370,27 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
       if (normalizedStandort && !standortLabel) {
         console.warn('CSV ingestion: missing Standort label mapping', { standort: normalizedStandort });
       }
-      if (final.BoxID) {
+      let normalizedBoxId: string | null = null;
+      const providedBoxId = typeof final.BoxID === 'string' ? final.BoxID.trim() : '';
+      if (providedBoxId) {
+        let mintedBoxId = mintedBoxByOriginal.get(providedBoxId);
+        if (!mintedBoxId) {
+          mintedBoxId = mintSequentialIdentifier(BOX_ID_PREFIX, identifierDate, boxSequenceByDate);
+          mintedBoxByOriginal.set(providedBoxId, mintedBoxId);
+          console.log('[importer] Minted BoxID for CSV row', {
+            rowNumber,
+            originalBoxId: providedBoxId,
+            mintedBoxId,
+          });
+        }
+        normalizedBoxId = mintedBoxId;
+        final.BoxID = mintedBoxId;
+      } else {
+        final.BoxID = '';
+      }
+      if (normalizedBoxId) {
         const box: Box = {
-          BoxID: final.BoxID,
+          BoxID: normalizedBoxId,
           Location: location,
           StandortLabel: standortLabel,
           CreatedAt: final.CreatedAt || '',
@@ -348,12 +421,39 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
         { treatBlankAsUndefined: true }
       );
+      const artikelNummer = (final['Artikel-Nummer'] || '').trim();
+      let itemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
+      if (artikelNummer) {
+        try {
+          const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;
+          if (existing?.ItemUUID) {
+            itemUUID = existing.ItemUUID;
+          }
+        } catch (error) {
+          console.error('[importer] Failed to lookup existing item by Artikel_Nummer', {
+            rowNumber,
+            artikelNummer,
+            error,
+          });
+        }
+      }
+      if (!itemUUID) {
+        itemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
+        console.log('[importer] Minted ItemUUID for CSV row', {
+          rowNumber,
+          artikelNummer: artikelNummer || null,
+          itemUUID,
+        });
+        final.itemUUID = itemUUID;
+      } else if (final.itemUUID !== itemUUID) {
+        final.itemUUID = itemUUID;
+      }
       const item: Item = {
-        ItemUUID: final.itemUUID,
-        BoxID: final.BoxID || null,
+        ItemUUID: itemUUID,
+        BoxID: normalizedBoxId,
         Location: location,
         UpdatedAt: nowDate,
-        Datum_erfasst: parseDatumErfasst(final['Datum erfasst']),
+        Datum_erfasst: parseDatumErfasst(final['Datum erfasst'] ?? final.idate),
         Artikel_Nummer: final['Artikel-Nummer'] || '',
         Grafikname: final['Grafikname(n)'] || '',
         Artikelbeschreibung: final['Artikelbeschreibung'] || '',
@@ -380,7 +480,9 @@ export async function ingestCsvFile(absPath: string): Promise<{ count: number; b
         UpdatedAt: nowDate
       });
 
-      boxesTouched.add(final.BoxID);
+      if (normalizedBoxId) {
+        boxesTouched.add(normalizedBoxId);
+      }
       count++;
     }
 
