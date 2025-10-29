@@ -7,4 +7,3 @@ export * from './entity';
 export * from './agentic-run';
 export * from './agentic-statuses';
 export * from './box-colors';
-export * from './shopware-sync-job';

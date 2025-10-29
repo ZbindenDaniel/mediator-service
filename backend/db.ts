@@ -14,10 +14,7 @@ import {
   EventLogLevel,
   EVENT_LOG_LEVELS,
   parseEventLogLevelAllowList,
-  resolveEventLogLevel,
-  ShopwareSyncQueueEntry,
-  ShopwareSyncQueueInsert,
-  ShopwareSyncQueueStatus
+  resolveEventLogLevel
 } from '../models';
 import { resolveStandortLabel } from './standort-label';
 
