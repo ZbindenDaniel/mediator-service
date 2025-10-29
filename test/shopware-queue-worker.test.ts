@@ -6,7 +6,7 @@ import {
   type ShopwareSyncQueueEntry
 } from '../backend/db';
 import { processShopwareQueue, type ShopwareQueueMetrics } from '../backend/workers/processShopwareQueue';
-import { ShopwareClientError, type ShopwareClient } from '../backend/shopware/client';
+import { ShopwareQueueClientError, type ShopwareQueueClient } from '../backend/shopware/queueClient';
 
 function getMockCalls(fn: unknown): any[][] {
   const mock = (fn as { mock?: { calls?: any[][] } })?.mock;
@@ -55,8 +55,8 @@ describe('processShopwareQueue', () => {
     });
 
     const dispatchMockImpl = jest.fn().mockResolvedValue({ ok: true, correlationId: 'corr-success' });
-    const client: ShopwareClient = {
-      dispatchJob: dispatchMockImpl as unknown as ShopwareClient['dispatchJob']
+    const client: ShopwareQueueClient = {
+      dispatchJob: dispatchMockImpl as unknown as ShopwareQueueClient['dispatchJob']
     };
     const logger = createLogger();
     const metrics = createMetrics();
@@ -97,13 +97,13 @@ describe('processShopwareQueue', () => {
       Payload: JSON.stringify({ itemId: 'I-2' })
     });
 
-    const error = new ShopwareClientError('temporary outage', {
+    const error = new ShopwareQueueClientError('temporary outage', {
       retryable: true,
       nextRetryDelayMs: 60_000
     });
     const dispatchMockImpl = jest.fn().mockRejectedValue(error);
-    const client: ShopwareClient = {
-      dispatchJob: dispatchMockImpl as unknown as ShopwareClient['dispatchJob']
+    const client: ShopwareQueueClient = {
+      dispatchJob: dispatchMockImpl as unknown as ShopwareQueueClient['dispatchJob']
     };
     const logger = createLogger();
     const metrics = createMetrics();
@@ -136,8 +136,8 @@ describe('processShopwareQueue', () => {
       message: 'Validation rejected',
       correlationId: 'corr-fail'
     });
-    const client: ShopwareClient = {
-      dispatchJob: dispatchMockImpl as unknown as ShopwareClient['dispatchJob']
+    const client: ShopwareQueueClient = {
+      dispatchJob: dispatchMockImpl as unknown as ShopwareQueueClient['dispatchJob']
     };
     const logger = createLogger();
     const metrics = createMetrics();
@@ -165,8 +165,8 @@ describe('processShopwareQueue', () => {
     });
 
     const dispatchMockImpl = jest.fn().mockResolvedValue({ ok: true });
-    const client: ShopwareClient = {
-      dispatchJob: dispatchMockImpl as unknown as ShopwareClient['dispatchJob']
+    const client: ShopwareQueueClient = {
+      dispatchJob: dispatchMockImpl as unknown as ShopwareQueueClient['dispatchJob']
     };
     const logger = createLogger();
     const metrics = createMetrics();

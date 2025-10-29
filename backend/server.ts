@@ -80,7 +80,7 @@ import { pdfForBox, pdfForItem } from './labelpdf';
 import type { ItemLabelPayload } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
-import { createShopwareClient } from './shopware/client';
+import { createShopwareQueueClient } from './shopware/queueClient';
 
 const actions = loadActions();
 
@@ -380,7 +380,7 @@ if (!SHOPWARE_SYNC_ENABLED) {
   console.warn('[server] Shopware sync worker disabled because SHOPWARE_API_BASE_URL is empty.');
 }
 
-const shopwareClient = createShopwareClient({ baseUrl: SHOPWARE_API_BASE_URL, logger: console });
+const shopwareClient = createShopwareQueueClient({ baseUrl: SHOPWARE_API_BASE_URL, logger: console });
 
 const shopwareWorkerMetrics: ShopwareQueueMetrics = {
   recordDispatched(jobType, correlationId) {
