@@ -23,7 +23,11 @@ import {
   SHOPWARE_SYNC_ENABLED,
   SHOPWARE_API_BASE_URL,
   SHOPWARE_QUEUE_POLL_INTERVAL_MS
+  SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS, // TODO: HERE doub check this
+  getShopwareConfig,
+  logShopwareConfigIssues
 } from './config';
+import type { ShopwareConfig } from './config';
 import { ingestCsvFile } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import {
@@ -78,6 +82,25 @@ import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
 import { createShopwareClient } from './shopware/client';
 
 const actions = loadActions();
+
+let shopwareConfig: ShopwareConfig = {
+  enabled: false,
+  baseUrl: null,
+  salesChannelId: null,
+  requestTimeoutMs: SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
+  credentials: {}
+};
+let shopwareConfigIssues: string[] = [];
+let shopwareConfigReady = false;
+
+try {
+  shopwareConfig = getShopwareConfig();
+  shopwareConfigIssues = logShopwareConfigIssues(console, shopwareConfig);
+  shopwareConfigReady = shopwareConfig.enabled && shopwareConfigIssues.length === 0;
+} catch (err) {
+  console.error('[server] Failed to initialize Shopware configuration', err);
+  shopwareConfigIssues = ['Shopware configuration evaluation failed; integration disabled.'];
+}
 
 function resolveRequestBase(req: IncomingMessage): string {
   const hostHeader = req.headers.host;
@@ -268,6 +291,7 @@ type ActionContext = {
   findByMaterial: typeof findByMaterial;
   itemsByBox: typeof itemsByBox;
   getBox: typeof getBox;
+  getItemReference: typeof getItemReference;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
   decrementItemStock: typeof decrementItemStock;
@@ -304,6 +328,11 @@ type ActionContext = {
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
   agenticServiceEnabled: boolean;
+  shopware: {
+    config: ShopwareConfig;
+    issues: string[];
+    ready: boolean;
+  };
 };
 
 const resolvedAgenticApiBase = AGENTIC_API_BASE.trim();
@@ -546,6 +575,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           PUBLIC_DIR,
           PREVIEW_DIR,
           agenticServiceEnabled,
+          shopware: {
+            config: shopwareConfig,
+            issues: [...shopwareConfigIssues],
+            ready: shopwareConfigReady
+          },
           generateItemUUID: generateItemId
         });
       } catch (err) {
