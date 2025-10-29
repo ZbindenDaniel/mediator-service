@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
+import { generateShopwareCorrelationId } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -37,14 +38,17 @@ const action: Action = {
             Meta: null
           });
           try {
-            ctx.enqueueShopwareSyncJob({
+            const correlationId = generateShopwareCorrelationId('delete-entity', id);
+            const payload = JSON.stringify({
+              actor,
+              boxId: item.BoxID ?? null,
               itemUUID: id,
-              operation: 'item-delete',
-              triggerSource: 'delete-entity',
-              payload: {
-                actor,
-                boxId: item.BoxID ?? null
-              }
+              trigger: 'delete-entity'
+            });
+            ctx.enqueueShopwareSyncJob({
+              CorrelationId: correlationId,
+              JobType: 'item-delete',
+              Payload: payload
             });
           } catch (queueErr) {
             console.error('[delete-entity] Failed to enqueue Shopware sync job', {

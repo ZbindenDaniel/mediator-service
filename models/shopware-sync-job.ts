@@ -1,31 +1,26 @@
-export type ShopwareSyncJobStatus = 'queued' | 'processing' | 'completed' | 'failed';
+export type ShopwareSyncQueueStatus = 'queued' | 'processing' | 'succeeded' | 'failed';
 
-export type ShopwareSyncOperation =
-  | 'stock-increment'
-  | 'stock-decrement'
-  | 'item-upsert'
-  | 'item-move'
-  | 'item-delete';
-
-export interface ShopwareSyncJob {
+export interface ShopwareSyncQueueEntry {
   Id: number;
-  ItemUUID: string;
-  Operation: ShopwareSyncOperation;
-  TriggerSource: string | null;
-  Payload: unknown;
-  Status: ShopwareSyncJobStatus;
-  AttemptCount: number;
+  CorrelationId: string;
+  JobType: string;
+  Payload: string;
+  Status: ShopwareSyncQueueStatus;
+  RetryCount: number;
   LastError: string | null;
   LastAttemptAt: string | null;
-  ShopwareId: string | null;
+  NextAttemptAt: string | null;
   CreatedAt: string;
   UpdatedAt: string;
 }
 
-export interface ShopwareSyncJobInsert {
-  itemUUID: string;
-  operation: ShopwareSyncOperation;
-  triggerSource?: string | null;
-  payload?: unknown;
-  shopwareId?: string | null;
+export interface ShopwareSyncQueueInsert {
+  CorrelationId: string;
+  JobType: string;
+  Payload: string;
+  Status?: ShopwareSyncQueueStatus;
+  RetryCount?: number;
+  LastError?: string | null;
+  LastAttemptAt?: string | null;
+  NextAttemptAt?: string | null;
 }
