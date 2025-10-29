@@ -142,6 +142,20 @@ export const HOSTNAME = PUBLIC_ORIGIN;
 export const BASE_QR_URL = resolveBaseUrl(process.env.BASE_QR_URL, '/qr');
 export const BASE_UI_URL = resolveBaseUrl(process.env.BASE_UI_URL, '/ui');
 
+
+// ------- HERE
+const SHOPWARE_ENABLE_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const rawShopwareEnabled = (process.env.SHOPWARE_SYNC_ENABLED || process.env.SHOPWARE_QUEUE_ENABLED || '').trim().toLowerCase();
+export const SHOPWARE_SYNC_ENABLED = SHOPWARE_ENABLE_VALUES.has(rawShopwareEnabled);
+export const SHOPWARE_API_BASE_URL = (process.env.SHOPWARE_API_BASE_URL || '').trim();
+const parsedShopwarePoll = Number.parseInt(process.env.SHOPWARE_QUEUE_POLL_INTERVAL_MS || '', 10);
+export const SHOPWARE_QUEUE_POLL_INTERVAL_MS =
+  Number.isFinite(parsedShopwarePoll) && parsedShopwarePoll > 0 ? parsedShopwarePoll : 5000;
+
+if (SHOPWARE_SYNC_ENABLED && !SHOPWARE_API_BASE_URL) {
+  console.warn('[config] Shopware sync enabled but SHOPWARE_API_BASE_URL is not configured.');
+  
+ // ------ HERE ---
 function parseBooleanFlag(raw: string | undefined, label: string): boolean | undefined {
   if (typeof raw !== 'string') {
     return undefined;

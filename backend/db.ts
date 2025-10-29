@@ -59,6 +59,26 @@ CREATE TABLE IF NOT EXISTS events (
   Level TEXT NOT NULL DEFAULT 'Information',
   Meta TEXT
 );
+
+CREATE TABLE IF NOT EXISTS shopware_sync_queue (
+  Id INTEGER PRIMARY KEY AUTOINCREMENT,
+  CorrelationId TEXT NOT NULL,
+  JobType TEXT NOT NULL,
+  Payload TEXT NOT NULL,
+  Status TEXT NOT NULL DEFAULT 'queued',
+  RetryCount INTEGER NOT NULL DEFAULT 0,
+  LastError TEXT,
+  LastAttemptAt TEXT,
+  NextAttemptAt TEXT,
+  CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+  UpdatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_attempt
+  ON shopware_sync_queue (Status, COALESCE(NextAttemptAt, '1970-01-01'), Id);
+
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_correlation
+  ON shopware_sync_queue (CorrelationId);
 `);
 } catch (err) {
   console.error('Failed to create schema', err);
@@ -1207,6 +1227,240 @@ export function markShopwareSyncJobCompleted(update: ShopwareSyncJobCompletionUp
 export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
 export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
 
+export type ShopwareSyncQueueStatus = 'queued' | 'processing' | 'succeeded' | 'failed';
+
+export interface ShopwareSyncQueueEntry {
+  Id: number;
+  CorrelationId: string;
+  JobType: string;
+  Payload: string;
+  Status: ShopwareSyncQueueStatus;
+  RetryCount: number;
+  LastError: string | null;
+  LastAttemptAt: string | null;
+  NextAttemptAt: string | null;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+export interface ShopwareSyncQueueInsert {
+  CorrelationId: string;
+  JobType: string;
+  Payload: string;
+  Status?: ShopwareSyncQueueStatus;
+  RetryCount?: number;
+  LastError?: string | null;
+  LastAttemptAt?: string | null;
+  NextAttemptAt?: string | null;
+}
+
+const insertShopwareSyncJob = db.prepare(`
+  INSERT INTO shopware_sync_queue (
+    CorrelationId,
+    JobType,
+    Payload,
+    Status,
+    RetryCount,
+    LastError,
+    LastAttemptAt,
+    NextAttemptAt,
+    CreatedAt,
+    UpdatedAt
+  )
+  VALUES (
+    @CorrelationId,
+    @JobType,
+    @Payload,
+    @Status,
+    @RetryCount,
+    @LastError,
+    @LastAttemptAt,
+    @NextAttemptAt,
+    datetime('now'),
+    datetime('now')
+  )
+`);
+
+const getShopwareSyncJobByIdStatement = db.prepare(`SELECT * FROM shopware_sync_queue WHERE Id = ?`);
+
+const clearShopwareSyncQueueStatement = db.prepare(`DELETE FROM shopware_sync_queue`);
+
+export function clearShopwareSyncQueue(): void {
+  try {
+    clearShopwareSyncQueueStatement.run();
+  } catch (err) {
+    console.error('[db] Failed to clear Shopware sync queue', err);
+    throw err;
+  }
+}
+
+export function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): ShopwareSyncQueueEntry {
+  const entry = {
+    CorrelationId: job.CorrelationId,
+    JobType: job.JobType,
+    Payload: job.Payload,
+    Status: job.Status ?? 'queued',
+    RetryCount: job.RetryCount ?? 0,
+    LastError: job.LastError ?? null,
+    LastAttemptAt: job.LastAttemptAt ?? null,
+    NextAttemptAt: job.NextAttemptAt ?? null
+  };
+
+  try {
+    const result = insertShopwareSyncJob.run(entry);
+    const inserted = getShopwareSyncJobByIdStatement.get(result.lastInsertRowid) as ShopwareSyncQueueEntry | undefined;
+    if (!inserted) {
+      throw new Error('Failed to fetch inserted Shopware sync job');
+    }
+    return inserted;
+  } catch (err) {
+    console.error('[db] Failed to enqueue Shopware sync job', {
+      correlationId: job.CorrelationId,
+      jobType: job.JobType,
+      error: err
+    });
+    throw err;
+  }
+}
+
+const selectDueShopwareSyncJobs = db.prepare(`
+  SELECT *
+  FROM shopware_sync_queue
+  WHERE Status = 'queued'
+    AND (NextAttemptAt IS NULL OR NextAttemptAt <= @Now)
+  ORDER BY CreatedAt ASC, Id ASC
+  LIMIT @Limit
+`);
+
+const markShopwareSyncJobProcessing = db.prepare(`
+  UPDATE shopware_sync_queue
+  SET Status = 'processing',
+      LastAttemptAt = @LastAttemptAt,
+      UpdatedAt = @LastAttemptAt
+  WHERE Id = @Id
+    AND Status = 'queued'
+`);
+
+export function claimShopwareSyncJobs(limit: number, attemptIso: string): ShopwareSyncQueueEntry[] {
+  const candidates = selectDueShopwareSyncJobs.all({ Now: attemptIso, Limit: limit }) as ShopwareSyncQueueEntry[];
+  if (!candidates.length) {
+    return [];
+  }
+
+  const claimed: ShopwareSyncQueueEntry[] = [];
+  const claimTxn = db.transaction((jobs: ShopwareSyncQueueEntry[]) => {
+    for (const job of jobs) {
+      try {
+        const result = markShopwareSyncJobProcessing.run({ Id: job.Id, LastAttemptAt: attemptIso });
+        if (result.changes > 0) {
+          claimed.push({
+            ...job,
+            Status: 'processing',
+            LastAttemptAt: attemptIso,
+            UpdatedAt: attemptIso
+          });
+        }
+      } catch (err) {
+        console.error('[db] Failed to mark Shopware sync job as processing', {
+          jobId: job.Id,
+          error: err
+        });
+        throw err;
+      }
+    }
+  });
+
+  try {
+    claimTxn(candidates);
+  } catch (err) {
+    console.error('[db] Failed to claim Shopware sync jobs', err);
+    throw err;
+  }
+
+  return claimed;
+}
+
+const markShopwareSyncJobSucceededStatement = db.prepare(`
+  UPDATE shopware_sync_queue
+  SET Status = 'succeeded',
+      RetryCount = 0,
+      LastError = NULL,
+      NextAttemptAt = NULL,
+      UpdatedAt = @UpdatedAt
+  WHERE Id = @Id
+`);
+
+export function markShopwareSyncJobSucceeded(id: number, completedAtIso: string): void {
+  try {
+    markShopwareSyncJobSucceededStatement.run({ Id: id, UpdatedAt: completedAtIso });
+  } catch (err) {
+    console.error('[db] Failed to mark Shopware sync job succeeded', { jobId: id, error: err });
+    throw err;
+  }
+}
+
+const rescheduleShopwareSyncJobStatement = db.prepare(`
+  UPDATE shopware_sync_queue
+  SET Status = 'queued',
+      RetryCount = @RetryCount,
+      LastError = @LastError,
+      NextAttemptAt = @NextAttemptAt,
+      UpdatedAt = @UpdatedAt
+  WHERE Id = @Id
+`);
+
+export function rescheduleShopwareSyncJob(params: {
+  id: number;
+  retryCount: number;
+  error: string | null;
+  nextAttemptAt: string;
+  updatedAt: string;
+}): void {
+  try {
+    rescheduleShopwareSyncJobStatement.run({
+      Id: params.id,
+      RetryCount: params.retryCount,
+      LastError: params.error,
+      NextAttemptAt: params.nextAttemptAt,
+      UpdatedAt: params.updatedAt
+    });
+  } catch (err) {
+    console.error('[db] Failed to reschedule Shopware sync job', { jobId: params.id, error: err });
+    throw err;
+  }
+}
+
+const markShopwareSyncJobFailedStatement = db.prepare(`
+  UPDATE shopware_sync_queue
+  SET Status = 'failed',
+      LastError = @LastError,
+      NextAttemptAt = NULL,
+      UpdatedAt = @UpdatedAt
+  WHERE Id = @Id
+`);
+
+export function markShopwareSyncJobFailed(params: { id: number; error: string | null; updatedAt: string }): void {
+  try {
+    markShopwareSyncJobFailedStatement.run({
+      Id: params.id,
+      LastError: params.error,
+      UpdatedAt: params.updatedAt
+    });
+  } catch (err) {
+    console.error('[db] Failed to mark Shopware sync job failed', { jobId: params.id, error: err });
+    throw err;
+  }
+}
+
+export function getShopwareSyncJobById(id: number): ShopwareSyncQueueEntry | undefined {
+  try {
+    return getShopwareSyncJobByIdStatement.get(id) as ShopwareSyncQueueEntry | undefined;
+  } catch (err) {
+    console.error('[db] Failed to load Shopware sync job by id', { jobId: id, error: err });
+    throw err;
+  }
+}
+
 type ItemMutationSnapshot = {
   ItemUUID: string;
   BoxID: string | null;
@@ -1481,5 +1735,15 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY i.Datum_erfasst
 `);
 
-export type { AgenticRun, Box, Item, ItemInstance, ItemRef, LabelJob, EventLog, ShopwareSyncQueueJob };
+export type {
+  AgenticRun,
+  Box,
+  Item,
+  ItemInstance,
+  ItemRef,
+  LabelJob,
+  EventLog,
+  ShopwareSyncQueueEntry,
+  ShopwareSyncQueueJob
+};
 
