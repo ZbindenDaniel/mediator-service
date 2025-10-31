@@ -1,6 +1,7 @@
 export interface OpContext {
   queueLabel: (id: string) => void;
   log: (...a: unknown[]) => void;
+  runState: Map<string, unknown>;
 }
 
 export interface OpResult {
