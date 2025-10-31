@@ -8,6 +8,8 @@ const LEGACY_INITIAL = path.join(FIXTURE_DIR, 'legacy-initial.csv');
 const LEGACY_UPDATE = path.join(FIXTURE_DIR, 'legacy-update.csv');
 const PRODUKT_INITIAL = path.join(FIXTURE_DIR, 'produkt-initial.csv');
 const PRODUKT_UPDATE = path.join(FIXTURE_DIR, 'produkt-update.csv');
+const PRODUKT_FRAGMENTS_INITIAL = path.join(FIXTURE_DIR, 'produkt-fragments-initial.csv');
+const PRODUKT_FRAGMENTS_UPDATE = path.join(FIXTURE_DIR, 'produkt-fragments-update.csv');
 
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
 
@@ -178,6 +180,36 @@ describe('CSV ingestion schema compatibility', () => {
 
     const updatedNotes = selectBoxNotes.get('BX-200') as { Notes: string | null } | undefined;
     expect(updatedNotes).toEqual({ Notes: 'Lager-Behältnis: Regal A | Lagerraum: Raum 1' });
+  });
+
+  test('Produkt schema drops stale note fragments between imports', async () => {
+    let fragmentsInitialResult: { count: number; boxes: string[] };
+    try {
+      fragmentsInitialResult = await ingestCsvFile(PRODUKT_FRAGMENTS_INITIAL);
+    } catch (error) {
+      console.error('[csv-ingest-produkt-schema.test] Produkt fragments initial ingestion failed', error);
+      throw error;
+    }
+
+    expect(fragmentsInitialResult.count).toBe(2);
+    expect(fragmentsInitialResult.boxes).toEqual(['BX-201']);
+
+    const initialFragmentNotes = selectBoxNotes.get('BX-201') as { Notes: string | null } | undefined;
+    expect(initialFragmentNotes).toEqual({ Notes: 'Lager-Behältnis: Regal B | Lagerraum: Raum 9' });
+
+    let fragmentsUpdateResult: { count: number; boxes: string[] };
+    try {
+      fragmentsUpdateResult = await ingestCsvFile(PRODUKT_FRAGMENTS_UPDATE);
+    } catch (error) {
+      console.error('[csv-ingest-produkt-schema.test] Produkt fragments update ingestion failed', error);
+      throw error;
+    }
+
+    expect(fragmentsUpdateResult.count).toBe(2);
+    expect(fragmentsUpdateResult.boxes).toEqual(['BX-201']);
+
+    const updatedFragmentNotes = selectBoxNotes.get('BX-201') as { Notes: string | null } | undefined;
+    expect(updatedFragmentNotes).toEqual({ Notes: 'Lager-Behältnis: Regal B' });
   });
 
   test('allows forcing zero stock ingestion via options', async () => {

@@ -329,10 +329,11 @@ export interface IngestCsvFileOptions {
   zeroStock?: boolean;
 }
 
-function applyOps(row: Record<string, string>): Record<string, string> {
+function applyOps(row: Record<string, string>, runState: Map<string, unknown>): Record<string, string> {
   const ctx = {
     queueLabel: (itemUUID: string) => queueLabel.run(itemUUID),
     log: (...a: unknown[]) => console.log('[ops]', ...a),
+    runState,
   };
   let current = row;
   for (const op of ops) {
@@ -366,11 +367,12 @@ export async function ingestCsvFile(
     const itemSequenceByDate = new Map<string, number>();
     const boxSequenceByDate = new Map<string, number>();
     const mintedBoxByOriginal = new Map<string, string>();
+    const runState = new Map<string, unknown>();
 
     for (const [index, r] of records.entries()) {
       const rowNumber = index + 1;
       const row = normalize(r);
-      const final = applyOps(row);
+      const final = applyOps(row, runState);
       if (zeroStockRequested) {
         const originalQuantity = final['Auf_Lager'] || final['Qty'] || '';
         final['Auf_Lager'] = '0';

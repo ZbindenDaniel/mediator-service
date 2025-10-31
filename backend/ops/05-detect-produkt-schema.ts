@@ -1,4 +1,4 @@
-import { Op } from './types';
+import { Op, OpContext } from './types';
 
 // TODO: Extend Produkt schema detection when additional export variants appear.
 const PRODUKT_SCHEMA_KEYS = [
@@ -11,7 +11,16 @@ const PRODUKT_SCHEMA_KEYS = [
   'Lagerraum'
 ];
 
-const notesByContainer = new Map<string, string[]>();
+const NOTES_STATE_KEY = 'detect-produkt-schema:notesByContainer';
+
+function resolveNotesMap(ctx: OpContext): Map<string, string[]> {
+  let map = ctx.runState.get(NOTES_STATE_KEY) as Map<string, string[]> | undefined;
+  if (!map) {
+    map = new Map<string, string[]>();
+    ctx.runState.set(NOTES_STATE_KEY, map);
+  }
+  return map;
+}
 
 function hasProduktSchema(row: Record<string, string>): boolean {
   return PRODUKT_SCHEMA_KEYS.some((key) => {
@@ -93,11 +102,17 @@ export const apply: Op['apply'] = (row, ctx) => {
       noteSegments.push(`Lagerraum: ${lagerRaum}`);
     }
 
-    if (containerId && noteSegments.length) {
+    const notesByContainer = resolveNotesMap(ctx);
+
+    if (containerId) {
       const existing = notesByContainer.get(containerId) || [];
-      const mergedSegments = mergeSegments(existing, noteSegments);
-      notesByContainer.set(containerId, mergedSegments);
-      mappedRow['Notes'] = mergedSegments.join(' | ');
+      if (noteSegments.length) {
+        const mergedSegments = mergeSegments(existing, noteSegments);
+        notesByContainer.set(containerId, mergedSegments);
+        mappedRow['Notes'] = mergedSegments.join(' | ');
+      } else if (existing.length) {
+        mappedRow['Notes'] = existing.join(' | ');
+      }
     } else if (noteSegments.length) {
       const mergedSegments = mergeSegments([], noteSegments);
       mappedRow['Notes'] = mergedSegments.join(' | ');
