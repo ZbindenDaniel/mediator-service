@@ -75,6 +75,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Wrapped removal and deletion in database transactions and added unit tests to verify item stock and box deletion logic.
 - Extended existing move and save/import actions to use database transactions for atomic updates and event logging.
 - Introduced a CSV export endpoint with date filters for item data.
+- Added an admin endpoint (`POST /api/agentic/queue`) that bulk-queues agentic runs with `mode` filtering (`all` vs `missing`) and logs each queued item for audit history.
 - Box and item IDs now follow the `B-ddMMyy-####` / `I-ddMMyy-####` pattern.
 - Added an API and React page to list all items, linked from the search card.
 - Confirmed inventory adjustments, styled item lists for mobile, added filter for unplaced items, and disabled UI during CSV uploads with automatic reload.
