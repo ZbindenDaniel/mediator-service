@@ -25,11 +25,11 @@ The table below lists every directory and top-level file under `ai-flow-service/
 | `ai-flow-service/src/config/` | Zod-based env parsing plus model/search/callback config exports. 【F:ai-flow-service/src/config/index.js†L1-L62】 | runtime |
 | `ai-flow-service/src/flow/` | Core item flow orchestrator, extraction pipeline, and cancellation helpers. 【F:ai-flow-service/src/flow/itemFlow.js†L1-L104】【F:ai-flow-service/src/flow/itemFlow.js†L160-L236】 | runtime |
 | `ai-flow-service/src/prompts/` | Prompt assets for extraction, supervisor, and Shopware verification. 【F:ai-flow-service/src/prompts/extract.md†L1-L4】 | runtime |
-| `ai-flow-service/src/search/` | MCP client plumbing and response parsing for web search. 【F:ai-flow-service/src/search/responseParser.js†L1-L120】 | runtime |
-| `ai-flow-service/src/tools/` | LangChain-facing tool wrappers for web and Shopware search. 【F:ai-flow-service/src/tools/searchWeb.js†L1-L50】 | runtime |
-| `ai-flow-service/src/utils/` | Logger, SQLite wrapper, JSON helpers, LangChain utilities, external callbacks. 【F:ai-flow-service/src/utils/logger.js†L1-L19】【F:ai-flow-service/src/utils/db.js†L1-L74】【F:ai-flow-service/src/utils/externalApi.js†L1-L79】 | runtime |
+| `ai-flow-service/src/search/` | Legacy MCP client plumbing and response parsing for web search (marked for removal). 【F:ai-flow-service/src/search/responseParser.js†L1-L120】 | runtime (deprecated) |
+| `ai-flow-service/src/tools/` | LangChain-facing tool wrappers for web and Shopware search; drop `searchWeb` once MCP dependency is removed. 【F:ai-flow-service/src/tools/searchWeb.js†L1-L50】 | runtime (candidate for removal) |
+| `ai-flow-service/src/utils/` | Logger, SQLite wrapper, JSON helpers, LangChain utilities, external callbacks. Merge or replace with mediator utilities during integration. 【F:ai-flow-service/src/utils/logger.js†L1-L19】【F:ai-flow-service/src/utils/db.js†L1-L74】【F:ai-flow-service/src/utils/externalApi.js†L1-L79】 | runtime |
 | `ai-flow-service/src/tests/` | Node-based test runner plus HTTP fixtures for standalone validation. 【F:ai-flow-service/src/tests/run-tests.js†L1-L40】 | docs |
-| `ai-flow-service/web-search/` | MCP stdio server plus logger used by `searchWeb`. 【F:ai-flow-service/web-search/index.js†L1-L80】 | runtime |
+| `ai-flow-service/web-search/` | MCP stdio server plus logger that is no longer used—plan to delete during consolidation. 【F:ai-flow-service/web-search/index.js†L1-L80】 | runtime (remove) |
 
 ## Runtime Dependency Destinations
 
@@ -41,10 +41,15 @@ The table below lists every directory and top-level file under `ai-flow-service/
 | `pino` | Structured logging for agentic modules. 【F:ai-flow-service/src/utils/logger.js†L1-L19】 | Replace with mediator logger wrapper at `backend/agentic/logging.ts` that delegates to existing console patterns. |
 | `sqlite3` | Persists request logs and notification queue. 【F:ai-flow-service/src/utils/db.js†L1-L67】 | Port logic into `backend/agentic/persistence/request-logs.ts` that reuses the core `backend/db.ts` connections. |
 | `@langchain/ollama`, `@langchain/openai` | Instantiate provider-specific chat models inside the flow orchestrator. 【F:ai-flow-service/src/flow/itemFlow.js†L160-L213】 | Introduce `backend/agentic/models/ollama.ts` and `backend/agentic/models/openai.ts` factories invoked by the orchestrator. |
-| `@modelcontextprotocol/sdk` | Hosts MCP stdio web-search server. 【F:ai-flow-service/web-search/index.js†L1-L53】 | Relocate to `backend/agentic/mcp/web-search-server.ts` with dependency injection for mediator logging. |
-| `axios`, `cheerio` | Fetch and scrape search results within MCP server. 【F:ai-flow-service/web-search/index.js†L1-L20】 | Keep inside `backend/agentic/mcp/web-search-server.ts` to preserve scraping pipeline. |
-| `@tavily/core` | Tavily API client consumed by MCP server. 【F:ai-flow-service/web-search/index.js†L200-L244】 | Bundle within `backend/agentic/mcp/tavily-client.ts` so HTTP usage is isolated. |
+| `@modelcontextprotocol/sdk` | Previously hosted the MCP stdio web-search server. 【F:ai-flow-service/web-search/index.js†L1-L53】 | Drop entirely—the mediator will not carry the unused MCP server forward. |
+| `axios`, `cheerio` | Fetch and scrape search results within the MCP server. 【F:ai-flow-service/web-search/index.js†L1-L20】 | Remove alongside the MCP web-search module unless future mediator features require them. |
+| `@tavily/core` | Tavily API client consumed by the legacy MCP server. 【F:ai-flow-service/web-search/index.js†L200-L244】 | Keep as a documented integration by wrapping requests in `backend/agentic/tavily/client.ts` with mediator logging/try-catch semantics. |
 | `uuid` | Intended for request identifiers but unused in runtime code (tests rely on `crypto.randomUUID`). | Drop during merge or replace with mediator `backend/utils/id.ts` if unique IDs are required. |
+
+## Tavily API Notes
+
+- Tavily calls should be centralised behind a mediator wrapper that provides configuration validation, structured logging, and retry-aware error handling. When porting, prefer a TypeScript module such as `backend/agentic/tavily/client.ts` that exports high-level search helpers and shields the rest of the codebase from raw HTTP usage.
+- Document required Tavily environment variables alongside other agentic settings in the combined mediator `.env.example`, mirroring any rate limit or safety guardrails from the standalone service.
 
 ## Redundant or Conflicting Configurations
 
@@ -55,4 +60,8 @@ The table below lists every directory and top-level file under `ai-flow-service/
 
 ## TODO Log
 
-No TODO comments were present in the audited files (`rg -n "TODO" ai-flow-service` returned no matches), so there are no outstanding TODOs to transfer at this stage. 【59f365†L1-L1】
+- TODO: Delete the unused MCP web-search implementation (`ai-flow-service/web-search/`, related `src/search/` helpers, and their dependencies) during the consolidation step so the mediator avoids bundling dormant tooling.
+- TODO: Create a dedicated Tavily client module under `backend/agentic/tavily/client.ts` that wraps `@tavily/core` with mediator logging and error handling, and document its configuration in `.env.example`.
+- TODO: Evaluate the utilities under `ai-flow-service/src/utils/` and merge or replace them with mediator equivalents (`backend/src/lib/logger.ts`, `backend/db.ts`, etc.) to prevent duplicated helpers and data-access patterns.
+
+No TODO comments were present in the audited files (`rg -n "TODO" ai-flow-service` returned no matches); the items above track follow-up work discovered during the review. 【59f365†L1-L1】
