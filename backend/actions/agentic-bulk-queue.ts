@@ -87,7 +87,9 @@ const action: Action = {
             Status: 'queued',
             LastModified: nowIso,
             ReviewState: 'not_required',
-            ReviewedBy: null
+            ReviewedBy: null,
+            LastReviewDecision: existingRun?.LastReviewDecision ?? null,
+            LastReviewNotes: existingRun?.LastReviewNotes ?? null
           };
 
           try {

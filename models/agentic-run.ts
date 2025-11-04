@@ -6,6 +6,8 @@ export interface AgenticRun {
   LastModified: string;
   ReviewState: string;
   ReviewedBy: string | null;
+  LastReviewDecision: string | null;
+  LastReviewNotes: string | null;
   RetryCount: number;
   NextRetryAt: string | null;
   LastError: string | null;

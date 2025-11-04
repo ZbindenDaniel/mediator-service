@@ -62,7 +62,9 @@ function saveAgenticRun(itemId, data) {
     Status: data.Status || existing.Status || 'queued',
     LastModified: nowIso,
     ReviewState: data.ReviewState || existing.ReviewState || 'not_required',
-    ReviewedBy: data.ReviewedBy ?? null
+    ReviewedBy: data.ReviewedBy ?? null,
+    LastReviewDecision: data.LastReviewDecision ?? existing.LastReviewDecision ?? null,
+    LastReviewNotes: data.LastReviewNotes ?? existing.LastReviewNotes ?? null
   };
   agenticRuns.set(itemId, run);
   return run;

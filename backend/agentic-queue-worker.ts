@@ -129,12 +129,25 @@ export async function processQueuedAgenticRuns(options: AgenticQueueWorkerOption
       itemId: run.ItemUUID,
       artikelbeschreibung
     };
+    const review = {
+      decision: run.LastReviewDecision ?? null,
+      notes: run.LastReviewNotes ?? null,
+      reviewedBy: run.ReviewedBy ?? null
+    };
+    const hasReviewMetadata = Boolean(
+      (review.decision && review.decision.trim()) ||
+        (review.notes && review.notes.trim()) ||
+        (review.reviewedBy && review.reviewedBy.trim())
+    );
+    if (hasReviewMetadata) {
+      payload.review = review;
+    }
 
     try {
       const result = await forward(payload, {
         context: 'agentic-queue-worker',
         agenticApiBase: options.agenticApiBase
-            });
+      });
 
       if (result.ok) {
         const completionTime = options.now?.() ?? new Date();

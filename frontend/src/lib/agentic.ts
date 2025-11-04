@@ -14,6 +14,11 @@ export interface AgenticRunTriggerPayload {
    *             new agent service contract.
    */
   search?: string | null;
+  review?: {
+    decision?: string | null;
+    notes?: string | null;
+    reviewedBy?: string | null;
+  } | null;
 }
 
 export interface AgenticRunTriggerOptions {

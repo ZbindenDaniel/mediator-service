@@ -77,7 +77,9 @@ const action: Action = {
           SearchQuery: searchQuery,
           LastModified: nowIso,
           ReviewState: 'not_required',
-          ReviewedBy: null
+          ReviewedBy: null,
+          LastReviewDecision: existingRun.LastReviewDecision ?? null,
+          LastReviewNotes: existingRun.LastReviewNotes ?? null
         });
         if (!result || result.changes === 0) {
           throw new Error('Failed to update agentic run during cancel');

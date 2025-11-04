@@ -8,6 +8,11 @@ export interface AgenticRunTriggerPayload {
   artikelbeschreibung?: string | null;
   id?: string | null;
   search?: string | null;
+  review?: {
+    decision?: string | null;
+    notes?: string | null;
+    reviewedBy?: string | null;
+  } | null;
   [key: string]: unknown;
 }
 
