@@ -43,6 +43,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Next Steps
 - Planning of the fusion project to take the ai-flow into this core to access and integrate it's functionallity close. See [SERVICE_FUSION](SERVICE_FUSION.md)
+- Use the [AI Flow Service Inventory Audit](ai-flow-service-audit.md) to guide which runtime modules, dependencies, and configs move into the mediator backend during the fusion work.
 
 ## Risks & Dependencies
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.

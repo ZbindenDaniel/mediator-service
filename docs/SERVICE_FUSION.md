@@ -16,6 +16,7 @@ The latest commit pulled the entire ai-flow-service repository into this project
     - Note the open TODO in backend/config.ts about schema validation so the config refactor can address it while unifying agentic settings.
 
 - 2. Inventory the ai-flow-service gitlink and select essentials
+  - Reference the curated module map in [docs/ai-flow-service-audit.md](ai-flow-service-audit.md) when deciding which runtime pieces belong under `backend/agentic/`.
   - Expand the gitlink locally, list the modules that power /run, /run/cancel, /health, and result callbacks, and mark which ones need to live under backend/agentic/ (e.g., orchestrator, search pipeline, queue consumers).
   - Ignore tooling/docs that duplicate what the mediator repo already provides; keep only the runtime pieces required for the agentic workflow.
 
