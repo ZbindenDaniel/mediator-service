@@ -1,0 +1,3 @@
+{"level":30,"time":1761379535926,"pid":13246,"hostname":"zBook15","msg":"Web search MCP server started","tool":"search","transport":"StdioServerTransport"}
+{"level":30,"time":1761379614594,"pid":13246,"hostname":"zBook15","msg":"Web search MCP server shut down via SIGINT","tool":"search"}
+{"level":30,"time":1761379617206,"pid":14186,"hostname":"zBook15","msg":"Web search MCP server started","tool":"search","transport":"StdioServerTransport"}

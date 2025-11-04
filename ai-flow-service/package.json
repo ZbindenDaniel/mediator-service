@@ -1,0 +1,31 @@
+{
+  "name": "ai-flow-service",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "NODE_ENV=development node src/index.js",
+    "test": "node src/tests/run-tests.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/swagger": "^9.4.0",
+    "@fastify/swagger-ui": "^5.2.3",
+    "@langchain/ollama": "^1.0.0",
+    "@langchain/openai": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.17.4",
+    "@tavily/core": "^0.5.12",
+    "axios": "^1.12.2",
+    "cheerio": "^1.1.2",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.6.0",
+    "pino": "^9.0.0",
+    "sqlite3": "^5.1.7",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "pino-pretty": "^13.1.1"
+  }
+}

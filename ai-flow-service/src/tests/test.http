@@ -1,0 +1,60 @@
+###
+
+
+POST http://localhost:3000/run
+Content-Type: application/json
+
+{
+  "item": {
+    "Artikelbeschreibung": "iPhone 7",
+    "itemUUid": "234",
+  }
+}
+
+###
+
+POST http://localhost:3000/run
+
+Content-Type: application/json
+
+{
+    "messages": [
+      {"role":"user","content":"Dell optiplex 7010"}
+    ]
+}
+
+###
+
+POST http://192.168.10.219:3000/run
+
+Content-Type: application/json
+{
+    "search":"Samsung Galaxy XCover 4"
+}
+
+###
+
+###
+
+
+POST http://localhost:3000/run
+Content-Type: application/json
+
+{
+    "messages": [
+      {"role":"user","content":"Samsung Galaxy XCover 4"}
+    ]
+}
+
+###
+
+POST http://localhost:3000/run
+Content-Type: application/json
+
+{
+    "messages": [
+      {"role":"user","content":"Dell optiplex 7010"}
+    ]
+}
+
+###
