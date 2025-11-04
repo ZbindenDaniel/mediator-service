@@ -51,8 +51,31 @@ const action: Action = {
       return sendJson(res, 400, { error: 'actor is required' });
     }
 
-    const providedSearch =
-      typeof payload.search === 'string' ? payload.search.trim() : '';
+    const providedSearch = typeof payload.search === 'string' ? payload.search.trim() : '';
+    const reviewPayload = payload && typeof payload.review === 'object' && payload.review
+      ? payload.review
+      : null;
+    const reviewDecisionRaw =
+      typeof reviewPayload?.decision === 'string' && reviewPayload.decision.trim()
+        ? reviewPayload.decision
+        : typeof payload.reviewDecision === 'string' && payload.reviewDecision.trim()
+          ? payload.reviewDecision
+          : '';
+    const reviewNotesRaw =
+      typeof reviewPayload?.notes === 'string' && reviewPayload.notes.trim()
+        ? reviewPayload.notes
+        : typeof payload.reviewNotes === 'string' && payload.reviewNotes.trim()
+          ? payload.reviewNotes
+          : '';
+    const reviewActorRaw =
+      typeof reviewPayload?.reviewedBy === 'string' && reviewPayload.reviewedBy.trim()
+        ? reviewPayload.reviewedBy
+        : typeof payload.reviewedBy === 'string' && payload.reviewedBy.trim()
+          ? payload.reviewedBy
+          : '';
+    const normalizedReviewDecision = reviewDecisionRaw ? reviewDecisionRaw.trim().toLowerCase() : '';
+    const normalizedReviewNotes = reviewNotesRaw ? reviewNotesRaw.trim() : '';
+    const normalizedReviewActor = reviewActorRaw ? reviewActorRaw.trim() : '';
 
     let existingRun: AgenticRun | undefined;
     try {
@@ -63,6 +86,11 @@ const action: Action = {
     }
 
     const nextSearchQuery = providedSearch || existingRun?.SearchQuery || null;
+    const reviewMetadata = {
+      decision: normalizedReviewDecision || existingRun?.LastReviewDecision || null,
+      notes: normalizedReviewNotes || existingRun?.LastReviewNotes || null,
+      reviewedBy: normalizedReviewActor || existingRun?.ReviewedBy || null
+    };
     const hadExistingRun = Boolean(existingRun);
     const previousStatus = existingRun?.Status ?? null;
 
@@ -71,7 +99,8 @@ const action: Action = {
         itemUUID: string,
         searchQuery: string | null,
         hasExisting: boolean,
-        prevStatus: string | null
+        prevStatus: string | null,
+        review: { decision: string | null; notes: string | null; reviewedBy: string | null }
       ) => {
         const nowIso = new Date().toISOString();
         if (hasExisting) {
@@ -81,7 +110,9 @@ const action: Action = {
             SearchQuery: searchQuery,
             LastModified: nowIso,
             ReviewState: 'not_required',
-            ReviewedBy: null
+            ReviewedBy: null,
+            LastReviewDecision: review.decision,
+            LastReviewNotes: review.notes
           });
           if (!result || result.changes === 0) {
             throw new Error('No agentic run updated');
@@ -93,7 +124,9 @@ const action: Action = {
             Status: AGENTIC_RUN_STATUS_QUEUED,
             LastModified: nowIso,
             ReviewState: 'not_required',
-            ReviewedBy: null
+            ReviewedBy: null,
+            LastReviewDecision: review.decision,
+            LastReviewNotes: review.notes
           });
           if (!result || result.changes === 0) {
             throw new Error('Failed to create agentic run');
@@ -105,13 +138,20 @@ const action: Action = {
           EntityType: 'Item',
           EntityId: itemUUID,
           Event: 'AgenticRunRestarted',
-          Meta: JSON.stringify({ previousStatus: prevStatus, searchQuery, created: !hasExisting })
+          Meta: JSON.stringify({
+            previousStatus: prevStatus,
+            searchQuery,
+            created: !hasExisting,
+            lastReviewDecision: review.decision,
+            lastReviewNotes: review.notes,
+            lastReviewActor: review.reviewedBy
+          })
         });
       }
     );
 
     try {
-      restartTransaction(itemId, nextSearchQuery, hadExistingRun, previousStatus);
+      restartTransaction(itemId, nextSearchQuery, hadExistingRun, previousStatus, reviewMetadata);
     } catch (err) {
       console.error('Failed to reset agentic run state', err);
       return sendJson(res, 500, { error: 'Failed to restart agentic run' });
@@ -137,8 +177,26 @@ const action: Action = {
         });
       } else {
         try {
+          const triggerPayload: AgenticRunTriggerPayload = {
+            itemId,
+            artikelbeschreibung: triggerSearchTerm
+          };
+          const reviewForDispatch = {
+            decision: refreshed?.LastReviewDecision ?? reviewMetadata.decision ?? null,
+            notes: refreshed?.LastReviewNotes ?? reviewMetadata.notes ?? null,
+            reviewedBy: refreshed?.ReviewedBy ?? reviewMetadata.reviewedBy ?? null
+          };
+          const hasReviewDetails = Boolean(
+            (reviewForDispatch.decision && reviewForDispatch.decision.trim()) ||
+              (reviewForDispatch.notes && reviewForDispatch.notes.trim()) ||
+              (reviewForDispatch.reviewedBy && reviewForDispatch.reviewedBy.trim())
+          );
+          if (hasReviewDetails) {
+            triggerPayload.review = reviewForDispatch;
+          }
+
           const result = await forwardAgenticTrigger(
-            { itemId, artikelbeschreibung: triggerSearchTerm },
+            triggerPayload,
             {
               context: 'agentic-restart',
               logger: console

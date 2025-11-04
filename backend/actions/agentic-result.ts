@@ -162,6 +162,14 @@ const action: Action = {
             effectiveReviewState === 'pending'
               ? null
               : review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
+          const normalizedReviewDecision =
+            typeof review.Decision === 'string' && review.Decision.trim()
+              ? review.Decision.trim().toLowerCase()
+              : existingRun?.LastReviewDecision ?? null;
+          const normalizedReviewNotes =
+            typeof review.Notes === 'string' && review.Notes.trim()
+              ? review.Notes.trim()
+              : existingRun?.LastReviewNotes ?? null;
           const searchQueryUpdate = typeof agenticPayload?.searchQuery === 'string' && agenticPayload.searchQuery.trim()
             ? agenticPayload.searchQuery.trim()
             : existingRun?.SearchQuery ?? null;
@@ -171,7 +179,9 @@ const action: Action = {
             Status: status,
             LastModified: now,
             ReviewState: effectiveReviewState,
-            ReviewedBy: effectiveReviewedBy
+            ReviewedBy: effectiveReviewedBy,
+            LastReviewDecision: normalizedReviewDecision,
+            LastReviewNotes: normalizedReviewNotes
           };
 
           const updateResult = ctx.updateAgenticRunStatus.run(runUpdate);
@@ -191,7 +201,8 @@ const action: Action = {
               NeedsReview: needsHumanReview,
               Summary: summary,
               Error: errorText,
-              ReviewNotes: review.Notes,
+              ReviewNotes: normalizedReviewNotes,
+              ReviewDecision: normalizedReviewDecision,
               LastModified: now
             })
           });

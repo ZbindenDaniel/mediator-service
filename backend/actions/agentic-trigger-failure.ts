@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import { AGENTIC_RUN_STATUS_FAILED } from '../../models';
+import type { AgenticRun } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -90,13 +91,21 @@ const action: Action = {
       }
 
       const nowIso = failedAt || new Date().toISOString();
+      let existingRun: AgenticRun | null = null;
+      try {
+        existingRun = ctx.getAgenticRun.get(itemId) || null;
+      } catch (loadErr) {
+        console.error('Failed to load existing agentic run for trigger failure metadata', loadErr);
+      }
       const runUpdate = {
         ItemUUID: itemId,
         Status: AGENTIC_RUN_STATUS_FAILED,
         SearchQuery: searchTerm,
         LastModified: nowIso,
         ReviewState: 'not_required',
-        ReviewedBy: null
+        ReviewedBy: null,
+        LastReviewDecision: existingRun?.LastReviewDecision ?? null,
+        LastReviewNotes: existingRun?.LastReviewNotes ?? null
       };
 
       try {

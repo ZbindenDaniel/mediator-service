@@ -569,7 +569,9 @@ const action: Action = {
             Status: status,
             LastModified: now,
             ReviewState: 'not_required',
-            ReviewedBy: null
+            ReviewedBy: null,
+            LastReviewDecision: null,
+            LastReviewNotes: null
           };
 
           try {

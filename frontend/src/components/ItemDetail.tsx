@@ -245,6 +245,43 @@ function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
 }
 
+export interface AgenticRestartRequestInput {
+  actor: string;
+  search: string | null;
+  reviewDecision?: string | null;
+  reviewNotes?: string | null;
+  reviewedBy?: string | null;
+}
+
+export function buildAgenticRestartRequestPayload({
+  actor,
+  search,
+  reviewDecision,
+  reviewNotes,
+  reviewedBy
+}: AgenticRestartRequestInput): Record<string, unknown> {
+  const trimmedActor = actor.trim();
+  const trimmedSearch = (search ?? '').trim();
+  const payload: Record<string, unknown> = {
+    actor: trimmedActor,
+    search: trimmedSearch
+  };
+
+  const decisionNormalized = reviewDecision && reviewDecision.trim() ? reviewDecision.trim().toLowerCase() : null;
+  const notesNormalized = reviewNotes && reviewNotes.trim() ? reviewNotes.trim() : null;
+  const reviewedByNormalized = reviewedBy && reviewedBy.trim() ? reviewedBy.trim() : null;
+
+  if (decisionNormalized || notesNormalized || reviewedByNormalized) {
+    payload.review = {
+      decision: decisionNormalized,
+      notes: notesNormalized,
+      reviewedBy: reviewedByNormalized
+    };
+  }
+
+  return payload;
+}
+
 export interface ItemDetailAgenticCancelRequest {
   agentic: AgenticRun;
   actor: string;
@@ -849,6 +886,14 @@ export default function ItemDetail({ itemId }: Props) {
 
     const baseSearchTerm = (agentic?.SearchQuery || item.Artikelbeschreibung || '').trim();
 
+    const restartRequestPayload = buildAgenticRestartRequestPayload({
+      actor,
+      search: baseSearchTerm,
+      reviewDecision: agentic?.LastReviewDecision ?? null,
+      reviewNotes: agentic?.LastReviewNotes ?? null,
+      reviewedBy: agentic?.ReviewedBy ?? null
+    });
+
     setAgenticActionPending(true);
     setAgenticError(null);
     setAgenticReviewIntent(null);
@@ -859,7 +904,7 @@ export default function ItemDetail({ itemId }: Props) {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor, search: baseSearchTerm })
+          body: JSON.stringify(restartRequestPayload)
         }
       );
 
@@ -899,6 +944,18 @@ export default function ItemDetail({ itemId }: Props) {
         itemId: refreshedRun.ItemUUID || item.ItemUUID,
         artikelbeschreibung: searchTerm
       };
+      const reviewForTrigger = {
+        decision: refreshedRun.LastReviewDecision ?? agentic?.LastReviewDecision ?? null,
+        notes: refreshedRun.LastReviewNotes ?? agentic?.LastReviewNotes ?? null,
+        reviewedBy: refreshedRun.ReviewedBy ?? agentic?.ReviewedBy ?? null
+      };
+      if (
+        (reviewForTrigger.decision && reviewForTrigger.decision.trim()) ||
+        (reviewForTrigger.notes && reviewForTrigger.notes.trim()) ||
+        (reviewForTrigger.reviewedBy && reviewForTrigger.reviewedBy.trim())
+      ) {
+        triggerPayload.review = reviewForTrigger;
+      }
       const triggerResult = await triggerAgenticRun({
         runUrl: agenticRunUrl,
         payload: triggerPayload,

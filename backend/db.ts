@@ -748,6 +748,8 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
   LastModified TEXT NOT NULL DEFAULT (datetime('now')),
   ReviewState TEXT NOT NULL DEFAULT 'not_required',
   ReviewedBy TEXT,
+  LastReviewDecision TEXT,
+  LastReviewNotes TEXT,
   RetryCount INTEGER NOT NULL DEFAULT 0,
   NextRetryAt TEXT,
   LastError TEXT,
@@ -791,15 +793,41 @@ function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
   if (!hasColumn('LastAttemptAt')) {
     alterations.push({ name: 'LastAttemptAt', sql: "ALTER TABLE agentic_runs ADD COLUMN LastAttemptAt TEXT" });
   }
+  if (!hasColumn('LastReviewDecision')) {
+    alterations.push({ name: 'LastReviewDecision', sql: "ALTER TABLE agentic_runs ADD COLUMN LastReviewDecision TEXT" });
+  }
+  if (!hasColumn('LastReviewNotes')) {
+    alterations.push({ name: 'LastReviewNotes', sql: "ALTER TABLE agentic_runs ADD COLUMN LastReviewNotes TEXT" });
+  }
 
+  const addedColumns: string[] = [];
   for (const { name, sql } of alterations) {
     try {
       database.prepare(sql).run();
+      addedColumns.push(name);
       console.info('[db] Added missing agentic_runs column', name);
     } catch (err) {
       console.error('Failed to add agentic_runs column', name, err);
       throw err;
     }
+  }
+
+  try {
+    const result = database.prepare(
+      `UPDATE agentic_runs
+          SET LastReviewDecision = LOWER(TRIM(ReviewState))
+        WHERE ReviewState IN ('approved', 'rejected')
+          AND (LastReviewDecision IS NULL OR TRIM(LastReviewDecision) = '')`
+    ).run();
+    if ((result?.changes ?? 0) > 0) {
+      console.info('[db] Backfilled LastReviewDecision for agentic_runs rows', {
+        count: result?.changes ?? 0,
+        addedColumns
+      });
+    }
+  } catch (err) {
+    console.error('Failed to backfill LastReviewDecision values for agentic_runs', err);
+    throw err;
   }
 }
 
@@ -846,10 +874,10 @@ export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
-      ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy
+      ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy, LastReviewDecision, LastReviewNotes
     )
     VALUES (
-      @ItemUUID, @SearchQuery, @Status, @LastModified, @ReviewState, @ReviewedBy
+      @ItemUUID, @SearchQuery, @Status, @LastModified, @ReviewState, @ReviewedBy, @LastReviewDecision, @LastReviewNotes
     )
     ON CONFLICT(ItemUUID) DO UPDATE SET
       SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
@@ -857,6 +885,8 @@ export const upsertAgenticRun = db.prepare(
       LastModified=excluded.LastModified,
       ReviewState=excluded.ReviewState,
       ReviewedBy=excluded.ReviewedBy,
+      LastReviewDecision=COALESCE(excluded.LastReviewDecision, agentic_runs.LastReviewDecision),
+      LastReviewNotes=COALESCE(excluded.LastReviewNotes, agentic_runs.LastReviewNotes),
       RetryCount=CASE WHEN excluded.Status = 'queued' THEN 0 ELSE agentic_runs.RetryCount END,
       NextRetryAt=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.NextRetryAt END,
       LastError=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.LastError END,
@@ -865,6 +895,7 @@ export const upsertAgenticRun = db.prepare(
 );
 export const getAgenticRun = db.prepare(`
   SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+         LastReviewDecision, LastReviewNotes,
          RetryCount, NextRetryAt, LastError, LastAttemptAt
   FROM agentic_runs
   WHERE ItemUUID = ?
@@ -876,13 +907,16 @@ export const updateAgenticRunStatus = db.prepare(
            SearchQuery=COALESCE(@SearchQuery, SearchQuery),
            LastModified=@LastModified,
            ReviewState=@ReviewState,
-           ReviewedBy=@ReviewedBy
+           ReviewedBy=@ReviewedBy,
+           LastReviewDecision=COALESCE(@LastReviewDecision, LastReviewDecision),
+           LastReviewNotes=COALESCE(@LastReviewNotes, LastReviewNotes)
      WHERE ItemUUID=@ItemUUID
   `
 );
 
 const selectQueuedAgenticRuns = db.prepare(`
   SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+         LastReviewDecision, LastReviewNotes,
          RetryCount, NextRetryAt, LastError, LastAttemptAt
   FROM agentic_runs
   WHERE Status = 'queued'
@@ -1465,6 +1499,8 @@ export const updateAgenticReview = db.prepare(`
   SET ReviewState = @ReviewState,
       ReviewedBy = @ReviewedBy,
       LastModified = @LastModified,
+      LastReviewDecision = @LastReviewDecision,
+      LastReviewNotes = @LastReviewNotes,
       Status = COALESCE(@Status, Status)
   WHERE ItemUUID = @ItemUUID
 `);

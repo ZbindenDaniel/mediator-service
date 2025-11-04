@@ -74,7 +74,9 @@ const action: Action = {
           ReviewState: decision,
           ReviewedBy: actor,
           LastModified: reviewedAt,
-          Status: status
+          Status: status,
+          LastReviewDecision: decision,
+          LastReviewNotes: notes || null
         });
         if (!result || result.changes === 0) {
           console.error('Agentic review update had no effect for', itemId);
