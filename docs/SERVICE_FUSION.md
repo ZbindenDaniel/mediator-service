@@ -16,13 +16,16 @@ The latest commit pulled the entire ai-flow-service repository into this project
     - Note the open TODO in backend/config.ts about schema validation so the config refactor can address it while unifying agentic settings.
 
 - 2. Inventory the ai-flow-service gitlink and select essentials
+  - Reference the curated module map in [docs/ai-flow-service-audit.md](ai-flow-service-audit.md) when deciding which runtime pieces belong under `backend/agentic/`.
   - Expand the gitlink locally, list the modules that power /run, /run/cancel, /health, and result callbacks, and mark which ones need to live under backend/agentic/ (e.g., orchestrator, search pipeline, queue consumers).
+  - Remove the unused MCP web-search stack (`web-search/`, `src/search/`, and related LangChain tool wrappers) instead of migrating it so the mediator avoids dead dependencies.
   - Ignore tooling/docs that duplicate what the mediator repo already provides; keep only the runtime pieces required for the agentic workflow.
 
 - 3. Flatten repository structure & merge dotfiles
   - Remove the gitlink entry and bring over the selected source files into a new backend/agentic/ (or similar) namespace that fits mediator conventions
   - Merge useful dotfiles (e.g., .eslintrc, .npmrc, .dockerignore) into existing root equivalents; delete duplicates that add no value to the combined project.
   - Fold AI-specific scripts into scripts/ if still needed, otherwise reference them from docs.
+  - Add a Tavily client module under `backend/agentic/tavily/client.ts` that encapsulates `@tavily/core` usage with mediator logging and error handling, and merge overlapping utilities from `ai-flow-service/src/utils/` into existing helpers.
 
 - 4. Unify package and build configuration
   - Merge ai-flow-service dependencies/devDependencies into the root package.json, keeping the build lean by dropping unused packages. Update tsconfig.json if new paths are required.
