@@ -1,5 +1,4 @@
 import type { AgenticRun } from '../../../models';
-// import { AGENTIC_API_BASE } from '../../../backend/config'; 
 
 export interface AgenticRunTriggerPayload {
   itemId?: string | null;
@@ -21,59 +20,13 @@ export interface AgenticRunTriggerPayload {
   } | null;
 }
 
+const DEFAULT_AGENTIC_RUN_ENDPOINT = '/api/agentic/run';
+
 export interface AgenticRunTriggerOptions {
-  runUrl: string | null;
   payload: AgenticRunTriggerPayload;
   context: string;
-}
-
-// export function resolveAgenticApiBase(): string | null {
-//   try {
-//     const candidate = 'http://127.0.0.1:3000'; //AGENTIC_API_BASE ?? null;
-
-//     if (!candidate) {
-//       return null;
-//     }
-
-//     const trimmed = candidate.trim();
-//     if (!trimmed) {
-//       return null;
-//     }
-
-//     const sanitized = trimmed.replace(/\/+$/, '');
-//     if (!sanitized) {
-//       return trimmed;
-//     }
-
-//     return sanitized;
-//   } catch (err) {
-//     console.error('Failed to resolve agentic API base URL', err);
-//     return null;
-//   }
-// }
-
-export function buildAgenticRunUrl(agenticApiBase: string | null): string | null {
-  if (!agenticApiBase) {
-    return null;
-  }
-  try {
-    return new URL('/run', agenticApiBase).toString();
-  } catch (err) {
-    console.error('Failed to construct agentic run URL', err);
-    return null;
-  }
-}
-
-export function buildAgenticCancelUrl(agenticApiBase: string | null): string | null {
-  if (!agenticApiBase) {
-    return null;
-  }
-  try {
-    return new URL('/run/cancel', agenticApiBase).toString();
-  } catch (err) {
-    console.error('Failed to construct agentic cancel URL', err);
-    return null;
-  }
+  endpoint?: string | null;
+  fetchImpl?: typeof fetch;
 }
 
 export type AgenticTriggerSkippedReason =
@@ -94,12 +47,13 @@ export type AgenticTriggerResult =
       error?: unknown;
     };
 
-export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRunTriggerOptions): Promise<AgenticTriggerResult> {
-  if (!runUrl) {
-    const message = `Agentic trigger skipped (${context}): run URL is not configured.`;
-    console.warn(message);
-    return { outcome: 'skipped', reason: 'run-url-missing', message };
-  }
+export async function triggerAgenticRun({
+  payload,
+  context,
+  endpoint = DEFAULT_AGENTIC_RUN_ENDPOINT,
+  fetchImpl = fetch
+}: AgenticRunTriggerOptions): Promise<AgenticTriggerResult> {
+  const runUrl = typeof endpoint === 'string' && endpoint.trim() ? endpoint.trim() : DEFAULT_AGENTIC_RUN_ENDPOINT;
 
   const itemIdCandidate =
     typeof payload.itemId === 'string' && payload.itemId.trim()
@@ -146,35 +100,11 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
       ...optionalPayload
     };
 
-    let isServerProxy = false;
-    try {
-      const parsedUrl = new URL(runUrl, 'http://localhost');
-      isServerProxy = parsedUrl.pathname.startsWith('/api/agentic/');
-    } catch (err) {
-      console.warn('Failed to parse agentic run URL; falling back to literal comparison', err);
-      isServerProxy = runUrl.startsWith('/api/agentic/');
-    }
-
-    let response: Response;
-    if (isServerProxy) {
-      response = await fetch(runUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context, payload: backendPayload })
-      });
-    } else {
-      const body: Record<string, unknown> = {
-        Artikelbeschreibung: artikelbeschreibungCandidate,
-        itemUUid: itemId, // note the mixed casing to match the agentic API contract
-        ...optionalPayload
-      };
-
-      response = await fetch(runUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-    }
+    const response = await fetchImpl(runUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context, payload: backendPayload })
+    });
     if (!response.ok) {
       let errorDetails: unknown = null;
       try {
@@ -202,62 +132,6 @@ export async function triggerAgenticRun({ runUrl, payload, context }: AgenticRun
     const message = `Agentic trigger invocation failed during ${context}`;
     console.error(message, err);
     return { outcome: 'failed', reason: 'network-error', message, error: err };
-  }
-}
-
-export interface AgenticRunCancelOptions {
-  cancelUrl: string | null;
-  itemId: string | null | undefined;
-  actor?: string | null;
-  context: string;
-}
-
-export async function cancelAgenticRun({ cancelUrl, itemId, actor, context }: AgenticRunCancelOptions): Promise<void> {
-  if (!cancelUrl) {
-    console.warn(`Agentic cancel skipped (${context}): cancel URL is not configured.`);
-    return;
-  }
-
-  const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
-  if (!trimmedItemId) {
-    console.warn(`Agentic cancel skipped (${context}): missing ItemUUID`);
-    return;
-  }
-
-  const trimmedActor = typeof actor === 'string' ? actor.trim() : '';
-
-  try {
-    const body = {
-      itemUUid: trimmedItemId, // note the mixed casing to match the agentic API contract
-      actor: trimmedActor || undefined
-    } as const;
-
-    const response = await fetch(cancelUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      // TODO: Include richer context payload when the agentic API expects extended item metadata.
-      let errorDetails: unknown = null;
-      try {
-        errorDetails = await response.clone().json();
-      } catch (jsonErr) {
-        try {
-          errorDetails = await response.text();
-        } catch (textErr) {
-          errorDetails = { message: 'Failed to read response body', cause: textErr };
-        }
-        console.warn(`Agentic cancel failed during ${context}: non-JSON error payload`, jsonErr);
-      }
-      const err = new Error(`Agentic cancel failed during ${context}`);
-      console.error(err.message, response.status, errorDetails);
-      throw err;
-    }
-  } catch (err) {
-    console.error(`Agentic cancel invocation failed during ${context}`, err);
-    throw err instanceof Error ? err : new Error('Agentic cancel invocation failed');
   }
 }
 

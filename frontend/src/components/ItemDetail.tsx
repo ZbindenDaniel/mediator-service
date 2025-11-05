@@ -24,12 +24,7 @@ import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { filterAllowedEvents } from '../utils/eventLogLevels';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
-import {
-  buildAgenticCancelUrl,
-  cancelAgenticRun,
-  persistAgenticRunCancellation,
-  triggerAgenticRun
-} from '../lib/agentic';
+import { persistAgenticRunCancellation, triggerAgenticRun } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
@@ -285,10 +280,8 @@ export function buildAgenticRestartRequestPayload({
 export interface ItemDetailAgenticCancelRequest {
   agentic: AgenticRun;
   actor: string;
-  agenticCancelUrl: string | null;
   persistCancellation: typeof persistAgenticRunCancellation;
-  cancelExternalRun: typeof cancelAgenticRun;
-  logger?: Pick<typeof console, 'warn' | 'error'>;
+  logger?: Pick<typeof console, 'warn' | 'error' | 'info'>;
 }
 
 export interface ItemDetailAgenticCancelResult {
@@ -299,9 +292,7 @@ export interface ItemDetailAgenticCancelResult {
 export async function performItemDetailAgenticCancel({
   agentic,
   actor,
-  agenticCancelUrl,
   persistCancellation,
-  cancelExternalRun,
   logger = console
 }: ItemDetailAgenticCancelRequest): Promise<ItemDetailAgenticCancelResult> {
   let updatedRun: AgenticRun | null = agentic;
@@ -317,30 +308,26 @@ export async function performItemDetailAgenticCancel({
     if (persistence.agentic) {
       updatedRun = persistence.agentic;
     }
+    logger.info?.('Persisted agentic cancellation via mediator API', {
+      itemId: agentic.ItemUUID,
+      status: persistence.status
+    });
   } else if (persistence.status === 404) {
     finalError = 'Kein laufender Ki-Durchlauf gefunden.';
+    logger.warn?.('Agentic cancellation skipped because run was not found', {
+      itemId: agentic.ItemUUID
+    });
   } else if (persistence.status === 0) {
     finalError = 'Ki-Abbruch fehlgeschlagen.';
+    logger.error?.('Agentic cancellation failed due to network error', {
+      itemId: agentic.ItemUUID
+    });
   } else {
     finalError = 'Ki-Abbruch konnte nicht gespeichert werden.';
-  }
-
-  if (agenticCancelUrl) {
-    try {
-      await cancelExternalRun({
-        cancelUrl: agenticCancelUrl,
-        itemId: agentic.ItemUUID,
-        actor,
-        context: 'item detail cancel'
-      });
-    } catch (err) {
-      logger.error('Agentic external cancel failed', err);
-      if (!finalError) {
-        finalError = 'Ki-Abbruch konnte extern nicht gestoppt werden.';
-      }
-    }
-  } else {
-    logger.warn('Agentic cancel URL not configured; external cancellation skipped.');
+    logger.error?.('Agentic cancellation failed to persist via mediator API', {
+      itemId: agentic.ItemUUID,
+      status: persistence.status
+    });
   }
 
   return { updatedRun, error: finalError };
@@ -502,9 +489,6 @@ export default function ItemDetail({ itemId }: Props) {
   const navigate = useNavigate();
   const dialog = useDialog();
 
-  const agenticApiBase = 'http://127.0.0.1:3000'; // TODO: extract this to cental class (Also used in ItemCreate)
-  const agenticRunUrl = '/api/agentic/run';
-  const agenticCancelUrl = useMemo(() => buildAgenticCancelUrl(agenticApiBase), [agenticApiBase]);
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
   const { haupt: hauptCategoryLookup, unter: unterCategoryLookup } = categoryLookups;
@@ -635,8 +619,23 @@ export default function ItemDetail({ itemId }: Props) {
   }, [events]);
 
   const agenticRows: [string, React.ReactNode][] = [];
+  if (agentic?.SearchQuery) {
+    agenticRows.push(['Suchbegriff', agentic.SearchQuery]);
+  }
   if (agentic?.LastModified) {
     agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
+  }
+  if (typeof agentic?.RetryCount === 'number') {
+    agenticRows.push(['Anzahl Versuche', agentic.RetryCount]);
+  }
+  if (agentic?.LastAttemptAt) {
+    agenticRows.push(['Letzter Versuch', formatDateTime(agentic.LastAttemptAt)]);
+  }
+  if (agentic?.NextRetryAt) {
+    agenticRows.push(['Nächster Versuch geplant', formatDateTime(agentic.NextRetryAt)]);
+  }
+  if (agentic?.LastError) {
+    agenticRows.push(['Letzter Fehler', agentic.LastError]);
   }
   if (agentic?.ReviewState) {
     const reviewStateNormalized = agentic.ReviewState.toLowerCase();
@@ -957,7 +956,6 @@ export default function ItemDetail({ itemId }: Props) {
         triggerPayload.review = reviewForTrigger;
       }
       const triggerResult = await triggerAgenticRun({
-        runUrl: agenticRunUrl,
         payload: triggerPayload,
         context: 'item detail restart'
       });
@@ -972,8 +970,8 @@ export default function ItemDetail({ itemId }: Props) {
           setAgentic(cancelResult.agentic);
         }
         const baseMessage =
-          triggerResult.outcome === 'skipped' && triggerResult.reason === 'run-url-missing'
-            ? 'Ki-Konfiguration fehlt. Durchlauf wurde abgebrochen.'
+          triggerResult.outcome === 'skipped'
+            ? 'Ki-Neustart konnte nicht gestartet werden (fehlende Angaben).'
             : 'Ki-Neustart konnte nicht gestartet werden. Durchlauf wurde abgebrochen.';
         if (!cancelResult.ok) {
           setAgenticError(`${baseMessage} (Abbruch konnte nicht gespeichert werden.)`);
@@ -1037,9 +1035,7 @@ export default function ItemDetail({ itemId }: Props) {
     const { updatedRun, error: finalError } = await performItemDetailAgenticCancel({
       agentic,
       actor,
-      agenticCancelUrl,
       persistCancellation: persistAgenticRunCancellation,
-      cancelExternalRun: cancelAgenticRun,
       logger: console
     });
 

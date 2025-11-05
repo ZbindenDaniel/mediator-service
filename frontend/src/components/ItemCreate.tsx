@@ -19,11 +19,6 @@ import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
 import { ITEM_FORM_DEFAULT_EINHEIT, extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
 
-type AgenticEnv = typeof globalThis & {
-  AGENTIC_API_BASE?: string;
-  process?: { env?: Record<string, string | undefined> };
-};
-
 type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
 export interface AgenticHealthProxyOptions {
@@ -73,7 +68,6 @@ export type AgenticTriggerFailureReporter = (args: AgenticTriggerFailureReportAr
 export interface AgenticTriggerHandlerOptions {
   agenticPayload: AgenticRunTriggerPayload;
   context: string;
-  agenticRunUrl: string | null;
   triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
   reportFailure: AgenticTriggerFailureReporter;
   alertFn: (message: string) => Promise<void>;
@@ -84,7 +78,6 @@ export interface AgenticTriggerHandlerOptions {
 export async function handleAgenticRunTrigger({
   agenticPayload,
   context,
-  agenticRunUrl,
   triggerAgenticRunRequest,
   reportFailure,
   alertFn,
@@ -98,11 +91,7 @@ export async function handleAgenticRunTrigger({
   const searchTerm = agenticPayload.artikelbeschreibung ?? '';
 
   try {
-    const result = await triggerAgenticRunRequest({
-      runUrl: agenticRunUrl,
-      payload: agenticPayload,
-      context
-    });
+    const result = await triggerAgenticRunRequest({ payload: agenticPayload, context });
 
     const status = result.outcome === 'triggered' || result.outcome === 'failed' ? result.status : undefined;
     logger.info?.('Agentic trigger result', { context, outcome: result.outcome, status });
@@ -185,7 +174,6 @@ export interface AgenticTriggerInvocationOptions {
   context: string;
   shouldUseAgenticForm: boolean;
   backendDispatched?: boolean;
-  agenticRunUrl: string | null;
   triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
   reportFailure: AgenticTriggerFailureReporter;
   alertFn: (message: string) => Promise<void>;
@@ -199,7 +187,6 @@ export function maybeTriggerAgenticRun({
   context,
   shouldUseAgenticForm,
   backendDispatched = false,
-  agenticRunUrl,
   triggerAgenticRunRequest,
   reportFailure,
   alertFn,
@@ -222,7 +209,6 @@ export function maybeTriggerAgenticRun({
     const triggerPromise = handleTrigger({
       agenticPayload,
       context,
-      agenticRunUrl,
       triggerAgenticRunRequest,
       reportFailure,
       alertFn,
@@ -515,20 +501,10 @@ export default function ItemCreate() {
     [dialog]
   );
 
-  const agenticApiBase ='http://127.0.0.1:8080';
-
-  const agenticRunUrl = '/api/agentic/run';
-
   useEffect(() => {
     let cancelled = false;
 
     async function checkAgenticHealth() {
-      if (!agenticApiBase) {
-        console.info('Agentic API base URL not configured. Falling back to legacy item form.');
-        setShouldUseAgenticForm(false);
-        return;
-      }
-
       try {
         const result = await fetchAgenticHealthProxy();
         if (cancelled) {
@@ -570,7 +546,7 @@ export default function ItemCreate() {
     return () => {
       cancelled = true;
     };
-  }, [agenticApiBase]);
+  }, []);
 
   const baseDraft = useMemo(
     () => ({
@@ -823,7 +799,6 @@ export default function ItemCreate() {
       context,
       shouldUseAgenticForm,
       backendDispatched: options.backendDispatched,
-      agenticRunUrl,
       triggerAgenticRunRequest,
       reportFailure: reportAgenticTriggerFailure,
       alertFn: showAgenticAlert,
