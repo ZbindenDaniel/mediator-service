@@ -11,7 +11,18 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "outDir": "dist",
-    "rootDir": "."
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@agentic/*": ["backend/agentic/*"]
+    }
   },
-  "include": ["backend/**/*", "models/**/*", "types/**/*", "test/**/*", "frontend/**/*"]
+  "include": [
+    "backend/**/*",
+    "backend/agentic/**/*",
+    "models/**/*",
+    "types/**/*",
+    "test/**/*",
+    "frontend/**/*"
+  ]
 }

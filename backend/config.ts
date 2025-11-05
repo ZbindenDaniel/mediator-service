@@ -53,7 +53,7 @@ if (!envLoaded) {
   console.info('[config] Proceeding without .env overrides; defaults and existing environment will be used.');
 }
 
-// TODO: Consider enforcing schema validation for required environment variables.
+// TODO(agentic-config): Replace ad-hoc parsing with a shared zod schema that also validates agentic settings.
 
 export const HTTP_PORT = parseInt(process.env.HTTP_PORT || '8080', 10);
 export const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data/mediator.sqlite');

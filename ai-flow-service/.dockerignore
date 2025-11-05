@@ -1,9 +1,0 @@
-node_modules
-npm-debug.log
-.DS_Store
-.git
-.gitignore
-Dockerfile
-.idea
-.vscode
-dist
