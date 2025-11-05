@@ -666,7 +666,16 @@ const action: Action = {
             agenticTriggerDispatched = true;
             void forwardAgenticTrigger(triggerPayload, {
               context: 'import-item',
-              logger: console
+              logger: console,
+              service: {
+                db: ctx.db,
+                getAgenticRun: ctx.getAgenticRun,
+                upsertAgenticRun: ctx.upsertAgenticRun,
+                updateAgenticRunStatus: ctx.updateAgenticRunStatus,
+                logEvent: ctx.logEvent,
+                logger: console,
+                now: () => new Date()
+              }
             })
               .then((result) => {
                 if (!result.ok) {

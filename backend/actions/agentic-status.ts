@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED } from '../../models';
+import { getAgenticStatus } from '../agentic';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -26,8 +27,16 @@ const action: Action = {
 
     if (req.method === 'GET') {
       try {
-        const run = ctx.getAgenticRun.get(itemId) || null;
-        return sendJson(res, 200, { agentic: run });
+        const result = getAgenticStatus(itemId, {
+          db: ctx.db,
+          getAgenticRun: ctx.getAgenticRun,
+          upsertAgenticRun: ctx.upsertAgenticRun,
+          updateAgenticRunStatus: ctx.updateAgenticRunStatus,
+          logEvent: ctx.logEvent,
+          logger: console,
+          now: () => new Date()
+        });
+        return sendJson(res, 200, { agentic: result.agentic });
       } catch (err) {
         console.error('Fetch agentic status failed', err);
         return sendJson(res, 500, { error: (err as Error).message });
@@ -96,8 +105,16 @@ const action: Action = {
       });
 
       try {
-        const updated = ctx.getAgenticRun.get(itemId) || null;
-        return sendJson(res, 200, { agentic: updated });
+        const result = getAgenticStatus(itemId, {
+          db: ctx.db,
+          getAgenticRun: ctx.getAgenticRun,
+          upsertAgenticRun: ctx.upsertAgenticRun,
+          updateAgenticRunStatus: ctx.updateAgenticRunStatus,
+          logEvent: ctx.logEvent,
+          logger: console,
+          now: () => new Date()
+        });
+        return sendJson(res, 200, { agentic: result.agentic });
       } catch (err) {
         console.error('Failed to load updated agentic status', err);
         return sendJson(res, 500, { error: (err as Error).message });

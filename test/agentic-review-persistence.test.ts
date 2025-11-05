@@ -80,9 +80,9 @@ describe('agentic review metadata persistence', () => {
 
     try {
       await processQueuedAgenticRuns({
-        agenticApiBase: 'https://agentic.test',
         logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-        now: () => new Date('2024-01-02T01:00:00.000Z')
+        now: () => new Date('2024-01-02T01:00:00.000Z'),
+        service: {} as any
       });
 
       expect(forwardSpy).toHaveBeenCalledTimes(1);

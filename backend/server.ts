@@ -356,12 +356,14 @@ type ActionContext = {
 };
 
 const resolvedAgenticApiBase = AGENTIC_API_BASE.trim();
-const agenticServiceEnabled = Boolean(resolvedAgenticApiBase);
+const agenticServiceEnabled = true;
 
-if (!agenticServiceEnabled) {
-  console.info(
-    '[server] Agentic API base not configured; agentic processing disabled (resolved value empty after trim).'
-  );
+if (!resolvedAgenticApiBase) {
+  console.info('[server] Agentic API base not configured; defaulting to in-process agentic service.');
+} else {
+  console.info('[server] Agentic API base configured but in-process agentic service will handle orchestration.', {
+    agenticApiBase: resolvedAgenticApiBase
+  });
 }
 
 const AGENTIC_QUEUE_WORKER_INTERVAL_MS = 5000;
@@ -375,8 +377,16 @@ async function runAgenticQueueWorker(): Promise<void> {
   agenticQueueWorkerRunning = true;
   try {
     await processQueuedAgenticRuns({
-      agenticApiBase: resolvedAgenticApiBase,
-      logger: console
+      logger: console,
+      service: {
+        db,
+        getAgenticRun,
+        upsertAgenticRun,
+        updateAgenticRunStatus,
+        logEvent,
+        logger: console,
+        now: () => new Date()
+      }
     });
   } catch (err) {
     console.error('[server] Agentic queue worker crashed', err);

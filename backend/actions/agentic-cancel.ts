@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { AgenticRun } from '../../models';
-import { AGENTIC_RUN_STATUS_CANCELLED } from '../../models';
+import { cancelAgenticRun } from '../agentic';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -50,65 +49,33 @@ const action: Action = {
       return sendJson(res, 400, { error: 'actor is required' });
     }
 
-    let existingRun: AgenticRun | null = null;
     try {
-      existingRun = ctx.getAgenticRun.get(itemId) || null;
-    } catch (err) {
-      console.error('Failed to load agentic run for cancel', err);
-      return sendJson(res, 500, { error: 'Failed to load agentic run' });
-    }
+      const result = await cancelAgenticRun(
+        { itemId, actor },
+        {
+          db: ctx.db,
+          getAgenticRun: ctx.getAgenticRun,
+          upsertAgenticRun: ctx.upsertAgenticRun,
+          updateAgenticRunStatus: ctx.updateAgenticRunStatus,
+          logEvent: ctx.logEvent,
+          logger: console,
+          now: () => new Date()
+        }
+      );
 
-    if (!existingRun) {
-      console.warn('Agentic cancel attempted without existing run', itemId);
-      return sendJson(res, 404, { error: 'Agentic run not found' });
-    }
-
-    const cancelTransaction = ctx.db.transaction(
-      (
-        itemUUID: string,
-        searchQuery: string | null,
-        actorName: string,
-        previousStatus: string | null
-      ) => {
-        const nowIso = new Date().toISOString();
-        const result = ctx.updateAgenticRunStatus.run({
-          ItemUUID: itemUUID,
-          Status: AGENTIC_RUN_STATUS_CANCELLED,
-          SearchQuery: searchQuery,
-          LastModified: nowIso,
-          ReviewState: 'not_required',
-          ReviewedBy: null,
-          LastReviewDecision: existingRun.LastReviewDecision ?? null,
-          LastReviewNotes: existingRun.LastReviewNotes ?? null
-        });
-        if (!result || result.changes === 0) {
-          throw new Error('Failed to update agentic run during cancel');
+      if (!result.cancelled) {
+        if (result.reason === 'not-found') {
+          return sendJson(res, 404, { error: 'Agentic run not found' });
         }
 
-        ctx.logEvent({
-          Actor: actorName,
-          EntityType: 'Item',
-          EntityId: itemUUID,
-          Event: 'AgenticRunCancelled',
-          Meta: JSON.stringify({ previousStatus, cancelledAt: nowIso })
-        });
+        return sendJson(res, 400, { error: 'Unable to cancel agentic run', reason: result.reason });
       }
-    );
 
-    try {
-      cancelTransaction(itemId, existingRun.SearchQuery || null, actor, existingRun.Status || null);
+      console.info('Agentic run cancelled', itemId, 'by', actor);
+      return sendJson(res, 200, { agentic: result.agentic });
     } catch (err) {
       console.error('Failed to cancel agentic run', err);
       return sendJson(res, 500, { error: 'Failed to cancel agentic run' });
-    }
-
-    try {
-      const refreshed = ctx.getAgenticRun.get(itemId) || null;
-      console.info('Agentic run cancelled', itemId, 'by', actor);
-      return sendJson(res, 200, { agentic: refreshed });
-    } catch (err) {
-      console.error('Failed to load agentic run after cancel', err);
-      return sendJson(res, 500, { error: 'Failed to load agentic run' });
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic cancel API</p></div>'
