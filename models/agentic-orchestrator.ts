@@ -6,12 +6,24 @@ export interface AgenticRunReviewMetadata {
   reviewedBy: string | null;
 }
 
+export interface AgenticRequestNotificationMetadata {
+  completedAt?: string | null;
+  error?: string | null;
+}
+
+export interface AgenticRequestContext {
+  id: string;
+  payload?: unknown;
+  notification?: AgenticRequestNotificationMetadata | null;
+}
+
 export interface AgenticRunStartInput {
   itemId: string;
   searchQuery?: string | null;
   actor?: string | null;
   review?: AgenticRunReviewMetadata | null;
   context?: string | null;
+  request?: AgenticRequestContext | null;
 }
 
 export interface AgenticRunStartResult {
@@ -25,6 +37,7 @@ export interface AgenticRunCancelInput {
   itemId: string;
   actor: string;
   reason?: string | null;
+  request?: AgenticRequestContext | null;
 }
 
 export interface AgenticRunCancelResult {
@@ -47,6 +60,10 @@ export interface AgenticHealthStatus {
   queuedRuns: number;
   runningRuns: number;
   lastUpdatedAt?: string | null;
+}
+
+export interface AgenticHealthOptions {
+  request?: AgenticRequestContext | null;
 }
 
 export interface AgenticModelInvocationInput {

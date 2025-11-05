@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
+import { resolveAgenticRequestContext } from './agentic-request-context';
 
 export interface AgenticRunTriggerPayload {
   itemId?: string | null;
@@ -93,6 +94,7 @@ export async function forwardAgenticTrigger(
   const { context = 'server', logger = console, service: serviceDeps } = options;
 
   const { artikelbeschreibung, itemId } = buildAgenticRunRequestBody(payload);
+  const requestContext = resolveAgenticRequestContext(payload, itemId);
   if (!serviceDeps) {
     throw new Error('Agentic service dependencies are required');
   }
@@ -103,7 +105,8 @@ export async function forwardAgenticTrigger(
         itemId,
         searchQuery: artikelbeschreibung,
         review: payload.review ?? null,
-        context
+        context,
+        request: requestContext
       },
       {
         ...serviceDeps,

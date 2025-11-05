@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import { cancelAgenticRun } from '../agentic';
+import { resolveAgenticRequestContext } from './agentic-request-context';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -49,9 +50,11 @@ const action: Action = {
       return sendJson(res, 400, { error: 'actor is required' });
     }
 
+    const requestContext = resolveAgenticRequestContext(payload, itemId);
+
     try {
       const result = await cancelAgenticRun(
-        { itemId, actor },
+        { itemId, actor, request: requestContext },
         {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
