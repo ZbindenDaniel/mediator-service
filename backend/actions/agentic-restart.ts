@@ -1,8 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { AgenticRun } from '../../models';
-import { AGENTIC_RUN_STATUS_QUEUED } from '../../models';
-import { forwardAgenticTrigger } from './agentic-trigger';
+import { restartAgenticRun } from '../agentic';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -77,148 +75,42 @@ const action: Action = {
     const normalizedReviewNotes = reviewNotesRaw ? reviewNotesRaw.trim() : '';
     const normalizedReviewActor = reviewActorRaw ? reviewActorRaw.trim() : '';
 
-    let existingRun: AgenticRun | undefined;
     try {
-      existingRun = ctx.getAgenticRun.get(itemId) as AgenticRun | undefined;
-    } catch (err) {
-      console.error('Failed to load existing agentic run for restart', err);
-      return sendJson(res, 500, { error: 'Failed to load agentic run' });
-    }
-
-    const nextSearchQuery = providedSearch || existingRun?.SearchQuery || null;
-    const reviewMetadata = {
-      decision: normalizedReviewDecision || existingRun?.LastReviewDecision || null,
-      notes: normalizedReviewNotes || existingRun?.LastReviewNotes || null,
-      reviewedBy: normalizedReviewActor || existingRun?.ReviewedBy || null
-    };
-    const hadExistingRun = Boolean(existingRun);
-    const previousStatus = existingRun?.Status ?? null;
-
-    const restartTransaction = ctx.db.transaction(
-      (
-        itemUUID: string,
-        searchQuery: string | null,
-        hasExisting: boolean,
-        prevStatus: string | null,
-        review: { decision: string | null; notes: string | null; reviewedBy: string | null }
-      ) => {
-        const nowIso = new Date().toISOString();
-        if (hasExisting) {
-          const result = ctx.updateAgenticRunStatus.run({
-            ItemUUID: itemUUID,
-            Status: AGENTIC_RUN_STATUS_QUEUED,
-            SearchQuery: searchQuery,
-            LastModified: nowIso,
-            ReviewState: 'not_required',
-            ReviewedBy: null,
-            LastReviewDecision: review.decision,
-            LastReviewNotes: review.notes
-          });
-          if (!result || result.changes === 0) {
-            throw new Error('No agentic run updated');
-          }
-        } else {
-          const result = ctx.upsertAgenticRun.run({
-            ItemUUID: itemUUID,
-            SearchQuery: searchQuery,
-            Status: AGENTIC_RUN_STATUS_QUEUED,
-            LastModified: nowIso,
-            ReviewState: 'not_required',
-            ReviewedBy: null,
-            LastReviewDecision: review.decision,
-            LastReviewNotes: review.notes
-          });
-          if (!result || result.changes === 0) {
-            throw new Error('Failed to create agentic run');
-          }
+      const result = await restartAgenticRun(
+        {
+          itemId,
+          searchQuery: providedSearch,
+          actor,
+          review: {
+            decision: normalizedReviewDecision || null,
+            notes: normalizedReviewNotes || null,
+            reviewedBy: normalizedReviewActor || null
+          },
+          context: 'agentic-restart'
+        },
+        {
+          db: ctx.db,
+          getAgenticRun: ctx.getAgenticRun,
+          upsertAgenticRun: ctx.upsertAgenticRun,
+          updateAgenticRunStatus: ctx.updateAgenticRunStatus,
+          logEvent: ctx.logEvent,
+          logger: console,
+          now: () => new Date()
         }
+      );
 
-        ctx.logEvent({
-          Actor: actor,
-          EntityType: 'Item',
-          EntityId: itemUUID,
-          Event: 'AgenticRunRestarted',
-          Meta: JSON.stringify({
-            previousStatus: prevStatus,
-            searchQuery,
-            created: !hasExisting,
-            lastReviewDecision: review.decision,
-            lastReviewNotes: review.notes,
-            lastReviewActor: review.reviewedBy
-          })
+      if (!result.queued) {
+        return sendJson(res, 400, {
+          error: 'Failed to restart agentic run',
+          reason: result.reason
         });
       }
-    );
 
-    try {
-      restartTransaction(itemId, nextSearchQuery, hadExistingRun, previousStatus, reviewMetadata);
+      return sendJson(res, 200, { agentic: result.agentic });
     } catch (err) {
-      console.error('Failed to reset agentic run state', err);
+      console.error('Failed to restart agentic run', err);
       return sendJson(res, 500, { error: 'Failed to restart agentic run' });
     }
-
-    let refreshed: AgenticRun | null = null;
-    try {
-      refreshed = (ctx.getAgenticRun.get(itemId) as AgenticRun | undefined) || null;
-    } catch (err) {
-      console.error('Failed to load refreshed agentic run after restart', err);
-      return sendJson(res, 500, { error: 'Failed to load refreshed agentic run' });
-    }
-
-    if (ctx.agenticServiceEnabled) {
-      const triggerSearchTerm =
-        (typeof nextSearchQuery === 'string' && nextSearchQuery.trim()) ||
-        (typeof refreshed?.SearchQuery === 'string' && refreshed.SearchQuery.trim()) ||
-        null;
-
-      if (!triggerSearchTerm) {
-        console.warn('[agentic-restart] Agentic trigger skipped: missing search term after restart', {
-          itemId
-        });
-      } else {
-        try {
-          const triggerPayload: AgenticRunTriggerPayload = {
-            itemId,
-            artikelbeschreibung: triggerSearchTerm
-          };
-          const reviewForDispatch = {
-            decision: refreshed?.LastReviewDecision ?? reviewMetadata.decision ?? null,
-            notes: refreshed?.LastReviewNotes ?? reviewMetadata.notes ?? null,
-            reviewedBy: refreshed?.ReviewedBy ?? reviewMetadata.reviewedBy ?? null
-          };
-          const hasReviewDetails = Boolean(
-            (reviewForDispatch.decision && reviewForDispatch.decision.trim()) ||
-              (reviewForDispatch.notes && reviewForDispatch.notes.trim()) ||
-              (reviewForDispatch.reviewedBy && reviewForDispatch.reviewedBy.trim())
-          );
-          if (hasReviewDetails) {
-            triggerPayload.review = reviewForDispatch;
-          }
-
-          const result = await forwardAgenticTrigger(
-            triggerPayload,
-            {
-              context: 'agentic-restart',
-              logger: console
-            }
-          );
-
-          if (!result.ok) {
-            console.error('[agentic-restart] Agentic trigger responded with failure', {
-              itemId,
-              status: result.status,
-              details: result.body ?? result.rawBody
-            });
-          }
-        } catch (triggerErr) {
-          console.error('[agentic-restart] Failed to dispatch agentic trigger after restart', triggerErr);
-        }
-      }
-    } else {
-      console.info('[agentic-restart] Agentic service disabled; skipping trigger dispatch', { itemId });
-    }
-
-    return sendJson(res, 200, { agentic: refreshed });
   },
   view: () => '<div class="card"><p class="muted">Agentic restart API</p></div>'
 };

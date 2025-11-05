@@ -7,6 +7,7 @@ import {
   type AgenticRunQueueUpdate
 } from './db';
 import { forwardAgenticTrigger, type AgenticRunTriggerPayload } from './actions/agentic-trigger';
+import type { AgenticServiceDependencies } from './agentic';
 import type { Item } from './db';
 
 export interface AgenticQueueWorkerLogger {
@@ -16,11 +17,12 @@ export interface AgenticQueueWorkerLogger {
 }
 
 export interface AgenticQueueWorkerOptions {
-  agenticApiBase: string;
+  agenticApiBase?: string;
   limit?: number;
   logger?: AgenticQueueWorkerLogger;
   now?: () => Date;
   forwardTrigger?: typeof forwardAgenticTrigger;
+  service?: AgenticServiceDependencies;
 }
 
 const DEFAULT_LIMIT = 5;
@@ -85,6 +87,11 @@ function shouldAttemptNow(run: AgenticRun, attemptTime: Date): boolean {
 export async function processQueuedAgenticRuns(options: AgenticQueueWorkerOptions): Promise<void> {
   const logger = options.logger ?? console;
   const forward = options.forwardTrigger ?? forwardAgenticTrigger;
+  const serviceDeps = options.service;
+  if (!serviceDeps) {
+    logger.warn?.('[agentic-worker] Agentic service dependencies missing; skipping dispatch cycle');
+    return;
+  }
   const limit = options.limit ?? DEFAULT_LIMIT;
 
   let runs: AgenticRun[] = [];
@@ -146,7 +153,8 @@ export async function processQueuedAgenticRuns(options: AgenticQueueWorkerOption
     try {
       const result = await forward(payload, {
         context: 'agentic-queue-worker',
-        agenticApiBase: options.agenticApiBase
+        service: serviceDeps,
+        logger
       });
 
       if (result.ok) {

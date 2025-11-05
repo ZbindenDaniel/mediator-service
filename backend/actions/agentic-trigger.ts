@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { URL } from 'url';
 import type { Action } from './index';
-import { AGENTIC_API_BASE } from '../config';
+import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
 
 export interface AgenticRunTriggerPayload {
   itemId?: string | null;
@@ -28,20 +27,6 @@ export class AgenticTriggerValidationError extends Error {
   }
 }
 
-export class AgenticTriggerRequestError extends Error {
-  public readonly reason: 'network-error';
-
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message);
-    this.name = 'AgenticTriggerRequestError';
-    this.reason = 'network-error';
-    if (options?.cause !== undefined) {
-      // @ts-expect-error Node 16 compat
-      this.cause = options.cause;
-    }
-  }
-}
-
 export interface AgenticTriggerForwardResult {
   ok: boolean;
   status: number;
@@ -51,20 +36,8 @@ export interface AgenticTriggerForwardResult {
 
 export interface ForwardAgenticTriggerOptions {
   context?: string;
-  agenticApiBase?: string | null;
-  fetchImpl?: typeof fetch;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
-}
-
-function sanitizeAgenticApiBase(candidate: string | null | undefined): string | null {
-  if (!candidate) {
-    return null;
-  }
-  const trimmed = candidate.trim();
-  if (!trimmed) {
-    return null;
-  }
-  return trimmed.replace(/\/+$/, '');
+  service?: AgenticServiceDependencies;
 }
 
 export function buildAgenticRunRequestBody(payload: AgenticRunTriggerPayload) {
@@ -117,69 +90,60 @@ export async function forwardAgenticTrigger(
   payload: AgenticRunTriggerPayload,
   options: ForwardAgenticTriggerOptions = {}
 ): Promise<AgenticTriggerForwardResult> {
-  const { context = 'server', agenticApiBase, fetchImpl = fetch, logger = console } = options;
+  const { context = 'server', logger = console, service: serviceDeps } = options;
 
-  const sanitizedBase = sanitizeAgenticApiBase(agenticApiBase ?? AGENTIC_API_BASE);
-  if (!sanitizedBase) {
-    throw new Error('Agentic API base URL is not configured');
+  const { artikelbeschreibung, itemId } = buildAgenticRunRequestBody(payload);
+  if (!serviceDeps) {
+    throw new Error('Agentic service dependencies are required');
   }
 
-  const { requestBody } = buildAgenticRunRequestBody(payload);
-
-  let runUrl: string;
   try {
-    runUrl = new URL('/run', sanitizedBase).toString();
-  } catch (err) {
-    logger.error?.('[agentic-trigger] Failed to construct run URL', err);
-    throw err;
-  }
-
-  let response: Response;
-  try {
-    response = await fetchImpl(runUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
-  } catch (err) {
-    logger.error?.('[agentic-trigger] Network error while forwarding trigger', { context });
-    throw new AgenticTriggerRequestError('Failed to reach agentic service', { cause: err });
-  }
-
-  let rawBody: string | null = null;
-  let parsedBody: unknown = null;
-  try {
-    rawBody = await response.text();
-    if (rawBody) {
-      try {
-        parsedBody = JSON.parse(rawBody);
-      } catch (parseErr) {
-        parsedBody = rawBody;
+    const result = await startAgenticRun(
+      {
+        itemId,
+        searchQuery: artikelbeschreibung,
+        review: payload.review ?? null,
+        context
+      },
+      {
+        ...serviceDeps,
+        logger: serviceDeps.logger ?? options.logger ?? console
       }
+    );
+
+    if (!result.queued) {
+      logger.warn?.('[agentic-trigger] Agentic run start declined', {
+        context,
+        itemId,
+        reason: result.reason
+      });
+      return {
+        ok: false,
+        status: 409,
+        body: { reason: result.reason },
+        rawBody: null
+      };
     }
+
+    logger.info?.('[agentic-trigger] Agentic run queued locally', { context, itemId });
+    return {
+      ok: true,
+      status: 202,
+      body: { agentic: result.agentic },
+      rawBody: null
+    };
   } catch (err) {
-    logger.warn?.('[agentic-trigger] Failed to read agentic response body', err);
-  }
-
-  if (!response.ok) {
-    logger.error?.('[agentic-trigger] Agentic service responded with error', {
+    logger.error?.('[agentic-trigger] Failed to start agentic run', {
       context,
-      status: response.status,
-      body: parsedBody ?? rawBody
+      error: err instanceof Error ? err.message : err
     });
-  } else {
-    logger.info?.('[agentic-trigger] Agentic run forwarded successfully', {
-      context,
-      status: response.status
-    });
+    return {
+      ok: false,
+      status: 500,
+      body: { error: 'agentic-start-failed' },
+      rawBody: null
+    };
   }
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    body: parsedBody,
-    rawBody
-  };
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -193,11 +157,6 @@ const action: Action = {
   appliesTo: () => false,
   matches: (path, method) => path === '/api/agentic/run' && method === 'POST',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
-    if (!ctx.agenticServiceEnabled) {
-      console.info('[agentic-trigger] Agentic service disabled; skipping trigger proxy');
-      return sendJson(res, 503, { error: 'Agentic service disabled' });
-    }
-
     let raw = '';
     try {
       for await (const chunk of req) {
@@ -230,15 +189,27 @@ const action: Action = {
     try {
       const result = await forwardAgenticTrigger(payload, {
         context: contextLabel,
-        agenticApiBase: AGENTIC_API_BASE,
-        logger: console
+        logger: console,
+        service: {
+          db: ctx.db,
+          getAgenticRun: ctx.getAgenticRun,
+          upsertAgenticRun: ctx.upsertAgenticRun,
+          updateAgenticRunStatus: ctx.updateAgenticRunStatus,
+          logEvent: ctx.logEvent,
+          logger: console,
+          now: () => new Date()
+        }
       });
 
       if (result.ok) {
-        return sendJson(res, result.status || 202, { ok: true });
+        const agenticPayload = (result.body as { agentic?: unknown }) ?? {};
+        return sendJson(res, result.status || 202, {
+          ok: true,
+          agentic: agenticPayload.agentic ?? null
+        });
       }
 
-      return sendJson(res, result.status || 502, {
+      return sendJson(res, result.status || 422, {
         error: 'Agentic trigger failed',
         details: result.body ?? result.rawBody
       });
@@ -247,11 +218,7 @@ const action: Action = {
         console.warn('[agentic-trigger] Validation error', { reason: err.reason });
         return sendJson(res, 400, { error: err.message, reason: err.reason });
       }
-      if (err instanceof AgenticTriggerRequestError) {
-        console.error('[agentic-trigger] Request error while forwarding trigger', err);
-        return sendJson(res, 502, { error: err.message, reason: err.reason });
-      }
-      console.error('[agentic-trigger] Unexpected error while forwarding trigger', err);
+      console.error('[agentic-trigger] Unexpected error while triggering agentic run', err);
       return sendJson(res, 500, { error: 'Failed to trigger agentic run' });
     }
   },
