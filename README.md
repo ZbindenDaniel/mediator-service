@@ -51,7 +51,6 @@ docker run --rm \
   -e DB_PATH=/var/lib/mediator/mediator.sqlite \
   -e INBOX_DIR=/var/lib/mediator/inbox \
   -e ARCHIVE_DIR=/var/lib/mediator/archive \
-  -e AGENTIC_API_BASE=https://agentic.example/api \
   -e TLS_CERT_PATH=/etc/mediator/tls/server.crt \
   -e TLS_KEY_PATH=/etc/mediator/tls/server.key \
   -v mediator-data:/var/lib/mediator \
@@ -75,8 +74,16 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 - `DB_PATH` – filesystem path to the SQLite database; map it onto persistent storage so data survives container restarts.
 - `INBOX_DIR` – directory where imported CSV files are staged; persist or share this path with automation that drops new files.
 - `ARCHIVE_DIR` – directory that receives processed CSV files; persist alongside the inbox for auditing.
-- `AGENTIC_API_BASE` – base URL for the external agent integration; expose the network so the container can reach the service.
 - `TLS_CERT_PATH` / `TLS_KEY_PATH` – PEM-encoded certificate and key that enable the optional HTTPS listener when both are present.
+
+### Agentic orchestrator configuration
+
+- `AGENTIC_MODEL_PROVIDER` – selects the in-process agentic model backend (`ollama`, `openai`, etc.).
+- `AGENTIC_SHARED_SECRET` – authenticates callbacks between the orchestrator worker and the HTTP layer.
+- `AGENTIC_OLLAMA_BASE_URL` / `AGENTIC_OLLAMA_MODEL` – host URL and model name when using Ollama.
+- `AGENTIC_OPENAI_BASE_URL` / `AGENTIC_OPENAI_MODEL` / `AGENTIC_OPENAI_API_KEY` – OpenAI-compatible endpoint, model, and credentials.
+- `AGENTIC_SEARCH_BASE_URL` / `AGENTIC_SEARCH_PORT` / `AGENTIC_SEARCH_PATH` – optional HTTP endpoint for delegated search enrichment.
+- `TAVILY_API_KEY` / `SEARCH_WEB_ALLOWED_ENGINES` – API key and safelist for external web search fallbacks.
 
 ### Recommended volumes
 
@@ -97,6 +104,12 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 - `PUBLIC_ORIGIN` can be used to override the entire origin (protocol + hostname + port) if finer control is required. When absent the origin is derived from the protocol/host/port variables above.
 - `TLS_CERT_PATH` and `TLS_KEY_PATH` should point to PEM-encoded certificate and key files. When both are provided the server launches an HTTPS listener on `HTTPS_PORT` (default `8443`) in addition to the HTTP listener. Missing or unreadable files are logged and HTTPS is skipped.
 - `BASE_QR_URL` and `BASE_UI_URL` still accept explicit overrides, but now default to `${PUBLIC_ORIGIN}/qr` and `${PUBLIC_ORIGIN}/ui` respectively so generated QR codes and labels remain consistent with the configured public endpoint.
+
+### Deployment notes (agentic orchestrator)
+
+1. Decommission the standalone `ai-flow-service` container or process; the mediator now embeds the orchestrator and queue worker.
+2. After deploying a new version, run `node scripts/verify-agentic-migration.js /path/to/mediator.sqlite` (or the packaged equivalent) to confirm the `agentic_request_logs` schema exists before enabling traffic. _TODO:_ add this verification to the CI/CD pipeline so the check runs automatically.
+3. Update your secrets manager or deployment environment to supply the `AGENTIC_*` variables above directly to the mediator container.
 
 Quick commands:
 
