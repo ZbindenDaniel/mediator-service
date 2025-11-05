@@ -32,7 +32,6 @@ describe('handleAgenticRunTrigger', () => {
     await handleAgenticRunTrigger({
       agenticPayload: payload,
       context: 'test-triggered',
-      agenticRunUrl: '/api/agentic/run',
       triggerAgenticRunRequest: triggerRequest,
       reportFailure,
       alertFn,
@@ -41,11 +40,7 @@ describe('handleAgenticRunTrigger', () => {
     });
 
     expect(triggerRequest).toHaveBeenCalledTimes(1);
-    expect(triggerRequest).toHaveBeenCalledWith({
-      runUrl: '/api/agentic/run',
-      payload,
-      context: 'test-triggered'
-    });
+    expect(triggerRequest).toHaveBeenCalledWith({ payload, context: 'test-triggered' });
     const [[triggerArgs]] = triggerRequest.mock.calls;
     expect(triggerArgs.payload).toEqual({
       artikelbeschreibung: 'Beispiel Artikel',
@@ -74,7 +69,6 @@ describe('handleAgenticRunTrigger', () => {
     await handleAgenticRunTrigger({
       agenticPayload: payload,
       context: 'test-skipped',
-      agenticRunUrl: '/api/agentic/run',
       triggerAgenticRunRequest: triggerRequest,
       reportFailure,
       alertFn,
@@ -121,7 +115,6 @@ describe('handleAgenticRunTrigger', () => {
     await handleAgenticRunTrigger({
       agenticPayload: payload,
       context: 'test-failed',
-      agenticRunUrl: '/api/agentic/run',
       triggerAgenticRunRequest: triggerRequest,
       reportFailure,
       alertFn,
@@ -163,7 +156,6 @@ describe('handleAgenticRunTrigger', () => {
       context: 'backend-dispatched',
       shouldUseAgenticForm: true,
       backendDispatched: true,
-      agenticRunUrl: '/api/agentic/run',
       triggerAgenticRunRequest: triggerRequest,
       reportFailure,
       alertFn,
