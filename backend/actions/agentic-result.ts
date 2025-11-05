@@ -1,17 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { AgenticRun, Item } from '../../models';
+import type { AgenticRun, AgenticRequestContext, Item } from '../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
   AGENTIC_RUN_STATUS_APPROVED,
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_RUNNING,
   AGENTIC_RUN_STATUS_REJECTED,
   AGENTIC_RUN_STATUS_REVIEW,
   normalizeAgenticRunStatus
 } from '../../models';
 import { AGENTIC_SHARED_SECRET } from '../config';
+import { recordAgenticRequestLogUpdate } from '../agentic';
+import { resolveAgenticRequestContext } from './agentic-request-context';
 
 const SHARED_SECRET_HEADER = 'x-agent-secret';
 
@@ -45,6 +48,9 @@ const action: Action = {
   appliesTo: () => false,
   matches: (path, method) => method === 'POST' && /^\/api\/agentic\/items\/[^/]+\/result$/.test(path),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
+    const requestLogger = console;
+    let requestContext: AgenticRequestContext | null = null;
+    let searchQueryForLog: string | null = null;
     try {
       if (!req.url) return sendJson(res, 400, { error: 'Invalid request' });
       const match = req.url.match(/^\/api\/agentic\/items\/([^/]+)\/result$/);
@@ -70,10 +76,28 @@ const action: Action = {
         return sendJson(res, 400, { error: 'Invalid JSON payload' });
       }
 
+      requestContext = resolveAgenticRequestContext(payload, itemId);
+      const initialSearch =
+        payload && typeof payload === 'object' && typeof payload.search === 'string' && payload.search.trim()
+          ? payload.search.trim()
+          : null;
+
       if (!payload || typeof payload !== 'object') {
         console.warn('Agentic result missing payload object');
+        recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+          error: 'payload-required',
+          markRunning: true,
+          searchQuery: initialSearch,
+          logger: requestLogger
+        });
         return sendJson(res, 400, { error: 'Payload is required' });
       }
+
+      recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_RUNNING, {
+        markRunning: true,
+        searchQuery: initialSearch,
+        logger: requestLogger
+      });
 
       const statusInput = typeof payload.status === 'string' ? payload.status : '';
       const normalizedIncomingStatus = normalizeAgenticRunStatus(statusInput);
@@ -173,6 +197,7 @@ const action: Action = {
           const searchQueryUpdate = typeof agenticPayload?.searchQuery === 'string' && agenticPayload.searchQuery.trim()
             ? agenticPayload.searchQuery.trim()
             : existingRun?.SearchQuery ?? null;
+          searchQueryForLog = searchQueryUpdate;
           const runUpdate = {
             ItemUUID: itemUUID,
             SearchQuery: searchQueryUpdate,
@@ -226,17 +251,38 @@ const action: Action = {
           }
         );
       } catch (err) {
-        if ((err as Error).message === 'Item not found') {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === 'Item not found') {
           console.error('Agentic result item not found', itemId);
+          recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+            error: 'item-not-found',
+            logger: requestLogger
+          });
           return sendJson(res, 404, { error: 'Item not found' });
         }
         console.error('Agentic result transaction failed', err);
+        recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+          error: message,
+          searchQuery: searchQueryForLog,
+          logger: requestLogger
+        });
         return sendJson(res, 500, { error: 'Failed to process agentic result' });
       }
 
+      recordAgenticRequestLogUpdate(requestContext, statusForPersistence, {
+        error: errorMessage,
+        searchQuery: searchQueryForLog,
+        logger: requestLogger
+      });
       return sendJson(res, 200, { ok: true });
     } catch (err) {
       console.error('Agentic result handler failed', err);
+      const failureMessage = err instanceof Error ? err.message : String(err);
+      recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+        error: failureMessage,
+        searchQuery: searchQueryForLog,
+        logger: requestLogger
+      });
       return sendJson(res, 500, { error: 'Internal error' });
     }
   },

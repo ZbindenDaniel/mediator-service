@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
 import { restartAgenticRun } from '../agentic';
+import { resolveAgenticRequestContext } from './agentic-request-context';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -74,6 +75,7 @@ const action: Action = {
     const normalizedReviewDecision = reviewDecisionRaw ? reviewDecisionRaw.trim().toLowerCase() : '';
     const normalizedReviewNotes = reviewNotesRaw ? reviewNotesRaw.trim() : '';
     const normalizedReviewActor = reviewActorRaw ? reviewActorRaw.trim() : '';
+    const requestContext = resolveAgenticRequestContext(payload, itemId);
 
     try {
       const result = await restartAgenticRun(
@@ -86,7 +88,8 @@ const action: Action = {
             notes: normalizedReviewNotes || null,
             reviewedBy: normalizedReviewActor || null
           },
-          context: 'agentic-restart'
+          context: 'agentic-restart',
+          request: requestContext
         },
         {
           db: ctx.db,
