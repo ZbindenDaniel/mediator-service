@@ -36,6 +36,8 @@ The latest commit pulled the entire ai-flow-service repository into this project
   - Inspect any AI-flow migrations/schema files and port only the tables actually used at runtime into backend/db.ts, ensuring they follow mediator naming and reuse better-sqlite3 helpers already present.
   - Double-check shared models under models/ (e.g., agentic-run.ts) so new columns or types stay consistent between backend and frontend per user instruction on data structures.
   - If AI-flow introduced a separate database, provide a one-time migration path that copies rows into mediator’s agentic_runs table, logging failures with try/catch blocks.
+  - ✅ Added `agentic_request_logs` schema management and helper functions to `backend/db.ts` so mediator owns request log persistence. Legacy AI-flow `request_logs` data will be dropped during consolidation, so no migration script is required.
+  - TODO: Wire upcoming in-process agentic orchestrator flows to the new request log helpers so the ai-flow `request_logs` proxy can be fully retired.
 
 - 6. Implement an in-process agentic orchestrator
   - Create a service module (e.g., backend/agentic/service.ts) that exposes methods for startRun, cancelRun, restartRun, checkHealth, and submitResult. The orchestrator should:
