@@ -9,6 +9,9 @@ import type {
   ShopwareSyncQueueStatus
 } from './shopware/queueTypes';
 import {
+  AgenticRequestLog,
+  AgenticRequestLogUpsert,
+  AgenticRequestNotification,
   AgenticRun,
   Box,
   Item,
@@ -831,6 +834,85 @@ function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
   }
 }
 
+const CREATE_AGENTIC_REQUEST_LOGS_SQL = `
+CREATE TABLE IF NOT EXISTS agentic_request_logs (
+  UUID TEXT PRIMARY KEY,
+  Search TEXT,
+  Status TEXT,
+  Error TEXT,
+  CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+  UpdatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+  NotifiedAt TEXT,
+  LastNotificationError TEXT,
+  PayloadJson TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_status ON agentic_request_logs(Status);
+CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_notification_pending
+  ON agentic_request_logs (Status, NotifiedAt, UpdatedAt)
+  WHERE Status = 'SUCCESS' AND NotifiedAt IS NULL;
+`;
+
+function ensureAgenticRequestLogSchema(database: Database.Database = db): void {
+  try {
+    database.exec(CREATE_AGENTIC_REQUEST_LOGS_SQL);
+  } catch (err) {
+    console.error('Failed to ensure agentic_request_logs schema', err);
+    throw err;
+  }
+
+  ensureAgenticRequestLogColumns(database);
+}
+
+function ensureAgenticRequestLogColumns(database: Database.Database = db): void {
+  let columns: Array<{ name: string }> = [];
+  try {
+    columns = database.prepare(`PRAGMA table_info(agentic_request_logs)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect agentic_request_logs schema for missing columns', err);
+    throw err;
+  }
+
+  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
+
+  const alterations: Array<{ name: string; sql: string }> = [];
+  if (!hasColumn('NotifiedAt')) {
+    alterations.push({ name: 'NotifiedAt', sql: "ALTER TABLE agentic_request_logs ADD COLUMN NotifiedAt TEXT" });
+  }
+  if (!hasColumn('LastNotificationError')) {
+    alterations.push({
+      name: 'LastNotificationError',
+      sql: 'ALTER TABLE agentic_request_logs ADD COLUMN LastNotificationError TEXT'
+    });
+  }
+  if (!hasColumn('PayloadJson')) {
+    alterations.push({ name: 'PayloadJson', sql: "ALTER TABLE agentic_request_logs ADD COLUMN PayloadJson TEXT" });
+  }
+
+  for (const { name, sql } of alterations) {
+    try {
+      database.prepare(sql).run();
+      console.info('[db] Added missing agentic_request_logs column', name);
+    } catch (err) {
+      console.error('Failed to add agentic_request_logs column', name, err);
+      throw err;
+    }
+  }
+
+  try {
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_status ON agentic_request_logs(Status);
+      CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_notification_pending
+        ON agentic_request_logs (Status, NotifiedAt, UpdatedAt)
+        WHERE Status = 'SUCCESS' AND NotifiedAt IS NULL;
+    `);
+  } catch (err) {
+    console.error('Failed to ensure agentic_request_logs indexes', err);
+    throw err;
+  }
+}
+
+ensureAgenticRequestLogSchema(db);
 ensureAgenticRunSchema(db);
 
 export { db };
@@ -871,6 +953,355 @@ ORDER BY i.ItemUUID
 `);
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
+
+const upsertAgenticRequestLogStatement = db.prepare(
+  `
+    INSERT INTO agentic_request_logs (
+      UUID, Search, Status, Error, CreatedAt, UpdatedAt, NotifiedAt, LastNotificationError, PayloadJson
+    )
+    VALUES (
+      @UUID,
+      @Search,
+      @Status,
+      @Error,
+      COALESCE(@CreatedAt, datetime('now')),
+      COALESCE(@UpdatedAt, datetime('now')),
+      @NotifiedAt,
+      @LastNotificationError,
+      @PayloadJson
+    )
+    ON CONFLICT(UUID) DO UPDATE SET
+      Search=COALESCE(excluded.Search, agentic_request_logs.Search),
+      Status=COALESCE(excluded.Status, agentic_request_logs.Status),
+      Error=CASE WHEN @ErrorIsSet THEN excluded.Error ELSE agentic_request_logs.Error END,
+      UpdatedAt=COALESCE(excluded.UpdatedAt, agentic_request_logs.UpdatedAt),
+      NotifiedAt=COALESCE(excluded.NotifiedAt, agentic_request_logs.NotifiedAt),
+      LastNotificationError=CASE
+        WHEN @LastNotificationErrorIsSet THEN excluded.LastNotificationError
+        ELSE agentic_request_logs.LastNotificationError
+      END,
+      PayloadJson=COALESCE(excluded.PayloadJson, agentic_request_logs.PayloadJson)
+  `
+);
+
+const startAgenticRequestLogStatement = db.prepare(
+  `
+    INSERT INTO agentic_request_logs (UUID, Search, Status, Error, CreatedAt, UpdatedAt, LastNotificationError)
+    VALUES (@UUID, @Search, @Status, NULL, @Now, @Now, NULL)
+    ON CONFLICT(UUID) DO UPDATE SET
+      Search=excluded.Search,
+      Status=excluded.Status,
+      Error=NULL,
+      UpdatedAt=excluded.UpdatedAt,
+      LastNotificationError=NULL,
+      NotifiedAt=NULL,
+      PayloadJson=NULL
+  `
+);
+
+const completeAgenticRequestLogStatement = db.prepare(
+  `
+    UPDATE agentic_request_logs
+       SET Status = @Status,
+           Error = @Error,
+           UpdatedAt = @Now
+     WHERE UUID = @UUID
+  `
+);
+
+const saveAgenticRequestPayloadStatement = db.prepare(
+  `
+    UPDATE agentic_request_logs
+       SET PayloadJson = @PayloadJson,
+           UpdatedAt = @Now
+     WHERE UUID = @UUID
+  `
+);
+
+const markAgenticRequestNotificationSuccessStatement = db.prepare(
+  `
+    UPDATE agentic_request_logs
+       SET NotifiedAt = @NotifiedAt,
+           LastNotificationError = NULL,
+           UpdatedAt = @UpdatedAt
+     WHERE UUID = @UUID
+  `
+);
+
+const markAgenticRequestNotificationFailureStatement = db.prepare(
+  `
+    UPDATE agentic_request_logs
+       SET LastNotificationError = @Error,
+           UpdatedAt = @UpdatedAt
+     WHERE UUID = @UUID
+  `
+);
+
+const selectPendingAgenticRequestNotificationsStatement = db.prepare(
+  `
+    SELECT UUID, PayloadJson
+      FROM agentic_request_logs
+     WHERE Status = 'SUCCESS'
+       AND NotifiedAt IS NULL
+       AND PayloadJson IS NOT NULL
+     ORDER BY UpdatedAt ASC
+     LIMIT @Limit
+  `
+);
+
+const getAgenticRequestLogStatement = db.prepare(
+  `
+    SELECT UUID, Search, Status, Error, CreatedAt, UpdatedAt, NotifiedAt, LastNotificationError, PayloadJson
+      FROM agentic_request_logs
+     WHERE UUID = ?
+  `
+);
+
+type AgenticRequestNotificationRow = {
+  UUID: string;
+  PayloadJson: string | null;
+};
+
+function resolveAgenticRequestPayload(json: string | null, uuid: string): unknown {
+  if (json === null) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(json);
+  } catch (err) {
+    console.error('[db] Failed to parse agentic request payload_json', { uuid, error: err });
+    return null;
+  }
+}
+
+export function upsertAgenticRequestLog(log: AgenticRequestLogUpsert): void {
+  const uuid = typeof log.UUID === 'string' ? log.UUID.trim() : '';
+  if (!uuid) {
+    console.warn('[db] Skipping agentic request log upsert due to missing UUID');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const createdAt = toIsoString(log.CreatedAt) ?? log.CreatedAt ?? now;
+  const updatedAt = toIsoString(log.UpdatedAt) ?? log.UpdatedAt ?? now;
+  const notifiedAt = toIsoString(log.NotifiedAt) ?? null;
+  const errorIsSet = Object.prototype.hasOwnProperty.call(log, 'Error');
+  const lastNotificationErrorIsSet = Object.prototype.hasOwnProperty.call(log, 'LastNotificationError');
+
+  const payload = {
+    UUID: uuid,
+    Search: asNullableTrimmedString(log.Search),
+    Status: asNullableTrimmedString(log.Status),
+    Error: errorIsSet ? asNullableString(log.Error) : null,
+    CreatedAt: createdAt,
+    UpdatedAt: updatedAt,
+    NotifiedAt: notifiedAt,
+    LastNotificationError: lastNotificationErrorIsSet ? asNullableString(log.LastNotificationError) : null,
+    PayloadJson: log.PayloadJson ?? null,
+    ErrorIsSet: errorIsSet ? 1 : 0,
+    LastNotificationErrorIsSet: lastNotificationErrorIsSet ? 1 : 0
+  };
+
+  try {
+    upsertAgenticRequestLogStatement.run(payload);
+  } catch (err) {
+    console.error('[db] Failed to upsert agentic_request_logs row', { uuid, error: err });
+    throw err;
+  }
+}
+
+export function logAgenticRequestStart(uuid: string, search: string | null): void {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) {
+    console.warn('[db] Cannot persist agentic request start without UUID');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  try {
+    startAgenticRequestLogStatement.run({
+      UUID: trimmedUuid,
+      Search: asNullableTrimmedString(search),
+      Status: 'RUNNING',
+      Now: now
+    });
+  } catch (err) {
+    console.error('[db] Failed to persist agentic request start', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export function logAgenticRequestEnd(uuid: string, status: string, error: string | null): void {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) {
+    console.warn('[db] Cannot persist agentic request completion without UUID');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  try {
+    const result = completeAgenticRequestLogStatement.run({
+      UUID: trimmedUuid,
+      Status: asNullableTrimmedString(status),
+      Error: asNullableString(error),
+      Now: now
+    });
+
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Agentic request completion updated zero rows; inserting fallback entry', { uuid: trimmedUuid });
+      upsertAgenticRequestLog({
+        UUID: trimmedUuid,
+        Status: status,
+        Error: error,
+        UpdatedAt: now
+      });
+    }
+  } catch (err) {
+    console.error('[db] Failed to persist agentic request completion', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export function saveAgenticRequestPayload(uuid: string, payload: unknown): void {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) {
+    console.warn('[db] Cannot persist agentic request payload without UUID');
+    return;
+  }
+
+  let payloadJson: string | null = null;
+  try {
+    payloadJson = JSON.stringify(payload ?? null);
+  } catch (err) {
+    console.error('[db] Failed to serialize agentic request payload', { uuid: trimmedUuid, error: err });
+  }
+
+  const now = new Date().toISOString();
+  try {
+    const result = saveAgenticRequestPayloadStatement.run({
+      UUID: trimmedUuid,
+      PayloadJson: payloadJson,
+      Now: now
+    });
+
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Agentic request payload update affected zero rows; inserting fallback entry', {
+        uuid: trimmedUuid
+      });
+      upsertAgenticRequestLog({
+        UUID: trimmedUuid,
+        PayloadJson: payloadJson,
+        UpdatedAt: now
+      });
+    }
+  } catch (err) {
+    console.error('[db] Failed to persist agentic request payload', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export function markAgenticRequestNotificationSuccess(uuid: string, completedAtIso: string | null = null): void {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) {
+    console.warn('[db] Cannot mark agentic request notification success without UUID');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const notifiedAt = toIsoString(completedAtIso) ?? now;
+  try {
+    const result = markAgenticRequestNotificationSuccessStatement.run({
+      UUID: trimmedUuid,
+      NotifiedAt: notifiedAt,
+      UpdatedAt: now
+    });
+
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Agentic notification success update affected zero rows; inserting fallback entry', {
+        uuid: trimmedUuid
+      });
+      upsertAgenticRequestLog({
+        UUID: trimmedUuid,
+        NotifiedAt: notifiedAt,
+        LastNotificationError: null,
+        UpdatedAt: now
+      });
+    }
+  } catch (err) {
+    console.error('[db] Failed to mark agentic notification success', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export function markAgenticRequestNotificationFailure(uuid: string, errorMessage: string): void {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) {
+    console.warn('[db] Cannot mark agentic request notification failure without UUID');
+    return;
+  }
+
+  const now = new Date().toISOString();
+  try {
+    const result = markAgenticRequestNotificationFailureStatement.run({
+      UUID: trimmedUuid,
+      Error: asNullableString(errorMessage),
+      UpdatedAt: now
+    });
+
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Agentic notification failure update affected zero rows; inserting fallback entry', {
+        uuid: trimmedUuid
+      });
+      upsertAgenticRequestLog({
+        UUID: trimmedUuid,
+        LastNotificationError: errorMessage,
+        UpdatedAt: now
+      });
+    }
+  } catch (err) {
+    console.error('[db] Failed to mark agentic notification failure', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export function listPendingAgenticRequestNotifications(limit = 10): AgenticRequestNotification[] {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 10;
+
+  let rows: AgenticRequestNotificationRow[] = [];
+  try {
+    rows = selectPendingAgenticRequestNotificationsStatement.all({ Limit: effectiveLimit }) as AgenticRequestNotificationRow[];
+  } catch (err) {
+    console.error('[db] Failed to query pending agentic request notifications', { limit: effectiveLimit, error: err });
+    throw err;
+  }
+
+  const notifications: AgenticRequestNotification[] = [];
+  for (const row of rows) {
+    const payload = resolveAgenticRequestPayload(row.PayloadJson, row.UUID);
+    if (payload !== null) {
+      notifications.push({ UUID: row.UUID, Payload: payload });
+    }
+  }
+
+  return notifications;
+}
+
+export function getAgenticRequestLog(uuid: string): AgenticRequestLog | null {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) {
+    return null;
+  }
+
+  try {
+    const row = getAgenticRequestLogStatement.get(trimmedUuid) as AgenticRequestLog | undefined;
+    return row ?? null;
+  } catch (err) {
+    console.error('[db] Failed to load agentic_request_logs row', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
