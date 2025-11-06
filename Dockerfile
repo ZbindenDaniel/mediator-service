@@ -31,7 +31,6 @@ ENV NODE_ENV=production \
     AGENTIC_OLLAMA_MODEL=qwen3:0.6b \
     AGENTIC_OPENAI_BASE_URL=https://api.openai.com/v1 \
     AGENTIC_OPENAI_MODEL=gpt-4o-mini \
-    AGENTIC_QUEUE_POLL_INTERVAL_MS=5000 \
     SEARCH_WEB_ALLOWED_ENGINES=google,duckduckgo,brave
 
 WORKDIR /app
