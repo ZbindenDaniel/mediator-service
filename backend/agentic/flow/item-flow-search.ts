@@ -1,4 +1,5 @@
 // TODO(agent): Monitor the impact of enriched item metadata on search heuristics and adjust weighting when planner feedback is available.
+// TODO(agent): Revisit the hard cap on generated search plans once telemetry confirms the typical query volume per item.
 import type { SearchResult } from '../tools/tavily-client';
 import { RateLimitError } from '../tools/tavily-client';
 import type { SearchSource } from '../utils/source-formatter';
@@ -45,6 +46,8 @@ type SearchPlan = {
   query: string;
   metadata: SearchInvokerMetadata;
 };
+
+const MAX_SEARCH_PLANS = 3;
 
 function truncateValue(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
@@ -174,6 +177,21 @@ export async function collectSearchContexts({
 }: CollectSearchContextOptions): Promise<CollectSearchContextsResult> {
   const resolvedTarget = resolveTarget(target ?? null, logger, itemId);
   const searchPlans = extractSearchPlans(searchTerm, resolvedTarget, logger, itemId);
+  const limitedPlans = searchPlans.slice(0, MAX_SEARCH_PLANS);
+
+  if (searchPlans.length > MAX_SEARCH_PLANS) {
+    try {
+      logger?.warn?.({
+        msg: 'search plan limit applied',
+        itemId,
+        requestedPlans: searchPlans.length,
+        limit: MAX_SEARCH_PLANS,
+        truncatedPlans: searchPlans.slice(MAX_SEARCH_PLANS).map((plan) => plan.query)
+      });
+    } catch (err) {
+      logger?.error?.({ err, msg: 'failed to log search plan truncation', itemId });
+    }
+  }
 
   const searchContexts: SearchContext[] = [];
   const seenSourceKeys = new Set<string>();
@@ -210,7 +228,7 @@ export async function collectSearchContexts({
     }
   };
 
-  for (const [index, plan] of searchPlans.entries()) {
+  for (const [index, plan] of limitedPlans.entries()) {
     const metadata = { ...plan.metadata, requestIndex: index };
     logger?.info?.({ msg: 'search start', searchQuery: plan.query, itemId, metadata });
     try {
