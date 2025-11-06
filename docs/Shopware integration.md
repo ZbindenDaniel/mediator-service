@@ -30,11 +30,11 @@ This document captures the current architecture, required configuration, and ope
 
 ## Configuration
 
-- Populate the following variables to enable search:
+- Populate the following variables to enable search. Leaving any of them blank keeps the feature disabled:
   - `SHOPWARE_ENABLED=true`
   - `SHOPWARE_BASE_URL=https://…`
-  - `SHOPWARE_CLIENT_ID` / `SHOPWARE_CLIENT_SECRET` **or** `SHOPWARE_ACCESS_TOKEN`
-  - `SHOPWARE_SALES_CHANNEL_ID`
+  - `SHOPWARE_CLIENT_ID` / `SHOPWARE_CLIENT_SECRET` **or** `SHOPWARE_ACCESS_TOKEN` / `SHOPWARE_API_TOKEN`
+  - `SHOPWARE_SALES_CHANNEL_ID` (or `SHOPWARE_SALES_CHANNEL`)
   - `SHOPWARE_REQUEST_TIMEOUT_MS` (optional override, defaults to 10 seconds)
 - Leave queue-specific flags at their defaults because the worker is inactive:
   - `SHOPWARE_SYNC_ENABLED=false`

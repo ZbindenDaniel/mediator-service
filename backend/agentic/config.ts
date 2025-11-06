@@ -29,10 +29,17 @@ const SECRET_TOKEN_PATTERN = /(KEY|SECRET|TOKEN)$/i;
 
 function resolveEnvValue(...keys: Array<keyof NodeJS.ProcessEnv>): string | undefined {
   for (const key of keys) {
-    const value = process.env[key];
-    if (value !== undefined) {
-      return value;
+    const rawValue = process.env[key];
+    if (rawValue === undefined) {
+      continue;
     }
+
+    const normalizedValue = rawValue.trim();
+    if (normalizedValue.length === 0) {
+      continue;
+    }
+
+    return normalizedValue;
   }
   return undefined;
 }
@@ -98,7 +105,7 @@ function resolveNumber(...keys: Array<keyof NodeJS.ProcessEnv>): number | undefi
   return parsedValue;
 }
 
-function sanitizeEnvForLogging(env: EnvSchemaInput): Record<string, unknown> {
+function sanitizeEnvForLogging(env: Record<string, unknown>): Record<string, unknown> {
   return Object.entries(env).reduce<Record<string, unknown>>((acc, [key, value]) => {
     acc[key] = SECRET_TOKEN_PATTERN.test(key) && value ? '***redacted***' : value ?? '(unset)';
     return acc;
@@ -121,7 +128,7 @@ const envInput: EnvSchemaInput = {
   SHOPWARE_BASE_URL: resolveEnvValue('SHOPWARE_BASE_URL'),
   SHOPWARE_CLIENT_ID: resolveEnvValue('SHOPWARE_CLIENT_ID'),
   SHOPWARE_CLIENT_SECRET: resolveEnvValue('SHOPWARE_CLIENT_SECRET'),
-  SHOPWARE_API_TOKEN: resolveEnvValue('SHOPWARE_API_TOKEN'),
+  SHOPWARE_API_TOKEN: resolveEnvValue('SHOPWARE_API_TOKEN', 'SHOPWARE_ACCESS_TOKEN'),
   SHOPWARE_SALES_CHANNEL: resolveEnvValue('SHOPWARE_SALES_CHANNEL', 'SHOPWARE_SALES_CHANNEL_ID'),
   AGENT_ACTOR_ID: resolveEnvValue('AGENT_ACTOR_ID')
 };
@@ -132,7 +139,7 @@ function parseEnvConfig(): z.infer<typeof envSchema> {
   } catch (err) {
     console.error?.({
       msg: 'Failed to parse agentic environment configuration',
-      envKeys: sanitizeEnvForLogging(envInput),
+      envKeys: sanitizeEnvForLogging(envInput as Record<string, unknown>),
       err
     });
     throw err;
@@ -224,9 +231,30 @@ const rawShopwareConfig = {
   salesChannel: parsedEnv.SHOPWARE_SALES_CHANNEL
 };
 
-export const shopwareConfig: ShopwareIntegrationConfig | null = rawShopwareConfig.baseUrl
-  ? shopwareConfigSchema.parse(rawShopwareConfig)
-  : null;
+const hasShopwareBase = Boolean(rawShopwareConfig.baseUrl && rawShopwareConfig.salesChannel);
+const hasShopwareApiToken = Boolean(rawShopwareConfig.apiToken);
+const hasShopwareClientCredentials = Boolean(
+  rawShopwareConfig.clientId && rawShopwareConfig.clientSecret
+);
+
+let resolvedShopwareConfig: ShopwareIntegrationConfig | null = null;
+
+if (hasShopwareBase && (hasShopwareApiToken || hasShopwareClientCredentials)) {
+  resolvedShopwareConfig = shopwareConfigSchema.parse(rawShopwareConfig);
+} else if (
+  rawShopwareConfig.baseUrl ||
+  rawShopwareConfig.salesChannel ||
+  rawShopwareConfig.clientId ||
+  rawShopwareConfig.clientSecret ||
+  rawShopwareConfig.apiToken
+) {
+  console.info?.({
+    msg: 'Skipping Shopware configuration due to incomplete settings',
+    providedKeys: sanitizeEnvForLogging(rawShopwareConfig as Record<string, unknown>)
+  });
+}
+
+export const shopwareConfig: ShopwareIntegrationConfig | null = resolvedShopwareConfig;
 
 export const agentActorId: string = parsedEnv.AGENT_ACTOR_ID?.trim() || 'item-flow-service';
 
