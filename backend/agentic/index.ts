@@ -302,7 +302,8 @@ interface BackgroundInvocationPayload {
 
 function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): void {
   const { deps, logger } = payload;
-  if (!deps.invokeModel) {
+  const invokeModel = deps.invokeModel;
+  if (!invokeModel) {
     return;
   }
 
@@ -358,7 +359,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     });
 
     try {
-      await deps.invokeModel({
+      await invokeModel({
         itemId: payload.itemId,
         searchQuery: payload.searchQuery,
         context: payload.context,
