@@ -116,10 +116,18 @@ export class AgenticModelInvoker {
         baseUrl: modelConfig.ollama.baseUrl,
         model: modelConfig.ollama.model
       });
+      const rawInvoke = (client as {
+        invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
+      }).invoke;
+      if (typeof rawInvoke !== 'function') {
+        const err = new Error('ChatOllama instance missing invoke method');
+        this.logger.error?.({ err, msg: 'ollama client missing invoke method' });
+        throw err;
+      }
       const adapter = {
         async invoke(messages: Array<{ role: string; content: unknown }>) {
-          const response = await client.invoke(messages);
-          return { content: response.content };
+          const response = await rawInvoke.call(client, messages);
+          return { content: response?.content };
         }
       } satisfies ChatModel;
       return adapter;
@@ -149,10 +157,18 @@ export class AgenticModelInvoker {
         model: modelConfig.openai.model,
         ...(configuration ? { configuration } : {})
       });
+      const rawInvoke = (client as {
+        invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
+      }).invoke;
+      if (typeof rawInvoke !== 'function') {
+        const err = new Error('ChatOpenAI instance missing invoke method');
+        this.logger.error?.({ err, msg: 'openai client missing invoke method' });
+        throw err;
+      }
       const adapter = {
         async invoke(messages: Array<{ role: string; content: unknown }>) {
-          const response = await client.invoke(messages);
-          return { content: response.content };
+          const response = await rawInvoke.call(client, messages);
+          return { content: response?.content };
         }
       } satisfies ChatModel;
       return adapter;
