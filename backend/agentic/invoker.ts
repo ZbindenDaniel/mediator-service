@@ -16,10 +16,13 @@ import { modelConfig, searchConfig } from './config';
 import { runItemFlow } from './flow/item-flow';
 import type { ItemFlowLogger } from './flow/item-flow';
 import type { ChatModel } from './flow/item-flow-extraction';
+import type { AgenticTarget } from './flow/item-flow-schemas';
 import { TavilySearchClient } from './tools/tavily-client';
 import type { SearchResult } from './tools/tavily-client';
 import { FlowError } from './flow/errors';
 import { handleAgenticResult, type AgenticResultPayload } from './result-handler';
+
+// TODO(agent): Audit request payload merge rules whenever the AgenticTarget schema evolves.
 
 export interface AgenticModelInvokerLogger extends ItemFlowLogger {
   info?: Console['info'];
@@ -61,6 +64,107 @@ function buildTargetFromRow(row: Record<string, unknown>): Record<string, unknow
     Höhe_mm: normalizeNullableNumber(row.Höhe_mm),
     Gewicht_kg: normalizeNullableNumber(row.Gewicht_kg)
   };
+}
+
+const TARGET_FIELD_KEYS: Array<keyof AgenticTarget> = [
+  'itemUUid',
+  'Artikelbeschreibung',
+  'Marktpreis',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg'
+];
+
+const TARGET_FIELD_SET = new Set<string>(TARGET_FIELD_KEYS);
+const EXTRA_TARGET_KEYS = new Set(['__locked', 'Artikel_Nummer']);
+
+const TARGET_KEY_ALIASES: Record<string, string> = {
+  artikelbeschreibung: 'Artikelbeschreibung',
+  artikel_beschreibung: 'Artikelbeschreibung',
+  artikelbeschreibung_de: 'Artikelbeschreibung',
+  artikelnummer: 'Artikel_Nummer',
+  Artikelnummer: 'Artikel_Nummer',
+  artikel_nummer: 'Artikel_Nummer'
+};
+
+function normalizeOverrideKey(rawKey: string): string | null {
+  if (!rawKey) {
+    return null;
+  }
+
+  if (TARGET_FIELD_SET.has(rawKey) || EXTRA_TARGET_KEYS.has(rawKey)) {
+    return rawKey;
+  }
+
+  const directAlias = TARGET_KEY_ALIASES[rawKey];
+  if (directAlias) {
+    return directAlias;
+  }
+
+  const lowerKey = rawKey.toLowerCase();
+  const lowerAlias = TARGET_KEY_ALIASES[lowerKey];
+  if (lowerAlias) {
+    return lowerAlias;
+  }
+
+  return null;
+}
+
+function extractOverrideSources(payload: unknown): Record<string, unknown>[] {
+  if (!payload || typeof payload !== 'object') {
+    return [];
+  }
+
+  const sources: Record<string, unknown>[] = [];
+  const seen = new Set<unknown>();
+
+  const pushIfObject = (candidate: unknown) => {
+    if (!candidate || typeof candidate !== 'object') {
+      return;
+    }
+    if (seen.has(candidate)) {
+      return;
+    }
+    seen.add(candidate);
+    sources.push(candidate as Record<string, unknown>);
+  };
+
+  const payloadRecord = payload as Record<string, unknown>;
+  pushIfObject(payloadRecord);
+  pushIfObject(payloadRecord.target);
+  pushIfObject(payloadRecord.requestBody);
+  pushIfObject(payloadRecord.item);
+
+  return sources;
+}
+
+function extractTargetOverrides(payload: unknown): Record<string, unknown> {
+  const overrides: Record<string, unknown> = {};
+  for (const source of extractOverrideSources(payload)) {
+    for (const [rawKey, value] of Object.entries(source)) {
+      if (value === undefined) {
+        continue;
+      }
+
+      const normalizedKey = normalizeOverrideKey(rawKey);
+      if (!normalizedKey || normalizedKey === 'itemUUid') {
+        continue;
+      }
+
+      if (normalizedKey === 'Artikelbeschreibung' && typeof value === 'string') {
+        overrides[normalizedKey] = value.trim();
+        continue;
+      }
+
+      overrides[normalizedKey] = value;
+    }
+  }
+
+  return overrides;
 }
 
 export class AgenticModelInvoker {
@@ -218,6 +322,59 @@ export class AgenticModelInvoker {
     return buildTargetFromRow(row);
   }
 
+  private mergeTargetWithRequestPayload(
+    target: Record<string, unknown>,
+    requestId: string | null | undefined
+  ): Record<string, unknown> {
+    const sanitizedRequestId = typeof requestId === 'string' ? requestId.trim() : '';
+    if (!sanitizedRequestId) {
+      return target;
+    }
+
+    let requestLog: { PayloadJson: string | null } | null;
+    try {
+      requestLog = getAgenticRequestLog(sanitizedRequestId);
+    } catch (err) {
+      this.logger.error?.({ err, msg: 'failed to load request log for agentic invocation', requestId: sanitizedRequestId });
+      return target;
+    }
+
+    if (!requestLog?.PayloadJson) {
+      return target;
+    }
+
+    let parsedPayload: unknown;
+    try {
+      parsedPayload = JSON.parse(requestLog.PayloadJson);
+    } catch (err) {
+      this.logger.warn?.({ err, msg: 'failed to parse saved request payload json', requestId: sanitizedRequestId });
+      return target;
+    }
+
+    const overrides = extractTargetOverrides(parsedPayload);
+    if (Object.keys(overrides).length === 0) {
+      return target;
+    }
+
+    const merged: Record<string, unknown> = { ...target, ...overrides };
+    merged.itemUUid = target.itemUUid;
+
+    if (typeof merged.Artikelbeschreibung === 'string') {
+      const trimmed = merged.Artikelbeschreibung.trim();
+      merged.Artikelbeschreibung = trimmed || (target.Artikelbeschreibung as string);
+    } else if (typeof target.Artikelbeschreibung === 'string') {
+      merged.Artikelbeschreibung = target.Artikelbeschreibung;
+    }
+
+    this.logger.info?.({
+      msg: 'merged request payload into agentic target',
+      requestId: sanitizedRequestId,
+      mergedKeys: Object.keys(overrides)
+    });
+
+    return merged;
+  }
+
   private ensureSearchInvoker(): (query: string, limit: number) => Promise<SearchResult> {
     return async (query: string, limit: number) => {
       this.logger.debug?.({ msg: 'dispatching Tavily search', query, limit });
@@ -237,10 +394,11 @@ export class AgenticModelInvoker {
         return { ok: false, message: 'search-unconfigured' };
       }
 
-      const target = await this.loadItemTarget(trimmedItemId);
+      let target = await this.loadItemTarget(trimmedItemId);
       if (!target.Artikelbeschreibung && input.searchQuery) {
         target.Artikelbeschreibung = input.searchQuery;
       }
+      target = this.mergeTargetWithRequestPayload({ ...target }, input.requestId ?? null);
       const llm = await this.ensureChatModel();
       const searchInvoker = this.ensureSearchInvoker();
 

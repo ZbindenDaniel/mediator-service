@@ -2,6 +2,8 @@ import type Database from 'better-sqlite3';
 import { startAgenticRun, type AgenticServiceDependencies } from '../backend/agentic';
 import type { AgenticRun } from '../models';
 
+// TODO(agent): Revisit requestId propagation assertions if the dispatch queue batching strategy changes.
+
 describe('agentic direct dispatch', () => {
   function createDeps(options: {
     existing?: AgenticRun | null;
@@ -82,6 +84,7 @@ describe('agentic direct dispatch', () => {
         itemId: createdRun.ItemUUID,
         searchQuery: createdRun.SearchQuery,
         context: 'direct-dispatch',
+        requestId: 'req-start-direct',
         review: {
           decision: null,
           notes: null,
@@ -129,6 +132,7 @@ describe('agentic direct dispatch', () => {
     expect(upsertAgenticRun).toHaveBeenCalledTimes(1);
     expect(invokeModel).toHaveBeenCalledWith(
       expect.objectContaining({
+        requestId: 'req-requeue',
         review: {
           decision: 'approved',
           notes: 'OK',
