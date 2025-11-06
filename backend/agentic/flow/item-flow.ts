@@ -1,15 +1,15 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { agentActorId } from '../config';
 import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
 import { FlowError } from './errors';
-import { TargetSchema, type AgenticTarget } from './item-flow-schemas';
+import { type AgenticTarget } from './item-flow-schemas';
 import { resolveShopwareMatch } from './item-flow-shopware';
 import { collectSearchContexts, type SearchInvoker, type SearchInvokerMetadata } from './item-flow-search';
 import { runExtractionAttempts, type ChatModel, type ExtractionLogger } from './item-flow-extraction';
 import { searchShopwareRaw, isShopwareConfigured, type ShopwareSearchResult } from '../tools/shopware';
-import { throwIfCancelled } from './cancellation';
+import { prepareItemContext } from './context';
+import { loadPrompts } from './prompts';
+import { dispatchAgenticResult } from './result-dispatch';
 
 export interface ItemFlowLogger extends ExtractionLogger {
   info?: Console['info'];
@@ -38,12 +38,6 @@ export interface RunItemFlowInput {
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
 }
-
-const PROMPTS_DIR = path.resolve(__dirname, '../prompts');
-const FORMAT_PATH = path.join(PROMPTS_DIR, 'item-format.json');
-const EXTRACT_PROMPT_PATH = path.join(PROMPTS_DIR, 'extract.md');
-const SUPERVISOR_PROMPT_PATH = path.join(PROMPTS_DIR, 'supervisor.md');
-const SHOPWARE_PROMPT_PATH = path.join(PROMPTS_DIR, 'shopware-verify.md');
 
 function buildCallbackPayload({
   itemId,
@@ -105,108 +99,22 @@ function buildCallbackPayload({
   };
 }
 
-function normalizeTarget(target: unknown, itemId: string): AgenticTarget {
-  const candidate = (target && typeof target === 'object' ? target : {}) as Partial<AgenticTarget>;
-  const artikelbeschreibung = typeof candidate.Artikelbeschreibung === 'string' ? candidate.Artikelbeschreibung.trim() : '';
-
-  return {
-    ...candidate,
-    itemUUid: itemId,
-    Artikelbeschreibung: artikelbeschreibung
-  } as AgenticTarget;
-}
-
-function resolveItemId(target: unknown, providedId: string | undefined | null): { itemId: string; targetId: string } {
-  const targetId =
-    target && typeof target === 'object' && typeof (target as { itemUUid?: string }).itemUUid === 'string'
-      ? (target as { itemUUid: string }).itemUUid.trim()
-      : '';
-  const itemId = typeof providedId === 'string' && providedId.trim().length ? providedId.trim() : targetId;
-  return { itemId, targetId };
-}
-
-async function readPromptFile(promptPath: string, logger?: ItemFlowLogger, context?: Record<string, unknown>): Promise<string | null> {
-  try {
-    return await fs.readFile(promptPath, 'utf8');
-  } catch (err) {
-    logger?.error?.({ err, msg: 'failed to load prompt file', ...context });
-    return null;
-  }
-}
-
 export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDependencies): Promise<AgenticResultPayload> {
   const logger = deps.logger ?? console;
   let resolvedItemId: string | null = null;
 
   try {
+    const context = prepareItemContext(input, logger);
+    const { itemId, target, searchTerm, checkCancellation } = context;
+    resolvedItemId = itemId;
+
     const rateLimiter = createRateLimiter({
       delayMs: deps.searchRateLimitDelayMs ?? DEFAULT_DELAY_MS,
       logger: deps.rateLimiterLogger ?? logger
     });
 
-    const { itemId, targetId } = resolveItemId(input.target, input.id);
-    resolvedItemId = itemId;
-    if (!itemId) {
-      const err = new FlowError('INVALID_TARGET', 'Target requires a non-empty "itemUUid"', 400);
-      logger.error?.({ err, msg: 'target missing itemUUid' });
-      throw err;
-    }
-
-    let target: AgenticTarget;
-    try {
-      target = normalizeTarget(input.target, itemId);
-      const parsed = TargetSchema.pick({ Artikelbeschreibung: true }).safeParse(target);
-      if (!parsed.success || !parsed.data.Artikelbeschreibung.trim()) {
-        const err = new FlowError('INVALID_TARGET', 'Target requires a non-empty "Artikelbeschreibung"', 400);
-        logger.error?.({ err, msg: 'target missing Artikelbeschreibung', itemId });
-        throw err;
-      }
-    } catch (err) {
-      if (err instanceof FlowError) {
-        throw err;
-      }
-      logger.error?.({ err, msg: 'target normalization failed', itemId, targetId });
-      throw new FlowError('INVALID_TARGET', 'Failed to normalize target', 400, { cause: err });
-    }
-
-    const searchTerm = typeof input.search === 'string' && input.search.trim().length
-      ? input.search.trim()
-      : target.Artikelbeschreibung;
-
-    const cancellationSignal = input.cancellationSignal ?? null;
-    const checkCancellation = () => {
-      try {
-        throwIfCancelled(itemId, cancellationSignal);
-      } catch (err) {
-        logger.warn?.({ err, msg: 'run cancellation detected', itemId });
-        throw err;
-      }
-    };
-
-    if (cancellationSignal?.addEventListener) {
-      try {
-        cancellationSignal.addEventListener(
-          'abort',
-          (event) => {
-            const reason = (event?.target as AbortSignal | undefined)?.reason;
-            const reasonMessage =
-              typeof (reason as { message?: string } | undefined)?.message === 'string' && reason?.message.trim().length
-                ? reason.message.trim()
-                : 'Run cancellation requested';
-            logger.info?.({ msg: 'cancellation signal received', itemId, reason: reasonMessage });
-          },
-          { once: true }
-        );
-      } catch (err) {
-        logger.error?.({ err, msg: 'failed to register cancellation listener', itemId });
-      }
-    }
-
-    checkCancellation();
-
-    const maxAttempts = input.maxAttempts && input.maxAttempts > 0 ? Math.min(input.maxAttempts, 5) : 3;
     const baseSearchInvoker = deps.searchInvoker;
-    const searchInvoker: SearchInvoker = async (query, limit, metadata) => {
+    const searchInvoker: SearchInvoker = async (query: string, limit: number, metadata?: SearchInvokerMetadata) => {
       checkCancellation();
       const result = await rateLimiter(() => baseSearchInvoker(query, limit, metadata), {
         ...metadata,
@@ -217,32 +125,14 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       return result as Awaited<ReturnType<SearchInvoker>>;
     };
 
-    let shopwarePrompt: string | null = null;
-    let formatContent: string | null = null;
-    let extractPrompt: string | null = null;
-    let supervisorPrompt: string | null = null;
-
-    try {
-      [formatContent, extractPrompt, supervisorPrompt] = await Promise.all([
-        readPromptFile(FORMAT_PATH, logger, { itemId, prompt: 'format' }),
-        readPromptFile(EXTRACT_PROMPT_PATH, logger, { itemId, prompt: 'extract' }),
-        readPromptFile(SUPERVISOR_PROMPT_PATH, logger, { itemId, prompt: 'supervisor' })
-      ]);
-      if (!formatContent || !extractPrompt || !supervisorPrompt) {
-        throw new FlowError('PROMPT_LOAD_FAILED', 'Required prompts could not be loaded', 500);
-      }
-    } catch (err) {
-      if (err instanceof FlowError) {
-        throw err;
-      }
-      logger.error?.({ err, msg: 'failed to load prompts', itemId });
-      throw new FlowError('PROMPT_LOAD_FAILED', 'Failed to load prompts', 500, { cause: err });
-    }
-
     const shopwareAvailable = isShopwareConfigured();
-    if (shopwareAvailable) {
-      shopwarePrompt = await readPromptFile(SHOPWARE_PROMPT_PATH, logger, { itemId, prompt: 'shopware' });
-    }
+    const { format, extract, supervisor, shopware } = await loadPrompts({
+      itemId,
+      logger,
+      includeShopware: shopwareAvailable
+    });
+
+    checkCancellation();
 
     let shopwareResult: ShopwareSearchResult = { text: '', products: [] };
     if (shopwareAvailable) {
@@ -263,8 +153,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       llm: deps.llm,
       logger,
       searchTerm,
-      targetFormat: formatContent,
-      shopwarePrompt,
+      targetFormat: format,
+      shopwarePrompt: shopware,
       shopwareResult,
       normalizedTarget: target,
       itemId
@@ -287,27 +177,22 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
         sources: shopwareShortcut.sources
       });
 
-      await deps.saveRequestPayload(itemId, payload);
-      try {
-        if (!deps.applyAgenticResult) {
-          const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
-          logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
-          throw error;
-        }
-        await deps.applyAgenticResult(payload);
-        await deps.markNotificationSuccess(itemId);
-      } catch (err) {
-        logger.error?.({ err, msg: 'agentic result dispatch failed', itemId });
-        await deps.markNotificationFailure(
-          itemId,
-          err instanceof Error ? err.message : 'agentic result dispatch failed'
-        );
-        throw err;
-      }
+      await dispatchAgenticResult({
+        itemId,
+        payload,
+        logger,
+        saveRequestPayload: deps.saveRequestPayload,
+        applyAgenticResult: deps.applyAgenticResult,
+        markNotificationSuccess: deps.markNotificationSuccess,
+        markNotificationFailure: deps.markNotificationFailure,
+        checkCancellation
+      });
+
       return payload;
     }
 
     checkCancellation();
+
     const { searchContexts, aggregatedSources, recordSources, buildAggregatedSearchText } = await collectSearchContexts({
       searchTerm,
       searchInvoker,
@@ -321,14 +206,14 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       llm: deps.llm,
       logger,
       itemId,
-      maxAttempts,
+      maxAttempts: input.maxAttempts && input.maxAttempts > 0 ? Math.min(input.maxAttempts, 5) : 3,
       searchContexts,
       aggregatedSources,
       recordSources,
       buildAggregatedSearchText,
-      extractPrompt,
-      targetFormat: formatContent,
-      supervisorPrompt,
+      extractPrompt: extract,
+      targetFormat: format,
+      supervisorPrompt: supervisor,
       searchInvoker
     });
 
@@ -352,25 +237,16 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       sources: extractionResult.sources
     });
 
-    await deps.saveRequestPayload(itemId, payload);
-    try {
-      checkCancellation();
-      if (!deps.applyAgenticResult) {
-        const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
-        logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
-        throw error;
-      }
-      await deps.applyAgenticResult(payload);
-      checkCancellation();
-      await deps.markNotificationSuccess(itemId);
-    } catch (err) {
-      logger.error?.({ err, msg: 'agentic result dispatch failed', itemId });
-      await deps.markNotificationFailure(
-        itemId,
-        err instanceof Error ? err.message : 'agentic result dispatch failed'
-      );
-      throw err;
-    }
+    await dispatchAgenticResult({
+      itemId,
+      payload,
+      logger,
+      saveRequestPayload: deps.saveRequestPayload,
+      applyAgenticResult: deps.applyAgenticResult,
+      markNotificationSuccess: deps.markNotificationSuccess,
+      markNotificationFailure: deps.markNotificationFailure,
+      checkCancellation
+    });
 
     return payload;
   } catch (err) {
