@@ -12,6 +12,15 @@ export interface Action {
   handle?: (req: IncomingMessage, res: ServerResponse, ctx: any) => Promise<void> | void;
 }
 
+export interface HttpAction extends Omit<Action, 'matches' | 'handle'> {
+  matches: (path: string, method: string) => boolean;
+  handle: (req: IncomingMessage, res: ServerResponse, ctx: any) => Promise<void> | void;
+}
+
+export function defineHttpAction<TAction extends HttpAction>(action: TAction): TAction {
+  return action;
+}
+
 function normalizeAction(mod: any, filename: string): Action {
   const a = (mod && typeof mod === 'object') ? mod : {};
   const key = typeof a.key === 'string' ? a.key : path.basename(filename, path.extname(filename));

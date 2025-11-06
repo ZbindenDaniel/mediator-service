@@ -10,7 +10,7 @@ import {
   isItemEinheit
 } from '../../models';
 import type { AgenticRunStatus } from '../../models';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
 import { generateItemUUID } from '../lib/itemIds';
@@ -140,7 +140,7 @@ function extractItemUUIDFromPath(pathname: string): string | null {
   }
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'import-item',
   label: 'Import item',
   appliesTo: () => false,
@@ -714,6 +714,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Import item API</p></div>'
-};
+});
 
 export default action;

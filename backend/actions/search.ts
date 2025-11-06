@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { ItemEinheit, isItemEinheit } from '../../models';
 
 function normalize(value: unknown): string {
@@ -163,7 +163,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'search',
   label: 'Search',
   appliesTo: () => false,
@@ -533,6 +533,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Search API</p></div>'
-};
+});
 
 export default action;

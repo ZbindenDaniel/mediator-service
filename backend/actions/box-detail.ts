@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'box-detail',
   label: 'Box detail',
   appliesTo: () => false,
@@ -27,6 +27,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Box detail API</p></div>'
-};
+});
 
 export default action;

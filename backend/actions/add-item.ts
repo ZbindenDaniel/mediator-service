@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -7,7 +7,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'add-item',
   label: 'Add item',
   appliesTo: (entity) => entity.type === 'Item',
@@ -71,6 +71,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Add item API</p></div>'
-};
+});
 
 export default action;

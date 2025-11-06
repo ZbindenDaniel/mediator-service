@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -7,7 +7,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'delete-entity',
   label: 'Delete entity',
   appliesTo: (entity) => entity.type === 'Item' || entity.type === 'Box',
@@ -80,6 +80,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Delete entity API</p></div>'
-};
+});
 
 export default action;

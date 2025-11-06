@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../labelpdf';
 import type { PrintPdfResult } from '../print';
@@ -22,7 +22,7 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'print-item',
   label: 'Print item label',
   appliesTo: () => false,
@@ -153,6 +153,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Print item API</p></div>'
-};
+});
 
 export default action;

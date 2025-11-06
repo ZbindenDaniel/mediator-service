@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_FAILED } from '../../models';
 import type { AgenticRun } from '../../models';
 
@@ -19,7 +19,7 @@ function readRequestBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'agentic-trigger-failure',
   label: 'Agentic trigger failure',
   appliesTo: (entity) => entity.type === 'Item',
@@ -149,6 +149,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic trigger failure API</p></div>'
-};
+});
 
 export default action;
