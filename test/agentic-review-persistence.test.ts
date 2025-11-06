@@ -1,11 +1,7 @@
 import Database from 'better-sqlite3';
 import { ensureAgenticRunSchema } from '../backend/db';
-import { processQueuedAgenticRuns } from '../backend/agentic-queue-worker';
+import { startAgenticRun } from '../backend/agentic';
 import type { AgenticRun } from '../models';
-import * as agenticTrigger from '../backend/actions/agentic-trigger';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const dbModule = require('../backend/db');
 
 describe('agentic review metadata persistence', () => {
   test('ensureAgenticRunSchema adds review columns and backfills decisions', () => {
@@ -54,7 +50,7 @@ describe('agentic review metadata persistence', () => {
     database.close();
   });
 
-  test('queue worker forwards stored review metadata with trigger payload', async () => {
+  test('direct dispatch forwards stored review metadata to the model invoker', async () => {
     const run: AgenticRun = {
       Id: 1,
       ItemUUID: 'item-review-1',
@@ -71,35 +67,48 @@ describe('agentic review metadata persistence', () => {
       LastAttemptAt: null
     };
 
-    const fetchSpy = jest.spyOn(dbModule, 'fetchQueuedAgenticRuns').mockReturnValue([run]);
-    const updateSpy = jest.spyOn(dbModule, 'updateQueuedAgenticRunQueueState').mockImplementation(() => undefined);
+    const getAgenticRun = { get: jest.fn().mockReturnValue(run) };
+    const upsertAgenticRun = { run: jest.fn() };
+    const updateAgenticRunStatus = { run: jest.fn() };
+    const logEvent = jest.fn();
+    const invokeModel = jest.fn().mockResolvedValue({ ok: true, message: null });
 
-    const forwardSpy = jest
-      .spyOn(agenticTrigger, 'forwardAgenticTrigger')
-      .mockResolvedValue({ ok: true, status: 202, body: null, rawBody: null });
+    const deps = {
+      db: { transaction: (fn: unknown) => fn } as unknown as Database.Database,
+      getAgenticRun: getAgenticRun as unknown as Database.Statement,
+      upsertAgenticRun: upsertAgenticRun as unknown as Database.Statement,
+      updateAgenticRunStatus: updateAgenticRunStatus as unknown as Database.Statement,
+      logEvent: logEvent as unknown as (payload: any) => void,
+      invokeModel,
+      logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+      now: () => new Date('2024-01-02T01:00:00.000Z')
+    };
 
-    try {
-      await processQueuedAgenticRuns({
-        logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-        now: () => new Date('2024-01-02T01:00:00.000Z'),
-        service: {} as any
-      });
+    const result = await startAgenticRun(
+      {
+        itemId: run.ItemUUID,
+        searchQuery: run.SearchQuery,
+        actor: 'unit-test',
+        request: { id: 'request-123' }
+      },
+      deps as any
+    );
 
-      expect(forwardSpy).toHaveBeenCalledTimes(1);
-      const [payload] = forwardSpy.mock.calls[0];
-      expect(payload).toMatchObject({
+    expect(result.queued).toBe(true);
+    expect(invokeModel).toHaveBeenCalledTimes(1);
+    expect(invokeModel).toHaveBeenCalledWith(
+      expect.objectContaining({
         itemId: 'item-review-1',
-        artikelbeschreibung: 'Search term',
+        searchQuery: 'Search term',
         review: {
           decision: 'approved',
           notes: 'Looks good',
           reviewedBy: 'jane.doe'
         }
-      });
-    } finally {
-      fetchSpy.mockRestore();
-      updateSpy.mockRestore();
-      forwardSpy.mockRestore();
-    }
+      })
+    );
+    expect(logEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ Event: 'AgenticRunRequeued', EntityId: 'item-review-1' })
+    );
   });
 });

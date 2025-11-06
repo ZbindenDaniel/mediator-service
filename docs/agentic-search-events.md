@@ -1,6 +1,6 @@
 # Agentic Queue Event Review
 
-This fixture helps analysts review the cadence of agentic queue events (`AgenticRunQueued`, `AgenticRunRequeued`) that are persisted in the mediator SQLite database. It automatically includes historical `AgenticSearchQueued` records so long as they remain in the database. The script relies on the same database location that the backend uses (`DB_PATH` in `backend/config.ts`) and **never mutates** the database — it opens the file in read-only mode.
+This fixture helps analysts review the cadence of agentic queue events (`AgenticRunQueued`, `AgenticRunRequeued`) that are persisted in the mediator SQLite database. Even though the orchestrator now dispatches runs immediately after enqueueing, these events still capture when a run was queued or retried so operators can audit retries. The script automatically includes historical `AgenticSearchQueued` records so long as they remain in the database. It relies on the same database location that the backend uses (`DB_PATH` in `backend/config.ts`) and **never mutates** the database — it opens the file in read-only mode.
 
 ## Prerequisites
 

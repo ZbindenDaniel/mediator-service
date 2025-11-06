@@ -53,7 +53,6 @@ Supported variables after this change:
 - `AGENTIC_MODEL_BASE_URL` / `MODEL_BASE_URL`.
 - `AGENTIC_MODEL_NAME` / `MODEL_NAME`.
 - `AGENTIC_MODEL_API_KEY` / `MODEL_API_KEY`.
-- `AGENTIC_QUEUE_POLL_INTERVAL_MS` (used by the mediator server loop).
 - `TAVILY_API_KEY`, `SEARCH_RATE_LIMIT_DELAY_MS`, and Shopware-specific credentials (unchanged names, all optional).
 
 All samples (`.env.example`, `docker-compose.yml`, `Dockerfile`) now advertise only the supported keys above; unused placeholders such as `AGENTIC_SEARCH_BASE_URL/PORT/PATH` were removed to avoid dead configuration. Backwards compatibility relies solely on the runtime fallback logic, so no migration step is required.
@@ -66,11 +65,12 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
     - Contain robust logging via the existing console/logger pattern and wrap external AI calls in try/catch to honor observability requirements.
     - Replace the shared-secret webhook with an internal invocation that validates input directly via orchestrator context (no shared secrets, rely on request-log lookups and job metadata).
 
-  - Update the queue worker to call the orchestrator directly (dependency-inject a function rather than forwardAgenticTrigger).
+  - Confirm the in-process orchestrator dispatches runs immediately and dependency-injects model invokers for tests instead of relying on a background worker.
 
 - 7. Refactor backend actions to drop REST proxies
   - Rewrite backend/actions/agentic-trigger.ts, agentic-health.ts, agentic-restart.ts, and related files so they call the orchestrator instead of fetching AGENTIC_API_BASE. Remove network-specific error classes as appropriate but keep validation and logging.
   - Adjust backend/actions/import-item.ts to queue/trigger runs through the in-process service, maintaining the current agentic status semantics and logging.
+  - Update config by deleting AGENTIC_API_BASE/AGENTIC_SHARED_SECRET and replacing them with any new knobs the orchestrator needs (e.g., AI model endpoints) while keeping TODO-driven validation in mind.
   - ✅ Completed: config no longer exposes AGENTIC_API_BASE/AGENTIC_SHARED_SECRET, relying solely on in-process callbacks and the remaining `AGENTIC_*` model/search settings.
 
 - 8. Update frontend integration
@@ -80,12 +80,12 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
 
 - 9. Retire obsolete tests & add new coverage
   - Remove or rewrite proxy-focused tests such as test/agentic-health-proxy.test.ts to exercise the new in-process orchestrator and backend actions.
-  - Keep `test/agentic-health-proxy.test.ts` and `test/agentic-queue-worker.test.ts` aligned with the in-process orchestrator: they now assert queue metrics, retry backoff, logging, and status transitions without relying on `AGENTIC_API_BASE`. Future backend changes that alter queue semantics should extend these suites instead of reintroducing proxy mocks.
+  - Keep `test/agentic-health-proxy.test.ts` aligned with the in-process orchestrator: it now asserts direct-dispatch metrics, logging, and status transitions without relying on `AGENTIC_API_BASE`. Future backend changes that alter dispatch semantics should extend the new direct-dispatch suites instead of reintroducing proxy mocks.
   - Extend existing backend tests (e.g., backend/actions/__tests__/agentic-bulk-queue.test.ts) to cover direct orchestrator calls and verify DB updates/logging.
 
 - 10. Documentation & follow-up
   - Update docs/setup.md, docs/ARCHITECTURE.md, and docs/OVERVIEW.md with the new single-service layout and link any retained AI docs.
-  - Mention configuration changes (no more AGENTIC_API_BASE/AGENTIC_SHARED_SECRET; add AGENTIC_QUEUE_POLL_INTERVAL_MS and request-log validation expectations) and point to new logging/monitoring expectations.
+  - Mention configuration changes (no more AGENTIC_API_BASE/AGENTIC_SHARED_SECRET; highlight immediate dispatch expectations and request-log validation) and point to new logging/monitoring expectations.
   - Close or revise TODO comments encountered during the refactor, including the CLI filtering TODO in scripts/dump-agentic-search-events.ts if it becomes relevant.
 
 - 11. Parallelisation suggestions
