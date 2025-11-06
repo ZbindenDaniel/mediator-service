@@ -1,3 +1,4 @@
+// TODO(agent): Revisit locked field normalization after agent output editing stabilizes.
 import { FlowError } from './errors';
 import { throwIfCancelled } from './cancellation';
 import { type AgenticTarget } from './item-flow-schemas';
@@ -21,11 +22,27 @@ function resolveItemId(target: unknown, providedId: string | undefined | null): 
 }
 
 function normalizeTarget(target: unknown, itemId: string): AgenticTarget {
-  const candidate = (target && typeof target === 'object' ? target : {}) as Partial<AgenticTarget>;
+  const candidate = (target && typeof target === 'object' ? target : {}) as Partial<AgenticTarget> &
+    Record<string, unknown>;
   const artikelbeschreibung = typeof candidate.Artikelbeschreibung === 'string' ? candidate.Artikelbeschreibung.trim() : '';
 
+  const sanitizedTarget: Record<string, unknown> = { ...candidate };
+  const rawLocked = Array.isArray(candidate.__locked) ? candidate.__locked : null;
+
+  if (rawLocked) {
+    const filteredLocked = rawLocked
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value && value.toLowerCase() !== 'artikelbeschreibung');
+
+    if (filteredLocked.length > 0) {
+      sanitizedTarget.__locked = filteredLocked;
+    } else {
+      delete sanitizedTarget.__locked;
+    }
+  }
+
   return {
-    ...candidate,
+    ...(sanitizedTarget as Partial<AgenticTarget>),
     itemUUid: itemId,
     Artikelbeschreibung: artikelbeschreibung
   } as AgenticTarget;
