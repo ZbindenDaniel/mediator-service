@@ -28,9 +28,6 @@ services:
       # AGENTIC_OPENAI_API_KEY: ""
       AGENTIC_OPENAI_BASE_URL: https://api.openai.com/v1
       AGENTIC_OPENAI_MODEL: gpt-4o-mini
-      AGENTIC_SEARCH_BASE_URL: http://127.0.0.1
-      AGENTIC_SEARCH_PORT: 8000
-      AGENTIC_SEARCH_PATH: /search
       AGENTIC_QUEUE_POLL_INTERVAL_MS: 5000
       # Provide API keys for third-party enrichment separately.
       # TAVILY_API_KEY: ""

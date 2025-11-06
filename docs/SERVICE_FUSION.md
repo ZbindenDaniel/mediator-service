@@ -38,6 +38,30 @@ The latest commit pulled the entire ai-flow-service repository into this project
   - ✅ Added `agentic_request_logs` schema management and helper functions to `backend/db.ts` so mediator owns request log persistence. Legacy AI-flow `request_logs` data will be dropped during consolidation, so no migration script is required.
   - ✅ Wired the in-process orchestrator flows and webhook handlers to those helpers so request lifecycle transitions, payload snapshots, and notification timestamps stay in sync without the ai-flow proxy.
 
+## Agentic environment variables
+
+The mediator now standardises the in-process agentic orchestrator settings behind the `AGENTIC_*` prefix while preserving backwards compatibility with legacy keys from the original ai-flow service. The `backend/agentic/config.ts` loader resolves prefixed variables first and gracefully falls back to the historical names (`MODEL_PROVIDER`, `OLLAMA_BASE_URL`, etc.) so existing deployments keep working.
+
+Supported variables after this change:
+
+- `AGENTIC_MODEL_PROVIDER` (required, defaults to `ollama`) with fallback to `MODEL_PROVIDER`.
+- `AGENTIC_OLLAMA_BASE_URL` / `OLLAMA_BASE_URL`.
+- `AGENTIC_OLLAMA_MODEL` / `OLLAMA_MODEL`.
+- `AGENTIC_OPENAI_API_KEY` / `OPENAI_API_KEY`.
+- `AGENTIC_OPENAI_BASE_URL` / `OPENAI_BASE_URL`.
+- `AGENTIC_OPENAI_MODEL` / `OPENAI_MODEL`.
+- `AGENTIC_MODEL_BASE_URL` / `MODEL_BASE_URL`.
+- `AGENTIC_MODEL_NAME` / `MODEL_NAME`.
+- `AGENTIC_MODEL_API_KEY` / `MODEL_API_KEY`.
+- `AGENTIC_AGENT_API_BASE_URL` / `AGENT_API_BASE_URL` (optional callback integration).
+- `AGENTIC_AGENT_SHARED_SECRET` / `AGENT_SHARED_SECRET` (optional callback integration).
+- `AGENTIC_QUEUE_POLL_INTERVAL_MS` (used by the mediator server loop).
+- `TAVILY_API_KEY`, `SEARCH_RATE_LIMIT_DELAY_MS`, and Shopware-specific credentials (unchanged names, all optional).
+
+All samples (`.env.example`, `docker-compose.yml`, `Dockerfile`) now advertise only the supported keys above; unused placeholders such as `AGENTIC_SEARCH_BASE_URL/PORT/PATH` were removed to avoid dead configuration. Backwards compatibility relies solely on the runtime fallback logic, so no migration step is required.
+
+TODO: Revisit the legacy key fallback once all environments have switched to the `AGENTIC_*` namespace so the config loader can be simplified.
+
 - 6. Implement an in-process agentic orchestrator
   - Create a service module (e.g., backend/agentic/service.ts) that exposes methods for startRun, cancelRun, restartRun, checkHealth, and submitResult. The orchestrator should:
     - Use mediator’s DB helpers to read/write queue state instead of HTTP calls.
