@@ -7,6 +7,8 @@ const createLogger = () => ({
   debug: jest.fn()
 });
 
+// TODO(agent): Keep item flow tests aligned with evolving target enrichment requirements.
+
 describe('prepareItemContext', () => {
   afterEach(() => {
     jest.resetModules();
@@ -30,6 +32,26 @@ describe('prepareItemContext', () => {
     expect(context.searchTerm).toBe('Custom search');
     expect(() => context.checkCancellation()).not.toThrow();
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  test('preserves locked metadata on target for downstream flows', async () => {
+    const logger = createLogger();
+    const { prepareItemContext } = await import('../../backend/agentic/flow/context');
+
+    const context = prepareItemContext(
+      {
+        target: {
+          itemUUid: 'item-locked',
+          Artikelbeschreibung: 'Locked item',
+          __locked: ['Artikel_Nummer'],
+          Artikel_Nummer: 'AN-001'
+        }
+      },
+      logger
+    );
+
+    expect((context.target as unknown as { __locked?: unknown[] }).__locked).toEqual(['Artikel_Nummer']);
+    expect((context.target as Record<string, unknown>)['Artikel_Nummer']).toBe('AN-001');
   });
 });
 

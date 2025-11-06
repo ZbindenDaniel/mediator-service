@@ -1,5 +1,7 @@
 import type { AgenticRun } from './agentic-run';
 
+// TODO(agent): Monitor requestId propagation for model invocations to ensure downstream logging stays consistent.
+
 export interface AgenticRunReviewMetadata {
   decision: string | null;
   notes: string | null;
@@ -71,6 +73,7 @@ export interface AgenticModelInvocationInput {
   searchQuery: string;
   context?: string | null;
   review?: AgenticRunReviewMetadata | null;
+  requestId?: string | null;
 }
 
 export interface AgenticModelInvocationResult {

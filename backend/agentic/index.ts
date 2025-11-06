@@ -290,6 +290,7 @@ function persistQueuedRun(
   return fetchAgenticRun(payload.itemId, deps, logger);
 }
 
+// TODO(agent): Verify requestId forwarding into background invocations when telemetry hooks evolve.
 interface BackgroundInvocationPayload {
   itemId: string;
   searchQuery: string;
@@ -363,7 +364,8 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         itemId: payload.itemId,
         searchQuery: payload.searchQuery,
         context: payload.context,
-        review: payload.review
+        review: payload.review,
+        requestId: payload.request?.id ?? null
       });
       logger.info?.('[agentic-service] Model invocation dispatched asynchronously', {
         itemId: payload.itemId,

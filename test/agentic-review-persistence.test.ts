@@ -3,6 +3,8 @@ import { ensureAgenticRunSchema } from '../backend/db';
 import { startAgenticRun } from '../backend/agentic';
 import type { AgenticRun } from '../models';
 
+// TODO(agent): Keep requestId coverage aligned with review persistence regressions.
+
 describe('agentic review metadata persistence', () => {
   test('ensureAgenticRunSchema adds review columns and backfills decisions', () => {
     const database = new Database(':memory:');
@@ -100,6 +102,7 @@ describe('agentic review metadata persistence', () => {
       expect.objectContaining({
         itemId: 'item-review-1',
         searchQuery: 'Search term',
+        requestId: 'request-123',
         review: {
           decision: 'approved',
           notes: 'Looks good',
