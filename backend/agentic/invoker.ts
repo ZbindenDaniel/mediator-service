@@ -112,10 +112,17 @@ export class AgenticModelInvoker {
       if (typeof ChatOllama !== 'function') {
         throw new Error('ChatOllama constructor unavailable');
       }
-      return new ChatOllama({
+      const client = new ChatOllama({
         baseUrl: modelConfig.ollama.baseUrl,
         model: modelConfig.ollama.model
       });
+      const adapter = {
+        async invoke(messages: Array<{ role: string; content: unknown }>) {
+          const response = await client.invoke(messages);
+          return { content: response.content };
+        }
+      } satisfies ChatModel;
+      return adapter;
     } catch (err) {
       this.logger.error?.({ err, msg: 'ollama provider requested but dependency unavailable' });
       throw new FlowError(
@@ -134,11 +141,21 @@ export class AgenticModelInvoker {
       if (typeof ChatOpenAI !== 'function') {
         throw new Error('ChatOpenAI constructor unavailable');
       }
-      return new ChatOpenAI({
-        openAIApiKey: modelConfig.openai.apiKey,
-        baseUrl: modelConfig.openai.baseUrl,
-        model: modelConfig.openai.model
+      const configuration = modelConfig.openai.baseUrl
+        ? { baseURL: modelConfig.openai.baseUrl }
+        : undefined;
+      const client = new ChatOpenAI({
+        apiKey: modelConfig.openai.apiKey,
+        model: modelConfig.openai.model,
+        ...(configuration ? { configuration } : {})
       });
+      const adapter = {
+        async invoke(messages: Array<{ role: string; content: unknown }>) {
+          const response = await client.invoke(messages);
+          return { content: response.content };
+        }
+      } satisfies ChatModel;
+      return adapter;
     } catch (err) {
       this.logger.error?.({ err, msg: 'openai provider requested but dependency unavailable' });
       throw new FlowError(
