@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
+import type { AgenticRunReviewMetadata } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 
 export interface AgenticRunTriggerPayload {
@@ -95,6 +96,7 @@ export async function forwardAgenticTrigger(
 
   const { artikelbeschreibung, itemId } = buildAgenticRunRequestBody(payload);
   const requestContext = resolveAgenticRequestContext(payload, itemId);
+  const review = normalizeReviewMetadata(payload.review);
   if (!serviceDeps) {
     throw new Error('Agentic service dependencies are required');
   }
@@ -104,7 +106,7 @@ export async function forwardAgenticTrigger(
       {
         itemId,
         searchQuery: artikelbeschreibung,
-        review: payload.review ?? null,
+        review,
         context,
         request: requestContext
       },
@@ -147,6 +149,29 @@ export async function forwardAgenticTrigger(
       rawBody: null
     };
   }
+}
+
+function normalizeReviewMetadata(
+  review: AgenticRunTriggerPayload['review']
+): AgenticRunReviewMetadata | null {
+  if (!review) {
+    return null;
+  }
+
+  const normalizeField = (value: unknown): string | null => {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  };
+
+  return {
+    decision: normalizeField(review.decision),
+    notes: normalizeField(review.notes),
+    reviewedBy: normalizeField(review.reviewedBy)
+  };
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
