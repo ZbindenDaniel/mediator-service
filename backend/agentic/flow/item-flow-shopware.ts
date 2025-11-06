@@ -1,12 +1,10 @@
 import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
+import type { ShopwareSearchResult } from '../tools/shopware';
 import type { ExtractionLogger, ChatModel } from './item-flow-extraction';
 import { ShopwareDecisionSchema, type AgenticTarget } from './item-flow-schemas';
 
-export interface ShopwareSearchResult {
-  text: string;
-  products: Array<Record<string, unknown> & { id?: string; url?: string; name?: string }>;
-}
+export type { ShopwareSearchResult } from '../tools/shopware';
 
 export interface ShopwareMatchOptions {
   llm: ChatModel;
