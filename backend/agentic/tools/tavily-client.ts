@@ -1,7 +1,11 @@
-import type { ExternalApiLogger } from '../utils/external-api';
 import type { SearchSource } from '../utils/source-formatter';
 
-export interface TavilySearchLogger extends Pick<ExternalApiLogger, 'debug' | 'info' | 'warn' | 'error'> {}
+export interface TavilySearchLogger {
+  debug?: Console['debug'];
+  info?: Console['info'];
+  warn?: Console['warn'];
+  error?: Console['error'];
+}
 
 export interface TavilySearchClientOptions {
   apiKey?: string | null;

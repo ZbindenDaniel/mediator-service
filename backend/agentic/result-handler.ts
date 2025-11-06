@@ -19,6 +19,19 @@ import {
 import { recordAgenticRequestLogUpdate } from '../agentic';
 import { resolveAgenticRequestContext } from '../actions/agentic-request-context';
 
+export interface AgenticResultPayload extends Record<string, unknown> {
+  itemId: string;
+  status: string;
+  error: string | null;
+  needsReview: boolean;
+  summary: string;
+  reviewDecision: string | null;
+  reviewNotes: string | null;
+  reviewedBy: string | null;
+  actor: string;
+  item: Record<string, unknown> & { itemUUid: string };
+}
+
 export interface AgenticResultLogger {
   error?: Console['error'];
   warn?: Console['warn'];
@@ -47,7 +60,7 @@ export interface AgenticResultHandlerContext {
 
 export interface AgenticResultHandlerInput {
   itemId: string;
-  payload: unknown;
+  payload: AgenticResultPayload | Record<string, unknown> | null | undefined;
 }
 
 export interface AgenticResultHandlerDependencies {
@@ -412,8 +425,10 @@ export function handleAgenticResult(
 export function createAgenticResultHandler(
   ctx: AgenticResultHandlerContext,
   logger?: AgenticResultLogger
-): (payload: AgenticResultPayloadWithId) => AgenticResultHandlerSuccess {
-  return (input) => handleAgenticResult(input, { ctx, logger });
+): (payload: AgenticResultPayload) => AgenticResultHandlerSuccess {
+  return (payload) =>
+    handleAgenticResult(
+      { itemId: payload.itemId, payload },
+      { ctx, logger }
+    );
 }
-
-export interface AgenticResultPayloadWithId extends AgenticResultHandlerInput {}

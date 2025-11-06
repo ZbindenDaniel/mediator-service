@@ -19,8 +19,7 @@ import type { ChatModel } from './flow/item-flow-extraction';
 import { TavilySearchClient } from './tools/tavily-client';
 import type { SearchResult } from './tools/tavily-client';
 import { FlowError } from './flow/errors';
-import type { AgenticResultPayload } from './utils/external-api';
-import { handleAgenticResult } from './result-handler';
+import { handleAgenticResult, type AgenticResultPayload } from './result-handler';
 
 export interface AgenticModelInvokerLogger extends ItemFlowLogger {
   info?: Console['info'];
