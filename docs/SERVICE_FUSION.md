@@ -58,6 +58,7 @@ The latest commit pulled the entire ai-flow-service repository into this project
 
 - 9. Retire obsolete tests & add new coverage
   - Remove or rewrite proxy-focused tests such as test/agentic-health-proxy.test.ts to exercise the new in-process orchestrator and backend actions.
+  - Keep `test/agentic-health-proxy.test.ts` and `test/agentic-queue-worker.test.ts` aligned with the in-process orchestrator: they now assert queue metrics, retry backoff, logging, and status transitions without relying on `AGENTIC_API_BASE`. Future backend changes that alter queue semantics should extend these suites instead of reintroducing proxy mocks.
   - Extend existing backend tests (e.g., backend/actions/__tests__/agentic-bulk-queue.test.ts) to cover direct orchestrator calls and verify DB updates/logging.
 
 - 10. Documentation & follow-up
