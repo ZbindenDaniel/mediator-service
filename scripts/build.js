@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
+// TODO: Monitor additional asset folders that need to be mirrored into the dist output.
 function copyDirectory(src, dest) {
   try {
     fs.mkdirSync(dest, { recursive: true });
@@ -63,9 +64,28 @@ function copyModelResources() {
   }
 }
 
+function copyAgenticPrompts() {
+  const src = path.join(__dirname, '..', 'backend', 'agentic', 'prompts');
+  const dest = path.join(__dirname, '..', 'dist', 'backend', 'agentic', 'prompts');
+
+  if (!fs.existsSync(src)) {
+    console.log('[build] No agentic prompts directory to copy.', { src });
+    return;
+  }
+
+  try {
+    copyDirectory(src, dest);
+    console.log('[build] Copied agentic prompts.', { dest });
+  } catch (error) {
+    console.error('[build] Failed to copy agentic prompts.', { src, dest, error });
+    throw error;
+  }
+}
+
 try {
   copyFrontendPublic();
   copyModelResources();
+  copyAgenticPrompts();
 } catch (error) {
   console.error('[build] Build script encountered an unrecoverable error.', error);
   process.exit(1);
