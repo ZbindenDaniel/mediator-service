@@ -51,7 +51,7 @@ describe('think tag parsing resilience', () => {
     targetFormat: 'format',
     supervisorPrompt: 'supervisor',
     searchInvoker: jest.fn()
-  } as const;
+  };
 
   afterEach(() => {
     jest.clearAllMocks();

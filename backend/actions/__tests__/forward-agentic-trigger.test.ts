@@ -79,7 +79,9 @@ describe('forwardAgenticTrigger', () => {
       run: jest.fn(() => ({ changes: 1 }))
     };
 
-    let resolveInvocation: ((value: AgenticModelInvocationResult) => void) | null = null;
+    let resolveInvocation:
+      | ((value: AgenticModelInvocationResult | PromiseLike<AgenticModelInvocationResult>) => void)
+      | null = null;
     const invokeModel = jest.fn(
       () =>
         new Promise<AgenticModelInvocationResult>((resolve) => {
