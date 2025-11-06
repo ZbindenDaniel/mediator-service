@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { copyFile } = require('fs/promises');
 const path = require('path');
 
 // TODO: Monitor additional asset folders that need to be mirrored into the dist output.
@@ -68,13 +69,23 @@ function copyAgenticPrompts() {
   const src = path.join(__dirname, '..', 'backend', 'agentic', 'prompts');
   const dest = path.join(__dirname, '..', 'dist', 'backend', 'agentic', 'prompts');
 
+  
+  
   if (!fs.existsSync(src)) {
     console.log('[build] No agentic prompts directory to copy.', { src });
     return;
   }
-
+  
   try {
     copyDirectory(src, dest);
+    
+    // also copy certain files from the 'docs'
+    fs.mkdirSync(path.join(dest, 'docs'), { recursive: true });
+    copyFile(
+      path.join(__dirname, '..', 'docs', 'data_struct.md'),
+      path.join(dest, 'docs', 'data_struct.md')
+    );
+
     console.log('[build] Copied agentic prompts.', { dest });
   } catch (error) {
     console.error('[build] Failed to copy agentic prompts.', { src, dest, error });

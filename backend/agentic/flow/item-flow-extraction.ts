@@ -105,6 +105,7 @@ export async function runExtractionAttempts({
   extractPrompt,
   targetFormat,
   supervisorPrompt,
+  categorizerPrompt,
   searchInvoker,
   target
 }: RunExtractionOptions): Promise<ExtractionResult> {

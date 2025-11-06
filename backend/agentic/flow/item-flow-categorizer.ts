@@ -8,7 +8,7 @@ import type { ChatModel, ExtractionLogger } from './item-flow-extraction';
 import type { AgenticOutput } from './item-flow-schemas';
 
 // TODO(agent): Monitor categorizer drift once evaluation datasets are curated.
-const CATEGORY_REFERENCE_PATH = path.resolve(__dirname, '../../../docs/data_struct.md');
+const CATEGORY_REFERENCE_PATH = path.resolve(__dirname, '../prompts/docs/data_struct.md');
 
 const CategorizerResponseSchema = z
   .object({
@@ -138,6 +138,7 @@ export async function runCategorizerStage({
 
   const result: Partial<AgenticOutput> = {};
   const response = validated.data as CategorizerResponse;
+  logger?.debug?.({ msg: 'categorizer response parsed', itemId, response });
   const fieldMap: Array<{
     field: keyof AgenticOutput;
     aliases: (keyof CategorizerResponse)[];
@@ -149,7 +150,7 @@ export async function runCategorizerStage({
   ];
 
   for (const { field, aliases } of fieldMap) {
-    if (isFieldLocked(candidate, field)) {
+    if (isFieldLocked(candidate, field.toString())) {
       logger?.debug?.({ msg: 'skipping locked category field', itemId, field });
       continue;
     }
