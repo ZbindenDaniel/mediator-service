@@ -215,6 +215,8 @@ describe('runItemFlow', () => {
 
       expect(mockCollect).toHaveBeenCalled();
       expect(mockExtraction).toHaveBeenCalled();
+      const extractionArgs = mockExtraction.mock.calls[0]?.[0];
+      expect(extractionArgs?.target).toEqual(expect.objectContaining({ itemUUid: 'item-888' }));
       expect(checkCancellation).toHaveBeenCalled();
       expect(mockDispatch).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-888' }));
       expect(payload.item.itemUUid).toBe('item-888');
