@@ -84,6 +84,7 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 - `AGENTIC_SEARCH_BASE_URL` / `AGENTIC_SEARCH_PORT` / `AGENTIC_SEARCH_PATH` – optional HTTP endpoint for delegated search enrichment.
 - `AGENTIC_QUEUE_POLL_INTERVAL_MS` – interval (milliseconds) between in-process queue dispatch cycles.
 - `TAVILY_API_KEY` / `SEARCH_WEB_ALLOWED_ENGINES` – API key and safelist for external web search fallbacks.
+- `AGENT_API_BASE_URL` / `AGENT_SHARED_SECRET` – optional external callback for result notifications. Leave unset to default to the in-process persistence path; when configured, the service posts results to the external URL and relies on that callback to acknowledge completion.
 
 ### Recommended volumes
 

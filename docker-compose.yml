@@ -29,6 +29,8 @@ services:
       AGENTIC_OPENAI_BASE_URL: https://api.openai.com/v1
       AGENTIC_OPENAI_MODEL: gpt-4o-mini
       AGENTIC_QUEUE_POLL_INTERVAL_MS: 5000
+      # Leave AGENT_API_BASE_URL unset to persist results in-process. Set it (and optionally AGENT_SHARED_SECRET)
+      # when an external service should receive agentic result callbacks instead.
       # Provide API keys for third-party enrichment separately.
       # TAVILY_API_KEY: ""
       SEARCH_WEB_ALLOWED_ENGINES: google,duckduckgo,brave
