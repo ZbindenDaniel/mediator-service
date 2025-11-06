@@ -1,8 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { agentActorId, callbackConfig } from '../config';
-import type { AgenticResultPayload } from '../utils/external-api';
-import { sendToExternal as defaultSendToExternal } from '../utils/external-api';
+import { agentActorId } from '../config';
+import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
 import { FlowError } from './errors';
 import { TargetSchema, type AgenticTarget } from './item-flow-schemas';
@@ -25,7 +24,6 @@ export interface ItemFlowDependencies {
   searchInvoker: SearchInvoker;
   rateLimiterLogger?: RateLimiterLogger;
   searchRateLimitDelayMs?: number;
-  sendToExternal?: typeof defaultSendToExternal;
   applyAgenticResult?: (payload: AgenticResultPayload) => Promise<void> | void;
   saveRequestPayload: (itemId: string, payload: unknown) => Promise<void> | void;
   markNotificationSuccess: (itemId: string) => Promise<void> | void;
@@ -141,7 +139,6 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
   let resolvedItemId: string | null = null;
 
   try {
-    const sendToExternal = deps.sendToExternal ?? defaultSendToExternal;
     const rateLimiter = createRateLimiter({
       delayMs: deps.searchRateLimitDelayMs ?? DEFAULT_DELAY_MS,
       logger: deps.rateLimiterLogger ?? logger
@@ -291,18 +288,13 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       });
 
       await deps.saveRequestPayload(itemId, payload);
-      const shouldDispatchExternally = Boolean(callbackConfig.baseUrl && callbackConfig.baseUrl.trim());
       try {
-        if (shouldDispatchExternally) {
-          await sendToExternal(payload);
-        } else {
-          if (!deps.applyAgenticResult) {
-            const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
-            logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
-            throw error;
-          }
-          await deps.applyAgenticResult(payload);
+        if (!deps.applyAgenticResult) {
+          const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
+          logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
+          throw error;
         }
+        await deps.applyAgenticResult(payload);
         await deps.markNotificationSuccess(itemId);
       } catch (err) {
         logger.error?.({ err, msg: 'agentic result dispatch failed', itemId });
@@ -361,19 +353,14 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     });
 
     await deps.saveRequestPayload(itemId, payload);
-    const shouldDispatchExternally = Boolean(callbackConfig.baseUrl && callbackConfig.baseUrl.trim());
     try {
       checkCancellation();
-      if (shouldDispatchExternally) {
-        await sendToExternal(payload);
-      } else {
-        if (!deps.applyAgenticResult) {
-          const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
-          logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
-          throw error;
-        }
-        await deps.applyAgenticResult(payload);
+      if (!deps.applyAgenticResult) {
+        const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
+        logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
+        throw error;
       }
+      await deps.applyAgenticResult(payload);
       checkCancellation();
       await deps.markNotificationSuccess(itemId);
     } catch (err) {
