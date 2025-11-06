@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { agentActorId } from '../config';
+import { agentActorId, callbackConfig } from '../config';
 import type { AgenticResultPayload } from '../utils/external-api';
 import { sendToExternal as defaultSendToExternal } from '../utils/external-api';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
@@ -26,6 +26,7 @@ export interface ItemFlowDependencies {
   rateLimiterLogger?: RateLimiterLogger;
   searchRateLimitDelayMs?: number;
   sendToExternal?: typeof defaultSendToExternal;
+  applyAgenticResult?: (payload: AgenticResultPayload) => Promise<void> | void;
   saveRequestPayload: (itemId: string, payload: unknown) => Promise<void> | void;
   markNotificationSuccess: (itemId: string) => Promise<void> | void;
   markNotificationFailure: (itemId: string, errorMessage: string) => Promise<void> | void;
@@ -290,12 +291,25 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       });
 
       await deps.saveRequestPayload(itemId, payload);
+      const shouldDispatchExternally = Boolean(callbackConfig.baseUrl && callbackConfig.baseUrl.trim());
       try {
-        await sendToExternal(payload);
+        if (shouldDispatchExternally) {
+          await sendToExternal(payload);
+        } else {
+          if (!deps.applyAgenticResult) {
+            const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
+            logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
+            throw error;
+          }
+          await deps.applyAgenticResult(payload);
+        }
         await deps.markNotificationSuccess(itemId);
       } catch (err) {
-        logger.error?.({ err, msg: 'external api failed', itemId });
-        await deps.markNotificationFailure(itemId, err instanceof Error ? err.message : 'external notification failed');
+        logger.error?.({ err, msg: 'agentic result dispatch failed', itemId });
+        await deps.markNotificationFailure(
+          itemId,
+          err instanceof Error ? err.message : 'agentic result dispatch failed'
+        );
         throw err;
       }
       return payload;
@@ -347,14 +361,27 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     });
 
     await deps.saveRequestPayload(itemId, payload);
+    const shouldDispatchExternally = Boolean(callbackConfig.baseUrl && callbackConfig.baseUrl.trim());
     try {
       checkCancellation();
-      await sendToExternal(payload);
+      if (shouldDispatchExternally) {
+        await sendToExternal(payload);
+      } else {
+        if (!deps.applyAgenticResult) {
+          const error = new FlowError('RESULT_HANDLER_MISSING', 'Agentic result handler unavailable', 500);
+          logger.error?.({ err: error, msg: 'result handler missing for internal dispatch', itemId });
+          throw error;
+        }
+        await deps.applyAgenticResult(payload);
+      }
       checkCancellation();
       await deps.markNotificationSuccess(itemId);
     } catch (err) {
-      logger.error?.({ err, msg: 'external api failed', itemId });
-      await deps.markNotificationFailure(itemId, err instanceof Error ? err.message : 'external notification failed');
+      logger.error?.({ err, msg: 'agentic result dispatch failed', itemId });
+      await deps.markNotificationFailure(
+        itemId,
+        err instanceof Error ? err.message : 'agentic result dispatch failed'
+      );
       throw err;
     }
 

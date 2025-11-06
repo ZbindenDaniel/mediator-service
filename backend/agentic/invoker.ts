@@ -1,5 +1,17 @@
 import type { AgenticModelInvocationInput, AgenticModelInvocationResult } from '../../models';
-import { getItem, saveAgenticRequestPayload, markAgenticRequestNotificationSuccess, markAgenticRequestNotificationFailure } from '../db';
+import {
+  db,
+  getItem,
+  getAgenticRun,
+  updateAgenticRunStatus,
+  upsertAgenticRun,
+  persistItemWithinTransaction,
+  logEvent,
+  getAgenticRequestLog,
+  saveAgenticRequestPayload,
+  markAgenticRequestNotificationSuccess,
+  markAgenticRequestNotificationFailure
+} from '../db';
 import { modelConfig, searchConfig } from './config';
 import { runItemFlow } from './flow/item-flow';
 import type { ItemFlowLogger } from './flow/item-flow';
@@ -7,6 +19,8 @@ import type { ChatModel } from './flow/item-flow-extraction';
 import { TavilySearchClient } from './tools/tavily-client';
 import type { SearchResult } from './tools/tavily-client';
 import { FlowError } from './flow/errors';
+import type { AgenticResultPayload } from './utils/external-api';
+import { handleAgenticResult } from './result-handler';
 
 export interface AgenticModelInvokerLogger extends ItemFlowLogger {
   info?: Console['info'];
@@ -55,6 +69,7 @@ export class AgenticModelInvoker {
   private readonly searchClient: TavilySearchClient;
   private chatModel?: ChatModel;
   private chatModelFactory?: ChatModelFactory;
+  private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
 
   constructor(options: AgenticModelInvokerOptions = {}) {
     this.logger = options.logger ?? console;
@@ -62,6 +77,33 @@ export class AgenticModelInvoker {
       apiKey: searchConfig.tavilyApiKey,
       logger: this.logger
     });
+    this.applyAgenticResult = (payload: AgenticResultPayload) => {
+      try {
+        handleAgenticResult(
+          { itemId: payload.itemId, payload },
+          {
+            ctx: {
+              db,
+              getItem,
+              getAgenticRun,
+              persistItemWithinTransaction,
+              updateAgenticRunStatus,
+              upsertAgenticRun,
+              logEvent,
+              getAgenticRequestLog
+            },
+            logger: this.logger
+          }
+        );
+      } catch (err) {
+        this.logger.error?.({
+          err,
+          msg: 'agentic result handler failed during in-process dispatch',
+          itemId: payload.itemId
+        });
+        throw err;
+      }
+    };
   }
 
   private async loadOllamaModel(): Promise<ChatModel> {
@@ -184,6 +226,7 @@ export class AgenticModelInvoker {
             return result;
           },
           searchRateLimitDelayMs: searchConfig.rateLimitDelayMs,
+          applyAgenticResult: this.applyAgenticResult,
           saveRequestPayload: saveAgenticRequestPayload,
           markNotificationSuccess: markAgenticRequestNotificationSuccess,
           markNotificationFailure: markAgenticRequestNotificationFailure

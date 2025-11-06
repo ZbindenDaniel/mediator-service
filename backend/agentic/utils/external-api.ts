@@ -35,9 +35,9 @@ export interface TriggerFailureOptions extends ExternalApiOptions {
   errorMessage?: string | null;
 }
 
-function resolveCallbackSettings(logger: ExternalApiLogger | undefined): { baseUrl: string; sharedSecret: string } | null {
-  const baseUrl = callbackConfig.baseUrl ?? '';
-  const sharedSecret = callbackConfig.sharedSecret ?? '';
+function resolveCallbackSettings(logger: ExternalApiLogger | undefined): { baseUrl: string; sharedSecret: string | null } | null {
+  const baseUrl = (callbackConfig.baseUrl ?? '').trim();
+  const sharedSecret = (callbackConfig.sharedSecret ?? '').trim();
 
   if (!baseUrl) {
     logger?.warn?.({ msg: 'AGENT_API_BASE_URL not set, skipping callback dispatch' });
@@ -45,11 +45,10 @@ function resolveCallbackSettings(logger: ExternalApiLogger | undefined): { baseU
   }
 
   if (!sharedSecret) {
-    logger?.warn?.({ msg: 'AGENT_SHARED_SECRET not set, skipping callback dispatch' });
-    return null;
+    logger?.debug?.({ msg: 'AGENT_SHARED_SECRET not configured; dispatching without shared secret header' });
   }
 
-  return { baseUrl, sharedSecret };
+  return { baseUrl, sharedSecret: sharedSecret || null };
 }
 
 function buildEndpointUrl(baseUrl: string, endpointPath: string, logger: ExternalApiLogger | undefined, context: Record<string, unknown>): string {
@@ -104,7 +103,7 @@ export async function sendToExternal(payload: AgenticResultPayload, options: Ext
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-agent-secret': settings.sharedSecret
+        ...(settings.sharedSecret ? { 'x-agent-secret': settings.sharedSecret } : {})
       },
       body: JSON.stringify(payload ?? null)
     });
@@ -170,7 +169,7 @@ export async function triggerAgenticFailure(options: TriggerFailureOptions): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-agent-secret': settings.sharedSecret
+        ...(settings.sharedSecret ? { 'x-agent-secret': settings.sharedSecret } : {})
       },
       body: JSON.stringify(requestPayload)
     });

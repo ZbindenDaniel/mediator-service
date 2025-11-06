@@ -32,6 +32,8 @@ services:
       AGENTIC_SEARCH_PORT: 8000
       AGENTIC_SEARCH_PATH: /search
       AGENTIC_QUEUE_POLL_INTERVAL_MS: 5000
+      # Leave AGENT_API_BASE_URL unset to persist results in-process. Set it (and optionally AGENT_SHARED_SECRET)
+      # when an external service should receive agentic result callbacks instead.
       # Provide API keys for third-party enrichment separately.
       # TAVILY_API_KEY: ""
       SEARCH_WEB_ALLOWED_ENGINES: google,duckduckgo,brave

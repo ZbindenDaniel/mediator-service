@@ -92,8 +92,8 @@ export const searchConfig: AgenticSearchConfig = {
 };
 
 export const callbackConfig: AgenticCallbackConfig = {
-  baseUrl: parsedEnv.AGENT_API_BASE_URL,
-  sharedSecret: parsedEnv.AGENT_SHARED_SECRET
+  baseUrl: parsedEnv.AGENT_API_BASE_URL?.trim() || undefined,
+  sharedSecret: parsedEnv.AGENT_SHARED_SECRET?.trim() || undefined
 };
 
 const shopwareConfigSchema = z
