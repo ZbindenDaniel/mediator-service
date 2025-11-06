@@ -40,7 +40,7 @@ The latest commit pulled the entire ai-flow-service repository into this project
 
 ## Agentic environment variables
 
-The mediator now standardises the in-process agentic orchestrator settings behind the `AGENTIC_*` prefix while preserving backwards compatibility with legacy keys from the original ai-flow service. The `backend/agentic/config.ts` loader resolves prefixed variables first and gracefully falls back to the historical names (`MODEL_PROVIDER`, `OLLAMA_BASE_URL`, etc.) so existing deployments keep working.
+The mediator now standardises the in-process agentic orchestrator settings behind the `AGENTIC_*` prefix while preserving backwards compatibility with legacy keys from the original ai-flow service. The `backend/agentic/config.ts` loader resolves prefixed variables first and gracefully falls back to the historical names (`MODEL_PROVIDER`, `OLLAMA_BASE_URL`, etc.) so existing deployments keep working. Result callbacks are now processed entirely inside the mediator, removing the need for an external base URL or shared secret.
 
 Supported variables after this change:
 
@@ -53,8 +53,6 @@ Supported variables after this change:
 - `AGENTIC_MODEL_BASE_URL` / `MODEL_BASE_URL`.
 - `AGENTIC_MODEL_NAME` / `MODEL_NAME`.
 - `AGENTIC_MODEL_API_KEY` / `MODEL_API_KEY`.
-- `AGENTIC_AGENT_API_BASE_URL` / `AGENT_API_BASE_URL` (optional callback integration).
-- `AGENTIC_AGENT_SHARED_SECRET` / `AGENT_SHARED_SECRET` (optional callback integration).
 - `AGENTIC_QUEUE_POLL_INTERVAL_MS` (used by the mediator server loop).
 - `TAVILY_API_KEY`, `SEARCH_RATE_LIMIT_DELAY_MS`, and Shopware-specific credentials (unchanged names, all optional).
 
@@ -73,7 +71,7 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
 - 7. Refactor backend actions to drop REST proxies
   - Rewrite backend/actions/agentic-trigger.ts, agentic-health.ts, agentic-restart.ts, and related files so they call the orchestrator instead of fetching AGENTIC_API_BASE. Remove network-specific error classes as appropriate but keep validation and logging.
   - Adjust backend/actions/import-item.ts to queue/trigger runs through the in-process service, maintaining the current agentic status semantics and logging.
-  - Update config by deleting AGENTIC_API_BASE/AGENTIC_SHARED_SECRET and replacing them with any new knobs the orchestrator needs (e.g., AI model endpoints, AGENTIC_QUEUE_POLL_INTERVAL_MS) while keeping TODO-driven validation in mind.
+  - ✅ Completed: config no longer exposes AGENTIC_API_BASE/AGENTIC_SHARED_SECRET, relying solely on in-process callbacks and the remaining `AGENTIC_*` model/search settings.
 
 - 8. Update frontend integration
   - Remove hard-coded API bases in frontend/src/lib/agentic.ts, ItemDetail.tsx, and ItemCreate.tsx, ensuring the UI only hits mediator endpoints and defers routing to the backend.

@@ -13,8 +13,6 @@ const envSchema = z.object({
   MODEL_API_KEY: z.string().min(1).optional(),
   TAVILY_API_KEY: z.string().min(1).optional(),
   SEARCH_RATE_LIMIT_DELAY_MS: z.coerce.number().int().nonnegative().optional(),
-  AGENT_API_BASE_URL: z.string().url().optional(),
-  AGENT_SHARED_SECRET: z.string().min(1).optional(),
   SHOPWARE_BASE_URL: z.string().url().optional(),
   SHOPWARE_CLIENT_ID: z.string().min(1).optional(),
   SHOPWARE_CLIENT_SECRET: z.string().min(1).optional(),
@@ -57,8 +55,6 @@ const envInput: EnvSchemaInput = {
   MODEL_API_KEY: resolveEnvValue('AGENTIC_MODEL_API_KEY', 'MODEL_API_KEY'),
   TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
   SEARCH_RATE_LIMIT_DELAY_MS: resolveEnvValue('SEARCH_RATE_LIMIT_DELAY_MS'),
-  AGENT_API_BASE_URL: resolveEnvValue('AGENTIC_AGENT_API_BASE_URL', 'AGENT_API_BASE_URL'),
-  AGENT_SHARED_SECRET: resolveEnvValue('AGENTIC_AGENT_SHARED_SECRET', 'AGENT_SHARED_SECRET'),
   SHOPWARE_BASE_URL: resolveEnvValue('SHOPWARE_BASE_URL'),
   SHOPWARE_CLIENT_ID: resolveEnvValue('SHOPWARE_CLIENT_ID'),
   SHOPWARE_CLIENT_SECRET: resolveEnvValue('SHOPWARE_CLIENT_SECRET'),
@@ -106,11 +102,6 @@ export interface AgenticSearchConfig {
   rateLimitDelayMs?: number;
 }
 
-export interface AgenticCallbackConfig {
-  baseUrl?: string;
-  sharedSecret?: string;
-}
-
 export interface ShopwareCredentialsConfig {
   clientId?: string;
   clientSecret?: string;
@@ -144,11 +135,6 @@ export const modelConfig: AgenticModelConfig = {
 export const searchConfig: AgenticSearchConfig = {
   tavilyApiKey: parsedEnv.TAVILY_API_KEY,
   rateLimitDelayMs: parsedEnv.SEARCH_RATE_LIMIT_DELAY_MS
-};
-
-export const callbackConfig: AgenticCallbackConfig = {
-  baseUrl: parsedEnv.AGENT_API_BASE_URL?.trim() || undefined,
-  sharedSecret: parsedEnv.AGENT_SHARED_SECRET?.trim() || undefined
 };
 
 const shopwareConfigSchema = z

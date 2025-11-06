@@ -1,4 +1,4 @@
-import type { AgenticModelConfig, AgenticCallbackConfig } from '../config';
+import type { AgenticModelConfig } from '../config';
 
 describe('agentic config environment resolution', () => {
   const baselineEnv = { ...process.env };
@@ -20,11 +20,7 @@ describe('agentic config environment resolution', () => {
     'AGENTIC_MODEL_NAME',
     'MODEL_NAME',
     'AGENTIC_MODEL_API_KEY',
-    'MODEL_API_KEY',
-    'AGENTIC_AGENT_API_BASE_URL',
-    'AGENT_API_BASE_URL',
-    'AGENTIC_AGENT_SHARED_SECRET',
-    'AGENT_SHARED_SECRET'
+    'MODEL_API_KEY'
   ];
 
   const loadConfig = () => {
@@ -95,16 +91,6 @@ describe('agentic config environment resolution', () => {
 
     expect(modelConfig.ollama.baseUrl).toBe('http://generic-base.example.com');
     expect(modelConfig.ollama.model).toBe('generic-model');
-  });
-
-  it('supports prefixed callback credentials with legacy fallback', () => {
-    process.env.AGENTIC_AGENT_API_BASE_URL = 'https://callback.example.com';
-    process.env.AGENTIC_AGENT_SHARED_SECRET = 'shh';
-
-    const { callbackConfig } = loadConfig();
-
-    expect((callbackConfig as AgenticCallbackConfig).baseUrl).toBe('https://callback.example.com');
-    expect((callbackConfig as AgenticCallbackConfig).sharedSecret).toBe('shh');
   });
 
   it('defaults provider to ollama when neither key is provided', () => {
