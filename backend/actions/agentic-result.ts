@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { Action } from './index';
-import type { AgenticRun, AgenticRequestContext, Item } from '../../models';
+import type { AgenticRun, AgenticRequestContext, AgenticRequestLog, Item } from '../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
@@ -12,11 +12,29 @@ import {
   AGENTIC_RUN_STATUS_REVIEW,
   normalizeAgenticRunStatus
 } from '../../models';
-import { AGENTIC_SHARED_SECRET } from '../config';
 import { recordAgenticRequestLogUpdate } from '../agentic';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 
-const SHARED_SECRET_HEADER = 'x-agent-secret';
+function loadAgenticRequestLog(
+  ctx: any,
+  requestId: string,
+  logger: Pick<Console, 'error' | 'warn'>
+): AgenticRequestLog | null {
+  if (!ctx || typeof ctx.getAgenticRequestLog !== 'function') {
+    logger.error?.('Agentic result missing getAgenticRequestLog dependency');
+    throw new Error('agentic-request-log-accessor-missing');
+  }
+
+  try {
+    return ctx.getAgenticRequestLog(requestId) ?? null;
+  } catch (err) {
+    logger.error?.('Agentic result failed to load request log', {
+      requestId,
+      error: err instanceof Error ? err.message : err
+    });
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -60,12 +78,6 @@ const action: Action = {
         return sendJson(res, 400, { error: 'Invalid item id' });
       }
 
-      const providedSecret = String(req.headers[SHARED_SECRET_HEADER] || '');
-      if (!AGENTIC_SHARED_SECRET || !providedSecret || providedSecret !== AGENTIC_SHARED_SECRET) {
-        console.warn('Agentic result rejected due to invalid secret');
-        return sendJson(res, 401, { error: 'Unauthorized' });
-      }
-
       let raw = '';
       for await (const chunk of req) raw += chunk;
       let payload: any;
@@ -77,10 +89,50 @@ const action: Action = {
       }
 
       requestContext = resolveAgenticRequestContext(payload, itemId);
+      const requestId = requestContext?.id?.trim() || '';
+      if (!requestId) {
+        console.warn('Agentic result rejected due to missing request id', { itemId });
+        recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+          error: 'request-id-required',
+          logger: requestLogger
+        });
+        return sendJson(res, 403, { error: 'Unauthorized' });
+      }
+
+      let requestLog: AgenticRequestLog | null = null;
+      try {
+        requestLog = loadAgenticRequestLog(ctx, requestId, requestLogger);
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        if (errorMessage === 'agentic-request-log-accessor-missing') {
+          return sendJson(res, 500, { error: 'Server misconfigured' });
+        }
+        recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+          error: 'request-log-load-failed',
+          logger: requestLogger
+        });
+        return sendJson(res, 500, { error: 'Internal error' });
+      }
+
+      if (!requestLog) {
+        console.warn('Agentic result rejected due to unknown request id', { itemId, requestId });
+        recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+          error: 'request-log-not-found',
+          logger: requestLogger
+        });
+        return sendJson(res, 403, { error: 'Unauthorized' });
+      }
+
+      if (requestLog.Search && requestLog.Search.trim()) {
+        searchQueryForLog = requestLog.Search.trim();
+      }
+
       const initialSearch =
         payload && typeof payload === 'object' && typeof payload.search === 'string' && payload.search.trim()
           ? payload.search.trim()
-          : null;
+          : requestLog.Search && requestLog.Search.trim()
+            ? requestLog.Search.trim()
+            : null;
 
       if (!payload || typeof payload !== 'object') {
         console.warn('Agentic result missing payload object');

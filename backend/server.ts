@@ -12,7 +12,6 @@ import {
   HTTP_PORT,
   INBOX_DIR,
   ARCHIVE_DIR,
-  AGENTIC_API_BASE,
   TLS_CERT_PATH,
   TLS_KEY_PATH,
   HTTPS_PORT,
@@ -24,7 +23,8 @@ import {
   SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
   getShopwareConfig,
   logShopwareConfigIssues,
-  IMPORTER_FORCE_ZERO_STOCK
+  IMPORTER_FORCE_ZERO_STOCK,
+  AGENTIC_QUEUE_POLL_INTERVAL_MS
 } from './config';
 import type { ShopwareConfig } from './config';
 import { ingestCsvFile, type IngestCsvFileOptions } from './importer';
@@ -45,6 +45,7 @@ import {
   upsertAgenticRun,
   getAgenticRun,
   updateAgenticRunStatus,
+  getAgenticRequestLog,
   nextLabelJob,
   updateLabelJobStatus,
   logEvent,
@@ -348,6 +349,7 @@ type ActionContext = {
   agenticServiceEnabled: boolean;
   registerCsvIngestionOptions: typeof registerCsvIngestionOptions;
   clearCsvIngestionOptions: typeof clearCsvIngestionOptions;
+  getAgenticRequestLog: typeof getAgenticRequestLog;
   shopware: {
     config: ShopwareConfig;
     issues: string[];
@@ -355,18 +357,11 @@ type ActionContext = {
   };
 };
 
-const resolvedAgenticApiBase = AGENTIC_API_BASE.trim();
 const agenticServiceEnabled = true;
 
-if (!resolvedAgenticApiBase) {
-  console.info('[server] Agentic API base not configured; defaulting to in-process agentic service.');
-} else {
-  console.info('[server] Agentic API base configured but in-process agentic service will handle orchestration.', {
-    agenticApiBase: resolvedAgenticApiBase
-  });
-}
-
-const AGENTIC_QUEUE_WORKER_INTERVAL_MS = 5000;
+console.info('[server] Agentic queue worker configured for in-process orchestration', {
+  intervalMs: AGENTIC_QUEUE_POLL_INTERVAL_MS
+});
 let agenticQueueWorkerRunning = false;
 
 async function runAgenticQueueWorker(): Promise<void> {
@@ -398,7 +393,7 @@ async function runAgenticQueueWorker(): Promise<void> {
 if (agenticServiceEnabled) {
   setInterval(() => {
     void runAgenticQueueWorker();
-  }, AGENTIC_QUEUE_WORKER_INTERVAL_MS);
+  }, AGENTIC_QUEUE_POLL_INTERVAL_MS);
 }
 
 if (SHOPWARE_SYNC_ENABLED) {
@@ -554,6 +549,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           agenticServiceEnabled,
           registerCsvIngestionOptions,
           clearCsvIngestionOptions,
+          getAgenticRequestLog,
           shopware: {
             config: shopwareConfig,
             issues: [...shopwareConfigIssues],

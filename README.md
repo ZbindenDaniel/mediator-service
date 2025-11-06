@@ -79,10 +79,10 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 ### Agentic orchestrator configuration
 
 - `AGENTIC_MODEL_PROVIDER` – selects the in-process agentic model backend (`ollama`, `openai`, etc.).
-- `AGENTIC_SHARED_SECRET` – authenticates callbacks between the orchestrator worker and the HTTP layer.
 - `AGENTIC_OLLAMA_BASE_URL` / `AGENTIC_OLLAMA_MODEL` – host URL and model name when using Ollama.
 - `AGENTIC_OPENAI_BASE_URL` / `AGENTIC_OPENAI_MODEL` / `AGENTIC_OPENAI_API_KEY` – OpenAI-compatible endpoint, model, and credentials.
 - `AGENTIC_SEARCH_BASE_URL` / `AGENTIC_SEARCH_PORT` / `AGENTIC_SEARCH_PATH` – optional HTTP endpoint for delegated search enrichment.
+- `AGENTIC_QUEUE_POLL_INTERVAL_MS` – interval (milliseconds) between in-process queue dispatch cycles.
 - `TAVILY_API_KEY` / `SEARCH_WEB_ALLOWED_ENGINES` – API key and safelist for external web search fallbacks.
 
 ### Recommended volumes
@@ -109,7 +109,7 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 
 1. Decommission the standalone `ai-flow-service` container or process; the mediator now embeds the orchestrator and queue worker.
 2. After deploying a new version, run `node scripts/verify-agentic-migration.js /path/to/mediator.sqlite` (or the packaged equivalent) to confirm the `agentic_request_logs` schema exists before enabling traffic. _TODO:_ add this verification to the CI/CD pipeline so the check runs automatically.
-3. Update your secrets manager or deployment environment to supply the `AGENTIC_*` variables above directly to the mediator container.
+3. Update your secrets manager or deployment environment to supply the `AGENTIC_*` variables above directly to the mediator container, including any provider credentials and the optional queue interval override.
 
 Quick commands:
 

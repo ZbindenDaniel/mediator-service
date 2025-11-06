@@ -1,6 +1,6 @@
 # Objective
 
-The latest commit pulled the entire ai-flow-service repository into this project as a gitlink, leaving the mediator backend and frontend still talking to it through REST proxies (/api/agentic/*) that forward to AGENTIC_API_BASE and expect a shared secret. Integrating only the essential AI flow pieces into the mediator app—while keeping the existing documentation but linking to it—will eliminate cross-service overhead, align schemas around backend/db.ts, and simplify deployment.
+The latest commit pulled the entire ai-flow-service repository into this project as a gitlink, leaving the mediator backend and frontend still talking to it through REST proxies (/api/agentic/*) that originally forwarded to the external agentic API and authenticated with a shared secret. Consolidating those pieces directly into the mediator app—with in-process validation keyed off persisted request logs—eliminates cross-service overhead, aligns schemas around backend/db.ts, and simplifies deployment.
 
 ## Target architecture
 
@@ -43,14 +43,14 @@ The latest commit pulled the entire ai-flow-service repository into this project
   - Create a service module (e.g., backend/agentic/service.ts) that exposes methods for startRun, cancelRun, restartRun, checkHealth, and submitResult. The orchestrator should:
     - Use mediator’s DB helpers to read/write queue state instead of HTTP calls.
     - Contain robust logging via the existing console/logger pattern and wrap external AI calls in try/catch to honor observability requirements.
-    - Replace the shared-secret webhook with an internal invocation that validates input directly (no AGENTIC_SHARED_SECRET).
+    - Replace the shared-secret webhook with an internal invocation that validates input directly via orchestrator context (no shared secrets, rely on request-log lookups and job metadata).
 
   - Update the queue worker to call the orchestrator directly (dependency-inject a function rather than forwardAgenticTrigger).
 
 - 7. Refactor backend actions to drop REST proxies
   - Rewrite backend/actions/agentic-trigger.ts, agentic-health.ts, agentic-restart.ts, and related files so they call the orchestrator instead of fetching AGENTIC_API_BASE. Remove network-specific error classes as appropriate but keep validation and logging.
   - Adjust backend/actions/import-item.ts to queue/trigger runs through the in-process service, maintaining the current agentic status semantics and logging.
-  - Update config by deleting AGENTIC_API_BASE/AGENTIC_SHARED_SECRET and replacing them with any new knobs the orchestrator needs (e.g., AI model endpoints), keeping TODO-driven validation in mind.
+  - Update config by deleting AGENTIC_API_BASE/AGENTIC_SHARED_SECRET and replacing them with any new knobs the orchestrator needs (e.g., AI model endpoints, AGENTIC_QUEUE_POLL_INTERVAL_MS) while keeping TODO-driven validation in mind.
 
 - 8. Update frontend integration
   - Remove hard-coded API bases in frontend/src/lib/agentic.ts, ItemDetail.tsx, and ItemCreate.tsx, ensuring the UI only hits mediator endpoints and defers routing to the backend.
@@ -63,7 +63,7 @@ The latest commit pulled the entire ai-flow-service repository into this project
 
 - 10. Documentation & follow-up
   - Update docs/setup.md, docs/ARCHITECTURE.md, and docs/OVERVIEW.md with the new single-service layout and link any retained AI docs.
-  - Mention configuration changes (no more AGENTIC_API_BASE/AGENTIC_SHARED_SECRET) and point to new logging/monitoring expectations.
+  - Mention configuration changes (no more AGENTIC_API_BASE/AGENTIC_SHARED_SECRET; add AGENTIC_QUEUE_POLL_INTERVAL_MS and request-log validation expectations) and point to new logging/monitoring expectations.
   - Close or revise TODO comments encountered during the refactor, including the CLI filtering TODO in scripts/dump-agentic-search-events.ts if it becomes relevant.
 
 - 11. Parallelisation suggestions
