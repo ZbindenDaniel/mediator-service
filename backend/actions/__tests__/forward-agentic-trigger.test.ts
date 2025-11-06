@@ -15,7 +15,11 @@ jest.mock('../../db', () => {
 });
 
 import { forwardAgenticTrigger } from '../agentic-trigger';
-import { AGENTIC_RUN_STATUS_QUEUED, AGENTIC_RUN_STATUS_RUNNING } from '../../../models';
+import {
+  AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_RUNNING,
+  type AgenticModelInvocationResult
+} from '../../../models';
 import * as agenticDb from '../../db';
 
 const mockedDb = agenticDb as jest.Mocked<typeof agenticDb>;
@@ -75,10 +79,10 @@ describe('forwardAgenticTrigger', () => {
       run: jest.fn(() => ({ changes: 1 }))
     };
 
-    let resolveInvocation: ((value: unknown) => void) | null = null;
+    let resolveInvocation: ((value: AgenticModelInvocationResult) => void) | null = null;
     const invokeModel = jest.fn(
       () =>
-        new Promise((resolve) => {
+        new Promise<AgenticModelInvocationResult>((resolve) => {
           resolveInvocation = resolve;
         })
     );
