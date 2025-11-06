@@ -98,4 +98,10 @@ describe('agentic config environment resolution', () => {
 
     expect((modelConfig as AgenticModelConfig).provider).toBe('ollama');
   });
+
+  it('throws a descriptive error when the provider value is invalid', () => {
+    process.env.AGENTIC_MODEL_PROVIDER = 'claude';
+
+    expect(() => loadConfig()).toThrowError(/Unsupported value/);
+  });
 });
