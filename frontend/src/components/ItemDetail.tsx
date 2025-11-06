@@ -24,7 +24,14 @@ import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { filterAllowedEvents } from '../utils/eventLogLevels';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
-import { persistAgenticRunCancellation, triggerAgenticRun } from '../lib/agentic';
+import {
+  describeAgenticFailureReason,
+  extractAgenticFailureReason,
+  persistAgenticRunCancellation,
+  triggerAgenticRun
+} from '../lib/agentic';
+
+// TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
@@ -961,6 +968,17 @@ export default function ItemDetail({ itemId }: Props) {
       });
       if (triggerResult.outcome !== 'triggered') {
         console.warn('Agentic restart did not trigger run; auto-cancelling', triggerResult);
+        let failureReasonCode: string | null = null;
+        if (triggerResult.outcome === 'skipped') {
+          failureReasonCode = triggerResult.reason;
+        } else if (triggerResult.outcome === 'failed') {
+          failureReasonCode =
+            extractAgenticFailureReason(triggerResult.error) ?? triggerResult.reason ?? null;
+          if (!failureReasonCode && typeof triggerResult.status === 'number' && triggerResult.status === 0) {
+            failureReasonCode = 'network-error';
+          }
+        }
+        const failureReasonDescription = describeAgenticFailureReason(failureReasonCode);
         const cancelResult = await persistAgenticRunCancellation({
           itemId: refreshedRun.ItemUUID || item.ItemUUID,
           actor,
@@ -973,10 +991,13 @@ export default function ItemDetail({ itemId }: Props) {
           triggerResult.outcome === 'skipped'
             ? 'Ki-Neustart konnte nicht gestartet werden (fehlende Angaben).'
             : 'Ki-Neustart konnte nicht gestartet werden. Durchlauf wurde abgebrochen.';
+        const detailedMessage = failureReasonDescription
+          ? `${baseMessage} (Grund: ${failureReasonDescription})`
+          : baseMessage;
         if (!cancelResult.ok) {
-          setAgenticError(`${baseMessage} (Abbruch konnte nicht gespeichert werden.)`);
+          setAgenticError(`${detailedMessage} (Abbruch konnte nicht gespeichert werden.)`);
         } else {
-          setAgenticError(baseMessage);
+          setAgenticError(detailedMessage);
         }
         return;
       }
