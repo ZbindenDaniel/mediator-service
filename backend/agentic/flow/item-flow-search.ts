@@ -16,10 +16,12 @@ export type SearchInvoker = (
   metadata?: SearchInvokerMetadata
 ) => Promise<SearchResult>;
 
+type LoggerMethods = 'info' | 'warn' | 'error' | 'debug';
+
 export interface CollectSearchContextOptions {
   searchTerm: string;
   searchInvoker: SearchInvoker;
-  logger?: Pick<Console, 'info' | 'warn' | 'error' | 'debug'>;
+  logger?: Partial<Pick<Console, LoggerMethods>>;
   itemId: string;
 }
 
