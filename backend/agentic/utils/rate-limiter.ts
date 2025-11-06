@@ -23,12 +23,14 @@ function normalizeDelay(value: unknown, fallback = DEFAULT_DELAY_MS): number {
 
 export function createRateLimiter({ delayMs, logger }: { delayMs?: number; logger?: RateLimiterLogger } = {}) {
   const baseDelay = normalizeDelay(delayMs, DEFAULT_DELAY_MS);
-  const queue: Array<{
-    task: () => Promise<unknown>;
-    resolve: (value: unknown) => void;
+  type QueueEntry<T> = {
+    task: () => Promise<T>;
+    resolve: (value: T | PromiseLike<T>) => void;
     reject: (reason?: unknown) => void;
     metadata?: RateLimiterMetadata;
-  }> = [];
+  };
+
+  const queue: Array<QueueEntry<unknown>> = [];
   let processing = false;
   let lastStartTs = 0;
 
@@ -80,7 +82,15 @@ export function createRateLimiter({ delayMs, logger }: { delayMs?: number; logge
 
   return function enqueue<T>(task: () => Promise<T>, metadata?: RateLimiterMetadata): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      queue.push({ task, resolve, reject, metadata });
+      const entry: QueueEntry<T> = {
+        task,
+        resolve: (value) => {
+          resolve(value as Awaited<T>);
+        },
+        reject,
+        metadata
+      };
+      queue.push(entry as QueueEntry<unknown>);
       logger?.debug?.({
         msg: 'search limiter task enqueued',
         queueSize: queue.length,
