@@ -6,7 +6,17 @@ interface AgenticEventRow {
   CreatedAt: string;
   ItemUUID: string;
   Meta: string | null;
+  Event: AgenticEventName;
 }
+
+const NEW_AGENTIC_EVENT_NAMES = Object.freeze(['AgenticRunQueued', 'AgenticRunRequeued'] as const);
+const LEGACY_AGENTIC_EVENT_NAMES = Object.freeze(['AgenticSearchQueued'] as const);
+const TRACKED_AGENTIC_EVENT_NAMES = Object.freeze([
+  ...NEW_AGENTIC_EVENT_NAMES,
+  ...LEGACY_AGENTIC_EVENT_NAMES,
+] as const);
+
+type AgenticEventName = (typeof TRACKED_AGENTIC_EVENT_NAMES)[number];
 
 // TODO: Consider adding CLI arguments for date range filtering if analysts require narrower slices.
 
@@ -21,26 +31,70 @@ function openDatabase(dbPath: string): Database.Database {
 
 function loadAgenticEvents(database: Database.Database): AgenticEventRow[] {
   try {
+    const placeholders = TRACKED_AGENTIC_EVENT_NAMES.map((_, index) => `@event${index}`).join(', ');
     const statement = database.prepare(
-      `SELECT CreatedAt, EntityId AS ItemUUID, Meta FROM events WHERE Event = @event ORDER BY datetime(CreatedAt) ASC`
+      `SELECT CreatedAt, EntityId AS ItemUUID, Meta, Event FROM events WHERE Event IN (${placeholders}) ORDER BY datetime(CreatedAt) ASC`
     );
-    return statement.all({ event: 'AgenticSearchQueued' }) as AgenticEventRow[];
+    const parameters = TRACKED_AGENTIC_EVENT_NAMES.reduce<Record<string, string>>((accumulator, eventName, index) => {
+      accumulator[`event${index}`] = eventName;
+      return accumulator;
+    }, {});
+    return statement.all(parameters) as AgenticEventRow[];
   } catch (error) {
-    console.error('[dump-agentic-search-events] Query failed for AgenticSearchQueued events', error);
+    console.error('[dump-agentic-search-events] Query failed for agentic queue events', error);
     throw error;
   }
 }
 
-function summarizeDuplicates(events: AgenticEventRow[]): Array<{ ItemUUID: string; count: number }> {
-  const counts = new Map<string, number>();
+function summarizeDuplicates(
+  events: AgenticEventRow[]
+): Array<{ ItemUUID: string; count: number; eventName: AgenticEventName }> {
+  const counts = new Map<string, { ItemUUID: string; count: number; eventName: AgenticEventName }>();
   for (const event of events) {
-    const current = counts.get(event.ItemUUID) ?? 0;
-    counts.set(event.ItemUUID, current + 1);
+    const key = `${event.Event}::${event.ItemUUID}`;
+    const current = counts.get(key);
+    if (current) {
+      current.count += 1;
+    } else {
+      counts.set(key, { ItemUUID: event.ItemUUID, count: 1, eventName: event.Event });
+    }
   }
-  return Array.from(counts.entries())
-    .filter(([, count]) => count > 1)
-    .map(([ItemUUID, count]) => ({ ItemUUID, count }))
-    .sort((a, b) => b.count - a.count || a.ItemUUID.localeCompare(b.ItemUUID));
+  return Array.from(counts.values())
+    .filter((entry) => entry.count > 1)
+    .sort((a, b) => {
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+      if (a.eventName !== b.eventName) {
+        return a.eventName.localeCompare(b.eventName);
+      }
+      return a.ItemUUID.localeCompare(b.ItemUUID);
+    });
+}
+
+function formatEventLabel(eventName: AgenticEventName): string {
+  const isLegacy = LEGACY_AGENTIC_EVENT_NAMES.includes(eventName as (typeof LEGACY_AGENTIC_EVENT_NAMES)[number]);
+  return isLegacy ? `${eventName} (legacy)` : eventName;
+}
+
+function buildEventLines(events: AgenticEventRow[]): string[] {
+  const lines: string[] = [];
+  for (const event of events) {
+    const meta = parseMeta(event.Meta);
+    const metaSummary = meta ? JSON.stringify(meta) : 'null';
+    lines.push(`[${formatEventLabel(event.Event)}] ${event.CreatedAt}\t${event.ItemUUID}\t${metaSummary}`);
+  }
+  return lines;
+}
+
+function buildDuplicateLines(
+  duplicates: Array<{ ItemUUID: string; count: number; eventName: AgenticEventName }>
+): string[] {
+  const lines: string[] = [];
+  for (const duplicate of duplicates) {
+    lines.push(`[${formatEventLabel(duplicate.eventName)}] ${duplicate.ItemUUID}\t${duplicate.count}`);
+  }
+  return lines;
 }
 
 function parseMeta(meta: string | null): Record<string, unknown> | null {
@@ -56,7 +110,7 @@ function parseMeta(meta: string | null): Record<string, unknown> | null {
   }
 }
 
-function main(): void {
+export function main(): void {
   const resolvedDbPath = path.resolve(DB_PATH);
   console.info('[dump-agentic-search-events] Opening database in read-only mode', { resolvedDbPath });
 
@@ -64,18 +118,23 @@ function main(): void {
 
   try {
     const events = loadAgenticEvents(database);
-    console.info('[dump-agentic-search-events] Retrieved AgenticSearchQueued events', { count: events.length });
+    const countsByEvent = events.reduce<Record<AgenticEventName, number>>((accumulator, event) => {
+      accumulator[event.Event] = (accumulator[event.Event] ?? 0) + 1;
+      return accumulator;
+    }, {} as Record<AgenticEventName, number>);
+    console.info('[dump-agentic-search-events] Retrieved agentic queue events', {
+      total: events.length,
+      countsByEvent,
+    });
 
     if (events.length === 0) {
-      console.info('[dump-agentic-search-events] No AgenticSearchQueued events found');
+      console.info('[dump-agentic-search-events] No agentic queue events found');
       return;
     }
 
-    console.log('\n=== AgenticSearchQueued events ===');
-    for (const event of events) {
-      const meta = parseMeta(event.Meta);
-      const metaSummary = meta ? JSON.stringify(meta) : 'null';
-      console.log(`${event.CreatedAt}\t${event.ItemUUID}\t${metaSummary}`);
+    console.log('\n=== Agentic queue events ===');
+    for (const line of buildEventLines(events)) {
+      console.log(line);
     }
 
     const duplicates = summarizeDuplicates(events);
@@ -84,9 +143,9 @@ function main(): void {
       return;
     }
 
-    console.log('\n=== Duplicate ItemUUID occurrences ===');
-    for (const duplicate of duplicates) {
-      console.log(`${duplicate.ItemUUID}\t${duplicate.count}`);
+    console.log('\n=== Duplicate ItemUUID occurrences by event ===');
+    for (const line of buildDuplicateLines(duplicates)) {
+      console.log(line);
     }
   } catch (error) {
     console.error('[dump-agentic-search-events] Unexpected failure while dumping events', error);
@@ -101,4 +160,16 @@ function main(): void {
   }
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+export {
+  buildDuplicateLines,
+  buildEventLines,
+  loadAgenticEvents,
+  summarizeDuplicates,
+  TRACKED_AGENTIC_EVENT_NAMES,
+  LEGACY_AGENTIC_EVENT_NAMES,
+  NEW_AGENTIC_EVENT_NAMES,
+};
