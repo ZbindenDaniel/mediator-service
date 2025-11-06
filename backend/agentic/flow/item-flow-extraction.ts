@@ -3,7 +3,7 @@ import { stringifyLangChainContent } from '../utils/langchain';
 import { formatSourcesForRetry, type SearchSource } from '../utils/source-formatter';
 import { parseJsonWithSanitizer } from '../utils/json';
 import { FlowError } from './errors';
-import type { AgenticOutput } from './item-flow-schemas';
+import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
 import { AgentOutputSchema } from './item-flow-schemas';
 import type { SearchInvoker } from './item-flow-search';
 
@@ -18,6 +18,7 @@ export interface ExtractionLogger {
   error?: Console['error'];
 }
 
+// TODO(agent): Monitor extraction target snapshots as schema fields grow to avoid prompt overflow.
 export interface RunExtractionOptions {
   llm: ChatModel;
   logger?: ExtractionLogger;
@@ -32,6 +33,7 @@ export interface RunExtractionOptions {
   targetFormat: string;
   supervisorPrompt: string;
   searchInvoker: SearchInvoker;
+  target: AgenticTarget;
 }
 
 export interface ExtractionResult {
@@ -45,6 +47,7 @@ const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 5;
 const MAX_LOG_OBJECT_KEYS = 10;
 const MAX_LOG_DEPTH = 2;
+const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
 
 function truncateForLog(value: string, maxLength = MAX_LOG_STRING_LENGTH): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
@@ -100,7 +103,8 @@ export async function runExtractionAttempts({
   extractPrompt,
   targetFormat,
   supervisorPrompt,
-  searchInvoker
+  searchInvoker,
+  target
 }: RunExtractionOptions): Promise<ExtractionResult> {
   let lastRaw = '';
   let lastValidated: { success: true; data: AgenticOutput } | null = null;
@@ -110,6 +114,16 @@ export async function runExtractionAttempts({
   let itemContent = '';
 
   let attempt = 1;
+  const sanitizedTargetPreview = sanitizeForLog(target);
+  let serializedTargetSnapshot = '';
+  try {
+    serializedTargetSnapshot = JSON.stringify(target, null, 2);
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to serialize target for extraction context', itemId });
+  }
+  const trimmedTargetSnapshot = serializedTargetSnapshot
+    ? truncateForLog(serializedTargetSnapshot, TARGET_SNAPSHOT_MAX_LENGTH).trim()
+    : '';
   const numericSearchLimit = Number(maxAgentSearchesPerRequest);
   const searchesPerRequestLimit = Number.isFinite(numericSearchLimit) && numericSearchLimit > 0
     ? Math.floor(numericSearchLimit)
@@ -145,6 +159,27 @@ export async function runExtractionAttempts({
           ? 'Reminder: request at most one additional search by including a "__searchQueries" array when vital information is missing.'
           : `Reminder: request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array when vital information is missing.`
       ].join('\n\n');
+    }
+
+    if (trimmedTargetSnapshot) {
+      userContent = [
+        userContent,
+        'Normalized target snapshot (truncated for context):',
+        trimmedTargetSnapshot
+      ].join('\n\n');
+      logger?.debug?.({
+        msg: 'appended target snapshot to extraction prompt',
+        attempt,
+        itemId,
+        targetPreview: sanitizedTargetPreview
+      });
+    } else {
+      logger?.debug?.({
+        msg: 'target snapshot unavailable for extraction prompt',
+        attempt,
+        itemId,
+        targetPreview: sanitizedTargetPreview
+      });
     }
 
     let extractRes;

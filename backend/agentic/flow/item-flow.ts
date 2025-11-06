@@ -216,7 +216,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       extractPrompt: extract,
       targetFormat: format,
       supervisorPrompt: supervisor,
-      searchInvoker
+      searchInvoker,
+      target
     });
 
     checkCancellation();
