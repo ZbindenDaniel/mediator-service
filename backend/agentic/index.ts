@@ -49,6 +49,12 @@ export interface AgenticServiceDependencies {
   invokeModel?: AgenticModelInvokerFn;
 }
 
+export interface AgenticRunResumeResult {
+  resumed: number;
+  skipped: number;
+  failed: number;
+}
+
 type NormalizedRequestContext = {
   id: string;
   payloadDefined: boolean;
@@ -61,6 +67,14 @@ const REQUEST_STATUS_SUCCESS = 'SUCCESS';
 const REQUEST_STATUS_FAILED = 'FAILED';
 const REQUEST_STATUS_DECLINED = 'DECLINED';
 const REQUEST_STATUS_CANCELLED = 'CANCELLED';
+
+const SELECT_STALE_AGENTIC_RUNS_SQL = `
+  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+         LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
+    FROM agentic_runs
+   WHERE Status IN ('queued', 'running')
+   ORDER BY datetime(LastModified) ASC, Id ASC
+`;
 
 function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -755,6 +769,94 @@ export function resumeAgenticRun(
   deps: AgenticServiceDependencies
 ): Promise<AgenticRunStartResult> {
   return restartAgenticRun(input, deps);
+}
+
+function resolveReviewFromPersistedRun(run: AgenticRun | null): AgenticRunReviewMetadata | null {
+  if (!run) {
+    return null;
+  }
+
+  const decision = run.LastReviewDecision ?? null;
+  const notes = run.LastReviewNotes ?? null;
+  const reviewedBy = run.ReviewedBy ?? null;
+
+  if (!decision && !notes && !reviewedBy) {
+    return null;
+  }
+
+  return { decision, notes, reviewedBy };
+}
+
+// TODO(agentic-resume): Persist request context metadata to forward during resume once storage exists.
+export async function resumeStaleAgenticRuns(
+  deps: AgenticServiceDependencies
+): Promise<AgenticRunResumeResult> {
+  validateDependencies(deps);
+  const logger = resolveLogger(deps);
+
+  let staleRuns: AgenticRun[] = [];
+  try {
+    const statement = deps.db.prepare(SELECT_STALE_AGENTIC_RUNS_SQL);
+    staleRuns = statement.all() as AgenticRun[];
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to query stale agentic runs during resume', {
+      error: toErrorMessage(err)
+    });
+    return { resumed: 0, skipped: 0, failed: 1 };
+  }
+
+  if (staleRuns.length === 0) {
+    logger.info?.('[agentic-service] No stale agentic runs detected during startup resume.');
+    return { resumed: 0, skipped: 0, failed: 0 };
+  }
+
+  logger.info?.('[agentic-service] Resuming stale agentic runs after restart', {
+    count: staleRuns.length
+  });
+
+  let resumed = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const run of staleRuns) {
+    const searchQuery = (run.SearchQuery || '').trim();
+    if (!searchQuery) {
+      skipped += 1;
+      logger.warn?.('[agentic-service] Skipping stale agentic run without search query', {
+        itemId: run.ItemUUID,
+        status: run.Status
+      });
+      continue;
+    }
+
+    try {
+      scheduleAgenticModelInvocation({
+        itemId: run.ItemUUID,
+        searchQuery,
+        context: null,
+        review: resolveReviewFromPersistedRun(run),
+        request: null,
+        deps,
+        logger
+      });
+      resumed += 1;
+    } catch (err) {
+      failed += 1;
+      logger.error?.('[agentic-service] Failed to schedule stale agentic run during resume', {
+        itemId: run.ItemUUID,
+        status: run.Status,
+        error: toErrorMessage(err)
+      });
+    }
+  }
+
+  logger.info?.('[agentic-service] Completed stale agentic run resume sweep', {
+    resumed,
+    skipped,
+    failed
+  });
+
+  return { resumed, skipped, failed };
 }
 
 export interface AgenticRequestLogUpdateOptions {

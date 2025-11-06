@@ -8,7 +8,7 @@ import { loadActions } from './actions';
 import { MEDIA_DIR } from './lib/media';
 
 export { MEDIA_DIR } from './lib/media';
-import type { AgenticServiceDependencies } from './agentic';
+import { resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
 import {
   HTTP_PORT,
   INBOX_DIR,
@@ -388,6 +388,14 @@ function createAgenticServiceDependencies(
 
 if (agenticServiceEnabled) {
   console.info('[server] In-process agentic orchestrator active; agentic runs dispatch immediately.');
+  void (async () => {
+    try {
+      const result = await resumeStaleAgenticRuns(createAgenticServiceDependencies());
+      console.info('[agentic-service] Startup stale run resume summary', result);
+    } catch (err) {
+      console.error('[agentic-service] Failed to resume stale agentic runs on startup', err);
+    }
+  })();
 }
 
 if (SHOPWARE_SYNC_ENABLED) {

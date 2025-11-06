@@ -17,6 +17,7 @@
 ## Agentic run dispatch lifecycle
 
 - Triggering `startAgenticRun`/`restartAgenticRun` records the queued run and returns immediately; the Node.js event loop schedules the model invocation with `setImmediate`, so no dedicated worker loop needs to be enabled for this hop.
+- After restarts the orchestrator scans the `agentic_runs` table for any rows still marked `queued` or `running` and resubmits them automatically, so in-flight work survives process crashes without manual intervention.
 - Request logs capture both stages automatically: the queue handoff is stored as `queued`, and a background transition updates the row to `running` (or `failed`) using `recordAgenticRequestLogUpdate` if the asynchronous invocation encounters an error.
 - Monitor the `agentic_runs` table or the request log endpoints to confirm progress; the UI will reflect the `running` state as soon as the asynchronous dispatcher updates the row.
 
