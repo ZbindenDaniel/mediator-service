@@ -5,7 +5,8 @@ jest.mock('../agentic', () => ({
   recordAgenticRequestLogUpdate: jest.fn()
 }));
 
-const { recordAgenticRequestLogUpdate } = jest.requireMock('../agentic');
+const mockAgenticModule = jest.requireMock<typeof import('../agentic')>('../agentic');
+const { recordAgenticRequestLogUpdate } = mockAgenticModule;
 
 describe('agentic result handler integration', () => {
   beforeEach(() => {
@@ -49,7 +50,9 @@ describe('agentic result handler integration', () => {
       })
     };
 
-    const { handleAgenticResult } = jest.requireActual('../result-handler');
+    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>(
+      '../result-handler'
+    );
 
     const result = handleAgenticResult(
       {
