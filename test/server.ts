@@ -5,8 +5,6 @@ const items = new Map();
 const agenticRuns = new Map();
 let materialCounter = 10000;
 let boxCounter = 0;
-let agenticHealthChecks = 0;
-let agenticHealthResponse: { status: number; body: any } = { status: 200, body: { ok: true } };
 
 function resetData() {
   boxes.clear();
@@ -14,16 +12,6 @@ function resetData() {
   agenticRuns.clear();
   materialCounter = 10000;
   boxCounter = 0;
-  agenticHealthChecks = 0;
-  agenticHealthResponse = { status: 200, body: { ok: true } };
-}
-
-function setAgenticHealthResponse(status: number, body: any) {
-  agenticHealthResponse = { status, body };
-}
-
-function getAgenticHealthCheckCount() {
-  return agenticHealthChecks;
 }
 
 function sendJson(res, status, body) {
@@ -387,9 +375,7 @@ const server = http.createServer(async (req, res) => {
     const { pathname, searchParams } = parsed;
 
     if (req.method === 'GET' && (pathname === '/health' || pathname === '/agentic/health')) {
-      agenticHealthChecks += 1;
-      const { status, body } = agenticHealthResponse;
-      return sendJson(res, status, body);
+      return sendJson(res, 200, { ok: true });
     }
     if (req.method === 'GET' && pathname === '/api/health') {
       return sendJson(res, 200, { ok: true });
@@ -501,7 +487,5 @@ const server = http.createServer(async (req, res) => {
 
 module.exports = {
   server,
-  resetData,
-  setAgenticHealthResponse,
-  getAgenticHealthCheckCount
+  resetData
 };
