@@ -122,7 +122,7 @@ describe('agentic request logging integration', () => {
 
     expect(mockedDb.saveAgenticRequestPayload).toHaveBeenCalledWith('req-123', requestPayload);
     expect(mockedDb.logAgenticRequestStart).toHaveBeenCalledWith('req-123', 'example search');
-    expect(mockedDb.logAgenticRequestEnd).toHaveBeenCalledWith('req-123', 'SUCCESS', null);
+    expect(mockedDb.logAgenticRequestEnd).toHaveBeenCalledWith('req-123', 'queued', null);
     expect(mockedDb.markAgenticRequestNotificationFailure).not.toHaveBeenCalled();
     expect(mockedDb.markAgenticRequestNotificationSuccess).not.toHaveBeenCalled();
 

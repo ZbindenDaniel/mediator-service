@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import {
   AGENTIC_RUN_STATUS_CANCELLED,
+  AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_QUEUED,
   AGENTIC_RUN_STATUS_RUNNING,
   type AgenticRun,
@@ -289,6 +290,118 @@ function persistQueuedRun(
   return fetchAgenticRun(payload.itemId, deps, logger);
 }
 
+interface BackgroundInvocationPayload {
+  itemId: string;
+  searchQuery: string;
+  context: string | null;
+  review: AgenticRunReviewMetadata | null;
+  request: NormalizedRequestContext | null;
+  deps: AgenticServiceDependencies;
+  logger: AgenticServiceLogger;
+}
+
+function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): void {
+  const { deps, logger } = payload;
+  if (!deps.invokeModel) {
+    return;
+  }
+
+  const scheduler =
+    typeof setImmediate === 'function'
+      ? (fn: () => void) => setImmediate(fn)
+      : (fn: () => void) => queueMicrotask(fn);
+
+  const runInBackground = async () => {
+    const nowIso = resolveNow(deps).toISOString();
+
+    try {
+      const updateResult = deps.updateAgenticRunStatus.run({
+        ItemUUID: payload.itemId,
+        Status: AGENTIC_RUN_STATUS_RUNNING,
+        SearchQuery: payload.searchQuery,
+        LastModified: nowIso,
+        ReviewState: 'not_required',
+        ReviewedBy: null,
+        LastReviewDecision: payload.review?.decision ?? null,
+        LastReviewNotes: payload.review?.notes ?? null
+      });
+
+      if (!updateResult?.changes) {
+        logger.warn?.('[agentic-service] Agentic run mark-running updated zero rows', {
+          itemId: payload.itemId
+        });
+      } else {
+        logger.info?.('[agentic-service] Agentic run marked running prior to invocation', {
+          itemId: payload.itemId,
+          context: payload.context
+        });
+      }
+    } catch (err) {
+      const errorMessage = toErrorMessage(err);
+      logger.error?.('[agentic-service] Failed to mark agentic run running prior to invocation', {
+        itemId: payload.itemId,
+        context: payload.context,
+        error: errorMessage
+      });
+      recordAgenticRequestLogUpdate(payload.request, AGENTIC_RUN_STATUS_FAILED, {
+        error: errorMessage,
+        searchQuery: payload.searchQuery,
+        logger
+      });
+      return;
+    }
+
+    recordAgenticRequestLogUpdate(payload.request, AGENTIC_RUN_STATUS_RUNNING, {
+      markRunning: true,
+      searchQuery: payload.searchQuery,
+      logger
+    });
+
+    try {
+      await deps.invokeModel({
+        itemId: payload.itemId,
+        searchQuery: payload.searchQuery,
+        context: payload.context,
+        review: payload.review
+      });
+      logger.info?.('[agentic-service] Model invocation dispatched asynchronously', {
+        itemId: payload.itemId,
+        context: payload.context
+      });
+    } catch (err) {
+      const errorMessage = toErrorMessage(err);
+      logger.error?.('[agentic-service] Model invocation failed during asynchronous dispatch', {
+        itemId: payload.itemId,
+        context: payload.context,
+        error: errorMessage
+      });
+      recordAgenticRequestLogUpdate(payload.request, AGENTIC_RUN_STATUS_FAILED, {
+        error: errorMessage,
+        searchQuery: payload.searchQuery,
+        logger
+      });
+    }
+  };
+
+  try {
+    scheduler(() => {
+      void runInBackground();
+    });
+  } catch (err) {
+    const errorMessage = toErrorMessage(err);
+    logger.error?.('[agentic-service] Failed to schedule asynchronous model invocation', {
+      itemId: payload.itemId,
+      context: payload.context,
+      error: errorMessage
+    });
+    recordAgenticRequestLogUpdate(payload.request, AGENTIC_RUN_STATUS_FAILED, {
+      error: errorMessage,
+      searchQuery: payload.searchQuery,
+      logger
+    });
+  }
+}
+
 function validateDependencies(deps: AgenticServiceDependencies): void {
   if (!deps?.db || !deps.getAgenticRun || !deps.upsertAgenticRun || !deps.updateAgenticRunStatus || !deps.logEvent) {
     throw new Error('Agentic service dependencies are incomplete');
@@ -334,25 +447,25 @@ export async function startAgenticRun(
       logger
     );
 
-    if (deps.invokeModel) {
-      try {
-        await deps.invokeModel({
-          itemId,
-          searchQuery,
-          context: input.context ?? null,
-          review
-        });
-        logger.info?.('[agentic-service] Model invocation dispatched', { itemId, context: input.context ?? null });
-      } catch (err) {
-        logger.error?.('[agentic-service] Model invocation failed during startAgenticRun', {
-          itemId,
-          error: err instanceof Error ? err.message : err
-        });
-        throw err;
-      }
-    }
+    recordAgenticRequestLogUpdate(request, AGENTIC_RUN_STATUS_QUEUED, {
+      searchQuery,
+      logger
+    });
 
-    finalizeRequestLog(request, REQUEST_STATUS_SUCCESS, null, logger);
+    scheduleAgenticModelInvocation({
+      itemId,
+      searchQuery,
+      context: input.context?.trim() || null,
+      review,
+      request,
+      deps,
+      logger
+    });
+
+    logger.info?.('[agentic-service] Agentic run queued for asynchronous execution', {
+      itemId,
+      context: input.context ?? null
+    });
     return { agentic, queued: true, created: !existing };
   } catch (err) {
     finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
@@ -513,26 +626,26 @@ export async function restartAgenticRun(
 
   const refreshed = fetchAgenticRun(itemId, deps, logger);
 
-  if (deps.invokeModel) {
-    try {
-      await deps.invokeModel({
-        itemId,
-        searchQuery,
-        context,
-        review
-      });
-      logger.info?.('[agentic-service] Model invocation dispatched after restart', { itemId, context });
-    } catch (err) {
-      logger.error?.('[agentic-service] Model invocation failed during restartAgenticRun', {
-        itemId,
-        error: err instanceof Error ? err.message : err
-      });
-      finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
-      throw err;
-    }
-  }
+  recordAgenticRequestLogUpdate(request, AGENTIC_RUN_STATUS_QUEUED, {
+    searchQuery,
+    logger
+  });
 
-  finalizeRequestLog(request, REQUEST_STATUS_SUCCESS, null, logger);
+  scheduleAgenticModelInvocation({
+    itemId,
+    searchQuery,
+    context,
+    review,
+    request,
+    deps,
+    logger
+  });
+
+  logger.info?.('[agentic-service] Agentic run restart queued for asynchronous execution', {
+    itemId,
+    context
+  });
+
   return { agentic: refreshed, queued: true, created: !existing };
 }
 
