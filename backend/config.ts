@@ -65,8 +65,9 @@ export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
 const parsedPrintTimeout = Number.parseInt(process.env.PRINT_TIMEOUT_MS || '', 10);
 export const PRINT_TIMEOUT_MS = Number.isFinite(parsedPrintTimeout) && parsedPrintTimeout > 0 ? parsedPrintTimeout : 15000;
-export const AGENTIC_SHARED_SECRET = (process.env.AGENTIC_SHARED_SECRET || 'revampItIsSoCool!').trim();
-export const AGENTIC_API_BASE = (process.env.AGENTIC_API_BASE || '').trim();
+const parsedAgenticQueuePoll = Number.parseInt(process.env.AGENTIC_QUEUE_POLL_INTERVAL_MS || '', 10);
+export const AGENTIC_QUEUE_POLL_INTERVAL_MS =
+  Number.isFinite(parsedAgenticQueuePoll) && parsedAgenticQueuePoll > 0 ? parsedAgenticQueuePoll : 5000;
 
 const DEFAULT_PUBLIC_HOSTNAME = 'localhost'; //10.196';
 

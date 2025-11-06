@@ -27,7 +27,6 @@ RUN apt-get update \
 ENV NODE_ENV=production \
     HTTP_PORT=8080 \
     AGENTIC_MODEL_PROVIDER=ollama \
-    AGENTIC_SHARED_SECRET=revampItIsSoCool! \
     AGENTIC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
     AGENTIC_OLLAMA_MODEL=qwen3:0.6b \
     AGENTIC_OPENAI_BASE_URL=https://api.openai.com/v1 \
@@ -35,6 +34,7 @@ ENV NODE_ENV=production \
     AGENTIC_SEARCH_BASE_URL=http://127.0.0.1 \
     AGENTIC_SEARCH_PORT=8000 \
     AGENTIC_SEARCH_PATH=/search \
+    AGENTIC_QUEUE_POLL_INTERVAL_MS=5000 \
     SEARCH_WEB_ALLOWED_ENGINES=google,duckduckgo,brave
 
 WORKDIR /app
