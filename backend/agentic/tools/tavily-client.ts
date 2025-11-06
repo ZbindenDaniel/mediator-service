@@ -123,8 +123,9 @@ export class TavilySearchClient {
     try {
       this.logger.info?.({ msg: 'Performing Tavily search', query: trimmedQuery, limit: effectiveLimit });
       const response = await search(trimmedQuery, { maxResults: effectiveLimit });
-      const rawResults = Array.isArray((response as { results?: unknown[] })?.results)
-        ? (response as { results?: unknown[] }).results
+      const candidate = (response as { results?: unknown[] })?.results;
+      const rawResults = Array.isArray(candidate)
+        ? candidate
         : Array.isArray(response)
           ? (response as unknown[])
           : [];
