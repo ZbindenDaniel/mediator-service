@@ -5,17 +5,18 @@ import type { ShopwareMatchOptions, ShopwareMatchResult } from '../flow/item-flo
 import type { SearchInvoker } from '../flow/item-flow-search';
 import type { SearchResult } from '../tools/tavily-client';
 
-type InvokeArgs = Parameters<ChatModel['invoke']>;
-type InvokeReturn = ReturnType<ChatModel['invoke']>;
+const createMockLlm = (): ChatModel => {
+  const invoke: ChatModel['invoke'] = jest.fn().mockResolvedValue({ content: null });
+  return { invoke };
+};
 
-const createMockLlm = (): ChatModel => ({
-  invoke: jest.fn<InvokeReturn, InvokeArgs>().mockResolvedValue({ content: null })
-});
-
-const createSearchInvokerMock = () =>
-  jest
-    .fn<ReturnType<SearchInvoker>, Parameters<SearchInvoker>>()
-    .mockResolvedValue({ text: 'mock search results', sources: [] } satisfies SearchResult);
+const createSearchInvokerMock = () => {
+  const searchInvoker: jest.MockedFunction<SearchInvoker> = jest.fn(async () => ({
+    text: 'mock search results',
+    sources: [] as SearchResult['sources']
+  }));
+  return searchInvoker;
+};
 
 const buildShopwareMatch = (overrides: Partial<ShopwareMatchResult> = {}): ShopwareMatchResult => ({
   finalData: {
@@ -44,12 +45,12 @@ describe('runItemFlow result dispatch', () => {
 
   test('dispatches agentic result via the provided handler', async () => {
     const runs = new Map<string, string>([['item-123', 'queued']]);
-    const applyAgenticResult = jest.fn<void, [AgenticResultPayload]>((payload) => {
+    const applyAgenticResult: jest.MockedFunction<(payload: AgenticResultPayload) => void> = jest.fn((payload) => {
       runs.set(payload.itemId, payload.status);
     });
-    const markNotificationSuccess = jest.fn<void, [string]>();
-    const markNotificationFailure = jest.fn<void, [string, string]>();
-    const saveRequestPayload = jest.fn<void, [string, unknown]>();
+    const markNotificationSuccess: jest.MockedFunction<(itemId: string) => void> = jest.fn();
+    const markNotificationFailure: jest.MockedFunction<(itemId: string, reason: string) => void> = jest.fn();
+    const saveRequestPayload: jest.MockedFunction<(itemId: string, payload: unknown) => void> = jest.fn();
     const searchInvoker = createSearchInvokerMock();
     const llm = createMockLlm();
 
@@ -57,9 +58,9 @@ describe('runItemFlow result dispatch', () => {
       jest.doMock('../config', () => ({
         agentActorId: 'test-agent'
       }));
-      const resolveShopwareMatch = jest
-        .fn<Promise<ShopwareMatchResult | null>, [ShopwareMatchOptions]>()
-        .mockResolvedValue(buildShopwareMatch());
+      const resolveShopwareMatch: jest.MockedFunction<
+        (options: ShopwareMatchOptions) => Promise<ShopwareMatchResult | null>
+      > = jest.fn(async () => buildShopwareMatch());
       jest.doMock('../flow/item-flow-shopware', () => ({ resolveShopwareMatch }));
 
       const { runItemFlow } = await import('../flow/item-flow');
@@ -91,12 +92,14 @@ describe('runItemFlow result dispatch', () => {
   });
 
   test('records notification failure when handler rejects', async () => {
-    const applyAgenticResult = jest
-      .fn<Promise<void>, [AgenticResultPayload]>()
-      .mockRejectedValue(new Error('dispatch failed'));
-    const markNotificationSuccess = jest.fn<void, [string]>();
-    const markNotificationFailure = jest.fn<void, [string, string]>();
-    const saveRequestPayload = jest.fn<void, [string, unknown]>();
+    const applyAgenticResult: jest.MockedFunction<
+      (payload: AgenticResultPayload) => Promise<void>
+    > = jest.fn(async () => {
+      throw new Error('dispatch failed');
+    });
+    const markNotificationSuccess: jest.MockedFunction<(itemId: string) => void> = jest.fn();
+    const markNotificationFailure: jest.MockedFunction<(itemId: string, reason: string) => void> = jest.fn();
+    const saveRequestPayload: jest.MockedFunction<(itemId: string, payload: unknown) => void> = jest.fn();
     const searchInvoker = createSearchInvokerMock();
     const llm = createMockLlm();
 
@@ -104,16 +107,16 @@ describe('runItemFlow result dispatch', () => {
       jest.doMock('../config', () => ({
         agentActorId: 'test-agent'
       }));
-      const resolveShopwareMatch = jest
-        .fn<Promise<ShopwareMatchResult | null>, [ShopwareMatchOptions]>()
-        .mockResolvedValue(
-          buildShopwareMatch({
-            finalData: {
-              itemUUid: 'item-xyz',
-              Artikelbeschreibung: 'Example item'
-            }
-          })
-        );
+      const resolveShopwareMatch: jest.MockedFunction<
+        (options: ShopwareMatchOptions) => Promise<ShopwareMatchResult | null>
+      > = jest.fn(async () =>
+        buildShopwareMatch({
+          finalData: {
+            itemUUid: 'item-xyz',
+            Artikelbeschreibung: 'Example item'
+          }
+        })
+      );
       jest.doMock('../flow/item-flow-shopware', () => ({ resolveShopwareMatch }));
 
       const { runItemFlow } = await import('../flow/item-flow');

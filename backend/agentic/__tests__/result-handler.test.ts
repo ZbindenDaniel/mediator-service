@@ -1,11 +1,16 @@
 import { jest } from '@jest/globals';
-import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_QUEUED, type AgenticRun } from '../../../models';
+import {
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_QUEUED,
+  type AgenticRun,
+  type AgenticRequestLog
+} from '../../../models';
 
-jest.mock('../agentic', () => ({
+jest.mock('../index', () => ({
   recordAgenticRequestLogUpdate: jest.fn()
 }));
 
-const mockAgenticModule = jest.requireMock<typeof import('../agentic')>('../agentic');
+const mockAgenticModule = jest.requireMock<typeof import('../index')>('../index');
 const { recordAgenticRequestLogUpdate } = mockAgenticModule;
 
 describe('agentic result handler integration', () => {
@@ -36,7 +41,18 @@ describe('agentic result handler integration', () => {
       LastError: null,
       LastAttemptAt: null
     };
-    const requestLog = { UUID: 'item-123', Search: 'example search' };
+    const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
+    const requestLog: AgenticRequestLog = {
+      UUID: 'item-123',
+      Search: 'example search',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
+      Error: null,
+      CreatedAt: nowIso,
+      UpdatedAt: nowIso,
+      NotifiedAt: null,
+      LastNotificationError: null,
+      PayloadJson: null
+    };
 
     const items = new Map<string, any>([[existingItem.ItemUUID, existingItem]]);
     const runs = new Map<string, AgenticRun>([[existingRun.ItemUUID, existingRun]]);
@@ -69,7 +85,8 @@ describe('agentic result handler integration', () => {
       {
         ctx: {
           db: {
-            transaction: (fn: (...args: any[]) => void) => (...args: any[]) => fn(...args)
+            transaction: <T extends (...args: any[]) => any>(fn: T) =>
+              (...args: Parameters<T>): ReturnType<T> => fn(...args)
           },
           getItem: { get: (id: string) => items.get(id) },
           getAgenticRun: { get: (id: string) => runs.get(id) },

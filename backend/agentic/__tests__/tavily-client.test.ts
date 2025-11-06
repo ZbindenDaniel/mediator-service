@@ -1,7 +1,9 @@
 import { jest } from '@jest/globals';
 import { TavilySearchClient, type TavilySearchLogger } from '../tools/tavily-client';
 
-const searchMock = jest.fn();
+const searchMock: jest.MockedFunction<
+  (query: string, params?: { maxResults?: number }) => Promise<{ results?: unknown[] } | unknown>
+> = jest.fn();
 
 jest.mock('@tavily/core', () => ({
   tavily: jest.fn(() => ({
@@ -23,7 +25,7 @@ describe('TavilySearchClient', () => {
   });
 
   it('returns empty sources when response lacks a results array', async () => {
-    searchMock.mockResolvedValue({ foo: 'bar' });
+    searchMock.mockResolvedValue({ text: 'mock search results', sources: [] });
     const client = new TavilySearchClient({ apiKey: 'test-key', logger });
 
     const result = await client.search('sample query');
