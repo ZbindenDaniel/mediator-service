@@ -353,14 +353,49 @@ export async function runExtractionAttempts({
       context: 'itemFlow.supervisor',
       logger
     }).trim();
-    lastSupervision = supervision;
+    // TODO(agent): Broaden supervisor status parsing once additional workflow states are introduced.
+    let normalizedSupervision = supervision;
+    if ((normalizedSupervision.startsWith('"') && normalizedSupervision.endsWith('"'))
+      || (normalizedSupervision.startsWith('\'') && normalizedSupervision.endsWith('\''))) {
+      try {
+        const parsedSupervisor = JSON.parse(normalizedSupervision);
+        if (typeof parsedSupervisor === 'string') {
+          normalizedSupervision = parsedSupervisor.trim();
+          logger?.debug?.({
+            msg: 'normalized quoted supervisor response',
+            attempt,
+            itemId,
+            supervisionPreview: sanitizeForLog(normalizedSupervision)
+          });
+        }
+      } catch (parseErr) {
+        logger?.warn?.({
+          err: parseErr,
+          msg: 'failed to parse quoted supervisor response',
+          attempt,
+          itemId,
+          supervisionPreview: sanitizeForLog(normalizedSupervision)
+        });
+        if (normalizedSupervision.length >= 2) {
+          normalizedSupervision = normalizedSupervision.slice(1, -1).trim();
+          logger?.debug?.({
+            msg: 'stripped quotes from supervisor response after parse failure',
+            attempt,
+            itemId,
+            supervisionPreview: sanitizeForLog(normalizedSupervision)
+          });
+        }
+      }
+    }
+    normalizedSupervision = normalizedSupervision.trim();
+    lastSupervision = normalizedSupervision;
     logger?.debug?.({
       msg: 'supervisor response received',
       attempt,
       itemId,
       supervisionPreview: sanitizeForLog(supervision)
     });
-    const pass = supervision.toLowerCase().startsWith('pass');
+    const pass = normalizedSupervision.toLowerCase().startsWith('pass');
 
     lastValidated = validated;
     if (pass) {
