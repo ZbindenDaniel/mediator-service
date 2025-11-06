@@ -1,4 +1,4 @@
-import type { AgenticModelConfig } from '../config';
+import type { AgenticModelConfig, ShopwareIntegrationConfig } from '../config';
 
 describe('agentic config environment resolution', () => {
   const baselineEnv = { ...process.env };
@@ -20,7 +20,14 @@ describe('agentic config environment resolution', () => {
     'AGENTIC_MODEL_NAME',
     'MODEL_NAME',
     'AGENTIC_MODEL_API_KEY',
-    'MODEL_API_KEY'
+    'MODEL_API_KEY',
+    'SHOPWARE_BASE_URL',
+    'SHOPWARE_CLIENT_ID',
+    'SHOPWARE_CLIENT_SECRET',
+    'SHOPWARE_API_TOKEN',
+    'SHOPWARE_ACCESS_TOKEN',
+    'SHOPWARE_SALES_CHANNEL',
+    'SHOPWARE_SALES_CHANNEL_ID'
   ];
 
   const loadConfig = () => {
@@ -103,5 +110,42 @@ describe('agentic config environment resolution', () => {
     process.env.AGENTIC_MODEL_PROVIDER = 'claude';
 
     expect(() => loadConfig()).toThrowError(/Unsupported value/);
+  });
+
+  describe('shopware configuration', () => {
+    it('accepts SHOPWARE_ACCESS_TOKEN and trims surrounding whitespace', () => {
+      process.env.SHOPWARE_BASE_URL = ' https://shopware.example.com ';
+      process.env.SHOPWARE_SALES_CHANNEL = ' main-channel ';
+      process.env.SHOPWARE_ACCESS_TOKEN = '  token-value  ';
+
+      const { shopwareConfig } = loadConfig();
+
+      expect(shopwareConfig).not.toBeNull();
+      expect((shopwareConfig as ShopwareIntegrationConfig).baseUrl).toBe(
+        'https://shopware.example.com'
+      );
+      expect((shopwareConfig as ShopwareIntegrationConfig).salesChannel).toBe('main-channel');
+      expect((shopwareConfig as ShopwareIntegrationConfig).apiToken).toBe('token-value');
+    });
+
+    it('skips configuration when required values resolve to empty strings', () => {
+      process.env.SHOPWARE_BASE_URL = 'https://shopware.example.com';
+      process.env.SHOPWARE_SALES_CHANNEL_ID = '   ';
+      process.env.SHOPWARE_CLIENT_ID = 'client-id';
+      process.env.SHOPWARE_CLIENT_SECRET = '   ';
+
+      const consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      try {
+        const { shopwareConfig } = loadConfig();
+
+        expect(shopwareConfig).toBeNull();
+        expect(consoleInfoSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ msg: 'Skipping Shopware configuration due to incomplete settings' })
+        );
+      } finally {
+        consoleInfoSpy.mockRestore();
+      }
+    });
   });
 });
