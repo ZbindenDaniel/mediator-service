@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import {
-  AGENTIC_RUN_STATUS_APPROVED,
   AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_REVIEW,
   type AgenticRun,
   type AgenticRequestLog
 } from '../../../models';
@@ -18,7 +18,7 @@ describe('agentic result handler integration', () => {
     jest.clearAllMocks();
   });
 
-  test('handleAgenticResult promotes queued run to approved without HTTP', () => {
+  test('handleAgenticResult keeps supervisor approvals pending for user review', () => {
     const existingItem = {
       ItemUUID: 'item-123',
       Artikelbeschreibung: 'Example item',
@@ -78,7 +78,7 @@ describe('agentic result handler integration', () => {
           status: 'completed',
           summary: 'done',
           reviewDecision: 'approved',
-          reviewedBy: 'auto-agent',
+          reviewedBy: 'supervisor-agent',
           needsReview: false
         }
       },
@@ -100,9 +100,9 @@ describe('agentic result handler integration', () => {
       }
     );
 
-    expect(result.status).toBe(AGENTIC_RUN_STATUS_APPROVED);
+    expect(result.status).toBe(AGENTIC_RUN_STATUS_REVIEW);
     expect(updateAgenticRunStatus.run).toHaveBeenCalledWith(
-      expect.objectContaining({ Status: AGENTIC_RUN_STATUS_APPROVED })
+      expect.objectContaining({ Status: AGENTIC_RUN_STATUS_REVIEW })
     );
     expect(persistItemWithinTransaction).toHaveBeenCalledWith(
       expect.objectContaining({ ItemUUID: 'item-123' })
@@ -112,7 +112,7 @@ describe('agentic result handler integration', () => {
     );
     expect(recordAgenticRequestLogUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'item-123' }),
-      AGENTIC_RUN_STATUS_APPROVED,
+      AGENTIC_RUN_STATUS_REVIEW,
       expect.objectContaining({ searchQuery: 'example search' })
     );
   });
