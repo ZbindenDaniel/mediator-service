@@ -21,6 +21,7 @@ type FragmentRecord = {
   hasInput?: boolean;
   keys?: string[];
   preview?: string;
+  error?: string;
 };
 
 interface ExtractionState {
@@ -52,7 +53,17 @@ function previewValue(value: unknown): string {
 }
 
 function record(state: ExtractionState, type: 'ignored' | 'unexpected', fragment: FragmentRecord): void {
-  state[type].push(fragment);
+  const sanitizedFragment = fragment.error
+    ? {
+        ...fragment,
+        error:
+          fragment.error.length > MAX_PREVIEW_LENGTH
+            ? `${fragment.error.slice(0, MAX_PREVIEW_LENGTH)}…`
+            : fragment.error
+      }
+    : fragment;
+
+  state[type].push(sanitizedFragment);
   if (state[type].length > MAX_LOGGED_FRAGMENTS) {
     state[type] = state[type].slice(0, MAX_LOGGED_FRAGMENTS);
     state[`${type}Truncated` as const] = true;
