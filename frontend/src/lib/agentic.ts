@@ -1,5 +1,66 @@
 import type { AgenticRun } from '../../../models';
 
+// TODO(agentic-failure-reason): Surface backend failure reasons to UI consumers.
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const AGENTIC_FAILURE_REASON_DESCRIPTIONS: Record<string, string> = {
+  'missing-search-query': 'Suchbegriff fehlt',
+  'missing-item-id': 'ItemUUID fehlt',
+  'missing-artikelbeschreibung': 'Artikelbeschreibung fehlt',
+  'agentic-start-failed': 'Agentischer Start fehlgeschlagen',
+  'request-id-required': 'Anfrage-ID erforderlich',
+  'request-log-load-failed': 'Agentic-Anfragelog konnte nicht geladen werden',
+  'response-not-ok': 'Unerwartete Antwort vom Agentic-Dienst',
+  'network-error': 'Netzwerkfehler',
+};
+
+export function extractAgenticFailureReason(details: unknown): string | null {
+  if (isRecord(details)) {
+    const directReason = details.reason;
+    if (typeof directReason === 'string' && directReason.trim()) {
+      return directReason.trim();
+    }
+
+    const nestedError = details.error;
+    if (typeof nestedError === 'string' && nestedError.trim()) {
+      return nestedError.trim();
+    }
+    if (isRecord(nestedError)) {
+      const nestedReason = extractAgenticFailureReason(nestedError);
+      if (nestedReason) {
+        return nestedReason;
+      }
+    }
+  }
+
+  if (typeof details === 'string' && details.trim()) {
+    return details.trim();
+  }
+
+  return null;
+}
+
+export function describeAgenticFailureReason(reason: string | null | undefined): string | null {
+  if (!reason || typeof reason !== 'string') {
+    return null;
+  }
+
+  const trimmed = reason.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  return AGENTIC_FAILURE_REASON_DESCRIPTIONS[normalized] ?? trimmed;
+}
+
+function formatAgenticFailureMessage(base: string, reasonDescription: string | null): string {
+  return reasonDescription ? `${base}. Grund: ${reasonDescription}` : base;
+}
+
 export interface AgenticRunTriggerPayload {
   itemId?: string | null;
   artikelbeschreibung?: string | null;
@@ -118,7 +179,13 @@ export async function triggerAgenticRun({
         console.warn(`Agentic trigger failed during ${context}: non-JSON error payload`, jsonErr);
       }
       console.error(`Agentic trigger failed during ${context}`, response.status, errorDetails);
-      const message = `Agentic trigger failed during ${context}`;
+      const failureReason = describeAgenticFailureReason(
+        extractAgenticFailureReason(errorDetails) ?? 'response-not-ok'
+      );
+      const message = formatAgenticFailureMessage(
+        `Agentic trigger failed during ${context}`,
+        failureReason
+      );
       return {
         outcome: 'failed',
         reason: 'response-not-ok',
@@ -129,7 +196,11 @@ export async function triggerAgenticRun({
     }
     return { outcome: 'triggered', status: response.status };
   } catch (err) {
-    const message = `Agentic trigger invocation failed during ${context}`;
+    const failureReason = describeAgenticFailureReason('network-error');
+    const message = formatAgenticFailureMessage(
+      `Agentic trigger invocation failed during ${context}`,
+      failureReason
+    );
     console.error(message, err);
     return { outcome: 'failed', reason: 'network-error', message, error: err };
   }
