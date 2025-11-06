@@ -313,6 +313,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
       ? (fn: () => void) => setImmediate(fn)
       : (fn: () => void) => queueMicrotask(fn);
 
+  // TODO(agentic-auto-cancel): Extract shared failure handling once retry support is introduced.
   const runInBackground = async () => {
     const nowIso = resolveNow(deps).toISOString();
 
@@ -359,14 +360,110 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
       logger
     });
 
+    const autoCancelAfterFailure = async (
+      reason: string,
+      message: string | null
+    ): Promise<void> => {
+      try {
+        let existingRun: AgenticRun | null = null;
+        try {
+          existingRun = fetchAgenticRun(payload.itemId, deps, logger);
+        } catch (loadErr) {
+          logger.error?.('[agentic-service] Failed to load run during auto-cancel', {
+            itemId: payload.itemId,
+            reason,
+            error: toErrorMessage(loadErr)
+          });
+        }
+
+        const cancelTimestamp = resolveNow(deps).toISOString();
+        const searchQuery = existingRun?.SearchQuery ?? payload.searchQuery;
+        const lastDecision = existingRun?.LastReviewDecision ?? payload.review?.decision ?? null;
+        const lastNotes = existingRun?.LastReviewNotes ?? payload.review?.notes ?? null;
+
+        try {
+          const updateResult = deps.updateAgenticRunStatus.run({
+            ItemUUID: payload.itemId,
+            Status: AGENTIC_RUN_STATUS_CANCELLED,
+            SearchQuery: searchQuery,
+            LastModified: cancelTimestamp,
+            ReviewState: 'not_required',
+            ReviewedBy: null,
+            LastReviewDecision: lastDecision,
+            LastReviewNotes: lastNotes
+          });
+
+          if (!updateResult?.changes) {
+            logger.warn?.('[agentic-service] Auto-cancel updated zero rows after failure', {
+              itemId: payload.itemId,
+              reason
+            });
+          } else {
+            logger.info?.('[agentic-service] Agentic run auto-cancelled after failure', {
+              itemId: payload.itemId,
+              reason
+            });
+          }
+        } catch (updateErr) {
+          logger.error?.('[agentic-service] Failed to auto-cancel agentic run after failure', {
+            itemId: payload.itemId,
+            reason,
+            error: toErrorMessage(updateErr)
+          });
+        }
+
+        try {
+          deps.logEvent({
+            Actor: 'agentic-service',
+            EntityType: 'Item',
+            EntityId: payload.itemId,
+            Event: 'AgenticRunCancelled',
+            Meta: JSON.stringify({
+              previousStatus: existingRun?.Status ?? null,
+              cancelledAt: cancelTimestamp,
+              reason,
+              error: message
+            })
+          });
+        } catch (eventErr) {
+          logger.error?.('[agentic-service] Failed to record auto-cancel event after failure', {
+            itemId: payload.itemId,
+            reason,
+            error: toErrorMessage(eventErr)
+          });
+        }
+      } catch (err) {
+        logger.error?.('[agentic-service] Auto-cancel workflow threw after failure', {
+          itemId: payload.itemId,
+          reason,
+          error: toErrorMessage(err)
+        });
+      }
+    };
+
     try {
-      await invokeModel({
+      const result = await invokeModel({
         itemId: payload.itemId,
         searchQuery: payload.searchQuery,
         context: payload.context,
         review: payload.review,
         requestId: payload.request?.id ?? null
       });
+      if (!result?.ok) {
+        const failureMessage = typeof result?.message === 'string' ? result.message : null;
+        logger.error?.('[agentic-service] Model invocation returned failure result', {
+          itemId: payload.itemId,
+          context: payload.context,
+          error: failureMessage
+        });
+        recordAgenticRequestLogUpdate(payload.request, AGENTIC_RUN_STATUS_FAILED, {
+          error: failureMessage ?? 'invocation-failed',
+          searchQuery: payload.searchQuery,
+          logger
+        });
+        await autoCancelAfterFailure('invocation-result-not-ok', failureMessage);
+        return;
+      }
       logger.info?.('[agentic-service] Model invocation dispatched asynchronously', {
         itemId: payload.itemId,
         context: payload.context
@@ -383,6 +480,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         searchQuery: payload.searchQuery,
         logger
       });
+      await autoCancelAfterFailure('invocation-dispatch-error', errorMessage);
     }
   };
 

@@ -9,6 +9,7 @@ describe('agentic direct dispatch', () => {
     existing?: AgenticRun | null;
     refreshed?: AgenticRun | null;
     invokeResult?: { ok: boolean; message?: string | null };
+    invokeMock?: jest.Mock;
   }): {
     deps: AgenticServiceDependencies;
     invokeModel: jest.Mock;
@@ -23,9 +24,10 @@ describe('agentic direct dispatch', () => {
     getAgenticRun.mockImplementationOnce(() => existing);
 
     const upsertAgenticRun = jest.fn();
-    const updateAgenticRunStatus = { run: jest.fn() };
+    const updateAgenticRunStatus = { run: jest.fn(() => ({ changes: 1 })) };
     const logEvent = jest.fn();
-    const invokeModel = jest.fn().mockResolvedValue(options.invokeResult ?? { ok: true, message: null });
+    const invokeModel =
+      options.invokeMock ?? jest.fn().mockResolvedValue(options.invokeResult ?? { ok: true, message: null });
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
@@ -142,6 +144,50 @@ describe('agentic direct dispatch', () => {
     );
     expect(logEvent).toHaveBeenCalledWith(
       expect.objectContaining({ Event: 'AgenticRunRequeued', EntityId: existingRun.ItemUUID })
+    );
+  });
+
+  test('auto-cancels run when asynchronous invocation reports failure', async () => {
+    const existingRun: AgenticRun = {
+      Id: 3,
+      ItemUUID: 'item-fail-1',
+      SearchQuery: 'Fehlgeschlagen',
+      Status: 'running',
+      LastModified: '2024-01-02T10:00:00.000Z',
+      ReviewState: 'not_required',
+      ReviewedBy: null,
+      LastReviewDecision: null,
+      LastReviewNotes: null,
+      RetryCount: 0,
+      NextRetryAt: null,
+      LastError: null,
+      LastAttemptAt: null
+    };
+
+    const failingInvoke = jest.fn().mockResolvedValue({ ok: false, message: 'flow-failed' });
+    const { deps, invokeModel, getAgenticRun, logEvent } = createDeps({
+      existing: existingRun,
+      invokeMock: failingInvoke
+    });
+
+    await startAgenticRun(
+      {
+        itemId: existingRun.ItemUUID,
+        searchQuery: existingRun.SearchQuery ?? '',
+        actor: 'qa.user',
+        request: { id: 'req-failure' }
+      },
+      deps
+    );
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(invokeModel).toHaveBeenCalledTimes(1);
+    expect(getAgenticRun).toHaveBeenCalled();
+    const updateCalls = (deps.updateAgenticRunStatus.run as jest.Mock).mock.calls;
+    expect(updateCalls.some((call) => call?.[0]?.Status === 'cancelled')).toBe(true);
+    expect(logEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ Event: 'AgenticRunCancelled', EntityId: existingRun.ItemUUID })
     );
   });
 });
