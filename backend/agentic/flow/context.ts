@@ -1,6 +1,6 @@
 import { FlowError } from './errors';
 import { throwIfCancelled } from './cancellation';
-import { TargetSchema, type AgenticTarget } from './item-flow-schemas';
+import { type AgenticTarget } from './item-flow-schemas';
 import type { ItemFlowLogger, RunItemFlowInput } from './item-flow';
 
 export interface PreparedItemContext {
@@ -40,11 +40,12 @@ export function prepareItemContext(input: RunItemFlowInput, logger: ItemFlowLogg
     throw err;
   }
 
+  // TODO: streamline validation once broader target normalization is refactored.
   let normalizedTarget: AgenticTarget;
   try {
     normalizedTarget = normalizeTarget(input.target, itemId);
-    const parsed = TargetSchema.pick({ Artikelbeschreibung: true }).safeParse(normalizedTarget);
-    if (!parsed.success || !parsed.data.Artikelbeschreibung.trim()) {
+    const artikelbeschreibung = normalizedTarget.Artikelbeschreibung;
+    if (typeof artikelbeschreibung !== 'string' || !artikelbeschreibung.trim().length) {
       const err = new FlowError('INVALID_TARGET', 'Target requires a non-empty "Artikelbeschreibung"', 400);
       logger.error?.({ err, msg: 'target missing Artikelbeschreibung', itemId });
       throw err;
