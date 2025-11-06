@@ -68,6 +68,12 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
     - Contain robust logging via the existing console/logger pattern and wrap external AI calls in try/catch to honor observability requirements.
     - Replace the shared-secret webhook with an internal invocation that validates input directly via orchestrator context (no shared secrets, rely on request-log lookups and job metadata).
 
+  ### Asynchronous dispatch semantics
+
+  - `startAgenticRun` and `restartAgenticRun` now persist the queued run, update the request log with a `queued` status, and immediately return control to the caller while a `setImmediate`-scheduled task transitions the row to `running` before invoking the model.
+  - There is no separate worker loop for this dispatch path—the Node.js event loop processes the background callback. Operational dashboards should rely on the `agentic_runs` table (queued → running → completion) to surface progress.
+  - Background failures are caught and logged; `recordAgenticRequestLogUpdate` records both the queue handoff (`queued`) and the asynchronous result (`running`, `failed`, etc.) so request logs reflect both handoff and completion states.
+
   - Update the queue worker to call the orchestrator directly (dependency-inject a function rather than forwardAgenticTrigger).
 
 - 7. Refactor backend actions to drop REST proxies
