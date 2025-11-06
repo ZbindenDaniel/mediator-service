@@ -24,8 +24,7 @@ import {
   SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
   getShopwareConfig,
   logShopwareConfigIssues,
-  IMPORTER_FORCE_ZERO_STOCK,
-  AGENTIC_QUEUE_POLL_INTERVAL_MS
+  IMPORTER_FORCE_ZERO_STOCK
 } from './config';
 import type { ShopwareConfig } from './config';
 import { ingestCsvFile, type IngestCsvFileOptions } from './importer';
@@ -73,7 +72,6 @@ import {
   deleteBox,
   enqueueShopwareSyncJob
 } from './db';
-import { processQueuedAgenticRuns } from './agentic-queue-worker';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
 import { printPdf, testPrinterConnection } from './print';
@@ -388,42 +386,8 @@ function createAgenticServiceDependencies(
   };
 }
 
-let agenticQueueWorkerRunning = false;
-let agenticQueueWorkerInitialized = false;
-
 if (agenticServiceEnabled) {
-  console.info('[server] In-process agentic orchestrator active; queue worker polling enabled.', {
-    queuePollIntervalMs: AGENTIC_QUEUE_POLL_INTERVAL_MS
-  });
-}
-
-async function runAgenticQueueWorker(): Promise<void> {
-  if (!agenticServiceEnabled || agenticQueueWorkerRunning) {
-    return;
-  }
-
-  if (!agenticQueueWorkerInitialized) {
-    console.info('[server] Agentic queue worker starting initial processing pass.');
-    agenticQueueWorkerInitialized = true;
-  }
-
-  agenticQueueWorkerRunning = true;
-  try {
-    await processQueuedAgenticRuns({
-      logger: console,
-      service: createAgenticServiceDependencies()
-    });
-  } catch (err) {
-    console.error('[server] Agentic queue worker crashed', err);
-  } finally {
-    agenticQueueWorkerRunning = false;
-  }
-}
-
-if (agenticServiceEnabled) {
-  setInterval(() => {
-    void runAgenticQueueWorker();
-  }, AGENTIC_QUEUE_POLL_INTERVAL_MS);
+  console.info('[server] In-process agentic orchestrator active; agentic runs dispatch immediately.');
 }
 
 if (SHOPWARE_SYNC_ENABLED) {

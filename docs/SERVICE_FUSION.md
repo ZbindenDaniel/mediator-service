@@ -40,7 +40,7 @@ The latest commit pulled the entire ai-flow-service repository into this project
 
 ## Agentic environment variables
 
-The mediator now standardises the in-process agentic orchestrator settings behind the `AGENTIC_*` prefix while preserving backwards compatibility with legacy keys from the original ai-flow service. The `backend/agentic/config.ts` loader resolves prefixed variables first and gracefully falls back to the historical names (`MODEL_PROVIDER`, `OLLAMA_BASE_URL`, etc.) so existing deployments keep working.
+The mediator now standardises the in-process agentic orchestrator settings behind the `AGENTIC_*` prefix while preserving backwards compatibility with legacy keys from the original ai-flow service. The `backend/agentic/config.ts` loader resolves prefixed variables first and gracefully falls back to the historical names (`MODEL_PROVIDER`, `OLLAMA_BASE_URL`, etc.) so existing deployments keep working. Result callbacks are now processed entirely inside the mediator, removing the need for an external base URL or shared secret.
 
 Supported variables after this change:
 
@@ -53,9 +53,6 @@ Supported variables after this change:
 - `AGENTIC_MODEL_BASE_URL` / `MODEL_BASE_URL`.
 - `AGENTIC_MODEL_NAME` / `MODEL_NAME`.
 - `AGENTIC_MODEL_API_KEY` / `MODEL_API_KEY`.
-- `AGENTIC_AGENT_API_BASE_URL` / `AGENT_API_BASE_URL` (optional callback integration).
-- `AGENTIC_AGENT_SHARED_SECRET` / `AGENT_SHARED_SECRET` (optional callback integration).
-- `AGENTIC_QUEUE_POLL_INTERVAL_MS` (used by the mediator server loop).
 - `TAVILY_API_KEY`, `SEARCH_RATE_LIMIT_DELAY_MS`, and Shopware-specific credentials (unchanged names, all optional).
 
 All samples (`.env.example`, `docker-compose.yml`, `Dockerfile`) now advertise only the supported keys above; unused placeholders such as `AGENTIC_SEARCH_BASE_URL/PORT/PATH` were removed to avoid dead configuration. Backwards compatibility relies solely on the runtime fallback logic, so no migration step is required.
@@ -75,11 +72,13 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
   - Background failures are caught and logged; `recordAgenticRequestLogUpdate` records both the queue handoff (`queued`) and the asynchronous result (`running`, `failed`, etc.) so request logs reflect both handoff and completion states.
 
   - Update the queue worker to call the orchestrator directly (dependency-inject a function rather than forwardAgenticTrigger).
+  - Confirm the in-process orchestrator dispatches runs immediately and dependency-injects model invokers for tests instead of relying on a background worker.
 
 - 7. Refactor backend actions to drop REST proxies
   - Rewrite backend/actions/agentic-trigger.ts, agentic-health.ts, agentic-restart.ts, and related files so they call the orchestrator instead of fetching AGENTIC_API_BASE. Remove network-specific error classes as appropriate but keep validation and logging.
   - Adjust backend/actions/import-item.ts to queue/trigger runs through the in-process service, maintaining the current agentic status semantics and logging.
-  - Update config by deleting AGENTIC_API_BASE/AGENTIC_SHARED_SECRET and replacing them with any new knobs the orchestrator needs (e.g., AI model endpoints, AGENTIC_QUEUE_POLL_INTERVAL_MS) while keeping TODO-driven validation in mind.
+  - Update config by deleting AGENTIC_API_BASE/AGENTIC_SHARED_SECRET and replacing them with any new knobs the orchestrator needs (e.g., AI model endpoints) while keeping TODO-driven validation in mind.
+  - ✅ Completed: config no longer exposes AGENTIC_API_BASE/AGENTIC_SHARED_SECRET, relying solely on in-process callbacks and the remaining `AGENTIC_*` model/search settings.
 
 - 8. Update frontend integration
   - Remove hard-coded API bases in frontend/src/lib/agentic.ts, ItemDetail.tsx, and ItemCreate.tsx, ensuring the UI only hits mediator endpoints and defers routing to the backend.
@@ -88,12 +87,12 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
 
 - 9. Retire obsolete tests & add new coverage
   - Remove or rewrite proxy-focused tests such as test/agentic-health-proxy.test.ts to exercise the new in-process orchestrator and backend actions.
-  - Keep `test/agentic-health-proxy.test.ts` and `test/agentic-queue-worker.test.ts` aligned with the in-process orchestrator: they now assert queue metrics, retry backoff, logging, and status transitions without relying on `AGENTIC_API_BASE`. Future backend changes that alter queue semantics should extend these suites instead of reintroducing proxy mocks.
+  - Keep `test/agentic-health-proxy.test.ts` aligned with the in-process orchestrator: it now asserts direct-dispatch metrics, logging, and status transitions without relying on `AGENTIC_API_BASE`. Future backend changes that alter dispatch semantics should extend the new direct-dispatch suites instead of reintroducing proxy mocks.
   - Extend existing backend tests (e.g., backend/actions/__tests__/agentic-bulk-queue.test.ts) to cover direct orchestrator calls and verify DB updates/logging.
 
 - 10. Documentation & follow-up
   - Update docs/setup.md, docs/ARCHITECTURE.md, and docs/OVERVIEW.md with the new single-service layout and link any retained AI docs.
-  - Mention configuration changes (no more AGENTIC_API_BASE/AGENTIC_SHARED_SECRET; add AGENTIC_QUEUE_POLL_INTERVAL_MS and request-log validation expectations) and point to new logging/monitoring expectations.
+  - Mention configuration changes (no more AGENTIC_API_BASE/AGENTIC_SHARED_SECRET; highlight immediate dispatch expectations and request-log validation) and point to new logging/monitoring expectations.
   - Close or revise TODO comments encountered during the refactor, including the CLI filtering TODO in scripts/dump-agentic-search-events.ts if it becomes relevant.
 
 - 11. Parallelisation suggestions
