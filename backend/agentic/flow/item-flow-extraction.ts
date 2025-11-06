@@ -168,9 +168,17 @@ export async function runExtractionAttempts({
     itemContent = raw;
     const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
     if (thinkMatch) {
-      thinkContent = thinkMatch[1].trim();
-      const afterThink = raw.slice(thinkMatch.index + thinkMatch[0].length).trim();
-      itemContent = afterThink;
+      thinkContent = thinkMatch[1]?.trim?.() ?? '';
+      if (typeof thinkMatch.index === 'number') {
+        const afterThink = raw.slice(thinkMatch.index + thinkMatch[0].length).trim();
+        itemContent = afterThink;
+      } else {
+        logger?.debug?.({
+          msg: 'think match missing index metadata, using raw content for parsing',
+          attempt,
+          itemId
+        });
+      }
     }
 
     let parsed: unknown = null;
