@@ -72,7 +72,11 @@ export async function resolveShopwareMatch({
     let decisionContent = decisionRaw;
     const thinkMatch = decisionRaw.match(/<think>([\s\S]*?)<\/think>/i);
     if (thinkMatch) {
-      decisionContent = decisionRaw.slice(thinkMatch.index + thinkMatch[0].length).trim();
+      if (typeof thinkMatch.index === 'number') {
+        decisionContent = decisionRaw.slice(thinkMatch.index + thinkMatch[0].length).trim();
+      } else {
+        logger?.debug?.({ msg: 'think match missing index metadata, using full decision content', itemId });
+      }
     }
 
     let decisionJson: unknown;
