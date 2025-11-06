@@ -32,7 +32,7 @@ export interface AgenticServiceLogger {
   error?: Console['error'];
 }
 
-export type AgenticModelInvoker = (
+export type AgenticModelInvokerFn = (
   input: AgenticModelInvocationInput
 ) => Promise<AgenticModelInvocationResult>;
 
@@ -45,7 +45,7 @@ export interface AgenticServiceDependencies {
   updateAgenticReview?: Database.Statement;
   now?: () => Date;
   logger?: AgenticServiceLogger;
-  invokeModel?: AgenticModelInvoker;
+  invokeModel?: AgenticModelInvokerFn;
 }
 
 type NormalizedRequestContext = {

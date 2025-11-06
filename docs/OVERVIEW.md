@@ -39,11 +39,14 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - CSV import/export, QR scanning, and print label flows are available but still receive incremental polish.
 - Legacy JavaScript scripts remain for compatibility; modernization continues incrementally.
 - Shopware support currently covers read-only product search plus a queued sync pipeline awaiting a real dispatch client.
-- A merge with the ai-service is in planning und will so be undergone see [SERVICE_FUSION](SERVICE_FUSION.md)
+- The legacy ai-flow runtime has been ported into the mediator under `backend/agentic/`; follow-up work focuses on stabilising the
+  in-process orchestrator and cleaning up the final integration tasks outlined in [SERVICE_FUSION](SERVICE_FUSION.md).
 
 ## Next Steps
-- Planning of the fusion project to take the ai-flow into this core to access and integrate it's functionallity close. See [SERVICE_FUSION](SERVICE_FUSION.md)
-- Use the [AI Flow Service Inventory Audit](ai-flow-service-audit.md) to guide which runtime modules, dependencies, and configs move into the mediator backend during the fusion work.
+- Finish wiring the new `AgenticModelInvoker` through backend services so queue workers and actions invoke models without the
+  HTTP proxy fallback.
+- Continue validating the migrated `backend/agentic/` modules (flows, tools, prompts) with focused tests and linting once the
+  invoker is fully integrated.
 
 ## Risks & Dependencies
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.
