@@ -2,9 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.string().default('development'),
-  MODEL_PROVIDER: z
-    .enum(['ollama', 'openai'])
-    .default((process.env.MODEL_PROVIDER as 'ollama' | 'openai' | undefined) ?? 'ollama'),
+  MODEL_PROVIDER: z.enum(['ollama', 'openai']).default('ollama'),
   OLLAMA_BASE_URL: z.string().url().optional(),
   OLLAMA_MODEL: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
@@ -25,7 +23,64 @@ const envSchema = z.object({
   AGENT_ACTOR_ID: z.string().min(1).optional()
 });
 
-const parsedEnv = envSchema.parse(process.env);
+type EnvSchemaInput = z.input<typeof envSchema>;
+
+const SECRET_TOKEN_PATTERN = /(KEY|SECRET|TOKEN)$/i;
+
+function resolveEnvValue(...keys: Array<keyof NodeJS.ProcessEnv>): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function sanitizeEnvForLogging(env: EnvSchemaInput): Record<string, unknown> {
+  return Object.entries(env).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    acc[key] = SECRET_TOKEN_PATTERN.test(key) && value ? '***redacted***' : value ?? '(unset)';
+    return acc;
+  }, {});
+}
+
+const envInput: EnvSchemaInput = {
+  NODE_ENV: resolveEnvValue('NODE_ENV'),
+  MODEL_PROVIDER: resolveEnvValue('AGENTIC_MODEL_PROVIDER', 'MODEL_PROVIDER'),
+  OLLAMA_BASE_URL: resolveEnvValue('AGENTIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'),
+  OLLAMA_MODEL: resolveEnvValue('AGENTIC_OLLAMA_MODEL', 'OLLAMA_MODEL'),
+  OPENAI_API_KEY: resolveEnvValue('AGENTIC_OPENAI_API_KEY', 'OPENAI_API_KEY'),
+  OPENAI_BASE_URL: resolveEnvValue('AGENTIC_OPENAI_BASE_URL', 'OPENAI_BASE_URL'),
+  OPENAI_MODEL: resolveEnvValue('AGENTIC_OPENAI_MODEL', 'OPENAI_MODEL'),
+  MODEL_BASE_URL: resolveEnvValue('AGENTIC_MODEL_BASE_URL', 'MODEL_BASE_URL'),
+  MODEL_NAME: resolveEnvValue('AGENTIC_MODEL_NAME', 'MODEL_NAME'),
+  MODEL_API_KEY: resolveEnvValue('AGENTIC_MODEL_API_KEY', 'MODEL_API_KEY'),
+  TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
+  SEARCH_RATE_LIMIT_DELAY_MS: resolveEnvValue('SEARCH_RATE_LIMIT_DELAY_MS'),
+  AGENT_API_BASE_URL: resolveEnvValue('AGENTIC_AGENT_API_BASE_URL', 'AGENT_API_BASE_URL'),
+  AGENT_SHARED_SECRET: resolveEnvValue('AGENTIC_AGENT_SHARED_SECRET', 'AGENT_SHARED_SECRET'),
+  SHOPWARE_BASE_URL: resolveEnvValue('SHOPWARE_BASE_URL'),
+  SHOPWARE_CLIENT_ID: resolveEnvValue('SHOPWARE_CLIENT_ID'),
+  SHOPWARE_CLIENT_SECRET: resolveEnvValue('SHOPWARE_CLIENT_SECRET'),
+  SHOPWARE_API_TOKEN: resolveEnvValue('SHOPWARE_API_TOKEN'),
+  SHOPWARE_SALES_CHANNEL: resolveEnvValue('SHOPWARE_SALES_CHANNEL', 'SHOPWARE_SALES_CHANNEL_ID'),
+  AGENT_ACTOR_ID: resolveEnvValue('AGENT_ACTOR_ID')
+};
+
+function parseEnvConfig(): z.infer<typeof envSchema> {
+  try {
+    return envSchema.parse(envInput);
+  } catch (err) {
+    console.error?.({
+      msg: 'Failed to parse agentic environment configuration',
+      envKeys: sanitizeEnvForLogging(envInput),
+      err
+    });
+    throw err;
+  }
+}
+
+const parsedEnv = parseEnvConfig();
 
 export type AgenticModelProvider = z.infer<typeof envSchema>['MODEL_PROVIDER'];
 
