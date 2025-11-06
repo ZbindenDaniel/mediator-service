@@ -232,19 +232,36 @@ export function handleAgenticResult(
   const statusInput = typeof payload.status === 'string' ? payload.status : '';
   const normalizedIncomingStatus = normalizeAgenticRunStatus(statusInput);
   const errorMessage = typeof payload.error === 'string' ? payload.error.trim() || null : null;
-  const needsReview = Boolean(payload.needsReview);
+  let needsReview = Boolean(payload.needsReview);
   const summaryInput = typeof payload.summary === 'string' && payload.summary.trim() ? payload.summary.trim() : null;
-  const reviewDecisionInput =
+  const reviewDecisionInputRaw =
     typeof payload.reviewDecision === 'string' && payload.reviewDecision.trim()
-      ? payload.reviewDecision.trim().toLowerCase()
+      ? payload.reviewDecision.trim()
       : null;
+  let normalizedDecision = reviewDecisionInputRaw ? reviewDecisionInputRaw.toLowerCase() : null;
   const reviewNotesInput =
     typeof payload.reviewNotes === 'string' && payload.reviewNotes.trim() ? payload.reviewNotes.trim() : null;
   const reviewedByInput = typeof payload.reviewedBy === 'string' && payload.reviewedBy.trim() ? payload.reviewedBy.trim() : null;
   const agenticActor = typeof payload.actor === 'string' && payload.actor ? payload.actor : 'agentic-service';
 
   let statusForPersistence = normalizedIncomingStatus;
-  const normalizedDecision = reviewDecisionInput ? reviewDecisionInput.toLowerCase() : null;
+  let reviewDecisionForPersistence = reviewDecisionInputRaw;
+  const normalizedReviewer = reviewedByInput ? reviewedByInput.toLowerCase() : null;
+
+  // TODO: Replace reviewer heuristics with explicit reviewer role metadata once available.
+  const supervisorAttemptedApproval =
+    normalizedDecision === 'approved' && (!normalizedReviewer || normalizedReviewer.includes('supervisor'));
+  if (supervisorAttemptedApproval) {
+    logger.info?.('Supervisor approval requires manual user confirmation', {
+      itemId,
+      reviewedBy: reviewedByInput ?? null
+    });
+    normalizedDecision = null;
+    reviewDecisionForPersistence = null;
+    needsReview = true;
+    statusForPersistence = AGENTIC_RUN_STATUS_REVIEW;
+  }
+
   if (AGENTIC_RUN_ACTIVE_STATUSES.has(statusForPersistence)) {
     // queued/running remain unchanged
   } else if (errorMessage || statusForPersistence === AGENTIC_RUN_STATUS_FAILED) {
@@ -380,7 +397,7 @@ export function handleAgenticResult(
       agenticActor,
       {
         ReviewedBy: reviewedByInput,
-        Decision: reviewDecisionInput,
+        Decision: reviewDecisionForPersistence,
         Notes: reviewNotesInput
       }
     );
