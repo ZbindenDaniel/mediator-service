@@ -44,7 +44,7 @@ export interface ExtractionResult {
 }
 
 const MAX_LOG_STRING_LENGTH = 500;
-const MAX_LOG_ARRAY_LENGTH = 5;
+const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
 const MAX_LOG_DEPTH = 2;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
@@ -396,7 +396,7 @@ export async function runExtractionAttempts({
       supervisionPreview: sanitizeForLog(supervision)
     });
     const pass = normalizedSupervision.toLowerCase().startsWith('pass');
-
+    
     lastValidated = validated;
     if (pass) {
       success = true;

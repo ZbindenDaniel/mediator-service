@@ -155,7 +155,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       logger,
       searchTerm,
       targetFormat: format,
-      shopwarePrompt: shopware,
+      shopwarePrompt: shopware ?? null,
       shopwareResult,
       normalizedTarget: target,
       itemId
@@ -208,7 +208,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       llm: deps.llm,
       logger,
       itemId,
-      maxAttempts: input.maxAttempts && input.maxAttempts > 0 ? Math.min(input.maxAttempts, 5) : 3,
+      maxAttempts: input.maxAttempts && input.maxAttempts > 0 ? Math.min(input.maxAttempts, 3) : 3,
       searchContexts,
       aggregatedSources,
       recordSources,
