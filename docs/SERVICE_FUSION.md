@@ -99,3 +99,22 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
   - Repository cleanup & dependency merge (Steps 2–4) can proceed while the database alignment (Step 5) happens in parallel, provided both coordinate on shared files (package.json, backend/db.ts).
   - Orchestrator implementation (Step 6) can start once schema decisions are agreed, while frontend adjustments (Step 8) proceed concurrently after the new backend interface is sketched.
   - Test updates (Step 9) should trail the orchestrator work but can begin with scaffolding as soon as new service contracts are defined.
+
+### Item flow pipeline helpers
+
+The item flow orchestrator (`backend/agentic/flow/item-flow.ts`) now composes a set of focused helpers so contributors can
+understand and extend each stage independently:
+
+1. `prepareItemContext` (`backend/agentic/flow/context.ts`) validates the inbound payload, normalises the `AgenticTarget`,
+   derives the search query, and wires cancellation logging so downstream steps can short-circuit safely.
+2. `loadPrompts` (`backend/agentic/flow/prompts.ts`) centralises prompt loading with structured logging and consistent
+   `FlowError` wrapping, including the optional Shopware verifier prompt when the integration is enabled.
+3. The Shopware shortcut runs before search aggregation, reusing the prompts above and skipping extraction entirely when
+   `resolveShopwareMatch` returns a final payload.
+4. When no shortcut is available the flow continues through `collectSearchContexts` and `runExtractionAttempts` using the
+   prepared context; cancellation is enforced between each stage.
+5. `dispatchAgenticResult` (`backend/agentic/flow/result-dispatch.ts`) handles persistence, result application, and
+   notification state updates for both the Shopware and extraction paths with uniform logging/error handling.
+
+These boundaries keep payload types unchanged while clarifying where to extend logging, validation, or branching logic in
+future iterations.
