@@ -1,6 +1,6 @@
-# Agentic Search Event Review
+# Agentic Queue Event Review
 
-This fixture helps analysts review the cadence of `AgenticSearchQueued` events that are persisted in the mediator SQLite database. It relies on the same database location that the backend uses (`DB_PATH` in `backend/config.ts`) and **never mutates** the database — it opens the file in read-only mode.
+This fixture helps analysts review the cadence of agentic queue events (`AgenticRunQueued`, `AgenticRunRequeued`) that are persisted in the mediator SQLite database. It automatically includes historical `AgenticSearchQueued` records so long as they remain in the database. The script relies on the same database location that the backend uses (`DB_PATH` in `backend/config.ts`) and **never mutates** the database — it opens the file in read-only mode.
 
 ## Prerequisites
 
@@ -18,16 +18,16 @@ npx ts-node --transpile-only scripts/dump-agentic-search-events.ts
 The script prints every matching event as tab-separated values using anonymised placeholders in the example below:
 
 ```
-=== AgenticSearchQueued events ===
-2024-05-01T08:15:30Z    ITEM-UUID-1234    {"Status":"queued","QueuedLocally":true,"RemoteTriggerDispatched":false}
-2024-05-02T09:45:10Z    ITEM-UUID-5678    {"Status":"queued","QueuedLocally":true,"RemoteTriggerDispatched":true}
+=== Agentic queue events ===
+[AgenticRunQueued] 2024-05-01T08:15:30Z    ITEM-UUID-1234    {"Status":"queued","QueuedLocally":true,"RemoteTriggerDispatched":false}
+[AgenticSearchQueued (legacy)] 2024-05-02T09:45:10Z    ITEM-UUID-5678    {"Status":"queued","QueuedLocally":true,"RemoteTriggerDispatched":true}
 
-=== Duplicate ItemUUID occurrences ===
-ITEM-UUID-1234    3
+=== Duplicate ItemUUID occurrences by event ===
+[AgenticRunQueued] ITEM-UUID-1234    3
 ```
 
-- **AgenticSearchQueued events**: Each line shows `CreatedAt`, the `ItemUUID` (sourced from `EntityId`), and the parsed `Meta` payload if it is valid JSON. Any sensitive fields should be redacted manually before sharing the output externally.
-- **Duplicate ItemUUID occurrences**: Lists items with more than one queued event along with the number of occurrences so that analysts can spot unexpected retries.
+- **Agentic queue events**: Each line starts with the originating event name. Legacy entries are annotated with `(legacy)` for clarity, and each row shows `CreatedAt`, the `ItemUUID` (sourced from `EntityId`), and the parsed `Meta` payload if it is valid JSON. Any sensitive fields should be redacted manually before sharing the output externally.
+- **Duplicate ItemUUID occurrences by event**: Lists items with more than one queued event, grouped by event type, so analysts can spot unexpected retries while still differentiating between legacy and current pipelines.
 
 If no duplicates exist, the script prints `No duplicate ItemUUID entries detected.` instead of the duplicate section.
 
