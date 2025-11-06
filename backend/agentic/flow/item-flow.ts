@@ -127,7 +127,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     };
 
     const shopwareAvailable = isShopwareConfigured();
-    const { format, extract, supervisor, shopware } = await loadPrompts({
+    const { format, extract, supervisor, categorizer, shopware } = await loadPrompts({
       itemId,
       logger,
       includeShopware: shopwareAvailable
@@ -216,6 +216,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       extractPrompt: extract,
       targetFormat: format,
       supervisorPrompt: supervisor,
+      categorizerPrompt: categorizer,
       searchInvoker,
       target
     });

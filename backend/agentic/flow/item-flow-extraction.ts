@@ -5,6 +5,7 @@ import { parseJsonWithSanitizer } from '../utils/json';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
 import { AgentOutputSchema } from './item-flow-schemas';
+import { runCategorizerStage } from './item-flow-categorizer';
 import type { SearchInvoker } from './item-flow-search';
 
 export interface ChatModel {
@@ -32,6 +33,7 @@ export interface RunExtractionOptions {
   extractPrompt: string;
   targetFormat: string;
   supervisorPrompt: string;
+  categorizerPrompt: string;
   searchInvoker: SearchInvoker;
   target: AgenticTarget;
 }
@@ -338,12 +340,46 @@ export async function runExtractionAttempts({
     const validated = { success: true as const, data: candidateData };
     lastValidationIssues = null;
 
+    let enrichedValidated = validated;
+    try {
+      const categoryPatch = await runCategorizerStage({
+        llm,
+        logger,
+        itemId,
+        categorizerPrompt,
+        candidate: validated.data
+      });
+
+      if (categoryPatch && Object.keys(categoryPatch).length > 0) {
+        const mergedCandidate = { ...validated.data, ...categoryPatch };
+        const mergedParse = AgentOutputSchema.safeParse(mergedCandidate);
+        if (!mergedParse.success) {
+          logger?.error?.({
+            msg: 'categorizer merge failed schema validation',
+            attempt,
+            itemId,
+            issues: mergedParse.error.issues
+          });
+          throw new FlowError('CATEGORIZER_MERGE_FAILED', 'Categorizer produced invalid category data', 422, {
+            cause: mergedParse.error
+          });
+        }
+        enrichedValidated = { success: true as const, data: mergedParse.data };
+      }
+    } catch (err) {
+      logger?.error?.({ err, msg: 'categorizer stage failed', attempt, itemId });
+      if (err instanceof FlowError) {
+        throw err;
+      }
+      throw new FlowError('CATEGORIZER_FAILED', 'Categorizer stage failed', 500, { cause: err });
+    }
+
     logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
     let supRes;
     try {
       supRes = await llm.invoke([
         { role: 'system', content: supervisorPrompt },
-        { role: 'user', content: JSON.stringify(validated.data) }
+        { role: 'user', content: JSON.stringify(enrichedValidated.data) }
       ]);
     } catch (err) {
       logger?.error?.({ err, msg: 'supervisor llm invocation failed', attempt, itemId });
@@ -397,7 +433,7 @@ export async function runExtractionAttempts({
     });
     const pass = normalizedSupervision.toLowerCase().startsWith('pass');
     
-    lastValidated = validated;
+    lastValidated = enrichedValidated;
     if (pass) {
       success = true;
       break;

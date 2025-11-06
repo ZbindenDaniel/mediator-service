@@ -77,7 +77,12 @@ export const TargetSchema = z
     Länge_mm: localizedNumber,
     Breite_mm: localizedNumber,
     Höhe_mm: localizedNumber,
-    Gewicht_kg: localizedNumber
+    Gewicht_kg: localizedNumber,
+    // TODO(agent): Review category field normalization once categorizer accuracy telemetry is available.
+    Hauptkategorien_A: localizedNumber.optional(),
+    Unterkategorien_A: localizedNumber.optional(),
+    Hauptkategorien_B: localizedNumber.optional(),
+    Unterkategorien_B: localizedNumber.optional()
   })
   .strict();
 

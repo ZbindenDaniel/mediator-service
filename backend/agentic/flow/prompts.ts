@@ -8,6 +8,7 @@ const FORMAT_PATH = path.join(PROMPTS_DIR, 'item-format.json');
 const EXTRACT_PROMPT_PATH = path.join(PROMPTS_DIR, 'extract.md');
 const SUPERVISOR_PROMPT_PATH = path.join(PROMPTS_DIR, 'supervisor.md');
 const SHOPWARE_PROMPT_PATH = path.join(PROMPTS_DIR, 'shopware-verify.md');
+const CATEGORIZER_PROMPT_PATH = path.join(PROMPTS_DIR, 'categorizer.md');
 
 interface ReadPromptOptions {
   itemId: string;
@@ -36,15 +37,17 @@ export interface LoadPromptsResult {
   format: string;
   extract: string;
   supervisor: string;
+  categorizer: string;
   shopware?: string | null;
 }
 
 export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromptsOptions): Promise<LoadPromptsResult> {
   try {
-    const [format, extract, supervisor] = await Promise.all([
+    const [format, extract, supervisor, categorizer] = await Promise.all([
       readPromptFile(FORMAT_PATH, { itemId, prompt: 'format', logger }),
       readPromptFile(EXTRACT_PROMPT_PATH, { itemId, prompt: 'extract', logger }),
-      readPromptFile(SUPERVISOR_PROMPT_PATH, { itemId, prompt: 'supervisor', logger })
+      readPromptFile(SUPERVISOR_PROMPT_PATH, { itemId, prompt: 'supervisor', logger }),
+      readPromptFile(CATEGORIZER_PROMPT_PATH, { itemId, prompt: 'categorizer', logger })
     ]);
 
     let shopware: string | null | undefined;
@@ -57,7 +60,7 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       }
     }
 
-    return { format, extract, supervisor, shopware };
+    return { format, extract, supervisor, categorizer, shopware };
   } catch (err) {
     if (err instanceof FlowError) {
       throw err;
@@ -67,4 +70,4 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
   }
 }
 
-export { FORMAT_PATH, EXTRACT_PROMPT_PATH, SUPERVISOR_PROMPT_PATH, SHOPWARE_PROMPT_PATH };
+export { FORMAT_PATH, EXTRACT_PROMPT_PATH, SUPERVISOR_PROMPT_PATH, SHOPWARE_PROMPT_PATH, CATEGORIZER_PROMPT_PATH };
