@@ -10,9 +10,15 @@ let shopwareConfigOverride: typeof shopwareConfig | null | undefined;
 
 export interface ShopwareToolLogger extends TavilySearchLogger {}
 
+export type ShopwareProductEntry = Record<string, unknown> & {
+  id?: string;
+  url?: string;
+  name?: string;
+};
+
 export interface ShopwareSearchResult {
   text: string;
-  products: Array<Record<string, unknown> & { id?: string; url?: string; name?: string }>;
+  products: ShopwareProductEntry[];
 }
 
 function getActiveShopwareConfig() {
@@ -90,7 +96,7 @@ function normaliseNumber(value: unknown): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
-function mapProduct(product: Record<string, unknown>, baseUrl: string) {
+function mapProduct(product: Record<string, unknown>, baseUrl: string): ShopwareProductEntry {
   const id = (product.id as string) ?? '';
   const translated = (product.translated as Record<string, unknown>) ?? {};
   const name = (translated.name as string) || (product.name as string) || '';
@@ -119,7 +125,7 @@ function mapProduct(product: Record<string, unknown>, baseUrl: string) {
     weight_kg: normaliseNumber(product.weight)
   };
 
-  const url = resolveProductUrl(product, baseUrl);
+  const url = resolveProductUrl(product, baseUrl) ?? undefined;
 
   return {
     id,
