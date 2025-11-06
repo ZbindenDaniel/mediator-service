@@ -1,0 +1,391 @@
+import { RateLimitError } from '../tools/tavily-client';
+import { stringifyLangChainContent } from '../utils/langchain';
+import { formatSourcesForRetry, type SearchSource } from '../utils/source-formatter';
+import { parseJsonWithSanitizer } from '../utils/json';
+import { FlowError } from './errors';
+import type { AgenticOutput } from './item-flow-schemas';
+import { AgentOutputSchema } from './item-flow-schemas';
+import type { SearchInvoker } from './item-flow-search';
+
+export interface ChatModel {
+  invoke(messages: Array<{ role: string; content: unknown }>): Promise<{ content: unknown }>;
+}
+
+export interface ExtractionLogger {
+  debug?: Console['debug'];
+  info?: Console['info'];
+  warn?: Console['warn'];
+  error?: Console['error'];
+}
+
+export interface RunExtractionOptions {
+  llm: ChatModel;
+  logger?: ExtractionLogger;
+  itemId: string;
+  maxAttempts: number;
+  maxAgentSearchesPerRequest?: number;
+  searchContexts: { query: string; text: string; sources: SearchSource[] }[];
+  aggregatedSources: SearchSource[];
+  recordSources: (sources: SearchSource[]) => void;
+  buildAggregatedSearchText: () => string;
+  extractPrompt: string;
+  targetFormat: string;
+  supervisorPrompt: string;
+  searchInvoker: SearchInvoker;
+}
+
+export interface ExtractionResult {
+  success: boolean;
+  data: AgenticOutput;
+  supervisor: string;
+  sources: SearchSource[];
+}
+
+const MAX_LOG_STRING_LENGTH = 500;
+const MAX_LOG_ARRAY_LENGTH = 5;
+const MAX_LOG_OBJECT_KEYS = 10;
+const MAX_LOG_DEPTH = 2;
+
+function truncateForLog(value: string, maxLength = MAX_LOG_STRING_LENGTH): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+function sanitizeForLog(value: unknown, depth = 0): unknown {
+  if (value == null) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return truncateForLog(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (depth >= MAX_LOG_DEPTH) {
+      return `[Array(${value.length})]`;
+    }
+    const sliced = value.slice(0, MAX_LOG_ARRAY_LENGTH).map((entry) => sanitizeForLog(entry, depth + 1));
+    if (value.length > MAX_LOG_ARRAY_LENGTH) {
+      sliced.push(`…(+${value.length - MAX_LOG_ARRAY_LENGTH} more)`);
+    }
+    return sliced;
+  }
+  if (typeof value === 'object') {
+    if (depth >= MAX_LOG_DEPTH) {
+      return '[Object]';
+    }
+    const keys = Object.keys(value);
+    const result: Record<string, unknown> = {};
+    for (const key of keys.slice(0, MAX_LOG_OBJECT_KEYS)) {
+      result[key] = sanitizeForLog((value as Record<string, unknown>)[key], depth + 1);
+    }
+    if (keys.length > MAX_LOG_OBJECT_KEYS) {
+      result.__truncatedKeys = keys.length - MAX_LOG_OBJECT_KEYS;
+    }
+    return result;
+  }
+  return truncateForLog(String(value));
+}
+
+export async function runExtractionAttempts({
+  llm,
+  logger,
+  itemId,
+  maxAttempts,
+  maxAgentSearchesPerRequest = 1,
+  searchContexts,
+  aggregatedSources,
+  recordSources,
+  buildAggregatedSearchText,
+  extractPrompt,
+  targetFormat,
+  supervisorPrompt,
+  searchInvoker
+}: RunExtractionOptions): Promise<ExtractionResult> {
+  let lastRaw = '';
+  let lastValidated: { success: true; data: AgenticOutput } | null = null;
+  let lastSupervision = '';
+  let lastValidationIssues: unknown = null;
+  let success = false;
+  let itemContent = '';
+
+  let attempt = 1;
+  const numericSearchLimit = Number(maxAgentSearchesPerRequest);
+  const searchesPerRequestLimit = Number.isFinite(numericSearchLimit) && numericSearchLimit > 0
+    ? Math.floor(numericSearchLimit)
+    : 1;
+  let searchRequestCycles = 0;
+  const MAX_SEARCH_REQUEST_CYCLES = Math.max(3 * searchesPerRequestLimit, maxAttempts * searchesPerRequestLimit);
+  const advanceAttempt = () => {
+    attempt += 1;
+    searchRequestCycles = 0;
+  };
+
+  while (attempt <= maxAttempts) {
+    logger?.debug?.({ msg: 'extraction attempt', attempt, itemId });
+
+    const aggregatedSearchText = buildAggregatedSearchText();
+    const searchRequestHint = searchesPerRequestLimit === 1
+      ? 'If you still require specific information, request up to one additional search by including a "__searchQueries" array in your JSON output.'
+      : `If you still require specific information, request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array in your JSON output.`;
+    let userContent = ['Aggregated search context:', aggregatedSearchText, searchRequestHint].join('\n\n');
+
+    if (attempt > 1) {
+      const formattedSources = formatSourcesForRetry(aggregatedSources, logger);
+      userContent = [
+        'Previous attempt failed or supervisor indicated issues.',
+        `Supervisor feedback:\n${lastSupervision || 'None'}`,
+        'Previous extraction raw output:',
+        lastRaw ? lastRaw : 'None',
+        'Sources:',
+        formattedSources.join('\n'),
+        'Aggregated search context:',
+        aggregatedSearchText,
+        searchesPerRequestLimit === 1
+          ? 'Reminder: request at most one additional search by including a "__searchQueries" array when vital information is missing.'
+          : `Reminder: request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array when vital information is missing.`
+      ].join('\n\n');
+    }
+
+    let extractRes;
+    try {
+      extractRes = await llm.invoke([
+        { role: 'system', content: `${extractPrompt}\nTargetformat:\n${targetFormat}` },
+        { role: 'user', content: userContent }
+      ]);
+    } catch (err) {
+      logger?.error?.({ err, msg: 'extraction llm invocation failed', attempt, itemId });
+      throw err;
+    }
+
+    const raw = stringifyLangChainContent(extractRes?.content, {
+      context: 'itemFlow.extract',
+      logger
+    });
+    lastRaw = raw;
+
+    let thinkContent = '';
+    itemContent = raw;
+    const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
+    if (thinkMatch) {
+      thinkContent = thinkMatch[1].trim();
+      const afterThink = raw.slice(thinkMatch.index + thinkMatch[0].length).trim();
+      itemContent = afterThink;
+    }
+
+    let parsed: unknown = null;
+    try {
+      parsed = parseJsonWithSanitizer(itemContent, {
+        loggerInstance: logger,
+        context: { itemId, attempt, stage: 'extraction-agent', thinkContent }
+      });
+    } catch (err) {
+      logger?.warn?.({
+        err,
+        msg: 'attempt produced invalid JSON after sanitization',
+        attempt,
+        itemId,
+        sanitizedSnippet: typeof (err as { sanitized?: string }).sanitized === 'string' ? (err as { sanitized?: string }).sanitized?.slice(0, 500) : undefined,
+        rawSnippet: itemContent.slice(0, 500)
+      });
+      lastSupervision = 'INVALID_JSON';
+      lastValidationIssues = 'INVALID_JSON';
+      const nextAttempt = attempt + 1;
+      logger?.info?.({
+        msg: 'retrying extraction attempt',
+        attempt,
+        nextAttempt,
+        itemId,
+        reason: 'INVALID_JSON'
+      });
+      advanceAttempt();
+      continue;
+    }
+
+    const agentParsed = AgentOutputSchema.safeParse(parsed);
+    if (!agentParsed.success) {
+      logger?.warn?.({ msg: 'schema validation failed', attempt, issues: agentParsed.error.issues, itemId });
+      lastValidated = null;
+      lastSupervision = `Schema validation failed: ${JSON.stringify(agentParsed.error.issues)}`;
+      lastValidationIssues = agentParsed.error.issues;
+      const nextAttempt = attempt + 1;
+      logger?.info?.({
+        msg: 'retrying extraction attempt',
+        attempt,
+        nextAttempt,
+        itemId,
+        reason: 'SCHEMA_VALIDATION_FAILED',
+        validationIssuesPreview: sanitizeForLog(agentParsed.error.issues)
+      });
+      advanceAttempt();
+      continue;
+    }
+
+    const { __searchQueries, ...candidateData } = agentParsed.data;
+    logger?.debug?.({
+      msg: 'candidate data parsed',
+      attempt,
+      itemId,
+      candidateDataPreview: sanitizeForLog(candidateData)
+    });
+
+    if (__searchQueries?.length) {
+      logger?.info?.({ msg: 'extraction agent requested additional search', attempt, queries: __searchQueries, itemId });
+      searchRequestCycles += 1;
+      if (searchRequestCycles > MAX_SEARCH_REQUEST_CYCLES) {
+        logger?.warn?.({
+          msg: 'extraction agent exceeded search request limit',
+          attempt,
+          itemId,
+          searchRequestCycles,
+          maxSearchRequestCycles: MAX_SEARCH_REQUEST_CYCLES
+        });
+        lastSupervision = 'TOO_MANY_SEARCH_REQUESTS';
+        lastValidated = { success: true, data: candidateData };
+        lastValidationIssues = null;
+        logger?.info?.({
+          msg: 'using best-effort extraction data after search limit reached',
+          attempt,
+          itemId,
+          payloadPreview: sanitizeForLog(candidateData)
+        });
+        break;
+      }
+      const queriesToProcess = __searchQueries.slice(0, searchesPerRequestLimit);
+      if (queriesToProcess.length < __searchQueries.length) {
+        logger?.warn?.({
+          msg: 'truncating agent search requests to configured limit',
+          attempt,
+          itemId,
+          requestedCount: __searchQueries.length,
+          allowedCount: searchesPerRequestLimit
+        });
+      }
+      for (const [index, query] of queriesToProcess.entries()) {
+        try {
+          const { text: extraText, sources: extraSources } = await searchInvoker(query, 5, {
+            context: 'agent',
+            attempt,
+            requestIndex: index + 1
+          });
+          searchContexts.push({ query, text: extraText, sources: extraSources });
+          recordSources(extraSources);
+          logger?.info?.({ msg: 'additional search complete', query, sourceCount: Array.isArray(extraSources) ? extraSources.length : 0, itemId });
+        } catch (searchErr) {
+          logger?.error?.({ err: searchErr, msg: 'additional search failed', query, itemId });
+          if (searchErr instanceof RateLimitError) {
+            throw new FlowError('RATE_LIMITED', 'Search provider rate limited requests', searchErr.statusCode ?? 503);
+          }
+          throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
+        }
+      }
+      lastSupervision = `ADDITIONAL_SEARCH_REQUESTED: ${queriesToProcess.join(' | ')}`;
+      lastValidated = null;
+      lastValidationIssues = '__SEARCH_REQUESTED__';
+      logger?.info?.({
+        msg: 'retrying extraction attempt',
+        attempt,
+        itemId,
+        reason: 'ADDITIONAL_SEARCH_REQUEST',
+        requestedQueriesPreview: sanitizeForLog(queriesToProcess)
+      });
+      continue;
+    }
+
+    const validated = { success: true as const, data: candidateData };
+    lastValidationIssues = null;
+
+    logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
+    let supRes;
+    try {
+      supRes = await llm.invoke([
+        { role: 'system', content: supervisorPrompt },
+        { role: 'user', content: JSON.stringify(validated.data) }
+      ]);
+    } catch (err) {
+      logger?.error?.({ err, msg: 'supervisor llm invocation failed', attempt, itemId });
+      throw err;
+    }
+    const supervision = stringifyLangChainContent(supRes?.content, {
+      context: 'itemFlow.supervisor',
+      logger
+    }).trim();
+    lastSupervision = supervision;
+    logger?.debug?.({
+      msg: 'supervisor response received',
+      attempt,
+      itemId,
+      supervisionPreview: sanitizeForLog(supervision)
+    });
+    const pass = supervision.toLowerCase().startsWith('pass');
+
+    lastValidated = validated;
+    if (pass) {
+      success = true;
+      break;
+    } else {
+      const nextAttempt = attempt + 1;
+      logger?.info?.({
+        msg: 'supervisor flagged issues, will retry if attempts remain',
+        attempt,
+        nextAttempt,
+        itemId,
+        reason: 'SUPERVISOR_FEEDBACK',
+        supervisionPreview: sanitizeForLog(supervision)
+      });
+      advanceAttempt();
+    }
+  }
+
+  if (attempt > maxAttempts && !success && lastValidationIssues !== 'TOO_MANY_SEARCH_REQUESTS') {
+    logger?.debug?.({ msg: 'extraction attempts exhausted', itemId, attempt, maxAttempts });
+  }
+
+  if (!lastValidated?.data) {
+    const sanitizedIssues = sanitizeForLog(lastValidationIssues);
+    const logBase = {
+      msg: 'agent failed to produce valid data',
+      itemId,
+      itemContentPreview: sanitizeForLog(itemContent),
+      lastValidationIssues: sanitizedIssues
+    };
+
+    if (lastValidationIssues === 'INVALID_JSON') {
+      logger?.error?.({ ...logBase, reason: 'INVALID_JSON' });
+      throw new FlowError('INVALID_JSON', 'Agent failed to return valid JSON after retries', 500);
+    }
+
+    if (Array.isArray(lastValidationIssues)) {
+      logger?.error?.({
+        ...logBase,
+        reason: 'SCHEMA_VALIDATION_FAILED',
+        validationIssuesPreview: sanitizeForLog(lastValidationIssues)
+      });
+      throw new FlowError('SCHEMA_VALIDATION_FAILED', 'Agent output failed schema validation after retries', 422);
+    }
+
+    if (lastValidationIssues === 'TOO_MANY_SEARCH_REQUESTS') {
+      logger?.error?.({ ...logBase, reason: 'TOO_MANY_SEARCH_REQUESTS' });
+      throw new FlowError('TOO_MANY_SEARCH_REQUESTS', 'Agent exceeded allowed additional search requests', 429);
+    }
+
+    logger?.error?.({ ...logBase, reason: 'EXTRACTION_FAILED' });
+    throw new FlowError('EXTRACTION_FAILED', 'Agent failed to produce valid data after retries', 500);
+  }
+
+  if (success) {
+    logger?.info?.({
+      msg: 'extraction succeeded',
+      itemId,
+      payloadPreview: sanitizeForLog(lastValidated.data),
+      supervisor: sanitizeForLog(lastSupervision)
+    });
+  }
+
+  return {
+    success,
+    data: lastValidated.data,
+    supervisor: lastSupervision,
+    sources: aggregatedSources
+  };
+}

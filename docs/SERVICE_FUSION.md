@@ -1,6 +1,6 @@
 # Objective
 
-The latest commit pulled the entire ai-flow-service repository into this project as a gitlink, leaving the mediator backend and frontend still talking to it through REST proxies (/api/agentic/*) that forward to AGENTIC_API_BASE and expect a shared secret. Integrating only the essential AI flow pieces into the mediator app—while keeping the existing documentation but linking to it—will eliminate cross-service overhead, align schemas around backend/db.ts, and simplify deployment.
+The ai-flow runtime now lives directly inside the mediator under `backend/agentic/`. The standalone `ai-flow-service/` tree has been deleted after porting its runtime pieces into TypeScript modules that share mediator logging, database helpers, and configuration. The remaining consolidation work focuses on finishing the in-process orchestrator wiring, validating the new search/model integrations, and cleaning up documentation or dependency stragglers.
 
 ## Target architecture
 
@@ -12,20 +12,18 @@ The latest commit pulled the entire ai-flow-service repository into this project
 ## Integration plan
 
 - 1. Document the consolidation plan
-    - Capture this migration roadmap in docs/AGENT.md (per planning guidelines) and cross-link any AI-specific docs that remain in ai-flow-service/ once material is copied or referenced.
+    - Capture this migration roadmap in docs/AGENT.md (per planning guidelines) and cross-link any AI-specific docs that previously lived in `ai-flow-service/` once their material is copied or referenced.
     - Note the open TODO in backend/config.ts about schema validation so the config refactor can address it while unifying agentic settings.
 
 - 2. Inventory the ai-flow-service gitlink and select essentials
-  - Reference the curated module map in [docs/ai-flow-service-audit.md](ai-flow-service-audit.md) when deciding which runtime pieces belong under `backend/agentic/`.
-  - Expand the gitlink locally, list the modules that power /run, /run/cancel, /health, and result callbacks, and mark which ones need to live under backend/agentic/ (e.g., orchestrator, search pipeline, queue consumers).
-  - Remove the unused MCP web-search stack (`web-search/`, `src/search/`, and related LangChain tool wrappers) instead of migrating it so the mediator avoids dead dependencies.
-  - Ignore tooling/docs that duplicate what the mediator repo already provides; keep only the runtime pieces required for the agentic workflow.
+  - ✅ Completed: the historical module map in [docs/ai-flow-service-audit.md](ai-flow-service-audit.md) now serves as a reference for the assets that were migrated into `backend/agentic/`.
+  - ✅ Completed: the unused MCP web-search stack and HTTP proxy wrappers were dropped during the TypeScript port so the mediator carries only the runtime components required for the agentic workflow.
 
 - 3. Flatten repository structure & merge dotfiles
-  - Remove the gitlink entry and bring over the selected source files into a new backend/agentic/ (or similar) namespace that fits mediator conventions
+  - ✅ Completed: the gitlink/duplicate directory has been removed and all runtime modules now live under `backend/agentic/` following mediator conventions.
   - Merge useful dotfiles (e.g., .eslintrc, .npmrc, .dockerignore) into existing root equivalents; delete duplicates that add no value to the combined project.
   - Fold AI-specific scripts into scripts/ if still needed, otherwise reference them from docs.
-  - Add a Tavily client module under `backend/agentic/tavily/client.ts` that encapsulates `@tavily/core` usage with mediator logging and error handling, and merge overlapping utilities from `ai-flow-service/src/utils/` into existing helpers.
+  - ✅ Completed: the Tavily client, flow pipeline, and supporting utilities have been ported into TypeScript modules that reuse mediator helpers.
 
 - 4. Unify package and build configuration
   - Merge ai-flow-service dependencies/devDependencies into the root package.json, keeping the build lean by dropping unused packages. Update tsconfig.json if new paths are required.

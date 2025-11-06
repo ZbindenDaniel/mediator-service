@@ -674,7 +674,8 @@ const action: Action = {
                 updateAgenticRunStatus: ctx.updateAgenticRunStatus,
                 logEvent: ctx.logEvent,
                 logger: console,
-                now: () => new Date()
+                now: () => new Date(),
+                invokeModel: ctx.agenticInvokeModel
               }
             })
               .then((result) => {

@@ -8,6 +8,7 @@ import { loadActions } from './actions';
 import { MEDIA_DIR } from './lib/media';
 
 export { MEDIA_DIR } from './lib/media';
+import type { AgenticServiceDependencies } from './agentic';
 import {
   HTTP_PORT,
   INBOX_DIR,
@@ -72,6 +73,7 @@ import {
   enqueueShopwareSyncJob
 } from './db';
 import { processQueuedAgenticRuns } from './agentic-queue-worker';
+import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
 import { printPdf, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
@@ -358,6 +360,24 @@ type ActionContext = {
 const resolvedAgenticApiBase = AGENTIC_API_BASE.trim();
 const agenticServiceEnabled = true;
 
+const agenticInvoker = new AgenticModelInvoker({ logger: console });
+const boundAgenticInvokeModel = agenticInvoker.invoke.bind(agenticInvoker);
+
+function createAgenticServiceDependencies(
+  overrides: Partial<Pick<AgenticServiceDependencies, 'logger' | 'now'>> = {}
+): AgenticServiceDependencies {
+  return {
+    db,
+    getAgenticRun,
+    upsertAgenticRun,
+    updateAgenticRunStatus,
+    logEvent,
+    logger: overrides.logger ?? console,
+    now: overrides.now ?? (() => new Date()),
+    invokeModel: boundAgenticInvokeModel
+  };
+}
+
 if (!resolvedAgenticApiBase) {
   console.info('[server] Agentic API base not configured; defaulting to in-process agentic service.');
 } else {
@@ -378,15 +398,7 @@ async function runAgenticQueueWorker(): Promise<void> {
   try {
     await processQueuedAgenticRuns({
       logger: console,
-      service: {
-        db,
-        getAgenticRun,
-        upsertAgenticRun,
-        updateAgenticRunStatus,
-        logEvent,
-        logger: console,
-        now: () => new Date()
-      }
+      service: createAgenticServiceDependencies()
     });
   } catch (err) {
     console.error('[server] Agentic queue worker crashed', err);
@@ -552,6 +564,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           PUBLIC_DIR,
           PREVIEW_DIR,
           agenticServiceEnabled,
+          agenticInvokeModel: boundAgenticInvokeModel,
           registerCsvIngestionOptions,
           clearCsvIngestionOptions,
           shopware: {
