@@ -364,37 +364,47 @@ const agenticServiceEnabled = true;
 const agenticInvoker = new AgenticModelInvoker({ logger: console });
 const boundAgenticInvokeModel = agenticInvoker.invoke.bind(agenticInvoker);
 
+let agenticDependenciesLogged = false;
+
 function createAgenticServiceDependencies(
   overrides: Partial<Pick<AgenticServiceDependencies, 'logger' | 'now'>> = {}
 ): AgenticServiceDependencies {
+  const logger = overrides.logger ?? console;
+
+  if (!agenticDependenciesLogged) {
+    logger.info?.('[agentic-service] In-process orchestrator dependencies initialized.');
+    agenticDependenciesLogged = true;
+  }
+
   return {
     db,
     getAgenticRun,
     upsertAgenticRun,
     updateAgenticRunStatus,
     logEvent,
-    logger: overrides.logger ?? console,
+    logger,
     now: overrides.now ?? (() => new Date()),
     invokeModel: boundAgenticInvokeModel
   };
 }
 
-if (!resolvedAgenticApiBase) {
-  console.info('[server] Agentic API base not configured; defaulting to in-process agentic service.');
-} else {
-  console.info('[server] Agentic API base configured but in-process agentic service will handle orchestration.', {
-    agenticApiBase: resolvedAgenticApiBase,
-      intervalMs: AGENTIC_QUEUE_POLL_INTERVAL_MS
-});
-}
-
-const AGENTIC_QUEUE_WORKER_INTERVAL_MS = 5000;
- 
 let agenticQueueWorkerRunning = false;
+let agenticQueueWorkerInitialized = false;
+
+if (agenticServiceEnabled) {
+  console.info('[server] In-process agentic orchestrator active; queue worker polling enabled.', {
+    queuePollIntervalMs: AGENTIC_QUEUE_POLL_INTERVAL_MS
+  });
+}
 
 async function runAgenticQueueWorker(): Promise<void> {
   if (!agenticServiceEnabled || agenticQueueWorkerRunning) {
     return;
+  }
+
+  if (!agenticQueueWorkerInitialized) {
+    console.info('[server] Agentic queue worker starting initial processing pass.');
+    agenticQueueWorkerInitialized = true;
   }
 
   agenticQueueWorkerRunning = true;
