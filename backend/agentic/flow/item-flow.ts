@@ -1,3 +1,4 @@
+// TODO(agent): Revisit item flow orchestration once planner surfaces richer item metadata requirements.
 import { agentActorId } from '../config';
 import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
@@ -197,7 +198,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       searchTerm,
       searchInvoker,
       logger,
-      itemId
+      itemId,
+      target
     });
 
     checkCancellation();
