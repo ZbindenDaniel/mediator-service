@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import type { AgenticRun } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -15,7 +15,7 @@ type AgenticBulkQueueResult = {
   skipped: number;
 };
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'agentic-bulk-queue',
   label: 'Agentic bulk queue',
   appliesTo: () => false,
@@ -139,6 +139,6 @@ const action: Action = {
     return sendJson(res, 200, { ok: true, mode, total, queued: result.queued, skipped: result.skipped });
   },
   view: () => '<div class="card"><p class="muted">Agentic bulk queue API</p></div>'
-};
+});
 
 export default action;

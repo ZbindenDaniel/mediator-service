@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, isItemEinheit } from '../../models';
 import type { Item } from '../../models';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { MEDIA_DIR } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
 
@@ -300,7 +300,7 @@ function resolveItemEinheitValue(value: unknown, context: string): ItemEinheit {
   return DEFAULT_ITEM_EINHEIT;
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'save-item',
   label: 'Save item',
   appliesTo: (entity) => entity.type === 'Item',
@@ -448,6 +448,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Item update API</p></div>'
-};
+});
 
 export default action;

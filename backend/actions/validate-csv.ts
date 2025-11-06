@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { parse } from 'csv-parse/sync';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -14,7 +14,7 @@ function validateRow(row: Record<string, any>): string[] {
   return errors;
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'validate-csv',
   label: 'Validate CSV',
   appliesTo: () => false,
@@ -45,6 +45,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">CSV validation API</p></div>'
-};
+});
 
 export default action;

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { cancelAgenticRun } from '../agentic';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 
@@ -8,7 +8,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'agentic-cancel',
   label: 'Agentic cancel',
   appliesTo: (entity) => entity.type === 'Item',
@@ -82,6 +82,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic cancel API</p></div>'
-};
+});
 
 export default action;

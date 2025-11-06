@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -102,7 +102,7 @@ function resolveExportValue(column: string, rawRow: Record<string, unknown>): un
   return DEFAULT_EINHEIT;
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'export-items',
   label: 'Export items',
   appliesTo: () => false,
@@ -148,7 +148,7 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Export items API</p></div>'
-};
+});
 
 export default action;
 

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { SHOPWARE_CONFIG } from '../config';
 import {
   createShopwareClient,
@@ -59,7 +59,7 @@ function normaliseLimit(value: unknown): number {
   return 5;
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'search-shopware',
   label: 'Search Shopware',
   appliesTo: () => false,
@@ -114,7 +114,7 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Shopware search API</p></div>'
-};
+});
 
 export function __setShopwareSearchClientForTests(client: ShopwareSearchClient | null): void {
   clientOverride = client;

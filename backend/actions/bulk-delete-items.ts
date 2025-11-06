@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import type { BulkRemoveResult } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -28,7 +28,7 @@ function asQuantity(value: unknown): number {
   return 0;
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'bulk-delete-items',
   label: 'Bulk delete items',
   appliesTo: () => false,
@@ -115,7 +115,7 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Bulk delete items API</p></div>'
-};
+});
 
 export default action;
 

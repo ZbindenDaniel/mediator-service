@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED } from '../../models';
 import { getAgenticStatus } from '../agentic';
 
@@ -8,7 +8,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'agentic-status',
   label: 'Agentic status',
   appliesTo: (entity) => entity.type === 'Item',
@@ -125,6 +125,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic review API</p></div>'
-};
+});
 
 export default action;

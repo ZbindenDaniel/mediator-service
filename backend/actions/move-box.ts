@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { resolveStandortLabel } from '../standort-label';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -7,7 +7,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'move-box',
   label: 'Move box',
   appliesTo: () => false,
@@ -80,7 +80,7 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Move box API</p></div>'
-};
+});
 
 export default action;
 

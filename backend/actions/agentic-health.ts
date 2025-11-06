@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { checkAgenticHealth } from '../agentic';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -7,7 +7,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'agentic-health',
   label: 'Agentic health proxy',
   appliesTo: () => false,
@@ -31,6 +31,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic health proxy API</p></div>'
-};
+});
 
 export default action;

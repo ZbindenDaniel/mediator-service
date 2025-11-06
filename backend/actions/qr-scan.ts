@@ -1,12 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'qr-scan',
   label: 'QR scan audit log',
   appliesTo: () => false,
@@ -76,6 +76,6 @@ const action: Action = {
       <p class="muted">Sollte der Scanner nicht laden, öffne <a href="/scan" target="_blank" rel="noopener">/scan</a> in einem neuen Tab.</p>
     </div>
   `
-};
+});
 
 export default action;

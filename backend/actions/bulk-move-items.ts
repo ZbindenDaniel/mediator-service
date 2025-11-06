@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import type { BulkMoveResult } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -17,7 +17,7 @@ function isConfirmed(value: unknown): boolean {
   return false;
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'bulk-move-items',
   label: 'Bulk move items',
   appliesTo: () => false,
@@ -98,7 +98,7 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Bulk move items API</p></div>'
-};
+});
 
 export default action;
 

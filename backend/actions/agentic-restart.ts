@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { restartAgenticRun } from '../agentic';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 
@@ -8,7 +8,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'agentic-restart',
   label: 'Agentic restart',
   appliesTo: (entity) => entity.type === 'Item',
@@ -116,6 +116,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic restart API</p></div>'
-};
+});
 
 export default action;

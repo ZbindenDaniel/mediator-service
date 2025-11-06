@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import type { Action } from './index';
+import { defineHttpAction } from './index';
 import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 
@@ -154,7 +154,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const action: Action = {
+const action = defineHttpAction({
   key: 'agentic-trigger',
   label: 'Agentic trigger proxy',
   appliesTo: () => false,
@@ -227,6 +227,6 @@ const action: Action = {
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic trigger proxy API</p></div>'
-};
+});
 
 export default action;
