@@ -1,8 +1,10 @@
 import { z } from 'zod';
 
+const MODEL_PROVIDER_VALUES = ['ollama', 'openai'] as const;
+
 const envSchema = z.object({
   NODE_ENV: z.string().default('development'),
-  MODEL_PROVIDER: z.enum(['ollama', 'openai']).default('ollama'),
+  MODEL_PROVIDER: z.enum(MODEL_PROVIDER_VALUES).default('ollama'),
   OLLAMA_BASE_URL: z.string().url().optional(),
   OLLAMA_MODEL: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
@@ -35,6 +37,67 @@ function resolveEnvValue(...keys: Array<keyof NodeJS.ProcessEnv>): string | unde
   return undefined;
 }
 
+function resolveEnumValue<T extends readonly [string, ...string[]]>(
+  allowedValues: T,
+  ...keys: Array<keyof NodeJS.ProcessEnv>
+): T[number] | undefined {
+  const rawValue = resolveEnvValue(...keys);
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  const normalizedValue = rawValue.trim();
+  if ((allowedValues as ReadonlyArray<string>).includes(normalizedValue)) {
+    return normalizedValue as T[number];
+  }
+
+  const targetKey = keys[0] ?? '(unknown)';
+  console.error?.({
+    msg: 'Unsupported value for environment variable',
+    keys,
+    allowedValues,
+    rawValue,
+    targetKey
+  });
+
+  throw new Error(`Unsupported value "${rawValue}" for environment variable ${targetKey}`);
+}
+
+function resolveNumber(...keys: Array<keyof NodeJS.ProcessEnv>): number | undefined {
+  const rawValue = resolveEnvValue(...keys);
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  const targetKey = keys[0] ?? '(unknown)';
+  const normalizedValue = rawValue.trim();
+  if (normalizedValue.length === 0) {
+    console.error?.({
+      msg: 'Empty numeric value for environment variable',
+      keys,
+      rawValue,
+      targetKey
+    });
+
+    throw new Error(`Invalid numeric value "${rawValue}" for environment variable ${targetKey}`);
+  }
+  const parsedValue = Number(normalizedValue);
+
+  if (!Number.isFinite(parsedValue) || !Number.isInteger(parsedValue) || parsedValue < 0) {
+    console.error?.({
+      msg: 'Invalid numeric value for environment variable',
+      keys,
+      rawValue,
+      targetKey,
+      parsedValue
+    });
+
+    throw new Error(`Invalid numeric value "${rawValue}" for environment variable ${targetKey}`);
+  }
+
+  return parsedValue;
+}
+
 function sanitizeEnvForLogging(env: EnvSchemaInput): Record<string, unknown> {
   return Object.entries(env).reduce<Record<string, unknown>>((acc, [key, value]) => {
     acc[key] = SECRET_TOKEN_PATTERN.test(key) && value ? '***redacted***' : value ?? '(unset)';
@@ -44,7 +107,7 @@ function sanitizeEnvForLogging(env: EnvSchemaInput): Record<string, unknown> {
 
 const envInput: EnvSchemaInput = {
   NODE_ENV: resolveEnvValue('NODE_ENV'),
-  MODEL_PROVIDER: resolveEnvValue('AGENTIC_MODEL_PROVIDER', 'MODEL_PROVIDER'),
+  MODEL_PROVIDER: resolveEnumValue(MODEL_PROVIDER_VALUES, 'AGENTIC_MODEL_PROVIDER', 'MODEL_PROVIDER'),
   OLLAMA_BASE_URL: resolveEnvValue('AGENTIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'),
   OLLAMA_MODEL: resolveEnvValue('AGENTIC_OLLAMA_MODEL', 'OLLAMA_MODEL'),
   OPENAI_API_KEY: resolveEnvValue('AGENTIC_OPENAI_API_KEY', 'OPENAI_API_KEY'),
@@ -54,7 +117,7 @@ const envInput: EnvSchemaInput = {
   MODEL_NAME: resolveEnvValue('AGENTIC_MODEL_NAME', 'MODEL_NAME'),
   MODEL_API_KEY: resolveEnvValue('AGENTIC_MODEL_API_KEY', 'MODEL_API_KEY'),
   TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
-  SEARCH_RATE_LIMIT_DELAY_MS: resolveEnvValue('SEARCH_RATE_LIMIT_DELAY_MS'),
+  SEARCH_RATE_LIMIT_DELAY_MS: resolveNumber('SEARCH_RATE_LIMIT_DELAY_MS'),
   SHOPWARE_BASE_URL: resolveEnvValue('SHOPWARE_BASE_URL'),
   SHOPWARE_CLIENT_ID: resolveEnvValue('SHOPWARE_CLIENT_ID'),
   SHOPWARE_CLIENT_SECRET: resolveEnvValue('SHOPWARE_CLIENT_SECRET'),
