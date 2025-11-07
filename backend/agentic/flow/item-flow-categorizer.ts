@@ -10,6 +10,7 @@ import type { AgenticOutput } from './item-flow-schemas';
 // TODO(agent): Monitor categorizer drift once evaluation datasets are curated.
 const CATEGORY_REFERENCE_PATH = path.resolve(__dirname, '../prompts/docs/data_struct.md');
 
+// TODO(agent): Replace ad-hoc categorizer schema once upstream agent contract is stabilized.
 const CategorizerResponseSchema = z
   .object({
     Hauptkategorien_A: z.union([z.number(), z.string()]).nullish(),
@@ -22,6 +23,15 @@ const CategorizerResponseSchema = z
   .passthrough();
 
 type CategorizerResponse = z.infer<typeof CategorizerResponseSchema>;
+
+const CategorizerPayloadSchema = z.union([
+  CategorizerResponseSchema,
+  z
+    .object({
+      item: CategorizerResponseSchema
+    })
+    .passthrough()
+]);
 
 let cachedReference: string | null = null;
 
@@ -124,7 +134,7 @@ export async function runCategorizerStage({
     throw new FlowError('CATEGORIZER_INVALID_JSON', 'Categorizer agent returned invalid JSON', 500, { cause: err });
   }
 
-  const validated = CategorizerResponseSchema.safeParse(parsed);
+  const validated = CategorizerPayloadSchema.safeParse(parsed);
   if (!validated.success) {
     logger?.error?.({
       msg: 'categorizer schema validation failed',
@@ -137,7 +147,16 @@ export async function runCategorizerStage({
   }
 
   const result: Partial<AgenticOutput> = {};
-  const response = validated.data as CategorizerResponse;
+  const nestedPayload = 'item' in validated.data ? validated.data.item : undefined;
+  const response: CategorizerResponse = {
+    ...(validated.data as CategorizerResponse),
+    ...(nestedPayload ? (nestedPayload as CategorizerResponse) : {})
+  };
+
+  if (nestedPayload) {
+    logger?.debug?.({ msg: 'categorizer response contains nested item payload', itemId });
+  }
+
   logger?.debug?.({ msg: 'categorizer response parsed', itemId, response });
   const fieldMap: Array<{
     field: keyof AgenticOutput;
