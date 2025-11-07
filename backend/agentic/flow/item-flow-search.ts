@@ -32,9 +32,10 @@ export interface CollectSearchContextOptions {
   itemId: string;
   target?: AgenticTarget | Record<string, unknown> | string | null;
   reviewNotes?: string | null;
-  skipSearch?: boolean;
-  llm: ChatModel;
-  plannerPrompt: string;
+  shouldSearch: boolean;
+  plannerDecision?: PlannerDecision | null;
+  missingSchemaFields?: string[];
+  reviewerSkip?: boolean;
 }
 
 export interface SearchContext {
@@ -50,7 +51,7 @@ export interface CollectSearchContextsResult {
   buildAggregatedSearchText: () => string;
 }
 
-type SearchPlan = {
+export type SearchPlan = {
   query: string;
   metadata: SearchInvokerMetadata;
 };
@@ -74,7 +75,7 @@ const TRACKED_SCHEMA_FIELDS = [
 
 type TrackedSchemaField = (typeof TRACKED_SCHEMA_FIELDS)[number];
 
-interface PlannerDecision {
+export interface PlannerDecision {
   shouldSearch: boolean;
   plans: SearchPlan[];
 }
@@ -118,7 +119,7 @@ function dedupeSearchPlans(plans: SearchPlan[]): SearchPlan[] {
   return Array.from(uniqueQueries.values());
 }
 
-function identifyMissingSchemaFields(target: AgenticTarget | Record<string, unknown> | null): string[] {
+export function identifyMissingSchemaFields(target: AgenticTarget | Record<string, unknown> | null): string[] {
   if (!target) {
     return [...TRACKED_SCHEMA_FIELDS];
   }
@@ -167,7 +168,8 @@ function sanitizePlannerMetadata(
 }
 
 // TODO(agent): Observe planner outputs to refine payload structure and metadata sanitization.
-async function generatePlannerDecision({
+// TODO(agent): Capture planner latency telemetry once search orchestration stabilizes.
+export async function evaluateSearchPlanner({
   llm,
   plannerPrompt,
   itemId,
@@ -397,15 +399,18 @@ export async function collectSearchContexts({
   itemId,
   target,
   reviewNotes,
-  skipSearch,
-  llm,
-  plannerPrompt
+  shouldSearch,
+  plannerDecision,
+  missingSchemaFields: providedMissingFields,
+  reviewerSkip
 }: CollectSearchContextOptions): Promise<CollectSearchContextsResult> {
   const resolvedTarget = resolveTarget(target ?? null, logger, itemId);
   const searchContexts: SearchContext[] = [];
   const seenSourceKeys = new Set<string>();
   const aggregatedSources: SearchSource[] = [];
-  const missingSchemaFields = identifyMissingSchemaFields(resolvedTarget);
+  const missingSchemaFields = Array.isArray(providedMissingFields) && providedMissingFields.length
+    ? providedMissingFields
+    : identifyMissingSchemaFields(resolvedTarget);
 
   if (missingSchemaFields.length > 0) {
     logger?.debug?.({
@@ -453,16 +458,18 @@ export async function collectSearchContexts({
 
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
 
-  if (skipSearch) {
+  if (!shouldSearch) {
     try {
       logger?.info?.({
-        msg: 'default search skipped per reviewer notes',
+        msg: 'search execution skipped',
         itemId,
+        reviewerSkip: Boolean(reviewerSkip),
         hasReviewerNotes: Boolean(sanitizedReviewerNotes),
-        missingFields: missingSchemaFields.slice(0, 10)
+        missingFields: missingSchemaFields.slice(0, 10),
+        plannerShouldSearch: plannerDecision?.shouldSearch ?? null
       });
     } catch (err) {
-      logger?.warn?.({ err, msg: 'failed to log skip-search decision', itemId });
+      logger?.warn?.({ err, msg: 'failed to log search skip resolution', itemId });
     }
 
     return {
@@ -473,55 +480,28 @@ export async function collectSearchContexts({
     };
   }
 
-  let plannerDecision: PlannerDecision | null = null;
-  try {
-    plannerDecision = await generatePlannerDecision({
-      llm,
-      plannerPrompt,
-      itemId,
-      searchTerm,
-      reviewerNotes: sanitizedReviewerNotes,
-      target: resolvedTarget,
-      missingFields: missingSchemaFields,
-      logger
-    });
-  } catch (err) {
-    logger?.error?.({ err, msg: 'search planner unexpected failure', itemId });
-    plannerDecision = null;
-  }
+  const fallbackPlans = extractSearchPlans(searchTerm, resolvedTarget, logger, itemId);
+  const baseQuery = `Gerätedaten ${searchTerm}`.trim();
+  const basePlan = fallbackPlans.find((plan) => plan.query === baseQuery) ?? {
+    query: baseQuery,
+    metadata: { context: 'primary' }
+  };
 
-  if (plannerDecision && !plannerDecision.shouldSearch) {
-    logger?.info?.({
-      msg: 'search planner requested skip',
-      itemId,
-      missingFields: missingSchemaFields.slice(0, 10),
-      hasReviewerNotes: Boolean(sanitizedReviewerNotes)
-    });
-    return {
-      searchContexts,
-      aggregatedSources,
-      recordSources,
-      buildAggregatedSearchText
-    };
-  }
-
-  let searchPlans = plannerDecision?.plans ?? [];
-  if (searchPlans.length === 0) {
-    searchPlans = extractSearchPlans(searchTerm, resolvedTarget, logger, itemId);
-  } else {
+  const plannerPlans = Array.isArray(plannerDecision?.plans) ? (plannerDecision?.plans as SearchPlan[]) : [];
+  if (plannerPlans.length > 0) {
     logger?.info?.({
       msg: 'search planner supplied plans',
       itemId,
-      planCount: searchPlans.length
+      planCount: plannerPlans.length
     });
   }
 
-  const baseQuery = `Gerätedaten ${searchTerm}`.trim();
-  if (searchPlans.length > 0 && !searchPlans.some((plan) => plan.query === baseQuery)) {
-    searchPlans = [
-      { query: baseQuery, metadata: { context: 'primary' } },
-      ...searchPlans
-    ];
+  const fallbackWithoutPrimary = fallbackPlans.filter((plan) => plan.query !== baseQuery);
+  let searchPlans: SearchPlan[] = [];
+  if (plannerPlans.length > 0) {
+    searchPlans = [basePlan, ...plannerPlans, ...fallbackWithoutPrimary];
+  } else {
+    searchPlans = fallbackPlans;
   }
 
   searchPlans = dedupeSearchPlans(searchPlans);
