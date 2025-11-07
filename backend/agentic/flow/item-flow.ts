@@ -133,7 +133,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     };
 
     const shopwareAvailable = isShopwareConfigured();
-    const { format, extract, supervisor, categorizer, shopware } = await loadPrompts({
+    const { format, extract, supervisor, categorizer, searchPlanner, shopware } = await loadPrompts({
       itemId,
       logger,
       includeShopware: shopwareAvailable
@@ -207,7 +207,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       itemId,
       target,
       reviewNotes: reviewerNotes,
-      skipSearch
+      skipSearch,
+      llm: deps.llm,
+      plannerPrompt: searchPlanner
     });
 
     checkCancellation();

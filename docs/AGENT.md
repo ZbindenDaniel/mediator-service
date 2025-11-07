@@ -30,3 +30,9 @@ When implementing a plan:
 5. **Update TODOs and documentation** – resolve or refresh adjacent TODO comments and mirror substantive changes in this documentation so future planning stays accurate.
 
 These planning responses should be explicit enough that another developer can implement them without additional clarification.
+
+## Search Planner Stage Overview
+
+- The item flow now loads `backend/agentic/prompts/search-planner.md` and asks the shared LLM to evaluate missing schema fields plus reviewer directives before running Tavily searches.
+- The planner can return `shouldSearch: false` to skip external lookups when reviewers forbid search activity, otherwise it emits up to three targeted queries with metadata about the gaps they address.
+- Planner results are validated and logged inside `backend/agentic/flow/item-flow-search.ts`; if the model output is invalid we fall back to the heuristic queries that existed previously.
