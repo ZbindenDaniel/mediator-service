@@ -5,7 +5,14 @@ import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../
 import { FlowError } from './errors';
 import { type AgenticTarget } from './item-flow-schemas';
 import { resolveShopwareMatch } from './item-flow-shopware';
-import { collectSearchContexts, type SearchInvoker, type SearchInvokerMetadata } from './item-flow-search';
+import {
+  collectSearchContexts,
+  evaluateSearchPlanner,
+  identifyMissingSchemaFields,
+  type PlannerDecision,
+  type SearchInvoker,
+  type SearchInvokerMetadata
+} from './item-flow-search';
 import { runExtractionAttempts, type ChatModel, type ExtractionLogger } from './item-flow-extraction';
 import { searchShopwareRaw, isShopwareConfigured, type ShopwareSearchResult } from '../tools/shopware';
 import { prepareItemContext } from './context';
@@ -200,6 +207,51 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
+    const missingSchemaFields = identifyMissingSchemaFields(target);
+
+    // TODO(agent): Feed planner gating outcomes into telemetry once available.
+    let plannerDecision: PlannerDecision | null = null;
+    let plannerShouldSearch = true;
+
+    if (searchPlanner && searchPlanner.trim()) {
+      try {
+        checkCancellation();
+        plannerDecision = await evaluateSearchPlanner({
+          llm: deps.llm,
+          plannerPrompt: searchPlanner,
+          itemId,
+          searchTerm,
+          reviewerNotes: reviewerNotes ?? '',
+          target,
+          missingFields: missingSchemaFields,
+          logger
+        });
+        checkCancellation();
+        if (plannerDecision) {
+          plannerShouldSearch = plannerDecision.shouldSearch;
+        }
+      } catch (err) {
+        plannerDecision = null;
+        plannerShouldSearch = true;
+        logger.error?.({ err, msg: 'search planner evaluation failed', itemId });
+      }
+    }
+
+    const finalShouldSearch = !skipSearch && plannerShouldSearch;
+
+    try {
+      logger.info?.({
+        msg: 'search gating resolved',
+        itemId,
+        reviewerSkip: skipSearch,
+        plannerShouldSearch: plannerDecision?.shouldSearch ?? null,
+        finalShouldSearch,
+        missingFields: missingSchemaFields.slice(0, 10)
+      });
+    } catch (err) {
+      logger.warn?.({ err, msg: 'failed to log search gating resolution', itemId });
+    }
+
     const { searchContexts, aggregatedSources, recordSources, buildAggregatedSearchText } = await collectSearchContexts({
       searchTerm,
       searchInvoker,
@@ -207,9 +259,10 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       itemId,
       target,
       reviewNotes: reviewerNotes,
-      skipSearch,
-      llm: deps.llm,
-      plannerPrompt: searchPlanner
+      shouldSearch: finalShouldSearch,
+      plannerDecision,
+      missingSchemaFields,
+      reviewerSkip: skipSearch
     });
 
     checkCancellation();

@@ -33,6 +33,7 @@ These planning responses should be explicit enough that another developer can im
 
 ## Search Planner Stage Overview
 
-- The item flow now loads `backend/agentic/prompts/search-planner.md` and asks the shared LLM to evaluate missing schema fields plus reviewer directives before running Tavily searches.
-- The planner can return `shouldSearch: false` to skip external lookups when reviewers forbid search activity, otherwise it emits up to three targeted queries with metadata about the gaps they address.
-- Planner results are validated and logged inside `backend/agentic/flow/item-flow-search.ts`; if the model output is invalid we fall back to the heuristic queries that existed previously.
+- `runItemFlow` invokes the planner prior to `collectSearchContexts`, combining reviewer-provided `skipSearch` flags with the planner's `shouldSearch` directive to determine whether Tavily requests should execute for the item.
+- When the planner indicates that search is required, its queries are passed through to `collectSearchContexts` ahead of the heuristic fallbacks so planner guidance runs first while legacy diversification still fills any remaining slots.
+- Planner evaluations, reviewer intents, and the final gating decision are logged from `backend/agentic/flow/item-flow.ts` while the downstream search collector short-circuits immediately when `shouldSearch` resolves to `false`.
+- Planner results are still validated in `backend/agentic/flow/item-flow-search.ts`; invalid payloads degrade gracefully to heuristic search plans.
