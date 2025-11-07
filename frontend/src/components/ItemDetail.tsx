@@ -498,28 +498,7 @@ export default function ItemDetail({ itemId }: Props) {
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
-  const { haupt: hauptCategoryLookup, unter: unterCategoryLookup } = categoryLookups;
-
-  const resolveHauptkategorieLabel = useCallback(
-    (code?: number | null): React.ReactNode => {
-      if (typeof code !== 'number' || Number.isNaN(code)) {
-        return null;
-      }
-      const category = hauptCategoryLookup.get(code);
-      if (!category) {
-        console.warn('Missing Hauptkategorie mapping for item detail view', { code });
-        return `Unbekannte Kategorie (${code})`;
-      }
-      const label = humanizeCategoryLabel(category.label);
-      return (
-        <span className="details-category" aria-label={`${label} (${category.code})`}>
-          <span className="details-category__name">{label}</span>
-          <span className="details-category__code">({category.code})</span>
-        </span>
-      );
-    },
-    [hauptCategoryLookup]
-  );
+  const { unter: unterCategoryLookup } = categoryLookups;
 
   const resolveUnterkategorieLabel = useCallback(
     (code?: number | null): React.ReactNode => {
@@ -551,9 +530,11 @@ export default function ItemDetail({ itemId }: Props) {
     },
     [unterCategoryLookup]
   );
+
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
+  // TODO: Confirm backend consistently provides Unterkategorien values so placeholders can be removed.
   const detailRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
       return [];
@@ -561,7 +542,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const creator = resolveActorName(events.length ? events[events.length - 1].Actor : null);
 
-    return [
+    const rows: [string, React.ReactNode][] = [
       ['Erstellt von', creator],
       ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],
       ['Artikelnummer', item.Artikel_Nummer ?? null],
@@ -571,10 +552,11 @@ export default function ItemDetail({ itemId }: Props) {
         item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
       ],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
-      ['Hauptkategorie A', resolveHauptkategorieLabel(item.Hauptkategorien_A)],
       ['Unterkategorie A', resolveUnterkategorieLabel(item.Unterkategorien_A)],
-      ['Hauptkategorie B', resolveHauptkategorieLabel(item.Hauptkategorien_B)],
-      ['Unterkategorie B', resolveUnterkategorieLabel(item.Unterkategorien_B)],
+      ['Unterkategorie B', resolveUnterkategorieLabel(item.Unterkategorien_B)]
+    ];
+
+    rows.push(
       ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
       ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
       ['Verkaufspreis', item.Verkaufspreis ?? null],
@@ -585,8 +567,10 @@ export default function ItemDetail({ itemId }: Props) {
       ['Höhe (mm)', item.Höhe_mm ?? null],
       ['Gewicht (kg)', item.Gewicht_kg ?? null],
       ['Einheit', resolveDetailEinheit(item.Einheit)]
-    ];
-  }, [events, item, resolveHauptkategorieLabel, resolveUnterkategorieLabel]);
+    );
+
+    return rows;
+  }, [events, item, resolveUnterkategorieLabel]);
 
   const latestAgenticReviewNote = useMemo(() => {
     let latestNote: string | null = null;
