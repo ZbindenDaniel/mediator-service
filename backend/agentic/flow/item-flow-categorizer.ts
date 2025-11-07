@@ -91,6 +91,8 @@ export interface RunCategorizerStageOptions {
   itemId: string;
   categorizerPrompt: string;
   candidate: AgenticOutput;
+  reviewNotes?: string | null;
+  skipSearch?: boolean;
 }
 
 export async function runCategorizerStage({
@@ -98,14 +100,55 @@ export async function runCategorizerStage({
   logger,
   itemId,
   categorizerPrompt,
-  candidate
+  candidate,
+  reviewNotes,
+  skipSearch
 }: RunCategorizerStageOptions): Promise<Partial<AgenticOutput>> {
   logger?.debug?.({ msg: 'invoking categorizer agent', itemId });
 
   const taxonomyReference = await loadCategoryReference(logger, itemId);
+  const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
+  const searchSkipped = Boolean(skipSearch);
+
+  let payloadForCategorizer: Record<string, unknown> = { item: candidate };
+  try {
+    const instructions: Record<string, unknown> = {};
+    if (sanitizedReviewerNotes) {
+      instructions.reviewerNotes = sanitizedReviewerNotes;
+    }
+    if (searchSkipped) {
+      instructions.searchSkipped = true;
+    }
+    if (Object.keys(instructions).length > 0) {
+      payloadForCategorizer = { ...payloadForCategorizer, instructions };
+      logger?.info?.({
+        msg: 'categorizer received reviewer guidance',
+        itemId,
+        hasReviewerNotes: Boolean(sanitizedReviewerNotes),
+        searchSkipped
+      });
+    }
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to append reviewer instructions to categorizer payload', itemId });
+    payloadForCategorizer = { item: candidate };
+  }
+
+  let userPayload = '';
+  try {
+    userPayload = JSON.stringify(payloadForCategorizer, null, 2);
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to serialize categorizer payload', itemId });
+    try {
+      userPayload = JSON.stringify({ item: candidate }, null, 2);
+    } catch (fallbackErr) {
+      logger?.error?.({ err: fallbackErr, msg: 'categorizer payload serialization fallback failed', itemId });
+      throw new FlowError('CATEGORIZER_PAYLOAD_SERIALIZATION_FAILED', 'Failed to serialize categorizer payload', 500, {
+        cause: fallbackErr
+      });
+    }
+  }
   let categorizeRes;
   try {
-    const userPayload = JSON.stringify({ item: candidate }, null, 2);
     categorizeRes = await llm.invoke([
       {
         role: 'system',

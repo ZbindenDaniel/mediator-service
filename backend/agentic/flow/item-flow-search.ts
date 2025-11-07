@@ -27,6 +27,8 @@ export interface CollectSearchContextOptions {
   logger?: Partial<Pick<Console, LoggerMethods>>;
   itemId: string;
   target?: AgenticTarget | Record<string, unknown> | string | null;
+  reviewNotes?: string | null;
+  skipSearch?: boolean;
 }
 
 export interface SearchContext {
@@ -173,26 +175,11 @@ export async function collectSearchContexts({
   searchInvoker,
   logger,
   itemId,
-  target
+  target,
+  reviewNotes,
+  skipSearch
 }: CollectSearchContextOptions): Promise<CollectSearchContextsResult> {
   const resolvedTarget = resolveTarget(target ?? null, logger, itemId);
-  const searchPlans = extractSearchPlans(searchTerm, resolvedTarget, logger, itemId);
-  const limitedPlans = searchPlans.slice(0, MAX_SEARCH_PLANS);
-
-  if (searchPlans.length > MAX_SEARCH_PLANS) {
-    try {
-      logger?.warn?.({
-        msg: 'search plan limit applied',
-        itemId,
-        requestedPlans: searchPlans.length,
-        limit: MAX_SEARCH_PLANS,
-        truncatedPlans: searchPlans.slice(MAX_SEARCH_PLANS).map((plan) => plan.query)
-      });
-    } catch (err) {
-      logger?.error?.({ err, msg: 'failed to log search plan truncation', itemId });
-    }
-  }
-
   const searchContexts: SearchContext[] = [];
   const seenSourceKeys = new Set<string>();
   const aggregatedSources: SearchSource[] = [];
@@ -227,6 +214,49 @@ export async function collectSearchContexts({
       logger?.error?.({ err, msg: 'failed to record sources', itemId });
     }
   };
+
+  const buildAggregatedSearchText = () =>
+    searchContexts
+      .map((ctx, index) => [`Search query ${index + 1}: ${ctx.query}`, ctx.text].join('\n'))
+      .join('\n\n-----\n\n');
+
+  const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
+
+  if (skipSearch) {
+    try {
+      logger?.info?.({
+        msg: 'default search skipped per reviewer notes',
+        itemId,
+        hasReviewerNotes: Boolean(sanitizedReviewerNotes)
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log skip-search decision', itemId });
+    }
+
+    return {
+      searchContexts,
+      aggregatedSources,
+      recordSources,
+      buildAggregatedSearchText
+    };
+  }
+
+  const searchPlans = extractSearchPlans(searchTerm, resolvedTarget, logger, itemId);
+  const limitedPlans = searchPlans.slice(0, MAX_SEARCH_PLANS);
+
+  if (searchPlans.length > MAX_SEARCH_PLANS) {
+    try {
+      logger?.warn?.({
+        msg: 'search plan limit applied',
+        itemId,
+        requestedPlans: searchPlans.length,
+        limit: MAX_SEARCH_PLANS,
+        truncatedPlans: searchPlans.slice(MAX_SEARCH_PLANS).map((plan) => plan.query)
+      });
+    } catch (err) {
+      logger?.error?.({ err, msg: 'failed to log search plan truncation', itemId });
+    }
+  }
 
   for (const [index, plan] of limitedPlans.entries()) {
     const metadata = { ...plan.metadata, requestIndex: index };
@@ -264,11 +294,6 @@ export async function collectSearchContexts({
       throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
     }
   }
-
-  const buildAggregatedSearchText = () =>
-    searchContexts
-      .map((ctx, index) => [`Search query ${index + 1}: ${ctx.query}`, ctx.text].join('\n'))
-      .join('\n\n-----\n\n');
 
   return {
     searchContexts,

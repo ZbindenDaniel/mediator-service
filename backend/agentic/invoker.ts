@@ -394,6 +394,31 @@ export class AgenticModelInvoker {
         return { ok: false, message: 'search-unconfigured' };
       }
 
+      let normalizedReviewNotes: string | null = null;
+      try {
+        const rawNotes = input.review?.notes ?? null;
+        if (typeof rawNotes === 'string') {
+          const condensed = rawNotes.replace(/\s+/g, ' ').trim();
+          normalizedReviewNotes = condensed ? condensed : null;
+        }
+      } catch (err) {
+        this.logger.warn?.({ err, msg: 'failed to normalize review notes for agentic invocation', itemId: trimmedItemId });
+      }
+
+      let skipSearch = false;
+      if (normalizedReviewNotes) {
+        try {
+          skipSearch = /skip\s+search|keine\s+suche|no\s+search/i.test(normalizedReviewNotes);
+          this.logger.info?.({
+            msg: 'agentic invocation received reviewer notes',
+            itemId: trimmedItemId,
+            skipSearchHint: skipSearch
+          });
+        } catch (err) {
+          this.logger.warn?.({ err, msg: 'failed to evaluate skip search hint', itemId: trimmedItemId });
+        }
+      }
+
       let target = await this.loadItemTarget(trimmedItemId);
       if (!target.Artikelbeschreibung && input.searchQuery) {
         target.Artikelbeschreibung = input.searchQuery;
@@ -406,7 +431,9 @@ export class AgenticModelInvoker {
         {
           target,
           id: trimmedItemId,
-          search: input.searchQuery ?? null
+          search: input.searchQuery ?? null,
+          reviewNotes: normalizedReviewNotes,
+          skipSearch
         },
         {
           llm,
@@ -422,6 +449,14 @@ export class AgenticModelInvoker {
           markNotificationFailure: markAgenticRequestNotificationFailure
         }
       );
+
+      if (!payload.reviewNotes && normalizedReviewNotes) {
+        this.logger.debug?.({
+          msg: 'agentic payload missing reviewer notes; appending original instructions',
+          itemId: trimmedItemId
+        });
+        payload.reviewNotes = normalizedReviewNotes;
+      }
 
       this.logger.info?.({ msg: 'agentic model invocation completed', itemId: trimmedItemId, status: payload.status });
       return { ok: true, message: payload.summary };
