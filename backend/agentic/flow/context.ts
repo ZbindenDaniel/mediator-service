@@ -29,6 +29,15 @@ function normalizeTarget(target: unknown, itemId: string): AgenticTarget {
   const sanitizedTarget: Record<string, unknown> = { ...candidate };
   const rawLocked = Array.isArray(candidate.__locked) ? candidate.__locked : null;
 
+  if (typeof candidate.reviewNotes === 'string') {
+    const trimmedNotes = candidate.reviewNotes.trim();
+    if (trimmedNotes) {
+      sanitizedTarget.reviewNotes = trimmedNotes;
+    } else {
+      delete sanitizedTarget.reviewNotes;
+    }
+  }
+
   if (rawLocked) {
     const filteredLocked = rawLocked
       .map((value) => (typeof value === 'string' ? value.trim() : ''))
