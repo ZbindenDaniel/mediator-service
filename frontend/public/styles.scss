@@ -319,6 +319,24 @@ div {
     padding: 0.25rem 0;
 }
 
+.details .item-detail__langtext {
+    display: block;
+    white-space: normal;
+}
+
+.details .item-detail__langtext p {
+    margin: 0.25rem 0;
+}
+
+.details .item-detail__langtext ul {
+    margin: 0.25rem 0 0.25rem 1.25rem;
+    padding-left: 0;
+}
+
+.details .item-detail__langtext li {
+    margin-bottom: 0.25rem;
+}
+
 .card-header {
     display: flex;
     align-items: center;

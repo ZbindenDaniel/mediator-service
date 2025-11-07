@@ -32,6 +32,7 @@ import {
 } from '../lib/agentic';
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
+// TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
@@ -155,6 +156,98 @@ function humanizeCategoryLabel(label: string): string {
     console.error('Failed to humanize category label', { label }, error);
     return label;
   }
+}
+
+function renderLangtextInlineSegments(
+  text: string,
+  counters: { bold: number },
+  keyBase: string
+): React.ReactNode {
+  const nodes: React.ReactNode[] = [];
+  const boldRegex = /\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = boldRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+
+    counters.bold += 1;
+    nodes.push(
+      <strong key={`${keyBase}-bold-${counters.bold}`}>{match[1]}</strong>
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  if (nodes.length === 0) {
+    return text;
+  }
+
+  return nodes;
+}
+
+function buildLangtextMarkdown(raw: string): React.ReactNode | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  let normalizedText = trimmed.replace(/\r\n/g, '\n');
+  if (normalizedText.trim().startsWith('- ') && normalizedText.includes(' - **')) {
+    normalizedText = normalizedText.replace(/\s+-\s+(?=\*\*)/g, '\n- ');
+  }
+
+  const lines = normalizedText.split('\n');
+  if (lines.length === 0) {
+    return trimmed;
+  }
+
+  const blocks: React.ReactNode[] = [];
+  const counters = { bold: 0 };
+  let pendingList: React.ReactNode[] = [];
+
+  const flushList = () => {
+    if (pendingList.length > 0) {
+      const listKey = `langtext-ul-${blocks.length}`;
+      blocks.push(<ul key={listKey}>{pendingList}</ul>);
+      pendingList = [];
+    }
+  };
+
+  lines.forEach((line, index) => {
+    const value = line.trim();
+    if (!value) {
+      flushList();
+      return;
+    }
+
+    if (value.startsWith('- ')) {
+      const itemContent = value.slice(2).trim();
+      const inline = renderLangtextInlineSegments(itemContent, counters, `li-${index}`);
+      pendingList.push(<li key={`langtext-li-${index}`}>{inline}</li>);
+      return;
+    }
+
+    flushList();
+    const inline = renderLangtextInlineSegments(value, counters, `p-${index}`);
+    blocks.push(
+      <p key={`langtext-p-${index}`}>{inline}</p>
+    );
+  });
+
+  flushList();
+
+  if (blocks.length === 0) {
+    return trimmed;
+  }
+
+  return <div className="item-detail__langtext">{blocks}</div>;
 }
 
 export function AgenticStatusCard({
@@ -500,6 +593,22 @@ export default function ItemDetail({ itemId }: Props) {
 
   const { haupt: hauptCategoryLookup } = categoryLookups;
 
+  const langtextContent = useMemo<React.ReactNode>(() => {
+    if (!item || typeof item.Langtext !== 'string') {
+      return null;
+    }
+
+    try {
+      return buildLangtextMarkdown(item.Langtext);
+    } catch (error) {
+      console.error('ItemDetail: Failed to render Langtext markdown', {
+        error,
+        value: item.Langtext
+      });
+      return item.Langtext;
+    }
+  }, [item?.Langtext]);
+
   const resolveHauptkategorieLabel = useCallback(
     (code?: number | null): React.ReactNode => {
       if (typeof code !== 'number' || Number.isNaN(code)) {
@@ -580,7 +689,7 @@ export default function ItemDetail({ itemId }: Props) {
       ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
       ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
       ['Verkaufspreis', item.Verkaufspreis ?? null],
-      ['Langtext', item.Langtext ?? null],
+      ['Langtext', langtextContent],
       ['Hersteller', item.Hersteller ?? null],
       ['Länge (mm)', item.Länge_mm ?? null],
       ['Breite (mm)', item.Breite_mm ?? null],
