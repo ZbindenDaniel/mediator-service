@@ -591,7 +591,7 @@ export default function ItemDetail({ itemId }: Props) {
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
-  const { haupt: hauptCategoryLookup } = categoryLookups;
+  const { unter: unterCategoryLookup } = categoryLookups;
 
   const langtextContent = useMemo<React.ReactNode>(() => {
     if (!item || typeof item.Langtext !== 'string') {
@@ -609,25 +609,31 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [item?.Langtext]);
 
-  const resolveHauptkategorieLabel = useCallback(
+  const resolveUnterkategorieLabel = useCallback(
     (code?: number | null): React.ReactNode => {
       if (typeof code !== 'number' || Number.isNaN(code)) {
         return null;
       }
-      const category = hauptCategoryLookup.get(code);
-      if (!category) {
-        console.warn('Missing Hauptkategorie mapping for item detail view', { code });
-        return `Unbekannte Kategorie (${code})`;
+
+      const subCategory = unterCategoryLookup.get(code);
+      if (!subCategory) {
+        console.warn('Missing Unterkategorie mapping for item detail view', { code });
+        return `Unbekannte Unterkategorie (${code})`;
       }
-      const label = humanizeCategoryLabel(category.label);
+
+      const label = humanizeCategoryLabel(subCategory.label);
+      const parentLabel = humanizeCategoryLabel(subCategory.parentLabel);
+
       return (
-        <span className="details-category" aria-label={`${label} (${category.code})`}>
-          <span className="details-category__name">{label}</span>
-          <span className="details-category__code">({category.code})</span>
+        <span className="details-category" aria-label={`${parentLabel} > ${label} (${subCategory.code})`}>
+          <span className="details-category__name">
+            {parentLabel ? `${parentLabel} – ${label}` : label}
+          </span>
+          <span className="details-category__code">({subCategory.code})</span>
         </span>
       );
     },
-    [hauptCategoryLookup]
+    [unterCategoryLookup]
   );
 
   // TODO: Replace client-side slicing once the activities page provides pagination.
@@ -677,12 +683,12 @@ export default function ItemDetail({ itemId }: Props) {
         item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
       ],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
-      ['Hauptkategorie A', resolveHauptkategorieLabel(item.Hauptkategorien_A)]
+      ['Unterkategorie A', resolveUnterkategorieLabel(item.Unterkategorien_A)]
     ];
 
-    const hauptkategorieB = resolveHauptkategorieLabel(item.Hauptkategorien_B);
-    if (hauptkategorieB !== null) {
-      rows.push(['Hauptkategorie B', hauptkategorieB]);
+    const unterkategorieB = resolveUnterkategorieLabel(item.Unterkategorien_B);
+    if (unterkategorieB !== null) {
+      rows.push(['Unterkategorie B', unterkategorieB]);
     }
 
     rows.push(
@@ -699,7 +705,7 @@ export default function ItemDetail({ itemId }: Props) {
     );
 
     return rows;
-  }, [events, item, resolveHauptkategorieLabel]);
+  }, [events, item, resolveUnterkategorieLabel]);
 
   const latestAgenticReviewNote = useMemo(() => {
     let latestNote: string | null = null;
