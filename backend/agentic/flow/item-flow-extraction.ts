@@ -36,6 +36,8 @@ export interface RunExtractionOptions {
   categorizerPrompt: string;
   searchInvoker: SearchInvoker;
   target: AgenticTarget;
+  reviewNotes?: string | null;
+  skipSearch?: boolean;
 }
 
 export interface ExtractionResult {
@@ -107,7 +109,9 @@ export async function runExtractionAttempts({
   supervisorPrompt,
   categorizerPrompt,
   searchInvoker,
-  target
+  target,
+  reviewNotes,
+  skipSearch
 }: RunExtractionOptions): Promise<ExtractionResult> {
   let lastRaw = '';
   let lastValidated: { success: true; data: AgenticOutput } | null = null;
@@ -133,6 +137,8 @@ export async function runExtractionAttempts({
     : 1;
   let searchRequestCycles = 0;
   const MAX_SEARCH_REQUEST_CYCLES = Math.max(3 * searchesPerRequestLimit, maxAttempts * searchesPerRequestLimit);
+  const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
+  const searchSkipped = Boolean(skipSearch);
   const advanceAttempt = () => {
     attempt += 1;
     searchRequestCycles = 0;
@@ -141,15 +147,59 @@ export async function runExtractionAttempts({
   while (attempt <= maxAttempts) {
     logger?.debug?.({ msg: 'extraction attempt', attempt, itemId });
 
-    const aggregatedSearchText = buildAggregatedSearchText();
-    const searchRequestHint = searchesPerRequestLimit === 1
+    let aggregatedSearchText = '';
+    try {
+      aggregatedSearchText = buildAggregatedSearchText();
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to build aggregated search text', attempt, itemId });
+      aggregatedSearchText = '';
+    }
+    if (!aggregatedSearchText.trim() && searchSkipped) {
+      aggregatedSearchText = 'No automated search results were generated because the reviewer requested manual focus.';
+      logger?.info?.({ msg: 'extraction prompt noting skipped search', attempt, itemId });
+    }
+
+    let searchRequestHint = searchesPerRequestLimit === 1
       ? 'If you still require specific information, request up to one additional search by including a "__searchQueries" array in your JSON output.'
       : `If you still require specific information, request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array in your JSON output.`;
-    let userContent = ['Aggregated search context:', aggregatedSearchText, searchRequestHint].join('\n\n');
+    if (searchSkipped) {
+      searchRequestHint = `${searchRequestHint} Only trigger a new search if the reviewer notes demand it.`;
+    }
+
+    let reviewerInstructionBlock = '';
+    try {
+      const instructionLines: string[] = [];
+      if (sanitizedReviewerNotes) {
+        instructionLines.push(sanitizedReviewerNotes);
+      }
+      if (searchSkipped) {
+        instructionLines.push('Search was skipped per reviewer request. Minimize new search requests.');
+      }
+      if (instructionLines.length > 0) {
+        reviewerInstructionBlock = ['Reviewer instructions:', ...instructionLines].join('\n');
+        logger?.info?.({
+          msg: 'appended reviewer instructions to extraction prompt',
+          attempt,
+          itemId,
+          hasReviewerNotes: Boolean(sanitizedReviewerNotes),
+          searchSkipped
+        });
+      }
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to assemble reviewer instructions', attempt, itemId });
+      reviewerInstructionBlock = '';
+    }
+
+    const initialSections = ['Aggregated search context:', aggregatedSearchText, searchRequestHint];
+    if (reviewerInstructionBlock) {
+      initialSections.unshift(reviewerInstructionBlock);
+    }
+
+    let userContent = initialSections.join('\n\n');
 
     if (attempt > 1) {
       const formattedSources = formatSourcesForRetry(aggregatedSources, logger);
-      userContent = [
+      const retrySections = [
         'Previous attempt failed or supervisor indicated issues.',
         `Supervisor feedback:\n${lastSupervision || 'None'}`,
         'Previous extraction raw output:',
@@ -161,7 +211,11 @@ export async function runExtractionAttempts({
         searchesPerRequestLimit === 1
           ? 'Reminder: request at most one additional search by including a "__searchQueries" array when vital information is missing.'
           : `Reminder: request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array when vital information is missing.`
-      ].join('\n\n');
+      ];
+      if (reviewerInstructionBlock) {
+        retrySections.splice(1, 0, reviewerInstructionBlock);
+      }
+      userContent = retrySections.join('\n\n');
     }
 
     if (trimmedTargetSnapshot) {
@@ -348,7 +402,9 @@ export async function runExtractionAttempts({
         logger,
         itemId,
         categorizerPrompt,
-        candidate: validated.data
+        candidate: validated.data,
+        reviewNotes: sanitizedReviewerNotes,
+        skipSearch: searchSkipped
       });
 
       if (categoryPatch && Object.keys(categoryPatch).length > 0) {

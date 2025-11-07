@@ -56,7 +56,18 @@ function normalizeLocalizedNumberInput(value: unknown): number | null | unknown 
   return normalizedValue;
 }
 
+// TODO(agent): Evaluate persisting reviewer instruction normalization after telemetry review cycles ship.
 const localizedNumber = z.preprocess((value) => normalizeLocalizedNumberInput(value), z.coerce.number().nullable());
+
+const optionalTrimmedNote = z
+  .preprocess((value) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : undefined;
+    }
+    return value ?? undefined;
+  }, z.string().min(1))
+  .optional();
 
 const AgentSourceSchema = z
   .object({
@@ -82,7 +93,8 @@ export const TargetSchema = z
     Hauptkategorien_A: localizedNumber.optional(),
     Unterkategorien_A: localizedNumber.optional(),
     Hauptkategorien_B: localizedNumber.optional(),
-    Unterkategorien_B: localizedNumber.optional()
+    Unterkategorien_B: localizedNumber.optional(),
+    reviewNotes: optionalTrimmedNote
   })
   .strict();
 

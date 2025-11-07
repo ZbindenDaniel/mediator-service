@@ -36,6 +36,8 @@ export interface RunItemFlowInput {
   target: unknown;
   id?: string | null;
   search?: string | null;
+  reviewNotes?: string | null;
+  skipSearch?: boolean;
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
 }
@@ -103,6 +105,10 @@ function buildCallbackPayload({
 export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDependencies): Promise<AgenticResultPayload> {
   const logger = deps.logger ?? console;
   let resolvedItemId: string | null = null;
+  const reviewerNotes = typeof input.reviewNotes === 'string' && input.reviewNotes.trim().length
+    ? input.reviewNotes.trim()
+    : null;
+  const skipSearch = Boolean(input.skipSearch);
 
   try {
     const context = prepareItemContext(input, logger);
@@ -172,7 +178,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
         needsReview: false,
         summary: shopwareShortcut.summary,
         reviewDecision: 'approved',
-        reviewNotes: shopwareShortcut.reviewNotes,
+        reviewNotes: shopwareShortcut.reviewNotes ?? reviewerNotes,
         reviewedBy: shopwareShortcut.reviewedBy,
         error: null,
         sources: shopwareShortcut.sources
@@ -199,7 +205,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       searchInvoker,
       logger,
       itemId,
-      target
+      target,
+      reviewNotes: reviewerNotes,
+      skipSearch
     });
 
     checkCancellation();
@@ -218,7 +226,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       supervisorPrompt: supervisor,
       categorizerPrompt: categorizer,
       searchInvoker,
-      target
+      target,
+      reviewNotes: reviewerNotes,
+      skipSearch
     });
 
     checkCancellation();
@@ -235,7 +245,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
         ? 'Item flow extraction completed successfully'
         : 'Supervisor requested manual review',
       reviewDecision: extractionResult.success ? 'approved' : 'changes_requested',
-      reviewNotes: extractionResult.supervisor,
+      reviewNotes: extractionResult.supervisor || reviewerNotes,
       reviewedBy: 'supervisor-agent',
       error: extractionResult.success ? null : 'Supervisor flagged issues',
       sources: extractionResult.sources
