@@ -451,7 +451,31 @@ const action = defineHttpAction({
       const einheitParam = p.get('Einheit');
       const einheit = einheitParam ? coalesceEinheit(einheitParam) : referenceDefaults?.Einheit ?? DEFAULT_EINHEIT;
 
-      const datumErfasst = datumErfasstRaw ? new Date(datumErfasstRaw) : undefined;
+      // TODO(timestamp-normalization): Audit creation defaults once dedicated created/updated columns exist.
+      let datumErfasst: Date | undefined;
+      if (datumErfasstRaw) {
+        try {
+          const parsedDatum = new Date(datumErfasstRaw);
+          if (Number.isNaN(parsedDatum.getTime())) {
+            console.warn('[import-item] Invalid Datum_erfasst provided; defaulting to creation timestamp', {
+              ItemUUID,
+              datumErfasstRaw
+            });
+            datumErfasst = new Date(nowDate.getTime());
+          } else {
+            datumErfasst = parsedDatum;
+          }
+        } catch (parseErr) {
+          console.error('[import-item] Failed to parse Datum_erfasst; falling back to creation timestamp', {
+            ItemUUID,
+            datumErfasstRaw,
+            error: parseErr
+          });
+          datumErfasst = new Date(nowDate.getTime());
+        }
+      } else {
+        datumErfasst = new Date(nowDate.getTime());
+      }
 
       const data = {
         BoxID,
