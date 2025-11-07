@@ -432,7 +432,7 @@ export async function runExtractionAttempts({
       itemId,
       supervisionPreview: sanitizeForLog(supervision)
     });
-    const pass = normalizedSupervision.toLowerCase().startsWith('pass');
+    const pass = normalizedSupervision.toLowerCase().includes('pass');
     
     lastValidated = enrichedValidated;
     if (pass) {
