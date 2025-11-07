@@ -4,6 +4,7 @@ import {
   ItemFormData,
   LockedFieldConfig,
   PhotoFieldKey,
+  PHOTO_INPUT_FIELDS,
   createPhotoChangeHandler,
   useItemFormState,
   usePhotoInputModes
@@ -30,7 +31,7 @@ export default function ItemForm({
   hidePhotoInputs,
   initialPhotos
 }: Props) {
-  const { form, update, mergeForm, generateMaterialNumber, changeStock, seedPhotos, seededPhotos } = useItemFormState({
+  const { form, update, mergeForm, generateMaterialNumber, changeStock, seedPhotos, seededPhotos, clearPhoto } = useItemFormState({
     initialItem: item,
     initialPhotos
   });
@@ -86,24 +87,51 @@ export default function ItemForm({
     [update]
   );
 
+  const handleRemovePhoto = useCallback(
+    (field: PhotoFieldKey) => {
+      try {
+        clearPhoto(field);
+      } catch (error) {
+        console.error('Failed to remove photo from preview list', { field, error });
+      }
+    },
+    [clearPhoto]
+  );
+
   const photoPreview = useMemo(() => {
-    const photos = [form.picture1, form.picture2, form.picture3].filter(Boolean);
-    if (photos.length === 0) {
+    const entries = PHOTO_INPUT_FIELDS.map((field, index) => {
+      const value = form[field];
+      if (!value) {
+        return null;
+      }
+      return { field, label: `Foto ${index + 1} übernommen` };
+    }).filter((entry): entry is { field: PhotoFieldKey; label: string } => entry !== null);
+
+    if (entries.length === 0) {
       return null;
     }
     return (
       <div className="row">
         <label>Vorhandene Fotos</label>
         <ul className="photo-preview-list">
-          {photos.map((_, index) => (
-            <li key={index}>
-              <span>Foto {index + 1} übernommen</span>
+          {entries.map(({ field, label }) => (
+            <li key={field}>
+              {/* TODO: Consider extracting the photo preview item into its own component once additional actions are introduced. */}
+              <span>{label}</span>
+              <button
+                type="button"
+                className="photo-preview-remove"
+                aria-label={`${label} entfernen`}
+                onClick={() => handleRemovePhoto(field)}
+              >
+                ×
+              </button>
             </li>
           ))}
         </ul>
       </div>
     );
-  }, [form.picture1, form.picture2, form.picture3]);
+  }, [form.picture1, form.picture2, form.picture3, handleRemovePhoto]);
 
   return (
     <div className='container item'>

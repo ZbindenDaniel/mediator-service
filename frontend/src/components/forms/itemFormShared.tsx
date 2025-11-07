@@ -286,11 +286,60 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
     [setForm]
   );
 
+  const clearPhoto = useCallback(
+    (field: PhotoFieldKey) => {
+      try {
+        let removedFromForm = false;
+        setForm((prev) => {
+          const currentValue = prev[field];
+          if (currentValue == null) {
+            return prev;
+          }
+          removedFromForm = true;
+          const next = { ...prev, [field]: null };
+          console.log('Cleared photo from item form state', { field });
+          return next;
+        });
+        setSeededPhotos((prev) => {
+          const index = PHOTO_FIELD_KEYS.indexOf(field);
+          if (index === -1) {
+            return prev;
+          }
+          const previousSeed = prev[index];
+          if (previousSeed == null) {
+            return prev;
+          }
+          const next = [...prev];
+          next[index] = null;
+          seededPhotosRef.current = next;
+          if (!removedFromForm) {
+            console.log('Removed seeded photo reference without local form value', { field });
+          }
+          return next;
+        });
+      } catch (error) {
+        console.error('Failed to clear photo from item form state', { field, error });
+      }
+    },
+    [setForm, setSeededPhotos]
+  );
+
   useEffect(() => {
     seedPhotos(initialPhotos);
   }, [initialPhotos, seedPhotos]);
 
-  return { form, update, mergeForm, resetForm, setForm, generateMaterialNumber, changeStock, seedPhotos, seededPhotos } as const;
+  return {
+    form,
+    update,
+    mergeForm,
+    resetForm,
+    setForm,
+    generateMaterialNumber,
+    changeStock,
+    seedPhotos,
+    seededPhotos,
+    clearPhoto
+  } as const;
 }
 
 interface ItemDetailsFieldsProps {
