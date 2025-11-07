@@ -157,52 +157,6 @@ function humanizeCategoryLabel(label: string): string {
   }
 }
 
-// TODO(timestamp-comparison): Move shared timestamp helpers into a centralized date utility module.
-function parseTimestampForComparison(value: unknown): number | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  try {
-    if (value instanceof Date) {
-      const time = value.getTime();
-      return Number.isNaN(time) ? null : time;
-    }
-
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return null;
-      }
-      const parsed = Date.parse(trimmed);
-      if (Number.isNaN(parsed)) {
-        console.warn('ItemDetail: Failed to parse timestamp string for comparison', { value: trimmed });
-        return null;
-      }
-      return parsed;
-    }
-  } catch (error) {
-    console.error('ItemDetail: Unexpected error while parsing timestamp for comparison', { value }, error);
-    return null;
-  }
-
-  return null;
-}
-
-function shouldDisplayUpdatedTimestamp(created: unknown, updated: unknown): boolean {
-  const updatedTime = parseTimestampForComparison(updated);
-  if (updatedTime === null) {
-    return false;
-  }
-
-  const createdTime = parseTimestampForComparison(created);
-  if (createdTime === null) {
-    return true;
-  }
-
-  return updatedTime > createdTime;
-}
-
 export function AgenticStatusCard({
   status,
   rows,
@@ -608,8 +562,30 @@ export default function ItemDetail({ itemId }: Props) {
     const creator = resolveActorName(events.length ? events[events.length - 1].Actor : null);
 
     const createdDisplay = item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null;
-    const shouldShowUpdatedAt = shouldDisplayUpdatedTimestamp(item.Datum_erfasst, item.UpdatedAt);
-    const updatedDisplay = shouldShowUpdatedAt && item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null;
+    let updatedDisplay: React.ReactNode = null;
+    if (item.UpdatedAt) {
+      let showUpdated = true;
+      if (item.Datum_erfasst) {
+        try {
+          const createdTime = Date.parse(String(item.Datum_erfasst));
+          const updatedTime = Date.parse(String(item.UpdatedAt));
+          if (!Number.isNaN(createdTime) && !Number.isNaN(updatedTime)) {
+            showUpdated = updatedTime !== createdTime;
+          } else if (item.Datum_erfasst === item.UpdatedAt) {
+            showUpdated = false;
+          }
+        } catch (error) {
+          console.warn('ItemDetail: Failed to compare timestamps', {
+            created: item.Datum_erfasst,
+            updated: item.UpdatedAt,
+            error
+          });
+        }
+      }
+      if (showUpdated) {
+        updatedDisplay = formatDateTime(item.UpdatedAt);
+      }
+    }
 
     return [
       ['Erstellt von', creator],
