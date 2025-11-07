@@ -140,6 +140,35 @@ button {
   display: flex;
   gap: 0.5rem;
 }
+.photo-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.photo-preview-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.photo-preview-remove {
+  background: transparent;
+  border: none;
+  color: #d32f2f;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.125rem 0.35rem;
+  border-radius: 50%;
+}
+
+.photo-preview-remove:focus,
+.photo-preview-remove:hover {
+  background: rgba(211, 47, 47, 0.1);
+}
 .row.between {
   justify-content: space-between;
   align-items: center;
