@@ -532,6 +532,32 @@ export default function ItemDetail({ itemId }: Props) {
 
     const creator = resolveActorName(events.length ? events[events.length - 1].Actor : null);
 
+    const createdDisplay = item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null;
+    let updatedDisplay: React.ReactNode = null;
+    if (item.UpdatedAt) {
+      let showUpdated = true;
+      if (item.Datum_erfasst) {
+        try {
+          const createdTime = Date.parse(String(item.Datum_erfasst));
+          const updatedTime = Date.parse(String(item.UpdatedAt));
+          if (!Number.isNaN(createdTime) && !Number.isNaN(updatedTime)) {
+            showUpdated = updatedTime !== createdTime;
+          } else if (item.Datum_erfasst === item.UpdatedAt) {
+            showUpdated = false;
+          }
+        } catch (error) {
+          console.warn('ItemDetail: Failed to compare timestamps', {
+            created: item.Datum_erfasst,
+            updated: item.UpdatedAt,
+            error
+          });
+        }
+      }
+      if (showUpdated) {
+        updatedDisplay = formatDateTime(item.UpdatedAt);
+      }
+    }
+
     const rows: [string, React.ReactNode][] = [
       ['Erstellt von', creator],
       ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],

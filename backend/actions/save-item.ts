@@ -352,6 +352,7 @@ const action = defineHttpAction({
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const existing = ctx.getItem.get(itemId) || {};
+      const isNewItem = !existing.ItemUUID;
       let grafik = existing.Grafikname || '';
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
@@ -380,7 +381,15 @@ const action = defineHttpAction({
         console.error('Failed to save item images', e);
       }
       const normalisedGrafikname = normaliseMediaReference(itemId, grafik);
-      const { picture1, picture2, picture3, BoxID: incomingBoxId, Einheit: incomingEinheit, ...rest } = data;
+      const {
+        picture1,
+        picture2,
+        picture3,
+        BoxID: incomingBoxId,
+        Einheit: incomingEinheit,
+        Datum_erfasst: incomingDatumErfasst,
+        ...rest
+      } = data;
       const selectedBoxId = incomingBoxId !== undefined ? incomingBoxId : existing.BoxID;
       let normalizedBoxId: string | null = null;
       if (selectedBoxId !== undefined && selectedBoxId !== null) {
@@ -399,13 +408,25 @@ const action = defineHttpAction({
         incomingEinheit !== undefined
           ? resolveItemEinheitValue(incomingEinheit, 'updatePayload')
           : resolveItemEinheitValue(existing.Einheit, 'existingRecord');
+      const now = new Date();
+      let datumErfasst: Date | string | null | undefined = existing.Datum_erfasst ?? incomingDatumErfasst;
+      if (datumErfasst === undefined || datumErfasst === null || datumErfasst === '') {
+        if (isNewItem) {
+          datumErfasst = now;
+          console.info('[save-item] Defaulted Datum_erfasst for new item', { itemId });
+        } else {
+          datumErfasst = existing.Datum_erfasst ?? null;
+        }
+      }
+      // TODO(item-dates): Allow UpdatedAt to remain null for new items when database defaults permit it.
       const item: Item = {
         ...existing,
         ...rest,
         Grafikname: normalisedGrafikname ?? undefined,
         ItemUUID: itemId,
         BoxID: normalizedBoxId,
-        UpdatedAt: new Date(),
+        Datum_erfasst: datumErfasst ?? undefined,
+        UpdatedAt: isNewItem ? now : new Date(),
         Einheit: resolvedEinheit
       };
       const txn = ctx.db.transaction((it: Item, a: string) => {
