@@ -1,9 +1,13 @@
 // TODO(agent): Monitor the impact of enriched item metadata on search heuristics and adjust weighting when planner feedback is available.
 // TODO(agent): Revisit the hard cap on generated search plans once telemetry confirms the typical query volume per item.
+import { z } from 'zod';
 import type { SearchResult } from '../tools/tavily-client';
 import { RateLimitError } from '../tools/tavily-client';
 import type { SearchSource } from '../utils/source-formatter';
+import { stringifyLangChainContent } from '../utils/langchain';
+import { parseJsonWithSanitizer } from '../utils/json';
 import { FlowError } from './errors';
+import type { ChatModel } from './item-flow-extraction';
 import type { AgenticTarget } from './item-flow-schemas';
 
 export interface SearchInvokerMetadata {
@@ -29,6 +33,8 @@ export interface CollectSearchContextOptions {
   target?: AgenticTarget | Record<string, unknown> | string | null;
   reviewNotes?: string | null;
   skipSearch?: boolean;
+  llm: ChatModel;
+  plannerPrompt: string;
 }
 
 export interface SearchContext {
@@ -50,9 +56,230 @@ type SearchPlan = {
 };
 
 const MAX_SEARCH_PLANS = 3;
+const TRACKED_SCHEMA_FIELDS = [
+  'Artikelbeschreibung',
+  'Marktpreis',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg',
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B'
+] as const;
+
+type TrackedSchemaField = (typeof TRACKED_SCHEMA_FIELDS)[number];
+
+interface PlannerDecision {
+  shouldSearch: boolean;
+  plans: SearchPlan[];
+}
+
+interface PlannerInvocationOptions {
+  llm: ChatModel;
+  plannerPrompt: string;
+  itemId: string;
+  searchTerm: string;
+  reviewerNotes: string;
+  target: AgenticTarget | Record<string, unknown> | null;
+  missingFields: string[];
+  logger?: Partial<Pick<Console, LoggerMethods>>;
+}
+
+const PlannerPlanSchema = z
+  .object({
+    query: z.string().min(1, 'Query required'),
+    metadata: z.record(z.any()).optional()
+  })
+  .passthrough();
+
+const PlannerResponseSchema = z
+  .object({
+    shouldSearch: z.boolean().optional().default(true),
+    plans: z.array(PlannerPlanSchema).optional().default([])
+  })
+  .passthrough();
 
 function truncateValue(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+function dedupeSearchPlans(plans: SearchPlan[]): SearchPlan[] {
+  const uniqueQueries = new Map<string, SearchPlan>();
+  for (const plan of plans) {
+    if (!uniqueQueries.has(plan.query)) {
+      uniqueQueries.set(plan.query, plan);
+    }
+  }
+  return Array.from(uniqueQueries.values());
+}
+
+function identifyMissingSchemaFields(target: AgenticTarget | Record<string, unknown> | null): string[] {
+  if (!target) {
+    return [...TRACKED_SCHEMA_FIELDS];
+  }
+  const missing: TrackedSchemaField[] = [];
+  for (const field of TRACKED_SCHEMA_FIELDS) {
+    const value = (target as Record<string, unknown>)[field];
+    if (value == null) {
+      missing.push(field);
+      continue;
+    }
+    if (typeof value === 'string' && !value.trim()) {
+      missing.push(field);
+    }
+  }
+  return missing;
+}
+
+function sanitizePlannerMetadata(
+  metadata: unknown,
+  fallbackMissingFields: string[]
+): SearchInvokerMetadata {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return { context: 'planner' };
+  }
+  const normalized: SearchInvokerMetadata = {};
+  for (const [key, value] of Object.entries(metadata as Record<string, unknown>)) {
+    if (value !== undefined) {
+      normalized[key] = value;
+    }
+  }
+  if (typeof normalized.context !== 'string' || !normalized.context.trim()) {
+    normalized.context = 'planner';
+  }
+  const missingFieldsCandidate = normalized.missingFields;
+  if (Array.isArray(missingFieldsCandidate)) {
+    normalized.missingFields = missingFieldsCandidate.filter(
+      (field): field is string => typeof field === 'string' && field.trim().length > 0
+    );
+    if ((normalized.missingFields as unknown[]).length === 0) {
+      normalized.missingFields = fallbackMissingFields;
+    }
+  } else if (fallbackMissingFields.length > 0) {
+    normalized.missingFields = fallbackMissingFields;
+  }
+  return normalized;
+}
+
+// TODO(agent): Observe planner outputs to refine payload structure and metadata sanitization.
+async function generatePlannerDecision({
+  llm,
+  plannerPrompt,
+  itemId,
+  searchTerm,
+  reviewerNotes,
+  target,
+  missingFields,
+  logger
+}: PlannerInvocationOptions): Promise<PlannerDecision | null> {
+  if (!plannerPrompt || !plannerPrompt.trim()) {
+    return null;
+  }
+
+  const payload: Record<string, unknown> = {
+    searchTerm,
+    missingFields,
+    reviewerNotes: reviewerNotes || null
+  };
+
+  if (target) {
+    payload.target = target;
+    const locked = Array.isArray((target as Record<string, unknown>)?.['__locked'])
+      ? ((target as Record<string, unknown>)['__locked'] as unknown[]).filter(
+          (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0
+        )
+      : [];
+    if (locked.length > 0) {
+      payload.lockedFields = locked;
+    }
+  }
+
+  let serializedPayload = '';
+  try {
+    serializedPayload = JSON.stringify(payload, null, 2);
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to serialize planner payload', itemId });
+    try {
+      serializedPayload = JSON.stringify(
+        {
+          searchTerm,
+          missingFields,
+          reviewerNotes: reviewerNotes || null
+        },
+        null,
+        2
+      );
+    } catch (fallbackErr) {
+      logger?.error?.({ err: fallbackErr, msg: 'planner payload fallback serialization failed', itemId });
+      return null;
+    }
+  }
+
+  let plannerResponse;
+  try {
+    plannerResponse = await llm.invoke([
+      { role: 'system', content: plannerPrompt },
+      { role: 'user', content: serializedPayload }
+    ]);
+  } catch (err) {
+    logger?.error?.({ err, msg: 'search planner invocation failed', itemId });
+    return null;
+  }
+
+  const raw = stringifyLangChainContent(plannerResponse?.content, {
+    context: 'itemFlow.searchPlanner',
+    logger
+  });
+
+  let parsed: unknown;
+  try {
+    parsed = parseJsonWithSanitizer(raw, {
+      loggerInstance: logger,
+      context: { itemId, stage: 'search-planner' }
+    });
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'search planner produced invalid JSON', itemId });
+    return null;
+  }
+
+  const validated = PlannerResponseSchema.safeParse(parsed);
+  if (!validated.success) {
+    logger?.warn?.({ msg: 'search planner schema mismatch', itemId, issues: validated.error.issues });
+    return null;
+  }
+
+  const normalizedPlans = validated.data.plans
+    .map((plan) => {
+      const trimmedQuery = typeof plan.query === 'string' ? plan.query.trim() : '';
+      if (!trimmedQuery) {
+        return null;
+      }
+      const metadata = sanitizePlannerMetadata(plan.metadata, missingFields);
+      metadata.plannerSource = 'llm';
+      return {
+        query: trimmedQuery,
+        metadata
+      } satisfies SearchPlan;
+    })
+    .filter((entry): entry is SearchPlan => Boolean(entry));
+
+  logger?.info?.({
+    msg: 'search planner evaluated',
+    itemId,
+    shouldSearch: validated.data.shouldSearch,
+    planCount: normalizedPlans.length,
+    missingFields: missingFields.slice(0, 10)
+  });
+
+  return {
+    shouldSearch: validated.data.shouldSearch,
+    plans: normalizedPlans
+  };
 }
 
 function extractSearchPlans(
@@ -140,14 +367,7 @@ function extractSearchPlans(
     });
   }
 
-  const uniqueQueries = new Map<string, SearchPlan>();
-  for (const plan of plans) {
-    if (!uniqueQueries.has(plan.query)) {
-      uniqueQueries.set(plan.query, plan);
-    }
-  }
-
-  return Array.from(uniqueQueries.values());
+  return dedupeSearchPlans(plans);
 }
 
 function resolveTarget(
@@ -177,12 +397,23 @@ export async function collectSearchContexts({
   itemId,
   target,
   reviewNotes,
-  skipSearch
+  skipSearch,
+  llm,
+  plannerPrompt
 }: CollectSearchContextOptions): Promise<CollectSearchContextsResult> {
   const resolvedTarget = resolveTarget(target ?? null, logger, itemId);
   const searchContexts: SearchContext[] = [];
   const seenSourceKeys = new Set<string>();
   const aggregatedSources: SearchSource[] = [];
+  const missingSchemaFields = identifyMissingSchemaFields(resolvedTarget);
+
+  if (missingSchemaFields.length > 0) {
+    logger?.debug?.({
+      msg: 'search planner missing field snapshot',
+      itemId,
+      missingFields: missingSchemaFields.slice(0, 10)
+    });
+  }
 
   const recordSources = (newSources: SearchSource[] = []): void => {
     try {
@@ -227,7 +458,8 @@ export async function collectSearchContexts({
       logger?.info?.({
         msg: 'default search skipped per reviewer notes',
         itemId,
-        hasReviewerNotes: Boolean(sanitizedReviewerNotes)
+        hasReviewerNotes: Boolean(sanitizedReviewerNotes),
+        missingFields: missingSchemaFields.slice(0, 10)
       });
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to log skip-search decision', itemId });
@@ -241,7 +473,58 @@ export async function collectSearchContexts({
     };
   }
 
-  const searchPlans = extractSearchPlans(searchTerm, resolvedTarget, logger, itemId);
+  let plannerDecision: PlannerDecision | null = null;
+  try {
+    plannerDecision = await generatePlannerDecision({
+      llm,
+      plannerPrompt,
+      itemId,
+      searchTerm,
+      reviewerNotes: sanitizedReviewerNotes,
+      target: resolvedTarget,
+      missingFields: missingSchemaFields,
+      logger
+    });
+  } catch (err) {
+    logger?.error?.({ err, msg: 'search planner unexpected failure', itemId });
+    plannerDecision = null;
+  }
+
+  if (plannerDecision && !plannerDecision.shouldSearch) {
+    logger?.info?.({
+      msg: 'search planner requested skip',
+      itemId,
+      missingFields: missingSchemaFields.slice(0, 10),
+      hasReviewerNotes: Boolean(sanitizedReviewerNotes)
+    });
+    return {
+      searchContexts,
+      aggregatedSources,
+      recordSources,
+      buildAggregatedSearchText
+    };
+  }
+
+  let searchPlans = plannerDecision?.plans ?? [];
+  if (searchPlans.length === 0) {
+    searchPlans = extractSearchPlans(searchTerm, resolvedTarget, logger, itemId);
+  } else {
+    logger?.info?.({
+      msg: 'search planner supplied plans',
+      itemId,
+      planCount: searchPlans.length
+    });
+  }
+
+  const baseQuery = `Gerätedaten ${searchTerm}`.trim();
+  if (searchPlans.length > 0 && !searchPlans.some((plan) => plan.query === baseQuery)) {
+    searchPlans = [
+      { query: baseQuery, metadata: { context: 'primary' } },
+      ...searchPlans
+    ];
+  }
+
+  searchPlans = dedupeSearchPlans(searchPlans);
   const limitedPlans = searchPlans.slice(0, MAX_SEARCH_PLANS);
 
   if (searchPlans.length > MAX_SEARCH_PLANS) {
