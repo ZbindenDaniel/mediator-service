@@ -498,7 +498,7 @@ export default function ItemDetail({ itemId }: Props) {
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
-  const { haupt: hauptCategoryLookup, unter: unterCategoryLookup } = categoryLookups;
+  const { haupt: hauptCategoryLookup } = categoryLookups;
 
   const resolveHauptkategorieLabel = useCallback(
     (code?: number | null): React.ReactNode => {
@@ -521,39 +521,10 @@ export default function ItemDetail({ itemId }: Props) {
     [hauptCategoryLookup]
   );
 
-  const resolveUnterkategorieLabel = useCallback(
-    (code?: number | null): React.ReactNode => {
-      if (typeof code !== 'number' || Number.isNaN(code)) {
-        return null;
-      }
-      const subCategory = unterCategoryLookup.get(code);
-      if (!subCategory) {
-        console.warn('Missing Unterkategorie mapping for item detail view', { code });
-        return `Unbekannte Kategorie (${code})`;
-      }
-      const parentLabel = humanizeCategoryLabel(subCategory.parentLabel);
-      const subLabel = humanizeCategoryLabel(subCategory.label);
-      return (
-        <span
-          className="details-category"
-          aria-label={`${parentLabel} → ${subLabel} (${subCategory.code})`}
-        >
-          <span className="details-category__path">
-            <span className="details-category__name">{parentLabel}</span>
-            <span className="details-category__separator" aria-hidden="true">
-              →
-            </span>
-            <span className="details-category__name">{subLabel}</span>
-          </span>
-          <span className="details-category__code">({subCategory.code})</span>
-        </span>
-      );
-    },
-    [unterCategoryLookup]
-  );
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
+  // TODO: Revisit optional category rendering once backend schema clarifies optional Haupt-/Unterkategorien fields.
   const detailRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
       return [];
@@ -561,7 +532,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const creator = resolveActorName(events.length ? events[events.length - 1].Actor : null);
 
-    return [
+    const rows: [string, React.ReactNode][] = [
       ['Erstellt von', creator],
       ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],
       ['Artikelnummer', item.Artikel_Nummer ?? null],
@@ -571,10 +542,15 @@ export default function ItemDetail({ itemId }: Props) {
         item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
       ],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
-      ['Hauptkategorie A', resolveHauptkategorieLabel(item.Hauptkategorien_A)],
-      ['Unterkategorie A', resolveUnterkategorieLabel(item.Unterkategorien_A)],
-      ['Hauptkategorie B', resolveHauptkategorieLabel(item.Hauptkategorien_B)],
-      ['Unterkategorie B', resolveUnterkategorieLabel(item.Unterkategorien_B)],
+      ['Hauptkategorie A', resolveHauptkategorieLabel(item.Hauptkategorien_A)]
+    ];
+
+    const hauptkategorieB = resolveHauptkategorieLabel(item.Hauptkategorien_B);
+    if (hauptkategorieB !== null) {
+      rows.push(['Hauptkategorie B', hauptkategorieB]);
+    }
+
+    rows.push(
       ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
       ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
       ['Verkaufspreis', item.Verkaufspreis ?? null],
@@ -585,8 +561,10 @@ export default function ItemDetail({ itemId }: Props) {
       ['Höhe (mm)', item.Höhe_mm ?? null],
       ['Gewicht (kg)', item.Gewicht_kg ?? null],
       ['Einheit', resolveDetailEinheit(item.Einheit)]
-    ];
-  }, [events, item, resolveHauptkategorieLabel, resolveUnterkategorieLabel]);
+    );
+
+    return rows;
+  }, [events, item, resolveHauptkategorieLabel]);
 
   const latestAgenticReviewNote = useMemo(() => {
     let latestNote: string | null = null;
