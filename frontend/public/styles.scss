@@ -1337,7 +1337,7 @@ button:focus {
     padding: 8px 6px;
     font-size: 1rem;
     word-break: break-word;
-    min-width: 10%;
+    min-width: 40vw;
 }
 
 .details .responsive-td.is-placeholder {
@@ -1372,7 +1372,7 @@ button:focus {
     color: var(--muted);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 800px) {
     .details {
         width: 100%;
         display: block;
