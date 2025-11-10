@@ -158,6 +158,7 @@ function humanizeCategoryLabel(label: string): string {
   }
 }
 
+// TODO(langtext-json): When Langtext becomes structured JSON, parse the payload with guarded logging and reuse these helpers as the fallback renderer for plain text segments.
 function renderLangtextInlineSegments(
   text: string,
   counters: { bold: number },
@@ -192,6 +193,7 @@ function renderLangtextInlineSegments(
   return nodes;
 }
 
+// TODO(langtext-json): Add a lightweight JSON-aware branch that surfaces key/value content while keeping this markdown path as the escape hatch on parse failures.
 function buildLangtextMarkdown(raw: string): React.ReactNode | null {
   const trimmed = raw.trim();
   if (!trimmed) {

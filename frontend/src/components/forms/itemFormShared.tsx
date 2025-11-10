@@ -62,6 +62,7 @@ function resolveFormEinheit(value: unknown, context: string): ItemEinheit {
   return ITEM_FORM_DEFAULT_EINHEIT;
 }
 
+// TODO(langtext-json): Introduce a minimal JSON-backed key/value editor here that parses Langtext safely, logs failures, and falls back to legacy string handling without expanding the surrounding form surface.
 const referenceFieldKeys: (keyof ItemRef)[] = [
   'Artikel_Nummer',
   'Grafikname',
