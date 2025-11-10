@@ -83,6 +83,7 @@ export const TargetSchema = z
     Artikelbeschreibung: z.string(),
     Marktpreis: localizedNumber,
     Kurzbeschreibung: z.string(),
+    // TODO(langtext-json): Accept parsed Langtext metadata objects with try/catch-protected logging during validation before falling back to raw strings.
     Langtext: z.string(),
     Hersteller: z.string(),
     Länge_mm: localizedNumber,

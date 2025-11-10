@@ -428,6 +428,7 @@ export async function ingestCsvFile(
       const grafikname = final['Grafikname(n)'] || '';
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
+      // TODO(langtext-json): Parse structured Langtext JSON with guarded logging and a try/catch fallback before defaulting to the plain string value.
       const langtext = final['Langtext'] || '';
       const hersteller = final['Hersteller'] || '';
       const hkA = parseIntegerField(

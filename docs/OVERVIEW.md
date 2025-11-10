@@ -47,6 +47,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
   HTTP proxy fallback.
 - Continue validating the migrated `backend/agentic/` modules (flows, tools, prompts) with focused tests and linting once the
   invoker is fully integrated.
+- Align the upcoming Langtext-as-JSON metadata flow by auditing `models/item.ts` and `backend/agentic/flow/item-flow-schemas.ts` so importer, schema, and UI workstreams stay synchronized while structured data handling ships.
 
 ## Risks & Dependencies
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.

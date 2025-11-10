@@ -31,6 +31,16 @@ When implementing a plan:
 
 These planning responses should be explicit enough that another developer can implement them without additional clarification.
 
+## Planning Log
+
+- **Langtext metadata normalization (Langtext-as-JSON decision)** – Converge on representing the `Langtext` field as structured JSON metadata across importer, agentic flows, and shared models so downstream tooling can parse localisation-ready key/value pairs. Before implementation we must double-check `models/item.ts` alongside `backend/agentic/flow/item-flow-schemas.ts` to confirm the shared contracts stay aligned and document any schema deltas for reviewers.
+
+### Parallel Workstreams
+
+- **UI editor** – Introduce a guarded JSON-backed editor for `Langtext` in `frontend/src/components/forms/itemFormShared.tsx` and the related render helpers in `frontend/src/components/ItemDetail.tsx`, ensuring logging captures parse failures and sensible fallbacks keep existing displays stable.
+- **Importer fallback** – Extend `backend/importer.ts` to parse Langtext JSON with try/catch-protected logging, preserving the current string fallback until all downstream consumers accept structured content.
+- **Agentic schema update** – Teach `backend/agentic/flow/item-flow-schemas.ts` to validate structured Langtext payloads, coordinating changes with `models/item.ts` so the runtime schema and shared types remain in sync.
+
 ## Search Planner Stage Overview
 
 - `runItemFlow` invokes the planner prior to `collectSearchContexts`, combining reviewer-provided `skipSearch` flags with the planner's `shouldSearch` directive to determine whether Tavily requests should execute for the item.
