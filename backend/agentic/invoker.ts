@@ -370,7 +370,32 @@ export class AgenticModelInvoker {
       return target;
     }
 
-    const merged: Record<string, unknown> = { ...target, ...overrides };
+    // TODO(agent): Monitor Langtext override sanitation to ensure upstream payloads converge on strings.
+    const sanitizedOverrides: Record<string, unknown> = { ...overrides };
+    if (Object.prototype.hasOwnProperty.call(overrides, 'Langtext')) {
+      const artikelNummerOverride =
+        typeof overrides.Artikel_Nummer === 'string' ? overrides.Artikel_Nummer : null;
+      const normalizedLangtext = ensureLangtextString(overrides.Langtext, {
+        logger: this.logger,
+        context: 'agentic:target-override',
+        artikelNummer: artikelNummerOverride,
+        itemUUID: typeof target.itemUUid === 'string' ? target.itemUUid : null
+      });
+
+      if (normalizedLangtext !== null) {
+        sanitizedOverrides.Langtext = normalizedLangtext;
+      } else {
+        this.logger.warn?.({
+          msg: 'discarded langtext override due to failed serialization',
+          requestId: sanitizedRequestId,
+          artikelNummer: artikelNummerOverride ?? undefined,
+          itemUUID: typeof target.itemUUid === 'string' ? target.itemUUid : undefined
+        });
+        delete sanitizedOverrides.Langtext;
+      }
+    }
+
+    const merged: Record<string, unknown> = { ...target, ...sanitizedOverrides };
     merged.itemUUid = target.itemUUid;
 
     if (typeof merged.Artikelbeschreibung === 'string') {
@@ -383,7 +408,7 @@ export class AgenticModelInvoker {
     this.logger.info?.({
       msg: 'merged request payload into agentic target',
       requestId: sanitizedRequestId,
-      mergedKeys: Object.keys(overrides)
+      mergedKeys: Object.keys(sanitizedOverrides)
     });
 
     return merged;
