@@ -111,7 +111,7 @@ describe('AgenticModelInvoker request payload merging', () => {
         Artikelbeschreibung: '',
         Verkaufspreis: 125,
         Kurzbeschreibung: 'Base Short',
-        Langtext: 'Base Long',
+        Langtext: { short: 'Base Long', extra: 5 },
         Hersteller: 'Base Maker',
         Länge_mm: null,
         Breite_mm: null,
@@ -176,6 +176,8 @@ describe('AgenticModelInvoker request payload merging', () => {
       expect(payload.target.Kurzbeschreibung).toBe('User Short');
       expect(payload.target.Artikel_Nummer).toBe('LOCK-42');
       expect(payload.target.__locked).toEqual(['Artikel_Nummer']);
+      // TODO(agent): Extend Langtext serialization coverage when additional item fields require sanitization.
+      expect(payload.target.Langtext).toBe('{"short":"Base Long","extra":"5"}');
     });
   });
 });
