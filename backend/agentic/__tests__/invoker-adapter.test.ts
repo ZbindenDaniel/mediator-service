@@ -180,4 +180,90 @@ describe('AgenticModelInvoker request payload merging', () => {
       expect(payload.target.Langtext).toBe('{"short":"Base Long","extra":"5"}');
     });
   });
+
+  it('serializes Langtext overrides from saved request payloads', async () => {
+    const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
+    const requestPayload = {
+      target: {
+        Artikel_Nummer: 'OVERRIDE-99',
+        Langtext: { short: 'User Long', details: 7, nullish: null }
+      }
+    };
+    const getAgenticRequestLog = jest.fn(() => ({ PayloadJson: JSON.stringify(requestPayload) }));
+    const getItem = {
+      get: jest.fn(() => ({
+        ItemUUID: 'item-merge-2',
+        Artikelbeschreibung: 'Base Description',
+        Verkaufspreis: 220,
+        Kurzbeschreibung: 'Base Short',
+        Langtext: { base: 'long' },
+        Hersteller: 'Base Maker',
+        Länge_mm: null,
+        Breite_mm: null,
+        Höhe_mm: null,
+        Gewicht_kg: null
+      }))
+    };
+
+    jest.doMock('../tools/tavily-client', () => ({
+      TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
+    }));
+    jest.doMock('../config', () => ({
+      modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+    }));
+    jest.doMock('../flow/item-flow', () => ({
+      runItemFlow
+    }));
+    jest.doMock('../../db', () => ({
+      db: { transaction: (fn: unknown) => fn } as unknown,
+      getItem,
+      getAgenticRun: jest.fn(),
+      updateAgenticRunStatus: { run: jest.fn() },
+      upsertAgenticRun: { run: jest.fn() },
+      persistItemWithinTransaction: jest.fn(),
+      logEvent: jest.fn(),
+      getAgenticRequestLog,
+      saveAgenticRequestPayload: jest.fn(),
+      markAgenticRequestNotificationSuccess: jest.fn(),
+      markAgenticRequestNotificationFailure: jest.fn()
+    }));
+    jest.doMock(
+      '@langchain/ollama',
+      () => ({
+        ChatOllama: class {
+          public async invoke() {
+            return { content: null };
+          }
+        }
+      }),
+      { virtual: true }
+    );
+
+    await jest.isolateModulesAsync(async () => {
+      const { AgenticModelInvoker } = await import('../invoker');
+      const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+      const invoker = new AgenticModelInvoker({ logger });
+
+      const result = await invoker.invoke({
+        itemId: 'item-merge-2',
+        searchQuery: 'Langtext Override Query',
+        context: 'unit-test',
+        review: null,
+        requestId: ' request-langtext '
+      });
+
+      expect(result).toEqual({ ok: true, message: 'ok' });
+      expect(getAgenticRequestLog).toHaveBeenCalledWith('request-langtext');
+      expect(runItemFlow).toHaveBeenCalledTimes(1);
+      const [payload] = runItemFlow.mock.calls[0];
+      // TODO(agent): Broaden override sanitization checks as new Langtext payload shapes emerge.
+      expect(typeof payload.target.Langtext).toBe('string');
+      expect(JSON.parse(payload.target.Langtext as string)).toEqual({
+        short: 'User Long',
+        details: '7'
+      });
+      expect(payload.target.Artikel_Nummer).toBe('OVERRIDE-99');
+    });
+  });
 });
