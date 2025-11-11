@@ -1482,8 +1482,12 @@ button:focus {
 .details .details-category__separator {
     color: var(--muted);
 }
+.agentic-status-card__heading{
+    display: flex;
+    justify-content: center;
+}
 
-.gentic-status-card__toggle {
+.agentic-status-card__toggle {
     width: 100%;
     justify-content: space-evenly;
     align-content: center;

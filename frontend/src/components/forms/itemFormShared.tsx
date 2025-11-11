@@ -1028,10 +1028,6 @@ export function ItemDetailsFields({
         </label>
         {parsedLangtext.mode === 'json' ? (
           <div className="langtext-editor" role="group" aria-label="Langtext Schlüssel-Wert-Paare">
-            <p className="langtext-editor__hint">
-              Vergeben Sie individuelle Schlüssel (maximal 25 Zeichen) und ergänzen Sie passende Werte, um strukturierte
-              Zusatzinformationen zu speichern.
-            </p>
             <div className="langtext-editor__draft">
               <label className="visually-hidden" htmlFor={langtextDraftInputId}>
                 Neuer Langtext-Schlüssel
