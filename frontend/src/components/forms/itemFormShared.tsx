@@ -6,6 +6,7 @@ import { itemCategories } from '../../data/itemCategories';
 import { buildItemCategoryLookups } from '../../lib/categoryLookup';
 import type { ConfirmDialogOptions } from '../dialog';
 import { dialogService } from '../dialog';
+import { parseLangtext, stringifyLangtextEntries } from '../../lib/langtext';
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -417,6 +418,40 @@ export function ItemDetailsFields({
 
   const placementHidden = isFieldLocked(lockedFields, 'BoxID', 'hidden');
   const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
+
+  const parsedLangtext = useMemo(() => parseLangtext(form.Langtext ?? ''), [form.Langtext]);
+
+  const handleLangtextJsonChange = useCallback(
+    (key: string, value: string) => {
+      if (parsedLangtext.kind !== 'json') {
+        console.warn('Langtext JSON editor active without JSON payload, falling back to text update', {
+          key
+        });
+        onUpdate('Langtext', value as ItemFormData['Langtext']);
+        return;
+      }
+
+      const nextEntries = parsedLangtext.entries.map((entry) =>
+        entry.key === key ? { ...entry, value } : entry
+      );
+
+      if (!nextEntries.some((entry) => entry.key === key)) {
+        console.warn('Attempted to update unknown Langtext key', { key });
+        return;
+      }
+
+      const nextPayload = stringifyLangtextEntries(nextEntries);
+      onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
+    },
+    [onUpdate, parsedLangtext]
+  );
+
+  const handleLangtextTextChange = useCallback(
+    (value: string) => {
+      onUpdate('Langtext', value as ItemFormData['Langtext']);
+    },
+    [onUpdate]
+  );
   const placementInputValue = typeof form.BoxID === 'string' ? form.BoxID : '';
   const hasPlacementValue = placementInputValue.trim() !== '';
   const shouldDisplayPlacement = !placementHidden && (!isNew || hasPlacementValue);
@@ -754,11 +789,42 @@ export function ItemDetailsFields({
         <label>
           Langtext
         </label>
-        <textarea
-          value={form.Langtext || ''}
-          onChange={(e) => onUpdate('Langtext', e.target.value)}
-          rows={3}
-        />
+        {parsedLangtext.kind === 'json' ? (
+          <div className="langtext-editor" role="group" aria-label="Langtext Schlüssel-Wert-Paare">
+            <p className="langtext-editor__hint">
+              Die verfügbaren Schlüssel werden zentral verwaltet. Bitte passe hier nur die Werte an.
+            </p>
+            {parsedLangtext.entries.length === 0 ? (
+              <p className="langtext-editor__empty">Es sind derzeit keine Langtext-Schlüssel hinterlegt.</p>
+            ) : (
+              parsedLangtext.entries.map((entry) => (
+                <div className="langtext-editor__row" key={entry.key}>
+                  <span className="langtext-editor__key" title={entry.key}>
+                    {entry.key}
+                  </span>
+                  <textarea
+                    className="langtext-editor__value"
+                    value={entry.value}
+                    onChange={(event) => handleLangtextJsonChange(entry.key, event.target.value)}
+                    rows={Math.max(2, entry.value.split('\n').length)}
+                  />
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="langtext-editor langtext-editor--legacy">
+            <textarea
+              value={parsedLangtext.rawText}
+              onChange={(event) => handleLangtextTextChange(event.target.value)}
+              rows={3}
+            />
+            <p className="langtext-editor__hint">
+              Dieses Feld nutzt noch das bisherige Textformat. Sobald strukturierte Daten vorliegen, wird die Liste der
+              Schlüssel automatisch angezeigt.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="row">
