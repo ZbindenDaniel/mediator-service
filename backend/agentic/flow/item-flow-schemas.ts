@@ -1,4 +1,7 @@
+// TODO(agent): Evaluate structured Langtext schema enforcement after helper telemetry stabilizes.
 import { z } from 'zod';
+import type { LangtextPayload } from '../../../models';
+import { parseLangtext } from '../../lib/langtext';
 
 function normalizeLocalizedNumberInput(value: unknown): number | null | unknown {
   if (value == null || value === '') {
@@ -69,6 +72,26 @@ const optionalTrimmedNote = z
   }, z.string().min(1))
   .optional();
 
+const LangtextFieldSchema = z
+  .any()
+  .transform((value, ctx) => {
+    const parsed = parseLangtext(value, {
+      logger: console,
+      context: 'agentic:target-schema'
+    });
+    if (parsed === null) {
+      if (value === null || value === undefined || value === '') {
+        return '' as string | LangtextPayload;
+      }
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Langtext payload could not be parsed'
+      });
+      return '' as string | LangtextPayload;
+    }
+    return parsed as string | LangtextPayload;
+  }) as z.ZodType<string | LangtextPayload>;
+
 const AgentSourceSchema = z
   .object({
     title: z.string().min(1).optional(),
@@ -83,8 +106,7 @@ export const TargetSchema = z
     Artikelbeschreibung: z.string(),
     Marktpreis: localizedNumber,
     Kurzbeschreibung: z.string(),
-    // TODO(langtext-json): Accept parsed Langtext metadata objects with try/catch-protected logging during validation before falling back to raw strings.
-    Langtext: z.string(),
+    Langtext: LangtextFieldSchema,
     Hersteller: z.string(),
     Länge_mm: localizedNumber,
     Breite_mm: localizedNumber,

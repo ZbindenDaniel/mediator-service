@@ -6,9 +6,11 @@ import https from 'https';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
 import { MEDIA_DIR } from './lib/media';
+import { ensureLangtextString } from './lib/langtext';
 
 export { MEDIA_DIR } from './lib/media';
 import { resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
+// TODO(agent): Audit Langtext response serialization once structured payload adoption completes.
 import {
   HTTP_PORT,
   INBOX_DIR,
@@ -229,8 +231,14 @@ async function runPrintWorker(): Promise<void> {
       if (Number.isFinite(parsed)) parsedQuantity = parsed;
     }
 
+    const langtextString = ensureLangtextString(item.Langtext ?? null, {
+      logger: console,
+      context: 'server:label-description',
+      artikelNummer: item.Artikel_Nummer ?? null,
+      itemUUID: item.ItemUUID
+    });
     const description =
-      item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim() || item.Langtext?.trim() || null;
+      item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim() || langtextString?.trim() || null;
 
     const toIsoString = (value: unknown): string | null => {
       if (!value) return null;

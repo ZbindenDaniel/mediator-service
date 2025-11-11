@@ -2,7 +2,9 @@ import { randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+// TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
 import { DB_PATH } from './config';
+import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
   ShopwareSyncQueueInsert,
@@ -316,6 +318,77 @@ type ItemRefRow = {
   ShopwareProductId: string | null;
 };
 
+function parseLangtextForRow<T extends Record<string, unknown>>(
+  row: T,
+  context: string
+): T {
+  if (!row || typeof row !== 'object' || !Object.prototype.hasOwnProperty.call(row, 'Langtext')) {
+    return row;
+  }
+  const rawValue = (row as Record<string, unknown>).Langtext;
+  const artikelNummer = typeof row.Artikel_Nummer === 'string' ? row.Artikel_Nummer : null;
+  const itemUUID = typeof row.ItemUUID === 'string' ? row.ItemUUID : null;
+  const parsed = parseLangtext(rawValue, {
+    logger: console,
+    context,
+    artikelNummer,
+    itemUUID
+  });
+  return {
+    ...row,
+    Langtext: parsed ?? (rawValue === undefined ? null : (rawValue as string | null))
+  } as T;
+}
+
+function wrapLangtextAwareStatement<T extends Database.Statement>(
+  statement: T,
+  context: string
+): T {
+  const handler: ProxyHandler<T> = {
+    get(target, prop, receiver) {
+      if (prop === 'get') {
+        return (...args: unknown[]) => {
+          const row = target.get.apply(target, args as any[]) as unknown;
+          if (!row || typeof row !== 'object') {
+            return row;
+          }
+          return parseLangtextForRow({ ...(row as Record<string, unknown>) }, `${context}:get`);
+        };
+      }
+      if (prop === 'all') {
+        return (...args: unknown[]) => {
+          const rows = target.all.apply(target, args as any[]) as unknown[];
+          return rows.map((row, index) => {
+            if (!row || typeof row !== 'object') {
+              return row;
+            }
+            return parseLangtextForRow({ ...(row as Record<string, unknown>) }, `${context}:all#${index}`);
+          });
+        };
+      }
+      if (prop === 'iterate') {
+        return (...args: unknown[]) => {
+          const iterator = target.iterate.apply(target, args as any[]) as IterableIterator<unknown>;
+          function* generator(): IterableIterator<unknown> {
+            let index = 0;
+            for (const row of iterator) {
+              if (row && typeof row === 'object') {
+                yield parseLangtextForRow({ ...(row as Record<string, unknown>) }, `${context}:iter#${index}`);
+              } else {
+                yield row;
+              }
+              index += 1;
+            }
+          }
+          return generator();
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    }
+  };
+  return new Proxy(statement, handler) as T;
+}
+
 function asNullableString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const str = String(value);
@@ -393,13 +466,18 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
   if (!artikelNummer) {
     throw new Error('Artikel_Nummer is required for item reference persistence');
   }
+  const serializedLangtext = stringifyLangtext(ref.Langtext ?? null, {
+    logger: console,
+    context: 'prepareRefRow',
+    artikelNummer
+  });
   return {
     Artikel_Nummer: artikelNummer,
     Grafikname: asNullableString(ref.Grafikname),
     Artikelbeschreibung: asNullableString(ref.Artikelbeschreibung),
     Verkaufspreis: asNullableFloat(ref.Verkaufspreis),
     Kurzbeschreibung: asNullableString(ref.Kurzbeschreibung),
-    Langtext: asNullableString(ref.Langtext),
+    Langtext: serializedLangtext ?? null,
     Hersteller: asNullableString(ref.Hersteller),
     Länge_mm: asNullableInteger(ref.Länge_mm),
     Breite_mm: asNullableInteger(ref.Breite_mm),
@@ -543,6 +621,9 @@ let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
 let getItemReferenceStatement: Database.Statement;
 let getMaxArtikelNummerStatement: Database.Statement;
+let getItemStatement: Database.Statement;
+let findByMaterialStatement: Database.Statement;
+let itemsByBoxStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
@@ -578,6 +659,23 @@ try {
     ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
     LIMIT 1
   `);
+  getItemStatement = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
+WHERE i.ItemUUID = ?
+`);
+  findByMaterialStatement = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
+WHERE i.Artikel_Nummer = ?
+ORDER BY i.UpdatedAt DESC
+`);
+  itemsByBoxStatement = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
+WHERE i.BoxID = ?
+ORDER BY i.ItemUUID
+`);
 } catch (err) {
   console.error('Failed to prepare item persistence statements', err);
   throw err;
@@ -933,24 +1031,13 @@ export const upsertBox = db.prepare(
 );
 
 export const queueLabel = db.prepare(`INSERT INTO label_queue (ItemUUID, CreatedAt) VALUES (?, datetime('now'))`);
-export const getItem = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
-${ITEM_JOIN_WITH_BOX}
-WHERE i.ItemUUID = ?
-`);
-export const getItemReference = getItemReferenceStatement;
-export const findByMaterial = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
-${ITEM_JOIN_WITH_BOX}
-WHERE i.Artikel_Nummer = ?
-ORDER BY i.UpdatedAt DESC
-`);
-export const itemsByBox = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
-${ITEM_JOIN_WITH_BOX}
-WHERE i.BoxID = ?
-ORDER BY i.ItemUUID
-`);
+export const getItem = wrapLangtextAwareStatement(getItemStatement, 'db:getItem');
+export const getItemReference = wrapLangtextAwareStatement(
+  getItemReferenceStatement,
+  'db:getItemReference'
+);
+export const findByMaterial = wrapLangtextAwareStatement(findByMaterialStatement, 'db:findByMaterial');
+export const itemsByBox = wrapLangtextAwareStatement(itemsByBoxStatement, 'db:itemsByBox');
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 

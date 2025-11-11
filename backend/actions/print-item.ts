@@ -2,9 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+// TODO(agent): Replace legacy Langtext print fallback once structured payload rendering lands.
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../labelpdf';
 import type { PrintPdfResult } from '../print';
+import { ensureLangtextString } from '../lib/langtext';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -68,7 +70,14 @@ const action = defineHttpAction({
         if (Number.isFinite(parsed)) parsedQuantity = parsed;
       }
 
-      const description = item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim() || item.Langtext?.trim() || null;
+      const langtextString = ensureLangtextString(item.Langtext ?? null, {
+        logger: console,
+        context: 'print-item:description',
+        artikelNummer: item.Artikel_Nummer ?? null,
+        itemUUID: item.ItemUUID
+      });
+      const description =
+        item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim() || langtextString?.trim() || null;
       const toIsoString = (value: unknown): string | null => {
         if (!value) return null;
         const date = value instanceof Date ? value : new Date(value as string);
