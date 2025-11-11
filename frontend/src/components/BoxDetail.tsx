@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
@@ -11,6 +11,8 @@ import { filterAllowedEvents } from '../utils/eventLogLevels';
 import BoxColorTag from './BoxColorTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
+
+// TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 
 interface Props {
   boxId: string;
@@ -36,7 +38,10 @@ export default function BoxDetail({ boxId }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const navigate = useNavigate();
+  const photoModalRef = useRef<HTMLDivElement | null>(null);
+  const photoDialogTitleId = useId();
 
   async function handleDeleteBox() {
     if (!box) return;
@@ -51,6 +56,18 @@ export default function BoxDetail({ boxId }: Props) {
         });
       } catch (error) {
         console.error('Failed to display agentic cancel user alert', error);
+      }
+      return;
+    }
+    if (items.length > 0) {
+      console.info('Box deletion blocked because items remain', { boxId: box.BoxID, itemCount: items.length });
+      try {
+        await dialogService.alert({
+          title: 'Löschen nicht möglich',
+          message: 'Bitte entnehmen Sie zuerst alle Artikel aus dem Behälter.'
+        });
+      } catch (error) {
+        console.error('Failed to display non-empty box deletion alert', error);
       }
       return;
     }
@@ -199,6 +216,52 @@ export default function BoxDetail({ boxId }: Props) {
     void load({ showSpinner: true });
   }, [boxId]);
 
+  useEffect(() => {
+    if (!isPhotoModalOpen) {
+      return undefined;
+    }
+
+    function handleKeydown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setIsPhotoModalOpen(false);
+        console.info('Closed box photo modal via keyboard', { boxId });
+      }
+    }
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => {
+      window.removeEventListener('keydown', handleKeydown);
+    };
+  }, [boxId, isPhotoModalOpen]);
+
+  useEffect(() => {
+    if (isPhotoModalOpen && photoModalRef.current) {
+      photoModalRef.current.focus();
+    }
+  }, [isPhotoModalOpen]);
+
+  useEffect(() => {
+    if (!photoPreview && isPhotoModalOpen) {
+      setIsPhotoModalOpen(false);
+      console.info('Closed box photo modal after preview reset', { boxId });
+    }
+  }, [boxId, isPhotoModalOpen, photoPreview]);
+
+  const openPhotoModal = useCallback(() => {
+    if (!photoPreview) {
+      console.warn('Attempted to open box photo modal without preview', { boxId });
+      return;
+    }
+    setIsPhotoModalOpen(true);
+    console.info('Opened box photo modal', { boxId });
+  }, [boxId, photoPreview]);
+
+  const closePhotoModal = useCallback(() => {
+    setIsPhotoModalOpen(false);
+    console.info('Closed box photo modal', { boxId });
+  }, [boxId]);
+
   const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
     const file = input.files?.[0];
@@ -242,6 +305,10 @@ export default function BoxDetail({ boxId }: Props) {
     } catch (error) {
       console.error('Failed to mark box photo for removal', error);
     }
+  }, [boxId]);
+
+  const handlePhotoImageError = useCallback(() => {
+    console.error('Failed to render box photo preview', { boxId });
   }, [boxId]);
 
   // TODO: Replace client-side slicing once the activities page provides pagination.
@@ -418,11 +485,25 @@ export default function BoxDetail({ boxId }: Props) {
                         {photoPreview ? (
                           <div className="note-photo-preview">
                             {/* TODO(agent): Extract box note photo preview into shared media component when expanding uploader features. */}
-                            <img
-                              src={photoPreview}
-                              alt="Aktuelles Box-Foto"
-                              style={{ maxWidth: '240px', maxHeight: '180px', display: 'block' }}
-                            />
+                            <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
+                              <img
+                                src={photoPreview}
+                                alt="Aktuelles Box-Foto"
+                                style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
+                                onClick={openPhotoModal}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    openPhotoModal();
+                                  }
+                                }}
+                                role="button"
+                                tabIndex={0}
+                                aria-haspopup="dialog"
+                                aria-label="Box-Foto vergrößern"
+                                onError={handlePhotoImageError}
+                              />
+                            </figure>
                             <div className='row'>
                               <button type="button" className="btn danger" onClick={handlePhotoRemove}>
                                 Foto entfernen
@@ -545,6 +626,47 @@ export default function BoxDetail({ boxId }: Props) {
           <p>Loading...</p>
         )}
       </div>
+      {isPhotoModalOpen && photoPreview ? (
+        <div
+          className="dialog-overlay item-media-gallery__overlay"
+          role="presentation"
+          onClick={closePhotoModal}
+        >
+          <div
+            className="dialog-content item-media-gallery__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={photoDialogTitleId}
+            tabIndex={-1}
+            ref={photoModalRef}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="item-media-gallery__dialog-header">
+              <h2 id={photoDialogTitleId} className="dialog-title">
+                Box-Foto
+              </h2>
+              <button
+                type="button"
+                className="item-media-gallery__dialog-close"
+                onClick={closePhotoModal}
+              >
+                Schließen
+              </button>
+            </header>
+            <div className="item-media-gallery__dialog-body">
+              <img
+                className="item-media-gallery__dialog-image"
+                src={photoPreview}
+                alt={`Foto für Behälter ${box?.BoxID ?? boxId}`}
+                onError={handlePhotoImageError}
+              />
+              <figcaption className="item-media-gallery__dialog-caption">
+                Foto für Behälter {box?.BoxID ?? boxId}
+              </figcaption>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
