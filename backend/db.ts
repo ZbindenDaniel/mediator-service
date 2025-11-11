@@ -2023,19 +2023,27 @@ export const updateAgenticReview = db.prepare(`
   WHERE ItemUUID = @ItemUUID
 `);
 
-export const listItems = db.prepare(`
+// TODO(agent): Capture metrics on Langtext parsing for list endpoints to guide frontend rollout timing.
+const listItemsStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
 ORDER BY i.ItemUUID
 `);
 
-export const listItemsForExport = db.prepare(`
+export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
+
+const listItemsForExportStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
 WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
   AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
 ORDER BY i.Datum_erfasst
 `);
+
+export const listItemsForExport = wrapLangtextAwareStatement(
+  listItemsForExportStatement,
+  'db:listItemsForExport'
+);
 
 export type {
   AgenticRun,

@@ -56,6 +56,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
   safe to deprecate the legacy string-only path.
 - Agentic schemas accept object payloads and print/search endpoints stringify structured metadata on demand; once telemetry
   shows minimal fallback usage we can schedule removal of the string coercion branches and update the frontend editors.
+- `/api/items` and `/api/export/items` now surface parsed `Langtext` payloads directly from the database proxies while the CSV
+  export code stringifies object payloads with shared helpers, aligning backend contracts with the frontend key/value editor.
 
 ## Risks & Dependencies
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.
