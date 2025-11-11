@@ -9,6 +9,8 @@ a small service to map items to the boxes they're stored in and the location the
 
 See the refreshed [project overview](docs/OVERVIEW.md) and [architecture outline](docs/ARCHITECTURE.md) for the complete domain map, guiding principles, and current priorities.
 
+<!-- TODO(agent): Reconfirm onboarding flow once the Postgres service splits into read/write nodes. -->
+
 ## QR scanning
 
 Generated QR codes encode a JSON payload that always contains the Behälter identifier under the `id` key and may include extra
@@ -29,7 +31,8 @@ POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate pay
 
 - The `build` script (see `package.json`) runs the Sass prebuild step, compiles TypeScript, bundles the frontend, and copies `frontend/public` into `dist/frontend/public` so the compiled server can run without requiring manual copying.
 
-- Runtime configuration is sourced from environment variables. Create a `.env` file in the repository root to override defaults (e.g., ports or paths); the server automatically loads it on startup for both TypeScript and compiled builds.
+- Runtime configuration is sourced from environment variables. Create a `.env` file in the repository root to override defaults (e.g., ports or paths); the server automatically loads it on startup for both TypeScript and compiled builds. Database settings follow the Docker Compose defaults (`DATABASE_URL`, `PGHOST`, etc.) so the backend connects to the bundled Postgres instance unless you override them.
+- Start the local stack with `docker compose up -d` to launch Postgres and the mediator together. After the containers report healthy, run your migration or schema verification scripts to validate that the database matches the latest definitions.
 
 ## Container deployment
 
@@ -62,7 +65,7 @@ docker run --rm \
 The provided [`docker-compose.yml`](./docker-compose.yml) offers the same defaults and can be started with:
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 Override values by editing the `environment` block, supplying a Compose `env_file`, or creating a repository-level `.env` file that the runtime automatically reads.
@@ -111,6 +114,12 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 1. Decommission the standalone `ai-flow-service` container or process; the mediator now embeds the orchestrator and queue worker.
 2. After deploying a new version, run `node scripts/verify-agentic-migration.js /path/to/mediator.sqlite` (or the packaged equivalent) to confirm the `agentic_request_logs` schema exists before enabling traffic. _TODO:_ add this verification to the CI/CD pipeline so the check runs automatically.
 3. Update your secrets manager or deployment environment to supply the `AGENTIC_*` variables above directly to the mediator container, including any provider credentials and the optional queue interval override.
+
+### Troubleshooting Postgres connectivity
+
+- Review mediator startup logs for any `DATABASE_URL` warnings; the backend emits them when falling back to default credentials or rejecting malformed connection strings.
+- Check the Postgres container status via `docker compose ps` or `docker compose logs postgres` to confirm the healthcheck succeeded before debugging application code.
+- When you encounter persistent connection retries, confirm that migrations have run—the table list in the log payload should match the schema under `models/` and `backend/src/models/`.
 
 Quick commands:
 
