@@ -713,6 +713,7 @@ button:focus {
     flex-direction: column;
 }
 
+
 .langtext-editor {
     display: flex;
     flex-direction: column;
@@ -770,6 +771,14 @@ button:focus {
     max-width: 40%;
     word-break: break-word;
     padding-top: 6px;
+}
+
+.langtext-editor__input {
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) / 2);
 }
 
 .langtext-editor__value {
