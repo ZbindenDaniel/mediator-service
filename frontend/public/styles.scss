@@ -724,13 +724,31 @@ button:focus {
     flex-direction: column;
 }
 
+
 .langtext-editor {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
+.langtext-editor__table {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 .langtext-editor__row {
+    display: grid;
+    grid-template-columns: minmax(160px, 220px) 1fr auto;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.langtext-editor__row--add {
+    grid-template-columns: minmax(160px, 220px) 1fr auto;
+}
+
+.langtext-editor__cell {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -743,10 +761,51 @@ button:focus {
     word-break: break-word;
 }
 
+.langtext-editor__input {
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) / 2);
+}
+
 .langtext-editor__value {
     width: 100%;
     min-height: 64px;
     resize: vertical;
+}
+
+.langtext-editor__cell--actions {
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+.langtext-editor__add-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.langtext-editor__delete-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 88px;
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) / 2);
+    background: transparent;
+}
+
+.langtext-editor__add-hint {
+    font-size: 0.85rem;
+    color: var(--muted);
 }
 
 .langtext-editor__hint {
