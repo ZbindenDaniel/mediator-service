@@ -20,7 +20,7 @@ const action = defineHttpAction({
       if (!box) return sendJson(res, 404, { error: 'not found' });
       const items = ctx.itemsByBox.all(id);
       const events = ctx.listEventsForBox.all(id);
-      sendJson(res, 200, { box, items, events });
+      sendJson(res, 200, { box, items, events });        
     } catch (err) {
       console.error('Box detail failed', err);
       sendJson(res, 500, { error: (err as Error).message });

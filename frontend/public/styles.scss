@@ -1483,6 +1483,14 @@ button:focus {
     color: var(--muted);
 }
 
+.gentic-status-card__toggle {
+    width: 100%;
+    justify-content: space-evenly;
+    align-content: center;
+    display: flex;
+    align-items: center;
+}
+
 @media (max-width: 800px) {
     .details {
         width: 100%;

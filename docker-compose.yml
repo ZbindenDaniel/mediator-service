@@ -18,11 +18,19 @@ services:
       retries: 5
       start_period: 5s
     restart: unless-stopped
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@revamp-it.ch
+      PGADMIN_DEFAULT_PASSWORD: l1n2xk3rn4l!
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
 
   mediator:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/zbindendaniel/mediator-service:latest   # or docker.io/youruser/yourapp:1.3.0
+    env_file: .env
     container_name: mediator
     ports:
       - "8080:8080"
@@ -42,7 +50,7 @@ services:
       # The in-process agentic orchestrator reuses these defaults; provide provider-specific overrides or secrets via an env_file.
       AGENTIC_MODEL_PROVIDER: ollama
       AGENTIC_OLLAMA_BASE_URL: http://127.0.0.1:11434
-      AGENTIC_OLLAMA_MODEL: qwen3:0.6b
+      AGENTIC_OLLAMA_MODEL: gpt-oss:20b
       # Uncomment to enable OpenAI-compatible providers and inject credentials through env_file or secrets management.
       # AGENTIC_OPENAI_API_KEY: ""
       AGENTIC_OPENAI_BASE_URL: https://api.openai.com/v1
@@ -51,7 +59,7 @@ services:
       # Leave AGENT_API_BASE_URL unset to persist results in-process. Set it (and optionally AGENT_SHARED_SECRET)
       # when an external service should receive agentic result callbacks instead.
       # Provide API keys for third-party enrichment separately.
-      # TAVILY_API_KEY: ""
+      TAVILY_API_KEY: "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"
       SEARCH_WEB_ALLOWED_ENGINES: google,duckduckgo,brave
     volumes:
       # Persist the mediator application state and inbox/archive content.
