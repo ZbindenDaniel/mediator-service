@@ -56,7 +56,28 @@ if (!envLoaded) {
 // TODO(agentic-config): Replace ad-hoc parsing with a shared zod schema that also validates agentic settings.
 
 export const HTTP_PORT = parseInt(process.env.HTTP_PORT || '8080', 10);
-export const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data/mediator.sqlite');
+// TODO(database-migration): Remove DB_PATH fallback once all services rely on DATABASE_URL.
+const DEFAULT_DB_PATH = path.join(__dirname, 'data/mediator.sqlite');
+const rawDatabaseUrl = (process.env.DATABASE_URL || '').trim();
+const rawDbPathEnv = (process.env.DB_PATH || '').trim();
+export const DATABASE_URL = rawDatabaseUrl;
+export const DB_PATH = rawDbPathEnv || DEFAULT_DB_PATH;
+
+if (rawDatabaseUrl && rawDbPathEnv) {
+  console.info('[config] DATABASE_URL provided; ignoring legacy DB_PATH override.');
+} else if (!rawDatabaseUrl) {
+  if (rawDbPathEnv) {
+    console.warn(
+      '[config] DATABASE_URL is not set; falling back to legacy DB_PATH. Verify the schema before proceeding.',
+    );
+  } else {
+    console.warn(
+      `[config] Neither DATABASE_URL nor DB_PATH environment variables are configured; defaulting to ${DB_PATH}. ` +
+        'Ensure the legacy SQLite database contains the expected tables before continuing.',
+    );
+  }
+}
+
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
 const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || '').trim();
