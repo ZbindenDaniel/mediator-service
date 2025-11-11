@@ -199,6 +199,51 @@ export default function BoxDetail({ boxId }: Props) {
     void load({ showSpinner: true });
   }, [boxId]);
 
+  const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          console.warn('Box photo reader produced non-string result');
+          return;
+        }
+        setPhotoPreview(reader.result);
+        setPhotoUpload(reader.result);
+        setPhotoRemoved(false);
+        console.info('Prepared box photo upload preview', { boxId, size: file.size });
+      };
+      reader.onerror = (error) => {
+        console.error('Failed to read selected box photo', error);
+      };
+      reader.onloadend = () => {
+        try {
+          input.value = '';
+        } catch (resetErr) {
+          console.warn('Failed to reset box photo input after selection', resetErr);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Failed to prepare box photo upload', error);
+    }
+  }, [boxId]);
+
+  const handlePhotoRemove = useCallback(() => {
+    try {
+      setPhotoPreview('');
+      setPhotoUpload(null);
+      setPhotoRemoved(true);
+      console.info('Marked box photo for removal', { boxId });
+    } catch (error) {
+      console.error('Failed to mark box photo for removal', error);
+    }
+  }, [boxId]);
+
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
