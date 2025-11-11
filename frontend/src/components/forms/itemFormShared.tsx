@@ -7,6 +7,7 @@ import { buildItemCategoryLookups } from '../../lib/categoryLookup';
 import type { ConfirmDialogOptions } from '../dialog';
 import { dialogService } from '../dialog';
 import { parseLangtext, stringifyLangtextEntries } from '../../lib/langtext';
+import { metaDataKeys } from '../../data/metaDataKeys';
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -563,7 +564,7 @@ export function ItemDetailsFields({
         console.error('Failed to remove Langtext entry', { key: keyToRemove, error });
       }
     },
-    [onUpdate, parsedLangtext]
+    [onUpdate, parsedLangtext, pendingLangtextKey]
   );
 
   const handleLangtextTextChange = useCallback(
