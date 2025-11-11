@@ -575,7 +575,19 @@ function ensureItemTables(database: Database.Database = db): void {
   }
 }
 
+const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Location,''))";
+
+const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
+
+const ITEM_JOIN_BASE = `
+  FROM items i
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
+`;
+
 ensureItemTables(db);
+const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
+  LEFT JOIN boxes b ON i.BoxID = b.BoxID
+`;
 
 function ensureItemShopwareColumns(database: Database.Database = db): void {
   let refColumns: Array<{ name: string }> = [];
@@ -726,19 +738,6 @@ export function generateShopwareCorrelationId(context: string, itemUUID: string 
     throw err;
   }
 }
-
-const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
-
-const ITEM_JOIN_BASE = `
-  FROM items i
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
-`;
-
-const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
-  LEFT JOIN boxes b ON i.BoxID = b.BoxID
-`;
-
-const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Location,''))";
 
 function itemSelectColumns(locationExpr: string): string {
   return `

@@ -28,12 +28,14 @@ ENV NODE_ENV=production \
     HTTP_PORT=8080 \
     AGENTIC_MODEL_PROVIDER=ollama \
     AGENTIC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
-    AGENTIC_OLLAMA_MODEL=qwen3:0.6b \
+    AGENTIC_OLLAMA_MODEL=gpt-oss:20b \
     AGENTIC_OPENAI_BASE_URL=https://api.openai.com/v1 \
     AGENTIC_OPENAI_MODEL=gpt-4o-mini \
     SEARCH_WEB_ALLOWED_ENGINES=google,duckduckgo,brave
 
 WORKDIR /app
+
+COPY .env /app/.env
 
 # Copy package manifests and install production dependencies
 COPY package.json package-lock.json ./

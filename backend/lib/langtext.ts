@@ -188,7 +188,7 @@ export function stringifyLangtext(value: unknown, context: LangtextHelperContext
 }
 
 export function ensureLangtextString(
-  value: string | LangtextPayload | null | undefined,
+  value: any,
   context: LangtextHelperContext = {}
 ): string | null {
   if (value == null) {
