@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
+import { stringifyLangtext } from '../lib/langtext';
 import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -34,6 +35,8 @@ const importFields = [
 
 const extraFields = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt'];
 const columns = [...importFields, ...extraFields];
+
+// TODO(agent): Replace CSV-specific Langtext serialization once exports move to typed clients.
 
 const fieldMap: Record<string, string> = {
   'Datum erfasst': 'Datum_erfasst',
@@ -74,6 +77,44 @@ function toCsvValue(val: any): string {
 function resolveExportValue(column: string, rawRow: Record<string, unknown>): unknown {
   const field = fieldMap[column];
   const value = rawRow[field];
+
+  if (field === 'Langtext' && value && typeof value === 'object' && !Array.isArray(value)) {
+    const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
+    const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    try {
+      const serialized = stringifyLangtext(value, {
+        logger: console,
+        context: 'export-items:Langtext',
+        artikelNummer,
+        itemUUID
+      });
+      if (serialized !== null && serialized !== undefined) {
+        return serialized;
+      }
+      console.warn('[export-items] Langtext payload resolved to null during serialization; exporting empty string.', {
+        artikelNummer,
+        itemUUID
+      });
+      return '';
+    } catch (error) {
+      console.error('[export-items] Failed to stringify Langtext payload for export, attempting JSON fallback.', {
+        artikelNummer,
+        itemUUID,
+        error
+      });
+      try {
+        return JSON.stringify(value);
+      } catch (fallbackError) {
+        console.error('[export-items] JSON fallback failed for Langtext payload; exporting empty string.', {
+          artikelNummer,
+          itemUUID,
+          error: fallbackError
+        });
+        return '';
+      }
+    }
+  }
+
   if (column !== 'Einheit') {
     return value;
   }
