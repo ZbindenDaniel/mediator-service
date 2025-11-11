@@ -12,6 +12,7 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
 } from '../db';
+import { ensureLangtextString } from '../lib/langtext';
 import { modelConfig, searchConfig } from './config';
 import { runItemFlow } from './flow/item-flow';
 import type { ItemFlowLogger } from './flow/item-flow';
@@ -51,13 +52,26 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
 }
 
-function buildTargetFromRow(row: Record<string, unknown>): Record<string, unknown> {
+// TODO(agent): Revisit Langtext serialization heuristics when upstream payloads evolve.
+function buildTargetFromRow(
+  row: Record<string, unknown>,
+  logger: AgenticModelInvokerLogger | undefined
+): Record<string, unknown> {
+  const artikelNummer = (row.Artikel_Nummer ?? null) as string | null;
+  const itemUUID = (row.ItemUUID ?? null) as string | null;
+  const langtextCandidate = ensureLangtextString(row.Langtext ?? null, {
+    logger,
+    context: 'agentic:target',
+    artikelNummer,
+    itemUUID
+  });
+
   return {
     itemUUid: normalizeString(row.ItemUUID),
     Artikelbeschreibung: normalizeString(row.Artikelbeschreibung),
     Marktpreis: normalizeNullableNumber(row.Verkaufspreis),
     Kurzbeschreibung: normalizeString(row.Kurzbeschreibung),
-    Langtext: normalizeString(row.Langtext),
+    Langtext: langtextCandidate ?? normalizeString(row.Langtext),
     Hersteller: normalizeString(row.Hersteller),
     Länge_mm: normalizeNullableNumber(row.Länge_mm),
     Breite_mm: normalizeNullableNumber(row.Breite_mm),
@@ -319,7 +333,7 @@ export class AgenticModelInvoker {
       throw new FlowError('ITEM_NOT_FOUND', `Item ${itemId} not found`, 404);
     }
 
-    return buildTargetFromRow(row);
+    return buildTargetFromRow(row, this.logger);
   }
 
   private mergeTargetWithRequestPayload(
