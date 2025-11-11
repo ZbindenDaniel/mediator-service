@@ -1,6 +1,24 @@
 version: '3.9'
 
 services:
+  # TODO(database-migration): Replace the transient Postgres bootstrap once production settings are finalised.
+  postgres:
+    image: postgres:16
+    container_name: mediator-postgres
+    environment:
+      POSTGRES_USER: mediator
+      POSTGRES_PASSWORD: mediator
+      POSTGRES_DB: mediator
+    volumes:
+      - mediator-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
   mediator:
     build:
       context: .
@@ -13,6 +31,7 @@ services:
     environment:
       # Storage locations for persistent state.
       DB_PATH: /var/lib/mediator/mediator.sqlite
+      DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
       INBOX_DIR: /var/lib/mediator/inbox
       ARCHIVE_DIR: /var/lib/mediator/archive
       # Set to the externally reachable hostname or IP for generated links.
@@ -45,9 +64,14 @@ services:
       # Optional: mount printer configuration files or device mappings if required for the target printer setup.
       # - ./config/printers:/etc/mediator/printers:ro
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   mediator-data:
     name: mediator-data
   mediator-media:
     name: mediator-media
+  mediator-postgres:
+    name: mediator-postgres
