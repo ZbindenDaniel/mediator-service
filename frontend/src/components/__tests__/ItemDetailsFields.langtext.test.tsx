@@ -19,4 +19,31 @@ describe('ItemDetailsFields Langtext rendering', () => {
     expect(markup).not.toContain('langtext-editor langtext-editor--legacy');
     expect(markup).toContain('Willkommen');
   });
+
+  it('serializes Langtext entries when adding a new approved key', () => {
+    const sanitizedPayload = JSON.stringify({ Intro: 'Willkommen' });
+    const onUpdate = jest.fn();
+    const harness: { add?: (key?: string) => void } = {};
+
+    renderToStaticMarkup(
+      <ItemDetailsFields
+        form={{ Langtext: sanitizedPayload } as Partial<ItemFormData>}
+        onUpdate={(key, value) => onUpdate(key, value)}
+        langtextEditorTestHarness={(helpers) => {
+          harness.add = helpers.add;
+        }}
+      />
+    );
+
+    expect(typeof harness.add).toBe('function');
+    harness.add?.('Details');
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const [updatedField, serializedValue] = onUpdate.mock.calls[0];
+    expect(updatedField).toBe('Langtext');
+    expect(typeof serializedValue).toBe('string');
+
+    const parsed = JSON.parse(serializedValue as string) as Record<string, unknown>;
+    expect(parsed).toEqual({ Intro: 'Willkommen', Details: '' });
+  });
 });
