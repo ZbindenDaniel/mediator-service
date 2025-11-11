@@ -72,6 +72,10 @@ const optionalTrimmedNote = z
   }, z.string().min(1))
   .optional();
 
+// LangtextPayload values remain JSON-first: the UI renders slots from the curated metaDataKeys list, so we accept
+// either that structured object or the legacy string fallback and rely on parseLangtext to normalize. Keep this in
+// sync with models/item.ts and the frontend editor in frontend/src/components/forms/itemFormShared.tsx when updating
+// prompt guidance.
 const LangtextFieldSchema = z
   .any()
   .transform((value, ctx) => {
