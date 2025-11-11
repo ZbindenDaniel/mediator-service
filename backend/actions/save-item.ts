@@ -182,6 +182,63 @@ export function collectMediaAssets(
   return assets;
 }
 
+function removeItemMediaAsset(itemId: string, asset: string): boolean {
+  const trimmed = typeof asset === 'string' ? asset.trim() : '';
+  if (!trimmed) {
+    return false;
+  }
+  const relativeCandidate = trimmed.startsWith(MEDIA_PREFIX) ? trimmed.slice(MEDIA_PREFIX.length) : trimmed;
+  const relative = buildRelativePath(relativeCandidate);
+  if (!relative) {
+    console.warn('[save-item] Skipped removing media asset with unsafe relative path', {
+      itemId,
+      asset: trimmed
+    });
+    return false;
+  }
+  try {
+    const absolute = path.join(MEDIA_DIR, relative);
+    if (!absolute.startsWith(MEDIA_DIR)) {
+      console.warn('[save-item] Refused to remove media asset outside MEDIA_DIR', {
+        itemId,
+        asset: trimmed,
+        resolved: absolute
+      });
+      return false;
+    }
+    if (!fs.existsSync(absolute)) {
+      console.info('[save-item] Media asset already removed', { itemId, asset: trimmed });
+      return false;
+    }
+    fs.unlinkSync(absolute);
+    console.info('[save-item] Removed media asset during item update', { itemId, asset: trimmed });
+    return true;
+  } catch (err) {
+    console.error('[save-item] Failed to remove media asset during item update', { itemId, asset: trimmed, err });
+    return false;
+  }
+}
+
+function pruneEmptyItemMediaDirectory(itemId: string): void {
+  try {
+    const dir = path.join(MEDIA_DIR, itemId);
+    if (!fs.existsSync(dir)) {
+      return;
+    }
+    const stat = fs.statSync(dir);
+    if (!stat.isDirectory()) {
+      return;
+    }
+    const entries = fs.readdirSync(dir);
+    if (entries.length === 0) {
+      fs.rmdirSync(dir);
+      console.info('[save-item] Removed empty media directory after update', { itemId });
+    }
+  } catch (err) {
+    console.error('[save-item] Failed to prune empty media directory', { itemId, err });
+  }
+}
+
 type CategoryFieldName =
   | 'Hauptkategorien_A'
   | 'Unterkategorien_A'
@@ -356,31 +413,98 @@ const action = defineHttpAction({
       let grafik = existing.Grafikname || '';
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
-        const dir = path.join(MEDIA_DIR, itemId);
-        const artNr = data.Artikel_Nummer || existing.Artikel_Nummer || itemId;
-        if (imgs.some((i: string) => i)) fs.mkdirSync(dir, { recursive: true });
-        imgs.forEach((img: string, idx: number) => {
-          if (!img) return;
-          const m = (img as string).match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-          if (!m) return;
-          const ext = m[1].split('/')[1];
-          const buf = Buffer.from(m[2], 'base64');
-          const file = `${artNr}-${idx + 1}.${ext}`;
-          try {
-            fs.writeFileSync(path.join(dir, file), buf);
-            if (idx === 0) grafik = `${MEDIA_PREFIX}${itemId}/${file}`;
-          } catch (writeErr) {
-            console.error('Failed to persist media file', {
-              itemId,
-              file,
-              error: writeErr
-            });
+        const normalisedExistingGrafik = normaliseMediaReference(itemId, existing.Grafikname);
+        const existingMediaBeforeUpdate = collectMediaAssets(
+          itemId,
+          normalisedExistingGrafik,
+          existing.Artikel_Nummer
+        );
+        const removalSlots = imgs.reduce<number[]>((acc, value, index) => {
+          if (value === null) {
+            acc.push(index);
           }
+          return acc;
+        }, []);
+        if (removalSlots.length > 0) {
+          let removedCount = 0;
+          for (const slot of removalSlots) {
+            const asset = existingMediaBeforeUpdate[slot];
+            if (asset && removeItemMediaAsset(itemId, asset)) {
+              removedCount += 1;
+            }
+            if (slot === 0) {
+              grafik = '';
+            }
+          }
+          if (removedCount > 0) {
+            console.info('[save-item] Processed item photo removals', { itemId, removedCount });
+          }
+        }
+
+        const uploads: Array<{ index: number; dataUrl: string }> = [];
+        imgs.forEach((img, idx) => {
+          if (typeof img !== 'string') {
+            return;
+          }
+          const trimmed = img.trim();
+          if (!trimmed) {
+            return;
+          }
+          if (!/^data:image\//i.test(trimmed)) {
+            return;
+          }
+          uploads.push({ index: idx, dataUrl: trimmed });
         });
+
+        if (uploads.length > 0) {
+          const dir = path.join(MEDIA_DIR, itemId);
+          const artNr = data.Artikel_Nummer || existing.Artikel_Nummer || itemId;
+          fs.mkdirSync(dir, { recursive: true });
+          uploads.forEach(({ index, dataUrl }) => {
+            const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+            if (!match) {
+              console.warn('[save-item] Skipped non data-url photo upload payload', { itemId, index });
+              return;
+            }
+            const ext = match[1].split('/')[1] || 'png';
+            const buf = Buffer.from(match[2], 'base64');
+            const file = `${artNr}-${index + 1}.${ext}`;
+            try {
+              fs.writeFileSync(path.join(dir, file), buf);
+              if (index === 0) {
+                grafik = `${MEDIA_PREFIX}${itemId}/${file}`;
+              }
+            } catch (writeErr) {
+              console.error('Failed to persist media file', {
+                itemId,
+                file,
+                error: writeErr
+              });
+            }
+          });
+        }
+
+        pruneEmptyItemMediaDirectory(itemId);
       } catch (e) {
         console.error('Failed to save item images', e);
       }
-      const normalisedGrafikname = normaliseMediaReference(itemId, grafik);
+      let normalisedGrafikname = normaliseMediaReference(itemId, grafik);
+      if (!normalisedGrafikname) {
+        const fallbackMedia = collectMediaAssets(
+          itemId,
+          null,
+          data.Artikel_Nummer || existing.Artikel_Nummer || null
+        );
+        if (fallbackMedia.length > 0) {
+          const fallbackPrimary = fallbackMedia[0];
+          normalisedGrafikname = normaliseMediaReference(itemId, fallbackPrimary) ?? fallbackPrimary;
+          grafik = normalisedGrafikname ?? '';
+          console.info('[save-item] Updated primary graphic after removals', {
+            itemId,
+            fallbackPrimary
+          });
+        }
+      }
       const {
         picture1,
         picture2,

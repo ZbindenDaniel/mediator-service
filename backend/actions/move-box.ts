@@ -1,6 +1,82 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import fs from 'fs';
+import path from 'path';
 import { defineHttpAction } from './index';
 import { resolveStandortLabel } from '../standort-label';
+import { MEDIA_DIR } from '../lib/media';
+
+const BOX_MEDIA_PREFIX = '/media/';
+const BOX_MEDIA_FOLDER = 'boxes';
+
+function sanitizeBoxMediaSegment(segment: string): string {
+  return segment.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function resolveBoxMediaDirectory(boxId: string): { absoluteDir: string; relativeDir: string } {
+  const safeId = sanitizeBoxMediaSegment(boxId);
+  const relativeDir = path.posix.join(BOX_MEDIA_FOLDER, safeId);
+  const absoluteDir = path.join(MEDIA_DIR, relativeDir);
+  return { absoluteDir, relativeDir };
+}
+
+function removeExistingBoxMedia(boxId: string): void {
+  try {
+    const { absoluteDir } = resolveBoxMediaDirectory(boxId);
+    if (!fs.existsSync(absoluteDir)) {
+      return;
+    }
+    const stat = fs.statSync(absoluteDir);
+    if (!stat.isDirectory()) {
+      console.warn('Expected box media directory but found different file type', { boxId, absoluteDir });
+      return;
+    }
+    const entries = fs.readdirSync(absoluteDir);
+    for (const entry of entries) {
+      try {
+        fs.unlinkSync(path.join(absoluteDir, entry));
+      } catch (unlinkErr) {
+        console.error('Failed to remove existing box photo', { boxId, entry, unlinkErr });
+      }
+    }
+    if (fs.readdirSync(absoluteDir).length === 0) {
+      try {
+        fs.rmdirSync(absoluteDir);
+      } catch (removeDirErr) {
+        console.warn('Failed to remove empty box media directory', { boxId, removeDirErr });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to clean up box media directory', { boxId, err });
+  }
+}
+
+function persistBoxPhoto(boxId: string, dataUrl: string): string | null {
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) {
+    console.warn('Rejected box photo payload without valid data URL prefix', { boxId });
+    return null;
+  }
+
+  const mimeType = match[1];
+  const base64Payload = match[2];
+  const extension = mimeType.split('/')[1] || 'png';
+  const { absoluteDir, relativeDir } = resolveBoxMediaDirectory(boxId);
+  const filename = `photo.${extension}`;
+  const absolutePath = path.join(absoluteDir, filename);
+  const relativePath = path.posix.join(relativeDir, filename);
+
+  try {
+    removeExistingBoxMedia(boxId);
+    fs.mkdirSync(absoluteDir, { recursive: true });
+    const buffer = Buffer.from(base64Payload, 'base64');
+    fs.writeFileSync(absolutePath, buffer);
+    console.info('Persisted box photo', { boxId, absolutePath });
+    return `${BOX_MEDIA_PREFIX}${relativePath}`;
+  } catch (err) {
+    console.error('Failed to persist box photo', { boxId, err });
+    return null;
+  }
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -30,26 +106,55 @@ const action = defineHttpAction({
       const hasLocation = locationRaw.length > 0;
       const notes = (data.notes ?? '').toString().trim();
       const hasNotesField = Object.prototype.hasOwnProperty.call(data, 'notes');
+      const hasPhotoField = Object.prototype.hasOwnProperty.call(data, 'photo');
+      const removePhoto = data.removePhoto === true;
+      const incomingPhoto = hasPhotoField && typeof data.photo === 'string' ? data.photo : null;
+      const hasPhotoMutation = removePhoto || (incomingPhoto !== null && incomingPhoto.length > 0);
+      let nextPhotoPath: string | null = box.PhotoPath ?? null;
+      let photoChanged = false;
 
-      if (!hasLocation && hasNotesField) {
-        const noteTxn = ctx.db.transaction((boxId: string, note: string, a: string) => {
-          ctx.db.prepare(`UPDATE boxes SET Notes=?, UpdatedAt=datetime('now') WHERE BoxID=?`).run(note, boxId);
-        ctx.logEvent({
-          Actor: a,
-          EntityType: 'Box',
-          EntityId: boxId,
-          Event: 'Note',
-          Meta: JSON.stringify({ notes: note })
-        });
+      if (removePhoto) {
+        removeExistingBoxMedia(id);
+        nextPhotoPath = null;
+        photoChanged = true;
+      }
+
+      if (incomingPhoto) {
+        const persisted = persistBoxPhoto(id, incomingPhoto);
+        if (persisted) {
+          nextPhotoPath = persisted;
+          photoChanged = true;
+        } else {
+          console.error('Failed to persist incoming box photo payload', { boxId: id });
+        }
+      }
+
+      if (!hasLocation && (hasNotesField || hasPhotoMutation)) {
+        const noteTxn = ctx.db.transaction((boxId: string, note: string, photoPath: string | null, a: string) => {
+          ctx.db
+            .prepare(`UPDATE boxes SET Notes=?, PhotoPath=?, UpdatedAt=datetime('now') WHERE BoxID=?`)
+            .run(note, photoPath, boxId);
+          ctx.logEvent({
+            Actor: a,
+            EntityType: 'Box',
+            EntityId: boxId,
+            Event: 'Note',
+            Meta: JSON.stringify({ notes: note, photoPath })
+          });
         });
         try {
-          noteTxn(id, notes, actor);
-          console.info('[move-box] Processed note-only update', { boxId: id, actor });
+          noteTxn(id, notes, nextPhotoPath, actor);
+          console.info('[move-box] Processed note/photo update', {
+            boxId: id,
+            actor,
+            photoChanged,
+            hasNotesField
+          });
         } catch (noteErr) {
-          console.error('Note-only update failed', noteErr);
+          console.error('Note/photo update failed', noteErr);
           throw noteErr;
         }
-        sendJson(res, 200, { ok: true });
+        sendJson(res, 200, { ok: true, photoPath: nextPhotoPath });
         return;
       }
 
@@ -61,19 +166,30 @@ const action = defineHttpAction({
       if (locationRaw && !standortLabel) {
         console.warn('[move-box] Missing Standort label mapping for location', { location: locationRaw });
       }
-      const txn = ctx.db.transaction((boxId: string, loc: string, note: string, a: string, label: string | null) => {
-        ctx.db.prepare(`UPDATE boxes SET Location=?, StandortLabel=?, Notes=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`).run(loc, label, note, a, boxId);
+      const txn = ctx.db.transaction(
+        (boxId: string, loc: string, note: string, photoPath: string | null, a: string, label: string | null) => {
+          ctx.db
+            .prepare(
+              `UPDATE boxes SET Location=?, StandortLabel=?, Notes=?, PhotoPath=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`
+            )
+            .run(loc, label, note, photoPath, a, boxId);
         ctx.logEvent({
           Actor: a,
           EntityType: 'Box',
           EntityId: boxId,
           Event: 'Moved',
-          Meta: JSON.stringify({ location: loc, notes: note, standortLabel: label })
+          Meta: JSON.stringify({ location: loc, notes: note, standortLabel: label, photoPath })
         });
       });
-      txn(id, locationRaw, notes, actor, standortLabel);
-      console.info('[move-box] Processed move update', { boxId: id, actor, location: locationRaw });
-      sendJson(res, 200, { ok: true });
+      txn(id, locationRaw, notes, nextPhotoPath, actor, standortLabel);
+      console.info('[move-box] Processed move update', {
+        boxId: id,
+        actor,
+        location: locationRaw,
+        photoChanged,
+        notesChanged: hasNotesField
+      });
+      sendJson(res, 200, { ok: true, photoPath: nextPhotoPath });
     } catch (err) {
       console.error('Move box failed', err);
       sendJson(res, 500, { error: (err as Error).message });
