@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
@@ -29,6 +29,9 @@ export default function BoxDetail({ boxId }: Props) {
   const [note, setNote] = useState('');
   const [noteFeedback, setNoteFeedback] = useState<NoteFeedback>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [photoUpload, setPhotoUpload] = useState<string | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -161,6 +164,10 @@ export default function BoxDetail({ boxId }: Props) {
         setBox(data.box);
         setNote(data.box?.Notes || '');
         setNoteFeedback(null);
+        const nextPhotoPath = typeof data.box?.PhotoPath === 'string' ? data.box.PhotoPath.trim() : '';
+        setPhotoPreview(nextPhotoPath);
+        setPhotoUpload(null);
+        setPhotoRemoved(false);
         setItems(data.items || []);
         setEvents(Array.isArray(data.events) ? filterAllowedEvents(data.events) : []);
         setLoadError(null);
@@ -170,11 +177,17 @@ export default function BoxDetail({ boxId }: Props) {
         setItems([]);
         setEvents([]);
         setNote('');
+        setPhotoPreview('');
+        setPhotoUpload(null);
+        setPhotoRemoved(false);
         setLoadError(res.status === 404 ? 'Behälter wurde nicht gefunden.' : 'Behälter konnte nicht geladen werden.');
       }
     } catch (err) {
       console.error('Failed to fetch box', err);
       setLoadError('Behälter konnte nicht geladen werden.');
+      setPhotoPreview('');
+      setPhotoUpload(null);
+      setPhotoRemoved(false);
     } finally {
       if (showSpinner) {
         setIsLoading(false);
@@ -211,6 +224,51 @@ export default function BoxDetail({ boxId }: Props) {
       </div>
     );
   }
+
+  const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          console.warn('Box photo reader produced non-string result');
+          return;
+        }
+        setPhotoPreview(reader.result);
+        setPhotoUpload(reader.result);
+        setPhotoRemoved(false);
+        console.info('Prepared box photo upload preview', { boxId, size: file.size });
+      };
+      reader.onerror = (error) => {
+        console.error('Failed to read selected box photo', error);
+      };
+      reader.onloadend = () => {
+        try {
+          input.value = '';
+        } catch (resetErr) {
+          console.warn('Failed to reset box photo input after selection', resetErr);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Failed to prepare box photo upload', error);
+    }
+  }, [boxId]);
+
+  const handlePhotoRemove = useCallback(() => {
+    try {
+      setPhotoPreview('');
+      setPhotoUpload(null);
+      setPhotoRemoved(true);
+      console.info('Marked box photo for removal', { boxId });
+    } catch (error) {
+      console.error('Failed to mark box photo for removal', error);
+    }
+  }, [boxId]);
 
   return (
     <div className="container box">
@@ -268,24 +326,35 @@ export default function BoxDetail({ boxId }: Props) {
                     if (typeof box.Location === 'string' && box.Location.trim()) {
                       payload.location = box.Location;
                     }
+                    if (photoUpload) {
+                      payload.photo = photoUpload;
+                    } else if (photoRemoved) {
+                      payload.removePhoto = true;
+                    }
                     const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify(payload)
                     });
+                    let responseBody: any = null;
+                    try {
+                      responseBody = await res.json();
+                    } catch (parseErr) {
+                      console.error('Failed to parse box note response', parseErr);
+                    }
                     if (res.ok) {
-                      setBox(b => b ? { ...b, Notes: note } : b);
+                      const nextPhotoPath = typeof responseBody?.photoPath === 'string' ? responseBody.photoPath.trim() : '';
+                      setBox(b => b ? { ...b, Notes: note, PhotoPath: nextPhotoPath || null } : b);
+                      setPhotoPreview(nextPhotoPath);
+                      setPhotoUpload(null);
+                      setPhotoRemoved(false);
                       setNoteFeedback({ type: 'success', message: 'Notiz gespeichert' });
-                      console.info('Box note saved', { boxId: box.BoxID });
+                      console.info('Box note saved', { boxId: box.BoxID, hasPhoto: Boolean(nextPhotoPath) });
                     } else {
                       let errorMessage = `Speichern fehlgeschlagen (Status ${res.status})`;
-                      try {
-                        const errorBody = await res.json();
-                        if (errorBody?.error) {
-                          errorMessage = `Speichern fehlgeschlagen: ${errorBody.error}`;
-                        }
-                      } catch (parseErr) {
-                        console.error('Failed to parse note save error response', parseErr);
+                      const errorBody = responseBody;
+                      if (errorBody?.error) {
+                        errorMessage = `Speichern fehlgeschlagen: ${errorBody.error}`;
                       }
                       console.error('Note save request failed', { boxId: box.BoxID, status: res.status });
                       setNoteFeedback({ type: 'error', message: errorMessage });
@@ -298,6 +367,39 @@ export default function BoxDetail({ boxId }: Props) {
                   }
                 }}>
                   <div className=''>
+                    <div className='row'>
+                      <label htmlFor="box-note-photo">Foto</label>
+                      <div className="note-photo-controls">
+                        {photoPreview ? (
+                          <div className="note-photo-preview">
+                            {/* TODO(agent): Extract box note photo preview into shared media component when expanding uploader features. */}
+                            <img
+                              src={photoPreview}
+                              alt="Aktuelles Box-Foto"
+                              style={{ maxWidth: '240px', maxHeight: '180px', display: 'block' }}
+                            />
+                            <div className='row'>
+                              <button type="button" className="btn danger" onClick={handlePhotoRemove}>
+                                Foto entfernen
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="muted">Kein Foto gespeichert.</p>
+                        )}
+                        {photoRemoved ? (
+                          <p className="muted">Foto wird nach dem Speichern entfernt.</p>
+                        ) : null}
+                        <input
+                          type="file"
+                          id="box-note-photo"
+                          name="box-note-photo"
+                          accept="image/*"
+                          onChange={handlePhotoFileChange}
+                        />
+                      </div>
+                    </div>
+
                     <div className='row'>
                       <textarea
                         value={note}
@@ -331,7 +433,7 @@ export default function BoxDetail({ boxId }: Props) {
 
             <div className="card">
               <h3>Artikel</h3>
-              <div className=''>
+                  <div className=''>
                 <div className='row'>
                   <div className="item-cards">
                     {items.map((it) => (

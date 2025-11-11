@@ -39,6 +39,7 @@ const action = defineHttpAction({
           StandortLabel: null,
           CreatedAt: now,
           Notes: null,
+          PhotoPath: null,
           PlacedBy: a,
           PlacedAt: null,
           UpdatedAt: now

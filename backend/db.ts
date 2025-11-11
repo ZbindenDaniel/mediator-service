@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS boxes (
   StandortLabel TEXT,
   CreatedAt TEXT,
   Notes TEXT,
+  PhotoPath TEXT,
   PlacedBy TEXT,
   PlacedAt TEXT,
   UpdatedAt TEXT NOT NULL
@@ -142,6 +143,32 @@ function ensureStandortLabelColumn(database: Database.Database = db): void {
 }
 
 ensureStandortLabelColumn();
+
+function ensureBoxPhotoPathColumn(database: Database.Database = db): void {
+  let hasColumn = false;
+  try {
+    const columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
+    hasColumn = columns.some((column) => column.name === 'PhotoPath');
+  } catch (err) {
+    console.error('Failed to inspect boxes schema for PhotoPath column', err);
+    throw err;
+  }
+
+  if (hasColumn) {
+    return;
+  }
+
+  console.info('Adding PhotoPath column to boxes table for existing deployments');
+
+  try {
+    database.prepare('ALTER TABLE boxes ADD COLUMN PhotoPath TEXT').run();
+  } catch (err) {
+    console.error('Failed to add PhotoPath column to boxes table', err);
+    throw err;
+  }
+}
+
+ensureBoxPhotoPathColumn();
 
 const rawEventLogLevels = process.env.EVENT_LOG_LEVELS ?? null;
 const {
@@ -1016,13 +1043,14 @@ export { db };
 
 export const upsertBox = db.prepare(
   `
-      INSERT INTO boxes (BoxID, Location, StandortLabel, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
-      VALUES (@BoxID, @Location, @StandortLabel, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
+      INSERT INTO boxes (BoxID, Location, StandortLabel, CreatedAt, Notes, PhotoPath, PlacedBy, PlacedAt, UpdatedAt)
+      VALUES (@BoxID, @Location, @StandortLabel, @CreatedAt, @Notes, @PhotoPath, @PlacedBy, @PlacedAt, @UpdatedAt)
       ON CONFLICT(BoxID) DO UPDATE SET
       Location=COALESCE(excluded.Location, boxes.Location),
       StandortLabel=COALESCE(excluded.StandortLabel, boxes.StandortLabel),
       CreatedAt=COALESCE(excluded.CreatedAt, boxes.CreatedAt),
       Notes=COALESCE(excluded.Notes, boxes.Notes),
+      PhotoPath=COALESCE(excluded.PhotoPath, boxes.PhotoPath),
       PlacedBy=COALESCE(excluded.PlacedBy, boxes.PlacedBy),
       PlacedAt=COALESCE(excluded.PlacedAt, boxes.PlacedAt),
       UpdatedAt=excluded.UpdatedAt

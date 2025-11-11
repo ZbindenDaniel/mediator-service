@@ -266,71 +266,101 @@ export function AgenticStatusCard({
   onReview,
   onCancel
 }: AgenticStatusCardProps) {
+  const [isCollapsed, setIsCollapsed] = useState(true);
+  const contentId = useMemo(() => `agentic-status-panel-${Math.random().toString(36).slice(2)}`, []);
+  const handleToggle = useCallback(() => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        console.info('Toggled agentic status card', { collapsed: next });
+      } catch (logError) {
+        console.error('Failed to log agentic status card toggle', logError);
+      }
+      return next;
+    });
+  }, []);
+
   return (
-    <div className="card">
-      <h3>Ki Status</h3>
-      <div className="row status-row">
-        <span className={status.className}>{status.label}</span>
-        {isInProgress ? <span className="status-spinner" aria-hidden="true" /> : null}
-      </div>
-      <p className="muted">{status.description}</p>
-      {rows.length > 0 ? (
-        <table className="details">
-          <tbody>
-            {rows.map(([k, v], idx) => (
-              (() => {
-                const cell = normalizeDetailValue(v);
-                return (
-                  <tr key={`${k}-${idx}`} className="responsive-row">
-                    <th className="responsive-th">{k}</th>
-                    <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                      {cell.content}
-                    </td>
-                  </tr>
-                );
-              })()
-            ))}
-          </tbody>
-        </table>
-      ) : null}
-      {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
-      {reviewIntent ? (
-        <p className="muted">
-          Review-Aktion "{reviewIntent === 'approved' ? 'Freigeben' : 'Ablehnen'}" vorbereitet.
-        </p>
-      ) : null}
-      {error ? (
-        <p className="muted" style={{ color: '#a30000' }}>{error}</p>
-      ) : null}
-      {canCancel ? (
-        <div className='row'>
-          <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>
-            Abbrechen
-          </button>
-        </div>
-      ) : null}
-      {!needsReview && (canStart || canRestart) ? (
-        <div className='row'>
-          {canStart ? (
-            <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
-              Starten
-            </button>
+    <div className={`card agentic-status-card${isCollapsed ? ' agentic-status-card--collapsed' : ''}`}>
+      <h3 className="agentic-status-card__heading">
+        <button
+          type="button"
+          className="agentic-status-card__toggle"
+          onClick={handleToggle}
+          aria-expanded={!isCollapsed}
+          aria-controls={contentId}
+        >
+          <span className="agentic-status-card__title">Ki Status</span>
+          <span className={`agentic-status-card__summary ${status.className}`}>{status.label}</span>
+          <span className="agentic-status-card__chevron" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
+        </button>
+      </h3>
+      {!isCollapsed ? (
+        <div className="agentic-status-card__content" id={contentId}>
+          <div className="row status-row">
+            <span className={status.className}>{status.label}</span>
+            {isInProgress ? <span className="status-spinner" aria-hidden="true" /> : null}
+          </div>
+          <p className="muted">{status.description}</p>
+          {rows.length > 0 ? (
+            <table className="details">
+              <tbody>
+                {rows.map(([k, v], idx) => (
+                  (() => {
+                    const cell = normalizeDetailValue(v);
+                    return (
+                      <tr key={`${k}-${idx}`} className="responsive-row">
+                        <th className="responsive-th">{k}</th>
+                        <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                          {cell.content}
+                        </td>
+                      </tr>
+                    );
+                  })()
+                ))}
+              </tbody>
+            </table>
           ) : null}
-          {canRestart ? (
-            <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
-              Wiederholen
-            </button>
+          {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
+          {reviewIntent ? (
+            <p className="muted">
+              Review-Aktion "{reviewIntent === 'approved' ? 'Freigeben' : 'Ablehnen'}" vorbereitet.
+            </p>
           ) : null}
-        </div>
-      ) : null}
-      {needsReview ? (
-        <div className='row'>
-          <button type="button" className="btn" disabled={actionPending} onClick={() => onReview('approved')}>
-            Freigeben
-          </button>
-          <button type="button" className="btn danger" disabled={actionPending} onClick={() => onReview('rejected')}>
-            Ablehnen
-          </button>
+          {error ? (
+            <p className="muted" style={{ color: '#a30000' }}>{error}</p>
+          ) : null}
+          {canCancel ? (
+            <div className='row'>
+              <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>
+                Abbrechen
+              </button>
+            </div>
+          ) : null}
+          {!needsReview && (canStart || canRestart) ? (
+            <div className='row'>
+              {canStart ? (
+                <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
+                  Starten
+                </button>
+              ) : null}
+              {canRestart ? (
+                <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
+                  Wiederholen
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {needsReview ? (
+            <div className='row'>
+              <button type="button" className="btn" disabled={actionPending} onClick={() => onReview('approved')}>
+                Freigeben
+              </button>
+              <button type="button" className="btn danger" disabled={actionPending} onClick={() => onReview('rejected')}>
+                Ablehnen
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
