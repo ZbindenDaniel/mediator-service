@@ -1,3 +1,5 @@
+// TODO(langtext-observability): Capture additional metadata for downstream JSON editors once the
+// parser stabilizes around sanitized payload handling and logging.
 export interface LangtextEntry {
   key: string;
   value: string;
@@ -6,11 +8,13 @@ export interface LangtextEntry {
 export type LangtextParseResult =
   | {
       kind: 'json';
+      mode: 'json';
       entries: LangtextEntry[];
       rawObject: Record<string, string>;
     }
   | {
       kind: 'text';
+      mode: 'text';
       text: string;
       rawText: string;
     };
@@ -46,7 +50,7 @@ function normaliseLangtextObject(
     rawObject[key] = coercedValue;
   }
 
-  return { kind: 'json', entries, rawObject };
+  return { kind: 'json', mode: 'json', entries, rawObject };
 }
 
 export function parseLangtext(
@@ -64,6 +68,7 @@ export function parseLangtext(
     });
     return {
       kind: 'text',
+      mode: 'text',
       text,
       rawText: text
     };
@@ -73,6 +78,7 @@ export function parseLangtext(
   if (!trimmed) {
     return {
       kind: 'text',
+      mode: 'text',
       text: '',
       rawText: candidate
     };
@@ -88,13 +94,15 @@ export function parseLangtext(
       valueType: typeof parsed
     });
   } catch (error) {
-    logger.warn?.('Failed to parse Langtext JSON, treating as legacy text', {
+    logger.error?.('Failed to parse sanitized Langtext JSON, treating as legacy text', {
+      preview: trimmed.slice(0, 200),
       error: error instanceof Error ? error.message : String(error)
     });
   }
 
   return {
     kind: 'text',
+    mode: 'text',
     text: candidate,
     rawText: candidate
   };

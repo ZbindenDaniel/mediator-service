@@ -419,11 +419,13 @@ export function ItemDetailsFields({
   const placementHidden = isFieldLocked(lockedFields, 'BoxID', 'hidden');
   const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
 
+  // TODO(langtext-observability): Revisit Langtext rendering once parser mode stabilizes across
+  // sanitized payloads and legacy fallbacks.
   const parsedLangtext = useMemo(() => parseLangtext(form.Langtext ?? ''), [form.Langtext]);
 
   const handleLangtextJsonChange = useCallback(
     (key: string, value: string) => {
-      if (parsedLangtext.kind !== 'json') {
+      if (parsedLangtext.mode !== 'json') {
         console.warn('Langtext JSON editor active without JSON payload, falling back to text update', {
           key
         });
@@ -789,7 +791,7 @@ export function ItemDetailsFields({
         <label>
           Langtext
         </label>
-        {parsedLangtext.kind === 'json' ? (
+        {parsedLangtext.mode === 'json' ? (
           <div className="langtext-editor" role="group" aria-label="Langtext Schlüssel-Wert-Paare">
             <p className="langtext-editor__hint">
               Die verfügbaren Schlüssel werden zentral verwaltet. Bitte passe hier nur die Werte an.
