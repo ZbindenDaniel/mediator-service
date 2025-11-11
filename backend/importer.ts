@@ -1,3 +1,4 @@
+// TODO(agent): Verify Langtext helper logging during CSV ingestion before enforcing structured payloads.
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
@@ -7,6 +8,7 @@ import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
 import { formatItemIdDateSegment } from './lib/itemIds';
+import { parseLangtext } from './lib/langtext';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -428,8 +430,20 @@ export async function ingestCsvFile(
       const grafikname = final['Grafikname(n)'] || '';
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
-      // TODO(langtext-json): Parse structured Langtext JSON with guarded logging and a try/catch fallback before defaulting to the plain string value.
-      const langtext = final['Langtext'] || '';
+      const csvItemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
+      const parsedLangtext = parseLangtext(final['Langtext'] ?? null, {
+        logger: console,
+        context: 'csv-import:langtext',
+        artikelNummer,
+        itemUUID: csvItemUUID || null
+      });
+      if (parsedLangtext === null && final['Langtext']) {
+        console.warn('[importer] Langtext CSV value rejected; defaulting to empty string', {
+          rowNumber,
+          artikelNummer: artikelNummer || null
+        });
+      }
+      const langtext = parsedLangtext ?? '';
       const hersteller = final['Hersteller'] || '';
       const hkA = parseIntegerField(
         final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'],
@@ -513,7 +527,7 @@ export async function ingestCsvFile(
 
         continue;
       }
-      let itemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
+      let itemUUID = csvItemUUID;
       if (artikelNummer) {
         try {
           const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;

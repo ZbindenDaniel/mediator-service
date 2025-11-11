@@ -1,4 +1,5 @@
 # Project Overview
+<!-- TODO(agent): Update Langtext migration status after observing backend helper telemetry. -->
 
 The mediator service coordinates warehouse inventory workflows by pairing a TypeScript/Node.js backend with a React frontend for managing boxes, items, and print assets. This document provides a planning-oriented snapshot of priorities, risks, and recent progress.
 
@@ -48,6 +49,13 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Continue validating the migrated `backend/agentic/` modules (flows, tools, prompts) with focused tests and linting once the
   invoker is fully integrated.
 - Align the upcoming Langtext-as-JSON metadata flow by auditing `models/item.ts` and `backend/agentic/flow/item-flow-schemas.ts` so importer, schema, and UI workstreams stay synchronized while structured data handling ships.
+
+## Langtext Migration Notes
+- Backend persistence, importer, and search flows now route `Langtext` values through `backend/lib/langtext.ts`, emitting
+  structured `[langtext]` logs whenever JSON parsing fails or fallbacks are applied. Monitor these logs to determine when it is
+  safe to deprecate the legacy string-only path.
+- Agentic schemas accept object payloads and print/search endpoints stringify structured metadata on demand; once telemetry
+  shows minimal fallback usage we can schedule removal of the string coercion branches and update the frontend editors.
 
 ## Risks & Dependencies
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.

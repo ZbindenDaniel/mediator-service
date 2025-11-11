@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
+// TODO(agent): Capture structured Langtext ingestion telemetry to validate helper fallbacks before removing string pathways.
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_QUEUED,
@@ -15,6 +16,7 @@ import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
 import { generateItemUUID } from '../lib/itemIds';
 import { MEDIA_DIR } from '../lib/media';
+import { parseLangtext } from '../lib/langtext';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -61,7 +63,16 @@ function normalizeItemReferenceRow(row: unknown): ItemRef | null {
     normalized.Verkaufspreis = record.Verkaufspreis;
   }
   if (typeof record.Kurzbeschreibung === 'string') normalized.Kurzbeschreibung = record.Kurzbeschreibung;
-  if (typeof record.Langtext === 'string') normalized.Langtext = record.Langtext;
+  if (Object.prototype.hasOwnProperty.call(record, 'Langtext')) {
+    const parsedLangtext = parseLangtext(record.Langtext, {
+      logger: console,
+      context: 'import-item:normalize-reference',
+      artikelNummer
+    });
+    if (parsedLangtext !== null) {
+      normalized.Langtext = parsedLangtext;
+    }
+  }
   if (typeof record.Hersteller === 'string') normalized.Hersteller = record.Hersteller;
   if (typeof record.Länge_mm === 'number' && Number.isFinite(record.Länge_mm)) normalized.Länge_mm = record.Länge_mm;
   if (typeof record.Breite_mm === 'number' && Number.isFinite(record.Breite_mm)) normalized.Breite_mm = record.Breite_mm;
@@ -391,7 +402,24 @@ const action = defineHttpAction({
 
       const artikelbeschreibung = artikelbeschreibungInput || referenceDefaults?.Artikelbeschreibung || '';
       const kurzbeschreibung = kurzbeschreibungInput || referenceDefaults?.Kurzbeschreibung || '';
-      const langtext = langtextInput || referenceDefaults?.Langtext || '';
+      const parsedLangtextInput = parseLangtext(langtextInput || null, {
+        logger: console,
+        context: 'import-item:form-langtext',
+        artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+        itemUUID: ItemUUID
+      });
+      if (parsedLangtextInput === null && langtextInput) {
+        console.warn('[import-item] Langtext input rejected; using fallback values', {
+          Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+          ItemUUID,
+          provided: langtextInput
+        });
+      }
+      let fallbackLangtext: ItemRef['Langtext'] = '';
+      if (referenceDefaults && Object.prototype.hasOwnProperty.call(referenceDefaults, 'Langtext')) {
+        fallbackLangtext = referenceDefaults.Langtext ?? '';
+      }
+      const langtext = parsedLangtextInput ?? fallbackLangtext;
       const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
 
       let verkaufspreis = referenceDefaults?.Verkaufspreis ?? 0;

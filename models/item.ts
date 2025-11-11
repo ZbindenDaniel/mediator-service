@@ -1,3 +1,4 @@
+// TODO(agent): Track Langtext payload migration and remove legacy fallback types when safe.
 export enum ItemEinheit {
   Stk = 'Stk',
   Mix = 'Mix'
@@ -23,13 +24,15 @@ export interface ItemInstance {
   ShopwareVariantId?: string | null;
 }
 
+export type LangtextPayload = Record<string, string>;
+
 export interface ItemRef {
   Artikel_Nummer: string;
   Grafikname?: string;
   Artikelbeschreibung?: string;
   Verkaufspreis?: number;
   Kurzbeschreibung?: string;
-  Langtext?: string;
+  Langtext?: string | LangtextPayload;
   Hersteller?: string;
   Länge_mm?: number;
   Breite_mm?: number;
