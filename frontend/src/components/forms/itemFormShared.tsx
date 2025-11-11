@@ -425,11 +425,9 @@ export function ItemDetailsFields({
   // TODO(langtext-observability): Revisit Langtext rendering once parser mode stabilizes across
   // sanitized payloads and legacy fallbacks.
   const parsedLangtext = useMemo(() => parseLangtext(form.Langtext ?? ''), [form.Langtext]);
-  const [langtextDraftKey, setLangtextDraftKey] = useState('');
   const [langtextFocusKey, setLangtextFocusKey] = useState<string | null>(null);
   const langtextValueRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
-  const langtextDraftInputId = useId();
-  const trimmedLangtextDraftKey = langtextDraftKey.trim();
+  const langtextFieldIdPrefix = useId();
 
   // TODO(langtext-type-guards): Consider splitting JSON and text Langtext editors into
   // dedicated components so union handling is localised and type-safe.
@@ -572,6 +570,8 @@ export function ItemDetailsFields({
         if (!explicitKey) {
           setPendingLangtextKey('');
         }
+        setLangtextFocusKey(normalisedKey);
+        console.info('Added Langtext entry via JSON add handler', { key: normalisedKey });
       } catch (error) {
         console.error('Failed to add Langtext entry', { error });
       }
@@ -642,40 +642,6 @@ export function ItemDetailsFields({
     },
     [onUpdate, parsedLangtext, pendingLangtextKey]
   );
-
-  const handleLangtextDraftKeyCommit = useCallback(() => {
-    const trimmed = trimmedLangtextDraftKey;
-    if (!trimmed) {
-      console.warn('Langtext key draft commit skipped because the key is empty');
-      return;
-    }
-
-    if (parsedLangtext.mode !== 'json') {
-      console.warn('Langtext key draft commit ignored because payload is not JSON-backed', { key: trimmed });
-      return;
-    }
-
-    if (parsedLangtext.entries.some((entry) => entry.key === trimmed)) {
-      console.warn('Langtext key draft duplicates existing key', { key: trimmed });
-      return;
-    }
-
-    const nextEntries = [...parsedLangtext.entries, { key: trimmed, value: '' }];
-
-    try {
-      const nextPayload = stringifyLangtextEntries(nextEntries);
-      onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
-      setLangtextDraftKey('');
-      setLangtextFocusKey(trimmed);
-      console.info('Added Langtext entry', { key: trimmed });
-    } catch (error) {
-      console.error('Failed to add Langtext entry', { key: trimmed, error });
-    }
-  }, [onUpdate, parsedLangtext, trimmedLangtextDraftKey]);
-
-  const handleLangtextDraftKeyChange = useCallback((value: string) => {
-    setLangtextDraftKey(value);
-  }, []);
 
   const handleLangtextTextChange = useCallback(
     (value: string) => {
@@ -1028,50 +994,23 @@ export function ItemDetailsFields({
         </label>
         {parsedLangtext.mode === 'json' ? (
           <div className="langtext-editor" role="group" aria-label="Langtext Schlüssel-Wert-Paare">
-            <div className="langtext-editor__draft">
-              <label className="visually-hidden" htmlFor={langtextDraftInputId}>
-                Neuer Langtext-Schlüssel
-              </label>
-              <div className="langtext-editor__draft-controls">
-                <input
-                  id={langtextDraftInputId}
-                  className="langtext-editor__draft-input"
-                  value={langtextDraftKey}
-                  onChange={(event) => handleLangtextDraftKeyChange(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleLangtextDraftKeyCommit();
-                    }
-                  }}
-                  placeholder="Schlüssel hinzufügen"
-                  aria-label="Neuen Langtext-Schlüssel hinzufügen"
-                />
-                <button
-                  type="button"
-                  className="langtext-editor__draft-button"
-                  onClick={handleLangtextDraftKeyCommit}
-                  aria-label="Langtext-Schlüssel speichern"
-                  disabled={
-                    trimmedLangtextDraftKey === '' ||
-                    parsedLangtext.entries.some((entry) => entry.key === trimmedLangtextDraftKey)
-                  }
-                >
-                  +
-                </button>
-              </div>
-            </div>
             {parsedLangtext.entries.length === 0 ? (
               <p className="langtext-editor__empty">Es sind derzeit keine Langtext-Schlüssel hinterlegt.</p>
             ) : (
               parsedLangtext.entries.map((entry, index) => {
-                const entryLabelId = `${langtextDraftInputId}-key-${index}`;
+                const entryValueId = `${langtextFieldIdPrefix}-value-${index}`;
+                // TODO(langtext-editor): Replace ad-hoc muted label styling with shared form label tokens.
                 return (
                   <div className="langtext-editor__entry" key={entry.key}>
-                    <span className="langtext-editor__key" id={entryLabelId} title={entry.key}>
+                    <label
+                      className="langtext-editor__key muted"
+                      htmlFor={entryValueId}
+                      title={entry.key}
+                    >
                       {entry.key}
-                    </span>
+                    </label>
                     <textarea
+                      id={entryValueId}
                       ref={(element) => {
                         langtextValueRefs.current[entry.key] = element;
                       }}
@@ -1081,7 +1020,6 @@ export function ItemDetailsFields({
                         handleLangtextJsonChange(entry.key, { value: event.target.value })
                       }
                       rows={Math.max(2, entry.value.split('\n').length)}
-                      aria-labelledby={entryLabelId}
                     />
                     <button
                       type="button"
