@@ -431,17 +431,32 @@ export function ItemDetailsFields({
   const langtextDraftInputId = useId();
   const trimmedLangtextDraftKey = langtextDraftKey.trim();
 
+  // TODO(langtext-type-guards): Consider splitting JSON and text Langtext editors into
+  // dedicated components so union handling is localised and type-safe.
   useEffect(() => {
+    if (parsedLangtext.mode !== 'json') {
+      langtextValueRefs.current = {};
+      return;
+    }
+
     const activeKeys = new Set(parsedLangtext.entries.map((entry) => entry.key));
     for (const key of Object.keys(langtextValueRefs.current)) {
       if (!activeKeys.has(key)) {
         delete langtextValueRefs.current[key];
       }
     }
-  }, [parsedLangtext.entries]);
+  }, [parsedLangtext]);
 
   useEffect(() => {
     if (!langtextFocusKey) {
+      return;
+    }
+
+    if (parsedLangtext.mode !== 'json') {
+      console.warn('Langtext focus request ignored because payload is not JSON-backed', {
+        key: langtextFocusKey
+      });
+      setLangtextFocusKey(null);
       return;
     }
 
@@ -457,7 +472,7 @@ export function ItemDetailsFields({
     }
 
     setLangtextFocusKey(null);
-  }, [langtextFocusKey, parsedLangtext.entries]);
+  }, [langtextFocusKey, parsedLangtext]);
 
   const [pendingLangtextKey, setPendingLangtextKey] = useState<string>('');
 
@@ -585,10 +600,20 @@ export function ItemDetailsFields({
       }
 
       try {
+        const nextEntries = parsedLangtext.entries.filter((entry) => entry.key !== keyToRemove);
+        if (nextEntries.length === parsedLangtext.entries.length) {
+          console.warn('Attempted to remove unknown Langtext key during JSON delete', { key: keyToRemove });
+          return;
+        }
+
         const nextPayload = stringifyLangtextEntries(nextEntries);
         onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
+        console.info('Removed Langtext entry via JSON delete handler', { key: keyToRemove });
       } catch (error) {
-        console.error('Failed to stringify Langtext entries during value update', { error, key });
+        console.error('Failed to stringify Langtext entries during value update', {
+          error,
+          key: keyToRemove
+        });
       }
     },
     [onUpdate, parsedLangtext]
@@ -1056,7 +1081,9 @@ export function ItemDetailsFields({
                       }}
                       className="langtext-editor__value"
                       value={entry.value}
-                      onChange={(event) => handleLangtextJsonChange(entry.key, event.target.value)}
+                      onChange={(event) =>
+                        handleLangtextJsonChange(entry.key, { value: event.target.value })
+                      }
                       rows={Math.max(2, entry.value.split('\n').length)}
                       aria-labelledby={entryLabelId}
                     />
