@@ -352,7 +352,7 @@ interface ItemDetailsFieldsProps {
   onGenerateMaterialNumber?: () => void | Promise<void | string>;
   onChangeStock?: (op: StockOperation) => void | Promise<void>;
   lockedFields?: LockedFieldConfig;
-  langtextEditorTestHarness?: (helpers: { add: (key?: string) => void }) => void;
+  langtextEditorTestHarness?: (helpers: { add: (key?: string) => void; remove: (key: string) => void }) => void;
 }
 
 function isFieldLocked(lockedFields: LockedFieldConfig | undefined, field: keyof ItemFormData, mode: LockedFieldMode) {
@@ -426,46 +426,22 @@ export function ItemDetailsFields({
   // sanitized payloads and legacy fallbacks.
   const parsedLangtext = useMemo(() => parseLangtext(form.Langtext ?? ''), [form.Langtext]);
 
-  const langtextKeyOptions = useMemo(() => {
-    const baseOptions = [...metaDataKeys];
-    if (parsedLangtext.mode !== 'json') {
-      return baseOptions;
+  const [pendingLangtextKey, setPendingLangtextKey] = useState<string>('');
+
+  const normaliseKeyLength = useCallback((candidate: string, context: string): string => {
+    const trimmed = candidate.trim();
+    if (trimmed.length <= 25) {
+      return trimmed;
     }
 
-    const approvedIds = new Set(baseOptions.map((definition) => definition.id));
-    const fallbackOptions = parsedLangtext.entries
-      .filter((entry) => !approvedIds.has(entry.key))
-      .map((entry) => ({ id: entry.key, label: entry.key }));
-
-    return [...baseOptions, ...fallbackOptions];
-  }, [parsedLangtext]);
-
-  const availableLangtextKeys = useMemo(() => {
-    if (parsedLangtext.mode !== 'json') {
-      return metaDataKeys;
-    }
-
-    const usedKeys = new Set(parsedLangtext.entries.map((entry) => entry.key));
-    return metaDataKeys.filter((definition) => !usedKeys.has(definition.id));
-  }, [parsedLangtext]);
-
-  const [pendingLangtextKey, setPendingLangtextKey] = useState<string>(() => metaDataKeys[0]?.id ?? '');
-
-  useEffect(() => {
-    if (availableLangtextKeys.length === 0) {
-      if (pendingLangtextKey !== '') {
-        setPendingLangtextKey('');
-      }
-      return;
-    }
-
-    const isPendingStillAvailable = availableLangtextKeys.some(
-      (definition) => definition.id === pendingLangtextKey
-    );
-    if (!isPendingStillAvailable) {
-      setPendingLangtextKey(availableLangtextKeys[0]?.id ?? '');
-    }
-  }, [availableLangtextKeys, pendingLangtextKey]);
+    const truncated = trimmed.slice(0, 25);
+    console.warn('Langtext key exceeds 25 characters, truncating value', {
+      context,
+      originalLength: trimmed.length,
+      truncated
+    });
+    return truncated;
+  }, []);
 
   const handleLangtextJsonChange = useCallback(
     (currentKey: string, next: { key?: string; value?: string }) => {
@@ -485,7 +461,7 @@ export function ItemDetailsFields({
           return;
         }
 
-        const requestedKey = (next.key ?? currentEntry.key).trim();
+        const requestedKey = normaliseKeyLength(next.key ?? currentEntry.key, 'update');
         if (!requestedKey) {
           console.warn('Langtext key cannot be empty, aborting update', { key: currentKey });
           return;
@@ -518,7 +494,7 @@ export function ItemDetailsFields({
         console.error('Failed to update Langtext entry', { key: currentKey, error });
       }
     },
-    [onUpdate, parsedLangtext]
+    [normaliseKeyLength, onUpdate, parsedLangtext]
   );
 
   const handleLangtextJsonAdd = useCallback(
@@ -528,30 +504,64 @@ export function ItemDetailsFields({
         return;
       }
 
-      const trimmedKey = (explicitKey ?? pendingLangtextKey).trim();
-      if (!trimmedKey) {
-        console.warn('Langtext add attempted without selecting a key');
-        return;
-      }
-
       try {
-        if (parsedLangtext.entries.some((entry) => entry.key === trimmedKey)) {
-          console.warn('Langtext key already present, skipping add', { key: trimmedKey });
+        const rawKey = explicitKey ?? pendingLangtextKey;
+        const normalisedKey = normaliseKeyLength(rawKey, 'add');
+        if (!normalisedKey) {
+          console.warn('Langtext key cannot be empty, skipping addition');
           return;
         }
 
-        const nextEntries = [...parsedLangtext.entries, { key: trimmedKey, value: '' }];
+        if (parsedLangtext.entries.some((entry) => entry.key === normalisedKey)) {
+          console.warn('Langtext key already present, skipping add', { key: normalisedKey });
+          return;
+        }
+
+        const nextEntries = [...parsedLangtext.entries, { key: normalisedKey, value: '' }];
         const nextPayload = stringifyLangtextEntries(nextEntries);
         onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
 
         if (!explicitKey) {
-          const remaining = metaDataKeys.filter(
-            (definition) => !nextEntries.some((entry) => entry.key === definition.id)
-          );
-          setPendingLangtextKey(remaining[0]?.id ?? '');
+          setPendingLangtextKey('');
         }
       } catch (error) {
-        console.error('Failed to add Langtext entry', { key: trimmedKey, error });
+        console.error('Failed to add Langtext entry', { error });
+      }
+    },
+    [normaliseKeyLength, onUpdate, parsedLangtext, pendingLangtextKey]
+  );
+
+  const handlePendingLangtextKeyChange = useCallback(
+    (value: string) => {
+      if (!value) {
+        setPendingLangtextKey('');
+        return;
+      }
+
+      const normalised = normaliseKeyLength(value, 'pending');
+      setPendingLangtextKey(normalised);
+    },
+    [normaliseKeyLength]
+  );
+
+  const handleLangtextJsonDelete = useCallback(
+    (keyToRemove: string) => {
+      if (parsedLangtext.mode !== 'json') {
+        console.warn('Langtext JSON editor inactive, cannot remove key-value pair', { key: keyToRemove });
+        return;
+      }
+
+      try {
+        const nextEntries = parsedLangtext.entries.filter((entry) => entry.key !== keyToRemove);
+        if (nextEntries.length === parsedLangtext.entries.length) {
+          console.warn('Attempted to remove unknown Langtext key', { key: keyToRemove });
+          return;
+        }
+
+        const nextPayload = stringifyLangtextEntries(nextEntries);
+        onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
+      } catch (error) {
+        console.error('Failed to remove Langtext entry', { key: keyToRemove, error });
       }
     },
     [onUpdate, parsedLangtext, pendingLangtextKey]
@@ -565,8 +575,8 @@ export function ItemDetailsFields({
   );
 
   if (langtextEditorTestHarness && parsedLangtext.mode === 'json') {
-    // Test harness hook: allows non-DOM tests to exercise the JSON addition pathway.
-    langtextEditorTestHarness({ add: handleLangtextJsonAdd });
+    // Test harness hook: allows non-DOM tests to exercise the JSON addition and removal pathways.
+    langtextEditorTestHarness({ add: handleLangtextJsonAdd, remove: handleLangtextJsonDelete });
   }
 
   const placementInputValue = typeof form.BoxID === 'string' ? form.BoxID : '';
@@ -909,7 +919,8 @@ export function ItemDetailsFields({
         {parsedLangtext.mode === 'json' ? (
           <div className="langtext-editor" role="group" aria-label="Langtext Schlüssel-Wert-Paare">
             <p className="langtext-editor__hint">
-              Die verfügbaren Schlüssel werden zentral verwaltet. Bitte passe hier nur die Werte an.
+              Vergeben Sie individuelle Schlüssel (maximal 25 Zeichen) und ergänzen Sie passende Werte, um strukturierte
+              Zusatzinformationen zu speichern.
             </p>
             {parsedLangtext.entries.length === 0 ? (
               <p className="langtext-editor__empty">Es sind derzeit keine Langtext-Schlüssel hinterlegt.</p>
@@ -921,20 +932,16 @@ export function ItemDetailsFields({
                       <span className="langtext-editor__key" title={entry.key}>
                         Schlüssel
                       </span>
-                      <select
-                        className="langtext-editor__select"
+                      <input
+                        type="text"
+                        className="langtext-editor__input"
                         aria-label={`Langtext-Schlüssel für ${entry.key}`}
                         value={entry.key}
+                        maxLength={25}
                         onChange={(event) =>
                           handleLangtextJsonChange(entry.key, { key: event.target.value })
                         }
-                      >
-                        {langtextKeyOptions.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </label>
                     <label className="langtext-editor__cell langtext-editor__cell--value">
                       <span className="langtext-editor__key">Wert</span>
@@ -947,6 +954,16 @@ export function ItemDetailsFields({
                         rows={Math.max(2, entry.value.split('\n').length)}
                       />
                     </label>
+                    <div className="langtext-editor__cell langtext-editor__cell--actions">
+                      <button
+                        type="button"
+                        className="langtext-editor__delete-button"
+                        onClick={() => handleLangtextJsonDelete(entry.key)}
+                        aria-label={`Langtext-Schlüssel ${entry.key} entfernen`}
+                      >
+                        Entfernen
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -954,30 +971,31 @@ export function ItemDetailsFields({
             <div className="langtext-editor__row langtext-editor__row--add">
               <label className="langtext-editor__cell langtext-editor__cell--key">
                 <span className="langtext-editor__key">Neuer Schlüssel</span>
-                <select
-                  className="langtext-editor__select"
+                <input
+                  type="text"
+                  className="langtext-editor__input"
                   aria-label="Neuer Langtext-Schlüssel"
                   value={pendingLangtextKey}
-                  onChange={(event) => setPendingLangtextKey(event.target.value)}
-                  disabled={availableLangtextKeys.length === 0}
-                >
-                  {availableLangtextKeys.length === 0 ? (
-                    <option value="">Keine weiteren Schlüssel verfügbar</option>
-                  ) : (
-                    availableLangtextKeys.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))
-                  )}
-                </select>
+                  maxLength={25}
+                  onChange={(event) => handlePendingLangtextKeyChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleLangtextJsonAdd();
+                    }
+                  }}
+                  placeholder="Schlüssel eingeben"
+                />
               </label>
               <div className="langtext-editor__cell langtext-editor__cell--value">
+                <span className="langtext-editor__add-hint">Wert kann nach dem Hinzufügen ergänzt werden.</span>
+              </div>
+              <div className="langtext-editor__cell langtext-editor__cell--actions">
                 <button
                   type="button"
                   className="langtext-editor__add-button"
                   onClick={() => handleLangtextJsonAdd()}
-                  disabled={!pendingLangtextKey}
+                  disabled={!pendingLangtextKey.trim()}
                   aria-label="Langtext-Schlüssel hinzufügen"
                 >
                   +
