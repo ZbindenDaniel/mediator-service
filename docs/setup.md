@@ -2,6 +2,8 @@
 
 ## Environment configuration
 
+<!-- TODO(agent): Re-run onboarding instructions after the Postgres container naming shifts. -->
+
 1. Copy `.env.example` to `.env` for local development.
 2. Populate the Shopware **search** variables before enabling read-only lookups. Leaving any required value blank keeps the integration disabled automatically:
    - `SHOPWARE_BASE_URL` must include the protocol (e.g. `https://shopware.example.com`).
@@ -11,6 +13,12 @@
 3. Flip `SHOPWARE_ENABLED=true` only after all required values are in place. Leaving it as `false` keeps Shopware search disabled even if credentials are present.
 4. Leave the queue-related flags (`SHOPWARE_SYNC_ENABLED`, `SHOPWARE_API_BASE_URL`, `SHOPWARE_QUEUE_POLL_INTERVAL_MS`) at their defaults. The background worker is intentionally disabled until the HTTP dispatch client is implemented.
 5. Set `IMPORTER_FORCE_ZERO_STOCK=true` to automatically override all CSV row quantities to zero during ingestion. When this flag is omitted or left `false`, operators can trigger a single zero-stock upload by calling `/api/import?zeroStock=true`.
+
+## Provisioning services
+
+1. Start the local dependencies with Docker Compose: `docker compose up -d`. The bundled configuration launches Postgres alongside the mediator so the backend can connect via the Compose network aliases.
+2. After the containers stabilise, run your migration/verification scripts (for example `npm run migrate` when available or `node scripts/verify-agentic-migration.js` for schema checks) to confirm the Postgres schema matches the latest models before exercising new features.
+3. If you swap in an external Postgres instance, update the `.env` variables (`DATABASE_URL`, `PGHOST`, etc.) accordingly and document the change so teammates inherit the correct connection string.
 
 > **Tip:** Variables can also be injected directly via your process manager or deployment platform if you prefer not to use a `.env` file.
 
@@ -35,3 +43,9 @@ If the firewall is enabled on your host, remember to open the HTTP port used by 
 ```bash
 sudo ufw allow 3000
 ```
+
+## Troubleshooting Postgres connectivity
+
+- Watch the mediator startup logs for `DATABASE_URL` warnings. The backend logs a structured message when it falls back to default credentials or encounters malformed connection strings, making it easier to spot typos.
+- Confirm the Postgres healthcheck status in Docker Compose (`docker compose ps` or `docker compose logs postgres`) before debugging application code. The included healthcheck reports when the database is still booting or rejecting connections.
+- When the service emits repeated connection retries, double-check that migrations have been applied—the tables listed in the log payload should align with the latest definitions under `models/`.

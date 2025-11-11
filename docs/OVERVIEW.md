@@ -49,6 +49,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Continue validating the migrated `backend/agentic/` modules (flows, tools, prompts) with focused tests and linting once the
   invoker is fully integrated.
 - Finalise the Langtext-as-JSON rollout by auditing `models/item.ts` and `backend/agentic/flow/item-flow-schemas.ts` so importer and schema workstreams stay synchronized with the new UI key/value editor.
+- Stand up the Compose-backed Postgres instance locally (`docker compose up`) during every integration cycle so migrations are exercised continuously and connection regressions surface early.
 
 ## Langtext Migration Notes
 - Backend persistence, importer, and search flows now route `Langtext` values through `backend/lib/langtext.ts`, emitting
@@ -62,6 +63,15 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Risks & Dependencies
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.
 - Refer to [BUGS.md](BUGS.md) for additional tracked defects.
+
+## Postgres rollout notes
+
+<!-- TODO(agent): Replace these notes once we promote managed database guidance. -->
+
+- Compose defines the mediator/Postgres network so `DATABASE_URL` and the individual `PG*` variables can follow the `mediator`/`postgres` defaults without leaking secrets.
+- After provisioning, run the migration and verification scripts to confirm every table matches the shared interfaces under `models/` and `backend/src/models/`; unresolved diffs risk runtime serialization errors.
+- Startup logs surface `DATABASE_URL` warnings and connection retries—treat them as blockers and resolve before layering on new features.
+- Healthcheck status from `docker compose ps` (or the container logs) is the quickest indicator of why local development cannot reach Postgres.
 
 ## Upcoming Opportunities
 - Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
