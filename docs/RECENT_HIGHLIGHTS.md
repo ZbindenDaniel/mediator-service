@@ -1,5 +1,7 @@
 # Recent Highlights
 
+- Added a Langtext JSON editor and detail viewer so key/value metadata renders clearly in the UI while falling back to the legacy text renderer when parsing fails.
+ 
 - Moved the detailed activities feed to `/activities` while limiting the landing page card to the latest three events with a shortcut link.
 - Trimmed the workspace `package-lock.json` by removing the accidental `npm` runtime dependency; regenerate with `npm install --package-lock-only` once registry access is restored (currently blocked by 403s in this environment).
 - Expanded the localized event label maps to cover newly tracked agentic lifecycle steps so UI timelines render translated copy for every restart, cancelation, and QR scan.

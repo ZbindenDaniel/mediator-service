@@ -30,6 +30,7 @@ import {
   persistAgenticRunCancellation,
   triggerAgenticRun
 } from '../lib/agentic';
+import { parseLangtext } from '../lib/langtext';
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
@@ -158,7 +159,6 @@ function humanizeCategoryLabel(label: string): string {
   }
 }
 
-// TODO(langtext-json): When Langtext becomes structured JSON, parse the payload with guarded logging and reuse these helpers as the fallback renderer for plain text segments.
 function renderLangtextInlineSegments(
   text: string,
   counters: { bold: number },
@@ -193,7 +193,6 @@ function renderLangtextInlineSegments(
   return nodes;
 }
 
-// TODO(langtext-json): Add a lightweight JSON-aware branch that surfaces key/value content while keeping this markdown path as the escape hatch on parse failures.
 function buildLangtextMarkdown(raw: string): React.ReactNode | null {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -596,18 +595,45 @@ export default function ItemDetail({ itemId }: Props) {
   const { unter: unterCategoryLookup } = categoryLookups;
 
   const langtextContent = useMemo<React.ReactNode>(() => {
-    if (!item || typeof item.Langtext !== 'string') {
+    if (!item) {
+      return null;
+    }
+
+    const parsed = parseLangtext(item.Langtext ?? '');
+    if (parsed.kind === 'json') {
+      if (parsed.entries.length === 0) {
+        return null;
+      }
+
+      return (
+        <div className="item-detail__langtext item-detail__langtext--json">
+          {parsed.entries.map((entry) => (
+            <div className="item-detail__langtext-json-row" key={entry.key}>
+              <span className="item-detail__langtext-json-key">{entry.key}</span>
+              {entry.value.trim() ? (
+                <span className="item-detail__langtext-json-value">{entry.value}</span>
+              ) : (
+                <span className="details-placeholder">{DETAIL_PLACEHOLDER_TEXT}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    const legacyText = parsed.text;
+    if (!legacyText || !legacyText.trim()) {
       return null;
     }
 
     try {
-      return buildLangtextMarkdown(item.Langtext);
+      return buildLangtextMarkdown(legacyText);
     } catch (error) {
       console.error('ItemDetail: Failed to render Langtext markdown', {
         error,
-        value: item.Langtext
+        value: legacyText
       });
-      return item.Langtext;
+      return legacyText;
     }
   }, [item?.Langtext]);
 

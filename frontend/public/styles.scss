@@ -337,6 +337,29 @@ div {
     margin-bottom: 0.25rem;
 }
 
+.details .item-detail__langtext--json {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.details .item-detail__langtext-json-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.details .item-detail__langtext-json-key {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.9rem;
+    word-break: break-word;
+}
+
+.details .item-detail__langtext-json-value {
+    white-space: pre-wrap;
+}
+
 .card-header {
     display: flex;
     align-items: center;
@@ -699,6 +722,48 @@ button:focus {
     // max-width: 460px;
     justify-content: space-between;
     flex-direction: column;
+}
+
+.langtext-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.langtext-editor__row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.langtext-editor__key {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.9rem;
+    word-break: break-word;
+}
+
+.langtext-editor__value {
+    width: 100%;
+    min-height: 64px;
+    resize: vertical;
+}
+
+.langtext-editor__hint {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.langtext-editor__empty {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-style: italic;
+}
+
+.langtext-editor--legacy textarea {
+    width: 100%;
 }
 
 .row.status-row {
