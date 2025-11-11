@@ -594,46 +594,56 @@ export default function ItemDetail({ itemId }: Props) {
 
   const { unter: unterCategoryLookup } = categoryLookups;
 
-  const langtextContent = useMemo<React.ReactNode>(() => {
+  const langtextRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
-      return null;
+      return [];
     }
 
     const parsed = parseLangtext(item.Langtext ?? '');
     if (parsed.kind === 'json') {
       if (parsed.entries.length === 0) {
-        return null;
+        return [];
       }
 
-      return (
-        <div className="item-detail__langtext item-detail__langtext--json">
-          {parsed.entries.map((entry) => (
-            <div className="item-detail__langtext-json-row" key={entry.key}>
-              <span className="item-detail__langtext-json-key">{entry.key}</span>
-              {entry.value.trim() ? (
-                <span className="item-detail__langtext-json-value">{entry.value}</span>
-              ) : (
-                <span className="details-placeholder">{DETAIL_PLACEHOLDER_TEXT}</span>
-              )}
-            </div>
-          ))}
-        </div>
-      );
+      return parsed.entries.map<[string, React.ReactNode]>((entry) => {
+        const trimmedValue = entry.value.trim();
+        if (!trimmedValue) {
+          return [entry.key, null];
+        }
+
+        try {
+          const rendered = buildLangtextMarkdown(entry.value);
+          if (rendered) {
+            return [entry.key, rendered];
+          }
+          return [entry.key, entry.value];
+        } catch (error) {
+          console.error('ItemDetail: Failed to render Langtext JSON markdown', {
+            error,
+            key: entry.key
+          });
+          return [entry.key, entry.value];
+        }
+      });
     }
 
     const legacyText = parsed.text;
     if (!legacyText || !legacyText.trim()) {
-      return null;
+      return [];
     }
 
     try {
-      return buildLangtextMarkdown(legacyText);
+      const rendered = buildLangtextMarkdown(legacyText);
+      if (!rendered) {
+        return [];
+      }
+      return [['Langtext', rendered]];
     } catch (error) {
       console.error('ItemDetail: Failed to render Langtext markdown', {
         error,
         value: legacyText
       });
-      return legacyText;
+      return [['Langtext', legacyText]];
     }
   }, [item?.Langtext]);
 
@@ -722,8 +732,14 @@ export default function ItemDetail({ itemId }: Props) {
     rows.push(
       ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
       ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
-      ['Verkaufspreis', item.Verkaufspreis ?? null],
-      ['Langtext', langtextContent],
+      ['Verkaufspreis', item.Verkaufspreis ?? null]
+    );
+
+    if (langtextRows.length > 0) {
+      rows.push(...langtextRows);
+    }
+
+    rows.push(
       ['Hersteller', item.Hersteller ?? null],
       ['Länge (mm)', item.Länge_mm ?? null],
       ['Breite (mm)', item.Breite_mm ?? null],
@@ -733,7 +749,7 @@ export default function ItemDetail({ itemId }: Props) {
     );
 
     return rows;
-  }, [events, item, resolveUnterkategorieLabel]);
+  }, [events, item, langtextRows, resolveUnterkategorieLabel]);
 
   const latestAgenticReviewNote = useMemo(() => {
     let latestNote: string | null = null;

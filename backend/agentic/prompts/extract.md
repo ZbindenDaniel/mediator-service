@@ -22,8 +22,9 @@ IMPORTANT: Return only the JSON data in the target format you received! Put unre
 
 Device-specific formatting guidance:
 
-- `Langtext`: Compose an objective, shop-ready device description in Markdown using clear bullet points. Focus on key technical
-  and selling features so the bullets can be reused to promote the item directly.
+- `Langtext`: Populate a JSON object (or JSON string) whose keys match the curated `metaDataKeys` set for this catalogue. Each
+  value should still contain the Markdown-ready merchandising copy for that key, and you may include bullet lists inside those
+  values when it improves clarity.
 - `Kurzbeschreibung`: Write a concise prose paragraph that summarizes the device.
 - `Artikelbeschreibung`: Provide the device or product name exactly as presented in the source material.
 

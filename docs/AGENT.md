@@ -1,3 +1,4 @@
+<!-- TODO(agent): Revisit Langtext metaDataKeys documentation when the curated key list changes upstream. -->
 # Agent Guidelines
 
 Get an overview of the project in `OVERVIEW.md`. There you will see what tasks are up next. You will also track your progress in this file. If you find parts of the application missing in `OVERVIEW.md` add them.
@@ -33,7 +34,7 @@ These planning responses should be explicit enough that another developer can im
 
 ## Planning Log
 
-- **Langtext metadata normalization (Langtext-as-JSON decision)** – Converge on representing the `Langtext` field as structured JSON metadata across importer, agentic flows, and shared models so downstream tooling can parse localisation-ready key/value pairs. Before implementation we must double-check `models/item.ts` alongside `backend/agentic/flow/item-flow-schemas.ts` to confirm the shared contracts stay aligned and document any schema deltas for reviewers.
+- **Langtext metadata normalization (Langtext-as-JSON decision)** – Converge on representing the `Langtext` field as structured JSON metadata across importer, agentic flows, and shared models so downstream tooling can parse localisation-ready key/value pairs. Before implementation we must double-check `models/item.ts` alongside `backend/agentic/flow/item-flow-schemas.ts` to confirm the shared contracts stay aligned and document any schema deltas for reviewers. The workflow is now JSON-first: the UI editor consumes the centrally curated `metaDataKeys` list (see the JSON editor hint in `frontend/src/components/forms/itemFormShared.tsx`) and prompts must emit objects whose keys align with that set so reviewers see stable slots.
 
 ### Parallel Workstreams
 
