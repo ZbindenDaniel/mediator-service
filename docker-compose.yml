@@ -32,6 +32,7 @@ services:
     image: ghcr.io/zbindendaniel/mediator-service:latest   # or docker.io/youruser/yourapp:1.3.0
     env_file: .env
     container_name: mediator
+    # TODO(host-ollama): Monitor upstream changes that could remove the host gateway requirement once a containerised Ollama ships.
     ports:
       - "8080:8080"
       # Uncomment the following line to expose the optional HTTPS listener once TLS_CERT_PATH/TLS_KEY_PATH are configured.
@@ -49,7 +50,8 @@ services:
       # Configure printing by setting PRINTER_QUEUE (and optionally LP_COMMAND / LPSTAT_COMMAND / PRINT_TIMEOUT_MS).
       # The in-process agentic orchestrator reuses these defaults; provide provider-specific overrides or secrets via an env_file.
       AGENTIC_MODEL_PROVIDER: ollama
-      AGENTIC_OLLAMA_BASE_URL: http://127.0.0.1:11434
+      # TODO(host-ollama): Remove this once the stack ships an internal Ollama sidecar.
+      AGENTIC_OLLAMA_BASE_URL: http://host.docker.internal:11434
       AGENTIC_OLLAMA_MODEL: gpt-oss:20b
       # Uncomment to enable OpenAI-compatible providers and inject credentials through env_file or secrets management.
       # AGENTIC_OPENAI_API_KEY: ""
@@ -72,6 +74,8 @@ services:
       # Optional: mount printer configuration files or device mappings if required for the target printer setup.
       # - ./config/printers:/etc/mediator/printers:ro
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
