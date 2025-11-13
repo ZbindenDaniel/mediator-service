@@ -32,6 +32,12 @@ When implementing a plan:
 
 These planning responses should be explicit enough that another developer can implement them without additional clarification.
 
+## Agentic Prompt Best Practices
+- Keep prompt sections aligned with `backend/agentic/flow/item-flow-schemas.ts::TargetSchema`; update both together when fields change.
+- Emphasise JSON-only output, locked field preservation, and the limited `__searchQueries` allowance when revising extraction instructions.
+- Tie device guidance directly to schema keys (`Langtext`, `Kurzbeschreibung`, `Artikelbeschreibung`) so downstream validators stay consistent and the prompt remains concise.
+- Do not expose system-only identifiers like `itemUUid` in prompts; the item flow injects them automatically.
+
 ## Planning Log
 
 - **Langtext metadata normalization (Langtext-as-JSON decision)** – Converge on representing the `Langtext` field as structured JSON metadata across importer, agentic flows, and shared models so downstream tooling can parse localisation-ready key/value pairs. Before implementation we must double-check `models/item.ts` alongside `backend/agentic/flow/item-flow-schemas.ts` to confirm the shared contracts stay aligned and document any schema deltas for reviewers. The workflow is now JSON-first: the UI editor consumes the centrally curated `metaDataKeys` list (see the JSON editor hint in `frontend/src/components/forms/itemFormShared.tsx`) and prompts must emit objects whose keys align with that set so reviewers see stable slots.
