@@ -64,6 +64,13 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       }
     }
 
+    logger?.debug?.({
+      msg: 'prompts bundle loaded',
+      itemId,
+      includeShopware: Boolean(includeShopware),
+      hasShopware: shopware != null
+    });
+
     return { format, extract, supervisor, categorizer, searchPlanner, shopware };
   } catch (err) {
     if (err instanceof FlowError) {

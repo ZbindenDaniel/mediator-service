@@ -121,10 +121,12 @@ export async function runExtractionAttempts({
   let itemContent = '';
 
   let attempt = 1;
-  const sanitizedTargetPreview = sanitizeForLog(target);
+  const { itemUUid: _promptHiddenItemId, ...promptFacingTarget } = target;
+  // TODO(agent): Keep prompt-facing target redactions aligned with fields hidden from agents.
+  const sanitizedTargetPreview = sanitizeForLog(promptFacingTarget);
   let serializedTargetSnapshot = '';
   try {
-    serializedTargetSnapshot = JSON.stringify(target, null, 2);
+    serializedTargetSnapshot = JSON.stringify(promptFacingTarget, null, 2);
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to serialize target for extraction context', itemId });
   }
