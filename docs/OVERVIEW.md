@@ -1,5 +1,6 @@
 # Project Overview
 <!-- TODO(agent): Update Langtext migration status after observing backend helper telemetry. -->
+<!-- TODO(agent): Re-run `npm install --package-lock-only` after each dependency change to keep CI lockfile checks green. -->
 
 The mediator service coordinates warehouse inventory workflows by pairing a TypeScript/Node.js backend with a React frontend for managing boxes, items, and print assets. This document provides a planning-oriented snapshot of priorities, risks, and recent progress.
 
