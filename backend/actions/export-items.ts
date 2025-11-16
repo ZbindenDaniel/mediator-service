@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { PUBLIC_ORIGIN } from '../config';
+import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
-import { stringifyLangtext } from '../lib/langtext';
+import { serializeLangtextForExport } from '../lib/langtext';
 import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -37,6 +37,7 @@ const extraFields = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt'];
 const columns = [...importFields, ...extraFields];
 
 // TODO(agent): Replace CSV-specific Langtext serialization once exports move to typed clients.
+// TODO(langtext-export): Align CSV Langtext serialization with downstream channel requirements when available.
 
 const fieldMap: Record<string, string> = {
   'Datum erfasst': 'Datum_erfasst',
@@ -78,40 +79,65 @@ function resolveExportValue(column: string, rawRow: Record<string, unknown>): un
   const field = fieldMap[column];
   const value = rawRow[field];
 
-  if (field === 'Langtext' && value && typeof value === 'object' && !Array.isArray(value)) {
+  if (field === 'Langtext') {
     const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    const helperContext = {
+      logger: console,
+      context: `export-items:Langtext:${LANGTEXT_EXPORT_FORMAT}`,
+      artikelNummer,
+      itemUUID
+    } as const;
+
     try {
-      const serialized = stringifyLangtext(value, {
-        logger: console,
-        context: 'export-items:Langtext',
-        artikelNummer,
-        itemUUID
-      });
+      const serialized = serializeLangtextForExport(value, LANGTEXT_EXPORT_FORMAT, helperContext);
       if (serialized !== null && serialized !== undefined) {
         return serialized;
       }
-      console.warn('[export-items] Langtext payload resolved to null during serialization; exporting empty string.', {
-        artikelNummer,
-        itemUUID
-      });
-      return '';
-    } catch (error) {
-      console.error('[export-items] Failed to stringify Langtext payload for export, attempting JSON fallback.', {
-        artikelNummer,
-        itemUUID,
-        error
-      });
-      try {
-        return JSON.stringify(value);
-      } catch (fallbackError) {
-        console.error('[export-items] JSON fallback failed for Langtext payload; exporting empty string.', {
+
+      console.warn(
+        '[export-items] Langtext payload resolved to null during configured serialization; attempting fallback.',
+        {
           artikelNummer,
           itemUUID,
-          error: fallbackError
+          format: LANGTEXT_EXPORT_FORMAT
+        }
+      );
+
+      if (LANGTEXT_EXPORT_FORMAT !== 'json') {
+        const fallbackSerialized = serializeLangtextForExport(value, 'json', {
+          ...helperContext,
+          context: 'export-items:Langtext:fallback-json'
         });
-        return '';
+
+        if (fallbackSerialized !== null && fallbackSerialized !== undefined) {
+          console.warn('[export-items] Falling back to JSON Langtext serialization for export.', {
+            artikelNummer,
+            itemUUID,
+            format: LANGTEXT_EXPORT_FORMAT
+          });
+          return fallbackSerialized;
+        }
       }
+    } catch (error) {
+      console.error('[export-items] Failed to serialize Langtext payload for export; attempting JSON fallback.', {
+        artikelNummer,
+        itemUUID,
+        format: LANGTEXT_EXPORT_FORMAT,
+        error
+      });
+    }
+
+    try {
+      return JSON.stringify(value);
+    } catch (fallbackError) {
+      console.error('[export-items] JSON fallback failed for Langtext payload; exporting empty string.', {
+        artikelNummer,
+        itemUUID,
+        format: LANGTEXT_EXPORT_FORMAT,
+        error: fallbackError
+      });
+      return '';
     }
   }
 

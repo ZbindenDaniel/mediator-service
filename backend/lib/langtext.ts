@@ -1,5 +1,7 @@
 import type { LangtextPayload } from '../../models';
 
+export type LangtextExportFormat = 'json' | 'markdown' | 'html';
+
 export type LangtextLogger = Partial<Pick<Console, 'debug' | 'info' | 'warn' | 'error'>>;
 
 export interface LangtextHelperContext {
@@ -22,6 +24,25 @@ function log(
   metadata: Record<string, unknown>
 ): void {
   logger[level]?.(`${LOG_NAMESPACE} ${message}`, metadata);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case '\'':
+        return '&#39;';
+      default:
+        return character;
+    }
+  });
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -182,6 +203,145 @@ export function stringifyLangtext(value: unknown, context: LangtextHelperContext
       ...context,
       error: err,
       value
+    });
+    return null;
+  }
+}
+
+function formatMarkdownFromPayload(
+  payload: LangtextPayload,
+  context: Record<string, unknown>,
+  logger: LangtextLogger
+): string | null {
+  const lines: string[] = [];
+
+  for (const [rawKey, rawValue] of Object.entries(payload)) {
+    const key = rawKey.trim();
+    if (!key) {
+      log(logger, 'warn', 'Skipping Langtext entry with empty key during markdown serialization', {
+        ...context,
+        entryKey: rawKey
+      });
+      continue;
+    }
+
+    const normalizedValue = rawValue.replace(/\r\n/g, '\n');
+    const trimmedValue = normalizedValue.trim();
+    if (!trimmedValue) {
+      lines.push(`- **${key}**`);
+      continue;
+    }
+
+    const singleLine = trimmedValue.replace(/\s*\n\s*/g, ' ');
+    lines.push(`- **${key}** ${singleLine}`);
+  }
+
+  if (lines.length === 0) {
+    log(logger, 'debug', 'Markdown serialization produced no Langtext entries', {
+      ...context
+    });
+    return null;
+  }
+
+  return lines.join('\n');
+}
+
+function formatMarkdownFromText(value: string): string | null {
+  const normalized = value.replace(/\r\n/g, '\n').trim();
+  return normalized ? normalized : null;
+}
+
+function formatHtmlFromPayload(
+  payload: LangtextPayload,
+  context: Record<string, unknown>,
+  logger: LangtextLogger
+): string | null {
+  const items: string[] = [];
+
+  for (const [rawKey, rawValue] of Object.entries(payload)) {
+    const key = rawKey.trim();
+    if (!key) {
+      log(logger, 'warn', 'Skipping Langtext entry with empty key during HTML serialization', {
+        ...context,
+        entryKey: rawKey
+      });
+      continue;
+    }
+
+    const normalizedValue = rawValue.replace(/\r\n/g, '\n');
+    const trimmedValue = normalizedValue.trim();
+    const escapedKey = escapeHtml(key);
+    if (!trimmedValue) {
+      items.push(`<li><strong>${escapedKey}</strong></li>`);
+      continue;
+    }
+
+    const escapedValue = escapeHtml(trimmedValue).replace(/\n/g, '<br />');
+    items.push(`<li><strong>${escapedKey}</strong> ${escapedValue}</li>`);
+  }
+
+  if (items.length === 0) {
+    log(logger, 'debug', 'HTML serialization produced no Langtext entries', {
+      ...context
+    });
+    return null;
+  }
+
+  return `<ul>${items.join('')}</ul>`;
+}
+
+function formatHtmlFromText(value: string): string | null {
+  const normalized = value.replace(/\r\n/g, '\n').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const escaped = escapeHtml(normalized).replace(/\n/g, '<br />');
+  return `<p>${escaped}</p>`;
+}
+
+export function serializeLangtextForExport(
+  value: unknown,
+  format: LangtextExportFormat,
+  context: LangtextHelperContext = {}
+): string | null {
+  const logger = resolveLogger(context.logger);
+  const contextWithLogger: LangtextHelperContext = { ...context, logger };
+  const serializationContext = { ...contextWithLogger, format };
+
+  try {
+    if (format === 'json') {
+      return stringifyLangtext(value, contextWithLogger);
+    }
+
+    const parsed = parseLangtext(value, contextWithLogger);
+    if (parsed === null) {
+      return null;
+    }
+
+    if (typeof parsed === 'string') {
+      if (format === 'markdown') {
+        return formatMarkdownFromText(parsed);
+      }
+      if (format === 'html') {
+        return formatHtmlFromText(parsed);
+      }
+      return null;
+    }
+
+    if (format === 'markdown') {
+      return formatMarkdownFromPayload(parsed, serializationContext, logger);
+    }
+
+    if (format === 'html') {
+      return formatHtmlFromPayload(parsed, serializationContext, logger);
+    }
+
+    return null;
+  } catch (error) {
+    log(logger, 'error', 'Failed to serialize Langtext for export', {
+      ...serializationContext,
+      error
     });
     return null;
   }
