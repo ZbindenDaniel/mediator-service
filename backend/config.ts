@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
+import type { LangtextExportFormat } from './lib/langtext';
+import { isLangtextExportFormat } from './lib/langtext';
+
 const ENV_FILE_PATH = path.resolve(process.cwd(), '.env');
 
 let envLoaded = false;
@@ -159,6 +162,21 @@ function resolveBaseUrl(envValue: string | undefined, fallbackPath: string): str
 export const HOSTNAME = PUBLIC_ORIGIN;
 export const BASE_QR_URL = resolveBaseUrl(process.env.BASE_QR_URL, '/qr');
 export const BASE_UI_URL = resolveBaseUrl(process.env.BASE_UI_URL, '/ui');
+
+// TODO(langtext-export-format): Surface format selection through admin UI once available.
+const DEFAULT_LANGTEXT_EXPORT_FORMAT: LangtextExportFormat = 'json';
+const rawLangtextExportFormat = (process.env.EXPORT_LANGTEXT_FORMAT || '').trim().toLowerCase();
+const resolvedLangtextExportFormat = isLangtextExportFormat(rawLangtextExportFormat)
+  ? (rawLangtextExportFormat as LangtextExportFormat)
+  : DEFAULT_LANGTEXT_EXPORT_FORMAT;
+
+if (rawLangtextExportFormat && !isLangtextExportFormat(rawLangtextExportFormat)) {
+  console.warn(
+    `[config] Unsupported EXPORT_LANGTEXT_FORMAT value "${rawLangtextExportFormat}" supplied; using ${DEFAULT_LANGTEXT_EXPORT_FORMAT}.`
+  );
+}
+
+export const EXPORT_LANGTEXT_FORMAT = resolvedLangtextExportFormat;
 
 const SHOPWARE_ENABLE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const rawShopwareEnabled = (process.env.SHOPWARE_SYNC_ENABLED || process.env.SHOPWARE_QUEUE_ENABLED || '').trim().toLowerCase();

@@ -23,8 +23,9 @@ const { runSuite, rootSuite } = harness;
 
 const harnessGlobals = ['describe', 'test', 'it', 'beforeAll', 'afterAll', 'beforeEach', 'afterEach', 'expect', 'jest'];
 for (const key of harnessGlobals) {
-  if (typeof harness[key] === 'function') {
-    global[key] = harness[key];
+  const candidate = harness[key];
+  if (typeof candidate === 'function' || key === 'jest') {
+    global[key] = candidate;
   }
 }
 
@@ -79,6 +80,7 @@ async function main() {
   const roots = [
     path.join(__dirname, '..', 'test'),
     path.join(__dirname, '..', 'backend', 'actions', '__tests__'),
+    path.join(__dirname, '..', 'backend', 'lib', '__tests__'),
     path.join(__dirname, '__tests__'),
   ];
   const files = [];

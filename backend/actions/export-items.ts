@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { PUBLIC_ORIGIN } from '../config';
+import { EXPORT_LANGTEXT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
-import { stringifyLangtext } from '../lib/langtext';
+import { formatLangtextForExport, stringifyLangtext } from '../lib/langtext';
+
+// TODO(langtext-export-format): Allow API consumers to request a specific Langtext export format dynamically.
 import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -78,30 +80,54 @@ function resolveExportValue(column: string, rawRow: Record<string, unknown>): un
   const field = fieldMap[column];
   const value = rawRow[field];
 
-  if (field === 'Langtext' && value && typeof value === 'object' && !Array.isArray(value)) {
+  if (field === 'Langtext') {
     const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+
     try {
-      const serialized = stringifyLangtext(value, {
+      const formatted = formatLangtextForExport(value, EXPORT_LANGTEXT_FORMAT, {
         logger: console,
         context: 'export-items:Langtext',
         artikelNummer,
         itemUUID
       });
-      if (serialized !== null && serialized !== undefined) {
-        return serialized;
+
+      if (formatted !== null && formatted !== undefined) {
+        return formatted;
       }
-      console.warn('[export-items] Langtext payload resolved to null during serialization; exporting empty string.', {
+
+      console.warn('[export-items] Langtext payload resolved to null during formatting; exporting empty string.', {
         artikelNummer,
-        itemUUID
+        itemUUID,
+        format: EXPORT_LANGTEXT_FORMAT
       });
       return '';
     } catch (error) {
-      console.error('[export-items] Failed to stringify Langtext payload for export, attempting JSON fallback.', {
+      console.error('[export-items] Failed to format Langtext payload for export, attempting JSON fallback.', {
         artikelNummer,
         itemUUID,
+        format: EXPORT_LANGTEXT_FORMAT,
         error
       });
+
+      try {
+        const serialized = stringifyLangtext(value, {
+          logger: console,
+          context: 'export-items:Langtext-fallback',
+          artikelNummer,
+          itemUUID
+        });
+        if (serialized !== null && serialized !== undefined) {
+          return serialized;
+        }
+      } catch (stringifyError) {
+        console.error('[export-items] Langtext stringify fallback failed during export.', {
+          artikelNummer,
+          itemUUID,
+          error: stringifyError
+        });
+      }
+
       try {
         return JSON.stringify(value);
       } catch (fallbackError) {

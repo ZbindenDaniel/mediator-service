@@ -2,6 +2,9 @@ import type { LangtextPayload } from '../../models';
 
 export type LangtextLogger = Partial<Pick<Console, 'debug' | 'info' | 'warn' | 'error'>>;
 
+// TODO(langtext-export-format): Consolidate format options once downstream clients adopt shared rendering helpers.
+export type LangtextExportFormat = 'json' | 'markdown' | 'html';
+
 export interface LangtextHelperContext {
   logger?: LangtextLogger;
   context?: string;
@@ -10,9 +13,17 @@ export interface LangtextHelperContext {
 }
 
 const LOG_NAMESPACE = '[langtext]';
+const LANGTEXT_EXPORT_FORMAT_SET: ReadonlySet<LangtextExportFormat> = new Set(['json', 'markdown', 'html']);
 
 function resolveLogger(logger?: LangtextLogger): LangtextLogger {
   return logger ?? console;
+}
+
+export function isLangtextExportFormat(value: unknown): value is LangtextExportFormat {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return LANGTEXT_EXPORT_FORMAT_SET.has(value as LangtextExportFormat);
 }
 
 function log(
@@ -201,4 +212,139 @@ export function ensureLangtextString(
 
   const serialized = stringifyLangtext(value, context);
   return serialized ?? null;
+}
+
+function escapeHtml(raw: string): string {
+  return raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatLangtextPayloadAsMarkdown(payload: LangtextPayload): string | null {
+  const segments: string[] = [];
+
+  for (const [rawKey, rawValue] of Object.entries(payload)) {
+    const key = rawKey.trim();
+    const value = rawValue.trim();
+
+    if (key && value) {
+      segments.push(`- **${key}**: ${value}`);
+      continue;
+    }
+
+    if (key) {
+      segments.push(`- **${key}**`);
+      continue;
+    }
+
+    if (value) {
+      segments.push(value);
+    }
+  }
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  return segments.join('\n');
+}
+
+function formatLangtextPayloadAsHtml(payload: LangtextPayload): string | null {
+  const segments: string[] = [];
+
+  for (const [rawKey, rawValue] of Object.entries(payload)) {
+    const key = rawKey.trim();
+    const value = rawValue.trim();
+
+    if (!key && !value) {
+      continue;
+    }
+
+    if (key && value) {
+      segments.push(`<p><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</p>`);
+      continue;
+    }
+
+    if (key) {
+      segments.push(`<p><strong>${escapeHtml(key)}</strong></p>`);
+      continue;
+    }
+
+    segments.push(`<p>${escapeHtml(value)}</p>`);
+  }
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  return segments.join('');
+}
+
+export function formatLangtextForExport(
+  value: unknown,
+  format: LangtextExportFormat,
+  context: LangtextHelperContext = {}
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (format === 'json') {
+    return stringifyLangtext(value, context);
+  }
+
+  const logger = resolveLogger(context.logger);
+  const parseContext: LangtextHelperContext = {
+    ...context,
+    logger
+  };
+  const parsed = parseLangtext(value, parseContext);
+
+  if (parsed === null) {
+    return null;
+  }
+
+  if (typeof parsed === 'string') {
+    const trimmed = parsed.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    if (format === 'html') {
+      return `<p>${escapeHtml(trimmed)}</p>`;
+    }
+
+    return trimmed;
+  }
+
+  if (format === 'markdown') {
+    const formatted = formatLangtextPayloadAsMarkdown(parsed);
+    if (formatted === null) {
+      log(logger, 'debug', 'Langtext markdown export produced no content', {
+        ...parseContext
+      });
+      return '';
+    }
+    return formatted;
+  }
+
+  if (format === 'html') {
+    const formatted = formatLangtextPayloadAsHtml(parsed);
+    if (formatted === null) {
+      log(logger, 'debug', 'Langtext HTML export produced no content', {
+        ...parseContext
+      });
+      return '';
+    }
+    return formatted;
+  }
+
+  log(logger, 'warn', 'Unsupported Langtext export format requested, falling back to JSON', {
+    ...parseContext,
+    format
+  });
+  return stringifyLangtext(parsed, parseContext);
 }
