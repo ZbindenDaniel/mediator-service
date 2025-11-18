@@ -1,4 +1,5 @@
 // TODO(agent): Verify Langtext helper logging during CSV ingestion before enforcing structured payloads.
+// TODO(agent): Keep importer box persistence in sync with schema changes (PhotoPath, future metadata).
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
@@ -475,6 +476,7 @@ export async function ingestCsvFile(
           StandortLabel: standortLabel,
           CreatedAt: final.CreatedAt || '',
           Notes: final.Notes || '',
+          PhotoPath: final.PhotoPath || null,
           PlacedBy: final.PlacedBy || '',
           PlacedAt: final.PlacedAt || '',
           UpdatedAt: now,
