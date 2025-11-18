@@ -132,7 +132,8 @@ export const apply: Op['apply'] = (row, ctx) => {
     }
 
     const normalizedItime = normalizeValue(row.itime);
-    const timestampFallbackFields = ['insertdate', 'mtime', 'Datum erfasst', 'Datum_erfasst', 'idate'] as const;
+    // TODO(agent): Monitor insertdateset synonym usage in future exports to keep timestamp fallbacks accurate.
+    const timestampFallbackFields = ['insertdate', 'insertdateset', 'mtime', 'Datum erfasst', 'Datum_erfasst', 'idate'] as const;
     let datumErfasstSourceField: string | null = null;
     let datumErfasst = normalizedItime;
     if (!datumErfasst) {
@@ -154,6 +155,16 @@ export const apply: Op['apply'] = (row, ctx) => {
           });
         } catch (loggingError) {
           console.error('[detect-kivitendo-schema] failed to log timestamp fallback usage', loggingError);
+        }
+        if (datumErfasstSourceField === 'insertdateset') {
+          try {
+            ctx.log('[detect-kivitendo-schema] mapped insertdateset alias for Datum erfasst', {
+              id: row.id,
+              partnumber: row.partnumber,
+            });
+          } catch (loggingError) {
+            console.error('[detect-kivitendo-schema] failed to log insertdateset alias usage', loggingError);
+          }
         }
       }
     }
