@@ -16,6 +16,58 @@ const ITEM_ID_PREFIX = 'I-';
 const BOX_ID_PREFIX = 'B-';
 const ID_SEQUENCE_WIDTH = 4;
 
+// TODO(agent): Expand quantity field resolution when additional column spellings surface.
+const QUANTITY_FIELD_PRIORITIES = [
+  { field: 'Auf_Lager', warnOnUse: false },
+  { field: 'Qty', warnOnUse: false },
+  { field: 'onhand', warnOnUse: true },
+  { field: 'Onhand', warnOnUse: true },
+  { field: 'OnHand', warnOnUse: true },
+] as const;
+
+interface QuantityFieldResolution {
+  value: string | undefined;
+  source: (typeof QUANTITY_FIELD_PRIORITIES)[number]['field'] | null;
+}
+
+function resolveQuantityFieldValue(
+  row: Record<string, string>,
+  rowNumber: number,
+  options: { logFallback?: boolean } = {}
+): QuantityFieldResolution {
+  const { logFallback = true } = options;
+  try {
+    for (const candidate of QUANTITY_FIELD_PRIORITIES) {
+      if (!Object.prototype.hasOwnProperty.call(row, candidate.field)) {
+        continue;
+      }
+      const rawValue = row[candidate.field];
+      const trimmed = typeof rawValue === 'string' ? rawValue.trim() : String(rawValue ?? '').trim();
+      if (!trimmed) {
+        continue;
+      }
+      if (candidate.warnOnUse && logFallback) {
+        try {
+          console.warn('[importer] Falling back to onhand quantity column for CSV row', {
+            rowNumber,
+            field: candidate.field,
+          });
+        } catch (loggingError) {
+          console.error('[importer] Failed to log onhand quantity fallback', {
+            rowNumber,
+            field: candidate.field,
+            loggingError,
+          });
+        }
+      }
+      return { value: trimmed, source: candidate.field };
+    }
+  } catch (error) {
+    console.error('[importer] Failed to resolve quantity column for row', { rowNumber, error });
+  }
+  return { value: undefined, source: null };
+}
+
 function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
   let candidate = '';
   if (typeof value === 'string') {
@@ -376,7 +428,8 @@ export async function ingestCsvFile(
       const row = normalize(r);
       const final = applyOps(row, runState);
       if (zeroStockRequested) {
-        const originalQuantity = final['Auf_Lager'] || final['Qty'] || '';
+        const resolvedQuantity = resolveQuantityFieldValue(final, rowNumber, { logFallback: false });
+        const originalQuantity = resolvedQuantity.value ?? '';
         final['Auf_Lager'] = '0';
         final['Qty'] = '0';
         if (originalQuantity !== '0') {
@@ -479,8 +532,9 @@ export async function ingestCsvFile(
         parseDecimalField(final['Gewicht(kg)'], 'Gewicht(kg)', { defaultValue: 0 }) ?? 0;
       const verkaufspreis =
         parseDecimalField(final['Verkaufspreis'], 'Verkaufspreis', { defaultValue: 0 }) ?? 0;
+      const resolvedQuantity = resolveQuantityFieldValue(final, rowNumber);
       const aufLager =
-        parseIntegerField(final['Auf_Lager'] || final['Qty'], 'Auf_Lager', { defaultValue: 0 }) ?? 0;
+        parseIntegerField(resolvedQuantity.value, 'Auf_Lager', { defaultValue: 0 }) ?? 0;
 
       if (aufLager <= 0) {
         console.info('CSV ingestion: skipping item persistence due to non-positive quantity', {
