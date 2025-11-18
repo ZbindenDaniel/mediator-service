@@ -440,6 +440,54 @@ export async function ingestCsvFile(
       const rowNumber = index + 1;
       const row = normalize(r);
       const final = applyOps(row, runState);
+      // TODO(agent): Remove Datum erfasst alias hydration once upstream CSVs always emit normalized timestamps.
+      const datumErfasstRaw = final['Datum erfasst'];
+      const datumErfasstMissing = typeof datumErfasstRaw !== 'string' || datumErfasstRaw.trim() === '';
+      if (datumErfasstMissing) {
+        try {
+          let fallbackAlias: string | null = null;
+          let fallbackValue: string | null = null;
+          for (const field of IMPORT_DATE_FIELD_PRIORITIES) {
+            if (field === 'Datum erfasst') {
+              continue;
+            }
+            const candidateValue = final[field];
+            if (candidateValue === undefined || candidateValue === null) {
+              continue;
+            }
+            if (typeof candidateValue !== 'string') {
+              console.warn('[importer] Skipping Datum erfasst alias with non-string value', {
+                rowNumber,
+                aliasField: field,
+              });
+              continue;
+            }
+            const trimmedCandidate = candidateValue.trim();
+            if (!trimmedCandidate) {
+              console.warn('[importer] Skipping Datum erfasst alias with blank value', {
+                rowNumber,
+                aliasField: field,
+              });
+              continue;
+            }
+            fallbackAlias = field;
+            fallbackValue = trimmedCandidate;
+            break;
+          }
+          if (fallbackAlias && fallbackValue) {
+            final['Datum erfasst'] = fallbackValue;
+            console.log('[importer] Defaulted Datum erfasst from alias column', {
+              rowNumber,
+              aliasField: fallbackAlias,
+            });
+          }
+        } catch (datumErfasstAliasError) {
+          console.error('[importer] Failed to hydrate Datum erfasst from alias', {
+            rowNumber,
+            error: datumErfasstAliasError,
+          });
+        }
+      }
       if (zeroStockRequested) {
         const resolvedQuantity = resolveQuantityFieldValue(final, rowNumber, { logFallback: false });
         const originalQuantity = resolvedQuantity.value ?? '';

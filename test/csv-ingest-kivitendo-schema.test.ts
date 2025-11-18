@@ -9,6 +9,8 @@ const KIVITENDO_ZERO_QUANTITY = path.join(FIXTURE_DIR, 'kivitendo-zero-quantity.
 const KIVITENDO_RELAXED = path.join(FIXTURE_DIR, 'kivitendo-relaxed.csv');
 // TODO(agent): Extend relaxed fixtures for future timestamp variants surfaced by partners.
 const KIVITENDO_RELAXED_UPDATE = path.join(FIXTURE_DIR, 'kivitendo-relaxed-update.csv');
+// TODO(agent): Replace insertdate-only fixture when upstream CSVs emit normalized Datum erfasst columns by default.
+const KIVITENDO_INSERTDATE_ONLY = path.join(FIXTURE_DIR, 'kivitendo-insertdate-only.csv');
 
 // TODO: Expand fixtures when additional Kivitendo header permutations surface.
 // TODO(agent): Mirror new Kivitendo cvar metadata in fixtures as upstream exports evolve.
@@ -78,6 +80,7 @@ const selectItemRef = db.prepare(
   WHERE Artikel_Nummer = ?`
 );
 const selectBox = db.prepare('SELECT BoxID, Notes FROM boxes WHERE BoxID = ?');
+const selectItemDatum = db.prepare('SELECT Datum_erfasst as DatumErfasst FROM items WHERE Artikel_Nummer = ?');
 
 function clearDatabase() {
   try {
@@ -351,5 +354,17 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
 
     const relaxedUpdatedBox = selectBox.get('B-030424-0001') as { BoxID: string; Notes: string | null } | undefined;
     expect(relaxedUpdatedBox).toEqual({ BoxID: 'B-030424-0001', Notes: '' });
+  });
+
+  test('hydrates Datum_erfasst from insertdate alias when normalized column is missing', async () => {
+    try {
+      await ingestCsvFile(KIVITENDO_INSERTDATE_ONLY);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Insertdate-only ingestion failed', error);
+      throw error;
+    }
+
+    const datumRow = selectItemDatum.get('KIV-INSERT') as { DatumErfasst: string | null } | undefined;
+    expect(datumRow).toEqual({ DatumErfasst: '2024-04-08T11:30:00.000Z' });
   });
 });
