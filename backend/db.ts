@@ -2051,6 +2051,18 @@ export const updateAgenticReview = db.prepare(`
 `);
 
 // TODO(agent): Capture metrics on Langtext parsing for list endpoints to guide frontend rollout timing.
+// TODO(agent): Backfill reference exports once Artikel_Nummer auditing is complete.
+const listItemReferencesStatement = db.prepare(`
+  SELECT
+    r.Artikel_Nummer,
+    i.ItemUUID AS InstanceItemUUID
+  FROM item_refs r
+  LEFT JOIN items i ON i.Artikel_Nummer = r.Artikel_Nummer
+  ORDER BY COALESCE(NULLIF(r.Artikel_Nummer, ''), i.ItemUUID)
+`);
+
+export const listItemReferences = listItemReferencesStatement;
+
 const listItemsStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
