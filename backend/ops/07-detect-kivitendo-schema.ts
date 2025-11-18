@@ -2,6 +2,7 @@ import { Op } from './types';
 
 // TODO: Extend Kivitendo schema detection when additional export variants surface.
 // TODO(agent): Monitor upcoming timestamp columns from Kivitendo exports to keep fallback coverage current.
+// TODO(agent): Keep cvar_* metadata mappings aligned with importer expectations as new partner fields appear.
 const KIVITENDO_HEADER_PROFILES = [
   {
     name: 'full',
@@ -108,10 +109,7 @@ export const apply: Op['apply'] = (row, ctx) => {
       mappedRow['Artikelbeschreibung'] = beschreibung;
     }
 
-    const langtext = normalizeValue(row.notes);
-    if (langtext) {
-      mappedRow['Langtext'] = langtext;
-    }
+    const langtextFromNotes = normalizeValue(row.notes);
 
     const verkaufspreis = normalizeValue(row.sellprice);
     if (verkaufspreis) {
@@ -203,6 +201,71 @@ export const apply: Op['apply'] = (row, ctx) => {
         id: row.id,
         partnumber: row.partnumber,
       });
+    }
+
+    const kurzbeschreibung = normalizeValue(row.cvar_vm_product_s_desc);
+    if (kurzbeschreibung) {
+      mappedRow['Kurzbeschreibung'] = kurzbeschreibung;
+    }
+
+    const cvarLangtext = normalizeValue(row.cvar_vm_product_desc);
+    if (cvarLangtext) {
+      mappedRow['Langtext'] = cvarLangtext;
+    } else if (langtextFromNotes) {
+      mappedRow['Langtext'] = langtextFromNotes;
+    }
+
+    const hersteller = normalizeValue(row.cvar_vm_product_mf_name);
+    if (hersteller) {
+      mappedRow.Hersteller = hersteller;
+    }
+
+    const laenge = normalizeValue(row.cvar_vm_product_length);
+    if (laenge) {
+      mappedRow['Länge(mm)'] = laenge;
+    }
+
+    const breite = normalizeValue(row.cvar_vm_product_width);
+    if (breite) {
+      mappedRow['Breite(mm)'] = breite;
+    }
+
+    const hoehe = normalizeValue(row.cvar_vm_product_height);
+    if (hoehe) {
+      mappedRow['Höhe(mm)'] = hoehe;
+    }
+
+    const hauptkategorienA = normalizeValue(row.cvar_categories_A1);
+    if (hauptkategorienA) {
+      mappedRow['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] = hauptkategorienA;
+    }
+
+    const unterkategorienA = normalizeValue(row.cvar_categories_A2);
+    if (unterkategorienA) {
+      mappedRow['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'] = unterkategorienA;
+    }
+
+    const hauptkategorienB = normalizeValue(row.cvar_categories_B1);
+    if (hauptkategorienB) {
+      mappedRow['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] = hauptkategorienB;
+    }
+
+    const unterkategorienB = normalizeValue(row.cvar_categories_B2);
+    if (unterkategorienB) {
+      mappedRow['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'] = unterkategorienB;
+    }
+
+    const cvarPublished = normalizeBooleanFlag(normalizeValue(row.cvar_published));
+    if (cvarPublished) {
+      mappedRow['Veröffentlicht_Status'] = cvarPublished;
+    }
+
+    const cvarStockhandle = normalizeBooleanFlag(normalizeValue(row.cvar_vm_product_stockhandle));
+    if (cvarStockhandle) {
+      if (!mappedRow['Auf_Lager']) {
+        mappedRow['Auf_Lager'] = cvarStockhandle;
+      }
+      mappedRow['Shopartikel'] = cvarStockhandle;
     }
 
     ctx.log('[detect-kivitendo-schema] mapped row', mappedRow);

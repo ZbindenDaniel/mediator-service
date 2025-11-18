@@ -11,6 +11,7 @@ const KIVITENDO_RELAXED = path.join(FIXTURE_DIR, 'kivitendo-relaxed.csv');
 const KIVITENDO_RELAXED_UPDATE = path.join(FIXTURE_DIR, 'kivitendo-relaxed-update.csv');
 
 // TODO: Expand fixtures when additional Kivitendo header permutations surface.
+// TODO(agent): Mirror new Kivitendo cvar metadata in fixtures as upstream exports evolve.
 
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
 
@@ -34,8 +35,47 @@ const { ingestCsvFile } = require('../backend/importer');
 const selectItemByArtikel = db.prepare(
   'SELECT ItemUUID, Artikel_Nummer as ArtikelNummer, BoxID, Auf_Lager as AufLager FROM items WHERE Artikel_Nummer = ?'
 );
+type ItemRefRow = {
+  Grafikname: string | null;
+  Artikelbeschreibung: string | null;
+  Langtext: string | null;
+  Verkaufspreis: number | null;
+  GewichtKg: number | null;
+  Einheit: string | null;
+  VStatus: string | null;
+  Shopartikel: number | null;
+  Kurzbeschreibung: string | null;
+  Hersteller: string | null;
+  LaengeMm: number | null;
+  BreiteMm: number | null;
+  HoeheMm: number | null;
+  HauptA: number | null;
+  UnterA: number | null;
+  HauptB: number | null;
+  UnterB: number | null;
+};
+
 const selectItemRef = db.prepare(
-  'SELECT Grafikname, Artikelbeschreibung, Langtext, Verkaufspreis, Gewicht_kg as GewichtKg, Einheit, Veröffentlicht_Status as VStatus, Shopartikel FROM item_refs WHERE Artikel_Nummer = ?'
+  `SELECT
+    Grafikname,
+    Artikelbeschreibung,
+    Langtext,
+    Verkaufspreis,
+    Gewicht_kg as GewichtKg,
+    Einheit,
+    Veröffentlicht_Status as VStatus,
+    Shopartikel,
+    Kurzbeschreibung,
+    Hersteller,
+    Länge_mm as LaengeMm,
+    Breite_mm as BreiteMm,
+    Höhe_mm as HoeheMm,
+    CAST(Hauptkategorien_A AS INTEGER) as HauptA,
+    CAST(Unterkategorien_A AS INTEGER) as UnterA,
+    CAST(Hauptkategorien_B AS INTEGER) as HauptB,
+    CAST(Unterkategorien_B AS INTEGER) as UnterB
+  FROM item_refs
+  WHERE Artikel_Nummer = ?`
 );
 const selectBox = db.prepare('SELECT BoxID, Notes FROM boxes WHERE BoxID = ?');
 
@@ -83,33 +123,31 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
       | undefined;
     expect(initialItem).toEqual({
-      ItemUUID: 'I-010424-0001',
+      ItemUUID: 'kivitendo-101',
       ArtikelNummer: 'KIV-001',
       BoxID: 'B-010424-0001',
       AufLager: 5,
     });
 
-    const initialRef = selectItemRef.get('KIV-001') as
-      | {
-          Grafikname: string | null;
-          Artikelbeschreibung: string | null;
-          Langtext: string | null;
-          Verkaufspreis: number | null;
-          GewichtKg: number | null;
-          Einheit: string | null;
-          VStatus: string | null;
-          Shopartikel: number | null;
-        }
-      | undefined;
+    const initialRef = selectItemRef.get('KIV-001') as ItemRefRow | undefined;
     expect(initialRef).toEqual({
       Grafikname: 'kivi-image.png',
       Artikelbeschreibung: 'Kivitendo Artikel',
-      Langtext: 'Langtext Notiz',
+      Langtext: 'Langtext Aus Custom Feld',
       Verkaufspreis: 17.49,
       GewichtKg: 1.25,
       Einheit: 'Stk',
       VStatus: 'yes',
       Shopartikel: 1,
+      Kurzbeschreibung: 'Kurzbeschreibung Initial',
+      Hersteller: 'Hersteller GmbH',
+      LaengeMm: 250,
+      BreiteMm: 150,
+      HoeheMm: 80,
+      HauptA: 1001,
+      UnterA: 2001,
+      HauptB: 3001,
+      UnterB: 4001,
     });
 
     const initialBox = selectBox.get('B-010424-0001') as { BoxID: string; Notes: string | null } | undefined;
@@ -130,33 +168,31 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
       | undefined;
     expect(updatedItem).toEqual({
-      ItemUUID: 'I-010424-0001',
+      ItemUUID: 'kivitendo-101',
       ArtikelNummer: 'KIV-001',
       BoxID: 'B-010424-0001',
       AufLager: 8,
     });
 
-    const updatedRef = selectItemRef.get('KIV-001') as
-      | {
-          Grafikname: string | null;
-          Artikelbeschreibung: string | null;
-          Langtext: string | null;
-          Verkaufspreis: number | null;
-          GewichtKg: number | null;
-          Einheit: string | null;
-          VStatus: string | null;
-          Shopartikel: number | null;
-        }
-      | undefined;
+    const updatedRef = selectItemRef.get('KIV-001') as ItemRefRow | undefined;
     expect(updatedRef).toEqual({
       Grafikname: 'kivi-image-updated.jpg',
       Artikelbeschreibung: 'Kivitendo Artikel Aktualisiert',
-      Langtext: 'Langtext Update',
+      Langtext: 'Langtext Aus Custom Feld Update',
       Verkaufspreis: 18.25,
       GewichtKg: 1.3,
       Einheit: 'Stk',
       VStatus: 'no',
       Shopartikel: 0,
+      Kurzbeschreibung: 'Kurzbeschreibung Update',
+      Hersteller: 'Hersteller GmbH Updated',
+      LaengeMm: 275,
+      BreiteMm: 165,
+      HoeheMm: 90,
+      HauptA: 1101,
+      UnterA: 2101,
+      HauptB: 3101,
+      UnterB: 4101,
     });
 
     const updatedBox = selectBox.get('B-010424-0001') as { BoxID: string; Notes: string | null } | undefined;
@@ -180,27 +216,25 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       | undefined;
     expect(zeroItem).toBeUndefined();
 
-    const zeroRef = selectItemRef.get('KIV-002') as
-      | {
-          Grafikname: string | null;
-          Artikelbeschreibung: string | null;
-          Langtext: string | null;
-          Verkaufspreis: number | null;
-          GewichtKg: number | null;
-          Einheit: string | null;
-          VStatus: string | null;
-          Shopartikel: number | null;
-        }
-      | undefined;
+    const zeroRef = selectItemRef.get('KIV-002') as ItemRefRow | undefined;
     expect(zeroRef).toEqual({
       Grafikname: 'kivi-image-zero.jpg',
       Artikelbeschreibung: 'Kivitendo Nullbestand',
-      Langtext: 'Hinweis Nullbestand',
+      Langtext: 'Langtext Nullbestand',
       Verkaufspreis: 8.49,
       GewichtKg: 0.75,
       Einheit: 'Stk',
-      VStatus: 'no',
+      VStatus: 'yes',
       Shopartikel: 0,
+      Kurzbeschreibung: 'Kurzbeschreibung Null',
+      Hersteller: 'Null Hersteller',
+      LaengeMm: 120,
+      BreiteMm: 60,
+      HoeheMm: 40,
+      HauptA: 5001,
+      UnterA: 6001,
+      HauptB: 7001,
+      UnterB: 8001,
     });
   });
 
@@ -220,33 +254,31 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
       | undefined;
     expect(relaxedItem).toEqual({
-      ItemUUID: 'I-030424-0001',
+      ItemUUID: 'kivitendo-202',
       ArtikelNummer: 'KIV-RELAX',
       BoxID: 'B-030424-0001',
       AufLager: 4,
     });
 
-    const relaxedRef = selectItemRef.get('KIV-RELAX') as
-      | {
-          Grafikname: string | null;
-          Artikelbeschreibung: string | null;
-          Langtext: string | null;
-          Verkaufspreis: number | null;
-          GewichtKg: number | null;
-          Einheit: string | null;
-          VStatus: string | null;
-          Shopartikel: number | null;
-        }
-      | undefined;
+    const relaxedRef = selectItemRef.get('KIV-RELAX') as ItemRefRow | undefined;
     expect(relaxedRef).toEqual({
       Grafikname: 'kivi-relaxed.jpg',
       Artikelbeschreibung: 'Kivitendo Relaxed Export',
-      Langtext: 'Relaxed Variant',
+      Langtext: 'Relaxed Langtext',
       Verkaufspreis: 0,
       GewichtKg: 0.55,
       Einheit: 'Stk',
       VStatus: 'yes',
       Shopartikel: 1,
+      Kurzbeschreibung: 'Relaxed Kurz',
+      Hersteller: 'Relaxed Maker',
+      LaengeMm: 210,
+      BreiteMm: 120,
+      HoeheMm: 70,
+      HauptA: 7100,
+      UnterA: 7200,
+      HauptB: 7300,
+      UnterB: 7400,
     });
 
     const relaxedBox = selectBox.get('B-030424-0001') as { BoxID: string; Notes: string | null } | undefined;
@@ -269,7 +301,7 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
       | undefined;
     expect(relaxedItem).toEqual({
-      ItemUUID: 'I-030424-0001',
+      ItemUUID: 'kivitendo-202',
       ArtikelNummer: 'KIV-RELAX',
       BoxID: 'B-030424-0001',
       AufLager: 4,
@@ -290,33 +322,31 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
       | undefined;
     expect(relaxedUpdatedItem).toEqual({
-      ItemUUID: 'I-030424-0001',
+      ItemUUID: 'kivitendo-202',
       ArtikelNummer: 'KIV-RELAX',
       BoxID: 'B-030424-0001',
       AufLager: 6,
     });
 
-    const relaxedUpdatedRef = selectItemRef.get('KIV-RELAX') as
-      | {
-          Grafikname: string | null;
-          Artikelbeschreibung: string | null;
-          Langtext: string | null;
-          Verkaufspreis: number | null;
-          GewichtKg: number | null;
-          Einheit: string | null;
-          VStatus: string | null;
-          Shopartikel: number | null;
-        }
-      | undefined;
+    const relaxedUpdatedRef = selectItemRef.get('KIV-RELAX') as ItemRefRow | undefined;
     expect(relaxedUpdatedRef).toEqual({
       Grafikname: 'kivi-relaxed-update.jpg',
       Artikelbeschreibung: 'Kivitendo Relaxed Export Update',
-      Langtext: 'Relaxed Variant Update',
+      Langtext: 'Relaxed Langtext Update',
       Verkaufspreis: 0,
       GewichtKg: 0.6,
       Einheit: 'Stk',
       VStatus: 'no',
       Shopartikel: 0,
+      Kurzbeschreibung: 'Relaxed Kurz Update',
+      Hersteller: 'Relaxed Maker Update',
+      LaengeMm: 230,
+      BreiteMm: 140,
+      HoeheMm: 85,
+      HauptA: 8100,
+      UnterA: 8200,
+      HauptB: 8300,
+      UnterB: 8400,
     });
 
     const relaxedUpdatedBox = selectBox.get('B-030424-0001') as { BoxID: string; Notes: string | null } | undefined;
