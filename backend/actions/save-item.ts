@@ -5,7 +5,7 @@ import { ItemEinheit, isItemEinheit } from '../../models';
 import type { Item } from '../../models';
 import { defineHttpAction } from './index';
 import { MEDIA_DIR } from '../lib/media';
-import { generateShopwareCorrelationId } from '../db';
+import { generateShopwareCorrelationId } from '../persistence';
 
 const MEDIA_PREFIX = '/media/';
 

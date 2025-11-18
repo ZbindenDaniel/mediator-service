@@ -18,7 +18,7 @@ removeTestDatabase();
 process.env.DB_PATH = TEST_DB_FILE;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { db, persistItemWithinTransaction } = require('../backend/db');
+const { db, persistItemWithinTransaction } = require('../backend/persistence');
 
 const selectReference = db.prepare(
   `SELECT Artikel_Nummer, Artikelbeschreibung, Kurzbeschreibung, Langtext, Hersteller, Verkaufspreis, Einheit, Shopartikel

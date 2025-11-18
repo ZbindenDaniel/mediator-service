@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { ensureAgenticRunSchema } from '../backend/db';
+import { ensureAgenticRunSchema } from '../backend/persistence';
 import { startAgenticRun } from '../backend/agentic';
 import type { AgenticRun } from '../models';
 

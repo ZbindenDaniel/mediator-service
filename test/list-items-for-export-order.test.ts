@@ -18,7 +18,7 @@ removeTestDatabase();
 process.env.DB_PATH = TEST_DB_FILE;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { db, listItemsForExport, persistItem } = require('../backend/db');
+const { db, listItemsForExport, persistItem } = require('../backend/persistence');
 
 function clearDatabase(): void {
   try {

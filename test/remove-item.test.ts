@@ -1,5 +1,5 @@
 // process.env.DB_PATH = ':memory:';
-// const { db, getItem, decrementItemStock, logEvent } = require('../backend/db');
+// const { db, getItem, decrementItemStock, logEvent } = require('../backend/persistence');
 // const removeItem = require('../backend/actions/remove-item').default;
 // const { Readable } = require('stream');
 

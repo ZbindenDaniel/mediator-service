@@ -28,5 +28,5 @@
 - Statistics now show "Artikel ohne Behälter" and list pages use `dd.MM.yyyy` dates.
 - Item details now show the creator and current stock, remove the Standort field, and events list include article numbers and descriptions.
 - Images persist across item edits with `{Artikelnummer}-{imgNumber}` naming, and item models no longer carry picture fields.
-- Restored agentic search-query storage using the streamlined `backend/db.ts` schema and the new `upsertAgenticRun` helper.
+- Restored agentic search-query storage using the streamlined `backend/persistence.ts` schema and the new `upsertAgenticRun` helper.
 - Updated the item creation workflow to trigger agentic runs asynchronously via `frontend/src/components/ItemCreate.tsx` while `backend/actions/import-item.ts` handles persistence and image writes.

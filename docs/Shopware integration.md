@@ -18,11 +18,11 @@ This document captures the current architecture, required configuration, and ope
 - Wraps outbound requests in `try/catch` blocks and logs structured context for successful and failed calls.
 - Returns `{ ok: true, products: [...] }` on success or structured error payloads on failure.
 
-### Sync Queue (`backend/db.ts` & `backend/workers/processShopwareQueue.ts`)
+### Sync Queue (`backend/persistence.ts` & `backend/workers/processShopwareQueue.ts`)
 
 - The SQLite table `shopware_sync_queue` persists pending jobs with correlation IDs, retry counters, timestamps, and the JSON
   payload to send to Shopware.
-- Helper functions in `backend/db.ts` provide enqueue (`enqueueShopwareSyncJob`), claim, success, retry, and failure mutations
+- Helper functions in `backend/persistence.ts` provide enqueue (`enqueueShopwareSyncJob`), claim, success, retry, and failure mutations
   with defensive logging.
 - `processShopwareQueue` contains the worker logic (retry backoff, result handling, and metrics hooks) but is not wired into the
   server because the queue client currently throws a `ShopwareQueueClientError('dispatchJob not implemented')`.

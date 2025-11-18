@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 // TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
+// TODO(persistence): Carve out adapter-friendly exports so repository layer can swap persistence engines.
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -2083,6 +2084,73 @@ export const listItemsForExport = wrapLangtextAwareStatement(
   listItemsForExportStatement,
   'db:listItemsForExport'
 );
+
+export const sqlitePersistenceAdapter = {
+  EVENT_LOG_LEVEL_ALLOW_LIST,
+  generateShopwareCorrelationId,
+  persistItemReference,
+  persistItemInstance,
+  persistItemWithinTransaction,
+  persistItem,
+  ensureAgenticRunSchema,
+  db,
+  upsertBox,
+  queueLabel,
+  getItem,
+  getItemReference,
+  findByMaterial,
+  itemsByBox,
+  getBox,
+  listBoxes,
+  upsertAgenticRun,
+  getAgenticRun,
+  updateAgenticRunStatus,
+  upsertAgenticRequestLog,
+  logAgenticRequestStart,
+  logAgenticRequestEnd,
+  saveAgenticRequestPayload,
+  markAgenticRequestNotificationSuccess,
+  markAgenticRequestNotificationFailure,
+  listPendingAgenticRequestNotifications,
+  getAgenticRequestLog,
+  fetchQueuedAgenticRuns,
+  updateQueuedAgenticRunQueueState,
+  nextLabelJob,
+  updateLabelJobStatus,
+  clearShopwareSyncQueue,
+  listShopwareSyncQueue,
+  enqueueShopwareSyncJob,
+  claimShopwareSyncJobs,
+  markShopwareSyncJobSucceeded,
+  rescheduleShopwareSyncJob,
+  markShopwareSyncJobFailed,
+  getShopwareSyncJobById,
+  decrementItemStock,
+  incrementItemStock,
+  deleteItem,
+  deleteBox,
+  logEvent,
+  bulkMoveItems,
+  bulkRemoveItemStock,
+  listEventsForBox,
+  listEventsForItem,
+  listRecentEvents,
+  listRecentActivities,
+  countEvents,
+  countBoxes,
+  countItems,
+  countItemsNoBox,
+  listRecentBoxes,
+  getMaxBoxId,
+  getMaxItemId,
+  getMaxArtikelNummer,
+  listItemReferences,
+  listItems,
+  listItemsForExport,
+  updateAgenticReview
+} as const;
+
+export type SqlitePersistenceAdapter = typeof sqlitePersistenceAdapter;
 
 export type {
   AgenticRun,

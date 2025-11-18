@@ -130,7 +130,7 @@ describe('AgenticModelInvoker request payload merging', () => {
     jest.doMock('../flow/item-flow', () => ({
       runItemFlow
     }));
-    jest.doMock('../../db', () => ({
+    jest.doMock('../../persistence', () => ({
       db: { transaction: (fn: unknown) => fn } as unknown,
       getItem,
       getAgenticRun: jest.fn(),
@@ -215,7 +215,7 @@ describe('AgenticModelInvoker request payload merging', () => {
     jest.doMock('../flow/item-flow', () => ({
       runItemFlow
     }));
-    jest.doMock('../../db', () => ({
+    jest.doMock('../../persistence', () => ({
       db: { transaction: (fn: unknown) => fn } as unknown,
       getItem,
       getAgenticRun: jest.fn(),

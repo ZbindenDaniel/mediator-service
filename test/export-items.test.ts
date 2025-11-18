@@ -1,5 +1,5 @@
 // process.env.DB_PATH = ':memory:';
-// const { db, listItemsForExport, logEvent } = require('../backend/db');
+// const { db, listItemsForExport, logEvent } = require('../backend/persistence');
 // const exportItems = require('../backend/actions/export-items').default;
 // const { Readable } = require('stream');
 
