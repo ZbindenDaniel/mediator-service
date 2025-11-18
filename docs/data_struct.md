@@ -2,6 +2,17 @@
 
 Die folgenden Codes werden für Haupt- und Unterkategorien verwendet. Die Hauptkategorien sind in Zehnerschritten nummeriert, die Unterkategorien hängen sich mit laufenden Nummern an (z.B. 10 → 101, 102, ...).
 
+## Unterstützte Kategorienamen für CSV-Importe
+
+Die Import- und Formular-APIs akzeptieren sowohl die numerischen Codes als auch die ausgeschriebenen Namen aus `models/item-categories.ts`. Beim Import werden die Namen wie folgt normalisiert:
+
+- Groß- und Kleinschreibung wird ignoriert, ebenso zusätzliche Leerzeichen.
+- Unterstriche, Bindestriche und andere Trenner werden gleichbehandelt.
+- Umlaute und andere diakritische Zeichen werden entfernt (z.B. "Zubehör" → "Zubehor").
+- Das Kaufmanns-Und (`&`) wird zu `und` normalisiert.
+
+Damit lassen sich auch Partner-Exporte, die statt der numerischen IDs die sprechenden Bezeichnungen verwenden, verlustfrei in die bekannten Codes überführen.
+
 ## 10 – Computer_und_Komplettsysteme
 
 - **101** – Komplettsysteme

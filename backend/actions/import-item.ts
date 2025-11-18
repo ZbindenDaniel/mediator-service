@@ -17,6 +17,7 @@ import { forwardAgenticTrigger } from './agentic-trigger';
 import { generateItemUUID } from '../lib/itemIds';
 import { MEDIA_DIR } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
+import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -442,24 +443,75 @@ const action = defineHttpAction({
         }
       }
 
-      const resolveInteger = (raw: string, fallback: number | null | undefined): number | null | undefined => {
+      type IntegerResolverOptions = {
+        fieldName: string;
+        categoryType?: 'haupt' | 'unter';
+      };
+
+      const resolveInteger = (
+        raw: string,
+        fallback: number | null | undefined,
+        options?: IntegerResolverOptions
+      ): number | null | undefined => {
         if (!raw) {
           return fallback ?? null;
         }
-        const parsed = parseInt(raw, 10);
+
+        const trimmed = raw.trim();
+        if (!trimmed) {
+          return fallback ?? null;
+        }
+
+        if (options?.categoryType) {
+          try {
+            const mapped = resolveCategoryLabelToCode(trimmed, options.categoryType);
+            if (typeof mapped === 'number') {
+              return mapped;
+            }
+          } catch (error) {
+            console.error('[import-item] Failed to resolve category label to code', {
+              field: options.fieldName,
+              value: raw,
+              error
+            });
+          }
+        }
+
+        const parsed = parseInt(trimmed, 10);
         if (Number.isFinite(parsed)) {
           return parsed;
         }
+
+        if (options?.categoryType) {
+          console.warn('[import-item] Unable to map category label to numeric code', {
+            field: options.fieldName,
+            value: raw
+          });
+        }
+
+        // TODO(agent): Teach resolveInteger about localized number formats when non-category payloads require it.
         return fallback ?? null;
       };
 
       const laenge = resolveInteger(laengeRaw, referenceDefaults?.Länge_mm ?? null);
       const breite = resolveInteger(breiteRaw, referenceDefaults?.Breite_mm ?? null);
       const hoehe = resolveInteger(hoeheRaw, referenceDefaults?.Höhe_mm ?? null);
-      const hauptkategorienA = resolveInteger(hauptkategorieARaw, referenceDefaults?.Hauptkategorien_A);
-      const unterkategorienA = resolveInteger(unterkategorieARaw, referenceDefaults?.Unterkategorien_A);
-      const hauptkategorienB = resolveInteger(hauptkategorieBRaw, referenceDefaults?.Hauptkategorien_B);
-      const unterkategorienB = resolveInteger(unterkategorieBRaw, referenceDefaults?.Unterkategorien_B);
+      const hauptkategorienA = resolveInteger(hauptkategorieARaw, referenceDefaults?.Hauptkategorien_A, {
+        fieldName: 'Hauptkategorien_A',
+        categoryType: 'haupt'
+      });
+      const unterkategorienA = resolveInteger(unterkategorieARaw, referenceDefaults?.Unterkategorien_A, {
+        fieldName: 'Unterkategorien_A',
+        categoryType: 'unter'
+      });
+      const hauptkategorienB = resolveInteger(hauptkategorieBRaw, referenceDefaults?.Hauptkategorien_B, {
+        fieldName: 'Hauptkategorien_B',
+        categoryType: 'haupt'
+      });
+      const unterkategorienB = resolveInteger(unterkategorieBRaw, referenceDefaults?.Unterkategorien_B, {
+        fieldName: 'Unterkategorien_B',
+        categoryType: 'unter'
+      });
 
       let shopartikel = referenceDefaults?.Shopartikel ?? 0;
       if (shopartikelRaw) {
