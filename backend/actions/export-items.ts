@@ -9,63 +9,63 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-const importFields = [
-  'Datum erfasst',
-  'Artikel-Nummer',
-  'Grafikname(n)',
-  'Artikelbeschreibung',
-  'Auf_Lager',
-  'Verkaufspreis',
-  'Kurzbeschreibung',
-  'Langtext',
-  'Hersteller',
-  'Länge(mm)',
-  'Breite(mm)',
-  'Höhe(mm)',
-  'Gewicht(kg)',
-  'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
-  'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
-  'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
-  'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
-  'Veröffentlicht_Status',
-  'Shopartikel',
-  'Artikeltyp',
-  'Einheit'
-];
-
-const extraFields = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt'];
-const columns = [...importFields, ...extraFields];
+// TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
+const columns = [
+  'partnumber',
+  'type_and_classific',
+  'entrydate',
+  'image_names',
+  'description',
+  'notes',
+  'longdescription',
+  'manufacturer',
+  'length_mm',
+  'width_mm',
+  'height_mm',
+  'weight_kg',
+  'sellprice',
+  'onhand',
+  'published_status',
+  'shoparticle',
+  'unit',
+  'ean',
+  'cvar_categories_A1',
+  'cvar_categories_A2',
+  'cvar_categories_B1',
+  'cvar_categories_B2'
+] as const;
 
 // TODO(agent): Replace CSV-specific Langtext serialization once exports move to typed clients.
 // TODO(langtext-export): Align CSV Langtext serialization with downstream channel requirements when available.
 
-const fieldMap: Record<string, string> = {
-  'Datum erfasst': 'Datum_erfasst',
-  'Artikel-Nummer': 'Artikel_Nummer',
-  'Grafikname(n)': 'Grafikname',
-  'Artikelbeschreibung': 'Artikelbeschreibung',
-  'Auf_Lager': 'Auf_Lager',
-  'Verkaufspreis': 'Verkaufspreis',
-  'Kurzbeschreibung': 'Kurzbeschreibung',
-  'Langtext': 'Langtext',
-  'Hersteller': 'Hersteller',
-  'Länge(mm)': 'Länge_mm',
-  'Breite(mm)': 'Breite_mm',
-  'Höhe(mm)': 'Höhe_mm',
-  'Gewicht(kg)': 'Gewicht_kg',
-  'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)': 'Hauptkategorien_A',
-  'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)': 'Unterkategorien_A',
-  'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)': 'Hauptkategorien_B',
-  'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)': 'Unterkategorien_B',
-  'Veröffentlicht_Status': 'Veröffentlicht_Status',
-  'Shopartikel': 'Shopartikel',
-  'Artikeltyp': 'Artikeltyp',
-  'Einheit': 'Einheit',
-  itemUUID: 'ItemUUID',
-  BoxID: 'BoxID',
-  Location: 'Location',
-  UpdatedAt: 'UpdatedAt'
+type ExportColumn = (typeof columns)[number];
+
+const fieldMap: Record<ExportColumn, string | null> = {
+  partnumber: 'Artikel_Nummer',
+  type_and_classific: 'Artikeltyp',
+  entrydate: 'Datum_erfasst',
+  image_names: 'Grafikname',
+  description: 'Artikelbeschreibung',
+  notes: 'Kurzbeschreibung',
+  longdescription: 'Langtext',
+  manufacturer: 'Hersteller',
+  length_mm: 'Länge_mm',
+  width_mm: 'Breite_mm',
+  height_mm: 'Höhe_mm',
+  weight_kg: 'Gewicht_kg',
+  sellprice: 'Verkaufspreis',
+  onhand: 'Auf_Lager',
+  published_status: 'Veröffentlicht_Status',
+  shoparticle: 'Shopartikel',
+  unit: 'Einheit',
+  ean: null,
+  cvar_categories_A1: 'Hauptkategorien_A',
+  cvar_categories_A2: 'Unterkategorien_A',
+  cvar_categories_B1: 'Hauptkategorien_B',
+  cvar_categories_B2: 'Unterkategorien_B'
 };
+
+const missingFieldWarnings = new Set<ExportColumn>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -75,8 +75,21 @@ function toCsvValue(val: any): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function resolveExportValue(column: string, rawRow: Record<string, unknown>): unknown {
+function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
   const field = fieldMap[column];
+
+  if (!field) {
+    if (!missingFieldWarnings.has(column)) {
+      missingFieldWarnings.add(column);
+      try {
+        console.warn('[export-items] Missing field mapping for export column; emitting blank value.', { column });
+      } catch (loggingError) {
+        console.error('[export-items] Failed to log missing field mapping warning', { column, loggingError });
+      }
+    }
+    return '';
+  }
+
   const value = rawRow[field];
 
   if (field === 'Langtext') {
@@ -141,7 +154,7 @@ function resolveExportValue(column: string, rawRow: Record<string, unknown>): un
     }
   }
 
-  if (column !== 'Einheit') {
+  if (field !== 'Einheit') {
     return value;
   }
   try {
@@ -200,7 +213,7 @@ const action = defineHttpAction({
       const header = columns.join(',');
       const lines = items.map((row: any) =>
         columns
-          .map((column) => {
+          .map((column: ExportColumn) => {
             const resolvedValue = resolveExportValue(column, row);
             return toCsvValue(resolvedValue);
           })
