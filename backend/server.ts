@@ -74,9 +74,9 @@ import {
   deleteItem,
   deleteBox,
   enqueueShopwareSyncJob
-} from './db';
+} from './persistence';
 import { AgenticModelInvoker } from './agentic/invoker';
-import type { Item, LabelJob } from './db';
+import type { Item, LabelJob } from './persistence';
 import { printPdf, testPrinterConnection } from './print';
 import { pdfForBox, pdfForItem } from './labelpdf';
 import type { ItemLabelPayload } from './labelpdf';

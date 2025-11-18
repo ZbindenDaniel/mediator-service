@@ -25,7 +25,7 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
   type LogEventPayload
-} from '../db';
+} from '../persistence';
 
 export interface AgenticServiceLogger {
   info?: Console['info'];

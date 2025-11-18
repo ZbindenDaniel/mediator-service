@@ -30,7 +30,7 @@ const {
   getBox,
   listEventsForItem,
   getAgenticRun
-} = require('../backend/db');
+} = require('../backend/persistence');
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const saveItemAction = require('../backend/actions/save-item').default;

@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import type { IncomingMessage, ServerResponse } from 'http';
 import agenticHealthAction from '../backend/actions/agentic-health';
 import { checkAgenticHealth } from '../backend/agentic';
-import { ensureAgenticRunSchema } from '../backend/db';
+import { ensureAgenticRunSchema } from '../backend/persistence';
 import { AGENTIC_RUN_STATUS_QUEUED, AGENTIC_RUN_STATUS_RUNNING } from '../models';
 
 function createMockResponse() {

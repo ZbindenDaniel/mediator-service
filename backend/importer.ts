@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
-import { upsertBox, persistItem, queueLabel, persistItemReference, findByMaterial } from './db';
+import { upsertBox, persistItem, queueLabel, persistItemReference, findByMaterial } from './persistence';
 import { IMPORTER_FORCE_ZERO_STOCK } from './config';
 import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
 import { Op } from './ops/types';

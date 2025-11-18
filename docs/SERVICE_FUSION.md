@@ -1,11 +1,11 @@
 # Objective
 
 The ai-flow runtime now lives directly inside the mediator under `backend/agentic/`. The standalone `ai-flow-service/` tree has been deleted after porting its runtime pieces into TypeScript modules that share mediator logging, database helpers, and configuration. The remaining consolidation work focuses on finishing the in-process orchestrator wiring, validating the new search/model integrations, and cleaning up documentation or dependency stragglers.
-The latest commit pulled the entire ai-flow-service repository into this project as a gitlink, leaving the mediator backend and frontend still talking to it through REST proxies (/api/agentic/*) that originally forwarded to the external agentic API and authenticated with a shared secret. Consolidating those pieces directly into the mediator app—with in-process validation keyed off persisted request logs—eliminates cross-service overhead, aligns schemas around backend/db.ts, and simplifies deployment.
+The latest commit pulled the entire ai-flow-service repository into this project as a gitlink, leaving the mediator backend and frontend still talking to it through REST proxies (/api/agentic/*) that originally forwarded to the external agentic API and authenticated with a shared secret. Consolidating those pieces directly into the mediator app—with in-process validation keyed off persisted request logs—eliminates cross-service overhead, aligns schemas around backend/persistence.ts, and simplifies deployment.
 
 ## Target architecture
 
-- Keep a single Node/TypeScript backend where the agentic workflow runs in-process, sharing the existing SQLite schema (agentic_runs) and helpers under backend/db.ts.
+- Keep a single Node/TypeScript backend where the agentic workflow runs in-process, sharing the existing SQLite schema (agentic_runs) and helpers under backend/persistence.ts.
 - Replace proxy actions (trigger, health, restart, etc.) with thin controllers that call a local agentic orchestrator instead of making HTTP round-trips
 - Update frontend helpers to rely solely on mediator endpoints (drop hard-coded http://127.0.0.1:* values) and let the backend own service selection.
 - Remove redundant submodule/dotfiles, merge necessary dependencies into the root package.json, and simplify container orchestration to a single service (Dockerfile, docker-compose.yml).
@@ -32,10 +32,10 @@ The latest commit pulled the entire ai-flow-service repository into this project
   - Clean up docker-compose.yml by removing instructions about a separate agentic base URL once the service is internal.
 
 - 5. Align database schemas on mediator defaults
-  - Inspect any AI-flow migrations/schema files and port only the tables actually used at runtime into backend/db.ts, ensuring they follow mediator naming and reuse better-sqlite3 helpers already present.
+  - Inspect any AI-flow migrations/schema files and port only the tables actually used at runtime into backend/persistence.ts, ensuring they follow mediator naming and reuse better-sqlite3 helpers already present.
   - Double-check shared models under models/ (e.g., agentic-run.ts) so new columns or types stay consistent between backend and frontend per user instruction on data structures.
   - If AI-flow introduced a separate database, provide a one-time migration path that copies rows into mediator’s agentic_runs table, logging failures with try/catch blocks.
-  - ✅ Added `agentic_request_logs` schema management and helper functions to `backend/db.ts` so mediator owns request log persistence. Legacy AI-flow `request_logs` data will be dropped during consolidation, so no migration script is required.
+  - ✅ Added `agentic_request_logs` schema management and helper functions to `backend/persistence.ts` so mediator owns request log persistence. Legacy AI-flow `request_logs` data will be dropped during consolidation, so no migration script is required.
   - ✅ Wired the in-process orchestrator flows and webhook handlers to those helpers so request lifecycle transitions, payload snapshots, and notification timestamps stay in sync without the ai-flow proxy.
 
 ## Agentic environment variables
@@ -96,7 +96,7 @@ TODO: Revisit the legacy key fallback once all environments have switched to the
   - Close or revise TODO comments encountered during the refactor, including the CLI filtering TODO in scripts/dump-agentic-search-events.ts if it becomes relevant.
 
 - 11. Parallelisation suggestions
-  - Repository cleanup & dependency merge (Steps 2–4) can proceed while the database alignment (Step 5) happens in parallel, provided both coordinate on shared files (package.json, backend/db.ts).
+  - Repository cleanup & dependency merge (Steps 2–4) can proceed while the database alignment (Step 5) happens in parallel, provided both coordinate on shared files (package.json, backend/persistence.ts).
   - Orchestrator implementation (Step 6) can start once schema decisions are agreed, while frontend adjustments (Step 8) proceed concurrently after the new backend interface is sketched.
   - Test updates (Step 9) should trail the orchestrator work but can begin with scaffolding as soon as new service contracts are defined.
 

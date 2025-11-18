@@ -9,7 +9,7 @@
 // process.env.DB_PATH = DB_FILE;
 
 // const moveItem = require('../backend/actions/move-item').default;
-// const { db, getItem, getBox, listItemsForExport, logEvent } = require('../backend/db');
+// const { db, getItem, getBox, listItemsForExport, logEvent } = require('../backend/persistence');
 
 // const insertBox = db.prepare(
 //   `INSERT INTO boxes (BoxID, Location, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)

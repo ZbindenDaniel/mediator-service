@@ -2,8 +2,8 @@
 
 // process.env.DB_PATH = ':memory:';
 
-// jest.mock('../../db', () => {
-//   const original = jest.requireActual('../../db');
+// jest.mock('../../persistence', () => {
+//   const original = jest.requireActual('../../persistence');
 //   return {
 //     ...original,
 //     logAgenticRequestStart: jest.fn(),
@@ -20,7 +20,7 @@
 //   AGENTIC_RUN_STATUS_RUNNING,
 //   type AgenticModelInvocationResult
 // } from '../../../models';
-// import * as agenticDb from '../../db';
+// import * as agenticDb from '../../persistence';
 
 // const mockedDb = agenticDb as jest.Mocked<typeof agenticDb>;
 

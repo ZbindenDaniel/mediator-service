@@ -38,7 +38,7 @@
 //   rescheduleShopwareSyncJob,
 //   markShopwareSyncJobFailed,
 //   getShopwareSyncJobById
-// } = require('../backend/db');
+// } = require('../backend/persistence');
 
 // // eslint-disable-next-line @typescript-eslint/no-var-requires
 // const addItemAction = require('../backend/actions/add-item').default;

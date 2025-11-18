@@ -3,7 +3,7 @@ import {
   markShopwareSyncJobFailed,
   markShopwareSyncJobSucceeded,
   rescheduleShopwareSyncJob
-} from '../db';
+} from '../persistence';
 import type { ShopwareSyncQueueEntry } from '../shopware/queueTypes';
 import {
   normalizeShopwareQueueClientError,

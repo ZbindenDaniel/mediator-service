@@ -4,7 +4,7 @@ import {
   enqueueShopwareSyncJob,
   getShopwareSyncJobById,
   type ShopwareSyncQueueEntry
-} from '../backend/db';
+} from '../backend/persistence';
 import { processShopwareQueue, type ShopwareQueueMetrics } from '../backend/workers/processShopwareQueue';
 import { ShopwareQueueClientError, type ShopwareQueueClient } from '../backend/shopware/queueClient';
 

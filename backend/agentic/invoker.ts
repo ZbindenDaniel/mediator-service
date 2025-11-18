@@ -11,7 +11,7 @@ import {
   saveAgenticRequestPayload,
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
-} from '../db';
+} from '../persistence';
 import { ensureLangtextString } from '../lib/langtext';
 import { modelConfig, searchConfig } from './config';
 import { runItemFlow } from './flow/item-flow';

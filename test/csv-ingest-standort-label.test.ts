@@ -18,7 +18,7 @@ removeTestDatabase();
 process.env.DB_PATH = TEST_DB_FILE;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { db, listBoxes, listItemsForExport } = require('../backend/db');
+const { db, listBoxes, listItemsForExport } = require('../backend/persistence');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { ingestCsvFile } = require('../backend/importer');
 
