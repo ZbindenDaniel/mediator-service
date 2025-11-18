@@ -10,6 +10,7 @@ import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
 import { formatItemIdDateSegment } from './lib/itemIds';
 import { parseLangtext } from './lib/langtext';
+import { resolveCategoryLabelToCode, CategoryFieldType } from './lib/categoryLabelLookup';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -114,6 +115,7 @@ function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
 interface NumericParseOptions {
   defaultValue?: number;
   treatBlankAsUndefined?: boolean;
+  categoryType?: CategoryFieldType;
 }
 
 function determineFallbackValue(
@@ -200,6 +202,13 @@ function parseIntegerField(
   }
 
   try {
+    if (options.categoryType) {
+      const resolved = resolveCategoryLabelToCode(trimmed, options.categoryType);
+      if (typeof resolved === 'number') {
+        return resolved;
+      }
+    }
+
     const normalized = normalizeNumericValue(trimmed, false);
     if (normalized === null) {
       console.warn('CSV ingestion: failed to normalize integer field', { field: fieldName, value: trimmed });
@@ -210,6 +219,12 @@ function parseIntegerField(
 
     if (Number.isNaN(parsed)) {
       console.warn('CSV ingestion: integer parse produced NaN', { field: fieldName, value: trimmed, normalized });
+      if (options.categoryType) {
+        console.warn('CSV ingestion: category label could not be mapped to code', {
+          field: fieldName,
+          value: trimmed
+        });
+      }
       return fallback;
     }
 
@@ -563,22 +578,22 @@ export async function ingestCsvFile(
       const hkA = parseIntegerField(
         final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'],
         'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
-        { treatBlankAsUndefined: true }
+        { treatBlankAsUndefined: true, categoryType: 'haupt' }
       );
       const ukA = parseIntegerField(
         final['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)'],
         'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
-        { treatBlankAsUndefined: true }
+        { treatBlankAsUndefined: true, categoryType: 'unter' }
       );
       const hkB = parseIntegerField(
         final['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)'],
         'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
-        { treatBlankAsUndefined: true }
+        { treatBlankAsUndefined: true, categoryType: 'haupt' }
       );
       const ukB = parseIntegerField(
         final['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)'],
         'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
-        { treatBlankAsUndefined: true }
+        { treatBlankAsUndefined: true, categoryType: 'unter' }
       );
       const publishedStatus = ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase());
       const shopartikel =

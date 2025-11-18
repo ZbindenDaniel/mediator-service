@@ -9,3 +9,4 @@ export * from './agentic-request-log';
 export * from './agentic-statuses';
 export * from './agentic-orchestrator';
 export * from './box-colors';
+export * from './item-categories';
