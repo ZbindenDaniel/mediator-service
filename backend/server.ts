@@ -65,6 +65,7 @@ import {
   getMaxBoxId,
   getMaxItemId,
   getMaxArtikelNummer,
+  listItemReferences,
   listItemsForExport,
   updateAgenticReview,
   listItems,
@@ -349,6 +350,7 @@ type ActionContext = {
   listRecentBoxes: typeof listRecentBoxes;
   getMaxBoxId: typeof getMaxBoxId;
   getMaxArtikelNummer: typeof getMaxArtikelNummer;
+  listItemReferences: typeof listItemReferences;
   listItemsForExport: typeof listItemsForExport;
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
@@ -551,6 +553,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           getMaxBoxId,
           getMaxItemId,
           getMaxArtikelNummer,
+          listItemReferences,
           listItemsForExport,
           updateAgenticReview,
           INBOX_DIR,
