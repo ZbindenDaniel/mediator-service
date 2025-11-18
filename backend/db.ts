@@ -1,9 +1,5 @@
 import { randomBytes } from 'crypto';
-import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
 // TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
-import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -27,16 +23,18 @@ import {
   resolveEventLogLevel
 } from '../models';
 import { resolveStandortLabel } from './standort-label';
+import { getDbClient } from './persistence/connection';
 
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-let db: Database.Database;
-try {
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-} catch (err) {
-  console.error('Failed to initialize database', err);
-  throw err;
+// TODO(persistence-connection): Support Postgres-backed clients by porting statement helpers.
+const dbClient = getDbClient();
+if (dbClient.kind !== 'sqlite') {
+  console.error('[db] Postgres client requested but sqlite-only helpers are still active.');
+  throw new Error('Postgres-backed db helpers are not implemented yet.');
 }
+
+const db = dbClient.db;
+type SqliteDatabase = typeof db;
+type SqliteStatement = ReturnType<SqliteDatabase['prepare']>;
 
 try {
   // Schema with boxes, label queue, and events; item tables ensured separately
@@ -98,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_correlation
   throw err;
 }
 
-function ensureStandortLabelColumn(database: Database.Database = db): void {
+function ensureStandortLabelColumn(database: SqliteDatabase = db): void {
   let hasColumn = false;
   try {
     const columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
@@ -144,7 +142,7 @@ function ensureStandortLabelColumn(database: Database.Database = db): void {
 
 ensureStandortLabelColumn();
 
-function ensureBoxPhotoPathColumn(database: Database.Database = db): void {
+function ensureBoxPhotoPathColumn(database: SqliteDatabase = db): void {
   let hasColumn = false;
   try {
     const columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
@@ -367,7 +365,7 @@ function parseLangtextForRow<T extends Record<string, unknown>>(
   } as T;
 }
 
-function wrapLangtextAwareStatement<T extends Database.Statement>(
+function wrapLangtextAwareStatement<T extends SqliteStatement>(
   statement: T,
   context: string
 ): T {
@@ -586,7 +584,7 @@ function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   }
 }
 
-function ensureItemTables(database: Database.Database = db): void {
+function ensureItemTables(database: SqliteDatabase = db): void {
   try {
     database.exec(CREATE_ITEM_REFS_SQL);
   } catch (err) {
@@ -616,7 +614,7 @@ const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
   LEFT JOIN boxes b ON i.BoxID = b.BoxID
 `;
 
-function ensureItemShopwareColumns(database: Database.Database = db): void {
+function ensureItemShopwareColumns(database: SqliteDatabase = db): void {
   let refColumns: Array<{ name: string }> = [];
   try {
     refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
@@ -656,13 +654,13 @@ function ensureItemShopwareColumns(database: Database.Database = db): void {
 
 ensureItemShopwareColumns(db);
 
-let upsertItemReferenceStatement: Database.Statement;
-let upsertItemInstanceStatement: Database.Statement;
-let getItemReferenceStatement: Database.Statement;
-let getMaxArtikelNummerStatement: Database.Statement;
-let getItemStatement: Database.Statement;
-let findByMaterialStatement: Database.Statement;
-let itemsByBoxStatement: Database.Statement;
+let upsertItemReferenceStatement: SqliteStatement;
+let upsertItemInstanceStatement: SqliteStatement;
+let getItemReferenceStatement: SqliteStatement;
+let getMaxArtikelNummerStatement: SqliteStatement;
+let getItemStatement: SqliteStatement;
+let findByMaterialStatement: SqliteStatement;
+let itemsByBoxStatement: SqliteStatement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
@@ -865,7 +863,7 @@ export function persistItem(item: Item): void {
   }
 }
 
-export function ensureAgenticRunSchema(database: Database.Database = db): void {
+export function ensureAgenticRunSchema(database: SqliteDatabase = db): void {
   const createAgenticRunsSql = `
 CREATE TABLE IF NOT EXISTS agentic_runs (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -896,7 +894,7 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
   ensureAgenticRunQueueColumns(database);
 }
 
-function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
+function ensureAgenticRunQueueColumns(database: SqliteDatabase = db): void {
   let columns: Array<{ name: string }> = [];
   try {
     columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
@@ -977,7 +975,7 @@ CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_notification_pending
   WHERE Status = 'SUCCESS' AND NotifiedAt IS NULL;
 `;
 
-function ensureAgenticRequestLogSchema(database: Database.Database = db): void {
+function ensureAgenticRequestLogSchema(database: SqliteDatabase = db): void {
   try {
     database.exec(CREATE_AGENTIC_REQUEST_LOGS_SQL);
   } catch (err) {
@@ -988,7 +986,7 @@ function ensureAgenticRequestLogSchema(database: Database.Database = db): void {
   ensureAgenticRequestLogColumns(database);
 }
 
-function ensureAgenticRequestLogColumns(database: Database.Database = db): void {
+function ensureAgenticRequestLogColumns(database: SqliteDatabase = db): void {
   let columns: Array<{ name: string }> = [];
   try {
     columns = database.prepare(`PRAGMA table_info(agentic_request_logs)`).all() as Array<{ name: string }>;
