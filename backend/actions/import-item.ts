@@ -17,6 +17,7 @@ import { forwardAgenticTrigger } from './agentic-trigger';
 import { generateItemUUID } from '../lib/itemIds';
 import { MEDIA_DIR } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
+import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
 import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
@@ -399,7 +400,36 @@ const action = defineHttpAction({
       const shopartikelRaw = (p.get('Shopartikel') || '').trim();
       const artikeltypInput = (p.get('Artikeltyp') || '').trim();
       const publishedRaw = (p.get('Veröffentlicht_Status') || '').trim();
-      const datumErfasstRaw = (p.get('Datum_erfasst') || '').trim();
+      let datumErfasstRaw = (p.get('Datum_erfasst') || '').trim();
+      // TODO(agent): Remove Datum_erfasst alias hydration when all manual imports send normalized timestamps.
+      if (!datumErfasstRaw) {
+        try {
+          for (const aliasField of IMPORT_DATE_FIELD_PRIORITIES) {
+            if (aliasField === 'Datum_erfasst') {
+              continue;
+            }
+            const aliasValue = p.get(aliasField);
+            if (typeof aliasValue !== 'string') {
+              continue;
+            }
+            const trimmedAlias = aliasValue.trim();
+            if (!trimmedAlias) {
+              continue;
+            }
+            datumErfasstRaw = trimmedAlias;
+            console.log('[import-item] Defaulted Datum_erfasst from alias column', {
+              ItemUUID,
+              aliasField
+            });
+            break;
+          }
+        } catch (datumErfasstAliasError) {
+          console.error('[import-item] Failed to hydrate Datum_erfasst from alias', {
+            ItemUUID,
+            error: datumErfasstAliasError
+          });
+        }
+      }
 
       const artikelbeschreibung = artikelbeschreibungInput || referenceDefaults?.Artikelbeschreibung || '';
       const kurzbeschreibung = kurzbeschreibungInput || referenceDefaults?.Kurzbeschreibung || '';
