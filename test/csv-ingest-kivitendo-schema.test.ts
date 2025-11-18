@@ -7,6 +7,8 @@ const KIVITENDO_INITIAL = path.join(FIXTURE_DIR, 'kivitendo-initial.csv');
 const KIVITENDO_UPDATE = path.join(FIXTURE_DIR, 'kivitendo-update.csv');
 const KIVITENDO_ZERO_QUANTITY = path.join(FIXTURE_DIR, 'kivitendo-zero-quantity.csv');
 const KIVITENDO_RELAXED = path.join(FIXTURE_DIR, 'kivitendo-relaxed.csv');
+// TODO(agent): Extend relaxed fixtures for future timestamp variants surfaced by partners.
+const KIVITENDO_RELAXED_UPDATE = path.join(FIXTURE_DIR, 'kivitendo-relaxed-update.csv');
 
 // TODO: Expand fixtures when additional Kivitendo header permutations surface.
 
@@ -249,5 +251,75 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
 
     const relaxedBox = selectBox.get('B-030424-0001') as { BoxID: string; Notes: string | null } | undefined;
     expect(relaxedBox).toEqual({ BoxID: 'B-030424-0001', Notes: '' });
+  });
+
+  test('maintains deterministic identifiers when only insertdate is provided across re-imports', async () => {
+    let initialResult: { count: number; boxes: string[] };
+    try {
+      initialResult = await ingestCsvFile(KIVITENDO_RELAXED);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Relaxed baseline ingestion failed', error);
+      throw error;
+    }
+
+    expect(initialResult.count).toBe(1);
+    expect(initialResult.boxes).toEqual(['B-030424-0001']);
+
+    const relaxedItem = selectItemByArtikel.get('KIV-RELAX') as
+      | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
+      | undefined;
+    expect(relaxedItem).toEqual({
+      ItemUUID: 'I-030424-0001',
+      ArtikelNummer: 'KIV-RELAX',
+      BoxID: 'B-030424-0001',
+      AufLager: 4,
+    });
+
+    let updateResult: { count: number; boxes: string[] };
+    try {
+      updateResult = await ingestCsvFile(KIVITENDO_RELAXED_UPDATE);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Relaxed update ingestion failed', error);
+      throw error;
+    }
+
+    expect(updateResult.count).toBe(1);
+    expect(updateResult.boxes).toEqual(['B-030424-0001']);
+
+    const relaxedUpdatedItem = selectItemByArtikel.get('KIV-RELAX') as
+      | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
+      | undefined;
+    expect(relaxedUpdatedItem).toEqual({
+      ItemUUID: 'I-030424-0001',
+      ArtikelNummer: 'KIV-RELAX',
+      BoxID: 'B-030424-0001',
+      AufLager: 6,
+    });
+
+    const relaxedUpdatedRef = selectItemRef.get('KIV-RELAX') as
+      | {
+          Grafikname: string | null;
+          Artikelbeschreibung: string | null;
+          Langtext: string | null;
+          Verkaufspreis: number | null;
+          GewichtKg: number | null;
+          Einheit: string | null;
+          VStatus: string | null;
+          Shopartikel: number | null;
+        }
+      | undefined;
+    expect(relaxedUpdatedRef).toEqual({
+      Grafikname: 'kivi-relaxed-update.jpg',
+      Artikelbeschreibung: 'Kivitendo Relaxed Export Update',
+      Langtext: 'Relaxed Variant Update',
+      Verkaufspreis: 0,
+      GewichtKg: 0.6,
+      Einheit: 'Stk',
+      VStatus: 'no',
+      Shopartikel: 0,
+    });
+
+    const relaxedUpdatedBox = selectBox.get('B-030424-0001') as { BoxID: string; Notes: string | null } | undefined;
+    expect(relaxedUpdatedBox).toEqual({ BoxID: 'B-030424-0001', Notes: '' });
   });
 });

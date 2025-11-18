@@ -1,6 +1,7 @@
 import { Op } from './types';
 
 // TODO: Extend Kivitendo schema detection when additional export variants surface.
+// TODO(agent): Monitor upcoming timestamp columns from Kivitendo exports to keep fallback coverage current.
 const KIVITENDO_HEADER_PROFILES = [
   {
     name: 'full',
@@ -132,8 +133,32 @@ export const apply: Op['apply'] = (row, ctx) => {
       mappedRow['Auf_Lager'] = aufLager;
     }
 
-    const datumErfasstSource = row.itime ?? row.insertdate;
-    const datumErfasst = normalizeValue(datumErfasstSource);
+    const normalizedItime = normalizeValue(row.itime);
+    const timestampFallbackFields = ['insertdate', 'mtime', 'Datum erfasst', 'Datum_erfasst', 'idate'] as const;
+    let datumErfasstSourceField: string | null = null;
+    let datumErfasst = normalizedItime;
+    if (!datumErfasst) {
+      for (const field of timestampFallbackFields) {
+        const fallbackValue = normalizeValue((row as Record<string, string | undefined>)[field]);
+        if (!fallbackValue) {
+          continue;
+        }
+        datumErfasst = fallbackValue;
+        datumErfasstSourceField = field;
+        break;
+      }
+      if (datumErfasst && datumErfasstSourceField) {
+        try {
+          ctx.log('[detect-kivitendo-schema] filled missing itime from timestamp fallback', {
+            id: row.id,
+            partnumber: row.partnumber,
+            fallbackField: datumErfasstSourceField,
+          });
+        } catch (loggingError) {
+          console.error('[detect-kivitendo-schema] failed to log timestamp fallback usage', loggingError);
+        }
+      }
+    }
     if (datumErfasst) {
       mappedRow['Datum erfasst'] = datumErfasst;
       mappedRow.idate = datumErfasst;
