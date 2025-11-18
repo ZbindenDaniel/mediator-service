@@ -2059,12 +2059,14 @@ ORDER BY i.ItemUUID
 
 export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
 
+// TODO(agent): Capture real-world export sorting expectations once Artikel_Nummer coverage is universal.
 const listItemsForExportStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
 WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
   AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
-ORDER BY i.Datum_erfasst
+-- Maintain Artikel_Nummer ordering for predictable export manifests and use ItemUUID as a stable tie-breaker.
+ORDER BY COALESCE(NULLIF(i.Artikel_Nummer, ''), i.ItemUUID), i.ItemUUID
 `);
 
 export const listItemsForExport = wrapLangtextAwareStatement(
