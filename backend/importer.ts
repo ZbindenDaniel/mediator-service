@@ -27,7 +27,16 @@ const QUANTITY_FIELD_PRIORITIES = [
 ] as const;
 
 // TODO(agent): Refresh identifier date fallbacks whenever upstream exports introduce new timestamp columns.
-const IMPORT_DATE_FIELD_PRIORITIES = ['idate', 'Datum erfasst', 'Datum_erfasst', 'itime', 'mtime', 'insertdate'] as const;
+// TODO(agent): Track insertdateset adoption to keep importer fallback priorities minimal but complete.
+const IMPORT_DATE_FIELD_PRIORITIES = [
+  'idate',
+  'Datum erfasst',
+  'Datum_erfasst',
+  'itime',
+  'mtime',
+  'insertdate',
+  'insertdateset'
+] as const;
 
 interface QuantityFieldResolution {
   value: string | undefined;
