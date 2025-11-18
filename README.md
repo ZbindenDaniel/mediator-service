@@ -10,6 +10,7 @@ a small service to map items to the boxes they're stored in and the location the
 See the refreshed [project overview](docs/OVERVIEW.md) and [architecture outline](docs/ARCHITECTURE.md) for the complete domain map, guiding principles, and current priorities.
 
 <!-- TODO(agent): Reconfirm onboarding flow once the Postgres service splits into read/write nodes. -->
+<!-- TODO(agent): Re-evaluate the Postgres-as-default messaging once the SQLite fallback is formally retired. -->
 
 ## QR scanning
 
@@ -31,7 +32,7 @@ POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate pay
 
 - The `build` script (see `package.json`) runs the Sass prebuild step, compiles TypeScript, bundles the frontend, and copies `frontend/public` into `dist/frontend/public` so the compiled server can run without requiring manual copying.
 
-- Runtime configuration is sourced from environment variables. Create a `.env` file in the repository root to override defaults (e.g., ports or paths); the server automatically loads it on startup for both TypeScript and compiled builds. Database settings follow the Docker Compose defaults (`DATABASE_URL`, `PGHOST`, etc.) so the backend connects to the bundled Postgres instance unless you override them.
+- Runtime configuration is sourced from environment variables. Create a `.env` file in the repository root to override defaults (e.g., ports or paths); the server automatically loads it on startup for both TypeScript and compiled builds. Database settings now prefer the Docker Compose Postgres connection string (`DATABASE_URL`). When that variable is missing the backend falls back to the file defined by `DB_PATH` (default `./data/mediator.sqlite`) and logs `[persistence] SQLite database initialized` with the resolved path.
 - Start the local stack with `docker compose up -d` to launch Postgres and the mediator together. After the containers report healthy, run your migration or schema verification scripts to validate that the database matches the latest definitions.
 
 ## Container deployment
@@ -51,7 +52,7 @@ docker run --rm \
   -p 8080:8080 \
   -e HTTP_PORT=8080 \
   -e PUBLIC_HOSTNAME=mediator.local \
-  -e DB_PATH=/var/lib/mediator/mediator.sqlite \
+  -e DATABASE_URL=postgres://mediator:mediator@postgres:5432/mediator \
   -e INBOX_DIR=/var/lib/mediator/inbox \
   -e ARCHIVE_DIR=/var/lib/mediator/archive \
   -e TLS_CERT_PATH=/etc/mediator/tls/server.crt \
@@ -61,6 +62,8 @@ docker run --rm \
   -v /etc/mediator/tls:/etc/mediator/tls:ro \
   mediator-service
 ```
+
+To intentionally use the SQLite fallback, omit `DATABASE_URL` from the command above and provide `-e DB_PATH=/var/lib/mediator/mediator.sqlite` so the backend can locate the file-backed database.
 
 The provided [`docker-compose.yml`](./docker-compose.yml) offers the same defaults and can be started with:
 
@@ -72,9 +75,10 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 
 ### Critical runtime environment
 
+- `DATABASE_URL` – Postgres connection string. Leave it pointed at the bundled Compose database (`postgres://mediator:mediator@postgres:5432/mediator`) or override per environment. The backend logs `[persistence] Postgres connectivity check failed` when this URL cannot be reached.
 - `HTTP_PORT` – HTTP listener inside the container (default `8080`). Update published ports when changing this value.
 - `PUBLIC_HOSTNAME` – externally reachable hostname or IP embedded into generated links and QR codes.
-- `DB_PATH` – filesystem path to the SQLite database; map it onto persistent storage so data survives container restarts.
+- `DB_PATH` – filesystem path to the SQLite fallback database. This value is only read when `DATABASE_URL` is unset; supply it when intentionally running the legacy file-backed mode.
 - `INBOX_DIR` – directory where imported CSV files are staged; persist or share this path with automation that drops new files.
 - `ARCHIVE_DIR` – directory that receives processed CSV files; persist alongside the inbox for auditing.
 - `TLS_CERT_PATH` / `TLS_KEY_PATH` – PEM-encoded certificate and key that enable the optional HTTPS listener when both are present.
@@ -91,7 +95,7 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 
 ### Recommended volumes
 
-- SQLite database and CSV state: mount a host path or Docker volume at `/var/lib/mediator` (or the directories referenced by `DB_PATH`, `INBOX_DIR`, and `ARCHIVE_DIR`).
+- SQLite fallback database and CSV state: mount a host path or Docker volume at `/var/lib/mediator` (or the directories referenced by `DB_PATH`, `INBOX_DIR`, and `ARCHIVE_DIR`). Persisting this path is optional when the service runs exclusively on Postgres.
 - Media assets: mount persistent storage at `/app/dist/backend/media` to retain uploaded files and generated label PDFs.
 - TLS material: mount certificate and key files read-only at the paths supplied via `TLS_CERT_PATH` and `TLS_KEY_PATH`.
 
@@ -117,9 +121,21 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 
 ### Troubleshooting Postgres connectivity
 
-- Review mediator startup logs for any `DATABASE_URL` warnings; the backend emits them when falling back to default credentials or rejecting malformed connection strings.
+- Review mediator startup logs for any `[persistence] DATABASE_URL` warnings; `backend/persistence/connection.ts` emits them when falling back to SQLite, when the `pg` dependency is unavailable, or when the connection string is malformed. The same module logs `[persistence] Postgres connectivity check failed` with the root cause whenever pool creation succeeds but authentication fails.
 - Check the Postgres container status via `docker compose ps` or `docker compose logs postgres` to confirm the healthcheck succeeded before debugging application code.
 - When you encounter persistent connection retries, confirm that migrations have run—the table list in the log payload should match the schema under `models/` and `backend/src/models/`.
+
+## Migrating SQLite data to Postgres
+
+1. **Back up the SQLite file.** Stop the mediator, copy the file referenced by `DB_PATH` (default `./data/mediator.sqlite`), and place it somewhere safe.
+2. **Export the SQLite contents.** Use `sqlite3 /path/to/mediator.sqlite '.dump' > mediator-export.sql` or install `pgloader` for a direct transfer. When using raw SQL dumps, review the output for `PRAGMA` statements that Postgres does not understand and remove them.
+3. **Import into Postgres.** Either:
+   - Run `pgloader sqlite:///path/to/mediator.sqlite postgresql://mediator:mediator@localhost:5432/mediator`, or
+   - Create matching tables via your existing migration flow and replay the scrubbed dump with `psql -f mediator-export.sql "$DATABASE_URL"`.
+4. **Point the mediator at Postgres.** Set `DATABASE_URL` (in `.env`, your Compose file, or deployment platform) to the target instance and leave `DB_PATH` unset so the fallback does not activate.
+5. **Verify logs and data.** On startup the backend will log `[persistence] Postgres connectivity verified.`. Run smoke tests or the `scripts/verify-agentic-migration.js` helper to ensure the data matches expectations before decommissioning the SQLite file.
+
+If you need to keep a hot SQLite copy for the migration window, you can temporarily keep `DB_PATH` defined and only remove it after the Postgres import has been validated.
 
 Quick commands:
 
