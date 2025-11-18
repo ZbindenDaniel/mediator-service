@@ -50,3 +50,7 @@ sudo ufw allow 3000
 - Watch the mediator startup logs for `DATABASE_URL` warnings. The backend logs a structured message when it falls back to default credentials or encounters malformed connection strings, making it easier to spot typos.
 - Confirm the Postgres healthcheck status in Docker Compose (`docker compose ps` or `docker compose logs postgres`) before debugging application code. The included healthcheck reports when the database is still booting or rejecting connections.
 - When the service emits repeated connection retries, double-check that migrations have been applied—the tables listed in the log payload should align with the latest definitions under `models/`.
+
+## registry
+
+- If the personal access token expires, regenerate it and login again to the registry: echo THE_NEW_PAT | docker login ghcr.io -u ZbindenDaniel --password-stdin
