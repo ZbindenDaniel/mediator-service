@@ -33,16 +33,17 @@ services:
     env_file: .env
     container_name: mediator
     # TODO(host-ollama): Monitor upstream changes that could remove the host gateway requirement once a containerised Ollama ships.
+    # TODO(agent): Confirm Postgres remains the default path once the SQLite fallback is removed.
     ports:
       - "8080:8080"
       # Uncomment the following line to expose the optional HTTPS listener once TLS_CERT_PATH/TLS_KEY_PATH are configured.
       # - "8443:8443"
     environment:
       # Storage locations for persistent state.
-      DB_PATH: /var/lib/mediator/mediator.sqlite
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
       INBOX_DIR: /var/lib/mediator/inbox
       ARCHIVE_DIR: /var/lib/mediator/archive
+      # To force the SQLite fallback, remove DATABASE_URL and set DB_PATH to the desired on-disk file.
       # Set to the externally reachable hostname or IP for generated links.
       PUBLIC_HOSTNAME: localhost
       # Additional environment variables may be supplied here to override defaults from backend/config.ts,
