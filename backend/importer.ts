@@ -25,6 +25,9 @@ const QUANTITY_FIELD_PRIORITIES = [
   { field: 'OnHand', warnOnUse: true },
 ] as const;
 
+// TODO(agent): Refresh identifier date fallbacks whenever upstream exports introduce new timestamp columns.
+const IMPORT_DATE_FIELD_PRIORITIES = ['idate', 'Datum erfasst', 'Datum_erfasst', 'itime', 'mtime', 'insertdate'] as const;
+
 interface QuantityFieldResolution {
   value: string | undefined;
   source: (typeof QUANTITY_FIELD_PRIORITIES)[number]['field'] | null;
@@ -258,9 +261,9 @@ function resolveImportDate(
   fallback: Date,
   rowNumber: number
 ): Date {
-  const candidateKeys = ['idate', 'Datum erfasst', 'Datum_erfasst', 'itime', 'mtime'] as const;
-  for (const key of candidateKeys) {
-    const raw = row[key as keyof typeof row];
+  const dateSource = row as Record<string, string | undefined>;
+  for (const key of IMPORT_DATE_FIELD_PRIORITIES) {
+    const raw = dateSource[key];
     if (typeof raw !== 'string') {
       continue;
     }
