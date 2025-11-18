@@ -1,10 +1,30 @@
 import { Op } from './types';
 
 // TODO: Extend Kivitendo schema detection when additional export variants surface.
-const REQUIRED_KIVITENDO_HEADERS = ['partnumber', 'sellprice', 'onhand', 'unit', 'itime'] as const;
+const KIVITENDO_HEADER_PROFILES = [
+  {
+    name: 'full',
+    headers: ['partnumber', 'sellprice', 'onhand', 'unit', 'itime'],
+    relaxed: false,
+  },
+  {
+    name: 'inventory-insertdate',
+    headers: ['partnumber', 'onhand', 'unit', 'insertdate'],
+    relaxed: true,
+    // Accepts exports that omit sellprice/itime but still expose insertdate-driven stock snapshots.
+  },
+] as const;
 
-function hasKivitendoSchema(row: Record<string, string>): boolean {
-  return REQUIRED_KIVITENDO_HEADERS.every((key) => Object.prototype.hasOwnProperty.call(row, key));
+type KivitendoHeaderProfile = (typeof KIVITENDO_HEADER_PROFILES)[number];
+
+function resolveKivitendoSchemaProfile(row: Record<string, string>): KivitendoHeaderProfile | null {
+  for (const profile of KIVITENDO_HEADER_PROFILES) {
+    const matches = profile.headers.every((key) => Object.prototype.hasOwnProperty.call(row, key));
+    if (matches) {
+      return profile;
+    }
+  }
+  return null;
 }
 
 function normalizeValue(value: string | undefined): string | null {
@@ -51,14 +71,29 @@ export const name = 'detect-kivitendo-schema';
 
 export const apply: Op['apply'] = (row, ctx) => {
   try {
-    if (!hasKivitendoSchema(row)) {
+    const schemaProfile = resolveKivitendoSchemaProfile(row);
+    if (!schemaProfile) {
       return { ok: true, row };
     }
 
     ctx.log('[detect-kivitendo-schema] detected Kivitendo schema row', {
       id: row.id,
       partnumber: row.partnumber,
+      profile: schemaProfile.name,
     });
+
+    if (schemaProfile.relaxed) {
+      try {
+        ctx.log('[detect-kivitendo-schema] using relaxed Kivitendo header profile', {
+          profile: schemaProfile.name,
+          headers: schemaProfile.headers,
+          id: row.id,
+          partnumber: row.partnumber,
+        });
+      } catch (loggingError) {
+        console.error('[detect-kivitendo-schema] failed to log relaxed header profile match', loggingError);
+      }
+    }
 
     const mappedRow: Record<string, string> = { ...row };
 
@@ -97,7 +132,8 @@ export const apply: Op['apply'] = (row, ctx) => {
       mappedRow['Auf_Lager'] = aufLager;
     }
 
-    const datumErfasst = normalizeValue(row.itime);
+    const datumErfasstSource = row.itime ?? row.insertdate;
+    const datumErfasst = normalizeValue(datumErfasstSource);
     if (datumErfasst) {
       mappedRow['Datum erfasst'] = datumErfasst;
       mappedRow.idate = datumErfasst;

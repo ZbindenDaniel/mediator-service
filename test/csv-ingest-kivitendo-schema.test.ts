@@ -6,6 +6,9 @@ const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'csv-kivitendo-schema');
 const KIVITENDO_INITIAL = path.join(FIXTURE_DIR, 'kivitendo-initial.csv');
 const KIVITENDO_UPDATE = path.join(FIXTURE_DIR, 'kivitendo-update.csv');
 const KIVITENDO_ZERO_QUANTITY = path.join(FIXTURE_DIR, 'kivitendo-zero-quantity.csv');
+const KIVITENDO_RELAXED = path.join(FIXTURE_DIR, 'kivitendo-relaxed.csv');
+
+// TODO: Expand fixtures when additional Kivitendo header permutations surface.
 
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
 
@@ -197,5 +200,54 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
       VStatus: 'no',
       Shopartikel: 0,
     });
+  });
+
+  test('ingests relaxed header variant with insertdate fallback', async () => {
+    let result: { count: number; boxes: string[] };
+    try {
+      result = await ingestCsvFile(KIVITENDO_RELAXED);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Relaxed variant ingestion failed', error);
+      throw error;
+    }
+
+    expect(result.count).toBe(1);
+    expect(result.boxes).toEqual(['B-030424-0001']);
+
+    const relaxedItem = selectItemByArtikel.get('KIV-RELAX') as
+      | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
+      | undefined;
+    expect(relaxedItem).toEqual({
+      ItemUUID: 'I-030424-0001',
+      ArtikelNummer: 'KIV-RELAX',
+      BoxID: 'B-030424-0001',
+      AufLager: 4,
+    });
+
+    const relaxedRef = selectItemRef.get('KIV-RELAX') as
+      | {
+          Grafikname: string | null;
+          Artikelbeschreibung: string | null;
+          Langtext: string | null;
+          Verkaufspreis: number | null;
+          GewichtKg: number | null;
+          Einheit: string | null;
+          VStatus: string | null;
+          Shopartikel: number | null;
+        }
+      | undefined;
+    expect(relaxedRef).toEqual({
+      Grafikname: 'kivi-relaxed.jpg',
+      Artikelbeschreibung: 'Kivitendo Relaxed Export',
+      Langtext: 'Relaxed Variant',
+      Verkaufspreis: 0,
+      GewichtKg: 0.55,
+      Einheit: 'Stk',
+      VStatus: 'yes',
+      Shopartikel: 1,
+    });
+
+    const relaxedBox = selectBox.get('B-030424-0001') as { BoxID: string; Notes: string | null } | undefined;
+    expect(relaxedBox).toEqual({ BoxID: 'B-030424-0001', Notes: '' });
   });
 });
