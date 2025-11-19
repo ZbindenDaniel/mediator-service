@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import { ItemEinheit } from '../models';
+import { MEDIA_DIR } from '../backend/lib/media';
 
 // TODO(agent): Expand exporter/importer parity coverage as storage metadata requirements grow.
 const TEST_DB_FILE = path.join(__dirname, 'export-items.test.sqlite');
@@ -275,5 +276,60 @@ describe('export-items action', () => {
         ? importedDatumErfasstRaw.toISOString()
         : new Date(importedDatumErfasstRaw as string).toISOString();
     expect(importedDatumErfasstIso).toBe(now.toISOString());
+  });
+
+  // TODO(agent): Add multi-image exporter fixtures for items that mix remote and local media paths.
+  test('image_names column enumerates stored media assets when multiple files exist', async () => {
+    const now = new Date('2024-09-01T09:00:00.000Z');
+    const itemUUID = 'I-EXPORT-MEDIA-001';
+    const artikelNummer = 'EXPORT-MEDIA-001';
+    const grafikname = `/media/${itemUUID}/primary.jpg`;
+    const mediaDir = path.join(MEDIA_DIR, itemUUID);
+    const mediaFiles = ['primary.jpg', 'detail-01.png'];
+
+    persistItemWithinTransaction({
+      ItemUUID: itemUUID,
+      Artikel_Nummer: artikelNummer,
+      Grafikname: grafikname,
+      Artikelbeschreibung: 'Media enumeration test',
+      Kurzbeschreibung: 'Media short',
+      Langtext: 'Media long',
+      UpdatedAt: now,
+      Datum_erfasst: now,
+      Auf_Lager: 2
+    });
+
+    fs.mkdirSync(mediaDir, { recursive: true });
+    for (const file of mediaFiles) {
+      fs.writeFileSync(path.join(mediaDir, file), 'fixture');
+    }
+
+    try {
+      const response = await runAction(
+        exportItems,
+        mockRequest('/api/export/items?actor=tester'),
+        { db, listItemsForExport, logEvent }
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toBeInstanceOf(Buffer);
+
+      const csvPayload = (response.body as Buffer).toString('utf8').trim();
+      const csvLines = csvPayload.split(/\r?\n/);
+      expect(csvLines).toHaveLength(2);
+
+      const headerColumns = csvLines[0].split(',');
+      const dataColumns = csvLines[1].split(',');
+      const imageNamesIndex = headerColumns.indexOf('image_names');
+      expect(imageNamesIndex).toBeGreaterThan(-1);
+
+      const imageNamesCell = dataColumns[imageNamesIndex];
+      const expectedAssets = mediaFiles.map((file) => `/media/${itemUUID}/${file}`);
+      expect(imageNamesCell.split('|')).toEqual(expectedAssets);
+    } finally {
+      if (fs.existsSync(mediaDir)) {
+        fs.rmSync(mediaDir, { recursive: true, force: true });
+      }
+    }
   });
 });
