@@ -202,7 +202,10 @@ export const apply: Op['apply'] = (row, ctx) => {
     if (normalizedId) {
       mappedRow.itemUUID = `kivitendo-${normalizedId}`;
     } else if (artikelNummer && datumErfasst) {
-      const datePart = new Date(datumErfasst)?.toLocaleDateString("ddmmYY") ?? 'XXX';
+      const d = new Date(datumErfasst);
+      const datePart = isNaN(d.getTime())
+        ? 'XXX'
+        : d.toLocaleDateString('de-DE');
       mappedRow.itemUUID = `I-${datePart}-${artikelNummer}`;
       ctx.log('[detect-kivitendo-schema] falling back to Artikel-Nummer for itemUUID', {
         id: row.id,
