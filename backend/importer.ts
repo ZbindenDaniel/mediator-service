@@ -55,7 +55,7 @@ const IMPORT_DATE_FIELD_PRIORITY_DESCRIPTORS: readonly ImportDateFieldDescriptor
   { field: 'mtime', priority: 80 },
   { field: 'insertdate', priority: 90 },
   { field: 'insertdateset', priority: 100 },
-]) as const;
+]);
 
 const SORTED_IMPORT_DATE_FIELD_DESCRIPTORS = Object.freeze(
   [...IMPORT_DATE_FIELD_PRIORITY_DESCRIPTORS].sort((a, b) => a.priority - b.priority)
