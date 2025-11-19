@@ -50,4 +50,5 @@ export interface ItemRef {
   ShopwareProductId?: string | null;
 }
 
+// TODO(agent): Verify Item metadata typing whenever export/import parity requirements evolve.
 export type Item = ItemInstance & Partial<ItemRef>;

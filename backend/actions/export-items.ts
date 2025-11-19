@@ -9,8 +9,9 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// TODO(agent): Keep exporter metadata parity intact when partner CSV specs change.
 // TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
-const columns = [
+const partnerRequiredColumns = [
   'partnumber',
   'type_and_classific',
   'entrydate',
@@ -35,10 +36,16 @@ const columns = [
   'cvar_categories_B2'
 ] as const;
 
+const metadataColumns = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt'] as const;
+
+const columns = [...partnerRequiredColumns, ...metadataColumns] as const;
+
 // TODO(agent): Replace CSV-specific Langtext serialization once exports move to typed clients.
 // TODO(langtext-export): Align CSV Langtext serialization with downstream channel requirements when available.
 
 type ExportColumn = (typeof columns)[number];
+
+const metadataColumnSet = new Set<ExportColumn>(metadataColumns as readonly ExportColumn[]);
 
 const fieldMap: Record<ExportColumn, string | null> = {
   partnumber: 'Artikel_Nummer',
@@ -62,10 +69,15 @@ const fieldMap: Record<ExportColumn, string | null> = {
   cvar_categories_A1: 'Hauptkategorien_A',
   cvar_categories_A2: 'Unterkategorien_A',
   cvar_categories_B1: 'Hauptkategorien_B',
-  cvar_categories_B2: 'Unterkategorien_B'
+  cvar_categories_B2: 'Unterkategorien_B',
+  itemUUID: 'ItemUUID',
+  BoxID: 'BoxID',
+  Location: 'Location',
+  UpdatedAt: 'UpdatedAt'
 };
 
 const missingFieldWarnings = new Set<ExportColumn>();
+const missingMetadataValueWarnings = new Set<ExportColumn>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -73,6 +85,31 @@ function toCsvValue(val: any): string {
   if (val === null || val === undefined) return '';
   const s = String(val);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function logMissingMetadataValue(
+  column: ExportColumn,
+  field: string,
+  rawRow: Record<string, unknown>
+): void {
+  if (missingMetadataValueWarnings.has(column)) {
+    return;
+  }
+  missingMetadataValueWarnings.add(column);
+  const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+  try {
+    console.warn('[export-items] Missing metadata value for export column; emitting blank string.', {
+      column,
+      field,
+      itemUUID
+    });
+  } catch (loggingError) {
+    console.error('[export-items] Failed to log missing metadata value warning', {
+      column,
+      field,
+      loggingError
+    });
+  }
 }
 
 function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
@@ -91,6 +128,14 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
   }
 
   const value = rawRow[field];
+
+  if (metadataColumnSet.has(column)) {
+    if (value === undefined) {
+      logMissingMetadataValue(column, field, rawRow);
+      return '';
+    }
+    return value;
+  }
 
   if (field === 'Langtext') {
     const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
