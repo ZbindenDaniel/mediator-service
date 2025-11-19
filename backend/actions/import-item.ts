@@ -628,6 +628,8 @@ const action = defineHttpAction({
 
       let boxLocationToPersist: string | null = normalizedLocation || null;
       let boxStandortLabelToPersist: string | null = requestedStandortLabel;
+      // TODO(agent): Confirm PhotoPath preservation remains aligned with the boxes schema during imports.
+      let preservedBoxPhotoPath: string | null = null;
       if (BoxID) {
         if (!normalizedLocation) {
           console.warn(
@@ -636,11 +638,16 @@ const action = defineHttpAction({
           );
           try {
             const existingBox = ctx.getBox?.get
-              ? (ctx.getBox.get(BoxID) as { Location?: string | null; StandortLabel?: string | null } | undefined)
+              ? (ctx.getBox.get(BoxID) as {
+                  Location?: string | null;
+                  StandortLabel?: string | null;
+                  PhotoPath?: string | null;
+                } | undefined)
               : undefined;
             if (existingBox?.Location) {
               boxLocationToPersist = existingBox.Location;
               boxStandortLabelToPersist = existingBox.StandortLabel ?? resolveStandortLabel(existingBox.Location);
+              preservedBoxPhotoPath = existingBox.PhotoPath ?? null;
               console.info('[import-item] Preserved existing box Location', { BoxID, Location: existingBox.Location });
             } else {
               boxLocationToPersist = null;
@@ -664,6 +671,7 @@ const action = defineHttpAction({
           search: string,
           status: string,
           boxLocation: string | null,
+          boxPhotoPath: string | null,
           agenticEnabled: boolean,
           manuallySkipped: boolean
         ) => {
@@ -674,6 +682,7 @@ const action = defineHttpAction({
               StandortLabel: boxStandortLabelToPersist,
               CreatedAt: now,
               Notes: null,
+              PhotoPath: boxPhotoPath,
               PlacedBy: null,
               PlacedAt: null,
               UpdatedAt: now
@@ -778,6 +787,7 @@ const action = defineHttpAction({
         agenticSearchQuery,
         agenticStatus,
         boxLocationToPersist,
+        preservedBoxPhotoPath,
         Boolean(ctx.agenticServiceEnabled),
         agenticRunManuallySkipped
       );
