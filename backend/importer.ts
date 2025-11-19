@@ -3,7 +3,14 @@
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
-import { upsertBox, persistItem, queueLabel, persistItemReference, findByMaterial } from './db';
+import {
+  upsertBox,
+  persistItem,
+  queueLabel,
+  persistItemReference,
+  findByMaterial,
+  getMaxArtikelNummer
+} from './db';
 import { IMPORTER_FORCE_ZERO_STOCK } from './config';
 import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
 import { Op } from './ops/types';
@@ -17,6 +24,7 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const ITEM_ID_PREFIX = 'I-';
 const BOX_ID_PREFIX = 'B-';
 const ID_SEQUENCE_WIDTH = 4;
+const ARTIKEL_NUMMER_WIDTH = 5;
 
 // TODO(agent): Expand quantity field resolution when additional column spellings surface.
 const QUANTITY_FIELD_PRIORITIES = [
@@ -433,6 +441,49 @@ function mintSequentialIdentifier(
   return `${prefix}${segment}-${sequenceSegment}`;
 }
 
+// TODO(agent): Replace sequential Artikel_Nummer minting with DB-backed counters when ingestion concurrency grows.
+type ArtikelNummerMintState = {
+  baseValue: number;
+  mintedCount: number;
+};
+
+function resolveArtikelNummerMintState(): ArtikelNummerMintState {
+  let baseValue = 0;
+  try {
+    const row = getMaxArtikelNummer.get() as { Artikel_Nummer?: string | null } | undefined;
+    if (row && typeof row.Artikel_Nummer === 'string') {
+      const normalized = row.Artikel_Nummer.trim();
+      if (normalized) {
+        const parsed = Number.parseInt(normalized, 10);
+        if (!Number.isNaN(parsed)) {
+          baseValue = parsed;
+        } else {
+          console.warn('[importer] Ignoring non-numeric max Artikel_Nummer value', {
+            provided: row.Artikel_Nummer,
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[importer] Failed to inspect max Artikel_Nummer before CSV ingestion', { error });
+  }
+  if (baseValue > 0) {
+    console.log('[importer] Initializing Artikel_Nummer mint state from database value', {
+      baseValue,
+    });
+  }
+  return { baseValue, mintedCount: 0 };
+}
+
+function mintArtikelNummerFromState(state: ArtikelNummerMintState): string {
+  state.mintedCount += 1;
+  const nextValue = state.baseValue + state.mintedCount;
+  if (!Number.isFinite(nextValue) || nextValue <= 0) {
+    throw new Error('Invalid Artikel_Nummer mint state detected');
+  }
+  return String(nextValue).padStart(ARTIKEL_NUMMER_WIDTH, '0');
+}
+
 function parseDatumErfasst(rawValue: string | null | undefined): Date | undefined {
   if (rawValue === null || rawValue === undefined) {
     return undefined;
@@ -556,6 +607,7 @@ export async function ingestCsvFile(
     const boxSequenceByDate = new Map<string, number>();
     const mintedBoxByOriginal = new Map<string, string>();
     const runState = new Map<string, unknown>();
+    const artikelNummerMintState = resolveArtikelNummerMintState();
 
     for (const [index, r] of records.entries()) {
       const rowNumber = index + 1;
@@ -663,7 +715,23 @@ export async function ingestCsvFile(
         upsertBox.run(box);
       }
       const rawArtikelNummer = final['Artikel-Nummer'];
-      const artikelNummer = typeof rawArtikelNummer === 'string' ? rawArtikelNummer.trim() : '';
+      let artikelNummer = typeof rawArtikelNummer === 'string' ? rawArtikelNummer.trim() : '';
+      if (!artikelNummer) {
+        try {
+          artikelNummer = mintArtikelNummerFromState(artikelNummerMintState);
+          final['Artikel-Nummer'] = artikelNummer;
+          console.log('[importer] Minted Artikel_Nummer for CSV row', {
+            rowNumber,
+            mintedArtikelNummer: artikelNummer,
+          });
+        } catch (mintError) {
+          console.error('[importer] Failed to mint Artikel_Nummer for CSV row', {
+            rowNumber,
+            mintError,
+          });
+          throw mintError;
+        }
+      }
       const grafikname = final['Grafikname(n)'] || '';
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
