@@ -11,6 +11,10 @@ const KIVITENDO_RELAXED = path.join(FIXTURE_DIR, 'kivitendo-relaxed.csv');
 const KIVITENDO_RELAXED_UPDATE = path.join(FIXTURE_DIR, 'kivitendo-relaxed-update.csv');
 // TODO(agent): Replace insertdate-only fixture when upstream CSVs emit normalized Datum erfasst columns by default.
 const KIVITENDO_INSERTDATE_ONLY = path.join(FIXTURE_DIR, 'kivitendo-insertdate-only.csv');
+const KIVITENDO_MISSING_ARTIKELNUMMER = path.join(
+  FIXTURE_DIR,
+  'kivitendo-missing-artikelnummer.csv'
+);
 
 // TODO: Expand fixtures when additional Kivitendo header permutations surface.
 // TODO(agent): Mirror new Kivitendo cvar metadata in fixtures as upstream exports evolve.
@@ -354,6 +358,51 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
 
     const relaxedUpdatedBox = selectBox.get('B-030424-0001') as { BoxID: string; Notes: string | null } | undefined;
     expect(relaxedUpdatedBox).toEqual({ BoxID: 'B-030424-0001', Notes: '' });
+  });
+
+  // TODO(agent): Extend missing Artikelnummer coverage to multi-row CSVs when concurrency requirements surface.
+  test('mints Artikelnummer when CSV row omits identifier', async () => {
+    let missingResult: { count: number; boxes: string[] };
+    try {
+      missingResult = await ingestCsvFile(KIVITENDO_MISSING_ARTIKELNUMMER);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Missing identifier ingestion failed', error);
+      throw error;
+    }
+
+    expect(missingResult.count).toBe(1);
+    expect(missingResult.boxes).toEqual(['B-010524-0001']);
+
+    const mintedItem = selectItemByArtikel.get('00001') as
+      | { ItemUUID: string; ArtikelNummer: string | null; BoxID: string | null; AufLager: number | null }
+      | undefined;
+    expect(mintedItem).toEqual({
+      ItemUUID: 'kivitendo-201',
+      ArtikelNummer: '00001',
+      BoxID: 'B-010524-0001',
+      AufLager: 3,
+    });
+
+    const mintedRef = selectItemRef.get('00001') as ItemRefRow | undefined;
+    expect(mintedRef).toEqual({
+      Grafikname: 'missing-image.png',
+      Artikelbeschreibung: 'Ohne Artikelnummer',
+      Langtext: 'Langtext Ohne Artikelnummer',
+      Verkaufspreis: 9.49,
+      GewichtKg: 0.75,
+      Einheit: 'Stk',
+      VStatus: 'yes',
+      Shopartikel: 1,
+      Kurzbeschreibung: 'Kurzbeschreibung Ohne Nummer',
+      Hersteller: 'Herstellerin GmbH',
+      LaengeMm: 150,
+      BreiteMm: 120,
+      HoeheMm: 45,
+      HauptA: 2001,
+      UnterA: 2101,
+      HauptB: 2201,
+      UnterB: 2301,
+    });
   });
 
   test('hydrates Datum_erfasst from insertdate alias when normalized column is missing', async () => {
