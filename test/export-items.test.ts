@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
+import { ItemEinheit } from '../models';
 
 // TODO(agent): Expand exporter/importer parity coverage as storage metadata requirements grow.
 const TEST_DB_FILE = path.join(__dirname, 'export-items.test.sqlite');
+const ROUNDTRIP_CSV_FILE = path.join(__dirname, 'export-items-roundtrip.csv');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
 
 function removeTestDatabase(): void {
@@ -28,6 +30,8 @@ const {
 } = require('../backend/db');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const exportItems = require('../backend/actions/export-items').default;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { ingestCsvFile } = require('../backend/importer');
 
 type MockResponse = {
   status?: number;
@@ -100,6 +104,9 @@ function runAction(action: ExportAction, req: Readable, ctx: ExportContext): Pro
 describe('export-items action', () => {
   beforeEach(() => {
     clearDatabase();
+    if (fs.existsSync(ROUNDTRIP_CSV_FILE)) {
+      fs.rmSync(ROUNDTRIP_CSV_FILE, { force: true });
+    }
   });
 
   afterAll(() => {
@@ -109,6 +116,9 @@ describe('export-items action', () => {
       console.warn('[export-items.test] Failed to close database cleanly', error);
     }
     removeTestDatabase();
+    if (fs.existsSync(ROUNDTRIP_CSV_FILE)) {
+      fs.rmSync(ROUNDTRIP_CSV_FILE, { force: true });
+    }
     if (ORIGINAL_DB_PATH === undefined) {
       delete process.env.DB_PATH;
     } else {
@@ -168,5 +178,76 @@ describe('export-items action', () => {
       placement.Location,
       now.toISOString()
     ]);
+  });
+
+  // TODO(agent): Broaden round-trip assertions to cover Langtext payload objects once exporters emit structured content.
+  test('partner CSV exports can be re-imported without losing descriptive metadata', async () => {
+    const now = new Date('2024-08-01T12:00:00.000Z');
+    const seedItem = {
+      ItemUUID: 'I-ROUNDTRIP-0001',
+      Artikel_Nummer: 'ROUNDTRIP-001',
+      Artikelbeschreibung: 'Roundtrip description survives export/import cycles.',
+      Kurzbeschreibung: 'Short detail',
+      Langtext: 'Detailed Langtext block',
+      Hersteller: 'Roundtrip Manufacturing',
+      Grafikname: 'roundtrip.png',
+      BoxID: null,
+      Location: null,
+      UpdatedAt: now,
+      Datum_erfasst: now,
+      Auf_Lager: 7,
+      Verkaufspreis: 199.95,
+      Länge_mm: 123,
+      Breite_mm: 45,
+      Höhe_mm: 67,
+      Gewicht_kg: 3.4,
+      Hauptkategorien_A: 101,
+      Unterkategorien_A: 202,
+      Hauptkategorien_B: 303,
+      Unterkategorien_B: 404,
+      Veröffentlicht_Status: 'yes',
+      Shopartikel: 1,
+      Artikeltyp: 'STANDARD',
+      Einheit: ItemEinheit.Stk,
+    };
+
+    persistItemWithinTransaction(seedItem);
+
+    const response = await runAction(
+      exportItems,
+      mockRequest('/api/export/items?actor=tester'),
+      { db, listItemsForExport, logEvent }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toBeInstanceOf(Buffer);
+
+    fs.writeFileSync(ROUNDTRIP_CSV_FILE, response.body as Buffer);
+
+    clearDatabase();
+
+    const ingestionResult = await ingestCsvFile(ROUNDTRIP_CSV_FILE);
+    expect(ingestionResult.count).toBe(1);
+
+    const roundtrippedRows = listItemsForExport.all({ createdAfter: null, updatedAfter: null });
+    expect(roundtrippedRows).toHaveLength(1);
+    const roundtripped = roundtrippedRows[0];
+
+    expect(roundtripped.Artikel_Nummer).toBe(seedItem.Artikel_Nummer);
+    expect(roundtripped.Artikelbeschreibung).toBe(seedItem.Artikelbeschreibung);
+    expect(roundtripped.Kurzbeschreibung).toBe(seedItem.Kurzbeschreibung);
+    expect(roundtripped.Langtext).toBe(seedItem.Langtext);
+    expect(roundtripped.Hersteller).toBe(seedItem.Hersteller);
+    expect(roundtripped.Länge_mm).toBe(seedItem.Länge_mm);
+    expect(roundtripped.Breite_mm).toBe(seedItem.Breite_mm);
+    expect(roundtripped.Höhe_mm).toBe(seedItem.Höhe_mm);
+    expect(roundtripped.Gewicht_kg).toBe(seedItem.Gewicht_kg);
+    expect(roundtripped.Verkaufspreis).toBe(seedItem.Verkaufspreis);
+    expect(roundtripped.Hauptkategorien_A).toBe(seedItem.Hauptkategorien_A);
+    expect(roundtripped.Unterkategorien_A).toBe(seedItem.Unterkategorien_A);
+    expect(roundtripped.Hauptkategorien_B).toBe(seedItem.Hauptkategorien_B);
+    expect(roundtripped.Unterkategorien_B).toBe(seedItem.Unterkategorien_B);
+    expect(roundtripped.Einheit).toBe(seedItem.Einheit);
+    expect(roundtripped.Shopartikel).toBe(seedItem.Shopartikel);
   });
 });
