@@ -39,6 +39,74 @@ export const IMPORT_DATE_FIELD_PRIORITIES = [
   'insertdateset'
 ] as const;
 
+// TODO(agent): Keep partner alias coverage synchronized with downstream CSV specs to minimize importer drift.
+type PartnerFieldAlias = {
+  source: string;
+  target: string;
+};
+
+const PARTNER_FIELD_ALIASES: readonly PartnerFieldAlias[] = Object.freeze([
+  { source: 'partnumber', target: 'Artikel-Nummer' },
+  { source: 'image_names', target: 'Grafikname(n)' },
+  { source: 'description', target: 'Artikelbeschreibung' },
+  { source: 'notes', target: 'Kurzbeschreibung' },
+  { source: 'longdescription', target: 'Langtext' },
+  { source: 'manufacturer', target: 'Hersteller' },
+  { source: 'type_and_classific', target: 'Artikeltyp' },
+  { source: 'entrydate', target: 'Datum erfasst' },
+  { source: 'length_mm', target: 'Länge(mm)' },
+  { source: 'width_mm', target: 'Breite(mm)' },
+  { source: 'height_mm', target: 'Höhe(mm)' },
+  { source: 'weight_kg', target: 'Gewicht(kg)' },
+  { source: 'sellprice', target: 'Verkaufspreis' },
+  { source: 'published_status', target: 'Veröffentlicht_Status' },
+  { source: 'shoparticle', target: 'Shopartikel' },
+  { source: 'unit', target: 'Einheit' },
+  { source: 'cvar_categories_A1', target: 'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)' },
+  { source: 'cvar_categories_A2', target: 'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)' },
+  { source: 'cvar_categories_B1', target: 'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)' },
+  { source: 'cvar_categories_B2', target: 'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)' },
+]);
+
+function hydratePartnerFieldAliases(row: Record<string, string>, rowNumber: number): void {
+  for (const alias of PARTNER_FIELD_ALIASES) {
+    try {
+      if (!Object.prototype.hasOwnProperty.call(row, alias.source)) {
+        continue;
+      }
+      const rawSourceValue = row[alias.source];
+      if (rawSourceValue === undefined || rawSourceValue === null) {
+        continue;
+      }
+      const currentTargetValue = row[alias.target];
+      const normalizedTargetValue =
+        typeof currentTargetValue === 'string'
+          ? currentTargetValue.trim()
+          : currentTargetValue === undefined || currentTargetValue === null
+            ? ''
+            : String(currentTargetValue).trim();
+      if (normalizedTargetValue) {
+        continue;
+      }
+      const normalizedSourceValue =
+        typeof rawSourceValue === 'string' ? rawSourceValue : String(rawSourceValue);
+      row[alias.target] = normalizedSourceValue;
+      console.debug('[importer] Hydrated legacy column via partner alias', {
+        rowNumber,
+        aliasSource: alias.source,
+        aliasTarget: alias.target,
+      });
+    } catch (aliasError) {
+      console.debug('[importer] Skipped partner alias application due to unexpected value', {
+        rowNumber,
+        aliasSource: alias.source,
+        aliasTarget: alias.target,
+        error: aliasError,
+      });
+    }
+  }
+}
+
 interface QuantityFieldResolution {
   value: string | undefined;
   source: (typeof QUANTITY_FIELD_PRIORITIES)[number]['field'] | null;
@@ -455,6 +523,7 @@ export async function ingestCsvFile(
       const rowNumber = index + 1;
       const row = normalize(r);
       const final = applyOps(row, runState);
+      hydratePartnerFieldAliases(final, rowNumber);
       // TODO(agent): Remove Datum erfasst alias hydration once upstream CSVs always emit normalized timestamps.
       const datumErfasstRaw = final['Datum erfasst'];
       const datumErfasstMissing = typeof datumErfasstRaw !== 'string' || datumErfasstRaw.trim() === '';
