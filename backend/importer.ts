@@ -29,15 +29,39 @@ const QUANTITY_FIELD_PRIORITIES = [
 
 // TODO(agent): Refresh identifier date fallbacks whenever upstream exports introduce new timestamp columns.
 // TODO(agent): Track insertdateset adoption to keep importer fallback priorities minimal but complete.
-export const IMPORT_DATE_FIELD_PRIORITIES = [
-  'idate',
-  'Datum erfasst',
-  'Datum_erfasst',
-  'itime',
-  'mtime',
-  'insertdate',
-  'insertdateset'
-] as const;
+// TODO(agent): Collapse entrydate alias coverage once upstream exporters stabilize on a canonical Datum_erfasst header.
+type ImportDateFieldDescriptor = {
+  field: string;
+  priority: number;
+  isAlias?: boolean;
+};
+
+const IMPORT_DATE_FIELD_PRIORITY_DESCRIPTORS: readonly ImportDateFieldDescriptor[] = Object.freeze([
+  { field: 'idate', priority: 10 },
+  { field: 'Datum erfasst', priority: 20 },
+  { field: 'Datum_erfasst', priority: 30 },
+  { field: 'entrydate', priority: 40, isAlias: true },
+  { field: 'entry_date', priority: 50, isAlias: true },
+  { field: 'EntryDate', priority: 60, isAlias: true },
+  { field: 'itime', priority: 70 },
+  { field: 'mtime', priority: 80 },
+  { field: 'insertdate', priority: 90 },
+  { field: 'insertdateset', priority: 100 },
+]) as const;
+
+const SORTED_IMPORT_DATE_FIELD_DESCRIPTORS = Object.freeze(
+  [...IMPORT_DATE_FIELD_PRIORITY_DESCRIPTORS].sort((a, b) => a.priority - b.priority)
+);
+
+export const IMPORT_DATE_FIELD_PRIORITIES = SORTED_IMPORT_DATE_FIELD_DESCRIPTORS.map(
+  (descriptor) => descriptor.field
+) as readonly string[];
+
+const IMPORT_DATE_ALIAS_FIELDS = new Set(
+  SORTED_IMPORT_DATE_FIELD_DESCRIPTORS.filter((descriptor) => descriptor.isAlias).map(
+    (descriptor) => descriptor.field
+  )
+);
 
 // TODO(agent): Keep partner alias coverage synchronized with downstream CSV specs to minimize importer drift.
 type PartnerFieldAlias = {
@@ -367,6 +391,20 @@ function resolveImportDate(
     try {
       const parsed = parseDatumErfasst(trimmed);
       if (parsed) {
+        if (IMPORT_DATE_ALIAS_FIELDS.has(key)) {
+          try {
+            console.info('[importer] Using identifier date alias column', {
+              rowNumber,
+              aliasField: key,
+            });
+          } catch (loggingError) {
+            console.error('[importer] Failed to log identifier date alias usage', {
+              rowNumber,
+              aliasField: key,
+              loggingError,
+            });
+          }
+        }
         return parsed;
       }
     } catch (error) {

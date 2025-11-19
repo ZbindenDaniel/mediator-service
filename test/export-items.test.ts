@@ -183,8 +183,12 @@ describe('export-items action', () => {
   // TODO(agent): Broaden round-trip assertions to cover Langtext payload objects once exporters emit structured content.
   test('partner CSV exports can be re-imported without losing descriptive metadata', async () => {
     const now = new Date('2024-08-01T12:00:00.000Z');
+    const identifierDateSegment = `${String(now.getDate()).padStart(2, '0')}${String(now.getMonth() + 1).padStart(2, '0')}${String(
+      now.getFullYear() % 100
+    ).padStart(2, '0')}`;
+    const expectedItemUUID = `I-${identifierDateSegment}-0001`;
     const seedItem = {
-      ItemUUID: 'I-ROUNDTRIP-0001',
+      ItemUUID: expectedItemUUID,
       Artikel_Nummer: 'ROUNDTRIP-001',
       Artikelbeschreibung: 'Roundtrip description survives export/import cycles.',
       Kurzbeschreibung: 'Short detail',
@@ -222,7 +226,21 @@ describe('export-items action', () => {
     expect(response.status).toBe(200);
     expect(response.body).toBeInstanceOf(Buffer);
 
-    fs.writeFileSync(ROUNDTRIP_CSV_FILE, response.body as Buffer);
+    const csvPayload = (response.body as Buffer).toString('utf8');
+    const csvLines = csvPayload.trim().split(/\r?\n/);
+    expect(csvLines.length).toBeGreaterThan(1);
+    const headerColumns = csvLines[0].split(',');
+    const dataColumns = csvLines[1].split(',');
+    const entrydateIndex = headerColumns.indexOf('entrydate');
+    expect(entrydateIndex).toBeGreaterThan(-1);
+    headerColumns[entrydateIndex] = 'entry_date';
+    const itemUUIDIndex = headerColumns.indexOf('itemUUID');
+    expect(itemUUIDIndex).toBeGreaterThan(-1);
+    dataColumns[itemUUIDIndex] = '';
+    // TODO(agent): Extend identifier date alias regression once multi-row CSV fixtures cover BoxID remapping determinism.
+    const mutatedCsv = [headerColumns.join(','), dataColumns.join(',')].join('\n');
+
+    fs.writeFileSync(ROUNDTRIP_CSV_FILE, `${mutatedCsv}\n`);
 
     clearDatabase();
 
@@ -249,5 +267,13 @@ describe('export-items action', () => {
     expect(roundtripped.Unterkategorien_B).toBe(seedItem.Unterkategorien_B);
     expect(roundtripped.Einheit).toBe(seedItem.Einheit);
     expect(roundtripped.Shopartikel).toBe(seedItem.Shopartikel);
+    expect(roundtripped.ItemUUID).toBe(expectedItemUUID);
+    const importedDatumErfasstRaw = roundtripped.Datum_erfasst as Date | string | null | undefined;
+    expect(importedDatumErfasstRaw).toBeTruthy();
+    const importedDatumErfasstIso =
+      importedDatumErfasstRaw instanceof Date
+        ? importedDatumErfasstRaw.toISOString()
+        : new Date(importedDatumErfasstRaw as string).toISOString();
+    expect(importedDatumErfasstIso).toBe(now.toISOString());
   });
 });
