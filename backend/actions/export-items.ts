@@ -7,6 +7,7 @@ import { serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
 import { collectMediaAssets } from './save-item';
 import { defineHttpAction } from './index';
+import { collectMediaAssets } from './save-item';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -151,7 +152,8 @@ function logMissingMetadataValue(
   }
 }
 
-export function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
+// TODO(agent): Revisit CSV media derivation when asset manifests are queryable via API.
+function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
   const field = fieldMap[column];
 
   if (!field) {
@@ -167,6 +169,36 @@ export function resolveExportValue(column: ExportColumn, rawRow: Record<string, 
   }
 
   const value = rawRow[field];
+
+  if (column === 'image_names') {
+    const fallbackValue = value;
+    const grafikname = typeof value === 'string' ? value : null;
+    const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
+
+    if (!itemUUID) {
+      console.warn('[export-items] Missing ItemUUID for media enumeration, falling back to original Grafikname.');
+      return fallbackValue;
+    }
+
+    try {
+      const mediaAssets = collectMediaAssets(itemUUID, grafikname, artikelNummer);
+      if (Array.isArray(mediaAssets) && mediaAssets.length > 0) {
+        return mediaAssets.join('|');
+      }
+      console.info('[export-items] No media assets discovered for export row, falling back to Grafikname.', {
+        itemUUID,
+        artikelNummer
+      });
+    } catch (error) {
+      console.error('[export-items] Failed to enumerate media assets for export row, falling back to Grafikname.', {
+        itemUUID,
+        artikelNummer,
+        error
+      });
+    }
+    return fallbackValue;
+  }
 
   if (metadataColumnSet.has(column)) {
     if (value === undefined) {
