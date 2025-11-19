@@ -1,4 +1,5 @@
 // TODO(agent): Track Langtext payload migration and remove legacy fallback types when safe.
+// TODO(agent): Remove ImageNames serialization once assets migrate to dedicated tables.
 export enum ItemEinheit {
   Stk = 'Stk',
   Mix = 'Mix'
@@ -29,6 +30,7 @@ export type LangtextPayload = Record<string, string>;
 export interface ItemRef {
   Artikel_Nummer: string;
   Grafikname?: string;
+  ImageNames?: string | null;
   Artikelbeschreibung?: string;
   Verkaufspreis?: number;
   Kurzbeschreibung?: string;

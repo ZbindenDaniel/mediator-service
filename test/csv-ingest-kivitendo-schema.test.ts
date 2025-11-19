@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { MEDIA_DIR } from '../backend/lib/media';
 
 const TEST_DB_FILE = path.join(__dirname, 'csv-ingest-kivitendo-schema.test.sqlite');
 const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'csv-kivitendo-schema');
@@ -15,6 +16,8 @@ const KIVITENDO_MISSING_ARTIKELNUMMER = path.join(
   FIXTURE_DIR,
   'kivitendo-missing-artikelnummer.csv'
 );
+// TODO(agent): Track exporter fallback coverage for ImageNames until media uploads are ubiquitous.
+const KIVITENDO_MULTI_IMAGE = path.join(FIXTURE_DIR, 'kivitendo-multi-images.csv');
 
 // TODO: Expand fixtures when additional Kivitendo header permutations surface.
 // TODO(agent): Mirror new Kivitendo cvar metadata in fixtures as upstream exports evolve.
@@ -34,15 +37,18 @@ removeTestDatabase();
 process.env.DB_PATH = TEST_DB_FILE;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { db } = require('../backend/db');
+const { db, listItemsForExport } = require('../backend/db');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { ingestCsvFile } = require('../backend/importer');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { resolveExportValue } = require('../backend/actions/export-items');
 
 const selectItemByArtikel = db.prepare(
   'SELECT ItemUUID, Artikel_Nummer as ArtikelNummer, BoxID, Auf_Lager as AufLager FROM items WHERE Artikel_Nummer = ?'
 );
 type ItemRefRow = {
   Grafikname: string | null;
+  ImageNames: string | null;
   Artikelbeschreibung: string | null;
   Langtext: string | null;
   Verkaufspreis: number | null;
@@ -64,6 +70,7 @@ type ItemRefRow = {
 const selectItemRef = db.prepare(
   `SELECT
     Grafikname,
+    ImageNames,
     Artikelbeschreibung,
     Langtext,
     Verkaufspreis,
@@ -92,6 +99,16 @@ function clearDatabase() {
   } catch (error) {
     console.error('[csv-ingest-kivitendo-schema.test] Failed to clear database', error);
     throw error;
+  }
+}
+
+function cleanupMediaDirectory(itemUUID: string | null | undefined): void {
+  if (!itemUUID) {
+    return;
+  }
+  const candidate = path.join(MEDIA_DIR, itemUUID);
+  if (fs.existsSync(candidate)) {
+    fs.rmSync(candidate, { recursive: true, force: true });
   }
 }
 
@@ -139,6 +156,7 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     const initialRef = selectItemRef.get('KIV-001') as ItemRefRow | undefined;
     expect(initialRef).toEqual({
       Grafikname: 'kivi-image.png',
+      ImageNames: 'kivi-image.png|thumb',
       Artikelbeschreibung: 'Kivitendo Artikel',
       Langtext: 'Langtext Aus Custom Feld',
       Verkaufspreis: 17.49,
@@ -184,6 +202,7 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     const updatedRef = selectItemRef.get('KIV-001') as ItemRefRow | undefined;
     expect(updatedRef).toEqual({
       Grafikname: 'kivi-image-updated.jpg',
+      ImageNames: 'kivi-image-updated.jpg|variant',
       Artikelbeschreibung: 'Kivitendo Artikel Aktualisiert',
       Langtext: 'Langtext Aus Custom Feld Update',
       Verkaufspreis: 18.25,
@@ -226,6 +245,7 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     const zeroRef = selectItemRef.get('KIV-002') as ItemRefRow | undefined;
     expect(zeroRef).toEqual({
       Grafikname: 'kivi-image-zero.jpg',
+      ImageNames: 'kivi-image-zero.jpg|thumb',
       Artikelbeschreibung: 'Kivitendo Nullbestand',
       Langtext: 'Langtext Nullbestand',
       Verkaufspreis: 8.49,
@@ -270,6 +290,7 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     const relaxedRef = selectItemRef.get('KIV-RELAX') as ItemRefRow | undefined;
     expect(relaxedRef).toEqual({
       Grafikname: 'kivi-relaxed.jpg',
+      ImageNames: 'kivi-relaxed.jpg',
       Artikelbeschreibung: 'Kivitendo Relaxed Export',
       Langtext: 'Relaxed Langtext',
       Verkaufspreis: 0,
@@ -338,6 +359,7 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     const relaxedUpdatedRef = selectItemRef.get('KIV-RELAX') as ItemRefRow | undefined;
     expect(relaxedUpdatedRef).toEqual({
       Grafikname: 'kivi-relaxed-update.jpg',
+      ImageNames: 'kivi-relaxed-update.jpg',
       Artikelbeschreibung: 'Kivitendo Relaxed Export Update',
       Langtext: 'Relaxed Langtext Update',
       Verkaufspreis: 0,
@@ -386,6 +408,7 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     const mintedRef = selectItemRef.get('00001') as ItemRefRow | undefined;
     expect(mintedRef).toEqual({
       Grafikname: 'missing-image.png',
+      ImageNames: 'missing-image.png|thumb',
       Artikelbeschreibung: 'Ohne Artikelnummer',
       Langtext: 'Langtext Ohne Artikelnummer',
       Verkaufspreis: 9.49,
@@ -416,4 +439,86 @@ describe('CSV ingestion Kivitendo schema compatibility', () => {
     const datumRow = selectItemDatum.get('KIV-INSERT') as { DatumErfasst: string | null } | undefined;
     expect(datumRow).toEqual({ DatumErfasst: '2024-04-08T11:30:00.000Z' });
   });
+
+  test('persists multi-image metadata and exporter fallback', async () => {
+    try {
+      await ingestCsvFile(KIVITENDO_MULTI_IMAGE);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Multi-image ingestion failed', error);
+      throw error;
+    }
+
+    const multiRef = selectItemRef.get('KIV-MULTI') as ItemRefRow | undefined;
+    expect(multiRef).toEqual({
+      Grafikname: 'multi-image-primary.png',
+      ImageNames: 'multi-image-primary.png|multi-image-secondary.jpg',
+      Artikelbeschreibung: 'Multi image article',
+      Langtext: 'Multi image description',
+      Verkaufspreis: 22.5,
+      GewichtKg: 0.5,
+      Einheit: 'Stk',
+      VStatus: 'yes',
+      Shopartikel: 1,
+      Kurzbeschreibung: 'Multi short text',
+      Hersteller: 'Multi Manufacturer',
+      LaengeMm: 125,
+      BreiteMm: 95,
+      HoeheMm: 45,
+      HauptA: 2101,
+      UnterA: 2201,
+      HauptB: 2301,
+      UnterB: 2401,
+    });
+
+    const exportRows = listItemsForExport.all({ createdAfter: null, updatedAfter: null }) as Array<
+      Record<string, unknown>
+    >;
+    const multiRow = exportRows.find((row) => row.Artikel_Nummer === 'KIV-MULTI');
+    expect(multiRow).toBeTruthy();
+    const itemUUID = (multiRow?.ItemUUID as string | undefined) ?? null;
+    cleanupMediaDirectory(itemUUID);
+    const resolved = resolveExportValue('image_names', multiRow as Record<string, unknown>);
+    expect(resolved).toBe('multi-image-primary.png|multi-image-secondary.jpg');
+  });
 });
+
+  test('persists multi-image metadata and exporter fallback', async () => {
+    try {
+      await ingestCsvFile(KIVITENDO_MULTI_IMAGE);
+    } catch (error) {
+      console.error('[csv-ingest-kivitendo-schema.test] Multi-image ingestion failed', error);
+      throw error;
+    }
+
+    const multiRef = selectItemRef.get('KIV-MULTI') as ItemRefRow | undefined;
+    expect(multiRef).toEqual({
+      Grafikname: 'multi-image-primary.png',
+      ImageNames: 'multi-image-primary.png|multi-image-secondary.jpg',
+      Artikelbeschreibung: 'Multi image article',
+      Langtext: 'Multi image description',
+      Verkaufspreis: 22.5,
+      GewichtKg: 0.5,
+      Einheit: 'Stk',
+      VStatus: 'yes',
+      Shopartikel: 1,
+      Kurzbeschreibung: 'Multi short text',
+      Hersteller: 'Multi Manufacturer',
+      LaengeMm: 125,
+      BreiteMm: 95,
+      HoeheMm: 45,
+      HauptA: 2101,
+      UnterA: 2201,
+      HauptB: 2301,
+      UnterB: 2401,
+    });
+
+    const exportRows = listItemsForExport.all({ createdAfter: null, updatedAfter: null }) as Array<
+      Record<string, unknown>
+    >;
+    const multiRow = exportRows.find((row) => row.Artikel_Nummer === 'KIV-MULTI');
+    expect(multiRow).toBeTruthy();
+    const itemUUID = (multiRow?.ItemUUID as string | undefined) ?? null;
+    cleanupMediaDirectory(itemUUID);
+    const resolved = resolveExportValue('image_names', multiRow as Record<string, unknown>);
+    expect(resolved).toBe('multi-image-primary.png|multi-image-secondary.jpg');
+  });

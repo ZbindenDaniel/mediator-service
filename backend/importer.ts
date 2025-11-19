@@ -1,5 +1,6 @@
 // TODO(agent): Verify Langtext helper logging during CSV ingestion before enforcing structured payloads.
 // TODO(agent): Keep importer box persistence in sync with schema changes (PhotoPath, future metadata).
+// TODO(agent): Monitor Grafikname multi-image normalization so downstream exporters can drop legacy fallbacks.
 import fs from 'fs';
 import path from 'path';
 import { parse } from 'csv-parse';
@@ -208,6 +209,49 @@ function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
     defaultValue: DEFAULT_EINHEIT
   });
   return DEFAULT_EINHEIT;
+}
+
+export function parseImageNames(
+  value: unknown,
+  options: { rowNumber?: number; fieldName?: string } = {}
+): string[] {
+  const { rowNumber, fieldName = 'Grafikname(n)' } = options;
+  if (value === undefined || value === null) {
+    return [];
+  }
+  try {
+    const raw = typeof value === 'string' ? value : String(value);
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const part of trimmed.split('|')) {
+      const entry = part.trim();
+      if (!entry || seen.has(entry)) {
+        continue;
+      }
+      seen.add(entry);
+      normalized.push(entry);
+    }
+    return normalized;
+  } catch (error) {
+    try {
+      console.warn('[importer] Failed to parse Grafikname(n) image list; defaulting to empty array', {
+        rowNumber,
+        fieldName,
+        error
+      });
+    } catch (loggingError) {
+      console.error('[importer] Failed to log Grafikname(n) parsing error', {
+        rowNumber,
+        fieldName,
+        loggingError
+      });
+    }
+    return [];
+  }
 }
 
 // TODO: Extend parsing to cover additional partner provided formats once discovered.
@@ -614,6 +658,23 @@ export async function ingestCsvFile(
       const row = normalize(r);
       const final = applyOps(row, runState);
       hydratePartnerFieldAliases(final, rowNumber);
+      const imageNameEntries = parseImageNames(final['Grafikname(n)'], { rowNumber });
+      const serializedImageNames = imageNameEntries.length > 0 ? imageNameEntries.join('|') : null;
+      const grafiknameFromRow = typeof final['Grafikname(n)'] === 'string' ? final['Grafikname(n)'].trim() : '';
+      const grafiknameCanonical = imageNameEntries[0] ?? grafiknameFromRow;
+      if (!grafiknameCanonical && serializedImageNames) {
+        try {
+          console.warn('[importer] Dropped additional image_name entries due to blank Grafikname column', {
+            rowNumber,
+            entryCount: imageNameEntries.length,
+          });
+        } catch (loggingError) {
+          console.error('[importer] Failed to log Grafikname blank warning for image list', {
+            rowNumber,
+            loggingError,
+          });
+        }
+      }
       // TODO(agent): Remove Datum erfasst alias hydration once upstream CSVs always emit normalized timestamps.
       const datumErfasstRaw = final['Datum erfasst'];
       const datumErfasstMissing = typeof datumErfasstRaw !== 'string' || datumErfasstRaw.trim() === '';
@@ -732,7 +793,7 @@ export async function ingestCsvFile(
           throw mintError;
         }
       }
-      const grafikname = final['Grafikname(n)'] || '';
+      const grafikname = grafiknameCanonical;
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
       const csvItemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
@@ -821,6 +882,7 @@ export async function ingestCsvFile(
               Shopartikel: shopartikel,
               Artikeltyp: final['Artikeltyp'] || '',
               Einheit: einheit,
+              ImageNames: serializedImageNames,
             });
           } catch (error) {
             console.error('CSV ingestion: failed to persist zero-quantity item reference', {
@@ -885,6 +947,7 @@ export async function ingestCsvFile(
         Shopartikel: shopartikel,
         Artikeltyp: final['Artikeltyp'] || '',
         Einheit: einheit,
+        ImageNames: serializedImageNames,
       };
       persistItem({
         ...item,
