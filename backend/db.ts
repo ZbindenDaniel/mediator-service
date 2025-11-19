@@ -766,6 +766,7 @@ export function generateShopwareCorrelationId(context: string, itemUUID: string 
   }
 }
 
+// TODO(agent): Keep exporter metadata selections (ItemUUID, BoxID, Location, UpdatedAt) stable for importer parity.
 function itemSelectColumns(locationExpr: string): string {
   return `
 SELECT
