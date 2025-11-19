@@ -1,8 +1,10 @@
+import { parseImageNames } from '../importer';
 import { Op } from './types';
 
 // TODO: Extend Kivitendo schema detection when additional export variants surface.
 // TODO(agent): Monitor upcoming timestamp columns from Kivitendo exports to keep fallback coverage current.
 // TODO(agent): Keep cvar_* metadata mappings aligned with importer expectations as new partner fields appear.
+// TODO(agent): Monitor multi-image propagation to confirm partner payloads match importer normalization.
 const KIVITENDO_HEADER_PROFILES = [
   {
     name: 'full',
@@ -54,17 +56,6 @@ function normalizeBooleanFlag(value: string | null): string | null {
   const parsedNumber = Number.parseFloat(value);
   if (Number.isFinite(parsedNumber)) {
     return parsedNumber !== 0 ? '1' : '0';
-  }
-  return value;
-}
-
-function sanitizeImageName(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-  const separatorIndex = value.indexOf('|');
-  if (separatorIndex >= 0) {
-    return value.slice(0, separatorIndex).trim();
   }
   return value;
 }
@@ -173,9 +164,21 @@ export const apply: Op['apply'] = (row, ctx) => {
       mappedRow.idate = datumErfasst;
     }
 
-    const image = sanitizeImageName(normalizeValue(row.image));
-    if (image) {
-      mappedRow['Grafikname(n)'] = image;
+    const normalizedImage = normalizeValue(row.image);
+    const parsedImageNames = parseImageNames(normalizedImage, { fieldName: 'image' });
+    if (parsedImageNames.length > 1) {
+      try {
+        ctx.log('[detect-kivitendo-schema] detected multiple image entries in Kivitendo export', {
+          id: row.id,
+          partnumber: row.partnumber,
+          entryCount: parsedImageNames.length,
+        });
+      } catch (loggingError) {
+        console.error('[detect-kivitendo-schema] failed to log multi-image detection', loggingError);
+      }
+    }
+    if (parsedImageNames.length > 0) {
+      mappedRow['Grafikname(n)'] = parsedImageNames.join('|');
     }
 
     const shopFlag = normalizeBooleanFlag(normalizeValue(row.shop));

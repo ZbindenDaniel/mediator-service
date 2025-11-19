@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 // TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
+// TODO(agent): Audit ImageNames persistence once asset synchronization tracks discrete files.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -218,6 +219,7 @@ const CREATE_ITEM_REFS_SQL = `
 CREATE TABLE IF NOT EXISTS item_refs (
   Artikel_Nummer TEXT PRIMARY KEY,
   Grafikname TEXT,
+  ImageNames TEXT,
   Artikelbeschreibung TEXT,
   Verkaufspreis REAL,
   Kurzbeschreibung TEXT,
@@ -259,19 +261,20 @@ CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
 
 const UPSERT_ITEM_REFERENCE_SQL = `
   INSERT INTO item_refs (
-    Artikel_Nummer, Grafikname, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
+    Artikel_Nummer, Grafikname, ImageNames, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
     Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
     Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
     Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, EntityType, ShopwareProductId
   )
   VALUES (
-    @Artikel_Nummer, @Grafikname, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
+    @Artikel_Nummer, @Grafikname, @ImageNames, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
     @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
     @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
     @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @ShopwareProductId
   )
   ON CONFLICT(Artikel_Nummer) DO UPDATE SET
     Grafikname=excluded.Grafikname,
+    ImageNames=excluded.ImageNames,
     Artikelbeschreibung=excluded.Artikelbeschreibung,
     Verkaufspreis=excluded.Verkaufspreis,
     Kurzbeschreibung=excluded.Kurzbeschreibung,
@@ -324,6 +327,7 @@ type ItemInstanceRow = {
 type ItemRefRow = {
   Artikel_Nummer: string;
   Grafikname: string | null;
+  ImageNames: string | null;
   Artikelbeschreibung: string | null;
   Verkaufspreis: number | null;
   Kurzbeschreibung: string | null;
@@ -501,6 +505,7 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
   return {
     Artikel_Nummer: artikelNummer,
     Grafikname: asNullableString(ref.Grafikname),
+    ImageNames: asNullableString(ref.ImageNames),
     Artikelbeschreibung: asNullableString(ref.Artikelbeschreibung),
     Verkaufspreis: asNullableFloat(ref.Verkaufspreis),
     Kurzbeschreibung: asNullableString(ref.Kurzbeschreibung),
@@ -602,6 +607,28 @@ function ensureItemTables(database: Database.Database = db): void {
   }
 }
 
+function ensureItemImageNamesColumn(database: Database.Database = db): void {
+  let refColumns: Array<{ name: string }> = [];
+  try {
+    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect item_refs schema for ImageNames column', err);
+    throw err;
+  }
+
+  if (refColumns.some((column) => column.name === 'ImageNames')) {
+    return;
+  }
+
+  try {
+    database.prepare('ALTER TABLE item_refs ADD COLUMN ImageNames TEXT').run();
+    console.info('[db] Added ImageNames column to item_refs');
+  } catch (err) {
+    console.error('Failed to add ImageNames column to item_refs', err);
+    throw err;
+  }
+}
+
 const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Location,''))";
 
 const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
@@ -612,6 +639,7 @@ const ITEM_JOIN_BASE = `
 `;
 
 ensureItemTables(db);
+ensureItemImageNamesColumn(db);
 const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
   LEFT JOIN boxes b ON i.BoxID = b.BoxID
 `;
@@ -670,6 +698,7 @@ try {
     SELECT
       Artikel_Nummer,
       Grafikname,
+      ImageNames,
       Artikelbeschreibung,
       Verkaufspreis,
       Kurzbeschreibung,
@@ -779,6 +808,7 @@ SELECT
   i.Auf_Lager AS Auf_Lager,
   i.ShopwareVariantId AS ShopwareVariantId,
   r.Grafikname AS Grafikname,
+  r.ImageNames AS ImageNames,
   r.Artikelbeschreibung AS Artikelbeschreibung,
   r.Verkaufspreis AS Verkaufspreis,
   r.Kurzbeschreibung AS Kurzbeschreibung,

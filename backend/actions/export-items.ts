@@ -1,7 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
 import { serializeLangtextForExport } from '../lib/langtext';
+import { MEDIA_DIR } from '../lib/media';
+import { collectMediaAssets } from './save-item';
 import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -10,6 +14,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 // TODO(agent): Keep exporter metadata parity intact when partner CSV specs change.
+// TODO(agent): Remove ImageNames fallback once disk-backed assets are guaranteed for exports.
 // TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
 const partnerRequiredColumns = [
   'partnumber',
@@ -80,6 +85,40 @@ const missingFieldWarnings = new Set<ExportColumn>();
 const missingMetadataValueWarnings = new Set<ExportColumn>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+const MEDIA_PREFIX = '/media/';
+
+function filterExistingMediaAssets(assets: string[]): string[] {
+  const filtered: string[] = [];
+  for (const asset of assets) {
+    if (typeof asset !== 'string') {
+      continue;
+    }
+    const trimmed = asset.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (!trimmed.startsWith(MEDIA_PREFIX)) {
+      filtered.push(trimmed);
+      continue;
+    }
+    const relative = trimmed.slice(MEDIA_PREFIX.length);
+    const absolute = path.join(MEDIA_DIR, relative);
+    if (!absolute.startsWith(MEDIA_DIR)) {
+      continue;
+    }
+    try {
+      if (fs.existsSync(absolute)) {
+        filtered.push(trimmed);
+      }
+    } catch (error) {
+      console.error('[export-items] Failed to verify media asset existence for export', {
+        asset: trimmed,
+        error,
+      });
+    }
+  }
+  return filtered;
+}
 
 function toCsvValue(val: any): string {
   if (val === null || val === undefined) return '';
@@ -112,7 +151,7 @@ function logMissingMetadataValue(
   }
 }
 
-function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
+export function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
   const field = fieldMap[column];
 
   if (!field) {
@@ -135,6 +174,45 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
       return '';
     }
     return value;
+  }
+
+  if (field === 'Grafikname') {
+    const canonicalGrafikname = typeof value === 'string' ? value : '';
+    const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
+    let mediaAssets: string[] = [];
+    if (itemUUID) {
+      try {
+        mediaAssets = collectMediaAssets(itemUUID, canonicalGrafikname, artikelNummer);
+      } catch (error) {
+        console.error('[export-items] Failed to collect media assets for CSV export; falling back to stored metadata.', {
+          itemUUID,
+          artikelNummer,
+          error,
+        });
+      }
+    }
+    const existingMediaAssets = filterExistingMediaAssets(mediaAssets);
+    if (existingMediaAssets.length > 0) {
+      return existingMediaAssets.join('|');
+    }
+    try {
+      const storedList = typeof rawRow.ImageNames === 'string' ? rawRow.ImageNames.trim() : '';
+      if (storedList) {
+        console.warn('[export-items] No media files found for item; using stored ImageNames metadata.', {
+          itemUUID,
+          artikelNummer,
+        });
+        return storedList;
+      }
+    } catch (fallbackError) {
+      console.error('[export-items] Failed to read ImageNames metadata fallback for CSV export.', {
+        itemUUID,
+        artikelNummer,
+        error: fallbackError,
+      });
+    }
+    return canonicalGrafikname;
   }
 
   if (field === 'Langtext') {

@@ -6,8 +6,11 @@ export const apply: Op['apply'] = (row) => {
   try {
     console.log('[validate] validating row', row);
     const errors: string[] = [];
-    if (!row.itemUUID) row.itemUUID = '080925-'+row['Artikel-Nummer']; //errors.push('ItemUUID missing');
-    console.log('[validate] assigned ItemUUID', row.itemUUID);
+    if (!row.itemUUID) {
+      console.warn('[validate] ItemUUID missing prior to importer minting', {
+        artikelNummer: typeof row['Artikel-Nummer'] === 'string' ? row['Artikel-Nummer'].trim() : null,
+      });
+    }
     // if (!row.BoxID) row.boxID =  //errors.push('BoxID missing');
     if (errors.length) return { ok: false, errors } as OpResult;
     return { ok: true, row } as OpResult;

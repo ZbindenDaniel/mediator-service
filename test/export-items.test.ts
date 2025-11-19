@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
+import { parse as parseCsv } from 'csv-parse/sync';
 import { ItemEinheit } from '../models';
 
 // TODO(agent): Expand exporter/importer parity coverage as storage metadata requirements grow.
@@ -46,6 +47,18 @@ type ExportContext = {
   listItemsForExport: typeof listItemsForExport;
   logEvent: typeof logEvent;
 };
+
+function serializeCsvLine(values: Array<string | number | null | undefined>): string {
+  return values
+    .map((value) => {
+      if (value === null || value === undefined) {
+        return '';
+      }
+      const normalized = String(value);
+      return /[",\n]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized;
+    })
+    .join(',');
+}
 
 function clearDatabase(): void {
   try {
@@ -227,10 +240,10 @@ describe('export-items action', () => {
     expect(response.body).toBeInstanceOf(Buffer);
 
     const csvPayload = (response.body as Buffer).toString('utf8');
-    const csvLines = csvPayload.trim().split(/\r?\n/);
-    expect(csvLines.length).toBeGreaterThan(1);
-    const headerColumns = csvLines[0].split(',');
-    const dataColumns = csvLines[1].split(',');
+    const parsedRows = parseCsv(csvPayload, { skip_empty_lines: true });
+    expect(parsedRows.length).toBeGreaterThan(1);
+    const headerColumns = parsedRows[0].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
+    const dataColumns = parsedRows[1].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
     const entrydateIndex = headerColumns.indexOf('entrydate');
     expect(entrydateIndex).toBeGreaterThan(-1);
     headerColumns[entrydateIndex] = 'entry_date';
@@ -238,7 +251,7 @@ describe('export-items action', () => {
     expect(itemUUIDIndex).toBeGreaterThan(-1);
     dataColumns[itemUUIDIndex] = '';
     // TODO(agent): Extend identifier date alias regression once multi-row CSV fixtures cover BoxID remapping determinism.
-    const mutatedCsv = [headerColumns.join(','), dataColumns.join(',')].join('\n');
+    const mutatedCsv = [serializeCsvLine(headerColumns), serializeCsvLine(dataColumns)].join('\n');
 
     fs.writeFileSync(ROUNDTRIP_CSV_FILE, `${mutatedCsv}\n`);
 
