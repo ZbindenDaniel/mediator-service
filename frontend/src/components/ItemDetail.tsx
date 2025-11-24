@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog, AgenticRun } from '../../../models';
@@ -617,12 +617,119 @@ export default function ItemDetail({ itemId }: Props) {
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
+    previousId: null,
+    nextId: null
+  });
+  const [neighborsLoading, setNeighborsLoading] = useState(false);
+  const [neighborSource, setNeighborSource] = useState<'query' | 'fetch' | null>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const dialog = useDialog();
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
   const { unter: unterCategoryLookup } = categoryLookups;
+
+  const neighborContext = useMemo(() => {
+    // TODO(navigation-context): Move adjacent navigation derivation into a shared list-aware provider once pagination is available.
+    const normalized = {
+      previousId: null as string | null,
+      nextId: null as string | null,
+      source: null as 'query' | null
+    };
+
+    const sequenceParam = searchParams.get('ids');
+    if (sequenceParam) {
+      const sequence = sequenceParam
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const currentIndex = sequence.indexOf(itemId);
+      if (currentIndex >= 0) {
+        normalized.previousId = sequence[currentIndex - 1] ?? null;
+        normalized.nextId = sequence[currentIndex + 1] ?? null;
+        normalized.source = 'query';
+        return normalized;
+      }
+    }
+
+    const previousParam = searchParams.get('prev');
+    const nextParam = searchParams.get('next');
+    if ((previousParam && previousParam.trim()) || (nextParam && nextParam.trim())) {
+      normalized.previousId = previousParam?.trim() || null;
+      normalized.nextId = nextParam?.trim() || null;
+      normalized.source = 'query';
+    }
+
+    return normalized;
+  }, [itemId, searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setNeighborSource(neighborContext.source);
+    setNeighborIds({ previousId: neighborContext.previousId, nextId: neighborContext.nextId });
+
+    const shouldFetchNeighbors = neighborContext.source !== 'query'
+      || !neighborContext.previousId
+      || !neighborContext.nextId;
+
+    if (!shouldFetchNeighbors) {
+      return undefined;
+    }
+
+    const fetchNeighbors = async () => {
+      setNeighborsLoading(true);
+      try {
+        console.info('ItemDetail: Fetching adjacent items', { itemId, source: neighborContext.source });
+      } catch (logError) {
+        console.error('ItemDetail: Failed to log adjacent fetch start', logError);
+      }
+      try {
+        const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/adjacent`);
+        if (!res.ok) {
+          if (!cancelled) {
+            console.error('ItemDetail: Failed to fetch adjacent items', res.status);
+          }
+          return;
+        }
+
+        const data = await res.json();
+        if (cancelled) {
+          return;
+        }
+
+        const fetchedPrevious = typeof data.previousId === 'string' && data.previousId.trim()
+          ? data.previousId.trim()
+          : null;
+        const fetchedNext = typeof data.nextId === 'string' && data.nextId.trim()
+          ? data.nextId.trim()
+          : null;
+
+        setNeighborIds({
+          previousId: neighborContext.previousId ?? fetchedPrevious,
+          nextId: neighborContext.nextId ?? fetchedNext
+        });
+        setNeighborSource(neighborContext.source ?? 'fetch');
+      } catch (error) {
+        if (!cancelled) {
+          console.error('ItemDetail: Failed to load adjacent items', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setNeighborsLoading(false);
+        }
+      }
+    };
+
+    void fetchNeighbors();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId, neighborContext]);
 
   const langtextRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
@@ -676,6 +783,86 @@ export default function ItemDetail({ itemId }: Props) {
       return [['Langtext', legacyText]];
     }
   }, [item?.Langtext]);
+
+  const handleNeighborNavigation = useCallback(
+    (direction: 'previous' | 'next') => {
+      const targetId = direction === 'previous' ? neighborIds.previousId : neighborIds.nextId;
+      if (!targetId) {
+        console.warn('ItemDetail: Neighbor navigation attempted without target', { direction, itemId });
+        return;
+      }
+
+      try {
+        console.info('ItemDetail: Navigating to neighbor item', {
+          direction,
+          targetId,
+          itemId,
+          source: neighborSource
+        });
+      } catch (logError) {
+        console.error('ItemDetail: Failed to log neighbor navigation', logError);
+      }
+
+      const search = window.location.search || '';
+      navigate(`/items/${encodeURIComponent(targetId)}${search}`);
+    },
+    [itemId, navigate, neighborIds.nextId, neighborIds.previousId, neighborSource]
+  );
+
+  const handleTouchStart = useCallback((event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    if (touch) {
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (event: React.TouchEvent) => {
+      const start = touchStartRef.current;
+      const touch = event.changedTouches[0];
+      touchStartRef.current = null;
+
+      if (!start || !touch) {
+        return;
+      }
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+
+      if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY)) {
+        return;
+      }
+
+      if (deltaX > 0 && neighborIds.previousId) {
+        handleNeighborNavigation('previous');
+      } else if (deltaX < 0 && neighborIds.nextId) {
+        handleNeighborNavigation('next');
+      }
+    },
+    [handleNeighborNavigation, neighborIds.nextId, neighborIds.previousId]
+  );
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+
+      if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' && neighborIds.previousId) {
+        event.preventDefault();
+        handleNeighborNavigation('previous');
+      } else if (event.key === 'ArrowRight' && neighborIds.nextId) {
+        event.preventDefault();
+        handleNeighborNavigation('next');
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [handleNeighborNavigation, neighborIds.nextId, neighborIds.previousId]);
 
   const resolveUnterkategorieLabel = useCallback(
     (code?: number | null): React.ReactNode => {
@@ -1315,12 +1502,36 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   return (
-    <div className="container item">
+    <div
+      className="container item"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="grid landing-grid">
         {item ? (
           <>
             <div className="card">
               <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
+              <div className='row'>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!neighborIds.previousId || neighborsLoading}
+                  onClick={() => handleNeighborNavigation('previous')}
+                  aria-label="Vorheriger Artikel"
+                >
+                  ← Vorheriger
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!neighborIds.nextId || neighborsLoading}
+                  onClick={() => handleNeighborNavigation('next')}
+                  aria-label="Nächster Artikel"
+                >
+                  Nächster →
+                </button>
+              </div>
               <section className="item-media-section">
                 <h3>Medien</h3>
                 <ItemMediaGallery
