@@ -1,9 +1,11 @@
 // TODO(agent): Verify Langtext helper logging during CSV ingestion before enforcing structured payloads.
 // TODO(agent): Keep importer box persistence in sync with schema changes (PhotoPath, future metadata).
 // TODO(agent): Monitor Grafikname multi-image normalization so downstream exporters can drop legacy fallbacks.
+// TODO(agent): Evaluate ZIP-sourced merge rules for boxes and media once parallel uploads are supported by partners.
 import fs from 'fs';
 import path from 'path';
-import { parse } from 'csv-parse';
+import { parse as parseCsvStream } from 'csv-parse';
+import { parse as parseCsvSync } from 'csv-parse/sync';
 import {
   upsertBox,
   persistItem,
@@ -762,15 +764,20 @@ export async function ingestCsvFile(
         final.BoxID = '';
       }
       if (normalizedBoxId) {
+        const createdAt = typeof final.CreatedAt === 'string' && final.CreatedAt.trim() ? final.CreatedAt.trim() : null;
+        const notes = typeof final.Notes === 'string' && final.Notes.trim() ? final.Notes.trim() : null;
+        const photoPath = typeof final.PhotoPath === 'string' && final.PhotoPath.trim() ? final.PhotoPath.trim() : null;
+        const placedBy = typeof final.PlacedBy === 'string' && final.PlacedBy.trim() ? final.PlacedBy.trim() : null;
+        const placedAt = typeof final.PlacedAt === 'string' && final.PlacedAt.trim() ? final.PlacedAt.trim() : null;
         const box: Box = {
           BoxID: normalizedBoxId,
           Location: location,
           StandortLabel: standortLabel,
-          CreatedAt: final.CreatedAt || '',
-          Notes: final.Notes || '',
-          PhotoPath: final.PhotoPath || null,
-          PlacedBy: final.PlacedBy || '',
-          PlacedAt: final.PlacedAt || '',
+          CreatedAt: createdAt,
+          Notes: notes,
+          PhotoPath: photoPath,
+          PlacedBy: placedBy,
+          PlacedAt: placedAt,
           UpdatedAt: now,
         };
         upsertBox.run(box);
@@ -967,6 +974,65 @@ export async function ingestCsvFile(
   }
 }
 
+function normalizeBoxField(value: unknown): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  try {
+    return (typeof value === 'string' ? value : String(value)).trim();
+  } catch (fieldError) {
+    console.error('[importer] Failed to normalize box field value', { value, fieldError });
+    return '';
+  }
+}
+
+export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: number }> {
+  console.log('[importer] Ingesting boxes.csv payload');
+  const now = new Date().toISOString();
+  try {
+    const content = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+    const records = parseCsvSync(content, { columns: true, skip_empty_lines: true }) as Array<Record<string, unknown>>;
+    let count = 0;
+
+    for (const [index, record] of records.entries()) {
+      const boxId = normalizeBoxField(record.BoxID ?? (record as Record<string, unknown>)?.boxid ?? null);
+      if (!boxId) {
+        console.warn('[importer] Skipping boxes.csv row without BoxID', { rowNumber: index + 1 });
+        continue;
+      }
+
+      const location = normalizeBoxField(record.Location);
+      const standortLabel = normalizeBoxField(record.StandortLabel);
+      const createdAt = normalizeBoxField(record.CreatedAt);
+      const notes = normalizeBoxField(record.Notes);
+      const photoPath = normalizeBoxField(record.PhotoPath);
+      const placedBy = normalizeBoxField(record.PlacedBy);
+      const placedAt = normalizeBoxField(record.PlacedAt);
+      const updatedAt = normalizeBoxField(record.UpdatedAt) || now;
+
+      const box: Box = {
+        BoxID: boxId,
+        Location: location || null,
+        StandortLabel: standortLabel || null,
+        CreatedAt: createdAt || null,
+        Notes: notes || null,
+        PhotoPath: photoPath || null,
+        PlacedBy: placedBy || null,
+        PlacedAt: placedAt || null,
+        UpdatedAt: updatedAt,
+      };
+
+      upsertBox.run(box);
+      count++;
+    }
+
+    return { count };
+  } catch (err) {
+    console.error('[importer] Failed to ingest boxes CSV payload', err);
+    throw err;
+  }
+}
+
 function normalize(r: Record<string, unknown>): Record<string, string> {
   const o: Record<string, string> = {};
   for (const k of Object.keys(r)) o[k] = String(r[k] ?? '').trim();
@@ -977,7 +1043,7 @@ function readCsv(file: string): Promise<Record<string, string>[]> {
   return new Promise((resolve, reject) => {
     const rows: Record<string, string>[] = [];
     fs.createReadStream(file)
-      .pipe(parse({ columns: true, trim: true }))
+      .pipe(parseCsvStream({ columns: true, trim: true }))
       .on('data', (d) => rows.push(d))
       .on('error', (err) => {
         console.error('CSV parse error', err);
@@ -987,4 +1053,4 @@ function readCsv(file: string): Promise<Record<string, string>[]> {
   });
 }
 
-export default { ingestCsvFile };
+export default { ingestCsvFile, ingestBoxesCsv };
