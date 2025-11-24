@@ -11,6 +11,7 @@ import { ensureLangtextString } from './lib/langtext';
 export { MEDIA_DIR } from './lib/media';
 import { resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
 // TODO(agent): Audit Langtext response serialization once structured payload adoption completes.
+// TODO(agent): Revisit inbox watcher patterns once ZIP uploads introduce mixed payload sequencing.
 import {
   HTTP_PORT,
   INBOX_DIR,
