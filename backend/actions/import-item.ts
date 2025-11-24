@@ -626,6 +626,8 @@ const action = defineHttpAction({
         : resolvedAgenticStatus;
       const agenticRunManuallySkipped = agenticManualFallback || agenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
 
+      // TODO(agentic-ingestion-audit): Capture structured metrics for agentic run registration during imports to validate start coverage.
+
       let boxLocationToPersist: string | null = normalizedLocation || null;
       let boxStandortLabelToPersist: string | null = requestedStandortLabel;
       // TODO(agent): Confirm PhotoPath preservation remains aligned with the boxes schema during imports.
@@ -793,6 +795,26 @@ const action = defineHttpAction({
       );
 
       let agenticTriggerDispatched = false;
+
+      try {
+        const persistedAgenticRun = ctx.getAgenticRun?.get
+          ? ((ctx.getAgenticRun.get(ItemUUID) as { ItemUUID?: string; SearchQuery?: string | null } | undefined) ?? null)
+          : null;
+        if (!persistedAgenticRun) {
+          console.warn('[import-item] Agentic run missing immediately after import transaction', {
+            ItemUUID,
+            actor,
+            agenticStatus
+          });
+        } else if (!persistedAgenticRun.SearchQuery && agenticSearchQuery) {
+          console.info('[import-item] Agentic run persisted without search query; confirming ingestion state', {
+            ItemUUID,
+            actor
+          });
+        }
+      } catch (agenticPostPersistErr) {
+        console.error('[import-item] Failed to verify agentic run presence after import', agenticPostPersistErr);
+      }
 
       if (ctx.agenticServiceEnabled && !agenticRunManuallySkipped) {
         const triggerPayload = {
