@@ -1,12 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { GoMoveToEnd, GoPackageDependents, GoTrash, GoXCircle } from 'react-icons/go';
+import type { Item } from '../../../models';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { dialogService } from './dialog';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { ensureUser } from '../lib/user';
 
+// TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
+
 interface BulkItemActionBarProps {
   selectedIds: string[];
+  selectedItems?: Item[];
   onClearSelection: () => void;
   onActionComplete?: () => Promise<void> | void;
   resolveActor?: () => Promise<string>;
@@ -41,6 +45,7 @@ type MoveContext = 'existing' | 'created';
 
 export default function BulkItemActionBar({
   selectedIds,
+  selectedItems = [],
   onClearSelection,
   onActionComplete,
   resolveActor
@@ -293,6 +298,141 @@ export default function BulkItemActionBar({
     }
   }
 
+  async function handleBulkAgenticStart(): Promise<void> {
+    if (!hasSelection) {
+      setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
+      return;
+    }
+
+    setFeedback(null);
+    const itemMap = new Map<string, Item>();
+    selectedItems.forEach((item) => {
+      if (item?.ItemUUID) {
+        itemMap.set(item.ItemUUID, item);
+      }
+    });
+
+    const previewEntries = selectedIds.slice(0, 3).map((itemId) => {
+      const record = itemMap.get(itemId);
+      return record?.Artikelbeschreibung || record?.Artikel_Nummer || itemId;
+    });
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Agentic starten',
+        message: (
+          <div className="bulk-item-action-bar__confirm-content">
+            <p>Sollen agentische Läufe für die Auswahl gestartet werden?</p>
+            <ul>
+              <li>{selectionLabel}</li>
+              {previewEntries.map((entry, index) => (
+                <li key={index}>{entry}</li>
+              ))}
+              {selectedIds.length > previewEntries.length ? (
+                <li>…und weitere {selectedIds.length - previewEntries.length}</li>
+              ) : null}
+            </ul>
+          </div>
+        ),
+        confirmLabel: 'Starten',
+        cancelLabel: 'Abbrechen'
+      });
+      console.info('Bulk agentic confirmation resolved', {
+        confirmed,
+        selectionCount: selectedCount
+      });
+    } catch (dialogError) {
+      console.error('Bulk agentic confirmation dialog failed', dialogError);
+      setFeedback({ type: 'error', message: 'Bestätigung fehlgeschlagen. Bitte erneut versuchen.' });
+      return;
+    }
+
+    if (!confirmed) {
+      console.info('Bulk agentic start cancelled via dialog', { selectionCount: selectedCount });
+      return;
+    }
+
+    setIsProcessing(true);
+    const failures: string[] = [];
+    let successCount = 0;
+
+    try {
+      for (const itemId of selectedIds) {
+        const detail = itemMap.get(itemId);
+        const artikelbeschreibung = detail?.Artikelbeschreibung?.trim()
+          || detail?.Artikel_Nummer?.trim()
+          || itemId;
+
+        if (!artikelbeschreibung) {
+          failures.push(`${itemId}: fehlende Artikelbeschreibung`);
+          continue;
+        }
+
+        try {
+          const response = await fetch('/api/agentic/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              context: 'item-list-bulk',
+              payload: {
+                itemId,
+                artikelbeschreibung
+              }
+            })
+          });
+
+          if (!response.ok) {
+            const message = await readErrorMessage(response);
+            console.error('Bulk agentic start failed', { itemId, status: response.status, message });
+            failures.push(`${itemId}: ${message}`);
+            continue;
+          }
+
+          successCount += 1;
+          console.info('Bulk agentic start dispatched', { itemId, artikelbeschreibung });
+        } catch (requestError) {
+          console.error('Bulk agentic start request failed', { itemId, requestError });
+          failures.push(`${itemId}: ${(requestError as Error).message || 'Request fehlgeschlagen'}`);
+        }
+      }
+
+      if (successCount) {
+        try {
+          onClearSelection();
+          if (onActionComplete) {
+            await onActionComplete();
+          }
+        } catch (afterSuccessError) {
+          console.error('Bulk agentic post-success handler failed', afterSuccessError);
+        }
+      }
+
+      if (failures.length && successCount) {
+        setFeedback({
+          type: 'error',
+          message: `${successCount} Läufe gestartet, ${failures.length} fehlgeschlagen: ${failures.slice(0, 3).join('; ')}`
+        });
+        return;
+      }
+
+      if (failures.length) {
+        setFeedback({
+          type: 'error',
+          message: `Agentic-Start fehlgeschlagen: ${failures.slice(0, 3).join('; ')}`
+        });
+        return;
+      }
+
+      setFeedback({
+        type: 'info',
+        message: `Agentische Läufe für ${successCount} Artikel gestartet.`
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   async function handleBulkDelete(): Promise<void> {
     if (!hasSelection) {
       setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
@@ -405,6 +545,16 @@ export default function BulkItemActionBar({
         />
       </div>
       <div className="bulk-item-action-bar__buttons row">
+        <button
+          className="bulk-item-action-bar__button"
+          disabled={isProcessing || !hasSelection}
+          onClick={() => {
+            void handleBulkAgenticStart();
+          }}
+          type="button"
+        >
+          <span>Agentisch starten</span>
+        </button>
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--primary"
           disabled={isProcessing || !hasSelection}

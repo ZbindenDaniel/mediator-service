@@ -5,7 +5,9 @@ import BulkItemActionBar from './BulkItemActionBar';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
 
-type SortKey = 'artikelbeschreibung' | 'artikelnummer' | 'box';
+// TODO(agentic): Extend item list page sorting and filtering controls for enriched inventory views.
+
+type SortKey = 'artikelbeschreibung' | 'artikelnummer' | 'box' | 'uuid' | 'stock' | 'subcategory';
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -17,6 +19,9 @@ export default function ItemListPage() {
   const [sortKey, setSortKey] = useState<SortKey>('artikelbeschreibung');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [subcategoryFilter, setSubcategoryFilter] = useState('');
+  const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
+  const [boxFilter, setBoxFilter] = useState('');
 
   const loadItems = useCallback(async ({ silent = false } = {}) => {
     if (silent) {
@@ -70,24 +75,58 @@ export default function ItemListPage() {
   }, [items]);
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
+  const normalizedSubcategoryFilter = subcategoryFilter.trim().toLowerCase();
+  const normalizedBoxFilter = boxFilter.trim().toLowerCase();
+
   const filtered = useMemo(() => {
     const baseItems = showUnplaced ? items.filter((it) => !it.BoxID) : items;
-    const searched = normalizedSearch
-      ? baseItems.filter((item) => {
-        const description = item.Artikelbeschreibung?.toLowerCase() ?? '';
-        const number = item.Artikel_Nummer?.toLowerCase() ?? '';
-        return description.includes(normalizedSearch) || number.includes(normalizedSearch);
-      })
-      : baseItems;
+    const searched = baseItems.filter((item) => {
+      const description = item.Artikelbeschreibung?.toLowerCase() ?? '';
+      const number = item.Artikel_Nummer?.toLowerCase() ?? '';
+      const uuid = item.ItemUUID.toLowerCase();
+      const matchesSearch = normalizedSearch
+        ? description.includes(normalizedSearch)
+          || number.includes(normalizedSearch)
+          || uuid.includes(normalizedSearch)
+        : true;
+      const matchesSubcategory = normalizedSubcategoryFilter
+        ? (item.Unterkategorien_A?.toString().toLowerCase() ?? '').includes(normalizedSubcategoryFilter)
+        : true;
+      const matchesBox = normalizedBoxFilter
+        ? (item.BoxID?.toLowerCase() ?? '').includes(normalizedBoxFilter)
+        : true;
+      const stockValue = typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0;
+      const matchesStock =
+        stockFilter === 'instock'
+          ? stockValue > 0
+          : stockFilter === 'outofstock'
+            ? stockValue <= 0
+            : true;
+
+      return matchesSearch && matchesSubcategory && matchesBox && matchesStock;
+    });
 
     const sorted = [...searched].sort((a, b) => {
       const direction = sortDirection === 'asc' ? 1 : -1;
+      if (sortKey === 'stock') {
+        const aStock = typeof a.Auf_Lager === 'number' ? a.Auf_Lager : -Infinity;
+        const bStock = typeof b.Auf_Lager === 'number' ? b.Auf_Lager : -Infinity;
+        if (aStock === bStock) {
+          return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+        }
+        return (aStock - bStock) * direction;
+      }
+
       const valueFor = (item: Item) => {
         switch (sortKey) {
           case 'artikelnummer':
             return item.Artikel_Nummer?.trim().toLowerCase() ?? '';
           case 'box':
             return item.BoxID?.trim().toLowerCase() ?? '';
+          case 'uuid':
+            return item.ItemUUID?.trim().toLowerCase() ?? '';
+          case 'subcategory':
+            return item.Unterkategorien_A?.toString().toLowerCase() ?? '';
           case 'artikelbeschreibung':
           default:
             return item.Artikelbeschreibung?.trim().toLowerCase() ?? '';
@@ -102,7 +141,16 @@ export default function ItemListPage() {
     });
 
     return sorted;
-  }, [items, normalizedSearch, showUnplaced, sortDirection, sortKey]);
+  }, [
+    items,
+    normalizedBoxFilter,
+    normalizedSearch,
+    normalizedSubcategoryFilter,
+    showUnplaced,
+    sortDirection,
+    sortKey,
+    stockFilter
+  ]);
 
   const visibleIds = useMemo(() => filtered.map((item) => item.ItemUUID), [filtered]);
   const allVisibleSelected = useMemo(() => (
@@ -144,6 +192,11 @@ export default function ItemListPage() {
     setSelectedIds(new Set());
   }, []);
 
+  const selectedItems = useMemo(() => {
+    const selectedLookup = new Set(selectedIds);
+    return items.filter((item) => selectedLookup.has(item.ItemUUID));
+  }, [items, selectedIds]);
+
   if (isLoading) {
     return (
       <LoadingPage message="Lade Artikelübersicht…">
@@ -157,55 +210,91 @@ export default function ItemListPage() {
     <div className="list-container item">
       <h2>Alle Artikel</h2>
       <div className="filter-bar">
-        <div className='filter-bar-row'>
+        <div className='filter-bar-row filter-bar-row--search'>
           <label className="search-control">
             <GoSearch />
           </label>
           <input
             aria-label="Artikel suchen"
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Beschreibung oder Artikelnummer"
+            placeholder="Beschreibung, Nummer oder UUID"
             type="search"
             value={searchTerm}
           />
-        </div>
-        {/* <label className="sort-control">
-          <span>Sortieren nach</span>
-          <select
-            aria-label="Sortierkriterium wählen"
-            onChange={(event) => setSortKey(event.target.value as SortKey)}
-            value={sortKey}
-          >
-            <option value="artikelbeschreibung">Artikel</option>
-            <option value="artikelnummer">Artikelnummer</option>
-            <option value="box">Behälter</option>
-          </select>
-        </label> */}
-        {/* <div className='row'>
+          <label className="sort-control">
+            <span>Sortieren nach</span>
+            <select
+              aria-label="Sortierkriterium wählen"
+              onChange={(event) => setSortKey(event.target.value as SortKey)}
+              value={sortKey}
+            >
+              <option value="artikelbeschreibung">Artikel</option>
+              <option value="artikelnummer">Artikelnummer</option>
+              <option value="box">Behälter</option>
+              <option value="uuid">UUID</option>
+              <option value="stock">Bestand</option>
+              <option value="subcategory">Unterkategorie</option>
+            </select>
+          </label>
           <label className="sort-direction-control">
             <span>Reihenfolge</span>
+            <select
+              aria-label="Sortierreihenfolge"
+              onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
+              value={sortDirection}
+            >
+              <option value="asc">Aufsteigend</option>
+              <option value="desc">Absteigend</option>
+            </select>
           </label>
-          <select
-            aria-label="Sortierreihenfolge"
-            onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
-            value={sortDirection}
-          >
-            <option value="asc">Aufsteigend</option>
-            <option value="desc">Absteigend</option>
-          </select>
-        </div> */}
+        </div>
 
-        <div className='filter-bar-row'>
+        <div className='filter-bar-row filter-bar-row--filters'>
+          <label className="filter-control">
+            <span>Unterkategorie</span>
+            <input
+              aria-label="Unterkategorie filtern"
+              onChange={(event) => setSubcategoryFilter(event.target.value)}
+              placeholder="Z.B. 101"
+              type="search"
+              value={subcategoryFilter}
+            />
+          </label>
+          <label className="filter-control">
+            <span>Bestand</span>
+            <select
+              aria-label="Bestandsstatus filtern"
+              onChange={(event) => setStockFilter(event.target.value as typeof stockFilter)}
+              value={stockFilter}
+            >
+              <option value="any">Alle</option>
+              <option value="instock">Auf Lager</option>
+              <option value="outofstock">Nicht auf Lager</option>
+            </select>
+          </label>
+          <label className="filter-control filter-control--box">
+            <span>Behälter</span>
+            <div className="filter-control__input">
+              <GoContainer aria-hidden="true" />
+              <input
+                aria-label="Behälter filtern"
+                onChange={(event) => setBoxFilter(event.target.value)}
+                placeholder="Box-ID oder Standort"
+                type="search"
+                value={boxFilter}
+              />
+            </div>
+          </label>
           <label className="unplaced-filter" htmlFor="unplaced">
             <span>unplatziert</span>
+            <input
+              checked={showUnplaced}
+              id="unplaced"
+              name='unplaced'
+              onChange={(event) => setShowUnplaced(event.target.checked)}
+              type="checkbox"
+            />
           </label>
-          <input
-            checked={showUnplaced}
-            id="unplaced"
-            name='unplaced'
-            onChange={(event) => setShowUnplaced(event.target.checked)}
-            type="checkbox"
-          />
         </div>
       </div>
       {error ? (
@@ -220,6 +309,7 @@ export default function ItemListPage() {
         <BulkItemActionBar
           onActionComplete={() => loadItems({ silent: true })}
           onClearSelection={handleClearSelection}
+          selectedItems={selectedItems}
           selectedIds={Array.from(selectedIds)}
         />
       ) : null}
