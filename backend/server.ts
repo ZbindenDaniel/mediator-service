@@ -66,6 +66,7 @@ import {
   getMaxBoxId,
   getMaxItemId,
   getMaxArtikelNummer,
+  getAdjacentItemIds,
   listItemReferences,
   listItemsForExport,
   updateAgenticReview,
@@ -333,6 +334,7 @@ type ActionContext = {
   getAgenticRun: typeof getAgenticRun;
   updateAgenticRunStatus: typeof updateAgenticRunStatus;
   listItems: typeof listItems;
+  getAdjacentItemIds: typeof getAdjacentItemIds;
   pdfForBox: typeof pdfForBox;
   pdfForItem: typeof pdfForItem;
   printPdf: typeof printPdf;
@@ -535,6 +537,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           bulkMoveItems,
           bulkRemoveItemStock,
           listItems,
+          getAdjacentItemIds,
           pdfForBox,
           pdfForItem,
           printPdf,

@@ -691,6 +691,7 @@ let getMaxArtikelNummerStatement: Database.Statement;
 let getItemStatement: Database.Statement;
 let findByMaterialStatement: Database.Statement;
 let itemsByBoxStatement: Database.Statement;
+let getAdjacentItemIdsStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
@@ -738,6 +739,11 @@ ${ITEM_JOIN_WITH_BOX}
 WHERE i.Artikel_Nummer = ?
 ORDER BY i.UpdatedAt DESC
 `);
+  getAdjacentItemIdsStatement = db.prepare(`
+    SELECT
+      (SELECT ItemUUID FROM items WHERE ItemUUID < @ItemUUID ORDER BY ItemUUID DESC LIMIT 1) AS previousId,
+      (SELECT ItemUUID FROM items WHERE ItemUUID > @ItemUUID ORDER BY ItemUUID ASC LIMIT 1) AS nextId
+  `);
   itemsByBoxStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
@@ -1098,6 +1104,7 @@ export const findByMaterial = wrapLangtextAwareStatement(findByMaterialStatement
 export const itemsByBox = wrapLangtextAwareStatement(itemsByBoxStatement, 'db:itemsByBox');
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
+export const getAdjacentItemIds = getAdjacentItemIdsStatement;
 
 const upsertAgenticRequestLogStatement = db.prepare(
   `
