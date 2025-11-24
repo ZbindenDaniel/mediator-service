@@ -44,6 +44,17 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - The legacy ai-flow runtime has been ported into the mediator under `backend/agentic/`; follow-up work focuses on stabilising the
   in-process orchestrator and cleaning up the final integration tasks outlined in [SERVICE_FUSION](SERVICE_FUSION.md).
 
+## Import/Export Archive Format
+- `/api/export/items` now streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring the backend's
+  `MEDIA_DIR`. The CSV payloads retain the partner column ordering and reuse existing metadata lookups (e.g., `collectMediaAssets`)
+  so downstream clients receive the same image resolution hints as before.
+- `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are
+  tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv`
+  updates continue to use duplicate detection and zero-stock flags.
+- `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the
+  frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before
+  ingestion.
+
 ## Next Steps
 - Finish wiring the new `AgenticModelInvoker` through backend services so queue workers and actions invoke models without the
   HTTP proxy fallback.
