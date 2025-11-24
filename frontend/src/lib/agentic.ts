@@ -67,13 +67,14 @@ export interface AgenticRunTriggerPayload {
   /**
    * @deprecated Temporary support for legacy payloads while the UI transitions to the
    *             new agent service contract.
-   */
+  */
   id?: string | null;
   /**
    * @deprecated Temporary support for legacy payloads while the UI transitions to the
    *             new agent service contract.
-   */
+  */
   search?: string | null;
+  actor?: string | null;
   review?: {
     decision?: string | null;
     notes?: string | null;
@@ -98,7 +99,7 @@ export type AgenticTriggerSkippedReason =
 export type AgenticTriggerFailedReason = 'response-not-ok' | 'network-error';
 
 export type AgenticTriggerResult =
-  | { outcome: 'triggered'; status: number }
+  | { outcome: 'triggered'; status: number; agentic?: AgenticRun | null }
   | { outcome: 'skipped'; reason: AgenticTriggerSkippedReason; message: string }
   | {
       outcome: 'failed';
@@ -194,7 +195,16 @@ export async function triggerAgenticRun({
         error: errorDetails
       };
     }
-    return { outcome: 'triggered', status: response.status };
+
+    let parsedBody: any = null;
+    try {
+      parsedBody = await response.json();
+    } catch (parseErr) {
+      console.warn(`Agentic trigger (${context}) succeeded but response body was not JSON`, parseErr);
+    }
+    const agenticRun: AgenticRun | null = parsedBody?.agentic ?? null;
+
+    return { outcome: 'triggered', status: response.status, agentic: agenticRun };
   } catch (err) {
     const failureReason = describeAgenticFailureReason('network-error');
     const message = formatAgenticFailureMessage(

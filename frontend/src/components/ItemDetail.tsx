@@ -32,6 +32,8 @@ import {
 } from '../lib/agentic';
 import { parseLangtext } from '../lib/langtext';
 
+// TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
+
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
@@ -93,6 +95,8 @@ export interface AgenticStatusCardProps {
   canStart: boolean;
   canRestart: boolean;
   isInProgress: boolean;
+  startLabel?: string;
+  onStart?: () => void | Promise<void>;
   onRestart: () => void | Promise<void>;
   onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
   onCancel: () => void | Promise<void>;
@@ -262,12 +266,16 @@ export function AgenticStatusCard({
   canStart,
   canRestart,
   isInProgress,
+  startLabel,
+  onStart,
   onRestart,
   onReview,
   onCancel
 }: AgenticStatusCardProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const contentId = useMemo(() => `agentic-status-panel-${Math.random().toString(36).slice(2)}`, []);
+  const startHandler = onStart ?? onRestart;
+  const startText = typeof startLabel === 'string' && startLabel.trim() ? startLabel : 'Starten';
   const handleToggle = useCallback(() => {
     setIsCollapsed((prev) => {
       const next = !prev;
@@ -339,9 +347,9 @@ export function AgenticStatusCard({
           ) : null}
           {!needsReview && (canStart || canRestart) ? (
             <div className='row'>
-              {canStart ? (
-                <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
-                  Starten
+              {canStart && startHandler ? (
+                <button type="button" className="btn" disabled={actionPending} onClick={startHandler}>
+                  {startText}
                 </button>
               ) : null}
               {canRestart ? (
@@ -596,6 +604,26 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     ...finalMeta,
     className: `pill status status-${finalMeta.variant}`
   };
+}
+
+function resolveAgenticSearchTerm(run: AgenticRun | null, item: Item | null): string {
+  try {
+    const candidates = [run?.SearchQuery, item?.Artikelbeschreibung, item?.Artikel_Nummer];
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to resolve agentic search term', error);
+  }
+
+  return '';
 }
 
 export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
@@ -901,6 +929,34 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [itemId]);
 
+  const refreshAgenticStatus = useCallback(
+    async (targetItemId: string): Promise<AgenticRun | null> => {
+      try {
+        const response = await fetch(`/api/items/${encodeURIComponent(targetItemId)}/agentic`, {
+          method: 'GET',
+          cache: 'reload'
+        });
+        if (!response.ok) {
+          console.warn('Failed to refresh agentic status', { status: response.status, targetItemId });
+          return null;
+        }
+        const payload = await response
+          .json()
+          .catch((parseErr) => {
+            console.error('Failed to parse refreshed agentic status payload', parseErr);
+            return null;
+          });
+        const refreshedRun: AgenticRun | null = payload?.agentic ?? null;
+        setAgentic(refreshedRun);
+        return refreshedRun;
+      } catch (error) {
+        console.error('Failed to reload agentic status', error);
+        return null;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     void load({ showSpinner: true });
   }, [load]);
@@ -936,7 +992,8 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticCanRestart = normalizedAgenticStatus
     ? AGENTIC_RUN_RESTARTABLE_STATUSES.has(normalizedAgenticStatus)
     : false;
-  const agenticCanStart = normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
+  const agenticHasRun = Boolean(agentic);
+  const agenticCanStart = !agenticHasRun || normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
   const agenticCanCancel = normalizedAgenticStatus
     ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
     : false;
@@ -1063,6 +1120,73 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  async function handleAgenticStart() {
+    if (!item) {
+      console.warn('Agentic start requested without loaded item data');
+      setAgenticError('Artikel konnte nicht geladen werden.');
+      return;
+    }
+
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic start user alert', error);
+      }
+      return;
+    }
+
+    const searchTerm = resolveAgenticSearchTerm(agentic, item);
+    if (!searchTerm) {
+      console.warn('Agentic start skipped due to missing search term', { itemId: item.ItemUUID });
+      setAgenticError('Ki-Lauf konnte nicht gestartet werden (fehlender Suchbegriff).');
+      return;
+    }
+
+    setAgenticActionPending(true);
+    setAgenticError(null);
+    setAgenticReviewIntent(null);
+
+    try {
+      const triggerResult = await triggerAgenticRun({
+        payload: { itemId: item.ItemUUID, artikelbeschreibung: searchTerm, actor },
+        context: 'item detail start'
+      });
+
+      if (triggerResult.outcome === 'skipped') {
+        console.warn('Agentic start was skipped by trigger logic', triggerResult);
+        setAgenticError('Ki-Lauf konnte nicht gestartet werden (fehlende Angaben).');
+        return;
+      }
+
+      if (triggerResult.outcome === 'failed') {
+        const failureCode =
+          extractAgenticFailureReason(triggerResult.error) ?? triggerResult.reason ?? null;
+        const failureDescription = describeAgenticFailureReason(failureCode);
+        const failureMessage = failureDescription
+          ? `Ki-Lauf konnte nicht gestartet werden. Grund: ${failureDescription}`
+          : 'Ki-Lauf konnte nicht gestartet werden.';
+        setAgenticError(failureMessage);
+        return;
+      }
+
+      const refreshed = triggerResult.agentic
+        ? triggerResult.agentic
+        : await refreshAgenticStatus(item.ItemUUID);
+      setAgentic(refreshed ?? agentic);
+      setAgenticError(null);
+    } catch (err) {
+      console.error('Ki-Start request failed', err);
+      setAgenticError('Ki-Lauf konnte nicht gestartet werden.');
+    } finally {
+      setAgenticActionPending(false);
+    }
+  }
+
   async function handleAgenticRestart() {
     if (!item) {
       console.warn('Agentic restart requested without loaded item data');
@@ -1083,7 +1207,12 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const baseSearchTerm = (agentic?.SearchQuery || item.Artikelbeschreibung || '').trim();
+    const baseSearchTerm = resolveAgenticSearchTerm(agentic, item);
+    if (!baseSearchTerm) {
+      console.warn('Agentic restart skipped due to missing search term', { itemId: item.ItemUUID });
+      setAgenticError('Ki-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
+      return;
+    }
 
     const restartRequestPayload = buildAgenticRestartRequestPayload({
       actor,
@@ -1261,6 +1390,8 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticActionPending(false);
   }
 
+  const agenticStartHandler = !agenticHasRun ? handleAgenticStart : handleAgenticRestart;
+  const agenticStartLabel = agenticHasRun ? 'Starten' : 'Start KI-Lauf';
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
 
@@ -1407,7 +1538,9 @@ export default function ItemDetail({ itemId }: Props) {
               canCancel={agenticCanCancel}
               canStart={agenticCanStart}
               canRestart={agenticCanRestart}
+              startLabel={agenticStartLabel}
               isInProgress={agenticIsInProgress}
+              onStart={agenticCanStart ? agenticStartHandler : undefined}
               onRestart={handleAgenticRestart}
               onReview={handleAgenticReview}
               onCancel={handleAgenticCancel}

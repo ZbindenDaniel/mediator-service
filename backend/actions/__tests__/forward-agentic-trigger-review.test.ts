@@ -50,4 +50,33 @@ describe('forwardAgenticTrigger review metadata', () => {
       expect.any(Object)
     );
   });
+
+  it('forwards actor to agentic start for auditing', async () => {
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+
+    await forwardAgenticTrigger(
+      {
+        artikelbeschreibung: 'Actor Artikel',
+        itemId: 'item-audit',
+        actor: 'alice'
+      },
+      {
+        context: 'unit-test',
+        logger,
+        service: { logger } as any
+      }
+    );
+
+    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    expect(mockedStartAgenticRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: 'alice'
+      }),
+      expect.any(Object)
+    );
+  });
 });
