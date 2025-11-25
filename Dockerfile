@@ -17,11 +17,14 @@ RUN npm run build
 FROM node:20-bullseye-slim AS runtime
 
 # Install system dependencies required at runtime
+# TODO(agent): Revisit runtime dependency footprint after adding CSV archive helpers.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3 \
         build-essential \
         cups-client \
+        unzip \
+        zip \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production \

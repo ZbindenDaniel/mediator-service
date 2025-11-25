@@ -433,6 +433,7 @@ const action = defineHttpAction({
         zipArgs.push('media');
       }
 
+      // TODO(agent): Add preflight checks for zip binary availability to return clearer client errors before streaming.
       const zipProc = spawn('zip', zipArgs, { cwd: tempDir });
       zipProc.stderr.on('data', (data: Buffer) => {
         console.warn('[export-items] zip stderr', data.toString());
