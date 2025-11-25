@@ -3,9 +3,32 @@ import LoadingPage from './LoadingPage';
 import { useDialog } from './dialog';
 
 // TODO: Extract the blocking overlay + messaging pattern into a shared hook when import flows expand.
+// TODO: Extract the import result summary dialog builder into a shared helper once other importers are added.
 
 interface ProcessingState {
   message: string;
+}
+
+interface UploadPayload {
+  itemCount?: number;
+  boxCount?: number;
+  diffs?: any[];
+  errors?: any[];
+}
+
+function normalizeUploadPayload(payload: unknown): UploadPayload {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const typed = payload as Record<string, unknown>;
+    return {
+      itemCount: typeof typed.itemCount === 'number' ? typed.itemCount : undefined,
+      boxCount: typeof typed.boxCount === 'number' ? typed.boxCount : undefined,
+      diffs: Array.isArray(typed.diffs) ? typed.diffs : [],
+      errors: Array.isArray(typed.errors) ? typed.errors : []
+    };
+  }
+
+  console.error('Unexpected upload response payload type', payload);
+  return {};
 }
 
 /** Card handling CSV import */
@@ -15,6 +38,7 @@ export default function ImportCard() {
   const [valid, setValid] = useState<boolean | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [processing, setProcessing] = useState<ProcessingState | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const isBusy = Boolean(processing);
 
@@ -97,9 +121,11 @@ export default function ImportCard() {
   const handleUpload = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file || !valid) return;
-    setProcessing({ message: 'CSV wird hochgeladen…' });
+    setProcessing({ message: 'Import läuft…' });
+    let payload: unknown = null;
     try {
       const text = await file.text();
+      setProcessing({ message: 'Import wird verarbeitet…' });
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: {
@@ -108,16 +134,81 @@ export default function ImportCard() {
         },
         body: text
       });
+      try {
+        payload = await res.json();
+      } catch (parseError) {
+        console.error('Failed to parse upload response JSON', parseError);
+      }
+
+      const normalizedPayload = payload === null ? {} : normalizeUploadPayload(payload);
+
       if (res.ok) {
         console.log('CSV uploaded');
-        window.location.reload();
-      } else {
-        console.error('CSV upload HTTP error', res.status);
+        const { itemCount, boxCount, diffs = [], errors: uploadErrors = [] } = normalizedPayload;
+
+        const message = (
+          <div>
+            <p>
+              Import abgeschlossen. {itemCount !== undefined && boxCount !== undefined
+                ? `Es wurden ${itemCount} Artikel und ${boxCount} Behälter verarbeitet.`
+                : 'Es liegen keine detaillierten Zahlen vor.'}
+            </p>
+            {diffs.length > 0 && (
+              <div>
+                <p>Änderungen:</p>
+                <ul>
+                  {diffs.map((diff: any, index: number) => (
+                    <li key={index}>{JSON.stringify(diff)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {uploadErrors.length > 0 && (
+              <div>
+                <p>Fehler:</p>
+                <ul>
+                  {uploadErrors.map((error: any, index: number) => (
+                    <li key={index}>{JSON.stringify(error)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+
         setProcessing(null);
         try {
           await dialog.alert({
+            title: 'Import abgeschlossen',
+            message
+          });
+        } catch (alertError) {
+          console.error('Failed to display upload success dialog', alertError);
+        }
+
+        setFile(null);
+        setValid(null);
+        setErrors([]);
+        setFileInputKey((key) => key + 1);
+      } else {
+        console.error('CSV upload HTTP error', res.status, payload);
+        setProcessing(null);
+        const uploadErrors = Array.isArray(normalizedPayload.errors) ? normalizedPayload.errors : [];
+        try {
+          await dialog.alert({
             title: 'Upload fehlgeschlagen',
-            message: 'Die CSV konnte nicht hochgeladen werden. Bitte prüfe die Datei und versuche es erneut.'
+            message: (
+              <div>
+                <p>Die CSV konnte nicht hochgeladen werden. Bitte prüfe die Datei und versuche es erneut.</p>
+                {uploadErrors.length > 0 && (
+                  <ul>
+                    {uploadErrors.map((error: any, index: number) => (
+                      <li key={index}>{JSON.stringify(error)}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )
           });
         } catch (alertError) {
           console.error('Failed to display upload failure dialog', alertError);
@@ -134,8 +225,6 @@ export default function ImportCard() {
       } catch (alertError) {
         console.error('Failed to display upload error dialog', alertError);
       }
-    } finally {
-      setProcessing(null);
     }
   }, [dialog, file, valid]);
 
@@ -151,7 +240,14 @@ export default function ImportCard() {
       <h2>CSV Import</h2>
       <form onSubmit={valid ? handleUpload : handleValidate}>
         <div className='row'>
-          <input type="file" name="file" accept=".csv" onChange={handleFileChange} disabled={isBusy} />
+          <input
+            key={fileInputKey}
+            type="file"
+            name="file"
+            accept=".csv"
+            onChange={handleFileChange}
+            disabled={isBusy}
+          />
         </div>
         <div className='row'>
           {valid === true && <div className="success">Validierung erfolgreich</div>}
