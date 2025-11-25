@@ -37,6 +37,7 @@ export interface ItemFlowDependencies {
   markNotificationSuccess: (itemId: string) => Promise<void> | void;
   markNotificationFailure: (itemId: string, errorMessage: string) => Promise<void> | void;
   shopwareSearch?: (query: string, limit: number, logger?: ItemFlowLogger) => Promise<ShopwareSearchResult>;
+  persistLastError?: (itemId: string, errorMessage: string, attemptAt?: string) => Promise<void> | void;
 }
 
 export interface RunItemFlowInput {
@@ -320,6 +321,19 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     return payload;
   } catch (err) {
     const log = deps.logger ?? console;
+    const itemId = resolvedItemId ?? (typeof input.id === 'string' ? input.id : null);
+    const failureMessage = err instanceof Error ? err.message : 'Unexpected failure';
+
+    if (itemId && !(err instanceof FlowError && err.code === 'RUN_CANCELLED')) {
+      // TODO(agentic-failure-telemetry): Consider enriching persisted error context with retry counters once available.
+      const attemptAt = new Date().toISOString();
+      try {
+        await deps.persistLastError?.(itemId, failureMessage, attemptAt);
+      } catch (persistErr) {
+        log.warn?.({ err: persistErr, msg: 'failed to persist agentic flow error outcome', itemId });
+      }
+    }
+
     if (err instanceof FlowError) {
       if (err.code === 'RUN_CANCELLED') {
         log.warn?.({ err, code: err.code, msg: 'run aborted due to cancellation', itemId: resolvedItemId ?? input.id ?? null });
