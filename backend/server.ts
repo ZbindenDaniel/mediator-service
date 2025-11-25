@@ -11,6 +11,7 @@ import { ensureLangtextString } from './lib/langtext';
 export { MEDIA_DIR } from './lib/media';
 import { resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
 // TODO(agent): Audit Langtext response serialization once structured payload adoption completes.
+// TODO(agent): Revisit inbox watcher patterns once ZIP uploads introduce mixed payload sequencing.
 import {
   HTTP_PORT,
   INBOX_DIR,
@@ -47,6 +48,7 @@ import {
   upsertAgenticRun,
   getAgenticRun,
   updateAgenticRunStatus,
+  updateQueuedAgenticRunQueueState,
   getAgenticRequestLog,
   nextLabelJob,
   updateLabelJobStatus,
@@ -65,6 +67,7 @@ import {
   getMaxBoxId,
   getMaxItemId,
   getMaxArtikelNummer,
+  getAdjacentItemIds,
   listItemReferences,
   listItemsForExport,
   updateAgenticReview,
@@ -332,6 +335,7 @@ type ActionContext = {
   getAgenticRun: typeof getAgenticRun;
   updateAgenticRunStatus: typeof updateAgenticRunStatus;
   listItems: typeof listItems;
+  getAdjacentItemIds: typeof getAdjacentItemIds;
   pdfForBox: typeof pdfForBox;
   pdfForItem: typeof pdfForItem;
   printPdf: typeof printPdf;
@@ -389,6 +393,7 @@ function createAgenticServiceDependencies(
     getAgenticRun,
     upsertAgenticRun,
     updateAgenticRunStatus,
+    updateQueuedAgenticRunQueueState,
     logEvent,
     logger,
     now: overrides.now ?? (() => new Date()),
@@ -534,6 +539,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           bulkMoveItems,
           bulkRemoveItemStock,
           listItems,
+          getAdjacentItemIds,
           pdfForBox,
           pdfForItem,
           printPdf,

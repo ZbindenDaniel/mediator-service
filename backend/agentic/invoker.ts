@@ -8,6 +8,7 @@ import {
   persistItemWithinTransaction,
   logEvent,
   getAgenticRequestLog,
+  persistAgenticRunError,
   saveAgenticRequestPayload,
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
@@ -187,6 +188,7 @@ export class AgenticModelInvoker {
   private chatModel?: ChatModel;
   private chatModelFactory?: ChatModelFactory;
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
+  private readonly persistAgenticRunError: (itemId: string, errorMessage: string, attemptAt?: string) => void;
 
   constructor(options: AgenticModelInvokerOptions = {}) {
     this.logger = options.logger ?? console;
@@ -194,6 +196,14 @@ export class AgenticModelInvoker {
       apiKey: searchConfig.tavilyApiKey,
       logger: this.logger
     });
+    // TODO(agentic-error-handling): Align DB error persistence with future retry scheduling metadata once available.
+    this.persistAgenticRunError = (itemId: string, errorMessage: string, attemptAt?: string) => {
+      try {
+        persistAgenticRunError({ itemId, error: errorMessage, attemptAt });
+      } catch (err) {
+        this.logger.warn?.({ err, msg: 'failed to persist agentic run error state', itemId });
+      }
+    };
     this.applyAgenticResult = (payload: AgenticResultPayload) => {
       try {
         handleAgenticResult(
@@ -485,7 +495,8 @@ export class AgenticModelInvoker {
           applyAgenticResult: this.applyAgenticResult,
           saveRequestPayload: saveAgenticRequestPayload,
           markNotificationSuccess: markAgenticRequestNotificationSuccess,
-          markNotificationFailure: markAgenticRequestNotificationFailure
+          markNotificationFailure: markAgenticRequestNotificationFailure,
+          persistLastError: this.persistAgenticRunError
         }
       );
 

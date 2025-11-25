@@ -356,8 +356,19 @@ export function handleAgenticResult(
         LastModified: now,
         ReviewState: effectiveReviewState,
         ReviewedBy: effectiveReviewedBy,
+        ReviewedByIsSet: true,
         LastReviewDecision: normalizedReviewDecision,
-        LastReviewNotes: normalizedReviewNotes
+        LastReviewDecisionIsSet: true,
+        LastReviewNotes: normalizedReviewNotes,
+        LastReviewNotesIsSet: true,
+        RetryCount: existingRun?.RetryCount ?? 0,
+        RetryCountIsSet: true,
+        NextRetryAt: existingRun?.NextRetryAt ?? null,
+        NextRetryAtIsSet: true,
+        LastError: existingRun?.LastError ?? null,
+        LastErrorIsSet: true,
+        LastAttemptAt: existingRun?.LastAttemptAt ?? null,
+        LastAttemptAtIsSet: true
       };
 
       const updateResult = ctx.updateAgenticRunStatus.run(runUpdate);

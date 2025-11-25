@@ -4,11 +4,14 @@ import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
 import type { AgenticRunReviewMetadata } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 
+// TODO(agentic-start-flow): Extract shared agentic start/restart validation once UI start flows stabilize.
+
 export interface AgenticRunTriggerPayload {
   itemId?: string | null;
   artikelbeschreibung?: string | null;
   id?: string | null;
   search?: string | null;
+  actor?: string | null;
   review?: {
     decision?: string | null;
     notes?: string | null;
@@ -96,6 +99,7 @@ export async function forwardAgenticTrigger(
 
   const { artikelbeschreibung, itemId } = buildAgenticRunRequestBody(payload);
   const requestContext = resolveAgenticRequestContext(payload, itemId);
+  const actor = typeof payload.actor === 'string' && payload.actor.trim() ? payload.actor.trim() : null;
   const review = normalizeReviewMetadata(payload.review);
   if (!serviceDeps) {
     throw new Error('Agentic service dependencies are required');
@@ -106,6 +110,7 @@ export async function forwardAgenticTrigger(
       {
         itemId,
         searchQuery: artikelbeschreibung,
+        actor,
         review,
         context,
         request: requestContext

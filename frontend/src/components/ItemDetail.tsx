@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 import type { Item, EventLog, AgenticRun } from '../../../models';
@@ -31,6 +31,8 @@ import {
   triggerAgenticRun
 } from '../lib/agentic';
 import { parseLangtext } from '../lib/langtext';
+
+// TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
@@ -93,6 +95,8 @@ export interface AgenticStatusCardProps {
   canStart: boolean;
   canRestart: boolean;
   isInProgress: boolean;
+  startLabel?: string;
+  onStart?: () => void | Promise<void>;
   onRestart: () => void | Promise<void>;
   onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
   onCancel: () => void | Promise<void>;
@@ -262,12 +266,16 @@ export function AgenticStatusCard({
   canStart,
   canRestart,
   isInProgress,
+  startLabel,
+  onStart,
   onRestart,
   onReview,
   onCancel
 }: AgenticStatusCardProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const contentId = useMemo(() => `agentic-status-panel-${Math.random().toString(36).slice(2)}`, []);
+  const startHandler = onStart ?? onRestart;
+  const startText = typeof startLabel === 'string' && startLabel.trim() ? startLabel : 'Starten';
   const handleToggle = useCallback(() => {
     setIsCollapsed((prev) => {
       const next = !prev;
@@ -339,9 +347,9 @@ export function AgenticStatusCard({
           ) : null}
           {!needsReview && (canStart || canRestart) ? (
             <div className='row'>
-              {canStart ? (
-                <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
-                  Starten
+              {canStart && startHandler ? (
+                <button type="button" className="btn" disabled={actionPending} onClick={startHandler}>
+                  {startText}
                 </button>
               ) : null}
               {canRestart ? (
@@ -598,6 +606,26 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
   };
 }
 
+function resolveAgenticSearchTerm(run: AgenticRun | null, item: Item | null): string {
+  try {
+    const candidates = [run?.SearchQuery, item?.Artikelbeschreibung, item?.Artikel_Nummer];
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to resolve agentic search term', error);
+  }
+
+  return '';
+}
+
 export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
   if (!run) {
     return false;
@@ -617,12 +645,119 @@ export default function ItemDetail({ itemId }: Props) {
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
+    previousId: null,
+    nextId: null
+  });
+  const [neighborsLoading, setNeighborsLoading] = useState(false);
+  const [neighborSource, setNeighborSource] = useState<'query' | 'fetch' | null>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const dialog = useDialog();
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
   const { unter: unterCategoryLookup } = categoryLookups;
+
+  const neighborContext = useMemo(() => {
+    // TODO(navigation-context): Move adjacent navigation derivation into a shared list-aware provider once pagination is available.
+    const normalized = {
+      previousId: null as string | null,
+      nextId: null as string | null,
+      source: null as 'query' | null
+    };
+
+    const sequenceParam = searchParams.get('ids');
+    if (sequenceParam) {
+      const sequence = sequenceParam
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const currentIndex = sequence.indexOf(itemId);
+      if (currentIndex >= 0) {
+        normalized.previousId = sequence[currentIndex - 1] ?? null;
+        normalized.nextId = sequence[currentIndex + 1] ?? null;
+        normalized.source = 'query';
+        return normalized;
+      }
+    }
+
+    const previousParam = searchParams.get('prev');
+    const nextParam = searchParams.get('next');
+    if ((previousParam && previousParam.trim()) || (nextParam && nextParam.trim())) {
+      normalized.previousId = previousParam?.trim() || null;
+      normalized.nextId = nextParam?.trim() || null;
+      normalized.source = 'query';
+    }
+
+    return normalized;
+  }, [itemId, searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setNeighborSource(neighborContext.source);
+    setNeighborIds({ previousId: neighborContext.previousId, nextId: neighborContext.nextId });
+
+    const shouldFetchNeighbors = neighborContext.source !== 'query'
+      || !neighborContext.previousId
+      || !neighborContext.nextId;
+
+    if (!shouldFetchNeighbors) {
+      return undefined;
+    }
+
+    const fetchNeighbors = async () => {
+      setNeighborsLoading(true);
+      try {
+        console.info('ItemDetail: Fetching adjacent items', { itemId, source: neighborContext.source });
+      } catch (logError) {
+        console.error('ItemDetail: Failed to log adjacent fetch start', logError);
+      }
+      try {
+        const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/adjacent`);
+        if (!res.ok) {
+          if (!cancelled) {
+            console.error('ItemDetail: Failed to fetch adjacent items', res.status);
+          }
+          return;
+        }
+
+        const data = await res.json();
+        if (cancelled) {
+          return;
+        }
+
+        const fetchedPrevious = typeof data.previousId === 'string' && data.previousId.trim()
+          ? data.previousId.trim()
+          : null;
+        const fetchedNext = typeof data.nextId === 'string' && data.nextId.trim()
+          ? data.nextId.trim()
+          : null;
+
+        setNeighborIds({
+          previousId: neighborContext.previousId ?? fetchedPrevious,
+          nextId: neighborContext.nextId ?? fetchedNext
+        });
+        setNeighborSource(neighborContext.source ?? 'fetch');
+      } catch (error) {
+        if (!cancelled) {
+          console.error('ItemDetail: Failed to load adjacent items', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setNeighborsLoading(false);
+        }
+      }
+    };
+
+    void fetchNeighbors();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId, neighborContext]);
 
   const langtextRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
@@ -676,6 +811,86 @@ export default function ItemDetail({ itemId }: Props) {
       return [['Langtext', legacyText]];
     }
   }, [item?.Langtext]);
+
+  const handleNeighborNavigation = useCallback(
+    (direction: 'previous' | 'next') => {
+      const targetId = direction === 'previous' ? neighborIds.previousId : neighborIds.nextId;
+      if (!targetId) {
+        console.warn('ItemDetail: Neighbor navigation attempted without target', { direction, itemId });
+        return;
+      }
+
+      try {
+        console.info('ItemDetail: Navigating to neighbor item', {
+          direction,
+          targetId,
+          itemId,
+          source: neighborSource
+        });
+      } catch (logError) {
+        console.error('ItemDetail: Failed to log neighbor navigation', logError);
+      }
+
+      const search = window.location.search || '';
+      navigate(`/items/${encodeURIComponent(targetId)}${search}`);
+    },
+    [itemId, navigate, neighborIds.nextId, neighborIds.previousId, neighborSource]
+  );
+
+  const handleTouchStart = useCallback((event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    if (touch) {
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (event: React.TouchEvent) => {
+      const start = touchStartRef.current;
+      const touch = event.changedTouches[0];
+      touchStartRef.current = null;
+
+      if (!start || !touch) {
+        return;
+      }
+
+      const deltaX = touch.clientX - start.x;
+      const deltaY = touch.clientY - start.y;
+
+      if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY)) {
+        return;
+      }
+
+      if (deltaX > 0 && neighborIds.previousId) {
+        handleNeighborNavigation('previous');
+      } else if (deltaX < 0 && neighborIds.nextId) {
+        handleNeighborNavigation('next');
+      }
+    },
+    [handleNeighborNavigation, neighborIds.nextId, neighborIds.previousId]
+  );
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+
+      if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' && neighborIds.previousId) {
+        event.preventDefault();
+        handleNeighborNavigation('previous');
+      } else if (event.key === 'ArrowRight' && neighborIds.nextId) {
+        event.preventDefault();
+        handleNeighborNavigation('next');
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [handleNeighborNavigation, neighborIds.nextId, neighborIds.previousId]);
 
   const resolveUnterkategorieLabel = useCallback(
     (code?: number | null): React.ReactNode => {
@@ -901,6 +1116,34 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [itemId]);
 
+  const refreshAgenticStatus = useCallback(
+    async (targetItemId: string): Promise<AgenticRun | null> => {
+      try {
+        const response = await fetch(`/api/items/${encodeURIComponent(targetItemId)}/agentic`, {
+          method: 'GET',
+          cache: 'reload'
+        });
+        if (!response.ok) {
+          console.warn('Failed to refresh agentic status', { status: response.status, targetItemId });
+          return null;
+        }
+        const payload = await response
+          .json()
+          .catch((parseErr) => {
+            console.error('Failed to parse refreshed agentic status payload', parseErr);
+            return null;
+          });
+        const refreshedRun: AgenticRun | null = payload?.agentic ?? null;
+        setAgentic(refreshedRun);
+        return refreshedRun;
+      } catch (error) {
+        console.error('Failed to reload agentic status', error);
+        return null;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     void load({ showSpinner: true });
   }, [load]);
@@ -936,7 +1179,8 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticCanRestart = normalizedAgenticStatus
     ? AGENTIC_RUN_RESTARTABLE_STATUSES.has(normalizedAgenticStatus)
     : false;
-  const agenticCanStart = normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
+  const agenticHasRun = Boolean(agentic);
+  const agenticCanStart = !agenticHasRun || normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
   const agenticCanCancel = normalizedAgenticStatus
     ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
     : false;
@@ -1063,6 +1307,73 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  async function handleAgenticStart() {
+    if (!item) {
+      console.warn('Agentic start requested without loaded item data');
+      setAgenticError('Artikel konnte nicht geladen werden.');
+      return;
+    }
+
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic start user alert', error);
+      }
+      return;
+    }
+
+    const searchTerm = resolveAgenticSearchTerm(agentic, item);
+    if (!searchTerm) {
+      console.warn('Agentic start skipped due to missing search term', { itemId: item.ItemUUID });
+      setAgenticError('Ki-Lauf konnte nicht gestartet werden (fehlender Suchbegriff).');
+      return;
+    }
+
+    setAgenticActionPending(true);
+    setAgenticError(null);
+    setAgenticReviewIntent(null);
+
+    try {
+      const triggerResult = await triggerAgenticRun({
+        payload: { itemId: item.ItemUUID, artikelbeschreibung: searchTerm, actor },
+        context: 'item detail start'
+      });
+
+      if (triggerResult.outcome === 'skipped') {
+        console.warn('Agentic start was skipped by trigger logic', triggerResult);
+        setAgenticError('Ki-Lauf konnte nicht gestartet werden (fehlende Angaben).');
+        return;
+      }
+
+      if (triggerResult.outcome === 'failed') {
+        const failureCode =
+          extractAgenticFailureReason(triggerResult.error) ?? triggerResult.reason ?? null;
+        const failureDescription = describeAgenticFailureReason(failureCode);
+        const failureMessage = failureDescription
+          ? `Ki-Lauf konnte nicht gestartet werden. Grund: ${failureDescription}`
+          : 'Ki-Lauf konnte nicht gestartet werden.';
+        setAgenticError(failureMessage);
+        return;
+      }
+
+      const refreshed = triggerResult.agentic
+        ? triggerResult.agentic
+        : await refreshAgenticStatus(item.ItemUUID);
+      setAgentic(refreshed ?? agentic);
+      setAgenticError(null);
+    } catch (err) {
+      console.error('Ki-Start request failed', err);
+      setAgenticError('Ki-Lauf konnte nicht gestartet werden.');
+    } finally {
+      setAgenticActionPending(false);
+    }
+  }
+
   async function handleAgenticRestart() {
     if (!item) {
       console.warn('Agentic restart requested without loaded item data');
@@ -1083,7 +1394,12 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const baseSearchTerm = (agentic?.SearchQuery || item.Artikelbeschreibung || '').trim();
+    const baseSearchTerm = resolveAgenticSearchTerm(agentic, item);
+    if (!baseSearchTerm) {
+      console.warn('Agentic restart skipped due to missing search term', { itemId: item.ItemUUID });
+      setAgenticError('Ki-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
+      return;
+    }
 
     const restartRequestPayload = buildAgenticRestartRequestPayload({
       actor,
@@ -1261,6 +1577,8 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticActionPending(false);
   }
 
+  const agenticStartHandler = !agenticHasRun ? handleAgenticStart : handleAgenticRestart;
+  const agenticStartLabel = agenticHasRun ? 'Starten' : 'Start KI-Lauf';
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
 
@@ -1315,12 +1633,36 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   return (
-    <div className="container item">
+    <div
+      className="container item"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="grid landing-grid">
         {item ? (
           <>
             <div className="card">
               <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
+              <div className='row'>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!neighborIds.previousId || neighborsLoading}
+                  onClick={() => handleNeighborNavigation('previous')}
+                  aria-label="Vorheriger Artikel"
+                >
+                  ← Vorheriger
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!neighborIds.nextId || neighborsLoading}
+                  onClick={() => handleNeighborNavigation('next')}
+                  aria-label="Nächster Artikel"
+                >
+                  Nächster →
+                </button>
+              </div>
               <section className="item-media-section">
                 <h3>Medien</h3>
                 <ItemMediaGallery
@@ -1407,7 +1749,9 @@ export default function ItemDetail({ itemId }: Props) {
               canCancel={agenticCanCancel}
               canStart={agenticCanStart}
               canRestart={agenticCanRestart}
+              startLabel={agenticStartLabel}
               isInProgress={agenticIsInProgress}
+              onStart={agenticCanStart ? agenticStartHandler : undefined}
               onRestart={handleAgenticRestart}
               onReview={handleAgenticReview}
               onCancel={handleAgenticCancel}

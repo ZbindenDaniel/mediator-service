@@ -691,6 +691,7 @@ let getMaxArtikelNummerStatement: Database.Statement;
 let getItemStatement: Database.Statement;
 let findByMaterialStatement: Database.Statement;
 let itemsByBoxStatement: Database.Statement;
+let getAdjacentItemIdsStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
   upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
@@ -738,6 +739,11 @@ ${ITEM_JOIN_WITH_BOX}
 WHERE i.Artikel_Nummer = ?
 ORDER BY i.UpdatedAt DESC
 `);
+  getAdjacentItemIdsStatement = db.prepare(`
+    SELECT
+      (SELECT ItemUUID FROM items WHERE ItemUUID < @ItemUUID ORDER BY ItemUUID DESC LIMIT 1) AS previousId,
+      (SELECT ItemUUID FROM items WHERE ItemUUID > @ItemUUID ORDER BY ItemUUID ASC LIMIT 1) AS nextId
+  `);
   itemsByBoxStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
@@ -1098,6 +1104,7 @@ export const findByMaterial = wrapLangtextAwareStatement(findByMaterialStatement
 export const itemsByBox = wrapLangtextAwareStatement(itemsByBoxStatement, 'db:itemsByBox');
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
+export const getAdjacentItemIds = getAdjacentItemIdsStatement;
 
 const upsertAgenticRequestLogStatement = db.prepare(
   `
@@ -1476,6 +1483,8 @@ export const getAgenticRun = db.prepare(`
   FROM agentic_runs
   WHERE ItemUUID = ?
 `);
+// TODO(agentic-retries): Align status update flags with queue helper defaults when additional
+// retry metadata fields are introduced.
 export const updateAgenticRunStatus = db.prepare(
   `
     UPDATE agentic_runs
@@ -1483,10 +1492,66 @@ export const updateAgenticRunStatus = db.prepare(
            SearchQuery=COALESCE(@SearchQuery, SearchQuery),
            LastModified=@LastModified,
            ReviewState=@ReviewState,
-           ReviewedBy=@ReviewedBy,
-           LastReviewDecision=COALESCE(@LastReviewDecision, LastReviewDecision),
-           LastReviewNotes=COALESCE(@LastReviewNotes, LastReviewNotes)
+           ReviewedBy=CASE WHEN @ReviewedByIsSet THEN @ReviewedBy ELSE ReviewedBy END,
+           LastReviewDecision=CASE
+             WHEN @LastReviewDecisionIsSet THEN COALESCE(@LastReviewDecision, LastReviewDecision)
+             ELSE LastReviewDecision
+           END,
+           LastReviewNotes=CASE
+             WHEN @LastReviewNotesIsSet THEN COALESCE(@LastReviewNotes, LastReviewNotes)
+             ELSE LastReviewNotes
+           END,
+           RetryCount=CASE WHEN @RetryCountIsSet THEN @RetryCount ELSE RetryCount END,
+           NextRetryAt=CASE WHEN @NextRetryAtIsSet THEN @NextRetryAt ELSE NextRetryAt END,
+           LastError=CASE WHEN @LastErrorIsSet THEN @LastError ELSE LastError END,
+           LastAttemptAt=CASE WHEN @LastAttemptAtIsSet THEN @LastAttemptAt ELSE LastAttemptAt END
      WHERE ItemUUID=@ItemUUID
+  `
+);
+
+export function persistAgenticRunError(params: {
+  itemId: string;
+  error: string | null;
+  attemptAt?: string | null;
+}): void {
+  const itemUUID = typeof params.itemId === 'string' ? params.itemId.trim() : '';
+  if (!itemUUID) {
+    console.warn('[db] Skipping agentic run error persistence for empty item id');
+    return;
+  }
+
+  const normalizedError =
+    typeof params.error === 'string' && params.error.trim()
+      ? params.error.trim().slice(0, 500)
+      : params.error === null
+        ? null
+        : String(params.error).slice(0, 500);
+  const attemptAt = params.attemptAt ?? new Date().toISOString();
+
+  try {
+    const result = updateAgenticRunErrorStatement.run({
+      ItemUUID: itemUUID,
+      LastError: normalizedError,
+      LastAttemptAt: attemptAt,
+      LastModified: attemptAt
+    });
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Agentic run error persistence affected zero rows', { itemUUID });
+    }
+  } catch (err) {
+    console.error('[db] Failed to persist agentic run error', { itemUUID, error: err });
+    throw err;
+  }
+}
+
+// TODO(agentic-observability): Capture structured failure codes once agentic retry policies solidify.
+const updateAgenticRunErrorStatement = db.prepare(
+  `
+    UPDATE agentic_runs
+       SET LastError = @LastError,
+           LastAttemptAt = COALESCE(@LastAttemptAt, LastAttemptAt),
+           LastModified = COALESCE(@LastModified, LastModified)
+     WHERE ItemUUID = @ItemUUID
   `
 );
 

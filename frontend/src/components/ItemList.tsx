@@ -4,6 +4,7 @@ import type { Item } from '../../../models';
 import BoxColorTag from './BoxColorTag';
 
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
+// TODO(agentic): Expand item list columns and responsive styling for enriched item metadata.
 
 interface Props {
   items: Item[];
@@ -77,10 +78,13 @@ export default function ItemList({
                 type="checkbox"
               />
             </th>
+            <th className="col-uuid optional-column">UUID</th>
             <th className="col-number">A-Nr</th>
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
+            <th className="col-stock optional-column">Auf Lager</th>
+            <th className="col-subcategory optional-column">Unterkategorie A</th>
           </tr>
         </thead>
         <tbody>
@@ -97,6 +101,11 @@ export default function ItemList({
             const rowLabel = it.Artikelbeschreibung?.trim()
               ? `Details für ${it.Artikelbeschreibung} öffnen`
               : `Details für Artikel ${it.ItemUUID} öffnen`;
+            const stockValue = typeof it.Auf_Lager === 'number' ? it.Auf_Lager : null;
+            const subcategoryValue =
+              typeof it.Unterkategorien_A === 'number'
+                ? it.Unterkategorien_A
+                : (typeof it.Unterkategorien_A === 'string' ? it.Unterkategorien_A : null);
 
             return (
               <tr
@@ -132,6 +141,7 @@ export default function ItemList({
                     type="checkbox"
                   />
                 </td>
+                <td className="col-uuid optional-column">{it.ItemUUID}</td>
                 <td className="col-number">{it.Artikel_Nummer?.trim() || '—'}</td>
                 <td className="col-desc">{it.Artikelbeschreibung}</td>
                 <td className="col-box">
@@ -142,6 +152,8 @@ export default function ItemList({
                 <td className="col-location">
                   <BoxColorTag locationKey={locationKey} />
                 </td>
+                <td className="col-stock optional-column">{stockValue ?? '—'}</td>
+                <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
               </tr>
             );
           })}

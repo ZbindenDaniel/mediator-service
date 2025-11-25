@@ -4,12 +4,13 @@ import { useDialog } from './dialog';
 
 // TODO: Extract the blocking overlay + messaging pattern into a shared hook when import flows expand.
 // TODO: Extract the import result summary dialog builder into a shared helper once other importers are added.
+// TODO(agent): Add progress reporting for large ZIP uploads once backpressure hooks are available in fetch.
 
 interface ProcessingState {
   message: string;
 }
 
-/** Card handling CSV import */
+/** Card handling ZIP-based import */
 export default function ImportCard() {
   const dialog = useDialog();
   const [file, setFile] = useState<File | null>(null);
@@ -33,13 +34,13 @@ export default function ImportCard() {
   const handleValidate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
-    setProcessing({ message: 'CSV wird validiert…' });
+    setProcessing({ message: 'Archiv wird validiert…' });
     try {
-      const text = await file.text();
+      const payload = await file.arrayBuffer();
       const res = await fetch('/api/import/validate', {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: text
+        headers: { 'Content-Type': 'application/zip', 'X-Filename': file.name },
+        body: payload
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
@@ -47,7 +48,8 @@ export default function ImportCard() {
         setErrors([]);
         console.log('CSV validation ok', {
           itemCount: data.itemCount,
-          boxCount: data.boxCount
+          boxCount: data.boxCount,
+          boxesFileCount: data.boxesFileCount
         });
         setProcessing(null);
         try {
@@ -58,6 +60,8 @@ export default function ImportCard() {
                 <p>
                   Die Datei enthält {data.itemCount ?? 0} Artikel und {data.boxCount ?? 0} Behälter.
                 </p>
+                <p>Zusätzliche Box-Stammdaten: {data.boxesFileCount ?? 0} Einträge.</p>
+                {data.message && <p>{data.message}</p>}
                 <p>Du kannst die Daten jetzt hochladen.</p>
               </div>
             )
@@ -70,15 +74,14 @@ export default function ImportCard() {
         setErrors((data.errors || []).map((e: any) => JSON.stringify(e)));
         setProcessing(null);
         console.error('CSV validation failed', data);
-        if (!Array.isArray(data.errors) || data.errors.length === 0) {
-          try {
-            await dialog.alert({
-              title: 'Validierung fehlgeschlagen',
-              message: 'Die CSV konnte nicht validiert werden. Bitte versuche es später erneut.'
-            });
-          } catch (alertError) {
-            console.error('Failed to display generic validation failure dialog', alertError);
-          }
+        const errorMessage = data.error || data.message || 'Die ZIP-Datei konnte nicht validiert werden. Bitte versuche es später erneut.';
+        try {
+          await dialog.alert({
+            title: 'Validierung fehlgeschlagen',
+            message: errorMessage
+          });
+        } catch (alertError) {
+          console.error('Failed to display generic validation failure dialog', alertError);
         }
       }
     } catch (err) {
@@ -88,7 +91,7 @@ export default function ImportCard() {
       try {
         await dialog.alert({
           title: 'Validierung fehlgeschlagen',
-          message: 'Beim Validieren der CSV ist ein Fehler aufgetreten.'
+          message: 'Beim Validieren des Archivs ist ein Fehler aufgetreten.'
         });
       } catch (alertError) {
         console.error('Failed to display validation error dialog', alertError);
@@ -99,26 +102,19 @@ export default function ImportCard() {
   const handleUpload = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file || !valid) return;
-    setProcessing({ message: 'Import läuft…' });
-    let payload: any = null;
+    setProcessing({ message: 'Archiv wird hochgeladen…' });
     try {
-      const text = await file.text();
-      setProcessing({ message: 'Import wird verarbeitet…' });
+      const payload = await file.arrayBuffer();
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain',
+          'Content-Type': 'application/zip',
           'X-Filename': file.name
         },
-        body: text
+        body: payload
       });
-      try {
-        payload = await res.json();
-      } catch (parseError) {
-        console.error('Failed to parse upload response JSON', parseError);
-      }
-
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok !== false) {
         console.log('CSV uploaded');
         const itemCount = typeof payload?.itemCount === 'number' ? payload.itemCount : undefined;
         const boxCount = typeof payload?.boxCount === 'number' ? payload.boxCount : undefined;
@@ -202,7 +198,7 @@ export default function ImportCard() {
       try {
         await dialog.alert({
           title: 'Upload fehlgeschlagen',
-          message: 'Beim Hochladen der CSV ist ein unerwarteter Fehler aufgetreten.'
+          message: 'Beim Hochladen des Archivs ist ein unerwarteter Fehler aufgetreten.'
         });
       } catch (alertError) {
         console.error('Failed to display upload error dialog', alertError);
@@ -219,17 +215,10 @@ export default function ImportCard() {
           </div>
         </div>
       )}
-      <h2>CSV Import</h2>
+      <h2>ZIP Import</h2>
       <form onSubmit={valid ? handleUpload : handleValidate}>
         <div className='row'>
-          <input
-            key={fileInputKey}
-            type="file"
-            name="file"
-            accept=".csv"
-            onChange={handleFileChange}
-            disabled={isBusy}
-          />
+          <input type="file" name="file" accept=".zip" onChange={handleFileChange} disabled={isBusy} />
         </div>
         <div className='row'>
           {valid === true && <div className="success">Validierung erfolgreich</div>}

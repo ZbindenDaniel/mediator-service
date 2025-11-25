@@ -119,6 +119,8 @@ export async function runExtractionAttempts({
   let lastValidationIssues: unknown = null;
   let success = false;
   let itemContent = '';
+  // TODO(agent): Capture invalid payload snippets for downstream observability and retention.
+  let lastInvalidJsonPayload: { sanitizedPayload: string; thinkContent?: string } | null = null;
 
   let attempt = 1;
   const { itemUUid: _promptHiddenItemId, ...promptFacingTarget } = target;
@@ -281,13 +283,23 @@ export async function runExtractionAttempts({
         loggerInstance: logger,
         context: { itemId, attempt, stage: 'extraction-agent', thinkContent }
       });
+      lastInvalidJsonPayload = null;
     } catch (err) {
+      const sanitizedPayload = typeof (err as { sanitized?: string }).sanitized === 'string'
+        ? (err as { sanitized?: string }).sanitized.trim()
+        : itemContent.trim();
+      const thinkPreview = thinkContent.trim();
+      lastInvalidJsonPayload = {
+        sanitizedPayload,
+        thinkContent: thinkPreview || undefined
+      };
       logger?.warn?.({
         err,
         msg: 'attempt produced invalid JSON after sanitization',
         attempt,
         itemId,
-        sanitizedSnippet: typeof (err as { sanitized?: string }).sanitized === 'string' ? (err as { sanitized?: string }).sanitized?.slice(0, 500) : undefined,
+        sanitizedSnippet: truncateForLog(sanitizedPayload),
+        thinkPreview: truncateForLog(thinkPreview),
         rawSnippet: itemContent.slice(0, 500)
       });
       lastSupervision = 'INVALID_JSON';
@@ -520,12 +532,19 @@ export async function runExtractionAttempts({
       msg: 'agent failed to produce valid data',
       itemId,
       itemContentPreview: sanitizeForLog(itemContent),
-      lastValidationIssues: sanitizedIssues
+      lastValidationIssues: sanitizedIssues,
+      sanitizedInvalidPayload: sanitizeForLog(lastInvalidJsonPayload?.sanitizedPayload ?? itemContent),
+      thinkInvalidPreview: sanitizeForLog(lastInvalidJsonPayload?.thinkContent)
     };
 
     if (lastValidationIssues === 'INVALID_JSON') {
       logger?.error?.({ ...logBase, reason: 'INVALID_JSON' });
-      throw new FlowError('INVALID_JSON', 'Agent failed to return valid JSON after retries', 500);
+      throw new FlowError('INVALID_JSON', 'Agent failed to return valid JSON after retries', 500, {
+        context: {
+          invalidJsonPayload: lastInvalidJsonPayload?.sanitizedPayload?.trim?.() ?? itemContent.trim(),
+          invalidThinkContent: lastInvalidJsonPayload?.thinkContent ?? thinkContent
+        }
+      });
     }
 
     if (Array.isArray(lastValidationIssues)) {
