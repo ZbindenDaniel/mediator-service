@@ -86,8 +86,8 @@ export default function ItemListPage() {
       const uuid = item.ItemUUID.toLowerCase();
       const matchesSearch = normalizedSearch
         ? description.includes(normalizedSearch)
-          || number.includes(normalizedSearch)
-          || uuid.includes(normalizedSearch)
+        || number.includes(normalizedSearch)
+        || uuid.includes(normalizedSearch)
         : true;
       const matchesSubcategory = normalizedSubcategoryFilter
         ? (item.Unterkategorien_A?.toString().toLowerCase() ?? '').includes(normalizedSubcategoryFilter)
@@ -211,90 +211,106 @@ export default function ItemListPage() {
       <h2>Alle Artikel</h2>
       <div className="filter-bar">
         <div className='filter-bar-row filter-bar-row--search'>
-          <label className="search-control">
-            <GoSearch />
-          </label>
-          <input
-            aria-label="Artikel suchen"
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Beschreibung, Nummer oder UUID"
-            type="search"
-            value={searchTerm}
-          />
-          <label className="sort-control">
-            <span>Sortieren nach</span>
-            <select
-              aria-label="Sortierkriterium wählen"
-              onChange={(event) => setSortKey(event.target.value as SortKey)}
-              value={sortKey}
-            >
-              <option value="artikelbeschreibung">Artikel</option>
-              <option value="artikelnummer">Artikelnummer</option>
-              <option value="box">Behälter</option>
-              <option value="uuid">UUID</option>
-              <option value="stock">Bestand</option>
-              <option value="subcategory">Unterkategorie</option>
-            </select>
-          </label>
-          <label className="sort-direction-control">
-            <span>Reihenfolge</span>
-            <select
-              aria-label="Sortierreihenfolge"
-              onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
-              value={sortDirection}
-            >
-              <option value="asc">Aufsteigend</option>
-              <option value="desc">Absteigend</option>
-            </select>
-          </label>
+          <div className='row'>
+            <label className="search-control">
+              <GoSearch />
+            </label>
+            <input
+              aria-label="Artikel suchen"
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Beschreibung, Nummer oder UUID"
+              type="search"
+              value={searchTerm}
+            />
+          </div>
+          <div className='row'>
+
+            <label className="sort-control">
+              <span>Sortieren nach</span>
+              <select
+                aria-label="Sortierkriterium wählen"
+                onChange={(event) => setSortKey(event.target.value as SortKey)}
+                value={sortKey}
+              >
+                <option value="artikelbeschreibung">Artikel</option>
+                <option value="artikelnummer">Artikelnummer</option>
+                <option value="box">Behälter</option>
+                <option value="uuid">UUID</option>
+                <option value="stock">Bestand</option>
+                <option value="subcategory">Unterkategorie</option>
+              </select>
+            </label>
+          </div>
+          <div className='row'>
+
+            <label className="sort-direction-control">
+              <span>Reihenfolge</span>
+              <select
+                aria-label="Sortierreihenfolge"
+                onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
+                value={sortDirection}
+              >
+                <option value="asc">Aufsteigend</option>
+                <option value="desc">Absteigend</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className='filter-bar-row filter-bar-row--filters'>
-          <label className="filter-control">
-            <span>Unterkategorie</span>
-            <input
-              aria-label="Unterkategorie filtern"
-              onChange={(event) => setSubcategoryFilter(event.target.value)}
-              placeholder="Z.B. 101"
-              type="search"
-              value={subcategoryFilter}
-            />
-          </label>
-          <label className="filter-control">
-            <span>Bestand</span>
-            <select
-              aria-label="Bestandsstatus filtern"
-              onChange={(event) => setStockFilter(event.target.value as typeof stockFilter)}
-              value={stockFilter}
-            >
-              <option value="any">Alle</option>
-              <option value="instock">Auf Lager</option>
-              <option value="outofstock">Nicht auf Lager</option>
-            </select>
-          </label>
-          <label className="filter-control filter-control--box">
-            <span>Behälter</span>
-            <div className="filter-control__input">
-              <GoContainer aria-hidden="true" />
+          {/* <div className='row'>
+            <label className="filter-control">
+              <span>Unterkategorie</span>
               <input
-                aria-label="Behälter filtern"
-                onChange={(event) => setBoxFilter(event.target.value)}
-                placeholder="Box-ID oder Standort"
+                aria-label="Unterkategorie filtern"
+                onChange={(event) => setSubcategoryFilter(event.target.value)}
+                placeholder="Z.B. 101"
                 type="search"
-                value={boxFilter}
+                value={subcategoryFilter}
               />
-            </div>
-          </label>
-          <label className="unplaced-filter" htmlFor="unplaced">
-            <span>unplatziert</span>
-            <input
-              checked={showUnplaced}
-              id="unplaced"
-              name='unplaced'
-              onChange={(event) => setShowUnplaced(event.target.checked)}
-              type="checkbox"
-            />
-          </label>
+            </label>
+          </div>
+          <div className='row'>
+            <label className="filter-control">
+              <span>Bestand</span>
+              <select
+                aria-label="Bestandsstatus filtern"
+                onChange={(event) => setStockFilter(event.target.value as typeof stockFilter)}
+                value={stockFilter}
+              >
+                <option value="any">Alle</option>
+                <option value="instock">Auf Lager</option>
+                <option value="outofstock">Nicht auf Lager</option>
+              </select>
+            </label>
+          </div> */}
+          <div className='row'>
+            <label className="filter-control filter-control--box">
+              <span>Behälter</span>
+              <div className="filter-control__input">
+                <GoContainer aria-hidden="true" />
+                <input
+                  aria-label="Behälter filtern"
+                  onChange={(event) => setBoxFilter(event.target.value)}
+                  placeholder="Box-ID oder Standort"
+                  type="search"
+                  value={boxFilter}
+                />
+              </div>
+            </label>
+          </div>
+          <div className='row'>
+            <label className="unplaced-filter" htmlFor="unplaced">
+              <span>unplatziert</span>
+              <input
+                checked={showUnplaced}
+                id="unplaced"
+                name='unplaced'
+                onChange={(event) => setShowUnplaced(event.target.checked)}
+                type="checkbox"
+              />
+            </label>
+          </div>
         </div>
       </div>
       {error ? (

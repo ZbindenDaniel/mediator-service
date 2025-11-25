@@ -1642,27 +1642,28 @@ export default function ItemDetail({ itemId }: Props) {
         {item ? (
           <>
             <div className="card">
-              <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
-              <div className='row'>
+              <div className='top-row'>
                 <button
                   type="button"
-                  className="btn"
+                  className="sml-btn btn"
                   disabled={!neighborIds.previousId || neighborsLoading}
                   onClick={() => handleNeighborNavigation('previous')}
                   aria-label="Vorheriger Artikel"
                 >
-                  ← Vorheriger
+                  ←
                 </button>
                 <button
                   type="button"
-                  className="btn"
+                  className="sml-btn btn"
                   disabled={!neighborIds.nextId || neighborsLoading}
                   onClick={() => handleNeighborNavigation('next')}
                   aria-label="Nächster Artikel"
                 >
-                  Nächster →
+                  →
                 </button>
               </div>
+              
+              <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
               <section className="item-media-section">
                 <h3>Medien</h3>
                 <ItemMediaGallery

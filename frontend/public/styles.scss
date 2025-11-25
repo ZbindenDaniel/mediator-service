@@ -616,6 +616,14 @@ div {
     display: flex;
 }
 
+.sml-btn {
+    height: 50px;
+    width: 50px;
+    display: flex;
+    align-items: center;
+    font-size: xx-large;
+}
+
 .view-heading {
     font-size: 1.2rem;
     margin-bottom: 10px;
@@ -713,6 +721,11 @@ button:focus {
     flex-direction: column;
 }
 
+.top-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
 
 .langtext-editor {
     display: flex;
@@ -1187,10 +1200,10 @@ button:focus {
 
 .sort-control,
 .sort-direction-control,
-.filter-control,
-.unplaced-filter {
+.filter-control {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
 }
 
@@ -1564,7 +1577,8 @@ button:focus {
 .details .details-category__separator {
     color: var(--muted);
 }
-.agentic-status-card__heading{
+
+.agentic-status-card__heading {
     display: flex;
     justify-content: center;
 }

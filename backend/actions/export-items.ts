@@ -9,6 +9,7 @@ import { ItemEinheit, isItemEinheit } from '../../models';
 import { serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
 import { defineHttpAction } from './index';
+import { collectMediaAssets } from './save-item';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
 
@@ -102,6 +103,8 @@ const missingMetadataValueWarnings = new Set<ExportColumn>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
+
+let tempDir: string | null = null;
 
 function filterExistingMediaAssets(assets: string[]): string[] {
   const filtered: string[] = [];
@@ -404,7 +407,6 @@ const action = defineHttpAction({
         'Content-Disposition': `attachment; filename="${archiveName}"`
       });
 
-      let tempDir: string | null = null;
       tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'items-export-'));
       const itemsPath = path.join(tempDir, 'items.csv');
       const boxesPath = path.join(tempDir, 'boxes.csv');

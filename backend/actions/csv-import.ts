@@ -20,6 +20,8 @@ import {
 
 // TODO(agent): Harden ZIP payload validation to reject archives with unexpected executable content.
 
+let tempDir: string | null = null;
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -47,7 +49,6 @@ const action = defineHttpAction({
       for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       const body = Buffer.concat(chunks);
 
-      let tempDir: string | null = null;
       let archivePath: string | null = null;
       try {
         tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'import-archive-'));
