@@ -9,6 +9,8 @@ a small service to map items to the boxes they're stored in and the location the
 
 See the refreshed [project overview](docs/OVERVIEW.md) and [architecture outline](docs/ARCHITECTURE.md) for the complete domain map, guiding principles, and current priorities.
 
+<!-- TODO(agent): Keep dependency notices refreshed whenever `package-lock.json` changes. -->
+
 <!-- TODO(agent): Reconfirm onboarding flow once the Postgres service splits into read/write nodes. -->
 
 ## QR scanning
@@ -22,6 +24,7 @@ POSTed to `/api/qr-scan/log` so the backend can audit activity and correlate pay
 - [Project overview & roadmap](docs/OVERVIEW.md)
 - [Architecture principles](docs/ARCHITECTURE.md)
 - [Shopware integration plan](docs/Shopware\ integration.md)
+- [Third-party licenses and notices](THIRD_PARTY_NOTICES.md)
 
 ## Development notes
 
