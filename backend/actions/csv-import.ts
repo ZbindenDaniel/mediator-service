@@ -15,7 +15,8 @@ import {
   normalizeArchiveFilename,
   normalizeCsvFilenameFromArchive,
   readZipEntry,
-  resolveSafePath
+  resolveSafePath,
+  ZipProcessError
 } from '../utils/csv-utils';
 
 // TODO(agent): Harden ZIP payload validation to reject archives with unexpected executable content.
@@ -36,6 +37,7 @@ const action = defineHttpAction({
     try {
       const archiveName = normalizeArchiveFilename(req.headers['x-filename']);
       const normalizedCsvName = normalizeCsvFilenameFromArchive(req.headers['x-filename']);
+      // TODO(agent): Keep unzip timeout and abort logic configurable for different deployment environments.
       const uploadContext = {
         queuedCsv: null as string | null,
         duplicate: false,
@@ -44,6 +46,9 @@ const action = defineHttpAction({
         mediaFiles: 0,
         message: ''
       };
+
+      const unzipController = new AbortController();
+      const unzipOptions = { signal: unzipController.signal, timeoutMs: 20000 };
 
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -82,18 +87,30 @@ const action = defineHttpAction({
 
         if (/(^|\/)boxes\.csv$/.test(lowerPath)) {
           try {
-            boxesBuffer = await readZipEntry(resolvedArchivePath, entryName);
+            boxesBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
           } catch (bufferError) {
             console.error('[csv-import] Failed to buffer boxes.csv from archive', bufferError);
+            const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            const message = bufferError instanceof ZipProcessError
+              ? bufferError.message
+              : 'Unexpected error buffering boxes.csv from archive.';
+            return sendJson(res, status, { error: message });
           }
           continue;
         }
 
         if (lowerPath.endsWith('.csv') && !itemsBuffer) {
           try {
-            itemsBuffer = await readZipEntry(resolvedArchivePath, entryName);
+            itemsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
           } catch (bufferError) {
             console.error('[csv-import] Failed to buffer items CSV from archive', bufferError);
+            const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            const message = bufferError instanceof ZipProcessError
+              ? bufferError.message
+              : 'Unexpected error buffering CSV from archive.';
+            return sendJson(res, status, { error: message });
           }
           continue;
         }
@@ -107,10 +124,13 @@ const action = defineHttpAction({
           }
           try {
             await fs.promises.mkdir(path.dirname(safeTarget), { recursive: true });
-            await extractZipEntryToPath(resolvedArchivePath, entryName, safeTarget);
+            await extractZipEntryToPath(resolvedArchivePath, entryName, safeTarget, unzipOptions);
             uploadContext.mediaFiles += 1;
           } catch (mediaError) {
             console.error('[csv-import] Failed to persist media asset from archive', { entry: normalizedPath, mediaError });
+            const isClientZipIssue = mediaError instanceof ZipProcessError && ['password', 'timeout'].includes(mediaError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            return sendJson(res, status, { error: mediaError instanceof Error ? mediaError.message : 'Failed to extract media.' });
           }
         }
       }

@@ -11,6 +11,25 @@ export type DuplicateCheck = {
   entry: string;
 };
 
+// TODO(agent): Pull shared unzip timeout configuration into a central utility once more call sites need it.
+
+export type ZipProcessErrorKind = 'timeout' | 'password' | 'spawn' | 'exit';
+
+export class ZipProcessError extends Error {
+  kind: ZipProcessErrorKind;
+
+  constructor(kind: ZipProcessErrorKind, message: string) {
+    super(message);
+    this.name = 'ZipProcessError';
+    this.kind = kind;
+  }
+}
+
+export type ZipProcessOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 export function normalizeCsvFilename(raw: unknown): string {
   const fallback = 'upload.csv';
   const rawValue = typeof raw === 'string'
@@ -77,48 +96,140 @@ export function isSafeArchiveEntry(entry: string): boolean {
   return true;
 }
 
-export async function readZipEntry(zipPath: string, entry: string): Promise<Buffer> {
+export async function readZipEntry(zipPath: string, entry: string, options: ZipProcessOptions = {}): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
     const child = spawn('unzip', ['-p', zipPath, entry]);
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    let settled = false;
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      if (child.exitCode === null && !child.killed) {
+        child.kill('SIGKILL');
+      }
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      reject(error);
+    };
+
+    if (options.timeoutMs && options.timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        console.warn('[csv-utils] unzip timed out while reading entry', { zipPath, entry, timeoutMs: options.timeoutMs });
+        fail(new ZipProcessError('timeout', 'Reading archive entry exceeded the allowed time.'));
+      }, options.timeoutMs);
+    }
+
+    if (options.signal) {
+      const abortHandler = () => {
+        console.warn('[csv-utils] unzip aborted while reading entry', { zipPath, entry });
+        fail(new ZipProcessError('timeout', 'Reading archive entry was aborted.'));
+      };
+      if (options.signal.aborted) {
+        abortHandler();
+      } else {
+        options.signal.addEventListener('abort', abortHandler, { once: true });
+      }
+    }
+
     child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
     child.on('error', (error) => {
       console.error('[csv-utils] Failed to spawn unzip for entry', { zipPath, entry, error });
-      reject(error);
+      fail(new ZipProcessError('spawn', error.message));
     });
     child.on('close', (code) => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (settled) return;
       if (code === 0) {
+        settled = true;
         resolve(Buffer.concat(chunks));
       } else {
-        const err = new Error(`unzip exited with code ${code}`);
+        const err = new ZipProcessError('exit', `unzip exited with code ${code}`);
         console.error('[csv-utils] unzip exit while reading entry', { zipPath, entry, code });
+        settled = true;
         reject(err);
       }
     });
     child.stderr.on('data', (stderr) => {
-      console.warn('[csv-utils] unzip stderr while reading entry', stderr.toString());
+      const stderrText = stderr.toString();
+      console.warn('[csv-utils] unzip stderr while reading entry', { zipPath, entry, stderr: stderrText });
+      if (/password/i.test(stderrText)) {
+        console.warn('[csv-utils] Password prompt detected while reading entry', { zipPath, entry });
+        fail(new ZipProcessError('password', 'Password-protected ZIP archives are not supported.'));
+      }
     });
   });
 }
 
-export async function extractZipEntryToPath(zipPath: string, entry: string, destination: string): Promise<void> {
-  const unzip = spawn('unzip', ['-p', zipPath, entry]);
-  unzip.on('error', (error) => {
-    console.error('[csv-utils] Failed to spawn unzip for extraction', { zipPath, entry, error });
-  });
-  try {
-    await pipeline(unzip.stdout, fs.createWriteStream(destination));
-  } catch (error) {
-    console.error('[csv-utils] Failed to extract ZIP entry', { zipPath, entry, destination, error });
-    throw error;
-  }
+export async function extractZipEntryToPath(
+  zipPath: string,
+  entry: string,
+  destination: string,
+  options: ZipProcessOptions = {}
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    const unzip = spawn('unzip', ['-p', zipPath, entry]);
+    let timeoutHandle: NodeJS.Timeout | null = null;
+    let settled = false;
+
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      if (unzip.exitCode === null && !unzip.killed) {
+        unzip.kill('SIGKILL');
+      }
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      reject(error);
+    };
+
+    if (options.timeoutMs && options.timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        console.warn('[csv-utils] unzip timed out while extracting entry', { zipPath, entry, timeoutMs: options.timeoutMs });
+        fail(new ZipProcessError('timeout', 'Extracting archive entry exceeded the allowed time.'));
+      }, options.timeoutMs);
+    }
+
+    if (options.signal) {
+      const abortHandler = () => {
+        console.warn('[csv-utils] unzip aborted while extracting entry', { zipPath, entry });
+        fail(new ZipProcessError('timeout', 'Extracting archive entry was aborted.'));
+      };
+      if (options.signal.aborted) {
+        abortHandler();
+      } else {
+        options.signal.addEventListener('abort', abortHandler, { once: true });
+      }
+    }
+
+    unzip.on('error', (error) => {
+      console.error('[csv-utils] Failed to spawn unzip for extraction', { zipPath, entry, error });
+      fail(new ZipProcessError('spawn', error.message));
+    });
+
+    pipeline(unzip.stdout, fs.createWriteStream(destination)).catch((error) => {
+      console.error('[csv-utils] Failed to extract ZIP entry', { zipPath, entry, destination, error });
+      fail(error instanceof ZipProcessError ? error : new ZipProcessError('spawn', error.message));
+    });
+
+    unzip.stderr.on('data', (stderr) => {
+      const stderrText = stderr.toString();
+      console.warn('[csv-utils] unzip stderr while extracting entry', { zipPath, entry, stderr: stderrText });
+      if (/password/i.test(stderrText)) {
+        console.warn('[csv-utils] Password prompt detected while extracting entry', { zipPath, entry });
+        fail(new ZipProcessError('password', 'Password-protected ZIP archives are not supported.'));
+      }
+    });
+
     unzip.on('close', (code) => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (settled) return;
       if (code === 0) {
+        settled = true;
         resolve();
       } else {
-        const err = new Error(`unzip exited with code ${code}`);
+        const err = new ZipProcessError('exit', `unzip exited with code ${code}`);
         console.error('[csv-utils] unzip exit while extracting entry', { zipPath, entry, code });
+        settled = true;
         reject(err);
       }
     });
