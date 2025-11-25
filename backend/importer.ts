@@ -185,6 +185,59 @@ function resolveQuantityFieldValue(
   return { value: undefined, source: null };
 }
 
+// TODO(agent): Consolidate Langtext CSV sanitization with downstream formatting helpers once exporters provide valid JSON.
+function sanitizeLangtextCsvValue(
+  value: unknown,
+  context: { rowNumber: number; artikelNummer: string | null; itemUUID: string | null }
+): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  let normalized = '';
+  try {
+    normalized = typeof value === 'string' ? value : String(value);
+  } catch (coercionError) {
+    try {
+      console.warn('[importer] Skipping Langtext value due to coercion failure', {
+        ...context,
+        coercionError,
+      });
+    } catch (loggingError) {
+      console.error('[importer] Failed to log Langtext coercion failure', { ...context, loggingError });
+    }
+    return null;
+  }
+
+  const trimmed = normalized.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (!trimmed.startsWith('{')) {
+    return trimmed;
+  }
+
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch (parseError) {
+    let escaped = trimmed.replace(/(^|[^\\])"/g, '$1\\"');
+    if (escaped.startsWith('{')) {
+      escaped = `\\${escaped}`;
+    }
+    try {
+      console.warn('[importer] Sanitized malformed Langtext JSON; persisting as plain text', {
+        ...context,
+        parseError,
+      });
+    } catch (loggingError) {
+      console.error('[importer] Failed to log Langtext JSON sanitization', { ...context, loggingError });
+    }
+    return escaped;
+  }
+}
+
 function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
   let candidate = '';
   if (typeof value === 'string') {
@@ -804,14 +857,19 @@ export async function ingestCsvFile(
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
       const csvItemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
-      const parsedLangtext = parseLangtext(final['Langtext'] ?? null, {
+      const sanitizedLangtextValue = sanitizeLangtextCsvValue(final['Langtext'], {
+        rowNumber,
+        artikelNummer: artikelNummer || null,
+        itemUUID: csvItemUUID || null,
+      });
+      const parsedLangtext = parseLangtext(sanitizedLangtextValue, {
         logger: console,
         context: 'csv-import:langtext',
         artikelNummer,
         itemUUID: csvItemUUID || null
       });
-      if (parsedLangtext === null && final['Langtext']) {
-        console.warn('[importer] Langtext CSV value rejected; defaulting to empty string', {
+      if (parsedLangtext === null && sanitizedLangtextValue) {
+        console.warn('[importer] Langtext CSV value rejected after sanitization; defaulting to empty string', {
           rowNumber,
           artikelNummer: artikelNummer || null
         });
