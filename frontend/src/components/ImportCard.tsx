@@ -104,25 +104,37 @@ export default function ImportCard() {
     if (!file || !valid) return;
     setProcessing({ message: 'Archiv wird hochgeladen…' });
     try {
-      const payload = await file.arrayBuffer();
+      const uploadPayload = await file.arrayBuffer();
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/zip',
           'X-Filename': file.name
         },
-        body: payload
+        body: uploadPayload
       });
-      const data = await res.json().catch(() => ({}));
+      // TODO(agent): Replace loose typing once the backend upload response is formalized.
+      interface UploadResponse {
+        ok?: boolean;
+        itemCount?: number;
+        boxCount?: number;
+        boxesFileCount?: number;
+        diffs?: any[];
+        errors?: any[];
+        message?: string;
+        error?: string;
+      }
+
+      const data: UploadResponse = await res.json().catch(() => ({} as UploadResponse));
       if (res.ok && data.ok !== false) {
         console.log('CSV uploaded');
-        const itemCount = typeof payload?.itemCount === 'number' ? payload.itemCount : undefined;
-        const boxCount = typeof payload?.boxCount === 'number' ? payload.boxCount : undefined;
-        const diffs = Array.isArray(payload?.diffs) ? payload.diffs : [];
-        const uploadErrors = Array.isArray(payload?.errors) ? payload.errors : [];
+        const itemCount = typeof data?.itemCount === 'number' ? data.itemCount : undefined;
+        const boxCount = typeof data?.boxCount === 'number' ? data.boxCount : undefined;
+        const diffs = Array.isArray(data?.diffs) ? data.diffs : [];
+        const uploadErrors = Array.isArray(data?.errors) ? data.errors : [];
 
-        if (!payload || itemCount === undefined || boxCount === undefined) {
-          console.error('Unexpected upload response payload', payload);
+        if (!data || itemCount === undefined || boxCount === undefined) {
+          console.error('Unexpected upload response payload', data);
         }
 
         const message = (
@@ -170,7 +182,7 @@ export default function ImportCard() {
         setErrors([]);
         setFileInputKey((key) => key + 1);
       } else {
-        console.error('CSV upload HTTP error', res.status, payload);
+        console.error('CSV upload HTTP error', res.status, data);
         setProcessing(null);
         try {
           await dialog.alert({
@@ -178,9 +190,9 @@ export default function ImportCard() {
             message: (
               <div>
                 <p>Die CSV konnte nicht hochgeladen werden. Bitte prüfe die Datei und versuche es erneut.</p>
-                {Array.isArray(payload?.errors) && payload.errors.length > 0 && (
+                {Array.isArray(data?.errors) && data.errors.length > 0 && (
                   <ul>
-                    {payload.errors.map((error: any, index: number) => (
+                    {data.errors.map((error: any, index: number) => (
                       <li key={index}>{JSON.stringify(error)}</li>
                     ))}
                   </ul>
