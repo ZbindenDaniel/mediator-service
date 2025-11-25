@@ -3,6 +3,8 @@ import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED } from '../../models';
 import { getAgenticStatus } from '../agentic';
 
+// TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -36,7 +38,12 @@ const action = defineHttpAction({
           logger: console,
           now: () => new Date()
         });
-        return sendJson(res, 200, { agentic: result.agentic });
+        const payload = {
+          agentic: result.agentic,
+          lastError: result.agentic?.LastError ?? null,
+          lastAttemptAt: result.agentic?.LastAttemptAt ?? null
+        };
+        return sendJson(res, 200, payload);
       } catch (err) {
         console.error('Fetch agentic status failed', err);
         return sendJson(res, 500, { error: (err as Error).message });

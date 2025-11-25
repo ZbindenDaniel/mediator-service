@@ -1497,6 +1497,52 @@ export const updateAgenticRunStatus = db.prepare(
   `
 );
 
+export function persistAgenticRunError(params: {
+  itemId: string;
+  error: string | null;
+  attemptAt?: string | null;
+}): void {
+  const itemUUID = typeof params.itemId === 'string' ? params.itemId.trim() : '';
+  if (!itemUUID) {
+    console.warn('[db] Skipping agentic run error persistence for empty item id');
+    return;
+  }
+
+  const normalizedError =
+    typeof params.error === 'string' && params.error.trim()
+      ? params.error.trim().slice(0, 500)
+      : params.error === null
+        ? null
+        : String(params.error).slice(0, 500);
+  const attemptAt = params.attemptAt ?? new Date().toISOString();
+
+  try {
+    const result = updateAgenticRunErrorStatement.run({
+      ItemUUID: itemUUID,
+      LastError: normalizedError,
+      LastAttemptAt: attemptAt,
+      LastModified: attemptAt
+    });
+    if ((result?.changes ?? 0) === 0) {
+      console.warn('[db] Agentic run error persistence affected zero rows', { itemUUID });
+    }
+  } catch (err) {
+    console.error('[db] Failed to persist agentic run error', { itemUUID, error: err });
+    throw err;
+  }
+}
+
+// TODO(agentic-observability): Capture structured failure codes once agentic retry policies solidify.
+const updateAgenticRunErrorStatement = db.prepare(
+  `
+    UPDATE agentic_runs
+       SET LastError = @LastError,
+           LastAttemptAt = COALESCE(@LastAttemptAt, LastAttemptAt),
+           LastModified = COALESCE(@LastModified, LastModified)
+     WHERE ItemUUID = @ItemUUID
+  `
+);
+
 const selectQueuedAgenticRuns = db.prepare(`
   SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes,
