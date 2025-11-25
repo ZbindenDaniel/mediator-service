@@ -3,6 +3,7 @@ import LoadingPage from './LoadingPage';
 import { useDialog } from './dialog';
 
 // TODO: Extract the blocking overlay + messaging pattern into a shared hook when import flows expand.
+// TODO: Extract the import result summary dialog builder into a shared helper once other importers are added.
 // TODO(agent): Add progress reporting for large ZIP uploads once backpressure hooks are available in fetch.
 
 interface ProcessingState {
@@ -16,6 +17,7 @@ export default function ImportCard() {
   const [valid, setValid] = useState<boolean | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [processing, setProcessing] = useState<ProcessingState | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const isBusy = Boolean(processing);
 
@@ -114,14 +116,77 @@ export default function ImportCard() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok !== false) {
         console.log('CSV uploaded');
-        window.location.reload();
+        const itemCount = typeof payload?.itemCount === 'number' ? payload.itemCount : undefined;
+        const boxCount = typeof payload?.boxCount === 'number' ? payload.boxCount : undefined;
+        const diffs = Array.isArray(payload?.diffs) ? payload.diffs : [];
+        const uploadErrors = Array.isArray(payload?.errors) ? payload.errors : [];
+
+        if (!payload || itemCount === undefined || boxCount === undefined) {
+          console.error('Unexpected upload response payload', payload);
+        }
+
+        const message = (
+          <div>
+            <p>
+              Import abgeschlossen. {itemCount !== undefined && boxCount !== undefined
+                ? `Es wurden ${itemCount} Artikel und ${boxCount} Behälter verarbeitet.`
+                : 'Es liegen keine detaillierten Zahlen vor.'}
+            </p>
+            {diffs.length > 0 && (
+              <div>
+                <p>Änderungen:</p>
+                <ul>
+                  {diffs.map((diff: any, index: number) => (
+                    <li key={index}>{JSON.stringify(diff)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {uploadErrors.length > 0 && (
+              <div>
+                <p>Fehler:</p>
+                <ul>
+                  {uploadErrors.map((error: any, index: number) => (
+                    <li key={index}>{JSON.stringify(error)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+
+        setProcessing(null);
+        try {
+          await dialog.alert({
+            title: 'Import abgeschlossen',
+            message
+          });
+        } catch (alertError) {
+          console.error('Failed to display upload success dialog', alertError);
+        }
+
+        setFile(null);
+        setValid(null);
+        setErrors([]);
+        setFileInputKey((key) => key + 1);
       } else {
-        console.error('CSV upload HTTP error', res.status);
+        console.error('CSV upload HTTP error', res.status, payload);
         setProcessing(null);
         try {
           await dialog.alert({
             title: 'Upload fehlgeschlagen',
-            message: data.message || data.error || 'Das Archiv konnte nicht hochgeladen werden. Bitte prüfe die Datei und versuche es erneut.'
+            message: (
+              <div>
+                <p>Die CSV konnte nicht hochgeladen werden. Bitte prüfe die Datei und versuche es erneut.</p>
+                {Array.isArray(payload?.errors) && payload.errors.length > 0 && (
+                  <ul>
+                    {payload.errors.map((error: any, index: number) => (
+                      <li key={index}>{JSON.stringify(error)}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )
           });
         } catch (alertError) {
           console.error('Failed to display upload failure dialog', alertError);
@@ -138,8 +203,6 @@ export default function ImportCard() {
       } catch (alertError) {
         console.error('Failed to display upload error dialog', alertError);
       }
-    } finally {
-      setProcessing(null);
     }
   }, [dialog, file, valid]);
 
