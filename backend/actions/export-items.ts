@@ -8,7 +8,6 @@ import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
 import { serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
-import { collectMediaAssets } from './save-item';
 import { defineHttpAction } from './index';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
