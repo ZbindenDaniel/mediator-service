@@ -286,7 +286,7 @@ export async function runExtractionAttempts({
       lastInvalidJsonPayload = null;
     } catch (err) {
       const sanitizedPayload = typeof (err as { sanitized?: string }).sanitized === 'string'
-        ? (err as { sanitized?: string }).sanitized.trim()
+        ? (err as { sanitized?: string }).sanitized?.trim() ?? ''
         : itemContent.trim();
       const thinkPreview = thinkContent.trim();
       lastInvalidJsonPayload = {
@@ -542,7 +542,7 @@ export async function runExtractionAttempts({
       throw new FlowError('INVALID_JSON', 'Agent failed to return valid JSON after retries', 500, {
         context: {
           invalidJsonPayload: lastInvalidJsonPayload?.sanitizedPayload?.trim?.() ?? itemContent.trim(),
-          invalidThinkContent: lastInvalidJsonPayload?.thinkContent ?? thinkContent
+          invalidThinkContent: lastInvalidJsonPayload?.thinkContent
         }
       });
     }
