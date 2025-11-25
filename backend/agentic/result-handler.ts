@@ -17,7 +17,7 @@ import {
   type AgenticRequestLog,
   type Item
 } from '../../models';
-import { recordAgenticRequestLogUpdate } from '../agentic';
+import { normalizeAgenticStatusUpdate, recordAgenticRequestLogUpdate } from '../agentic';
 import { resolveAgenticRequestContext } from '../actions/agentic-request-context';
 
 export interface AgenticResultPayload extends Record<string, unknown> {
@@ -371,10 +371,14 @@ export function handleAgenticResult(
         LastAttemptAtIsSet: true
       };
 
-      const updateResult = ctx.updateAgenticRunStatus.run(runUpdate);
+      // TODO(agentic-flag-normalization): Centralize SQLite-safe status payload coercion once
+      // the updateAgenticRunStatus statement accepts native booleans.
+      const normalizedRunUpdate = normalizeAgenticStatusUpdate(runUpdate);
+
+      const updateResult = ctx.updateAgenticRunStatus.run(normalizedRunUpdate);
       if (!updateResult?.changes) {
         logger.warn?.('Agentic run missing on status update, creating record', itemUUID);
-        ctx.upsertAgenticRun.run(runUpdate);
+        ctx.upsertAgenticRun.run(normalizedRunUpdate);
       }
 
       ctx.logEvent({
