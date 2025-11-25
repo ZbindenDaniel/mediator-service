@@ -19,6 +19,11 @@ import {
 } from '../utils/csv-utils';
 
 // TODO(agent): Harden ZIP payload validation to reject archives with unexpected executable content.
+// TODO(agent): Revisit staging and extraction thresholds once upload telemetry is available.
+
+const STAGING_TIMEOUT_MS = 30_000;
+const ENTRY_TIMEOUT_MS = 45_000;
+const MAX_ARCHIVE_BYTES = 75 * 1024 * 1024; // 75MB guardrail to prevent runaway buffering
 
 let tempDir: string | null = null;
 
@@ -45,11 +50,35 @@ const action = defineHttpAction({
         message: ''
       };
 
+      const bufferingStartedAt = Date.now();
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       const body = Buffer.concat(chunks);
+      const bufferingCompletedAt = Date.now();
+      const bufferingDuration = bufferingCompletedAt - bufferingStartedAt;
+      if (bufferingDuration > STAGING_TIMEOUT_MS) {
+        console.warn('[csv-import] Upload buffering exceeded timeout threshold', {
+          bufferingDuration,
+          maxDuration: STAGING_TIMEOUT_MS,
+        });
+        return sendJson(res, 408, { error: 'Upload buffering exceeded time limit.' });
+      }
+
+      if (body.length > MAX_ARCHIVE_BYTES) {
+        console.warn('[csv-import] Upload body rejected for exceeding size limit', {
+          bytesReceived: body.length,
+          maxBytes: MAX_ARCHIVE_BYTES,
+        });
+        return sendJson(res, 413, { error: 'Upload exceeds maximum allowed size.' });
+      }
+
+      console.info('[csv-import] Buffered upload body', {
+        bytesReceived: body.length,
+        bufferingDuration,
+      });
 
       let archivePath: string | null = null;
+      const stagingStartedAt = Date.now();
       try {
         tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'import-archive-'));
         archivePath = path.join(tempDir, archiveName);
@@ -58,12 +87,30 @@ const action = defineHttpAction({
         console.error('[csv-import] Failed to stage ZIP upload for processing', archiveError);
         return sendJson(res, 400, { error: 'Upload must be a ZIP archive containing items.csv and optional media.' });
       }
+      const stagingDuration = Date.now() - stagingStartedAt;
+      if (stagingDuration > STAGING_TIMEOUT_MS) {
+        console.warn('[csv-import] Archive staging exceeded timeout threshold', {
+          stagingDuration,
+          maxDuration: STAGING_TIMEOUT_MS,
+        });
+        return sendJson(res, 408, { error: 'Upload staging exceeded time limit.' });
+      }
+
+      console.info('[csv-import] Staged archive to temp directory', {
+        archivePath,
+        stagingDuration,
+      });
 
       const resolvedArchivePath = archivePath as string;
       const entries = listZipEntries(resolvedArchivePath).filter(isSafeArchiveEntry);
       if (entries.length === 0) {
         return sendJson(res, 400, { error: 'The ZIP archive did not contain any usable entries.' });
       }
+
+      console.info('[csv-import] Enumerated archive entries', {
+        archiveName,
+        entryCount: entries.length,
+      });
 
       const requestUrl = new URL(req.url || '', 'http://localhost');
       const zeroStockParam = requestUrl.searchParams.get('zeroStock');
@@ -73,7 +120,15 @@ const action = defineHttpAction({
       let itemsBuffer: Buffer | null = null;
       let boxesBuffer: Buffer | null = null;
 
+      const extractionStartedAt = Date.now();
       for (const entryName of entries) {
+        if (Date.now() - extractionStartedAt > ENTRY_TIMEOUT_MS) {
+          console.warn('[csv-import] Extraction aborted after exceeding time budget', {
+            maxDuration: ENTRY_TIMEOUT_MS,
+          });
+          return sendJson(res, 408, { error: 'Archive extraction exceeded time limit.' });
+        }
+
         const normalizedPath = entryName.replace(/\\/g, '/');
         if (normalizedPath.endsWith('/')) {
           continue;
@@ -82,7 +137,20 @@ const action = defineHttpAction({
 
         if (/(^|\/)boxes\.csv$/.test(lowerPath)) {
           try {
+            const entryStartedAt = Date.now();
             boxesBuffer = await readZipEntry(resolvedArchivePath, entryName);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] boxes.csv extraction exceeded time limit', {
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: 'boxes.csv extraction exceeded time limit.' });
+            }
+            console.info('[csv-import] Buffered boxes.csv from archive', {
+              bytesBuffered: boxesBuffer?.length ?? 0,
+              entryDuration,
+            });
           } catch (bufferError) {
             console.error('[csv-import] Failed to buffer boxes.csv from archive', bufferError);
           }
@@ -91,7 +159,20 @@ const action = defineHttpAction({
 
         if (lowerPath.endsWith('.csv') && !itemsBuffer) {
           try {
+            const entryStartedAt = Date.now();
             itemsBuffer = await readZipEntry(resolvedArchivePath, entryName);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] items.csv extraction exceeded time limit', {
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: 'items.csv extraction exceeded time limit.' });
+            }
+            console.info('[csv-import] Buffered items CSV from archive', {
+              bytesBuffered: itemsBuffer?.length ?? 0,
+              entryDuration,
+            });
           } catch (bufferError) {
             console.error('[csv-import] Failed to buffer items CSV from archive', bufferError);
           }
@@ -106,14 +187,36 @@ const action = defineHttpAction({
             continue;
           }
           try {
+            const entryStartedAt = Date.now();
             await fs.promises.mkdir(path.dirname(safeTarget), { recursive: true });
             await extractZipEntryToPath(resolvedArchivePath, entryName, safeTarget);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] Media extraction exceeded time limit', {
+                entry: normalizedPath,
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: `Media extraction exceeded time limit for ${normalizedPath}.` });
+            }
             uploadContext.mediaFiles += 1;
+            console.info('[csv-import] Extracted media asset', {
+              entry: normalizedPath,
+              entryDuration,
+              mediaCount: uploadContext.mediaFiles,
+            });
           } catch (mediaError) {
             console.error('[csv-import] Failed to persist media asset from archive', { entry: normalizedPath, mediaError });
           }
         }
       }
+
+      console.info('[csv-import] Completed archive extraction pass', {
+        itemsBuffered: Boolean(itemsBuffer),
+        boxesBuffered: Boolean(boxesBuffer),
+        mediaFiles: uploadContext.mediaFiles,
+        extractionDuration: Date.now() - extractionStartedAt,
+      });
 
       if (boxesBuffer) {
         try {
