@@ -1483,6 +1483,8 @@ export const getAgenticRun = db.prepare(`
   FROM agentic_runs
   WHERE ItemUUID = ?
 `);
+// TODO(agentic-retries): Align status update flags with queue helper defaults when additional
+// retry metadata fields are introduced.
 export const updateAgenticRunStatus = db.prepare(
   `
     UPDATE agentic_runs
@@ -1490,9 +1492,19 @@ export const updateAgenticRunStatus = db.prepare(
            SearchQuery=COALESCE(@SearchQuery, SearchQuery),
            LastModified=@LastModified,
            ReviewState=@ReviewState,
-           ReviewedBy=@ReviewedBy,
-           LastReviewDecision=COALESCE(@LastReviewDecision, LastReviewDecision),
-           LastReviewNotes=COALESCE(@LastReviewNotes, LastReviewNotes)
+           ReviewedBy=CASE WHEN @ReviewedByIsSet THEN @ReviewedBy ELSE ReviewedBy END,
+           LastReviewDecision=CASE
+             WHEN @LastReviewDecisionIsSet THEN COALESCE(@LastReviewDecision, LastReviewDecision)
+             ELSE LastReviewDecision
+           END,
+           LastReviewNotes=CASE
+             WHEN @LastReviewNotesIsSet THEN COALESCE(@LastReviewNotes, LastReviewNotes)
+             ELSE LastReviewNotes
+           END,
+           RetryCount=CASE WHEN @RetryCountIsSet THEN @RetryCount ELSE RetryCount END,
+           NextRetryAt=CASE WHEN @NextRetryAtIsSet THEN @NextRetryAt ELSE NextRetryAt END,
+           LastError=CASE WHEN @LastErrorIsSet THEN @LastError ELSE LastError END,
+           LastAttemptAt=CASE WHEN @LastAttemptAtIsSet THEN @LastAttemptAt ELSE LastAttemptAt END
      WHERE ItemUUID=@ItemUUID
   `
 );
