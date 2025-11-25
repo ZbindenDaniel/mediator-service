@@ -71,6 +71,27 @@ const REQUEST_STATUS_FAILED = 'FAILED';
 const REQUEST_STATUS_DECLINED = 'DECLINED';
 const REQUEST_STATUS_CANCELLED = 'CANCELLED';
 
+// TODO(agentic-flag-normalization): Fold boolean-to-integer coercion into the shared DB layer
+// once SQLite bindings accept native booleans in our migration plan.
+type AgenticRunStatusFlag =
+  | 'ReviewedByIsSet'
+  | 'LastReviewDecisionIsSet'
+  | 'LastReviewNotesIsSet'
+  | 'RetryCountIsSet'
+  | 'NextRetryAtIsSet'
+  | 'LastErrorIsSet'
+  | 'LastAttemptAtIsSet';
+
+const AGENTIC_STATUS_UPDATE_FLAGS: AgenticRunStatusFlag[] = [
+  'ReviewedByIsSet',
+  'LastReviewDecisionIsSet',
+  'LastReviewNotesIsSet',
+  'RetryCountIsSet',
+  'NextRetryAtIsSet',
+  'LastErrorIsSet',
+  'LastAttemptAtIsSet'
+];
+
 const SELECT_STALE_AGENTIC_RUNS_SQL = `
   SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
@@ -118,6 +139,25 @@ function persistRequestPayloadSnapshot(
       error: toErrorMessage(err)
     });
   }
+}
+
+export function normalizeAgenticStatusUpdate(update: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = { ...update };
+
+  for (const flag of AGENTIC_STATUS_UPDATE_FLAGS) {
+    if (Object.prototype.hasOwnProperty.call(normalized, flag)) {
+      const value = normalized[flag];
+      if (typeof value === 'boolean') {
+        normalized[flag] = value ? 1 : 0;
+      } else if (typeof value === 'number' || typeof value === 'bigint') {
+        normalized[flag] = Number(value);
+      } else {
+        normalized[flag] = value ?? 0;
+      }
+    }
+  }
+
+  return normalized;
 }
 
 function recordRequestLogStart(
@@ -381,27 +421,29 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     });
 
     try {
-      const updateResult = deps.updateAgenticRunStatus.run({
-        ItemUUID: payload.itemId,
-        Status: AGENTIC_RUN_STATUS_RUNNING,
-        SearchQuery: payload.searchQuery,
-        LastModified: nowIso,
-        ReviewState: 'not_required',
-        ReviewedBy: payload.review?.reviewedBy ?? existingRun?.ReviewedBy ?? null,
-        ReviewedByIsSet: true,
-        LastReviewDecision: payload.review?.decision ?? null,
-        LastReviewDecisionIsSet: true,
-        LastReviewNotes: payload.review?.notes ?? null,
-        LastReviewNotesIsSet: true,
-        RetryCount: nextRetryCount,
-        RetryCountIsSet: true,
-        NextRetryAt: null,
-        NextRetryAtIsSet: true,
-        LastError: null,
-        LastErrorIsSet: true,
-        LastAttemptAt: attemptTimestamp,
-        LastAttemptAtIsSet: true
-      });
+      const updateResult = deps.updateAgenticRunStatus.run(
+        normalizeAgenticStatusUpdate({
+          ItemUUID: payload.itemId,
+          Status: AGENTIC_RUN_STATUS_RUNNING,
+          SearchQuery: payload.searchQuery,
+          LastModified: nowIso,
+          ReviewState: 'not_required',
+          ReviewedBy: payload.review?.reviewedBy ?? existingRun?.ReviewedBy ?? null,
+          ReviewedByIsSet: true,
+          LastReviewDecision: payload.review?.decision ?? null,
+          LastReviewDecisionIsSet: true,
+          LastReviewNotes: payload.review?.notes ?? null,
+          LastReviewNotesIsSet: true,
+          RetryCount: nextRetryCount,
+          RetryCountIsSet: true,
+          NextRetryAt: null,
+          NextRetryAtIsSet: true,
+          LastError: null,
+          LastErrorIsSet: true,
+          LastAttemptAt: attemptTimestamp,
+          LastAttemptAtIsSet: true
+        })
+      );
 
       if (!updateResult?.changes) {
         logger.warn?.('[agentic-service] Agentic run mark-running updated zero rows', {
@@ -469,27 +511,29 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         });
 
         try {
-          const updateResult = deps.updateAgenticRunStatus.run({
-            ItemUUID: payload.itemId,
-            Status: AGENTIC_RUN_STATUS_CANCELLED,
-            SearchQuery: searchQuery,
-            LastModified: cancelTimestamp,
-            ReviewState: 'not_required',
-            ReviewedBy: null,
-            ReviewedByIsSet: true,
-            LastReviewDecision: lastDecision,
-            LastReviewDecisionIsSet: true,
-            LastReviewNotes: lastNotes,
-            LastReviewNotesIsSet: true,
-            RetryCount: retryCount,
-            RetryCountIsSet: true,
-            NextRetryAt: null,
-            NextRetryAtIsSet: true,
-            LastError: lastError,
-            LastErrorIsSet: true,
-            LastAttemptAt: lastAttemptAt,
-            LastAttemptAtIsSet: true
-          });
+          const updateResult = deps.updateAgenticRunStatus.run(
+            normalizeAgenticStatusUpdate({
+              ItemUUID: payload.itemId,
+              Status: AGENTIC_RUN_STATUS_CANCELLED,
+              SearchQuery: searchQuery,
+              LastModified: cancelTimestamp,
+              ReviewState: 'not_required',
+              ReviewedBy: null,
+              ReviewedByIsSet: true,
+              LastReviewDecision: lastDecision,
+              LastReviewDecisionIsSet: true,
+              LastReviewNotes: lastNotes,
+              LastReviewNotesIsSet: true,
+              RetryCount: retryCount,
+              RetryCountIsSet: true,
+              NextRetryAt: null,
+              NextRetryAtIsSet: true,
+              LastError: lastError,
+              LastErrorIsSet: true,
+              LastAttemptAt: lastAttemptAt,
+              LastAttemptAtIsSet: true
+            })
+          );
 
           if (!updateResult?.changes) {
             logger.warn?.('[agentic-service] Auto-cancel updated zero rows after failure', {
@@ -711,27 +755,29 @@ export async function cancelAgenticRun(
       LastAttemptAt: lastAttemptAt
     });
 
-    const updateResult = deps.updateAgenticRunStatus.run({
-      ItemUUID: itemId,
-      Status: AGENTIC_RUN_STATUS_CANCELLED,
-      SearchQuery: existing.SearchQuery ?? null,
-      LastModified: nowIso,
-      ReviewState: 'not_required',
-      ReviewedBy: null,
-      ReviewedByIsSet: true,
-      LastReviewDecision: existing.LastReviewDecision ?? null,
-      LastReviewDecisionIsSet: true,
-      LastReviewNotes: existing.LastReviewNotes ?? null,
-      LastReviewNotesIsSet: true,
-      RetryCount: retryCount,
-      RetryCountIsSet: true,
-      NextRetryAt: null,
-      NextRetryAtIsSet: true,
-      LastError: lastError,
-      LastErrorIsSet: true,
-      LastAttemptAt: lastAttemptAt,
-      LastAttemptAtIsSet: true
-    });
+    const updateResult = deps.updateAgenticRunStatus.run(
+      normalizeAgenticStatusUpdate({
+        ItemUUID: itemId,
+        Status: AGENTIC_RUN_STATUS_CANCELLED,
+        SearchQuery: existing.SearchQuery ?? null,
+        LastModified: nowIso,
+        ReviewState: 'not_required',
+        ReviewedBy: null,
+        ReviewedByIsSet: true,
+        LastReviewDecision: existing.LastReviewDecision ?? null,
+        LastReviewDecisionIsSet: true,
+        LastReviewNotes: existing.LastReviewNotes ?? null,
+        LastReviewNotesIsSet: true,
+        RetryCount: retryCount,
+        RetryCountIsSet: true,
+        NextRetryAt: null,
+        NextRetryAtIsSet: true,
+        LastError: lastError,
+        LastErrorIsSet: true,
+        LastAttemptAt: lastAttemptAt,
+        LastAttemptAtIsSet: true
+      })
+    );
     if (!updateResult?.changes) {
       throw new Error('Failed to cancel agentic run');
     }
@@ -795,27 +841,29 @@ export async function restartAgenticRun(
   recordRequestLogStart(request, searchQuery, logger);
   const txn = deps.db.transaction(() => {
     if (existing) {
-      const updateResult = deps.updateAgenticRunStatus.run({
-        ItemUUID: itemId,
-        Status: AGENTIC_RUN_STATUS_QUEUED,
-        SearchQuery: searchQuery,
-        LastModified: nowIso,
-        ReviewState: 'not_required',
-        ReviewedBy: null,
-        ReviewedByIsSet: true,
-        LastReviewDecision: review?.decision ?? null,
-        LastReviewDecisionIsSet: true,
-        LastReviewNotes: review?.notes ?? null,
-        LastReviewNotesIsSet: true,
-        RetryCount: 0,
-        RetryCountIsSet: true,
-        NextRetryAt: null,
-        NextRetryAtIsSet: true,
-        LastError: null,
-        LastErrorIsSet: true,
-        LastAttemptAt: null,
-        LastAttemptAtIsSet: true
-      });
+      const updateResult = deps.updateAgenticRunStatus.run(
+        normalizeAgenticStatusUpdate({
+          ItemUUID: itemId,
+          Status: AGENTIC_RUN_STATUS_QUEUED,
+          SearchQuery: searchQuery,
+          LastModified: nowIso,
+          ReviewState: 'not_required',
+          ReviewedBy: null,
+          ReviewedByIsSet: true,
+          LastReviewDecision: review?.decision ?? null,
+          LastReviewDecisionIsSet: true,
+          LastReviewNotes: review?.notes ?? null,
+          LastReviewNotesIsSet: true,
+          RetryCount: 0,
+          RetryCountIsSet: true,
+          NextRetryAt: null,
+          NextRetryAtIsSet: true,
+          LastError: null,
+          LastErrorIsSet: true,
+          LastAttemptAt: null,
+          LastAttemptAtIsSet: true
+        })
+      );
       if (!updateResult?.changes) {
         throw new Error('Failed to reset agentic run');
       }
