@@ -13,6 +13,8 @@ export interface LangtextHelperContext {
 
 const LOG_NAMESPACE = '[langtext]';
 
+// TODO(agent): Expand malformed Langtext JSON detection to cover nested structures.
+
 function resolveLogger(logger?: LangtextLogger): LangtextLogger {
   return logger ?? console;
 }
@@ -47,6 +49,17 @@ function escapeHtml(value: string): string {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasSuspiciousQuotePlacement(raw: string): boolean {
+  const withoutEscapedQuotes = raw.replace(/\\"/g, '');
+  return /:\s*"[^"\n]*"[^,}\s]/.test(withoutEscapedQuotes);
+}
+
+function normalizeMalformedJsonText(raw: string): string {
+  const trimmed = raw.trim();
+  const withoutBraces = trimmed.replace(/^\{\s*/, '').replace(/\s*\}$/, '').trim();
+  return withoutBraces || trimmed;
 }
 
 function sanitizePayload(
@@ -113,6 +126,16 @@ export function parseLangtext(
     }
 
     if (trimmed.startsWith('{')) {
+      if (hasSuspiciousQuotePlacement(trimmed)) {
+        const fallbackText = normalizeMalformedJsonText(trimmed);
+        log(logger, 'warn', 'Detected malformed Langtext JSON-like payload; treating as text', {
+          ...context,
+          value: fallbackText,
+          reason: 'suspicious_quote_placement'
+        });
+        return fallbackText;
+      }
+
       try {
         const parsed = JSON.parse(value);
         if (isPlainObject(parsed)) {
@@ -131,12 +154,13 @@ export function parseLangtext(
         });
         return value;
       } catch (err) {
+        const fallbackText = normalizeMalformedJsonText(trimmed);
         log(logger, 'warn', 'Failed to parse Langtext JSON payload', {
           ...context,
           error: err,
-          value
+          value: fallbackText
         });
-        return value;
+        return fallbackText;
       }
     }
 
