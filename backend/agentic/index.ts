@@ -28,6 +28,7 @@ import {
   type AgenticRunQueueUpdate,
   type LogEventPayload
 } from '../db';
+import { locateTranscript } from './flow/transcript';
 
 export interface AgenticServiceLogger {
   info?: Console['info'];
@@ -316,6 +317,27 @@ function normalizeReviewMetadata(
   };
 }
 
+function attachTranscriptReference(
+  agenticRun: AgenticRun | null,
+  itemId: string,
+  logger: AgenticServiceLogger
+): AgenticRun | null {
+  if (!agenticRun) {
+    return null;
+  }
+
+  try {
+    const transcript = locateTranscript(itemId, logger);
+    return { ...agenticRun, TranscriptUrl: transcript?.publicUrl ?? null };
+  } catch (err) {
+    logger.warn?.('[agentic-service] Failed to attach transcript reference', {
+      itemId,
+      error: err instanceof Error ? err.message : err
+    });
+    return { ...agenticRun, TranscriptUrl: null };
+  }
+}
+
 function fetchAgenticRun(
   itemId: string,
   deps: AgenticServiceDependencies,
@@ -323,7 +345,7 @@ function fetchAgenticRun(
 ): AgenticRun | null {
   try {
     const result = deps.getAgenticRun.get(itemId) as AgenticRun | undefined;
-    return result ?? null;
+    return attachTranscriptReference(result ?? null, itemId, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to load agentic run', {
       itemId,

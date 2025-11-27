@@ -1052,6 +1052,12 @@ export default function ItemDetail({ itemId }: Props) {
   if (agentic?.LastError) {
     agenticRows.push(['Letzter Fehler', agentic.LastError]);
   }
+  if (agentic?.TranscriptUrl) {
+    agenticRows.push([
+      'Agenten-Transkript',
+      <a href={agentic.TranscriptUrl} target="_blank" rel="noreferrer">Protokoll öffnen</a>
+    ]);
+  }
   if (agentic?.ReviewState) {
     const reviewStateNormalized = agentic.ReviewState.toLowerCase();
     let reviewLabel = 'Nicht erforderlich';
