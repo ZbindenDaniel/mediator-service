@@ -66,6 +66,8 @@ type NormalizedRequestContext = {
   notification: AgenticRequestContext['notification'];
 };
 
+type NormalizedReviewMetadata = AgenticRunReviewMetadata & { state: string | null };
+
 const REQUEST_STATUS_SUCCESS = 'SUCCESS';
 const REQUEST_STATUS_FAILED = 'FAILED';
 const REQUEST_STATUS_DECLINED = 'DECLINED';
@@ -269,13 +271,20 @@ function applyQueueUpdate(
   }
 }
 
+// TODO(agentic-review-state): Align review state semantics with upstream contract once schema is formalized.
 function normalizeReviewMetadata(
   review: AgenticRunReviewMetadata | null | undefined,
-  fallback: AgenticRun | null
-): AgenticRunReviewMetadata | null {
+  fallback: AgenticRun | null,
+  logger: AgenticServiceLogger
+): NormalizedReviewMetadata | null {
   if (!review && !fallback) {
     return null;
   }
+
+  const rawState =
+    review && typeof (review as { state?: unknown }).state === 'string'
+      ? ((review as { state?: string | null }).state ?? '').trim()
+      : null;
 
   const base = review ?? {
     decision: fallback?.LastReviewDecision ?? null,
@@ -286,11 +295,24 @@ function normalizeReviewMetadata(
   const decision = base.decision && base.decision.trim() ? base.decision.trim().toLowerCase() : null;
   const notes = base.notes && base.notes.trim() ? base.notes.trim() : null;
   const reviewedBy = base.reviewedBy && base.reviewedBy.trim() ? base.reviewedBy.trim() : null;
+  const fallbackState = fallback?.ReviewState && fallback.ReviewState.trim() ? fallback.ReviewState.trim() : null;
+  const state = rawState || fallbackState || null;
+
+  logger.info?.('[agentic-service] Normalized review metadata', {
+    provided: Boolean(review),
+    normalizedDecision: decision,
+    normalizedNotesPresent: Boolean(notes),
+    normalizedReviewedBy: reviewedBy,
+    normalizedState: state,
+    fallbackState,
+    fallbackReviewedBy: fallback?.ReviewedBy ?? null
+  });
 
   return {
     decision,
     notes,
-    reviewedBy
+    reviewedBy,
+    state
   };
 }
 
@@ -317,7 +339,7 @@ function persistQueuedRun(
     searchQuery: string;
     actor: string | null;
     context: string | null;
-    review: AgenticRunReviewMetadata | null;
+    review: NormalizedReviewMetadata | null;
     created: boolean;
   },
   deps: AgenticServiceDependencies,
@@ -326,6 +348,8 @@ function persistQueuedRun(
   const now = resolveNow(deps).toISOString();
   const reviewDecision = payload.review?.decision ?? null;
   const reviewNotes = payload.review?.notes ?? null;
+  const reviewState = payload.review?.state ?? 'not_required';
+  const reviewedBy = payload.review?.reviewedBy ?? null;
 
   try {
     deps.upsertAgenticRun.run({
@@ -333,8 +357,8 @@ function persistQueuedRun(
       SearchQuery: payload.searchQuery,
       Status: AGENTIC_RUN_STATUS_QUEUED,
       LastModified: now,
-      ReviewState: 'not_required',
-      ReviewedBy: null,
+      ReviewState: reviewState,
+      ReviewedBy: reviewedBy,
       LastReviewDecision: reviewDecision,
       LastReviewNotes: reviewNotes
     });
@@ -674,7 +698,7 @@ export async function startAgenticRun(
     return { agentic: existing, queued: false, created: !existing, reason: 'missing-search-query' };
   }
 
-  const review = normalizeReviewMetadata(input.review ?? null, existing);
+  const review = normalizeReviewMetadata(input.review ?? null, existing, logger);
   try {
     recordRequestLogStart(request, searchQuery, logger);
     const agentic = persistQueuedRun(
@@ -834,7 +858,7 @@ export async function restartAgenticRun(
     return { agentic: existing, queued: false, created: !existing, reason: 'missing-search-query' };
   }
 
-  const review = normalizeReviewMetadata(input.review ?? null, existing);
+  const review = normalizeReviewMetadata(input.review ?? null, existing, logger);
   const nowIso = resolveNow(deps).toISOString();
   const actor = input.actor?.trim() || null;
   const context = input.context?.trim() || null;
@@ -847,8 +871,8 @@ export async function restartAgenticRun(
           Status: AGENTIC_RUN_STATUS_QUEUED,
           SearchQuery: searchQuery,
           LastModified: nowIso,
-          ReviewState: 'not_required',
-          ReviewedBy: null,
+          ReviewState: review?.state ?? existing?.ReviewState ?? 'not_required',
+          ReviewedBy: review?.reviewedBy ?? existing?.ReviewedBy ?? null,
           ReviewedByIsSet: true,
           LastReviewDecision: review?.decision ?? null,
           LastReviewDecisionIsSet: true,
@@ -873,8 +897,8 @@ export async function restartAgenticRun(
         SearchQuery: searchQuery,
         Status: AGENTIC_RUN_STATUS_QUEUED,
         LastModified: nowIso,
-        ReviewState: 'not_required',
-        ReviewedBy: null,
+        ReviewState: review?.state ?? existing?.ReviewState ?? 'not_required',
+        ReviewedBy: review?.reviewedBy ?? existing?.ReviewedBy ?? null,
         LastReviewDecision: review?.decision ?? null,
         LastReviewNotes: review?.notes ?? null
       });
