@@ -7,6 +7,7 @@ import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
 import { AgentOutputSchema } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
 import type { SearchInvoker } from './item-flow-search';
+import { appendTranscriptSection, type AgentTranscriptWriter } from './transcript';
 
 export interface ChatModel {
   invoke(messages: Array<{ role: string; content: unknown }>): Promise<{ content: unknown }>;
@@ -38,6 +39,7 @@ export interface RunExtractionOptions {
   target: AgenticTarget;
   reviewNotes?: string | null;
   skipSearch?: boolean;
+  transcriptWriter?: AgentTranscriptWriter | null;
 }
 
 export interface ExtractionResult {
@@ -111,7 +113,8 @@ export async function runExtractionAttempts({
   searchInvoker,
   target,
   reviewNotes,
-  skipSearch
+  skipSearch,
+  transcriptWriter
 }: RunExtractionOptions): Promise<ExtractionResult> {
   let lastRaw = '';
   let lastValidated: { success: true; data: AgenticOutput } | null = null;
@@ -243,12 +246,13 @@ export async function runExtractionAttempts({
       });
     }
 
+    const extractionMessages = [
+      { role: 'system', content: `${extractPrompt}\nTargetformat:\n${targetFormat}` },
+      { role: 'user', content: userContent }
+    ];
     let extractRes;
     try {
-      extractRes = await llm.invoke([
-        { role: 'system', content: `${extractPrompt}\nTargetformat:\n${targetFormat}` },
-        { role: 'user', content: userContent }
-      ]);
+      extractRes = await llm.invoke(extractionMessages);
     } catch (err) {
       logger?.error?.({ err, msg: 'extraction llm invocation failed', attempt, itemId });
       throw err;
@@ -259,6 +263,15 @@ export async function runExtractionAttempts({
       logger
     });
     lastRaw = raw;
+
+    await appendTranscriptSection(
+      transcriptWriter,
+      `${attempt}. extraction attempt`,
+      extractionMessages,
+      raw,
+      logger,
+      itemId
+    );
 
     let thinkContent = '';
     itemContent = raw;
@@ -418,7 +431,8 @@ export async function runExtractionAttempts({
         categorizerPrompt,
         candidate: validated.data,
         reviewNotes: sanitizedReviewerNotes,
-        skipSearch: searchSkipped
+        skipSearch: searchSkipped,
+        transcriptWriter
       });
 
       if (categoryPatch && Object.keys(categoryPatch).length > 0) {
@@ -446,12 +460,20 @@ export async function runExtractionAttempts({
     }
 
     logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
+    let supervisorUserContent = '';
+    try {
+      supervisorUserContent = JSON.stringify(enrichedValidated.data);
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to serialize supervisor payload', attempt, itemId });
+      supervisorUserContent = String(enrichedValidated.data);
+    }
+    const supervisorMessages = [
+      { role: 'system', content: supervisorPrompt },
+      { role: 'user', content: supervisorUserContent }
+    ];
     let supRes;
     try {
-      supRes = await llm.invoke([
-        { role: 'system', content: supervisorPrompt },
-        { role: 'user', content: JSON.stringify(enrichedValidated.data) }
-      ]);
+      supRes = await llm.invoke(supervisorMessages);
     } catch (err) {
       logger?.error?.({ err, msg: 'supervisor llm invocation failed', attempt, itemId });
       throw err;
@@ -460,6 +482,8 @@ export async function runExtractionAttempts({
       context: 'itemFlow.supervisor',
       logger
     }).trim();
+
+    await appendTranscriptSection(transcriptWriter, 'supervisor', supervisorMessages, supervision, logger, itemId);
     // TODO(agent): Broaden supervisor status parsing once additional workflow states are introduced.
     let normalizedSupervision = supervision;
     if ((normalizedSupervision.startsWith('"') && normalizedSupervision.endsWith('"'))

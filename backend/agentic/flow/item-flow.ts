@@ -18,6 +18,7 @@ import { searchShopwareRaw, isShopwareConfigured, type ShopwareSearchResult } fr
 import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
+import { createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
 
 export interface ItemFlowLogger extends ExtractionLogger {
   info?: Console['info'];
@@ -122,6 +123,13 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     const context = prepareItemContext(input, logger);
     const { itemId, target, searchTerm, checkCancellation } = context;
     resolvedItemId = itemId;
+
+    let transcriptWriter: AgentTranscriptWriter | null = null;
+    try {
+      transcriptWriter = await createTranscriptWriter(itemId, logger);
+    } catch (err) {
+      logger.warn?.({ err, msg: 'failed to initialize transcript writer', itemId });
+    }
 
     const rateLimiter = createRateLimiter({
       delayMs: deps.searchRateLimitDelayMs ?? DEFAULT_DELAY_MS,
@@ -284,7 +292,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       searchInvoker,
       target,
       reviewNotes: reviewerNotes,
-      skipSearch
+      skipSearch,
+      transcriptWriter
     });
 
     checkCancellation();

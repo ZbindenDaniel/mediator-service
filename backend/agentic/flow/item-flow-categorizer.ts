@@ -6,6 +6,7 @@ import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
 import type { ChatModel, ExtractionLogger } from './item-flow-extraction';
 import type { AgenticOutput } from './item-flow-schemas';
+import { appendTranscriptSection, type AgentTranscriptWriter } from './transcript';
 
 // TODO(agent): Monitor categorizer drift once evaluation datasets are curated.
 const CATEGORY_REFERENCE_PATH = path.resolve(__dirname, '../prompts/docs/data_struct.md');
@@ -93,6 +94,7 @@ export interface RunCategorizerStageOptions {
   candidate: AgenticOutput;
   reviewNotes?: string | null;
   skipSearch?: boolean;
+  transcriptWriter?: AgentTranscriptWriter | null;
 }
 
 export async function runCategorizerStage({
@@ -102,7 +104,8 @@ export async function runCategorizerStage({
   categorizerPrompt,
   candidate,
   reviewNotes,
-  skipSearch
+  skipSearch,
+  transcriptWriter
 }: RunCategorizerStageOptions): Promise<Partial<AgenticOutput>> {
   logger?.debug?.({ msg: 'invoking categorizer agent', itemId });
 
@@ -148,14 +151,16 @@ export async function runCategorizerStage({
     }
   }
   let categorizeRes;
+  let categorizerMessages: Array<{ role: string; content: string }> = [];
   try {
-    categorizeRes = await llm.invoke([
+    categorizerMessages = [
       {
         role: 'system',
         content: `${categorizerPrompt}\n\nKategorie-Referenz:\n${taxonomyReference}`
       },
       { role: 'user', content: userPayload }
-    ]);
+    ];
+    categorizeRes = await llm.invoke(categorizerMessages);
   } catch (err) {
     logger?.error?.({ err, msg: 'categorizer llm invocation failed', itemId });
     throw new FlowError('CATEGORIZER_INVOKE_FAILED', 'Categorizer stage failed to invoke model', 502, { cause: err });
@@ -165,6 +170,8 @@ export async function runCategorizerStage({
     context: 'itemFlow.categorizer',
     logger
   });
+
+  await appendTranscriptSection(transcriptWriter, 'categorizer', categorizerMessages, raw, logger, itemId);
 
   let parsed: unknown;
   try {

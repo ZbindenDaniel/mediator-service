@@ -12,5 +12,6 @@ export interface AgenticRun {
   NextRetryAt: string | null;
   LastError: string | null;
   LastAttemptAt: string | null;
+  TranscriptUrl?: string | null;
 }
 
