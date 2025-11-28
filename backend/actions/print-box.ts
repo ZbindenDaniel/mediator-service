@@ -3,10 +3,11 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { Box, Item } from '../../models';
-import type { BoxLabelPayload } from '../labelpdf';
+import type { BoxLabelPayload, LabelTemplate } from '../labelpdf';
 import type { PrintPdfResult } from '../print';
 
 // TODO(agent): Align box print payloads with size-specific label templates.
+// TODO(agent): Promote template selection to UI once multiple label sizes ship.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -21,6 +22,22 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', (err) => reject(err));
   });
+}
+
+function resolveTemplateFromQuery(req: IncomingMessage): LabelTemplate | undefined {
+  try {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const raw = url.searchParams.get('template');
+    if (raw === '23x23' || raw === '62x100') {
+      return raw;
+    }
+    if (raw) {
+      console.warn('Unexpected label template requested for box print', raw);
+    }
+  } catch (err) {
+    console.error('Failed to parse label template from box print query', err);
+  }
+  return undefined;
 }
 
 const action = defineHttpAction({
@@ -71,10 +88,11 @@ const action = defineHttpAction({
         return sum;
       }, 0);
 
+      const template = resolveTemplateFromQuery(req) || '23x23';
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,
-        template: '23x23',
+        template,
         labelText: box.BoxID,
         location: box.Location?.trim() || null,
         standortLabel: box.StandortLabel?.trim() || null,

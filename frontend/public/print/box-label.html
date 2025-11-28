@@ -27,17 +27,20 @@
   </head>
   <body>
     <div class="notice">
-      <strong>Hinweis:</strong> Die Behälter-Vorlage wurde durch die neue 23x23-Größenschablone ersetzt.
+      <strong>Hinweis:</strong> Die Behälter-Vorlage wurde durch größenbasierte Schablonen ersetzt.
       Falls keine automatische Weiterleitung erfolgt, öffnen Sie bitte die
-      <a href="./23x23.html">23x23-Vorlage</a> manuell.
+      <a href="./23x23.html">23x23-Vorlage</a> oder die <a href="./62x100.html">62x100-Vorlage</a> manuell.
     </div>
     <script>
       (function redirectToTemplate() {
         try {
           const suffix = `${window.location.search || ''}${window.location.hash || ''}`;
-          window.location.replace(`./23x23.html${suffix}`);
+          const params = new URLSearchParams(window.location.search);
+          const requested = params.get('template');
+          const template = requested === '62x100' ? '62x100' : '23x23';
+          window.location.replace(`./${template}.html${suffix}`);
         } catch (err) {
-          console.error('Automatic redirect to 23x23 template failed for box label', err);
+          console.error('Automatic redirect to size-based template failed for box label', err);
         }
       })();
     </script>

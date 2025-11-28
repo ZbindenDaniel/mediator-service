@@ -15,6 +15,12 @@ const LABEL_SIZE: [number, number] = [410, 580];
 const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
 const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');
 // TODO: Surface configurable label styling so branding can be adjusted without code changes.
+// TODO(agent): Add registry for supported label sizes so validation stays centralized.
+export type LabelTemplate = '23x23' | '62x100';
+
+function mmToPt(mm: number): number {
+  return (mm / 25.4) * 72;
+}
 
 type LabelTemplate = '23x23';
 
@@ -67,6 +73,10 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
   if (template === '23x23') {
     const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
     return pdfFor23x23({ qrPayload, label: labelText, type: 'box' }, outPath);
+  }
+  if (template === '62x100') {
+    const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
+    return pdfFor62x100({ qrPayload, label: labelText, type: 'box' }, outPath);
   }
   try {
     const doc = new PDFDocument({ size: 'A6', margin: 36 });
@@ -237,6 +247,63 @@ async function pdfFor23x23({ qrPayload, label }: SquareLabelPayload, outPath: st
   }
 }
 
+async function pdfFor62x100({ qrPayload, label }: SquareLabelPayload, outPath: string): Promise<string> {
+  if (!PDFDocument) throw new Error('pdfkit module not available');
+  const labelWidth = mmToPt(62);
+  const labelHeight = mmToPt(100);
+  const pageSize: [number, number] = [labelWidth, labelHeight];
+
+  try {
+    const doc = new PDFDocument({ size: pageSize, margin: 2 });
+    const stream = fs.createWriteStream(outPath);
+    doc.pipe(stream);
+
+    const qrContent = JSON.stringify(qrPayload);
+    const qr = await makeQrPngBuffer(qrContent);
+
+    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const contentHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
+    const frameX = doc.page.margins.left;
+    const frameY = doc.page.margins.top;
+    const frameWidth = doc.page.width - frameX * 2;
+    const frameHeight = doc.page.height - frameY * 2;
+    const captionHeight = 18;
+    const qrTargetSize = Math.min(mmToPt(60), contentWidth, contentHeight - captionHeight - 10);
+    const qrX = doc.page.margins.left + (contentWidth - qrTargetSize) / 2;
+    const qrY = doc.page.margins.top + 6;
+
+    doc
+      .save()
+      .roundedRect(frameX, frameY, frameWidth, frameHeight, 6)
+      .fill('#ffffff')
+      .restore();
+
+    doc.image(qr, qrX, qrY, { fit: [qrTargetSize, qrTargetSize] });
+
+    const caption = qrPayload.type === 'box' ? `BoxId ${label}` : `Artikelnummer ${label}`;
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .fillColor('#0b1f33')
+      .text(caption, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - captionHeight + 6, {
+        width: contentWidth,
+        align: 'center'
+      });
+
+    doc.end();
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on('finish', () => resolve());
+      stream.on('error', (err) => reject(err));
+    });
+
+    return outPath;
+  } catch (err) {
+    console.error('Failed to create 62x100 label PDF', err);
+    throw err;
+  }
+}
+
 export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
   const template = itemData.template || '23x23';
@@ -245,6 +312,10 @@ export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promi
   if (template === '23x23') {
     const qrPayload = { ...itemData, template, labelText, type: 'item' } as Record<string, unknown>;
     return pdfFor23x23({ qrPayload, label: labelText, type: 'item' }, outPath);
+  }
+  if (template === '62x100') {
+    const qrPayload = { ...itemData, template, labelText, type: 'item' } as Record<string, unknown>;
+    return pdfFor62x100({ qrPayload, label: labelText, type: 'item' }, outPath);
   }
   try {
     const doc = new PDFDocument({ size: LABEL_SIZE, margin: 32 });
