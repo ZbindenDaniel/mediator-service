@@ -2,300 +2,46 @@
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <title>Behälter-Etikett</title>
+    <title>Behälter-Etikett (23x23)</title>
+    <!-- TODO(agent): Replace legacy box-specific label with size-based templates. -->
     <style>
-      :root {
-        color-scheme: only light;
-      }
       body {
-        margin: 0;
         font-family: 'Helvetica Neue', Arial, sans-serif;
-        background: #e8ebf0;
-      }
-      .page {
-        box-sizing: border-box;
-        width: 148mm;
-        height: 105mm;
-        margin: 12mm auto;
-        padding: 12mm 16mm;
-        background: #fff;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        border-radius: 6mm;
-      }
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-      }
-      header h1 {
-        font-size: 20pt;
         margin: 0;
-        letter-spacing: 1px;
+        padding: 24px;
+        background: #f3f4f6;
       }
-      header span {
-        font-size: 10pt;
-        color: #4b5563;
+      .notice {
+        max-width: 640px;
+        margin: 24px auto;
+        padding: 16px 18px;
+        background: #eff6ff;
+        border: 1px solid #3b82f6;
+        border-radius: 8px;
+        color: #1d4ed8;
       }
-      .details {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px 12px;
-        font-size: 11pt;
-      }
-      .details div {
-        min-height: 20px;
-      }
-      .notes {
-        margin-top: 12px;
-        padding: 12px;
-        border: 1px dashed #cbd5f5;
-        border-radius: 4mm;
-        min-height: 60px;
-        font-size: 11pt;
-        background: #f6f8fc;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-      .qr-wrapper {
-        display: flex;
-        justify-content: flex-end;
-        align-items: flex-end;
-      }
-      .qr-wrapper img,
-      .qr-wrapper canvas {
-        width: 160px;
-        height: 160px;
-        image-rendering: pixelated;
-      }
-      .error {
-        color: #b91c1c;
-        background: #fee2e2;
-        padding: 10px 14px;
-        border-radius: 4mm;
-        margin: 16px;
-        font-size: 12pt;
-      }
-      @media print {
-        body {
-          background: none;
-        }
-        .page {
-          margin: 0;
-          box-shadow: none;
-          border-radius: 0;
-          width: 148mm;
-          height: 105mm;
-        }
-        .error {
-          display: none !important;
-        }
+      a {
+        color: inherit;
       }
     </style>
   </head>
   <body>
-    <div class="page" id="page" hidden>
-      <header>
-        <div>
-          <h1 id="box-id">Behälter</h1>
-          <span id="box-location"></span>
-        </div>
-        <div class="qr-wrapper">
-          <img id="qrImage" alt="QR-Code" hidden />
-          <canvas id="qrCanvas" hidden></canvas>
-        </div>
-      </header>
-      <div class="details">
-        <div id="box-placed"></div>
-        <div id="box-updated"></div>
-      </div>
-      <div class="notes" id="box-notes"></div>
+    <div class="notice">
+      <strong>Hinweis:</strong> Die Behälter-Vorlage wurde durch größenbasierte Schablonen ersetzt.
+      Falls keine automatische Weiterleitung erfolgt, öffnen Sie bitte die
+      <a href="./23x23.html">23x23-Vorlage</a> oder die <a href="./62x100.html">62x100-Vorlage</a> manuell.
     </div>
-    <div class="error" id="error" hidden></div>
     <script>
-      (function init() {
-        const state = { payload: null };
-        const errorEl = document.getElementById('error');
-        const pageEl = document.getElementById('page');
-        const qrCanvas = document.getElementById('qrCanvas');
-        const qrImage = document.getElementById('qrImage');
-
-        function drawMatrix(modules, margin) {
-          if (!qrCanvas || !Array.isArray(modules) || modules.length === 0) {
-            return false;
-          }
-          const ctx = qrCanvas.getContext('2d');
-          if (!ctx) {
-            return false;
-          }
-          try {
-            const quietZone = Number.isFinite(margin) ? Math.max(0, Math.floor(margin)) : 4;
-            const moduleCount = modules.length;
-            const totalModules = moduleCount + quietZone * 2;
-            const target = 320;
-            const scale = Math.max(1, Math.floor(target / totalModules));
-            const size = totalModules * scale;
-
-            qrCanvas.width = size;
-            qrCanvas.height = size;
-
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, size, size);
-            ctx.fillStyle = '#000000';
-
-            for (let row = 0; row < moduleCount; row += 1) {
-              const rowData = modules[row];
-              if (!Array.isArray(rowData)) continue;
-              for (let col = 0; col < rowData.length; col += 1) {
-                if (rowData[col]) {
-                  const x = (col + quietZone) * scale;
-                  const y = (row + quietZone) * scale;
-                  ctx.fillRect(x, y, scale, scale);
-                }
-              }
-            }
-            qrCanvas.hidden = false;
-            return true;
-          } catch (err) {
-            console.error('Failed to draw QR matrix', err);
-            return false;
-          }
+      (function redirectToTemplate() {
+        try {
+          const suffix = `${window.location.search || ''}${window.location.hash || ''}`;
+          const params = new URLSearchParams(window.location.search);
+          const requested = params.get('template');
+          const template = requested === '62x100' ? '62x100' : '23x23';
+          window.location.replace(`./${template}.html${suffix}`);
+        } catch (err) {
+          console.error('Automatic redirect to size-based template failed for box label', err);
         }
-
-        function showError(message) {
-          if (!errorEl) return;
-          errorEl.textContent = message;
-          errorEl.hidden = false;
-          if (pageEl) pageEl.hidden = true;
-        }
-
-        function render(payload) {
-          if (!payload || typeof payload !== 'object') {
-            showError('Kein gültiger Payload vorhanden.');
-            return;
-          }
-          try {
-            const idEl = document.getElementById('box-id');
-            const locEl = document.getElementById('box-location');
-            const placedEl = document.getElementById('box-placed');
-            const updatedEl = document.getElementById('box-updated');
-            const notesEl = document.getElementById('box-notes');
-
-            if (idEl) idEl.textContent = payload.id ? `Behälter ${payload.id}` : 'Behälter';
-            if (locEl) {
-              const rawLabel = typeof payload.standortLabel === 'string' ? payload.standortLabel.trim() : '';
-              const rawCode = typeof payload.location === 'string' ? payload.location.trim() : '';
-              const hasLabel = rawLabel.length > 0;
-              const hasCode = rawCode.length > 0;
-              let rendered = '';
-              if (hasLabel && hasCode && rawLabel.toLowerCase() !== rawCode.toLowerCase()) {
-                rendered = `${rawLabel} (${rawCode})`;
-              } else {
-                rendered = hasLabel ? rawLabel : rawCode;
-              }
-              locEl.textContent = rendered ? `Standort: ${rendered}` : 'Standort unbekannt';
-            }
-            if (placedEl) {
-              const by = payload.placedBy ? `von ${payload.placedBy}` : 'Unbekannt';
-              const at = payload.placedAt ? new Date(payload.placedAt).toLocaleDateString('de-DE') : 'Datum offen';
-              placedEl.textContent = `Eingelagert ${by} am ${at}`;
-            }
-            if (updatedEl) {
-              updatedEl.textContent = payload.id ? `Payload-ID: ${payload.id}` : '';
-            }
-            if (notesEl) {
-              notesEl.textContent = payload.notes ? payload.notes : 'Keine Notizen vorhanden.';
-            }
-
-            if (pageEl) pageEl.hidden = false;
-
-            const hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
-            if (qrImage) {
-              if (hasDataUri) {
-                qrImage.src = payload.qrDataUri;
-                qrImage.hidden = false;
-              } else {
-                qrImage.hidden = true;
-              }
-            }
-
-            let fallbackRendered = false;
-            if (!hasDataUri && Array.isArray(payload.qrModules)) {
-              fallbackRendered = drawMatrix(payload.qrModules, payload.qrMargin);
-            }
-            if (qrCanvas) {
-              qrCanvas.hidden = hasDataUri ? true : !fallbackRendered;
-            }
-            if (!hasDataUri && !fallbackRendered) {
-              console.warn('QR fallback rendering skipped: no modules available.');
-            }
-            state.payload = payload;
-          } catch (err) {
-            console.error('Render error', err);
-            showError('Vorlage konnte nicht gerendert werden.');
-          }
-        }
-
-        function tryFromStorage(key) {
-          if (!key) return false;
-          try {
-            const raw = sessionStorage.getItem(key);
-            if (!raw) {
-              showError('Kein zwischengespeicherter Payload gefunden.');
-              return true;
-            }
-            const payload = JSON.parse(raw);
-            sessionStorage.removeItem(key);
-            render(payload);
-            return true;
-          } catch (err) {
-            console.error('Failed to load payload from storage', err);
-            showError('Payload konnte nicht gelesen werden.');
-            return true;
-          }
-        }
-
-        function handleMessage(event) {
-          if (event.origin && event.origin !== window.location.origin) {
-            console.warn('Ignoring message from unexpected origin', event.origin);
-            return;
-          }
-          try {
-            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-            if (data && data.payload) {
-              render(data.payload);
-            }
-          } catch (err) {
-            console.error('Failed to parse postMessage payload', err);
-            showError('Übertragene Daten ungültig.');
-          }
-        }
-
-        window.addEventListener('message', handleMessage, { once: true });
-
-        const params = new URLSearchParams(window.location.search);
-        const key = params.get('key');
-        if (!tryFromStorage(key)) {
-          console.warn('Warte auf Payload via postMessage…');
-        }
-
-        const qrScript = document.createElement('script');
-        qrScript.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';
-        qrScript.async = true;
-        qrScript.onload = function () {
-          state.qrReady = true;
-          if (state.payload) {
-            render(state.payload);
-          }
-        };
- qrScript.onerror = function (err) {
-          console.error('QR library failed to load inbox-label', err);
-          showError('QR-Bibliothek konnte nicht geladen werden.');
-        };
-        document.head.appendChild(qrScript);
       })();
     </script>
   </body>
