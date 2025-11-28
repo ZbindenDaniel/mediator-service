@@ -48,6 +48,14 @@ These planning responses should be explicit enough that another developer can im
 - **Importer fallback** – Extend `backend/importer.ts` to parse Langtext JSON with try/catch-protected logging, preserving the current string fallback until all downstream consumers accept structured content.
 - **Agentic schema update** – Teach `backend/agentic/flow/item-flow-schemas.ts` to validate structured Langtext payloads, coordinating changes with `models/item.ts` so the runtime schema and shared types remain in sync.
 
+## Chat UI + ChatFlow MVP
+
+Reference `docs/chat-agent-plan.md` for the active task breakdown and keep the TODOs there updated with implementation clarifications. The high-level goal is a chat agent that can query the database and interact with internal tools/actions, starting in a dry-run mode that only returns intended SQLite queries. The initial chat UI mirrors the action cards: a simple thread view that echoes the planned queries from the chatFlow agent without executing tools, keeping prompts aligned with existing `backend/actions`/`backend/agentic` patterns for reuse of validation and logging hooks.
+
+- **MVP limitation** – The chatFlow agent only reports which tool calls (queries) it would issue; no external lookups or mutations are executed yet so we can validate the prompt and data contracts safely.
+- **Operational hooks** – Reuse the action loader + agentic flow telemetry for interim logging so that future persistence (thread history) and tool integration can plug into the same observability surface.
+- **TODO(chat)** – Track persistence schema + tool wiring details in `docs/chat-agent-plan.md`, aligning with `backend/actions/index.ts` registration and any `frontend/src/components/Chat*.tsx` entry points as they solidify.
+
 ## Search Planner Stage Overview
 
 - `runItemFlow` invokes the planner prior to `collectSearchContexts`, combining reviewer-provided `skipSearch` flags with the planner's `shouldSearch` directive to determine whether Tavily requests should execute for the item.
