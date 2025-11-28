@@ -36,6 +36,7 @@ function normalizeAction(mod: any, filename: string): Action {
 
 export function loadActions(): Action[] {
   const dir = __dirname;
+  // TODO(chat-backend): Register the chatFlow HTTP action (dry-run SQLite agent) here once chat session storage and SQLite-tool adapters are ready (see docs/chat-agent-plan.md).
   return fs.readdirSync(dir)
     .filter(f => (f.endsWith('.ts') || f.endsWith('.js')) && !f.startsWith('index.'))
     .map(f => {
