@@ -13,6 +13,7 @@ import ItemCreate from './ItemCreate';
 import ItemListPage from './ItemListPage';
 import BoxListPage from './BoxListPage';
 import RecentActivitiesPage from './RecentActivitiesPage';
+import ChatPlaceholder from './ChatPlaceholder';
 
 function BoxRoute() {
   const { boxId } = useParams();
@@ -47,6 +48,7 @@ export function AppRoutes() {
       <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
       <Route path="/scan" element={<QrScannerPage />} />
       <Route path="/activities" element={<RecentActivitiesPage />} />
+      <Route path="/chat" element={<ChatPlaceholder />} />
     </Routes>
   );
 }
