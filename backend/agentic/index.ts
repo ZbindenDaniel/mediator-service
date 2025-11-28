@@ -919,8 +919,8 @@ export async function restartAgenticRun(
         SearchQuery: searchQuery,
         Status: AGENTIC_RUN_STATUS_QUEUED,
         LastModified: nowIso,
-        ReviewState: review?.state ?? existing?.ReviewState ?? 'not_required',
-        ReviewedBy: review?.reviewedBy ?? existing?.ReviewedBy ?? null,
+        ReviewState: review?.state ?? existing != null ? existing!.ReviewState : 'not_required',
+        ReviewedBy: review?.reviewedBy ?? existing != null ? existing!.ReviewedBy : null,
         LastReviewDecision: review?.decision ?? null,
         LastReviewNotes: review?.notes ?? null
       });

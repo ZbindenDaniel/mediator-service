@@ -22,6 +22,12 @@ function mmToPt(mm: number): number {
   return (mm / 25.4) * 72;
 }
 
+type LabelTemplate = '23x23';
+
+function mmToPt(mm: number): number {
+  return (mm / 25.4) * 72;
+}
+
 async function makeQrPngBuffer(text: string): Promise<Buffer> {
   if (!QRCode) throw new Error('qrcode module not available');
   return QRCode.toBuffer(text, { type: 'png', margin: 0, scale: 6 });

@@ -7,7 +7,7 @@ import type { ExtractionLogger } from './item-flow-extraction';
 // TODO(agent): Rotate transcript snapshots once multi-run history needs to be preserved for audits.
 export const TRANSCRIPT_FILE_NAME = 'agentic-transcript.md';
 
-export interface AgentTranscriptLogger extends Pick<Console, 'error' | 'warn' | 'info'>, ExtractionLogger {}
+export interface AgentTranscriptLogger extends ExtractionLogger {}
 
 export interface AgentTranscriptReference {
   filePath: string;
