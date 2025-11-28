@@ -6,6 +6,7 @@ import type { Box, Item } from '../../models';
 import type { BoxLabelPayload } from '../labelpdf';
 import type { PrintPdfResult } from '../print';
 
+// TODO(agent): Align box print payloads with size-specific label templates.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -73,6 +74,8 @@ const action = defineHttpAction({
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,
+        template: '23x23',
+        labelText: box.BoxID,
         location: box.Location?.trim() || null,
         standortLabel: box.StandortLabel?.trim() || null,
         description: box.Notes?.trim() || null,

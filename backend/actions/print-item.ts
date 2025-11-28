@@ -8,6 +8,7 @@ import type { ItemLabelPayload } from '../labelpdf';
 import type { PrintPdfResult } from '../print';
 import { ensureLangtextString } from '../lib/langtext';
 
+// TODO(agent): Align item print payloads with upcoming label size templates.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -87,6 +88,8 @@ const action = defineHttpAction({
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
+        template: '23x23',
+        labelText: item.Artikel_Nummer?.trim() || item.ItemUUID,
         materialNumber: item.Artikel_Nummer?.trim() || null,
         boxId: item.BoxID || null,
         location: item.Location?.trim() || null,

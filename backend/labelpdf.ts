@@ -9,10 +9,18 @@ try {
   console.error('PDF generation unavailable', err);
 }
 
+// TODO(agent): Keep size-based label templates in sync with frontend print previews.
+
 const LABEL_SIZE: [number, number] = [410, 580];
 const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
 const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');
 // TODO: Surface configurable label styling so branding can be adjusted without code changes.
+
+type LabelTemplate = '23x23';
+
+function mmToPt(mm: number): number {
+  return (mm / 25.4) * 72;
+}
 
 async function makeQrPngBuffer(text: string): Promise<Buffer> {
   if (!QRCode) throw new Error('qrcode module not available');
@@ -38,6 +46,8 @@ function formatDate(value: string | Date | null | undefined): string {
 export interface BoxLabelPayload {
   type: 'box';
   id: string;
+  template?: LabelTemplate;
+  labelText?: string | null;
   location?: string | null;
   standortLabel?: string | null;
   description: string | null;
@@ -52,6 +62,12 @@ export interface BoxLabelOptions {
 
 export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
+  const template = boxData.template || '23x23';
+  const labelText = (boxData.labelText || boxData.id || '').trim() || boxData.id;
+  if (template === '23x23') {
+    const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
+    return pdfFor23x23({ qrPayload, label: labelText, type: 'box' }, outPath);
+  }
   try {
     const doc = new PDFDocument({ size: 'A6', margin: 36 });
     const stream = fs.createWriteStream(outPath);
@@ -143,6 +159,8 @@ export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<
 export interface ItemLabelPayload {
   type: 'item';
   id: string;
+  template?: LabelTemplate;
+  labelText?: string | null;
   materialNumber: string | null;
   boxId?: string | null;
   location?: string | null;
@@ -157,8 +175,77 @@ export interface ItemLabelOptions {
   outPath: string;
 }
 
+interface SquareLabelPayload {
+  type: 'box' | 'item';
+  label: string;
+  qrPayload: Record<string, unknown>;
+}
+
+async function pdfFor23x23({ qrPayload, label }: SquareLabelPayload, outPath: string): Promise<string> {
+  if (!PDFDocument) throw new Error('pdfkit module not available');
+  const labelSize = mmToPt(23);
+  const pageSize: [number, number] = [labelSize, labelSize];
+
+  try {
+    const doc = new PDFDocument({ size: pageSize, margin: 6 });
+    const stream = fs.createWriteStream(outPath);
+    doc.pipe(stream);
+
+    const qrContent = JSON.stringify(qrPayload);
+    const qr = await makeQrPngBuffer(qrContent);
+
+    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const contentHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
+    const frameX = doc.page.margins.left / 2;
+    const frameY = doc.page.margins.top / 2;
+    const frameWidth = doc.page.width - frameX * 2;
+    const frameHeight = doc.page.height - frameY * 2;
+    const captionHeight = 12;
+    const qrTargetSize = Math.min(contentWidth, contentHeight - captionHeight - 4);
+    const qrX = doc.page.margins.left + (contentWidth - qrTargetSize) / 2;
+    const qrY = doc.page.margins.top;
+
+    doc
+      .save()
+      .roundedRect(frameX, frameY, frameWidth, frameHeight, 4)
+      .fill('#ffffff')
+      .restore();
+
+    doc.image(qr, qrX, qrY, { fit: [qrTargetSize, qrTargetSize] });
+
+    const caption = qrPayload.type === 'box' ? `BoxId ${label}` : `Artikelnummer ${label}`;
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .fillColor('#0b1f33')
+      .text(caption, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - captionHeight + 4, {
+        width: contentWidth,
+        align: 'center'
+      });
+
+    doc.end();
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on('finish', () => resolve());
+      stream.on('error', (err) => reject(err));
+    });
+
+    return outPath;
+  } catch (err) {
+    console.error('Failed to create 23x23 label PDF', err);
+    throw err;
+  }
+}
+
 export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
+  const template = itemData.template || '23x23';
+  const fallbackLabel = itemData.materialNumber || itemData.id;
+  const labelText = (itemData.labelText || fallbackLabel || '').trim() || fallbackLabel || itemData.id;
+  if (template === '23x23') {
+    const qrPayload = { ...itemData, template, labelText, type: 'item' } as Record<string, unknown>;
+    return pdfFor23x23({ qrPayload, label: labelText, type: 'item' }, outPath);
+  }
   try {
     const doc = new PDFDocument({ size: LABEL_SIZE, margin: 32 });
     const stream = fs.createWriteStream(outPath);
