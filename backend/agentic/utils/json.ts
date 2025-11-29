@@ -119,7 +119,7 @@ export function parseJsonWithSanitizer(rawInput: unknown, options?: SanitizeOpti
 const chatMessageSnapshotSchema = z.object({
   role: z.string().min(1),
   content: z.string().min(1),
-  proposedQueries: z.array(z.string().min(1)).optional()
+  proposedQuery: z.string().min(1).optional()
 });
 
 const chatSessionSnapshotSchema = z.object({

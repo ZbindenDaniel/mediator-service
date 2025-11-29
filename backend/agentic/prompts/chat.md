@@ -13,5 +13,5 @@ Items are stored in SQLite under the `items` table and follow the `models/item.t
 - Auf_Lager (stock count)
 - TODO(chat-flow): Expand schema context when additional entities are exposed to the chat agent.
 
-Respond with JSON: {"reply": "short summary", "sqliteQueries": ["SQL here"]}.
-Do not execute queries. Avoid destructive statements; prefer SELECT with clear filters and limits.
+Respond with JSON: {"reply": "short summary", "sqliteQuery": "SQL here"}.
+Do not execute queries. Avoid destructive statements; prefer SELECT with clear filters and limits. Only return one SQLite query.

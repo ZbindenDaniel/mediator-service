@@ -3,7 +3,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
-  queries?: string[];
+  query?: string;
 }
 
 const ChatPlaceholder: React.FC = () => {
@@ -11,11 +11,8 @@ const ChatPlaceholder: React.FC = () => {
     () => ({
       role: 'assistant',
       content:
-        'Frag nach Artikeln, Boxen oder Lagerplätzen. Ich schlage dir nur SQLite-SELECTs auf dem Item-Schema vor, ' +
-        'die noch nicht ausgeführt werden.',
-      queries: [
-        'SELECT ItemUUID, Artikelbeschreibung, BoxID FROM items WHERE Artikelbeschreibung LIKE "%monitor%" LIMIT 5;'
-      ]
+        'Frag nach Artikeln, Boxen oder Lagerplätzen. Ich schlage dir nur SQLite-SELECTs auf dem Item-Schema vor, die noch nicht ausgeführt werden.',
+      query: 'SELECT ItemUUID, Artikelbeschreibung, BoxID FROM items WHERE Artikelbeschreibung LIKE "%monitor%" LIMIT 5;'
     }),
     []
   );
@@ -56,11 +53,16 @@ const ChatPlaceholder: React.FC = () => {
 
         const payload = await response.json();
         const reply = (payload?.result?.reply as string) || 'Keine Antwort vom Chat-Agenten erhalten.';
-        const sqliteQueries = Array.isArray(payload?.result?.sqliteQueries)
-          ? (payload.result.sqliteQueries as string[]).filter((entry) => typeof entry === 'string' && entry.trim().length)
-          : [];
+        const sqliteQuery = typeof payload?.result?.sqliteQuery === 'string' ? payload.result.sqliteQuery.trim() : '';
 
-        setMessages((prev) => [...prev, { role: 'assistant', content: reply, queries: sqliteQueries }]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: reply,
+            query: sqliteQuery || undefined
+          }
+        ]);
       } catch (err) {
         console.error('[chat-ui] Failed to send chat message', err);
         setSendError('Fehler beim Senden der Nachricht.');
@@ -69,7 +71,7 @@ const ChatPlaceholder: React.FC = () => {
           {
             role: 'assistant',
             content: 'Es gab ein Problem beim Senden oder Empfangen der Nachricht.',
-            queries: []
+            query: undefined
           }
         ]);
       } finally {
@@ -93,16 +95,10 @@ const ChatPlaceholder: React.FC = () => {
             <div key={`${message.role}-${index}`} className="chat-message">
               <div className="muted">{message.role === 'user' ? 'Du' : 'Agent'}</div>
               <p>{message.content}</p>
-              {message.queries && message.queries.length > 0 ? (
+              {message.query ? (
                 <div className="muted">
-                  <div>SQLite-Vorschläge:</div>
-                  <ul>
-                    {message.queries.map((query, queryIndex) => (
-                      <li key={`query-${index}-${queryIndex}`}>
-                        <code>{query}</code>
-                      </li>
-                    ))}
-                  </ul>
+                  <div>SQLite-Vorschlag:</div>
+                  <code>{message.query}</code>
                 </div>
               ) : null}
             </div>

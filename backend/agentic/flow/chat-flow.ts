@@ -29,8 +29,8 @@ export interface ChatFlowDependencies {
 
 export interface ChatFlowResult {
   reply: string;
-  sqliteQueries: string[];
-  toolEchoes: SqliteEchoResult[];
+  sqliteQuery?: string;
+  toolEcho?: SqliteEchoResult | null;
 }
 
 const chatMessageSchema = z.object({
@@ -42,9 +42,10 @@ const chatRequestSchema = z.object({
   messages: z.array(chatMessageSchema).min(1)
 });
 
+// TODO(chat-flow): Support multiple SQLite suggestions if future flows require broader sampling.
 const agentResponseSchema = z.object({
   reply: z.string().min(1),
-  sqliteQueries: z.array(z.string().min(1)).default([])
+  sqliteQuery: z.string().min(1).optional()
 });
 
 async function loadChatModel(logger: ChatFlowLogger): Promise<ChatModel> {
@@ -149,19 +150,18 @@ export async function runChatFlow(input: unknown, deps: ChatFlowDependencies = {
     logger.warn?.({ err, msg: 'chat agent response parsing failed', rawContent });
   }
 
-  const sqliteQueries = parsedResponse?.sqliteQueries ?? [];
-  const toolEchoes: SqliteEchoResult[] = [];
-  for (const query of sqliteQueries) {
+  const sqliteQuery = parsedResponse?.sqliteQuery?.trim() ?? '';
+  let toolEcho: SqliteEchoResult | null = null;
+  if (sqliteQuery) {
     try {
-      const echo = await sqliteTool(query, { logger });
-      toolEchoes.push(echo);
+      toolEcho = await sqliteTool(sqliteQuery, { logger });
     } catch (err) {
-      logger.warn?.({ err, msg: 'sqlite echo tool failed', queryPreview: query.slice(0, 120) });
+      logger.warn?.({ err, msg: 'sqlite echo tool failed', queryPreview: sqliteQuery.slice(0, 120) });
     }
   }
 
   const reply = parsedResponse?.reply ?? rawContent;
-  const result: ChatFlowResult = { reply, sqliteQueries, toolEchoes };
+  const result: ChatFlowResult = { reply, sqliteQuery: sqliteQuery || undefined, toolEcho };
 
   try {
     const snapshot: ChatSessionSnapshot = {
@@ -172,7 +172,7 @@ export async function runChatFlow(input: unknown, deps: ChatFlowDependencies = {
         {
           role: 'assistant',
           content: reply,
-          proposedQueries: sqliteQueries
+          proposedQuery: sqliteQuery || undefined
         }
       ]
     };
