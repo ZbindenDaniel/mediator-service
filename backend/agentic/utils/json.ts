@@ -1,3 +1,7 @@
+import fs from 'fs';
+import path from 'path';
+import { z } from 'zod';
+
 export interface JsonLogger {
   debug?: Console['debug'];
 }
@@ -109,5 +113,53 @@ export function parseJsonWithSanitizer(rawInput: unknown, options?: SanitizeOpti
   } catch (err) {
     (err as Error & { sanitized?: string }).sanitized = sanitized;
     throw err;
+  }
+}
+
+const chatMessageSnapshotSchema = z.object({
+  role: z.string().min(1),
+  content: z.string().min(1),
+  proposedQuery: z.string().min(1).optional()
+});
+
+const chatSessionSnapshotSchema = z.object({
+  id: z.string().min(1),
+  createdAt: z.string().optional(),
+  messages: z.array(chatMessageSnapshotSchema)
+});
+
+export type ChatSessionSnapshot = z.infer<typeof chatSessionSnapshotSchema>;
+
+export interface ChatPersistenceLogger extends JsonLogger {
+  warn?: Console['warn'];
+  error?: Console['error'];
+}
+
+export function validateChatSessionSnapshot(snapshot: unknown): ChatSessionSnapshot {
+  // TODO(chat-storage): Replace ad-hoc validation with shared persistence schemas once chat transcripts are written to disk.
+  return chatSessionSnapshotSchema.parse(snapshot);
+}
+
+export function persistChatSessionSnapshot(
+  snapshot: unknown,
+  filePath: string,
+  logger?: ChatPersistenceLogger
+): void {
+  try {
+    const validated = validateChatSessionSnapshot(snapshot);
+    const resolvedPath = path.resolve(filePath);
+    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+    fs.writeFileSync(resolvedPath, JSON.stringify(validated, null, 2), 'utf-8');
+    logger?.debug?.({
+      msg: 'chat session snapshot persisted',
+      path: resolvedPath,
+      messageCount: validated.messages.length
+    });
+  } catch (err) {
+    logger?.warn?.({
+      msg: 'failed to persist chat session snapshot',
+      path: filePath,
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 }

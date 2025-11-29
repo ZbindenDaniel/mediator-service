@@ -11,6 +11,7 @@ const SUPERVISOR_PROMPT_PATH = path.join(PROMPTS_DIR, 'supervisor.md');
 const SHOPWARE_PROMPT_PATH = path.join(PROMPTS_DIR, 'shopware-verify.md');
 const CATEGORIZER_PROMPT_PATH = path.join(PROMPTS_DIR, 'categorizer.md');
 const SEARCH_PLANNER_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-planner.md');
+const CHAT_PROMPT_PATH = path.join(PROMPTS_DIR, 'chat.md');
 
 interface ReadPromptOptions {
   itemId: string;
@@ -42,6 +43,10 @@ export interface LoadPromptsResult {
   categorizer: string;
   searchPlanner: string;
   shopware?: string | null;
+}
+
+export interface LoadChatPromptOptions {
+  logger?: ItemFlowLogger;
 }
 
 export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromptsOptions): Promise<LoadPromptsResult> {
@@ -81,11 +86,24 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
   }
 }
 
+export async function loadChatPrompt({ logger }: LoadChatPromptOptions = {}): Promise<string> {
+  try {
+    return await readPromptFile(CHAT_PROMPT_PATH, { itemId: 'chat', prompt: 'chat', logger });
+  } catch (err) {
+    if (err instanceof FlowError) {
+      throw err;
+    }
+    logger?.error?.({ err, msg: 'failed to load chat prompt' });
+    throw new FlowError('PROMPT_LOAD_FAILED', 'Failed to load chat prompt', 500, { cause: err });
+  }
+}
+
 export {
   FORMAT_PATH,
   EXTRACT_PROMPT_PATH,
   SUPERVISOR_PROMPT_PATH,
   SHOPWARE_PROMPT_PATH,
   CATEGORIZER_PROMPT_PATH,
-  SEARCH_PLANNER_PROMPT_PATH
+  SEARCH_PLANNER_PROMPT_PATH,
+  CHAT_PROMPT_PATH
 };

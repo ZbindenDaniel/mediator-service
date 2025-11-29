@@ -108,6 +108,14 @@ export default function LandingPage() {
             </div>
           </Link>
         </div>
+        <div className="card" id="chat-card">
+          <Link className="linkcard" to="/chat">
+            <div>
+              <h2>Chat</h2>
+              <p className="muted">Mit dem Agenten sprechen und vorgeschlagene SQLite-Queries ansehen</p>
+            </div>
+          </Link>
+        </div>
         <StatsCard counts={overview?.counts} printerOk={printerOk} health={health} />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <RecentEventsCard events={previewEvents}></RecentEventsCard>
