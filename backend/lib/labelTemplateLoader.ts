@@ -8,9 +8,11 @@ const TEMPLATE_FILES: Record<LabelHtmlTemplate, string> = {
   '62x100': '62x100.html'
 };
 
+// TODO(agent): Add ENV override for template roots when backend runs outside repo root.
 const TEMPLATE_ROOTS = [
-  path.join(__dirname, '../frontend/public/print'),
-  path.join(__dirname, '../../..', 'frontend', 'public', 'print')
+  path.join(__dirname, '..', '..', 'frontend', 'public', 'print'),
+  path.join(process.cwd(), 'frontend', 'public', 'print'),
+  path.join(__dirname, '..', '..', '..', '..', 'frontend', 'public', 'print')
 ];
 
 const templateCache = new Map<LabelHtmlTemplate, string>();
