@@ -124,6 +124,7 @@ export async function runExtractionAttempts({
   let itemContent = '';
   // TODO(agent): Capture invalid payload snippets for downstream observability and retention.
   let lastInvalidJsonPayload: { sanitizedPayload: string; thinkContent?: string } | null = null;
+  let lastInvalidJsonErrorHint = '';
 
   let attempt = 1;
   const { itemUUid: _promptHiddenItemId, ...promptFacingTarget } = target;
@@ -219,6 +220,29 @@ export async function runExtractionAttempts({
           ? 'Reminder: request at most one additional search by including a "__searchQueries" array when vital information is missing.'
           : `Reminder: request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array when vital information is missing.`
       ];
+      if (lastValidationIssues === 'INVALID_JSON') {
+        const sanitizedPayload = lastInvalidJsonPayload?.sanitizedPayload?.trim();
+        const parseErrorHint = lastInvalidJsonErrorHint.trim();
+        const invalidJsonGuidance: string[] = [];
+        if (sanitizedPayload) {
+          invalidJsonGuidance.push('Sanitized JSON captured from the last attempt:', sanitizedPayload);
+        }
+        if (parseErrorHint) {
+          invalidJsonGuidance.push(`Parse hint: ${parseErrorHint}`);
+        }
+        if (invalidJsonGuidance.length) {
+          retrySections.splice(2, 0, invalidJsonGuidance.join('\n'));
+          logger?.info?.({
+            msg: 'added invalid json guidance to retry prompt',
+            attempt,
+            itemId,
+            hasSanitizedPayload: Boolean(sanitizedPayload),
+            hasParseErrorHint: Boolean(parseErrorHint),
+            sanitizedPayloadPreview: sanitizeForLog(sanitizedPayload),
+            parseErrorPreview: sanitizeForLog(parseErrorHint)
+          });
+        }
+      }
       if (reviewerInstructionBlock) {
         retrySections.splice(1, 0, reviewerInstructionBlock);
       }
@@ -297,6 +321,7 @@ export async function runExtractionAttempts({
         context: { itemId, attempt, stage: 'extraction-agent', thinkContent }
       });
       lastInvalidJsonPayload = null;
+      lastInvalidJsonErrorHint = '';
     } catch (err) {
       const sanitizedPayload = typeof (err as { sanitized?: string }).sanitized === 'string'
         ? (err as { sanitized?: string }).sanitized?.trim() ?? ''
@@ -306,12 +331,14 @@ export async function runExtractionAttempts({
         sanitizedPayload,
         thinkContent: thinkPreview || undefined
       };
+      lastInvalidJsonErrorHint = err instanceof Error ? err.message : String(err);
       logger?.warn?.({
         err,
         msg: 'attempt produced invalid JSON after sanitization',
         attempt,
         itemId,
         sanitizedSnippet: truncateForLog(sanitizedPayload),
+        parseErrorHint: truncateForLog(lastInvalidJsonErrorHint),
         thinkPreview: truncateForLog(thinkPreview),
         rawSnippet: itemContent.slice(0, 500)
       });
