@@ -23,6 +23,7 @@ import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
 // TODO(agent): Consolidate ItemUUID collision handling into a shared allocator helper for reuse across actions.
+// TODO(agent): Normalize getItem.get to a consistent sync/async contract to simplify uniqueness checks.
 async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string> {
   const maxAttempts = 3;
   let attempt = 0;
@@ -31,7 +32,10 @@ async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string
   while (attempt < maxAttempts) {
     let existing: unknown = null;
     try {
-      existing = ctx.getItem?.get ? ctx.getItem.get(itemUUID) : null;
+      const existingLookup = ctx.getItem?.get ? ctx.getItem.get(itemUUID) : null;
+      existing = typeof (existingLookup as Promise<unknown>)?.then === 'function'
+        ? await existingLookup
+        : existingLookup;
     } catch (lookupError) {
       console.error('[import-item] Failed to verify ItemUUID uniqueness during mint', {
         attempt,
