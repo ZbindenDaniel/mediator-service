@@ -284,7 +284,7 @@ async function runPrintWorker(): Promise<void> {
     }
 
     try {
-      const result = await printFile({ filePath: outPath, jobName: `Item ${item.ItemUUID}` });
+      const result = await printFile({ filePath: outPath, jobName: `Item ${item.ItemUUID}`, mode: 'html' });
       if (!result.sent) {
         console.error('Print worker failed to dispatch HTML label', {
           itemId: item.ItemUUID,

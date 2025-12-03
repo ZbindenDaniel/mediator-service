@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import { renderHtmlToPdf } from './labelpdf';
 import {
   PRINTER_QUEUE,
   LP_COMMAND,
@@ -13,6 +14,7 @@ export interface PrintFileOptions {
   jobName?: string;
   printerQueue?: string;
   timeoutMs?: number;
+  mode?: PrintContentMode;
 }
 
 export interface PrintFileResult {
@@ -21,6 +23,8 @@ export interface PrintFileResult {
   code?: number | null;
   signal?: NodeJS.Signals | null;
 }
+
+export type PrintContentMode = 'raw' | 'html' | 'pdf' | 'auto';
 
 function validateFilePath(filePath: string): { ok: boolean; reason?: string } {
   if (!filePath) {
@@ -41,14 +45,33 @@ function validateFilePath(filePath: string): { ok: boolean; reason?: string } {
 }
 
 export async function printFile(options: PrintFileOptions): Promise<PrintFileResult> {
-  const { filePath, jobName, timeoutMs, printerQueue } = options;
+  const { filePath, jobName, timeoutMs, printerQueue, mode = 'auto' } = options;
   const effectiveQueue = (printerQueue || PRINTER_QUEUE || '').trim();
   const resolvedTimeout = Number.isFinite(timeoutMs) && timeoutMs ? timeoutMs : PRINT_TIMEOUT_MS;
-  const validation = validateFilePath(filePath);
+  let targetPath = filePath;
+  let effectiveMode: PrintContentMode = mode;
+
+  if (mode === 'html' || (mode === 'auto' && /\.html?$/i.test(filePath))) {
+    try {
+      targetPath = await renderHtmlToPdf(filePath, { jobLabel: jobName });
+      effectiveMode = 'pdf';
+    } catch (renderErr) {
+      console.error('[print] Failed to render HTML for printing', {
+        filePath,
+        jobName,
+        error: renderErr
+      });
+      return { sent: false, reason: (renderErr as Error).message || 'render_failed' };
+    }
+  }
+
+  const validation = validateFilePath(targetPath);
   if (!validation.ok) {
     console.error('[print] Refusing to send file; invalid file path', {
-      filePath,
-      reason: validation.reason
+      filePath: targetPath,
+      reason: validation.reason,
+      requestedMode: mode,
+      effectiveMode
     });
     return { sent: false, reason: validation.reason };
   }
@@ -60,7 +83,7 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
     return { sent: false, reason: 'printer_queue_not_configured' };
   }
 
-  const absolute = path.resolve(filePath);
+  const absolute = path.resolve(targetPath);
   const args = ['-d', effectiveQueue];
   if (jobName && jobName.trim()) {
     args.push('-t', jobName.trim());
@@ -70,7 +93,10 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
   console.log('[print] Dispatching file to printer', {
     command: LP_COMMAND,
     args,
-    timeoutMs: resolvedTimeout
+    timeoutMs: resolvedTimeout,
+    mode: effectiveMode,
+    sourcePath: filePath,
+    targetPath: absolute
   });
 
   return await new Promise<PrintFileResult>((resolve) => {

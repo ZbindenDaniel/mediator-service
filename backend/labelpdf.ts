@@ -1,4 +1,6 @@
 import fs from 'fs';
+import path from 'path';
+import { spawn } from 'child_process';
 
 let QRCode: any;
 try {
@@ -14,6 +16,12 @@ try {
 
 const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
 const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');
+
+// TODO(agent): Validate PDF renderer availability during service startup.
+// TODO(agent): Confirm wkhtmltopdf sizing parity across printer hardware.
+const HTML_TO_PDF_COMMAND = (process.env.HTML_TO_PDF_COMMAND || 'wkhtmltopdf').trim() || 'wkhtmltopdf';
+const rawHtmlToPdfTimeout = Number.parseInt(process.env.HTML_TO_PDF_TIMEOUT_MS || '', 10);
+const HTML_TO_PDF_TIMEOUT_MS = Number.isFinite(rawHtmlToPdfTimeout) && rawHtmlToPdfTimeout > 0 ? rawHtmlToPdfTimeout : 20000;
 
 export type LabelTemplate = '62x100';
 
@@ -345,4 +353,139 @@ export async function htmlForItem({ itemData, outPath }: ItemLabelOptions): Prom
     console.error('Failed to create item label HTML', err);
     throw err;
   }
+}
+
+function derivePdfPath(htmlPath: string): string {
+  const normalized = path.resolve(htmlPath);
+  const parsed = path.parse(normalized);
+  const nextName = parsed.ext ? parsed.name : path.basename(normalized);
+  return path.join(parsed.dir, `${nextName}.pdf`);
+}
+
+export async function renderHtmlToPdf(
+  htmlPath: string,
+  options: { outputPath?: string; jobLabel?: string } = {}
+): Promise<string> {
+  const resolvedHtml = path.resolve(htmlPath);
+  const outputPath = path.resolve(options.outputPath || derivePdfPath(resolvedHtml));
+  const jobLabel = options.jobLabel || path.basename(resolvedHtml);
+  if (!fs.existsSync(resolvedHtml)) {
+    throw new Error(`html_missing:${resolvedHtml}`);
+  }
+
+  const args = [
+    '--disable-smart-shrinking',
+    '--encoding',
+    'utf-8',
+    '--print-media-type',
+    '--margin-top',
+    '0',
+    '--margin-right',
+    '0',
+    '--margin-bottom',
+    '0',
+    '--margin-left',
+    '0',
+    resolvedHtml,
+    outputPath
+  ];
+
+  console.log('[label] Rendering HTML to PDF for print', {
+    command: HTML_TO_PDF_COMMAND,
+    args,
+    timeoutMs: HTML_TO_PDF_TIMEOUT_MS,
+    outputPath,
+    htmlPath: resolvedHtml,
+    jobLabel
+  });
+
+  return await new Promise<string>((resolve, reject) => {
+    try {
+      const child = spawn(HTML_TO_PDF_COMMAND, args, {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+
+      const timer = setTimeout(() => {
+        console.error('[label] HTML to PDF render timed out', {
+          command: HTML_TO_PDF_COMMAND,
+          args,
+          timeoutMs: HTML_TO_PDF_TIMEOUT_MS,
+          htmlPath: resolvedHtml,
+          outputPath,
+          jobLabel
+        });
+        try {
+          child.kill('SIGKILL');
+        } catch (killError) {
+          console.error('[label] Failed to terminate renderer after timeout', killError);
+        }
+        if (!settled) {
+          settled = true;
+          reject(new Error('render_timeout'));
+        }
+      }, HTML_TO_PDF_TIMEOUT_MS);
+
+      const finish = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (err) {
+          reject(err);
+        } else {
+          resolve(outputPath);
+        }
+      };
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.once('error', (err) => {
+        console.error('[label] PDF render process failed to start', {
+          command: HTML_TO_PDF_COMMAND,
+          args,
+          error: err,
+          jobLabel
+        });
+        finish(err);
+      });
+
+      child.once('close', (code, signal) => {
+        if (code === 0) {
+          console.log('[label] PDF render completed', {
+            htmlPath: resolvedHtml,
+            outputPath,
+            stdout: stdout.trim(),
+            signal,
+            jobLabel
+          });
+          finish();
+          return;
+        }
+
+        const error = new Error(`render_exit_${code ?? 'unknown'}`);
+        console.error('[label] PDF render process exited with error', {
+          command: HTML_TO_PDF_COMMAND,
+          args,
+          code,
+          signal,
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+          jobLabel
+        });
+        finish(error);
+      });
+    } catch (err) {
+      console.error('[label] Unexpected error during HTML to PDF render', err);
+      reject(err);
+    }
+  });
 }
