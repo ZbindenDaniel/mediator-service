@@ -802,7 +802,8 @@ export function generateShopwareCorrelationId(context: string, itemUUID: string 
 }
 
 // TODO(agent): Keep exporter metadata selections (ItemUUID, BoxID, Location, UpdatedAt) stable for importer parity.
-function itemSelectColumns(locationExpr: string): string {
+function itemSelectColumns(locationExpr: string, extraColumns: string[] = []): string {
+  const extras = extraColumns.length ? `,\n  ${extraColumns.join(',\n  ')}` : '';
   return `
 SELECT
   i.ItemUUID AS ItemUUID,
@@ -833,7 +834,7 @@ SELECT
   r.Artikeltyp AS Artikeltyp,
   r.Einheit AS Einheit,
   r.EntityType AS EntityType,
-  r.ShopwareProductId AS ShopwareProductId
+  r.ShopwareProductId AS ShopwareProductId${extras}
 `;
 }
 
@@ -2159,9 +2160,14 @@ const listItemReferencesStatement = db.prepare(`
 
 export const listItemReferences = listItemReferencesStatement;
 
+// TODO(agentic-status-ui): Evaluate whether additional agentic audit fields should be projected once frontend requires them.
 const listItemsStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
+  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
+])}
 ${ITEM_JOIN_WITH_BOX}
+LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
 ORDER BY i.ItemUUID
 `);
 

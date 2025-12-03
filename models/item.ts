@@ -1,5 +1,7 @@
 // TODO(agent): Track Langtext payload migration and remove legacy fallback types when safe.
 // TODO(agent): Remove ImageNames serialization once assets migrate to dedicated tables.
+// TODO(agentic-status-model): Consider splitting agentic metadata into a dedicated view model to avoid bloating Item shape.
+import type { AgenticRunStatus } from './agentic-statuses';
 export enum ItemEinheit {
   Stk = 'Stk',
   Mix = 'Mix'
@@ -53,4 +55,7 @@ export interface ItemRef {
 }
 
 // TODO(agent): Verify Item metadata typing whenever export/import parity requirements evolve.
-export type Item = ItemInstance & Partial<ItemRef>;
+export type Item = ItemInstance & Partial<ItemRef> & {
+  AgenticStatus?: AgenticRunStatus | null;
+  AgenticReviewState?: string | null;
+};

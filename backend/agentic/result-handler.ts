@@ -303,27 +303,37 @@ export function handleAgenticResult(
       }
 
       const existingRun = ctx.getAgenticRun.get(itemUUID) as AgenticRun | undefined;
-      const merged: Record<string, any> = { ...existingItem };
-      if (agenticPayload && typeof agenticPayload === 'object') {
-        for (const [key, value] of Object.entries(agenticPayload)) {
-          if (value !== undefined) {
-            merged[key] = value;
+      const shouldPersistItemUpdate = status !== AGENTIC_RUN_STATUS_REJECTED && status !== AGENTIC_RUN_STATUS_REVIEW;
+      if (shouldPersistItemUpdate) {
+        const merged: Record<string, any> = { ...existingItem };
+        if (agenticPayload && typeof agenticPayload === 'object') {
+          for (const [key, value] of Object.entries(agenticPayload)) {
+            if (value !== undefined) {
+              merged[key] = value;
+            }
           }
         }
+
+        merged.ItemUUID = itemUUID;
+        merged.UpdatedAt = now;
+
+        const mergedDatum = toIsoString(merged.Datum_erfasst);
+        const itemPayload: Item = {
+          ...(merged as Item),
+          UpdatedAt: new Date(now),
+          Datum_erfasst: mergedDatum ? new Date(mergedDatum) : undefined,
+          Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status) === 'yes'
+        };
+
+        ctx.persistItemWithinTransaction(itemPayload);
+      } else {
+        logger?.info?.({
+          msg: 'skipping item update for non-approved agentic run',
+          itemId,
+          reviewDecision: review.Decision ?? null,
+          status
+        });
       }
-
-      merged.ItemUUID = itemUUID;
-      merged.UpdatedAt = now;
-
-      const mergedDatum = toIsoString(merged.Datum_erfasst);
-      const itemPayload: Item = {
-        ...(merged as Item),
-        UpdatedAt: new Date(now),
-        Datum_erfasst: mergedDatum ? new Date(mergedDatum) : undefined,
-        Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status) === 'yes'
-      };
-
-      ctx.persistItemWithinTransaction(itemPayload);
 
       const effectiveReviewState =
         status === AGENTIC_RUN_STATUS_REVIEW

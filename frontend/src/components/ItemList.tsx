@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { Item } from '../../../models';
+import type { AgenticRunStatus, Item } from '../../../models';
+import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import BoxColorTag from './BoxColorTag';
+import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
 // TODO(agentic): Expand item list columns and responsive styling for enriched item metadata.
+// TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
 
 interface Props {
   items: Item[];
@@ -83,6 +86,7 @@ export default function ItemList({
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
+            <th className="col-agentic optional-column">Agentic</th>
             <th className="col-stock optional-column">Auf Lager</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
           </tr>
@@ -106,6 +110,8 @@ export default function ItemList({
               typeof it.Unterkategorien_A === 'number'
                 ? it.Unterkategorien_A
                 : (typeof it.Unterkategorien_A === 'string' ? it.Unterkategorien_A : null);
+            const agenticStatus = (it.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus | null;
+            const agenticLabel = describeAgenticStatus(agenticStatus);
 
             return (
               <tr
@@ -152,6 +158,7 @@ export default function ItemList({
                 <td className="col-location">
                   <BoxColorTag locationKey={locationKey} />
                 </td>
+                <td className="col-agentic optional-column">{agenticLabel}</td>
                 <td className="col-stock optional-column">{stockValue ?? '—'}</td>
                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
               </tr>
