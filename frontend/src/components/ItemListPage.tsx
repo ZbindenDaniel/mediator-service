@@ -1,13 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { GoContainer, GoSearch } from 'react-icons/go';
-import type { Item } from '../../../models';
+import type { AgenticRunStatus, Item } from '../../../models';
+import {
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUSES
+} from '../../../models';
+import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import BulkItemActionBar from './BulkItemActionBar';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
 
 // TODO(agentic): Extend item list page sorting and filtering controls for enriched inventory views.
+// TODO(agentic-status-ui): Replace single-select status filtering with quick filters once reviewer workflows expand.
 
-type SortKey = 'artikelbeschreibung' | 'artikelnummer' | 'box' | 'uuid' | 'stock' | 'subcategory';
+type SortKey = 'artikelbeschreibung' | 'artikelnummer' | 'box' | 'uuid' | 'stock' | 'subcategory' | 'agenticStatus';
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -22,6 +28,7 @@ export default function ItemListPage() {
   const [subcategoryFilter, setSubcategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
   const [boxFilter, setBoxFilter] = useState('');
+  const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>('any');
 
   const loadItems = useCallback(async ({ silent = false } = {}) => {
     if (silent) {
@@ -77,6 +84,7 @@ export default function ItemListPage() {
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const normalizedSubcategoryFilter = subcategoryFilter.trim().toLowerCase();
   const normalizedBoxFilter = boxFilter.trim().toLowerCase();
+  const normalizedAgenticFilter = agenticStatusFilter === 'any' ? null : agenticStatusFilter;
 
   const filtered = useMemo(() => {
     const baseItems = showUnplaced ? items.filter((it) => !it.BoxID) : items;
@@ -102,8 +110,12 @@ export default function ItemListPage() {
           : stockFilter === 'outofstock'
             ? stockValue <= 0
             : true;
+      const agenticStatus = (item.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus;
+      const matchesAgenticStatus = normalizedAgenticFilter
+        ? agenticStatus === normalizedAgenticFilter
+        : true;
 
-      return matchesSearch && matchesSubcategory && matchesBox && matchesStock;
+      return matchesSearch && matchesSubcategory && matchesBox && matchesStock && matchesAgenticStatus;
     });
 
     const sorted = [...searched].sort((a, b) => {
@@ -115,6 +127,20 @@ export default function ItemListPage() {
           return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
         }
         return (aStock - bStock) * direction;
+      }
+
+      if (sortKey === 'agenticStatus') {
+        const statusOrder = (status: AgenticRunStatus | null | undefined) => {
+          const resolved = status ?? AGENTIC_RUN_STATUS_NOT_STARTED;
+          const idx = AGENTIC_RUN_STATUSES.indexOf(resolved);
+          return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+        };
+        const aStatusOrder = statusOrder(a.AgenticStatus as AgenticRunStatus | null | undefined);
+        const bStatusOrder = statusOrder(b.AgenticStatus as AgenticRunStatus | null | undefined);
+        if (aStatusOrder === bStatusOrder) {
+          return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+        }
+        return (aStatusOrder - bStatusOrder) * direction;
       }
 
       const valueFor = (item: Item) => {
@@ -144,6 +170,7 @@ export default function ItemListPage() {
   }, [
     items,
     normalizedBoxFilter,
+    normalizedAgenticFilter,
     normalizedSearch,
     normalizedSubcategoryFilter,
     showUnplaced,
@@ -153,6 +180,15 @@ export default function ItemListPage() {
   ]);
 
   const visibleIds = useMemo(() => filtered.map((item) => item.ItemUUID), [filtered]);
+  const agenticStatusOptions = useMemo(() => (
+    [{ value: 'any', label: 'Alle' as const } as const]
+      .concat(
+        AGENTIC_RUN_STATUSES.map((status) => ({
+          value: status,
+          label: describeAgenticStatus(status)
+        }))
+      )
+  ), [AGENTIC_RUN_STATUSES, describeAgenticStatus]);
   const allVisibleSelected = useMemo(() => (
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
   ), [selectedIds, visibleIds]);
@@ -197,6 +233,16 @@ export default function ItemListPage() {
     return items.filter((item) => selectedLookup.has(item.ItemUUID));
   }, [items, selectedIds]);
 
+  const handleAgenticStatusFilterChange = useCallback((value: string) => {
+    const nextValue = value as AgenticRunStatus | 'any';
+    if (nextValue === 'any' || AGENTIC_RUN_STATUSES.includes(nextValue as AgenticRunStatus)) {
+      setAgenticStatusFilter(nextValue);
+      return;
+    }
+    console.warn('Ignoring unknown agentic status filter value', value);
+    setAgenticStatusFilter('any');
+  }, []);
+
   if (isLoading) {
     return (
       <LoadingPage message="Lade Artikelübersicht…">
@@ -235,6 +281,7 @@ export default function ItemListPage() {
                 <option value="artikelbeschreibung">Artikel</option>
                 <option value="artikelnummer">Artikelnummer</option>
                 <option value="box">Behälter</option>
+                <option value="agenticStatus">Agentic-Status</option>
                 <option value="uuid">UUID</option>
                 <option value="stock">Bestand</option>
                 <option value="subcategory">Unterkategorie</option>
@@ -297,6 +344,20 @@ export default function ItemListPage() {
                   value={boxFilter}
                 />
               </div>
+            </label>
+          </div>
+          <div className='row'>
+            <label className="filter-control">
+              <span>Agentic-Status</span>
+              <select
+                aria-label="Agentic-Status filtern"
+                onChange={(event) => handleAgenticStatusFilterChange(event.target.value)}
+                value={agenticStatusFilter}
+              >
+                {agenticStatusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
             </label>
           </div>
           <div className='row'>

@@ -4,7 +4,12 @@
     <meta charset="utf-8" />
     <title>Etikett 62x100</title>
     <!-- TODO(agent): Keep 62x100 layout aligned with backend PDF sizing. -->
+    <!-- TODO(agentic-printing): Capture printer margin telemetry to keep single-page sizing reliable across devices. -->
     <style>
+      @page {
+        size: 62mm 100mm;
+        margin: 0;
+      }
       :root {
         color-scheme: only light;
       }
@@ -15,6 +20,8 @@
         place-items: center;
         background: #f3f4f6;
         font-family: 'Helvetica Neue', Arial, sans-serif;
+        width: 62mm;
+        height: 100mm;
       }
       .label {
         box-sizing: border-box;
@@ -68,10 +75,14 @@
       @media print {
         body {
           background: none;
+          width: 62mm;
+          height: 100mm;
+          min-height: 100mm;
         }
         .label {
           box-shadow: none;
           border-color: transparent;
+          page-break-inside: avoid;
         }
         .error {
           display: none !important;

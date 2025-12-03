@@ -5,7 +5,10 @@ import { resolveMediaPath } from '../../lib/media';
 import type { ExtractionLogger } from './item-flow-extraction';
 
 // TODO(agent): Rotate transcript snapshots once multi-run history needs to be preserved for audits.
-export const TRANSCRIPT_FILE_NAME = 'agentic-transcript.md';
+// TODO(agentic-html-transcript): Consider migrating legacy markdown transcripts to HTML when cleanup time permits.
+export const TRANSCRIPT_FILE_NAME = 'agentic-transcript.html';
+const TRANSCRIPT_SECTION_MARKER = '<!-- transcript-sections -->';
+const TRANSCRIPT_FOOTER = '</main>\n</body>\n</html>\n';
 
 export interface AgentTranscriptLogger extends ExtractionLogger {}
 
@@ -31,25 +34,59 @@ function stringifyTranscriptPayload(
   }
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildTranscriptHeader(itemId: string, updatedAtIso: string): string {
+  const updatedDisplay = new Date(updatedAtIso).toLocaleString('de-DE');
+  return [
+    '<!DOCTYPE html>',
+    '<html lang="de">',
+    '<head>',
+    '  <meta charset="utf-8" />',
+    `  <meta name="last-updated" content="${escapeHtml(updatedAtIso)}" />`,
+    '  <title>Agentisches Protokoll</title>',
+    '  <style>',
+    '    :root { color-scheme: only light; }',
+    '    body { font-family: Arial, sans-serif; margin: 0; background: #f9fafb; color: #0f172a; }',
+    '    main { max-width: 960px; margin: 0 auto; padding: 24px 20px 40px; }',
+    '    header { margin-bottom: 24px; }',
+    '    .transcript-meta { color: #475569; font-size: 0.95rem; margin: 8px 0 16px; }',
+    '    .transcript-section { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06); }',
+    '    .transcript-section h2 { margin: 0 0 8px; font-size: 1.1rem; color: #0f172a; }',
+    '    .transcript-block { display: grid; gap: 12px; }',
+    '    .transcript-block h3 { margin: 0; font-size: 0.95rem; color: #0f172a; }',
+    '    pre { background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; }',
+    '  </style>',
+    '</head>',
+    '<body>',
+    '  <main>',
+    '    <header>',
+    `      <h1>Agenten-Transkript für ${escapeHtml(itemId)}</h1>`,
+    `      <p class="transcript-meta">Zuletzt aktualisiert: ${escapeHtml(updatedDisplay)}</p>`,
+    '    </header>'
+  ].join('\n');
+}
+
 export function buildTranscriptBody(
   request: unknown,
   response: string,
   logger?: AgentTranscriptLogger | null,
   meta?: { heading?: string; itemId?: string }
 ): string {
-  const requestBlock = stringifyTranscriptPayload(request, logger, meta);
-  const responseBlock = typeof response === 'string' ? response : String(response);
+  const requestBlock = escapeHtml(stringifyTranscriptPayload(request, logger, meta));
+  const responseBlock = escapeHtml(typeof response === 'string' ? response : String(response));
   return [
-    '### Request',
-    '```json',
-    requestBlock,
-    '```',
-    '',
-    '### Response',
-    '```',
-    responseBlock.trim(),
-    '```',
-    ''
+    '<div class="transcript-block">',
+    '  <h3>Request</h3>',
+    `  <pre>${requestBlock}</pre>`,
+    '  <h3>Response</h3>',
+    `  <pre>${responseBlock.trim()}</pre>`,
+    '</div>'
   ].join('\n');
 }
 
@@ -61,8 +98,23 @@ function buildTranscriptReference(itemId: string): AgentTranscriptReference {
 
 export function locateTranscript(itemId: string, logger?: AgentTranscriptLogger | null): AgentTranscriptReference | null {
   const reference = buildTranscriptReference(itemId);
+  const legacyReference: AgentTranscriptReference = {
+    filePath: resolveMediaPath(itemId, 'agentic-transcript.md'),
+    publicUrl: `/media/${encodeURIComponent(itemId)}/agentic-transcript.md`
+  };
   try {
-    return fs.existsSync(reference.filePath) ? reference : null;
+    if (fs.existsSync(reference.filePath)) {
+      return reference;
+    }
+    if (fs.existsSync(legacyReference.filePath)) {
+      logger?.warn?.({
+        msg: 'serving legacy markdown transcript',
+        itemId,
+        transcriptPath: legacyReference.filePath
+      });
+      return legacyReference;
+    }
+    return null;
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to check transcript presence', itemId, transcriptPath: reference.filePath });
     return null;
@@ -74,6 +126,8 @@ export async function createTranscriptWriter(
   logger?: AgentTranscriptLogger | null
 ): Promise<AgentTranscriptWriter | null> {
   const reference = buildTranscriptReference(itemId);
+  const nowIso = new Date().toISOString();
+  const header = `${buildTranscriptHeader(itemId, nowIso)}\n${TRANSCRIPT_SECTION_MARKER}\n${TRANSCRIPT_FOOTER}`;
 
   try {
     await fsPromises.mkdir(path.dirname(reference.filePath), { recursive: true });
@@ -82,24 +136,43 @@ export async function createTranscriptWriter(
     return null;
   }
 
-  const headerLines = [
-    `# Agent transcript for ${itemId}`,
-    '',
-    `Last updated at ${new Date().toISOString()}`,
-    ''
-  ];
-
   try {
-    await fsPromises.writeFile(reference.filePath, headerLines.join('\n'));
+    await fsPromises.writeFile(reference.filePath, header);
   } catch (err) {
     logger?.error?.({ err, msg: 'failed to initialize transcript file', itemId, transcriptPath: reference.filePath });
     return null;
   }
 
   const appendSection = async (heading: string, body: string): Promise<void> => {
-    const sectionLines = [`## ${heading}`, '', body.trimEnd(), '', ''];
     try {
-      await fsPromises.appendFile(reference.filePath, sectionLines.join('\n'));
+      const timestampIso = new Date().toISOString();
+      const sectionLines = [
+        `<section class="transcript-section">`,
+        `  <h2>${escapeHtml(heading)}</h2>`,
+        `  <div class="transcript-meta">${escapeHtml(timestampIso)}</div>`,
+        body.trimEnd(),
+        '</section>',
+        ''
+      ];
+
+      let existingContent = await fsPromises.readFile(reference.filePath, 'utf8');
+      let markerIndex = existingContent.indexOf(TRANSCRIPT_SECTION_MARKER);
+      if (markerIndex === -1) {
+        logger?.warn?.({ msg: 'transcript section marker missing, rewriting file', itemId, transcriptPath: reference.filePath });
+        existingContent = `${buildTranscriptHeader(itemId, timestampIso)}\n${TRANSCRIPT_SECTION_MARKER}\n${TRANSCRIPT_FOOTER}`;
+        markerIndex = existingContent.indexOf(TRANSCRIPT_SECTION_MARKER);
+      }
+
+      const footerIndex = existingContent.lastIndexOf(TRANSCRIPT_FOOTER);
+      const withoutFooter = footerIndex === -1
+        ? existingContent
+        : existingContent.slice(0, footerIndex);
+
+      const updatedHeader = buildTranscriptHeader(itemId, timestampIso);
+      const preservedSections = withoutFooter.slice(markerIndex + TRANSCRIPT_SECTION_MARKER.length).trimStart();
+      const newSections = [preservedSections, sectionLines.join('\n')].filter(Boolean).join('\n');
+      const nextContent = [`${updatedHeader}`, TRANSCRIPT_SECTION_MARKER, newSections, TRANSCRIPT_FOOTER].join('\n');
+      await fsPromises.writeFile(reference.filePath, nextContent);
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to append transcript section', itemId, heading, transcriptPath: reference.filePath });
     }
