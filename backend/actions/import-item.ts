@@ -22,6 +22,49 @@ import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
+// TODO(agent): Consolidate ItemUUID collision handling into a shared allocator helper for reuse across actions.
+async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string> {
+  const maxAttempts = 3;
+  let attempt = 0;
+  let itemUUID = candidate;
+
+  while (attempt < maxAttempts) {
+    let existing: unknown = null;
+    try {
+      existing = ctx.getItem?.get ? ctx.getItem.get(itemUUID) : null;
+    } catch (lookupError) {
+      console.error('[import-item] Failed to verify ItemUUID uniqueness during mint', {
+        attempt,
+        itemUUID,
+        error: lookupError
+      });
+    }
+
+    if (!existing) {
+      return itemUUID;
+    }
+
+    attempt += 1;
+    console.warn('[import-item] Detected ItemUUID collision while minting; retrying with fresh identifier', {
+      attempt,
+      itemUUID
+    });
+
+    try {
+      itemUUID = await ctx.generateItemUUID();
+    } catch (regenError) {
+      console.error('[import-item] Failed to remint ItemUUID after collision', {
+        attempt,
+        previousItemUUID: itemUUID,
+        error: regenError
+      });
+      break;
+    }
+  }
+
+  throw new Error('Failed to mint a unique ItemUUID for import');
+}
+
 function coalesceEinheit(value: string | null): ItemEinheit {
   const raw = value ?? '';
   const trimmed = raw.trim();
@@ -342,7 +385,16 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: 'Failed to resolve item import strategy' });
       }
 
-      const ItemUUID = branch.itemUUID;
+      let ItemUUID = branch.itemUUID;
+      try {
+        ItemUUID = await ensureUniqueItemUUID(branch.itemUUID, ctx);
+      } catch (collisionError) {
+        console.error('[import-item] Aborting import due to repeated ItemUUID collisions', {
+          requestedItemUUID: branch.itemUUID,
+          error: collisionError
+        });
+        return sendJson(res, 500, { error: 'Failed to mint unique ItemUUID for item import' });
+      }
       const resolvedArtikelNummer = branch.artikelNummer ?? '';
       const referenceDefaults = branch.referenceOverride;
       const persistenceMetadata: Record<string, unknown> = {};
