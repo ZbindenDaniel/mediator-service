@@ -461,6 +461,34 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       }
     }
 
+    // TODO(agent): Remove legacy print page redirects once clients stop requesting retired templates.
+    if (url.pathname.startsWith('/print/') && req.method === 'GET') {
+      const canonicalTemplate = '/print/62x100.html';
+      const legacyPrintPaths = new Set(['/print/item-label.html', '/print/box-label.html', '/print/23x23.html']);
+      if (legacyPrintPaths.has(url.pathname)) {
+        console.warn('[print] Legacy print page requested; redirecting to canonical template', {
+          requested: url.pathname,
+          redirect: canonicalTemplate
+        });
+        res.writeHead(302, { Location: canonicalTemplate });
+        return res.end();
+      }
+
+      const relativePath = url.pathname.replace(/^\/+/, '');
+      const resolvedPath = path.join(PUBLIC_DIR, relativePath);
+      try {
+        if (!resolvedPath.startsWith(path.join(PUBLIC_DIR, 'print'))) {
+          throw new Error('bad path');
+        }
+        const html = fs.readFileSync(resolvedPath);
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(html);
+      } catch (err) {
+        console.warn('[print] Print template not found', { requested: url.pathname, error: err });
+        res.writeHead(404); return res.end('Not found');
+      }
+    }
+
     if (url.pathname.startsWith('/prints/') && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, url.pathname);
       try {

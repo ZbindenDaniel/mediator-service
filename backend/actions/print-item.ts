@@ -4,13 +4,15 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 // TODO(agent): Replace legacy Langtext print fallback once structured payload rendering lands.
 // TODO(agent): Document HTML print artifacts so support can trace failures quickly.
-// TODO(agentic-printing): Move item print rendering onto the shared HTML template registry.
+// TODO(agent): Monitor ignored template query logs while the 62x100 default remains fixed.
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
 import { ensureLangtextString } from '../lib/langtext';
 
-// TODO(agent): Surface label size enforcement in UI once additional templates exist.
+// TODO(agent): Align item print payloads with upcoming label size templates.
+// TODO(agent): Promote template selection to UI once multiple label sizes ship.
+// TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -25,6 +27,19 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', (err) => reject(err));
   });
+}
+
+function logUnexpectedTemplateQuery(req: IncomingMessage): void {
+  try {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const raw = url.searchParams.get('template');
+    if (raw && raw !== '62x100') {
+      console.warn('[label] Unexpected label template requested for item print', { template: raw });
+    }
+    if (raw) console.warn('Unexpected label template requested for item print', raw);
+  } catch (err) {
+    console.error('Failed to inspect label template from item print query', err);
+  }
 }
 
 const action = defineHttpAction({
@@ -64,6 +79,7 @@ const action = defineHttpAction({
       if (!id) return sendJson(res, 400, { error: 'invalid item id' });
       const item = ctx.getItem.get(id) as Item | undefined;
       if (!item) return sendJson(res, 404, { error: 'item not found' });
+      logUnexpectedTemplateQuery(req);
       const quantityRaw = item.Auf_Lager as unknown;
       let parsedQuantity = 0;
       if (typeof quantityRaw === 'number' && Number.isFinite(quantityRaw)) {
@@ -86,17 +102,6 @@ const action = defineHttpAction({
         const date = value instanceof Date ? value : new Date(value as string);
         return Number.isNaN(date.getTime()) ? null : date.toISOString();
       };
-
-      try {
-        const requestedTemplate = new URL(req.url ?? '', 'http://localhost').searchParams.get('template');
-        if (requestedTemplate) {
-          console.warn('Ignoring item print template override; 62x100 is enforced', {
-            requestedTemplate
-          });
-        }
-      } catch (err) {
-        console.error('Failed to inspect item label template query', err);
-      }
 
       const itemData: ItemLabelPayload = {
         type: 'item',
