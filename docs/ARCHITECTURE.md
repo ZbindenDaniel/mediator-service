@@ -13,8 +13,8 @@ Design:owner@mediator and target the Q4 documentation refresh.
 - **Structured observability** – Logging relies on `backend/src/lib/logger.ts` and `frontend/src/utils/logger.ts` helpers.
   Actions wrap risky operations in `try/catch` blocks that surface context and rethrow typed errors for the HTTP layer.
   Frontend components use the logger to annotate asynchronous effects, agentic polling, and printing triggers.
-- **Separation of rendering** – Printing flows reuse HTML templates under `frontend/public/print/`. The backend renders these
-  templates for both preview and printer jobs, avoiding duplication and keeping box/item labels in sync.
+- **Separation of rendering** – Printing flows reuse the canonical HTML template at `frontend/public/print/62x100.html`. The
+  backend renders this template for both preview and printer jobs, avoiding duplication and keeping box/item labels in sync.
 - **Progressive automation** – Agentic enrichment runs asynchronously, persisting state transitions so manual fallbacks remain
   available. Background workers build on the same event log to integrate with future services (e.g., Shopware).
 

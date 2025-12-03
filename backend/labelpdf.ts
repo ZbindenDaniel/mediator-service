@@ -9,15 +9,15 @@ try {
 
 // TODO(agent): Keep size-based label templates in sync with frontend print previews.
 // TODO(agent): Outline HTML label export assumptions for postmortems.
+// TODO(agent): Reassess additional label sizes once 62x100-only telemetry stabilises.
 
 const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
 const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');
 
-export type LabelTemplate = '23x23' | '62x100';
+export type LabelTemplate = '62x100';
 
 // TODO(agent): Validate physical print sizing for all label templates.
 const TEMPLATE_DIMENSIONS: Record<LabelTemplate, { width: number; height: number }> = {
-  '23x23': { width: 23, height: 23 },
   '62x100': { width: 62, height: 100 }
 };
 
