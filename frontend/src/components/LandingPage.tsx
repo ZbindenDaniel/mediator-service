@@ -100,6 +100,7 @@ export default function LandingPage() {
       <div className="grid landing-grid">
         <CreateItemCard />
         <SearchCard />
+     {/* 
         <div className="card" id="qr-scan-card">
           <Link className="linkcard" to="/scan">
             <div>
@@ -116,6 +117,7 @@ export default function LandingPage() {
             </div>
           </Link>
         </div>
+              */}
         <StatsCard counts={overview?.counts} printerOk={printerOk} health={health} />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <RecentEventsCard events={previewEvents}></RecentEventsCard>

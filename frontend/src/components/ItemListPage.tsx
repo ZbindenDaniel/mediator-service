@@ -180,15 +180,13 @@ export default function ItemListPage() {
   ]);
 
   const visibleIds = useMemo(() => filtered.map((item) => item.ItemUUID), [filtered]);
-  const agenticStatusOptions = useMemo(() => (
-    [{ value: 'any', label: 'Alle' as const } as const]
-      .concat(
-        AGENTIC_RUN_STATUSES.map((status) => ({
-          value: status,
-          label: describeAgenticStatus(status)
-        }))
-      )
-  ), [AGENTIC_RUN_STATUSES, describeAgenticStatus]);
+  const agenticStatusOptions = useMemo(() => [
+    { value: 'any', label: 'Alle' as const } as const,
+    ...AGENTIC_RUN_STATUSES.map((status) => ({
+      value: status,
+      label: describeAgenticStatus(status)
+    }))
+  ], [AGENTIC_RUN_STATUSES, describeAgenticStatus]);
   const allVisibleSelected = useMemo(() => (
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
   ), [selectedIds, visibleIds]);

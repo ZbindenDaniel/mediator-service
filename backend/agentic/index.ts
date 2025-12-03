@@ -824,7 +824,7 @@ export async function cancelAgenticRun(
   const txn = deps.db.transaction((actorName: string) => {
     const retryCount = existing.RetryCount ?? 0;
     const lastAttemptAt = existing.LastAttemptAt ?? nowIso;
-    const lastError = cancellationReason || existing.LastError ?? null;
+    const lastError = (cancellationReason || existing.LastError) ?? null;
 
     applyQueueUpdate(deps, logger, {
       ItemUUID: itemId,
