@@ -9,6 +9,7 @@ try {
 
 // TODO(agent): Keep size-based label templates in sync with frontend print previews.
 // TODO(agent): Outline HTML label export assumptions for postmortems.
+// TODO(agent): Revisit single-template assumption if printer hardware changes.
 // TODO(agent): Reassess additional label sizes once 62x100-only telemetry stabilises.
 
 const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
@@ -76,16 +77,12 @@ function buildLabelHtml(options: {
   const safeSubtitle = subtitle ? displayValue(subtitle) : '';
   const descriptionText = displayValue(description || '');
   const footer = footerNote ? `<div class="footer">${escapeHtml(footerNote)}</div>` : '';
-  let pageSize = 'auto';
-
-  try {
-    if (!Number.isFinite(width) || !Number.isFinite(height)) {
-      throw new Error('Invalid template dimensions');
-    }
-    pageSize = `${width}mm ${height}mm`;
-  } catch (err) {
-    console.error('[label] Falling back to default page size', { template, width, height, error: err });
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    const error = new Error('Invalid template dimensions');
+    console.error('[label] Invalid template dimensions', { template, width, height, error });
+    throw error;
   }
+  const pageSize = `${width}mm ${height}mm`;
 
   return `<!doctype html>
 <html lang="de">
@@ -262,7 +259,7 @@ export interface BoxLabelOptions {
 }
 
 export async function htmlForBox({ boxData, outPath }: BoxLabelOptions): Promise<string> {
-  const template = boxData.template || '62x100';
+  const template: LabelTemplate = '62x100';
   const labelText = (boxData.labelText || boxData.id || '').trim() || boxData.id;
   const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
 
@@ -314,7 +311,7 @@ export interface ItemLabelOptions {
 }
 
 export async function htmlForItem({ itemData, outPath }: ItemLabelOptions): Promise<string> {
-  const template = itemData.template || '62x100';
+  const template: LabelTemplate = '62x100';
   const labelText = (itemData.labelText || itemData.materialNumber || itemData.id || '').trim() || itemData.id;
   const qrPayload = { ...itemData, template, labelText, type: 'item' } as Record<string, unknown>;
 
