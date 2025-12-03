@@ -284,8 +284,13 @@ async function runPrintWorker(): Promise<void> {
       return;
     }
 
+    // TODO(agent): Measure render latency for label printing to keep template compatibility visible in dashboards.
     try {
-      const result = await printFile({ filePath: outPath, jobName: `Item ${item.ItemUUID}` });
+      const result = await printFile({
+        filePath: outPath,
+        jobName: `Item ${item.ItemUUID}`,
+        renderMode: 'html-to-pdf'
+      });
       if (!result.sent) {
         console.error('Print worker failed to dispatch HTML label', {
           itemId: item.ItemUUID,

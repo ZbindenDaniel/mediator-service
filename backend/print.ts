@@ -7,12 +7,17 @@ import {
   LPSTAT_COMMAND,
   PRINT_TIMEOUT_MS
 } from './config';
+import { renderHtmlToPdf, type HtmlToPdfOptions } from './labelpdf';
+
+// TODO(agent): Unify renderer selection with PDF preview generation once headless dependencies stabilize.
 
 export interface PrintFileOptions {
   filePath: string;
   jobName?: string;
   printerQueue?: string;
   timeoutMs?: number;
+  renderMode?: 'raw' | 'html-to-pdf';
+  renderOptions?: Pick<HtmlToPdfOptions, 'rendererCommand' | 'rendererArgs' | 'timeoutMs'>;
 }
 
 export interface PrintFileResult {
@@ -20,6 +25,7 @@ export interface PrintFileResult {
   reason?: string;
   code?: number | null;
   signal?: NodeJS.Signals | null;
+  artifactPath?: string;
 }
 
 function validateFilePath(filePath: string): { ok: boolean; reason?: string } {
@@ -41,7 +47,7 @@ function validateFilePath(filePath: string): { ok: boolean; reason?: string } {
 }
 
 export async function printFile(options: PrintFileOptions): Promise<PrintFileResult> {
-  const { filePath, jobName, timeoutMs, printerQueue } = options;
+  const { filePath, jobName, timeoutMs, printerQueue, renderMode = 'raw', renderOptions } = options;
   const effectiveQueue = (printerQueue || PRINTER_QUEUE || '').trim();
   const resolvedTimeout = Number.isFinite(timeoutMs) && timeoutMs ? timeoutMs : PRINT_TIMEOUT_MS;
   const validation = validateFilePath(filePath);
@@ -60,7 +66,35 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
     return { sent: false, reason: 'printer_queue_not_configured' };
   }
 
-  const absolute = path.resolve(filePath);
+  let artifactPath = path.resolve(filePath);
+  if (renderMode === 'html-to-pdf') {
+    try {
+      artifactPath = await renderHtmlToPdf({
+        htmlPath: artifactPath,
+        rendererCommand: renderOptions?.rendererCommand,
+        rendererArgs: renderOptions?.rendererArgs,
+        timeoutMs: renderOptions?.timeoutMs ?? resolvedTimeout,
+        logger: console
+      });
+    } catch (renderErr) {
+      console.error('[print] Failed to render HTML label before printing', {
+        sourcePath: artifactPath,
+        error: renderErr
+      });
+      return { sent: false, reason: (renderErr as Error).message };
+    }
+
+    const renderedValidation = validateFilePath(artifactPath);
+    if (!renderedValidation.ok) {
+      console.error('[print] Rendered artifact missing or invalid after HTML conversion', {
+        artifactPath,
+        reason: renderedValidation.reason
+      });
+      return { sent: false, reason: renderedValidation.reason };
+    }
+  }
+
+  const absolute = artifactPath;
   const args = ['-d', effectiveQueue];
   if (jobName && jobName.trim()) {
     args.push('-t', jobName.trim());
@@ -120,7 +154,7 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
           args,
           error: err
         });
-        finish({ sent: false, reason: err.message });
+        finish({ sent: false, reason: err.message, artifactPath: absolute });
       });
 
       child.once('close', (code, signal) => {
@@ -130,7 +164,7 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
             args,
             stdout: stdout.trim()
           });
-          finish({ sent: true, code, signal: signal ?? null });
+          finish({ sent: true, code, signal: signal ?? null, artifactPath: absolute });
           return;
         }
 
@@ -146,7 +180,8 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
           sent: false,
           reason: stderr.trim() || stdout.trim() || `exit_code_${code ?? 'unknown'}`,
           code,
-          signal: signal ?? null
+          signal: signal ?? null,
+          artifactPath: absolute
         });
       });
     } catch (err) {
@@ -155,7 +190,7 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
         args,
         error: err
       });
-      resolve({ sent: false, reason: (err as Error).message });
+      resolve({ sent: false, reason: (err as Error).message, artifactPath: absolute });
     }
   });
 }

@@ -130,7 +130,8 @@ const action = defineHttpAction({
       try {
         printResult = await ctx.printFile({
           filePath: htmlPath,
-          jobName: `Box ${box.BoxID}`
+          jobName: `Box ${box.BoxID}`,
+          renderMode: 'html-to-pdf'
         });
       } catch (err) {
         console.error('Box label print invocation failed', { boxId: box.BoxID, error: err });
@@ -143,7 +144,7 @@ const action = defineHttpAction({
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintSent',
-          Meta: JSON.stringify({ transport: 'html', file: previewUrl })
+          Meta: JSON.stringify({ transport: 'pdf', file: previewUrl, artifact: printResult.artifactPath })
         });
       } else {
         ctx.logEvent({
@@ -151,7 +152,12 @@ const action = defineHttpAction({
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintFailed',
-          Meta: JSON.stringify({ transport: 'html', file: previewUrl, reason: printResult.reason })
+          Meta: JSON.stringify({
+            transport: 'pdf',
+            file: previewUrl,
+            artifact: printResult.artifactPath,
+            reason: printResult.reason
+          })
         });
       }
 
