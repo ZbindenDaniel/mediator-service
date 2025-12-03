@@ -15,9 +15,10 @@ const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');
 
 export type LabelTemplate = '23x23' | '62x100';
 
+// TODO(agent): Validate physical print sizing for all label templates.
 const TEMPLATE_DIMENSIONS: Record<LabelTemplate, { width: number; height: number }> = {
-  '23x23': { width: 320, height: 320 },
-  '62x100': { width: 620, height: 900 }
+  '23x23': { width: 23, height: 23 },
+  '62x100': { width: 62, height: 100 }
 };
 
 function escapeHtml(value: string): string {
@@ -75,6 +76,16 @@ function buildLabelHtml(options: {
   const safeSubtitle = subtitle ? displayValue(subtitle) : '';
   const descriptionText = displayValue(description || '');
   const footer = footerNote ? `<div class="footer">${escapeHtml(footerNote)}</div>` : '';
+  let pageSize = 'auto';
+
+  try {
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      throw new Error('Invalid template dimensions');
+    }
+    pageSize = `${width}mm ${height}mm`;
+  } catch (err) {
+    console.error('[label] Falling back to default page size', { template, width, height, error: err });
+  }
 
   return `<!doctype html>
 <html lang="de">
@@ -83,6 +94,17 @@ function buildLabelHtml(options: {
   <title>Label ${escapeHtml(title)}</title>
   <style>
     :root { color-scheme: light; }
+    @page {
+      size: ${pageSize};
+      margin: 0;
+    }
+    @media print {
+      body { margin: 0; }
+      .label-shell {
+        width: ${width}mm;
+        min-height: ${height}mm;
+      }
+    }
     body {
       font-family: 'Helvetica', 'Arial', sans-serif;
       background: #f5f7fb;
@@ -90,8 +112,8 @@ function buildLabelHtml(options: {
       margin: 0;
     }
     .label-shell {
-      width: ${width}px;
-      min-height: ${height}px;
+      width: ${width}mm;
+      min-height: ${height}mm;
       background: #ffffff;
       border: 1px solid #d8dee9;
       border-radius: 12px;
