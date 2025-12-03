@@ -3,11 +3,10 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { Box, Item } from '../../models';
-import type { BoxLabelPayload, LabelTemplate } from '../labelpdf';
+import type { BoxLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
 
-// TODO(agent): Align box print payloads with size-specific label templates.
-// TODO(agent): Promote template selection to UI once multiple label sizes ship.
+// TODO(agent): Surface label size enforcement in UI once additional templates exist.
 // TODO(agent): Capture HTML label previews to help debug print regressions.
 // TODO(agent): Track rejected template query attempts while only 62x100 is permitted.
 // TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
@@ -93,7 +92,6 @@ const action = defineHttpAction({
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,
-        template,
         labelText: box.BoxID,
         location: box.Location?.trim() || null,
         standortLabel: box.StandortLabel?.trim() || null,

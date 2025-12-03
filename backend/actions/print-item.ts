@@ -6,7 +6,7 @@ import { defineHttpAction } from './index';
 // TODO(agent): Document HTML print artifacts so support can trace failures quickly.
 // TODO(agent): Monitor ignored template query logs while the 62x100 default remains fixed.
 import type { Item } from '../../models';
-import type { ItemLabelPayload, LabelTemplate } from '../labelpdf';
+import type { ItemLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
 import { ensureLangtextString } from '../lib/langtext';
 
@@ -103,11 +103,9 @@ const action = defineHttpAction({
         return Number.isNaN(date.getTime()) ? null : date.toISOString();
       };
 
-      const template: LabelTemplate = '62x100';
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
-        template,
         labelText: item.Artikel_Nummer?.trim() || item.ItemUUID,
         materialNumber: item.Artikel_Nummer?.trim() || null,
         boxId: item.BoxID || null,
