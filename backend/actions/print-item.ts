@@ -4,12 +4,14 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 // TODO(agent): Replace legacy Langtext print fallback once structured payload rendering lands.
 // TODO(agent): Document HTML print artifacts so support can trace failures quickly.
+// TODO(agentic-printing): Move item print rendering onto the shared HTML template registry.
 // TODO(agent): Monitor ignored template query logs while the 62x100 default remains fixed.
 import type { Item } from '../../models';
-import type { ItemLabelPayload, LabelTemplate } from '../labelpdf';
+import type { ItemLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
 import { ensureLangtextString } from '../lib/langtext';
 
+// TODO(agent): Surface label size enforcement in UI once additional templates exist.
 // TODO(agent): Align item print payloads with upcoming label size templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
 // TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
@@ -103,11 +105,20 @@ const action = defineHttpAction({
         return Number.isNaN(date.getTime()) ? null : date.toISOString();
       };
 
-      const template: LabelTemplate = '62x100';
+      try {
+        const requestedTemplate = new URL(req.url ?? '', 'http://localhost').searchParams.get('template');
+        if (requestedTemplate) {
+          console.warn('Ignoring item print template override; 62x100 is enforced', {
+            requestedTemplate
+          });
+        }
+      } catch (err) {
+        console.error('Failed to inspect item label template query', err);
+      }
+
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
-        template,
         labelText: item.Artikel_Nummer?.trim() || item.ItemUUID,
         materialNumber: item.Artikel_Nummer?.trim() || null,
         boxId: item.BoxID || null,

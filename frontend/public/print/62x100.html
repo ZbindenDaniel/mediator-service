@@ -5,6 +5,7 @@
     <title>Etikett 62x100</title>
     <!-- TODO(agent): Keep 62x100 layout aligned with backend PDF sizing. -->
     <!-- TODO(agentic-printing): Capture printer margin telemetry to keep single-page sizing reliable across devices. -->
+    <!-- TODO(agentic-printing): Verify inline payload injection stays in sync with backend QR generation. -->
     <style>
       @page {
         size: 62mm 100mm;
@@ -213,6 +214,19 @@
           }
         }
 
+        function tryInlinePayload() {
+          const inlinePayload = window.__LABEL_PAYLOAD__;
+          if (!inlinePayload) return false;
+          try {
+            render(inlinePayload);
+            return true;
+          } catch (err) {
+            console.error('Failed to render inline payload', err);
+            showError('Eingebettete Druckdaten konnten nicht gelesen werden.');
+            return true;
+          }
+        }
+
         function handleMessage(event) {
           if (event.origin && event.origin !== window.location.origin) {
             console.warn('Ignoring message from unexpected origin', event.origin);
@@ -233,7 +247,7 @@
 
         const params = new URLSearchParams(window.location.search);
         const key = params.get('key');
-        if (!tryFromStorage(key)) {
+        if (!tryInlinePayload() && !tryFromStorage(key)) {
           console.warn('Warte auf Payload via postMessage…');
         }
       })();

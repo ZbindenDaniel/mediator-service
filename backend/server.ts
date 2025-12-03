@@ -81,8 +81,8 @@ import {
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
 import { printFile, testPrinterConnection } from './print';
-import { htmlForBox, htmlForItem } from './labelpdf';
-import type { ItemLabelPayload } from './labelpdf';
+import { htmlForBox, htmlForItem } from './lib/labelHtml';
+import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
 
@@ -253,6 +253,7 @@ async function runPrintWorker(): Promise<void> {
     const itemData: ItemLabelPayload = {
       type: 'item',
       id: item.ItemUUID,
+      labelText: item.Artikel_Nummer?.trim() || item.ItemUUID,
       materialNumber: item.Artikel_Nummer?.trim() || null,
       boxId: item.BoxID || null,
       location: item.Location?.trim() || null,
