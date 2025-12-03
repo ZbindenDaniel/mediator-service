@@ -4,85 +4,10 @@
 </role>
 
 <context>
-  The SQLite schema for `items` includes fields: ItemUUID (primary key), Artikel_Nummer,
-  Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung, Langtext (JSON or long string), Hersteller, Länge_mm, Breite_mm,
-  Höhe_mm, Gewicht_kg, BoxID (optional container link), and Auf_Lager.
+  The SQLite schema for `items` and `item_refs` is provided below.
 </context>
 <database_schema>
-
-ItemInstance {
-  ItemUUID: string;
-  Artikel_Nummer?: string | null;
-  BoxID: string | null;
-  Location?: string | null;
-  UpdatedAt: Date;
-  Datum_erfasst?: Date;
-  Auf_Lager?: number;
-  ShopwareVariantId?: string | null;
-}
-
----
-
-  ItemRef {
-  Artikel_Nummer: string;
-  Grafikname?: string;
-  ImageNames?: string | null;
-  Artikelbeschreibung?: string;
-  Verkaufspreis?: number;
-  Kurzbeschreibung?: string;
-  Langtext?: string | LangtextPayload;
-  Hersteller?: string;
-  Länge_mm?: number;
-  Breite_mm?: number;
-  Höhe_mm?: number;
-  Gewicht_kg?: number;
-  Hauptkategorien_A?: number;
-  Unterkategorien_A?: number;
-  Hauptkategorien_B?: number;
-  Unterkategorien_B?: number;
-  Veröffentlicht_Status?: boolean | string;
-  Shopartikel?: number;
-  Artikeltyp?: string;
-  Einheit?: ItemEinheit;
-  EntityType?: string;
-  ShopwareProductId?: string | null;
-}
-
----
-
-Box {
-  BoxID: string;
-  Location?: string | null;
-  StandortLabel?: string | null;
-  CreatedAt?: string | null;
-  Notes?: string | null;
-  PlacedBy?: string | null;
-  PlacedAt?: string | null;
-  PhotoPath?: string | null;
-  UpdatedAt: string;
-}
-
----
-
-AgenticRun {
-  Id: number;
-  ItemUUID: string;
-  SearchQuery: string | null;
-  Status: string;
-  LastModified: string;
-  ReviewState: string;
-  ReviewedBy: string | null;
-  LastReviewDecision: string | null;
-  LastReviewNotes: string | null;
-  RetryCount: number;
-  NextRetryAt: string | null;
-  LastError: string | null;
-  LastAttemptAt: string | null;
-  TranscriptUrl?: string | null;
-}
-
----
-
+  {{ITEM_DATABASE_SCHEMA}}
 </database_schema>
 
 <task>

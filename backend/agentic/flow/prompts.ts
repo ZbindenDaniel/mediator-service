@@ -12,6 +12,15 @@ const SHOPWARE_PROMPT_PATH = path.join(PROMPTS_DIR, 'shopware-verify.md');
 const CATEGORIZER_PROMPT_PATH = path.join(PROMPTS_DIR, 'categorizer.md');
 const SEARCH_PLANNER_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-planner.md');
 const CHAT_PROMPT_PATH = path.join(PROMPTS_DIR, 'chat.md');
+const DB_SCHEMA_PATH = path.resolve(__dirname, '../../db.ts');
+const CHAT_SCHEMA_TOKEN = '{{ITEM_DATABASE_SCHEMA}}';
+
+type SchemaTable = {
+  name: string;
+  columns: string[];
+  constraints: string[];
+  indexes: string[];
+};
 
 interface ReadPromptOptions {
   itemId: string;
@@ -27,6 +36,128 @@ async function readPromptFile(promptPath: string, { itemId, prompt, logger }: Re
   } catch (err) {
     logger?.error?.({ err, msg: 'failed to load prompt file', itemId, prompt, promptPath });
     throw err;
+  }
+}
+
+// TODO(agent): Centralize SQL schema extraction so future prompt flows can reuse the same summaries without duplicating parsing.
+function extractSchemaSql(source: string, constantName: string): string {
+  const marker = `const ${constantName} = \``;
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex === -1) {
+    throw new Error(`Schema constant not found: ${constantName}`);
+  }
+
+  const startIndex = source.indexOf('`', markerIndex + marker.length - 1);
+  const endIndex = source.indexOf('`;', startIndex + 1);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    throw new Error(`Schema constant is malformed: ${constantName}`);
+  }
+
+  return source.slice(startIndex + 1, endIndex);
+}
+
+function parseTableBlocks(sql: string): SchemaTable[] {
+  const tables: SchemaTable[] = [];
+  const tableRegex = /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+(\w+)\s*\(([\s\S]*?)\);/gim;
+  let match: RegExpExecArray | null;
+  while ((match = tableRegex.exec(sql)) !== null) {
+    const [, name, body] = match;
+    const columns: string[] = [];
+    const constraints: string[] = [];
+    const lines = body
+      .split('\n')
+      .map((line) => line.trim().replace(/,+$/, ''))
+      .filter(Boolean);
+
+    for (const line of lines) {
+      if (/^(foreign key|primary key|unique)/i.test(line)) {
+        constraints.push(line);
+      } else {
+        columns.push(line);
+      }
+    }
+
+    tables.push({ name, columns, constraints, indexes: [] });
+  }
+
+  const indexRegex = /CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+(\w+)\s+ON\s+(\w+)\s*\(([^)]+)\)/gim;
+  let indexMatch: RegExpExecArray | null;
+  while ((indexMatch = indexRegex.exec(sql)) !== null) {
+    const [, indexName, tableName, indexBody] = indexMatch;
+    const table = tables.find((candidate) => candidate.name === tableName);
+    if (table) {
+      table.indexes.push(`${indexName}(${indexBody.trim()})`);
+    }
+  }
+
+  return tables;
+}
+
+function validateSchemaTables(tables: SchemaTable[]): void {
+  const requiredTables = ['item_refs', 'items'];
+  const missing = requiredTables.filter((table) => !tables.some((candidate) => candidate.name === table));
+  if (missing.length > 0) {
+    throw new FlowError('PROMPT_SCHEMA_VALIDATION_FAILED', 'Chat schema is missing required tables', 500, {
+      context: { missing }
+    });
+  }
+
+  const emptyTables = tables.filter((table) => table.columns.length === 0);
+  if (emptyTables.length > 0) {
+    throw new FlowError('PROMPT_SCHEMA_VALIDATION_FAILED', 'Chat schema is missing column definitions', 500, {
+      context: { emptyTables: emptyTables.map(({ name }) => name) }
+    });
+  }
+}
+
+function formatSchemaTables(tables: SchemaTable[]): string {
+  return tables
+    .map((table) => {
+      const lines = [`${table.name}:`, ...table.columns.map((column) => `  - ${column}`)];
+      if (table.constraints.length > 0) {
+        lines.push('  Constraints:');
+        for (const constraint of table.constraints) {
+          lines.push(`    - ${constraint}`);
+        }
+      }
+      if (table.indexes.length > 0) {
+        lines.push('  Indexes:');
+        for (const index of table.indexes) {
+          lines.push(`    - ${index}`);
+        }
+      }
+      return lines.join('\n');
+    })
+    .join('\n\n');
+}
+
+async function buildChatSchemaSection(logger?: ItemFlowLogger): Promise<string> {
+  try {
+    const dbSource = await fs.readFile(DB_SCHEMA_PATH, 'utf8');
+    logger?.debug?.({ msg: 'loaded db schema source for chat prompt', schemaPath: DB_SCHEMA_PATH });
+
+    const itemRefSql = extractSchemaSql(dbSource, 'CREATE_ITEM_REFS_SQL');
+    const itemsSql = extractSchemaSql(dbSource, 'CREATE_ITEMS_SQL');
+    const tables = parseTableBlocks(`${itemRefSql}\n${itemsSql}`);
+
+    validateSchemaTables(tables);
+    const schemaText = formatSchemaTables(tables);
+
+    if (!schemaText.includes('item_refs') || !schemaText.includes('items')) {
+      throw new FlowError('PROMPT_SCHEMA_VALIDATION_FAILED', 'Schema summary did not include required tables', 500, {
+        context: { schemaPath: DB_SCHEMA_PATH }
+      });
+    }
+
+    logger?.debug?.({ msg: 'assembled chat schema section', tables: tables.map(({ name }) => name) });
+    return schemaText;
+  } catch (err) {
+    logger?.error?.({ err, msg: 'failed to build chat schema section', schemaPath: DB_SCHEMA_PATH });
+    if (err instanceof FlowError) {
+      throw err;
+    }
+    throw new FlowError('PROMPT_SCHEMA_BUILD_FAILED', 'Failed to build chat schema section', 500, { cause: err });
   }
 }
 
@@ -88,7 +219,27 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
 
 export async function loadChatPrompt({ logger }: LoadChatPromptOptions = {}): Promise<string> {
   try {
-    return await readPromptFile(CHAT_PROMPT_PATH, { itemId: 'chat', prompt: 'chat', logger });
+    const [template, schemaSection] = await Promise.all([
+      readPromptFile(CHAT_PROMPT_PATH, { itemId: 'chat', prompt: 'chat', logger }),
+      buildChatSchemaSection(logger)
+    ]);
+
+    if (!template.includes(CHAT_SCHEMA_TOKEN)) {
+      throw new FlowError('PROMPT_SCHEMA_TEMPLATE_MISSING', 'Chat prompt template missing schema token', 500, {
+        context: { chatPromptPath: CHAT_PROMPT_PATH }
+      });
+    }
+
+    const prompt = template.replace(CHAT_SCHEMA_TOKEN, schemaSection);
+
+    if (!prompt.includes(schemaSection)) {
+      throw new FlowError('PROMPT_SCHEMA_VALIDATION_FAILED', 'Chat prompt assembly failed schema injection', 500, {
+        context: { chatPromptPath: CHAT_PROMPT_PATH }
+      });
+    }
+
+    logger?.debug?.({ msg: 'chat prompt assembled', schemaLength: schemaSection.length });
+    return prompt;
   } catch (err) {
     if (err instanceof FlowError) {
       throw err;
