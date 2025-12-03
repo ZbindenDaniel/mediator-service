@@ -1,30 +1,32 @@
 import fs from 'fs';
 
-let PDFDocument: any;
 let QRCode: any;
 try {
-  PDFDocument = require('pdfkit');
   QRCode = require('qrcode');
 } catch (err) {
-  console.error('PDF generation unavailable', err);
+  console.error('QR generation unavailable', err);
 }
 
 // TODO(agent): Keep size-based label templates in sync with frontend print previews.
+// TODO(agent): Outline HTML label export assumptions for postmortems.
 
-const LABEL_SIZE: [number, number] = [410, 580];
 const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
 const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');
-// TODO: Surface configurable label styling so branding can be adjusted without code changes.
-// TODO(agent): Add registry for supported label sizes so validation stays centralized.
+
 export type LabelTemplate = '23x23' | '62x100';
 
-function mmToPt(mm: number): number {
-  return (mm / 25.4) * 72;
-}
+const TEMPLATE_DIMENSIONS: Record<LabelTemplate, { width: number; height: number }> = {
+  '23x23': { width: 320, height: 320 },
+  '62x100': { width: 620, height: 900 }
+};
 
-async function makeQrPngBuffer(text: string): Promise<Buffer> {
-  if (!QRCode) throw new Error('qrcode module not available');
-  return QRCode.toBuffer(text, { type: 'png', margin: 0, scale: 6 });
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -41,6 +43,183 @@ function formatDate(value: string | Date | null | undefined): string {
     return typeof value === 'string' ? value : '—';
   }
   return DATE_FORMAT.format(date);
+}
+
+function displayValue(value: string | null | undefined): string {
+  if (typeof value !== 'string') return '—';
+  const trimmed = value.trim();
+  return trimmed || '—';
+}
+
+async function makeQrDataUrl(text: string): Promise<string> {
+  if (!QRCode) throw new Error('qrcode module not available');
+  return QRCode.toDataURL(text, { type: 'image/png', margin: 0, scale: 6 });
+}
+
+function renderMetaRow(label: string, value: string): string {
+  return `<div class="meta-row"><span class="meta-label">${escapeHtml(label)}</span><span class="meta-value">${escapeHtml(value)}</span></div>`;
+}
+
+function buildLabelHtml(options: {
+  title: string;
+  subtitle?: string | null;
+  description?: string | null;
+  qrDataUrl: string;
+  metaRows: string[];
+  template: LabelTemplate;
+  badge: string;
+  footerNote?: string;
+}): string {
+  const { title, subtitle, description, qrDataUrl, metaRows, template, badge, footerNote } = options;
+  const { width, height } = TEMPLATE_DIMENSIONS[template];
+  const safeSubtitle = subtitle ? displayValue(subtitle) : '';
+  const descriptionText = displayValue(description || '');
+  const footer = footerNote ? `<div class="footer">${escapeHtml(footerNote)}</div>` : '';
+
+  return `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>Label ${escapeHtml(title)}</title>
+  <style>
+    :root { color-scheme: light; }
+    body {
+      font-family: 'Helvetica', 'Arial', sans-serif;
+      background: #f5f7fb;
+      padding: 16px;
+      margin: 0;
+    }
+    .label-shell {
+      width: ${width}px;
+      min-height: ${height}px;
+      background: #ffffff;
+      border: 1px solid #d8dee9;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(17, 24, 39, 0.12);
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 1fr 190px;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 12px;
+    }
+    .label-heading {
+      grid-column: 1 / 2;
+    }
+    .badge {
+      display: inline-block;
+      background: #0f62fe;
+      color: #f9fbff;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #102a43;
+      margin: 6px 0 2px 0;
+      word-break: break-word;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #52606d;
+      margin: 0;
+    }
+    .qr {
+      grid-row: 1 / span 3;
+      grid-column: 2 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f0f4ff;
+      border-radius: 10px;
+      padding: 10px;
+      border: 1px dashed #cbd2d9;
+    }
+    .qr img { width: 160px; height: 160px; object-fit: contain; }
+    .meta {
+      grid-column: 1 / 2;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .meta-row {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 10px;
+      font-size: 13px;
+      color: #243b53;
+    }
+    .meta-label { font-weight: 600; color: #334e68; }
+    .meta-value { color: #102a43; word-break: break-word; }
+    .description-block {
+      grid-column: 1 / 3;
+      background: #f8fafc;
+      border-radius: 10px;
+      border: 1px solid #e4e7eb;
+      padding: 12px 14px;
+    }
+    .description-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #243b53;
+      margin: 0 0 6px 0;
+    }
+    .description-text {
+      font-size: 13px;
+      color: #102a43;
+      margin: 0;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .footer {
+      grid-column: 1 / 3;
+      font-size: 11px;
+      color: #52606d;
+      margin-top: 4px;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-shell">
+    <div class="label-heading">
+      <span class="badge">${escapeHtml(badge)}</span>
+      <div class="title">${escapeHtml(title)}</div>
+      ${safeSubtitle ? `<p class="subtitle">${escapeHtml(safeSubtitle)}</p>` : ''}
+    </div>
+    <div class="qr">
+      <img src="${qrDataUrl}" alt="QR code for ${escapeHtml(title)}" />
+    </div>
+    <div class="meta">
+      ${metaRows.join('')}
+    </div>
+    <div class="description-block">
+      <p class="description-title">Beschreibung</p>
+      <p class="description-text">${escapeHtml(descriptionText)}</p>
+    </div>
+    ${footer}
+  </div>
+</body>
+</html>`;
+}
+
+async function writeHtmlFile(outPath: string, html: string, context: string): Promise<void> {
+  return await new Promise((resolve, reject) => {
+    fs.writeFile(outPath, html, 'utf8', (err) => {
+      if (err) {
+        console.error(`[label] Failed to persist ${context} HTML`, { outPath, error: err });
+        reject(err);
+        return;
+      }
+      resolve(undefined);
+    });
+  });
 }
 
 export interface BoxLabelPayload {
@@ -60,102 +239,35 @@ export interface BoxLabelOptions {
   outPath: string;
 }
 
-export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<string> {
-  if (!PDFDocument) throw new Error('pdfkit module not available');
+export async function htmlForBox({ boxData, outPath }: BoxLabelOptions): Promise<string> {
   const template = boxData.template || '62x100';
   const labelText = (boxData.labelText || boxData.id || '').trim() || boxData.id;
-  if (template === '23x23') {
-    const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
-    return pdfFor23x23({ qrPayload, label: labelText, type: 'box' }, outPath);
-  }
-  if (template === '62x100') {
-    const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
-    return pdfFor62x100({ qrPayload, label: labelText, type: 'box' }, outPath);
-  }
+  const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
+
   try {
-    const doc = new PDFDocument({ size: 'A6', margin: 36 });
-    const stream = fs.createWriteStream(outPath);
-    doc.pipe(stream);
+    const qrDataUrl = await makeQrDataUrl(JSON.stringify(qrPayload));
+    const metaRows = [
+      renderMetaRow('Standort', displayValue(boxData.standortLabel || boxData.location)),
+      renderMetaRow('Anzahl gesamt', formatNumber(boxData.quantity)),
+      renderMetaRow('Artikelpositionen', formatNumber(boxData.itemCount)),
+      renderMetaRow('Label-Template', template)
+    ];
 
-    const qrContent = JSON.stringify(boxData);
-    const qr = await makeQrPngBuffer(qrContent);
-
-    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const qrSize = Math.min(200, contentWidth * 0.42);
-    const textWidth = Math.max(contentWidth - qrSize - 28, contentWidth * 0.55);
-    const textX = doc.page.margins.left + 8;
-    const textY = doc.page.margins.top + 12;
-    const qrX = doc.page.margins.left + textWidth + 20;
-    const qrY = doc.page.margins.top + 30;
-
-    const frameX = doc.page.margins.left / 2;
-    const frameY = doc.page.margins.top / 2;
-    const frameWidth = doc.page.width - frameX * 2;
-    const frameHeight = doc.page.height - frameY * 2;
-
-    doc
-      .save()
-      .roundedRect(textX - 12, textY - 18, textWidth + 24, frameHeight - 48, 12)
-      .fill('#ffffff')
-      .restore();
-
-    doc
-      .save()
-      .roundedRect(qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 12)
-      .fill('#ffffff')
-      .restore();
-
-    doc
-      .moveDown(0.2)
-      .font('Helvetica')
-      .fontSize(18)
-      .fillColor('#1d3557')
-      .text(`Box-ID: ${boxData.id}`, { width: contentWidth });
-
-    doc
-      .moveDown(1)
-      .font('Helvetica-Bold')
-      .fontSize(13)
-      .fillColor('#0b1f33')
-      .text(`Anzahl gesamt: ${formatNumber(boxData.quantity)}`, { width: textWidth });
-
-    if (typeof boxData.itemCount === 'number' && Number.isFinite(boxData.itemCount)) {
-      doc
-        .moveDown(0.4)
-        .font('Helvetica')
-        .fontSize(12)
-        .fillColor('#2f3c4f')
-        .text(`Artikelpositionen: ${NUMBER_FORMAT.format(boxData.itemCount)}`, { width: textWidth });
-    }
-
-    const description = boxData.description?.trim() || '—';
-    doc
-      .moveDown(3)
-      .font('Helvetica-Bold')
-      .fontSize(13)
-      .fillColor('#0b1f33')
-      .text('Beschreibung', { width: textWidth });
-
-    doc
-      .moveDown(0.15)
-      .font('Helvetica')
-      .fontSize(12)
-      .fillColor('#2f3c4f')
-      .text(description, { width: contentWidth, lineGap: 2 });
-
-
-
-    doc.image(qr, qrX, qrY, { fit: [qrSize, qrSize] });
-
-    doc.end();
-
-    await new Promise<void>((resolve, reject) => {
-      stream.on('finish', () => resolve());
-      stream.on('error', (err) => reject(err));
+    const html = buildLabelHtml({
+      title: labelText,
+      subtitle: boxData.location || boxData.standortLabel,
+      description: boxData.description,
+      qrDataUrl,
+      metaRows,
+      template,
+      badge: 'Box'
     });
+
+    await writeHtmlFile(outPath, html, 'box label');
+    console.log('[label] Box HTML saved', { outPath, template });
     return outPath;
   } catch (err) {
-    console.error('Failed to create box label PDF', err);
+    console.error('Failed to create box label HTML', err);
     throw err;
   }
 }
@@ -179,237 +291,39 @@ export interface ItemLabelOptions {
   outPath: string;
 }
 
-interface SquareLabelPayload {
-  type: 'box' | 'item';
-  label: string;
-  qrPayload: Record<string, unknown>;
-}
-
-async function pdfFor23x23({ qrPayload, label }: SquareLabelPayload, outPath: string): Promise<string> {
-  if (!PDFDocument) throw new Error('pdfkit module not available');
-  const labelSize = mmToPt(23);
-  const pageSize: [number, number] = [labelSize, labelSize];
-
-  try {
-    const doc = new PDFDocument({ size: pageSize, margin: 6 });
-    const stream = fs.createWriteStream(outPath);
-    doc.pipe(stream);
-
-    const qrContent = JSON.stringify(qrPayload);
-    const qr = await makeQrPngBuffer(qrContent);
-
-    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const contentHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
-    const frameX = doc.page.margins.left / 2;
-    const frameY = doc.page.margins.top / 2;
-    const frameWidth = doc.page.width - frameX * 2;
-    const frameHeight = doc.page.height - frameY * 2;
-    const captionHeight = 12;
-    const qrTargetSize = Math.min(contentWidth, contentHeight - captionHeight - 4);
-    const qrX = doc.page.margins.left + (contentWidth - qrTargetSize) / 2;
-    const qrY = doc.page.margins.top;
-
-    doc
-      .save()
-      .roundedRect(frameX, frameY, frameWidth, frameHeight, 4)
-      .fill('#ffffff')
-      .restore();
-
-    doc.image(qr, qrX, qrY, { fit: [qrTargetSize, qrTargetSize] });
-
-    const caption = qrPayload.type === 'box' ? `BoxId ${label}` : `Artikelnummer ${label}`;
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(8)
-      .fillColor('#0b1f33')
-      .text(caption, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - captionHeight + 4, {
-        width: contentWidth,
-        align: 'center'
-      });
-
-    doc.end();
-
-    await new Promise<void>((resolve, reject) => {
-      stream.on('finish', () => resolve());
-      stream.on('error', (err) => reject(err));
-    });
-
-    return outPath;
-  } catch (err) {
-    console.error('Failed to create 23x23 label PDF', err);
-    throw err;
-  }
-}
-
-async function pdfFor62x100({ qrPayload, label }: SquareLabelPayload, outPath: string): Promise<string> {
-  if (!PDFDocument) throw new Error('pdfkit module not available');
-  const labelWidth = mmToPt(62);
-  const labelHeight = mmToPt(100);
-  const pageSize: [number, number] = [labelWidth, labelHeight];
-
-  try {
-    const doc = new PDFDocument({ size: pageSize, margin: 2 });
-    const stream = fs.createWriteStream(outPath);
-    doc.pipe(stream);
-
-    const qrContent = JSON.stringify(qrPayload);
-    const qr = await makeQrPngBuffer(qrContent);
-
-    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const contentHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
-    const frameX = doc.page.margins.left;
-    const frameY = doc.page.margins.top;
-    const frameWidth = doc.page.width - frameX * 2;
-    const frameHeight = doc.page.height - frameY * 2;
-    const captionHeight = 18;
-    const qrTargetSize = Math.min(mmToPt(60), contentWidth, contentHeight - captionHeight - 10);
-    const qrX = doc.page.margins.left + (contentWidth - qrTargetSize) / 2;
-    const qrY = doc.page.margins.top + 6;
-
-    doc
-      .save()
-      .roundedRect(frameX, frameY, frameWidth, frameHeight, 6)
-      .fill('#ffffff')
-      .restore();
-
-    doc.image(qr, qrX, qrY, { fit: [qrTargetSize, qrTargetSize] });
-
-    const caption = qrPayload.type === 'box' ? `BoxId ${label}` : `Artikelnummer ${label}`;
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(12)
-      .fillColor('#0b1f33')
-      .text(caption, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - captionHeight + 6, {
-        width: contentWidth,
-        align: 'center'
-      });
-
-    doc.end();
-
-    await new Promise<void>((resolve, reject) => {
-      stream.on('finish', () => resolve());
-      stream.on('error', (err) => reject(err));
-    });
-
-    return outPath;
-  } catch (err) {
-    console.error('Failed to create 62x100 label PDF', err);
-    throw err;
-  }
-}
-
-export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promise<string> {
-  if (!PDFDocument) throw new Error('pdfkit module not available');
+export async function htmlForItem({ itemData, outPath }: ItemLabelOptions): Promise<string> {
   const template = itemData.template || '62x100';
-  const fallbackLabel = itemData.materialNumber || itemData.id;
-  const labelText = (itemData.labelText || fallbackLabel || '').trim() || fallbackLabel || itemData.id;
-  if (template === '23x23') {
-    const qrPayload = { ...itemData, template, labelText, type: 'item' } as Record<string, unknown>;
-    return pdfFor23x23({ qrPayload, label: labelText, type: 'item' }, outPath);
-  }
-  if (template === '62x100') {
-    const qrPayload = { ...itemData, template, labelText, type: 'item' } as Record<string, unknown>;
-    return pdfFor62x100({ qrPayload, label: labelText, type: 'item' }, outPath);
-  }
+  const labelText = (itemData.labelText || itemData.materialNumber || itemData.id || '').trim() || itemData.id;
+  const qrPayload = { ...itemData, template, labelText, type: 'item' } as Record<string, unknown>;
+
   try {
-    const doc = new PDFDocument({ size: LABEL_SIZE, margin: 32 });
-    const stream = fs.createWriteStream(outPath);
-    doc.pipe(stream);
+    const qrDataUrl = await makeQrDataUrl(JSON.stringify(qrPayload));
+    const metaRows = [
+      renderMetaRow('Materialnummer', displayValue(itemData.materialNumber)),
+      renderMetaRow('Box', displayValue(itemData.boxId)),
+      renderMetaRow('Standort', displayValue(itemData.location)),
+      renderMetaRow('Menge', formatNumber(itemData.quantity)),
+      renderMetaRow('Hinzugefügt', formatDate(itemData.addedAt)),
+      renderMetaRow('Aktualisiert', formatDate(itemData.updatedAt)),
+      renderMetaRow('Label-Template', template)
+    ];
 
-    const qrContent = JSON.stringify(itemData);
-    const qr = await makeQrPngBuffer(qrContent);
-
-    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const qrSize = Math.min(200, contentWidth * 0.42);
-    const textWidth = Math.max(contentWidth - qrSize - 28, contentWidth * 0.55);
-    const textX = doc.page.margins.left + 8;
-    const textY = doc.page.margins.top + 12;
-    const qrX = doc.page.margins.left + textWidth + 20;
-    const qrY = doc.page.margins.top + 20;
-
-    const frameX = doc.page.margins.left / 2;
-    const frameY = doc.page.margins.top / 2;
-    const frameWidth = doc.page.width - frameX * 2;
-    const frameHeight = doc.page.height - frameY * 2;
-
-    doc
-      .save()
-      .roundedRect(textX - 12, textY - 18, textWidth + 24, frameHeight - 48, 12)
-      .fill('#ffffff')
-      .restore();
-
-    doc
-      .save()
-      .roundedRect(qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 12)
-      .fill('#ffffff')
-      .restore();
-
-    const headline = itemData.description?.trim() || 'Artikel';
-    doc
-      .font('Helvetica-Bold')
-      .fontSize(24)
-      .fillColor('#0b1f33')
-      .text(headline, textX, textY, { width: textWidth });
-
-    doc
-      .moveDown(0.4)
-      .font('Helvetica')
-      .fontSize(14)
-      .fillColor('#1d3557')
-      .text('Artikelnummer');
-
-    doc
-      .moveDown(0.15)
-      .font('Helvetica')
-      .fontSize(12)
-      .fillColor('#2f3c4f')
-      .text(`${itemData.materialNumber?.trim() || '—'}`, { width: textWidth });
-
-    const drawSection = (label: string, value: string, space = 0.7) => {
-      doc
-        .moveDown(space)
-        .font('Helvetica-Bold')
-        .fontSize(12)
-        .fillColor('#0b1f33')
-        .text(label, { width: textWidth });
-
-      doc
-        .moveDown(0.15)
-        .font('Helvetica')
-        .fontSize(12)
-        .fillColor('#2f3c4f')
-        .text(value || '—', { width: textWidth, lineGap: 2 });
-    };
-
-    drawSection('Artikelbeschreibung', headline);
-    drawSection('Angelegt am', formatDate(itemData.addedAt));
-    drawSection('Geändert am', formatDate(itemData.updatedAt));
-
-    doc
-      .moveDown(0.7)
-      .font('Helvetica-Bold')
-      .fontSize(12)
-      .fillColor('#0b1f33')
-      .text('Anzahl', { width: textWidth });
-
-    doc
-      .moveDown(0.2)
-      .font('Helvetica')
-      .fontSize(16)
-      .fillColor('#1d3557')
-      .text(formatNumber(itemData.quantity), { width: textWidth });
-
-    doc.image(qr, qrX, qrY, { fit: [qrSize, qrSize] });
-
-    doc.end();
-
-    await new Promise<void>((resolve, reject) => {
-      stream.on('finish', () => resolve());
-      stream.on('error', (err) => reject(err));
+    const html = buildLabelHtml({
+      title: labelText,
+      subtitle: itemData.location,
+      description: itemData.description,
+      qrDataUrl,
+      metaRows,
+      template,
+      badge: 'Artikel',
+      footerNote: itemData.boxId ? `Box-ID: ${itemData.boxId}` : undefined
     });
+
+    await writeHtmlFile(outPath, html, 'item label');
+    console.log('[label] Item HTML saved', { outPath, template });
     return outPath;
   } catch (err) {
-    console.error('Failed to create item label PDF', err);
+    console.error('Failed to create item label HTML', err);
     throw err;
   }
 }
