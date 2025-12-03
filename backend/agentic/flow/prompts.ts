@@ -22,6 +22,49 @@ type SchemaTable = {
   indexes: string[];
 };
 
+// TODO(agent): Keep column usage notes aligned with db schema changes.
+type ColumnNote = {
+  note: string;
+  aliases?: string[];
+};
+
+export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
+  item_refs: {
+    Artikel_Nummer: { note: 'SKU-level master record', aliases: ['SKU'] },
+    Grafikname: { note: 'Base media identifier' },
+    ImageNames: { note: 'Comma-separated image list' },
+    Artikelbeschreibung: { note: 'Primary product name' },
+    Verkaufspreis: { note: 'Sell price' },
+    Kurzbeschreibung: { note: 'Short description' },
+    Langtext: { note: 'Rich description text' },
+    Hersteller: { note: 'Manufacturer label', aliases: ['brand'] },
+    Länge_mm: { note: 'Length in millimeters', aliases: ['dimensions'] },
+    Breite_mm: { note: 'Width in millimeters', aliases: ['dimensions'] },
+    Höhe_mm: { note: 'Height in millimeters', aliases: ['dimensions'] },
+    Gewicht_kg: { note: 'Weight in kilograms' },
+    Hauptkategorien_A: { note: 'Primary category A code' },
+    Unterkategorien_A: { note: 'Secondary category A code' },
+    Hauptkategorien_B: { note: 'Primary category B code' },
+    Unterkategorien_B: { note: 'Secondary category B code' },
+    Veröffentlicht_Status: { note: 'Publication status' },
+    Shopartikel: { note: 'Shop article flag' },
+    Artikeltyp: { note: 'Product type' },
+    Einheit: { note: 'Unit of measure' },
+    EntityType: { note: 'Source entity type' },
+    ShopwareProductId: { note: 'Shopware parent product id' }
+  },
+  items: {
+    ItemUUID: { note: 'Instance identifier' },
+    Artikel_Nummer: { note: 'Linked SKU reference', aliases: ['SKU'] },
+    BoxID: { note: 'Storage box id' },
+    Location: { note: 'Free-form storage location' },
+    UpdatedAt: { note: 'Last update timestamp' },
+    Datum_erfasst: { note: 'Capture timestamp' },
+    Auf_Lager: { note: 'Stock availability flag', aliases: ['stock'] },
+    ShopwareVariantId: { note: 'Shopware variant id' }
+  }
+};
+
 interface ReadPromptOptions {
   itemId: string;
   prompt: string;
@@ -111,10 +154,40 @@ function validateSchemaTables(tables: SchemaTable[]): void {
   }
 }
 
-function formatSchemaTables(tables: SchemaTable[]): string {
+function annotateColumn(
+  column: string,
+  tableName: string,
+  logger?: ItemFlowLogger
+): { rendered: string; name?: string; foundNote: boolean } {
+  const columnName = column.split(/\s+/)[0];
+  const note = SCHEMA_COLUMN_NOTES[tableName]?.[columnName];
+  if (!note || !columnName) {
+    return { rendered: column, name: columnName, foundNote: false };
+  }
+
+  const aliasText = note.aliases?.length ? `; aliases: ${note.aliases.join('/')}` : '';
+  const rendered = `${column} — use: ${note.note}${aliasText}`;
+  logger?.debug?.({ msg: 'schema column annotated', tableName, columnName, hasAliases: Boolean(aliasText) });
+  return { rendered, name: columnName, foundNote: true };
+}
+
+function formatSchemaTables(tables: SchemaTable[], logger?: ItemFlowLogger): string {
   return tables
     .map((table) => {
-      const lines = [`${table.name}:`, ...table.columns.map((column) => `  - ${column}`)];
+      const missingNotes: string[] = [];
+      const annotatedColumns = table.columns.map((column) => {
+        const { rendered, name, foundNote } = annotateColumn(column, table.name, logger);
+        if (!foundNote && name) {
+          missingNotes.push(name);
+        }
+        return `  - ${rendered}`;
+      });
+
+      if (missingNotes.length > 0) {
+        logger?.debug?.({ msg: 'schema column notes missing', table: table.name, missingNotes });
+      }
+
+      const lines = [`${table.name}:`, ...annotatedColumns];
       if (table.constraints.length > 0) {
         lines.push('  Constraints:');
         for (const constraint of table.constraints) {
@@ -142,7 +215,7 @@ async function buildChatSchemaSection(logger?: ItemFlowLogger): Promise<string> 
     const tables = parseTableBlocks(`${itemRefSql}\n${itemsSql}`);
 
     validateSchemaTables(tables);
-    const schemaText = formatSchemaTables(tables);
+    const schemaText = formatSchemaTables(tables, logger);
 
     if (!schemaText.includes('item_refs') || !schemaText.includes('items')) {
       throw new FlowError('PROMPT_SCHEMA_VALIDATION_FAILED', 'Schema summary did not include required tables', 500, {
@@ -150,7 +223,11 @@ async function buildChatSchemaSection(logger?: ItemFlowLogger): Promise<string> 
       });
     }
 
-    logger?.debug?.({ msg: 'assembled chat schema section', tables: tables.map(({ name }) => name) });
+    logger?.debug?.({
+      msg: 'assembled chat schema section',
+      tables: tables.map(({ name }) => name),
+      annotatedColumns: tables.map(({ name, columns }) => ({ table: name, columnCount: columns.length }))
+    });
     return schemaText;
   } catch (err) {
     logger?.error?.({ err, msg: 'failed to build chat schema section', schemaPath: DB_SCHEMA_PATH });
