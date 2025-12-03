@@ -10,6 +10,7 @@ try {
 // TODO(agent): Keep size-based label templates in sync with frontend print previews.
 // TODO(agent): Outline HTML label export assumptions for postmortems.
 // TODO(agent): Revisit single-template assumption if printer hardware changes.
+// TODO(agent): Reassess additional label sizes once 62x100-only telemetry stabilises.
 
 const NUMBER_FORMAT = new Intl.NumberFormat('de-DE');
 const DATE_FORMAT = new Intl.DateTimeFormat('de-DE');

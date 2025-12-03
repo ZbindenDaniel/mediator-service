@@ -12,6 +12,7 @@ import { ensureLangtextString } from '../lib/langtext';
 
 // TODO(agent): Align item print payloads with upcoming label size templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
+// TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -35,6 +36,7 @@ function logUnexpectedTemplateQuery(req: IncomingMessage): void {
     if (raw && raw !== '62x100') {
       console.warn('[label] Unexpected label template requested for item print', { template: raw });
     }
+    if (raw) console.warn('Unexpected label template requested for item print', raw);
   } catch (err) {
     console.error('Failed to inspect label template from item print query', err);
   }

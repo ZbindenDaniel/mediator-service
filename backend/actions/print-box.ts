@@ -10,6 +10,7 @@ import type { PrintFileResult } from '../print';
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
 // TODO(agent): Capture HTML label previews to help debug print regressions.
 // TODO(agent): Track rejected template query attempts while only 62x100 is permitted.
+// TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -33,6 +34,7 @@ function logUnexpectedTemplateQuery(req: IncomingMessage): void {
     if (raw && raw !== '62x100') {
       console.warn('[label] Unexpected label template requested for box print', { template: raw });
     }
+    if (raw) console.warn('Unexpected label template requested for box print', raw);
   } catch (err) {
     console.error('Failed to inspect label template from box print query', err);
   }
@@ -87,7 +89,7 @@ const action = defineHttpAction({
         return sum;
       }, 0);
 
-      const template: LabelTemplate = '62x100';
+      const template = resolveTemplateFromQuery(req) || '62x100';
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,
