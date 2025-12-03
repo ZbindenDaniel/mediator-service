@@ -107,11 +107,59 @@ export function sanitizeJsonInput(rawInput: unknown, { loggerInstance, context }
 }
 
 export function parseJsonWithSanitizer(rawInput: unknown, options?: SanitizeOptions): any {
-  const sanitized = sanitizeJsonInput(rawInput, options);
+  const { loggerInstance, context } = options ?? {};
+  const sanitized = sanitizeJsonInput(rawInput, { loggerInstance, context });
   try {
     return JSON.parse(sanitized);
   } catch (err) {
     (err as Error & { sanitized?: string }).sanitized = sanitized;
+    loggerInstance?.debug?.({
+      msg: 'json parse failed after sanitization',
+      error: err instanceof Error ? err.message : String(err),
+      ...context
+    });
+
+    if (typeof rawInput === 'string') {
+      const heuristicActions: string[] = [];
+      let heuristicCandidate: string | null = null;
+
+      // TODO(agent-json): Unify heuristic extraction with sanitizer stages to avoid duplication.
+      const fencedJsonMatch = rawInput.match(/```json\s*\n?([\s\S]*?)```/i);
+      if (fencedJsonMatch?.[1]) {
+        heuristicCandidate = fencedJsonMatch[1].trim();
+        heuristicActions.push('heuristic-fenced-json');
+      } else {
+        const firstBrace = rawInput.indexOf('{');
+        if (firstBrace !== -1) {
+          const extracted = extractBalancedJsonSegment(rawInput, firstBrace);
+          if (extracted) {
+            heuristicCandidate = extracted.trim();
+            heuristicActions.push('heuristic-first-brace-segment');
+          }
+        }
+      }
+
+      if (heuristicCandidate) {
+        loggerInstance?.debug?.({
+          msg: 'retrying json parse with heuristic slice',
+          actions: heuristicActions,
+          ...context
+        });
+        try {
+          return JSON.parse(heuristicCandidate);
+        } catch (retryErr) {
+          (retryErr as Error & { sanitized?: string }).sanitized = heuristicCandidate;
+          loggerInstance?.debug?.({
+            msg: 'heuristic json parse failed',
+            actions: heuristicActions,
+            error: retryErr instanceof Error ? retryErr.message : String(retryErr),
+            ...context
+          });
+          throw retryErr;
+        }
+      }
+    }
+
     throw err;
   }
 }
