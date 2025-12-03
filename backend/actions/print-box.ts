@@ -8,6 +8,8 @@ import type { PrintFileResult } from '../print';
 
 // TODO(agent): Surface label size enforcement in UI once additional templates exist.
 // TODO(agent): Capture HTML label previews to help debug print regressions.
+// TODO(agent): Track rejected template query attempts while only 62x100 is permitted.
+// TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -22,6 +24,19 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', (err) => reject(err));
   });
+}
+
+function logUnexpectedTemplateQuery(req: IncomingMessage): void {
+  try {
+    const url = new URL(req.url ?? '', 'http://localhost');
+    const raw = url.searchParams.get('template');
+    if (raw && raw !== '62x100') {
+      console.warn('[label] Unexpected label template requested for box print', { template: raw });
+    }
+    if (raw) console.warn('Unexpected label template requested for box print', raw);
+  } catch (err) {
+    console.error('Failed to inspect label template from box print query', err);
+  }
 }
 
 const action = defineHttpAction({
@@ -62,6 +77,7 @@ const action = defineHttpAction({
       const box = ctx.getBox.get(id) as Box | undefined;
       if (!box) return sendJson(res, 404, { error: 'box not found' });
       const items = (ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [];
+      logUnexpectedTemplateQuery(req);
       const totalQuantity = items.reduce((sum, item) => {
         const raw = (item as Item)?.Auf_Lager as unknown;
         if (typeof raw === 'number' && Number.isFinite(raw)) return sum + raw;
