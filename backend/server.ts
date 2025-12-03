@@ -80,8 +80,8 @@ import {
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
-import { printPdf, testPrinterConnection } from './print';
-import { pdfForBox, pdfForItem } from './labelpdf';
+import { printFile, testPrinterConnection } from './print';
+import { htmlForBox, htmlForItem } from './labelpdf';
 import type { ItemLabelPayload } from './labelpdf';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
@@ -264,7 +264,7 @@ async function runPrintWorker(): Promise<void> {
 
     const outPath = path.join(
       PREVIEW_DIR,
-      `queue-item-${item.ItemUUID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, '_')
+      `queue-item-${item.ItemUUID}-${Date.now()}.html`.replace(/[^\w.\-]/g, '_')
     );
 
     try {
@@ -276,17 +276,17 @@ async function runPrintWorker(): Promise<void> {
     }
 
     try {
-      await pdfForItem({ itemData, outPath });
-    } catch (pdfErr) {
-      console.error('Print worker failed to generate PDF', pdfErr);
-      updateLabelJobStatus.run('Error', (pdfErr as Error).message, job.Id);
+      await htmlForItem({ itemData, outPath });
+    } catch (htmlErr) {
+      console.error('Print worker failed to generate HTML label', htmlErr);
+      updateLabelJobStatus.run('Error', (htmlErr as Error).message, job.Id);
       return;
     }
 
     try {
-      const result = await printPdf({ filePath: outPath, jobName: `Item ${item.ItemUUID}` });
+      const result = await printFile({ filePath: outPath, jobName: `Item ${item.ItemUUID}` });
       if (!result.sent) {
-        console.error('Print worker failed to dispatch PDF', {
+        console.error('Print worker failed to dispatch HTML label', {
           itemId: item.ItemUUID,
           jobId: job.Id,
           reason: result.reason
@@ -336,9 +336,9 @@ type ActionContext = {
   updateAgenticRunStatus: typeof updateAgenticRunStatus;
   listItems: typeof listItems;
   getAdjacentItemIds: typeof getAdjacentItemIds;
-  pdfForBox: typeof pdfForBox;
-  pdfForItem: typeof pdfForItem;
-  printPdf: typeof printPdf;
+  htmlForBox: typeof htmlForBox;
+  htmlForItem: typeof htmlForItem;
+  printFile: typeof printFile;
   testPrinterConnection: typeof testPrinterConnection;
   EVENT_LABELS: typeof EVENT_LABELS;
   eventLabel: typeof eventLabel;
@@ -465,7 +465,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       try {
         if (!p.startsWith(path.join(PUBLIC_DIR, 'prints'))) throw new Error('bad path');
         if (fs.existsSync(p)) {
-          res.writeHead(200, { 'Content-Type': 'application/pdf' });
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           return res.end(fs.readFileSync(p));
         }
       } catch {
@@ -540,9 +540,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           bulkRemoveItemStock,
           listItems,
           getAdjacentItemIds,
-          pdfForBox,
-          pdfForItem,
-          printPdf,
+          htmlForBox,
+          htmlForItem,
+          printFile,
           testPrinterConnection,
           EVENT_LABELS,
           eventLabel,

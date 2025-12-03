@@ -38,7 +38,7 @@ const action: Action = {
               link.href = safePreviewUrl;
               link.target = '_blank';
               link.rel = 'noopener';
-              link.textContent = 'PDF öffnen';
+              link.textContent = 'HTML öffnen';
 
               el.textContent = 'Kein Drucker konfiguriert. Vorschau erstellt: ';
               el.appendChild(link);

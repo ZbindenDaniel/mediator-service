@@ -8,21 +8,21 @@ import {
   PRINT_TIMEOUT_MS
 } from './config';
 
-export interface PrintPdfOptions {
+export interface PrintFileOptions {
   filePath: string;
   jobName?: string;
   printerQueue?: string;
   timeoutMs?: number;
 }
 
-export interface PrintPdfResult {
+export interface PrintFileResult {
   sent: boolean;
   reason?: string;
   code?: number | null;
   signal?: NodeJS.Signals | null;
 }
 
-function validatePdfPath(filePath: string): { ok: boolean; reason?: string } {
+function validateFilePath(filePath: string): { ok: boolean; reason?: string } {
   if (!filePath) {
     return { ok: false, reason: 'missing_file_path' };
   }
@@ -40,13 +40,13 @@ function validatePdfPath(filePath: string): { ok: boolean; reason?: string } {
   return { ok: true };
 }
 
-export async function printPdf(options: PrintPdfOptions): Promise<PrintPdfResult> {
+export async function printFile(options: PrintFileOptions): Promise<PrintFileResult> {
   const { filePath, jobName, timeoutMs, printerQueue } = options;
   const effectiveQueue = (printerQueue || PRINTER_QUEUE || '').trim();
   const resolvedTimeout = Number.isFinite(timeoutMs) && timeoutMs ? timeoutMs : PRINT_TIMEOUT_MS;
-  const validation = validatePdfPath(filePath);
+  const validation = validateFilePath(filePath);
   if (!validation.ok) {
-    console.error('[print] Refusing to send PDF; invalid file path', {
+    console.error('[print] Refusing to send file; invalid file path', {
       filePath,
       reason: validation.reason
     });
@@ -67,13 +67,13 @@ export async function printPdf(options: PrintPdfOptions): Promise<PrintPdfResult
   }
   args.push(absolute);
 
-  console.log('[print] Dispatching PDF to printer', {
+  console.log('[print] Dispatching file to printer', {
     command: LP_COMMAND,
     args,
     timeoutMs: resolvedTimeout
   });
 
-  return await new Promise<PrintPdfResult>((resolve) => {
+  return await new Promise<PrintFileResult>((resolve) => {
     try {
       const child = spawn(LP_COMMAND, args, {
         stdio: ['ignore', 'pipe', 'pipe']
@@ -99,7 +99,7 @@ export async function printPdf(options: PrintPdfOptions): Promise<PrintPdfResult
         }
       }, resolvedTimeout);
 
-      const finish = (result: PrintPdfResult) => {
+      const finish = (result: PrintFileResult) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -243,4 +243,4 @@ export function testPrinterConnection(
   });
 }
 
-export default { printPdf, testPrinterConnection };
+export default { printFile, testPrinterConnection };

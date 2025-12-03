@@ -4,10 +4,11 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { Box, Item } from '../../models';
 import type { BoxLabelPayload, LabelTemplate } from '../labelpdf';
-import type { PrintPdfResult } from '../print';
+import type { PrintFileResult } from '../print';
 
 // TODO(agent): Align box print payloads with size-specific label templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
+// TODO(agent): Capture HTML label previews to help debug print regressions.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -102,13 +103,13 @@ const action = defineHttpAction({
       };
 
       let previewUrl = '';
-      let pdfPath = '';
+      let htmlPath = '';
       try {
-        pdfPath = path
-          .join(ctx.PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.pdf`.replace(/[^\w.\-]/g, '_'));
-        fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
-        await ctx.pdfForBox({ boxData, outPath: pdfPath });
-        previewUrl = `/prints/${path.basename(pdfPath)}`;
+        htmlPath = path
+          .join(ctx.PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.html`.replace(/[^\w.\-]/g, '_'));
+        fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
+        await ctx.htmlForBox({ boxData, outPath: htmlPath });
+        previewUrl = `/prints/${path.basename(htmlPath)}`;
         ctx.logEvent({
           Actor: actor,
           EntityType: 'Box',
@@ -120,17 +121,17 @@ const action = defineHttpAction({
           boxId: box.BoxID,
           previewUrl,
           qrPayload: boxData,
-          pdfPath
+          htmlPath
         });
       } catch (err) {
         console.error('Preview generation failed', err);
         return sendJson(res, 500, { error: 'preview_generation_failed' });
       }
 
-      let printResult: PrintPdfResult = { sent: false, reason: 'print_not_attempted' };
+      let printResult: PrintFileResult = { sent: false, reason: 'print_not_attempted' };
       try {
-        printResult = await ctx.printPdf({
-          filePath: pdfPath,
+        printResult = await ctx.printFile({
+          filePath: htmlPath,
           jobName: `Box ${box.BoxID}`
         });
       } catch (err) {
@@ -144,7 +145,7 @@ const action = defineHttpAction({
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintSent',
-          Meta: JSON.stringify({ transport: 'pdf', file: previewUrl })
+          Meta: JSON.stringify({ transport: 'html', file: previewUrl })
         });
       } else {
         ctx.logEvent({
@@ -152,7 +153,7 @@ const action = defineHttpAction({
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintFailed',
-          Meta: JSON.stringify({ transport: 'pdf', file: previewUrl, reason: printResult.reason })
+          Meta: JSON.stringify({ transport: 'html', file: previewUrl, reason: printResult.reason })
         });
       }
 
