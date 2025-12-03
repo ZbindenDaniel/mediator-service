@@ -89,7 +89,7 @@ const action = defineHttpAction({
         return sum;
       }, 0);
 
-      const template = resolveTemplateFromQuery(req) || '62x100';
+      const template = '62x100';
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,
