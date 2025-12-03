@@ -18,6 +18,7 @@ import {
   type AgenticRequestContext,
   type AgenticHealthOptions
 } from '../../models';
+import { appendTranscriptSection, createTranscriptWriter } from './flow/transcript';
 import {
   logAgenticRequestStart,
   logAgenticRequestEnd,
@@ -322,6 +323,8 @@ function attachTranscriptReference(
   itemId: string,
   logger: AgenticServiceLogger
 ): AgenticRun | null {
+  // TODO(agentic-transcript-coverage): Capture transcript metadata for every terminal run state without relying on upstream
+  // flow writers.
   if (!agenticRun) {
     return null;
   }
@@ -335,6 +338,31 @@ function attachTranscriptReference(
       error: err instanceof Error ? err.message : err
     });
     return { ...agenticRun, TranscriptUrl: null };
+  }
+}
+
+export async function appendOutcomeTranscriptSection(
+  itemId: string,
+  heading: string,
+  request: Record<string, unknown>,
+  response: string,
+  logger: AgenticServiceLogger
+): Promise<string | null> {
+  try {
+    const writer = await createTranscriptWriter(itemId, logger);
+    if (!writer) {
+      return null;
+    }
+
+    await appendTranscriptSection(writer, heading, request, response, logger, itemId);
+    return writer.publicUrl ?? null;
+  } catch (err) {
+    logger.warn?.('[agentic-service] Failed to append outcome transcript section', {
+      itemId,
+      heading,
+      error: err instanceof Error ? err.message : err
+    });
+    return null;
   }
 }
 
@@ -777,6 +805,13 @@ export async function cancelAgenticRun(
     return { cancelled: false, agentic: null, reason: 'missing-item-id' };
   }
 
+  const actor = (input.actor || '').trim();
+  const cancellationReason = input.reason && input.reason.trim()
+    ? input.reason.trim()
+    : actor
+      ? `Cancelled by ${actor}`
+      : 'Agentic run cancelled';
+
   const existing = fetchAgenticRun(itemId, deps, logger);
   if (!existing) {
     logger.warn?.('[agentic-service] cancelAgenticRun attempted without existing run', { itemId });
@@ -786,10 +821,10 @@ export async function cancelAgenticRun(
 
   const nowIso = resolveNow(deps).toISOString();
   recordRequestLogStart(request, existing.SearchQuery ?? null, logger);
-  const txn = deps.db.transaction((actor: string) => {
+  const txn = deps.db.transaction((actorName: string) => {
     const retryCount = existing.RetryCount ?? 0;
     const lastAttemptAt = existing.LastAttemptAt ?? nowIso;
-    const lastError = existing.LastError ?? null;
+    const lastError = cancellationReason || existing.LastError ?? null;
 
     applyQueueUpdate(deps, logger, {
       ItemUUID: itemId,
@@ -836,13 +871,13 @@ export async function cancelAgenticRun(
       Meta: JSON.stringify({
         previousStatus: existing.Status ?? null,
         cancelledAt: nowIso,
-        reason: input.reason ?? null
+        reason: cancellationReason ?? null
       })
     });
   });
 
   try {
-    txn((input.actor || '').trim());
+    txn(actor);
     finalizeRequestLog(request, REQUEST_STATUS_CANCELLED, null, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to cancel agentic run', {
@@ -851,6 +886,25 @@ export async function cancelAgenticRun(
     });
     finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
     throw err;
+  }
+
+  try {
+    await appendOutcomeTranscriptSection(
+      itemId,
+      'Agentic run cancelled',
+      {
+        status: existing.Status ?? null,
+        actor,
+        reason: cancellationReason
+      },
+      cancellationReason,
+      logger
+    );
+  } catch (err) {
+    logger.warn?.('[agentic-service] Failed to record cancellation transcript note', {
+      itemId,
+      error: err instanceof Error ? err.message : err
+    });
   }
 
   const refreshed = fetchAgenticRun(itemId, deps, logger);

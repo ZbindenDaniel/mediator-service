@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED } from '../../models';
-import { getAgenticStatus } from '../agentic';
+import { getAgenticStatus, normalizeAgenticStatusUpdate } from '../agentic';
 
 // TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
 
@@ -97,6 +97,26 @@ const action = defineHttpAction({
         if (!result || result.changes === 0) {
           console.error('Agentic review update had no effect for', itemId);
           return sendJson(res, 500, { error: 'Failed to update review state' });
+        }
+
+        if (decision === 'rejected') {
+          try {
+            ctx.updateAgenticRunStatus.run(
+              normalizeAgenticStatusUpdate({
+                ItemUUID: itemId,
+                LastAttemptAt: null,
+                LastAttemptAtIsSet: true,
+                LastError: null,
+                LastErrorIsSet: true,
+                NextRetryAt: null,
+                NextRetryAtIsSet: true,
+                RetryCount: 0,
+                RetryCountIsSet: true
+              })
+            );
+          } catch (clearErr) {
+            console.error('Failed to clear agentic run data after rejection', clearErr);
+          }
         }
       } catch (err) {
         console.error('Failed to update agentic review', err);

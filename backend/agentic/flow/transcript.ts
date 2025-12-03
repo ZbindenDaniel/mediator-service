@@ -128,6 +128,7 @@ export async function createTranscriptWriter(
   const reference = buildTranscriptReference(itemId);
   const nowIso = new Date().toISOString();
   const header = `${buildTranscriptHeader(itemId, nowIso)}\n${TRANSCRIPT_SECTION_MARKER}\n${TRANSCRIPT_FOOTER}`;
+  let fileExists = false;
 
   try {
     await fsPromises.mkdir(path.dirname(reference.filePath), { recursive: true });
@@ -137,7 +138,15 @@ export async function createTranscriptWriter(
   }
 
   try {
-    await fsPromises.writeFile(reference.filePath, header);
+    fileExists = fs.existsSync(reference.filePath);
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to detect transcript presence before initialization', itemId });
+  }
+
+  try {
+    if (!fileExists) {
+      await fsPromises.writeFile(reference.filePath, header);
+    }
   } catch (err) {
     logger?.error?.({ err, msg: 'failed to initialize transcript file', itemId, transcriptPath: reference.filePath });
     return null;
