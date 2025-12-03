@@ -3,6 +3,7 @@ import path from 'path';
 
 export type LabelHtmlTemplate = '62x100';
 
+// TODO(agent): Align template root discovery with server PUBLIC_DIR detection to avoid missing runtime assets.
 const TEMPLATE_FILES: Record<LabelHtmlTemplate, string> = {
   '62x100': '62x100.html'
 };
@@ -20,8 +21,10 @@ function loadTemplateContent(template: LabelHtmlTemplate, logger: Console = cons
   }
 
   const filename = TEMPLATE_FILES[template];
+  const attemptedPaths: string[] = [];
   for (const root of TEMPLATE_ROOTS) {
     const candidate = path.join(root, filename);
+    attemptedPaths.push(candidate);
     try {
       if (fs.existsSync(candidate)) {
         const html = fs.readFileSync(candidate, 'utf8');
@@ -34,6 +37,10 @@ function loadTemplateContent(template: LabelHtmlTemplate, logger: Console = cons
     }
   }
 
+  logger.error('[label-template-loader] Template not found in expected roots', {
+    template,
+    attemptedPaths
+  });
   throw new Error(`Template ${template} not found in configured roots`);
 }
 
