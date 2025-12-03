@@ -22,12 +22,6 @@ function mmToPt(mm: number): number {
   return (mm / 25.4) * 72;
 }
 
-type LabelTemplate = '23x23';
-
-function mmToPt(mm: number): number {
-  return (mm / 25.4) * 72;
-}
-
 async function makeQrPngBuffer(text: string): Promise<Buffer> {
   if (!QRCode) throw new Error('qrcode module not available');
   return QRCode.toBuffer(text, { type: 'png', margin: 0, scale: 6 });
@@ -68,7 +62,7 @@ export interface BoxLabelOptions {
 
 export async function pdfForBox({ boxData, outPath }: BoxLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
-  const template = boxData.template || '23x23';
+  const template = boxData.template || '62x100';
   const labelText = (boxData.labelText || boxData.id || '').trim() || boxData.id;
   if (template === '23x23') {
     const qrPayload = { ...boxData, template, labelText, type: 'box' } as Record<string, unknown>;
@@ -306,7 +300,7 @@ async function pdfFor62x100({ qrPayload, label }: SquareLabelPayload, outPath: s
 
 export async function pdfForItem({ itemData, outPath }: ItemLabelOptions): Promise<string> {
   if (!PDFDocument) throw new Error('pdfkit module not available');
-  const template = itemData.template || '23x23';
+  const template = itemData.template || '62x100';
   const fallbackLabel = itemData.materialNumber || itemData.id;
   const labelText = (itemData.labelText || fallbackLabel || '').trim() || fallbackLabel || itemData.id;
   if (template === '23x23') {

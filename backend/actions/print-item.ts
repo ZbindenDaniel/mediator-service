@@ -102,7 +102,7 @@ const action = defineHttpAction({
         return Number.isNaN(date.getTime()) ? null : date.toISOString();
       };
 
-      const template = resolveTemplateFromQuery(req) || '23x23';
+      const template = resolveTemplateFromQuery(req) || '62x100';
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
