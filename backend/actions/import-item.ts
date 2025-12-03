@@ -14,7 +14,7 @@ import type { AgenticRunStatus } from '../../models';
 import { defineHttpAction } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
-import { generateItemUUID } from '../lib/itemIds';
+import { generateItemUUID, parseSequentialItemUUID } from '../lib/itemIds';
 import { MEDIA_DIR } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
@@ -23,11 +23,63 @@ import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
 // TODO(agent): Consolidate ItemUUID collision handling into a shared allocator helper for reuse across actions.
+// TODO(agent): Capture the provisional ItemUUID sequence snapshot to avoid reusing stale maxima during regeneration.
 // TODO(agent): Normalize getItem.get to a consistent sync/async contract to simplify uniqueness checks.
 async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string> {
   const maxAttempts = 3;
   let attempt = 0;
   let itemUUID = candidate;
+
+  const resolveSequentialContext = (current: string): { prefix: string; dateSegment: string; sequence: number } | null => {
+    const parsed = parseSequentialItemUUID(current);
+    if (!parsed) {
+      return null;
+    }
+
+    const suffixWidth = parsed.dateSegment.length + 1 + String(parsed.sequence).padStart(4, '0').length;
+    const prefixLength = current.length - suffixWidth;
+    const prefix = prefixLength > 0 ? current.slice(0, prefixLength) : '';
+    return {
+      prefix,
+      dateSegment: parsed.dateSegment,
+      sequence: parsed.sequence
+    };
+  };
+
+  const resolveNextSequenceFromDb = async (current: string): Promise<string | null> => {
+    const context = resolveSequentialContext(current);
+    if (!context || !ctx?.db?.prepare) {
+      return null;
+    }
+
+    const sequenceStartIndex = context.prefix.length + context.dateSegment.length + 2;
+    const pattern = `${context.prefix}${context.dateSegment}-%`;
+
+    try {
+      const statement = ctx.db.prepare(
+        `SELECT ItemUUID
+         FROM items
+         WHERE ItemUUID LIKE ?
+         ORDER BY CAST(substr(ItemUUID, ?, 4) AS INTEGER) DESC
+         LIMIT 1`
+      );
+      const row = statement.get(pattern, sequenceStartIndex) as { ItemUUID?: string } | undefined;
+      const latestSequence = row?.ItemUUID
+        ? parseSequentialItemUUID(row.ItemUUID, context.prefix)?.sequence ?? null
+        : null;
+      const nextSequence = Math.max(latestSequence ?? 0, context.sequence) + 1;
+      const nextSequenceSegment = String(nextSequence).padStart(4, '0');
+      return `${context.prefix}${context.dateSegment}-${nextSequenceSegment}`;
+    } catch (dbSequenceError) {
+      console.error('[import-item] Failed to resolve next ItemUUID sequence from database', {
+        candidate: current,
+        pattern,
+        sequenceStartIndex,
+        error: dbSequenceError
+      });
+      return null;
+    }
+  };
 
   while (attempt < maxAttempts) {
     let existing: unknown = null;
@@ -55,7 +107,36 @@ async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string
     });
 
     try {
-      itemUUID = await ctx.generateItemUUID();
+      const dbSequenceCandidate = await resolveNextSequenceFromDb(itemUUID);
+      if (dbSequenceCandidate) {
+        console.info('[import-item] Resolved next ItemUUID sequence from database after collision', {
+          attempt,
+          previousItemUUID: itemUUID,
+          nextItemUUID: dbSequenceCandidate
+        });
+        itemUUID = dbSequenceCandidate;
+        continue;
+      }
+
+      const regenerated = await ctx.generateItemUUID();
+      if (regenerated && regenerated !== itemUUID) {
+        itemUUID = regenerated;
+        continue;
+      }
+
+      const sequentialContext = resolveSequentialContext(itemUUID);
+      if (sequentialContext) {
+        const nextSequence = sequentialContext.sequence + 1;
+        const nextSequenceSegment = String(nextSequence).padStart(4, '0');
+        const sequentialCandidate = `${sequentialContext.prefix}${sequentialContext.dateSegment}-${nextSequenceSegment}`;
+        console.info('[import-item] Incrementing ItemUUID sequence locally to avoid repeated collisions', {
+          attempt,
+          previousItemUUID: itemUUID,
+          nextItemUUID: sequentialCandidate
+        });
+        itemUUID = sequentialCandidate;
+        continue;
+      }
     } catch (regenError) {
       console.error('[import-item] Failed to remint ItemUUID after collision', {
         attempt,
@@ -64,6 +145,12 @@ async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string
       });
       break;
     }
+
+    console.error('[import-item] Unable to generate a new ItemUUID distinct from existing collision candidate', {
+      attempt,
+      lastItemUUID: itemUUID
+    });
+    break;
   }
 
   throw new Error('Failed to mint a unique ItemUUID for import');
