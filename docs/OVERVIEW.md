@@ -21,7 +21,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - **Imports & ERP Bridge** – CSV uploads seeded from an external ERP initialize the catalogue. Future integrations (e.g.,
   Shopware) will build on the same ingestion path.
 - **Printing & QR Labels** – Boxes and larger standalone items receive QR codes and human-readable stickers. The printing stack
-  generates label PDFs, stores previews, and dispatches jobs to CUPS-compatible printers.
+  generates label PDFs from the canonical `frontend/public/print/62x100.html` template, stores previews, and dispatches jobs to
+  CUPS-compatible printers.
 
 ## Architectural Patterns in Practice
 - **Action architecture** – The backend dynamically loads `backend/actions/*` modules that wrap database calls in
