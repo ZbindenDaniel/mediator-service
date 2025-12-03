@@ -61,10 +61,7 @@ This list tracks defects that require fixes. Cross-reference the planning contex
 
 ## Printing
 
-- [x] labelpdf.ts need to get updated:
-  - [x]  It should take itemData/boxData as param. this data consists of the basic info about the entity
-  - [x]  this data is then encoded into the QR code instead of a URL (See actions/qr-scan to see the expected format)
-  - [x]  Also the labels should be larger (A5) and also contain the same information in human readbale text.
+- [x] labelpdf.ts removed; 62x100 HTML templates now receive item/box payloads directly for QR encoding and printing.
   
 ## Build & Tooling
 
