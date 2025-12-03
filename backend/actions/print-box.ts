@@ -9,6 +9,7 @@ import type { PrintFileResult } from '../print';
 // TODO(agent): Align box print payloads with size-specific label templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
 // TODO(agent): Capture HTML label previews to help debug print regressions.
+// TODO(agent): Track rejected template query attempts while only 62x100 is permitted.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -25,20 +26,16 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-function resolveTemplateFromQuery(req: IncomingMessage): LabelTemplate | undefined {
+function logUnexpectedTemplateQuery(req: IncomingMessage): void {
   try {
     const url = new URL(req.url ?? '', 'http://localhost');
     const raw = url.searchParams.get('template');
-    if (raw === '23x23' || raw === '62x100') {
-      return raw;
-    }
-    if (raw) {
-      console.warn('Unexpected label template requested for box print', raw);
+    if (raw && raw !== '62x100') {
+      console.warn('[label] Unexpected label template requested for box print', { template: raw });
     }
   } catch (err) {
-    console.error('Failed to parse label template from box print query', err);
+    console.error('Failed to inspect label template from box print query', err);
   }
-  return undefined;
 }
 
 const action = defineHttpAction({
@@ -79,6 +76,7 @@ const action = defineHttpAction({
       const box = ctx.getBox.get(id) as Box | undefined;
       if (!box) return sendJson(res, 404, { error: 'box not found' });
       const items = (ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [];
+      logUnexpectedTemplateQuery(req);
       const totalQuantity = items.reduce((sum, item) => {
         const raw = (item as Item)?.Auf_Lager as unknown;
         if (typeof raw === 'number' && Number.isFinite(raw)) return sum + raw;
@@ -89,7 +87,7 @@ const action = defineHttpAction({
         return sum;
       }, 0);
 
-      const template = resolveTemplateFromQuery(req) || '23x23';
+      const template: LabelTemplate = '62x100';
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,

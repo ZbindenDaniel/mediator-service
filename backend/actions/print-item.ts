@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 // TODO(agent): Replace legacy Langtext print fallback once structured payload rendering lands.
 // TODO(agent): Document HTML print artifacts so support can trace failures quickly.
+// TODO(agent): Monitor ignored template query logs while the 62x100 default remains fixed.
 import type { Item } from '../../models';
 import type { ItemLabelPayload, LabelTemplate } from '../labelpdf';
 import type { PrintFileResult } from '../print';
@@ -27,20 +28,16 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-function resolveTemplateFromQuery(req: IncomingMessage): LabelTemplate | undefined {
+function logUnexpectedTemplateQuery(req: IncomingMessage): void {
   try {
     const url = new URL(req.url ?? '', 'http://localhost');
     const raw = url.searchParams.get('template');
-    if (raw === '23x23' || raw === '62x100') {
-      return raw;
-    }
-    if (raw) {
-      console.warn('Unexpected label template requested for item print', raw);
+    if (raw && raw !== '62x100') {
+      console.warn('[label] Unexpected label template requested for item print', { template: raw });
     }
   } catch (err) {
-    console.error('Failed to parse label template from item print query', err);
+    console.error('Failed to inspect label template from item print query', err);
   }
-  return undefined;
 }
 
 const action = defineHttpAction({
@@ -80,6 +77,7 @@ const action = defineHttpAction({
       if (!id) return sendJson(res, 400, { error: 'invalid item id' });
       const item = ctx.getItem.get(id) as Item | undefined;
       if (!item) return sendJson(res, 404, { error: 'item not found' });
+      logUnexpectedTemplateQuery(req);
       const quantityRaw = item.Auf_Lager as unknown;
       let parsedQuantity = 0;
       if (typeof quantityRaw === 'number' && Number.isFinite(quantityRaw)) {
@@ -103,7 +101,7 @@ const action = defineHttpAction({
         return Number.isNaN(date.getTime()) ? null : date.toISOString();
       };
 
-      const template = resolveTemplateFromQuery(req) || '62x100';
+      const template: LabelTemplate = '62x100';
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
