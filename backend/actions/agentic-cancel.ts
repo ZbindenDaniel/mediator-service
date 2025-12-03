@@ -45,6 +45,7 @@ const action = defineHttpAction({
     }
 
     const actor = typeof payload.actor === 'string' ? payload.actor.trim() : '';
+    const reason = typeof payload.reason === 'string' && payload.reason.trim() ? payload.reason.trim() : null;
     if (!actor) {
       console.warn('Agentic cancel missing actor');
       return sendJson(res, 400, { error: 'actor is required' });
@@ -54,7 +55,7 @@ const action = defineHttpAction({
 
     try {
       const result = await cancelAgenticRun(
-        { itemId, actor, request: requestContext },
+        { itemId, actor, reason, request: requestContext },
         {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,

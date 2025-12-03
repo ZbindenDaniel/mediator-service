@@ -1,6 +1,7 @@
 /**
  * TODO(agentic-result-handler): consider extracting shared validation helpers
  * if additional result endpoints are introduced.
+ * TODO(agentic-transcript-notes): Ensure terminal agentic runs record a transcript note summarizing the outcome for reviewers.
  */
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
@@ -17,7 +18,11 @@ import {
   type AgenticRequestLog,
   type Item
 } from '../../models';
-import { normalizeAgenticStatusUpdate, recordAgenticRequestLogUpdate } from '../agentic';
+import {
+  appendOutcomeTranscriptSection,
+  normalizeAgenticStatusUpdate,
+  recordAgenticRequestLogUpdate
+} from '../agentic';
 import { resolveAgenticRequestContext } from '../actions/agentic-request-context';
 
 export interface AgenticResultPayload extends Record<string, unknown> {
@@ -455,6 +460,33 @@ export function handleAgenticResult(
     error: errorMessage,
     searchQuery: searchQueryForLog,
     logger
+  });
+
+  const transcriptResponse =
+    summaryInput || errorMessage || `Agentic status updated to ${statusForPersistence}.`;
+  const transcriptRequest = {
+    status: statusForPersistence,
+    needsReview,
+    summary: summaryInput,
+    error: errorMessage,
+    reviewDecision: normalizedDecision ?? null,
+    reviewNotes: reviewNotesInput,
+    reviewedBy: reviewedByInput
+  };
+
+  void appendOutcomeTranscriptSection(
+    itemId,
+    'Agentic run outcome',
+    transcriptRequest,
+    transcriptResponse,
+    logger
+  ).catch((err) => {
+    logger?.warn?.({
+      err,
+      msg: 'failed to append agentic outcome transcript section',
+      itemId,
+      status: statusForPersistence
+    });
   });
 
   return {

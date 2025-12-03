@@ -1034,6 +1034,7 @@ export default function ItemDetail({ itemId }: Props) {
   }, [events]);
 
   const agenticRows: [string, React.ReactNode][] = [];
+  // TODO(agentic-transcript-ui): Keep the transcript link visible regardless of agentic run state once backend exposes it.
   if (agentic?.SearchQuery) {
     agenticRows.push(['Suchbegriff', agentic.SearchQuery]);
   }
