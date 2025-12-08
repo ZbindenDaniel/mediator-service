@@ -6,6 +6,7 @@ import type { ExtractionLogger } from './item-flow-extraction';
 
 // TODO(agent): Rotate transcript snapshots once multi-run history needs to be preserved for audits.
 // TODO(agentic-html-transcript): Consider migrating legacy markdown transcripts to HTML when cleanup time permits.
+// TODO(agentic-transcript-blocks): Expand structured sections with markdown rendering when safe sanitization exists.
 export const TRANSCRIPT_FILE_NAME = 'agentic-transcript.html';
 const TRANSCRIPT_SECTION_MARKER = '<!-- transcript-sections -->';
 const TRANSCRIPT_FOOTER = '</main>\n</body>\n</html>\n';
@@ -19,6 +20,28 @@ export interface AgentTranscriptReference {
 
 export interface AgentTranscriptWriter extends AgentTranscriptReference {
   appendSection: (heading: string, body: string) => Promise<void>;
+}
+
+export interface TranscriptMessageBlock {
+  role?: string;
+  content?: string;
+  type?: string;
+}
+
+export interface TranscriptToolInvocation {
+  name?: string;
+  input?: unknown;
+  output?: unknown;
+  status?: string;
+}
+
+export interface TranscriptSectionPayload {
+  request?: unknown;
+  response?: string;
+  messages?: TranscriptMessageBlock[];
+  toolInvocations?: TranscriptToolInvocation[];
+  logLines?: string[];
+  errors?: unknown[];
 }
 
 function stringifyTranscriptPayload(
@@ -73,21 +96,137 @@ function buildTranscriptHeader(itemId: string, updatedAtIso: string): string {
 }
 
 export function buildTranscriptBody(
-  request: unknown,
+  request: TranscriptSectionPayload | unknown,
   response: string,
   logger?: AgentTranscriptLogger | null,
   meta?: { heading?: string; itemId?: string }
 ): string {
-  const requestBlock = escapeHtml(stringifyTranscriptPayload(request, logger, meta));
-  const responseBlock = escapeHtml(typeof response === 'string' ? response : String(response));
-  return [
-    '<div class="transcript-block">',
-    '  <h3>Request</h3>',
-    `  <pre>${requestBlock}</pre>`,
-    '  <h3>Response</h3>',
-    `  <pre>${responseBlock.trim()}</pre>`,
-    '</div>'
-  ].join('\n');
+  const fallbackRender = (): string => {
+    const requestBlock = escapeHtml(stringifyTranscriptPayload(request, logger, meta));
+    const responseBlock = escapeHtml(typeof response === 'string' ? response : String(response));
+    return [
+      '<div class="transcript-block" data-kind="request-response">',
+      '  <h3>Request</h3>',
+      `  <pre>${requestBlock}</pre>`,
+      '  <h3>Response</h3>',
+      `  <pre>${responseBlock.trim()}</pre>`,
+      '</div>'
+    ].join('\n');
+  };
+
+  try {
+    const structured =
+      request && typeof request === 'object' && !Array.isArray(request)
+        ? (request as TranscriptSectionPayload)
+        : undefined;
+
+    const blocks: string[] = [];
+    const requestBody = structured?.request ?? request;
+    const responseBody = structured?.response ?? response;
+
+    if (structured?.messages?.length) {
+      const messageLines = structured.messages.map((message, index) => {
+        const label = [message.role, message.type].filter(Boolean).join(' • ') || `Message ${index + 1}`;
+        return [
+          `  <article class="transcript-entry" data-kind="message" data-role="${escapeHtml(message.role ?? 'unknown')}">`,
+          `    <h4>${escapeHtml(label)}</h4>`,
+          `    <pre>${escapeHtml(message.content ?? '')}</pre>`,
+          '  </article>'
+        ].join('\n');
+      });
+
+      blocks.push(
+        [
+          '<div class="transcript-block" data-kind="messages">',
+          '  <h3>Messages</h3>',
+          ...messageLines,
+          '</div>'
+        ].join('\n')
+      );
+    }
+
+    if (structured?.toolInvocations?.length) {
+      const toolLines = structured.toolInvocations.map((tool, index) => {
+        const heading = tool.name ? `${tool.name} (${tool.status ?? 'pending'})` : `Tool ${index + 1}`;
+        const inputBlock = stringifyTranscriptPayload(tool.input, logger, meta);
+        const outputBlock = stringifyTranscriptPayload(tool.output, logger, meta);
+        return [
+          `  <article class="transcript-entry" data-kind="tool" data-name="${escapeHtml(tool.name ?? 'unknown')}">`,
+          `    <h4>${escapeHtml(heading)}</h4>`,
+          '    <h5>Input</h5>',
+          `    <pre>${escapeHtml(inputBlock)}</pre>`,
+          '    <h5>Output</h5>',
+          `    <pre>${escapeHtml(outputBlock)}</pre>`,
+          '  </article>'
+        ].join('\n');
+      });
+
+      blocks.push(
+        [
+          '<div class="transcript-block" data-kind="tool-invocations">',
+          '  <h3>Tool Calls</h3>',
+          ...toolLines,
+          '</div>'
+        ].join('\n')
+      );
+    }
+
+    if (structured?.logLines?.length) {
+      const logItems = structured.logLines.map((line) => `    <li>${escapeHtml(line)}</li>`);
+      blocks.push(
+        [
+          '<div class="transcript-block" data-kind="logs">',
+          '  <h3>Logs</h3>',
+          '  <ul>',
+          ...logItems,
+          '  </ul>',
+          '</div>'
+        ].join('\n')
+      );
+    }
+
+    if (structured?.errors?.length) {
+      const errorBlocks = structured.errors.map((err, index) => {
+        const serializedError = stringifyTranscriptPayload(err, logger, meta);
+        return [
+          `  <article class="transcript-entry" data-kind="error" data-index="${index}">`,
+          `    <h4>Error ${index + 1}</h4>`,
+          `    <pre>${escapeHtml(serializedError)}</pre>`,
+          '  </article>'
+        ].join('\n');
+      });
+
+      blocks.push(
+        [
+          '<div class="transcript-block" data-kind="errors">',
+          '  <h3>Errors</h3>',
+          ...errorBlocks,
+          '</div>'
+        ].join('\n')
+      );
+    }
+
+    const requestBlock = escapeHtml(stringifyTranscriptPayload(requestBody, logger, meta));
+    const responseBlock = escapeHtml(
+      typeof responseBody === 'string' ? responseBody : stringifyTranscriptPayload(responseBody, logger, meta)
+    );
+
+    blocks.push(
+      [
+        '<div class="transcript-block" data-kind="request-response">',
+        '  <h3>Request</h3>',
+        `  <pre>${requestBlock}</pre>`,
+        '  <h3>Response</h3>',
+        `  <pre>${responseBlock.trim()}</pre>`,
+        '</div>'
+      ].join('\n')
+    );
+
+    return blocks.join('\n');
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to build structured transcript body', heading: meta?.heading, itemId: meta?.itemId });
+    return fallbackRender();
+  }
 }
 
 function buildTranscriptReference(itemId: string): AgentTranscriptReference {
@@ -193,7 +332,7 @@ export async function createTranscriptWriter(
 export async function appendTranscriptSection(
   writer: AgentTranscriptWriter | null | undefined,
   heading: string,
-  request: unknown,
+  request: TranscriptSectionPayload | unknown,
   response: string,
   logger?: AgentTranscriptLogger | null,
   itemId?: string

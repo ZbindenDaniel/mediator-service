@@ -354,7 +354,9 @@ export async function appendOutcomeTranscriptSection(
       return null;
     }
 
-    await appendTranscriptSection(writer, heading, request, response, logger, itemId);
+    const transcriptPayload = { request, response };
+
+    await appendTranscriptSection(writer, heading, transcriptPayload, response, logger, itemId);
     return writer.publicUrl ?? null;
   } catch (err) {
     logger.warn?.('[agentic-service] Failed to append outcome transcript section', {
