@@ -2,8 +2,10 @@ import type Database from 'better-sqlite3';
 import {
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_REVIEW,
   AGENTIC_RUN_STATUS_QUEUED,
   AGENTIC_RUN_STATUS_RUNNING,
+  AGENTIC_RUN_TERMINAL_STATUSES,
   type AgenticRun,
   type AgenticRunCancelInput,
   type AgenticRunCancelResult,
@@ -16,7 +18,8 @@ import {
   type AgenticModelInvocationInput,
   type AgenticModelInvocationResult,
   type AgenticRequestContext,
-  type AgenticHealthOptions
+  type AgenticHealthOptions,
+  normalizeAgenticRunStatus
 } from '../../models';
 import { appendTranscriptSection, createTranscriptWriter } from './flow/transcript';
 import {
@@ -1152,6 +1155,49 @@ export function recordAgenticRequestLogUpdate(
     recordRequestLogStart(normalized, options.searchQuery ?? null, logger);
   }
   finalizeRequestLog(normalized, status, options.error ?? null, logger);
+
+  // TODO(agentic-transcript-log-snippets): Unify terminal transcript rendering for request log updates once upstream exposes
+  // richer log querying helpers.
+  const normalizedStatus = normalizeAgenticRunStatus(status);
+  const statusIsTerminal =
+    AGENTIC_RUN_TERMINAL_STATUSES.has(normalizedStatus) || normalizedStatus === AGENTIC_RUN_STATUS_REVIEW;
+  if (!statusIsTerminal) {
+    return;
+  }
+
+  const transcriptHeading =
+    normalizedStatus === AGENTIC_RUN_STATUS_CANCELLED
+      ? 'Agentic run cancelled'
+      : normalizedStatus === AGENTIC_RUN_STATUS_REVIEW
+        ? 'Agentic run requires review'
+        : 'Agentic run terminal update';
+  const transcriptRequest = {
+    status: normalizedStatus,
+    searchQuery: options.searchQuery ?? null,
+    requestId: normalized.id,
+    error: options.error ?? null,
+    payloadCaptured: normalized.payloadDefined,
+    notification: normalized.notificationDefined ? normalized.notification ?? null : null,
+    requestLogSnapshot: {
+      status: normalizedStatus,
+      error: options.error ?? null,
+      recordedAt: new Date().toISOString(),
+      searchQuery: options.searchQuery ?? null
+    }
+  };
+  const responseSummary = options.error
+    ? `Agentic run reached ${normalizedStatus} with error: ${options.error}`
+    : `Agentic run reached ${normalizedStatus}.`;
+
+  void appendOutcomeTranscriptSection(normalized.id, transcriptHeading, transcriptRequest, responseSummary, logger).catch(
+    (err) => {
+      logger.warn?.('[agentic-service] Failed to append terminal request log transcript section', {
+        requestId: normalized.id,
+        status: normalizedStatus,
+        error: err instanceof Error ? err.message : err
+      });
+    }
+  );
 }
 
 export function getAgenticStatus(
