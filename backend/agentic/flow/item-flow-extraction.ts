@@ -7,7 +7,7 @@ import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
 import { AgentOutputSchema } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
 import type { SearchInvoker } from './item-flow-search';
-import { appendTranscriptSection, type AgentTranscriptWriter } from './transcript';
+import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
 
 export interface ChatModel {
   invoke(messages: Array<{ role: string; content: unknown }>): Promise<{ content: unknown }>;
@@ -288,10 +288,16 @@ export async function runExtractionAttempts({
     });
     lastRaw = raw;
 
+    const extractionTranscriptPayload: TranscriptSectionPayload = {
+      request: { targetPreview: sanitizedTargetPreview, attempt },
+      messages: extractionMessages,
+      response: raw
+    };
+
     await appendTranscriptSection(
       transcriptWriter,
       `${attempt}. extraction attempt`,
-      extractionMessages,
+      extractionTranscriptPayload,
       raw,
       logger,
       itemId
@@ -510,7 +516,13 @@ export async function runExtractionAttempts({
       logger
     }).trim();
 
-    await appendTranscriptSection(transcriptWriter, 'supervisor', supervisorMessages, supervision, logger, itemId);
+    const supervisorTranscriptPayload: TranscriptSectionPayload = {
+      request: enrichedValidated.data,
+      messages: supervisorMessages,
+      response: supervision
+    };
+
+    await appendTranscriptSection(transcriptWriter, 'supervisor', supervisorTranscriptPayload, supervision, logger, itemId);
     // TODO(agent): Broaden supervisor status parsing once additional workflow states are introduced.
     let normalizedSupervision = supervision;
     if ((normalizedSupervision.startsWith('"') && normalizedSupervision.endsWith('"'))

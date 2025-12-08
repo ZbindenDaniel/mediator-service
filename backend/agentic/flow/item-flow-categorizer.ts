@@ -6,7 +6,7 @@ import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
 import type { ChatModel, ExtractionLogger } from './item-flow-extraction';
 import type { AgenticOutput } from './item-flow-schemas';
-import { appendTranscriptSection, type AgentTranscriptWriter } from './transcript';
+import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
 
 // TODO(agent): Monitor categorizer drift once evaluation datasets are curated.
 const CATEGORY_REFERENCE_PATH = path.resolve(__dirname, '../prompts/docs/data_struct.md');
@@ -171,7 +171,13 @@ export async function runCategorizerStage({
     logger
   });
 
-  await appendTranscriptSection(transcriptWriter, 'categorizer', categorizerMessages, raw, logger, itemId);
+  const transcriptPayload: TranscriptSectionPayload = {
+    request: payloadForCategorizer,
+    messages: categorizerMessages,
+    response: raw
+  };
+
+  await appendTranscriptSection(transcriptWriter, 'categorizer', transcriptPayload, raw, logger, itemId);
 
   let parsed: unknown;
   try {
