@@ -1,7 +1,3 @@
-<!-- TODO(agent): Keep this prompt aligned with backend/agentic/flow/item-flow-schemas.ts::TargetSchema. -->
-<!-- TODO(agent): Keep langtext format guidance synchronized with downstream validators. -->
-<!-- TODO(agent): Keep pseudo-XML tag layout consistent with shared prompt format guidelines. -->
-<!-- TODO(agent): Confirm JSON-only output constraints remain synchronized with downstream validators. -->
 <role>
   You are a German-language data extraction agent that converts verified web search findings into the item target schema.
 </role>
