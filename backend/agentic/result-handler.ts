@@ -462,8 +462,12 @@ export function handleAgenticResult(
     logger
   });
 
+  // TODO(agentic-transcript-log-snippets): Centralize transcript payload formatting so request log snapshots remain consistent
+  // across agentic entry points.
   const transcriptResponse =
-    summaryInput || errorMessage || `Agentic status updated to ${statusForPersistence}.`;
+    summaryInput ||
+    errorMessage ||
+    `Agentic status updated to ${statusForPersistence}${needsReview ? ' (needs review)' : ''}.`;
   const transcriptRequest = {
     status: statusForPersistence,
     needsReview,
@@ -471,7 +475,19 @@ export function handleAgenticResult(
     error: errorMessage,
     reviewDecision: normalizedDecision ?? null,
     reviewNotes: reviewNotesInput,
-    reviewedBy: reviewedByInput
+    reviewedBy: reviewedByInput,
+    requestId,
+    requestLogSnapshot: requestLog
+      ? {
+          id: requestLog.UUID,
+          status: requestLog.Status ?? null,
+          search: requestLog.Search ?? null,
+          error: requestLog.Error ?? null,
+          notifiedAt: requestLog.NotifiedAt ?? null,
+          lastNotificationError: requestLog.LastNotificationError ?? null,
+          updatedAt: requestLog.UpdatedAt ?? requestLog.CreatedAt ?? null
+        }
+      : null
   };
 
   void appendOutcomeTranscriptSection(
