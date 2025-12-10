@@ -16,7 +16,7 @@ export function prepareBoxesForDisplay(boxes: Box[], options: PrepareBoxesOption
 
   const filtered = normalizedQuery
     ? boxes.filter((box) => {
-        const candidates = [box.BoxID, box.StandortLabel, box.Location].filter(
+        const candidates = [box.BoxID, box.Label, box.LocationId].filter(
           (value): value is string => typeof value === 'string' && value.trim() !== ''
         );
         return candidates.some((candidate) => candidate.toLowerCase().includes(normalizedQuery));
@@ -25,9 +25,9 @@ export function prepareBoxesForDisplay(boxes: Box[], options: PrepareBoxesOption
 
   const sorted = [...filtered].sort((a, b) => {
     switch (sortKey) {
-      case 'StandortLabel': {
-        const labelA = (a.StandortLabel || '').toLowerCase();
-        const labelB = (b.StandortLabel || '').toLowerCase();
+      case 'Label': {
+        const labelA = (a.Label || '').toLowerCase();
+        const labelB = (b.Label || '').toLowerCase();
         return labelA.localeCompare(labelB) || compareBoxId(a, b);
       }
       case 'UpdatedAt': {

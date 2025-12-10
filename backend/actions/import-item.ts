@@ -771,8 +771,8 @@ const action = defineHttpAction({
 
       // TODO(agentic-ingestion-audit): Capture structured metrics for agentic run registration during imports to validate start coverage.
 
-      let boxLocationToPersist: string | null = normalizedLocation || null;
-      let boxStandortLabelToPersist: string | null = requestedStandortLabel;
+      let boxLocationIdToPersist: string | null = normalizedLocation || null;
+      let boxLabelToPersist: string | null = requestedStandortLabel;
       // TODO(agent): Confirm PhotoPath preservation remains aligned with the boxes schema during imports.
       let preservedBoxPhotoPath: string | null = null;
       if (BoxID) {
@@ -784,19 +784,19 @@ const action = defineHttpAction({
           try {
             const existingBox = ctx.getBox?.get
               ? (ctx.getBox.get(BoxID) as {
-                  Location?: string | null;
-                  StandortLabel?: string | null;
+                  LocationId?: string | null;
+                  Label?: string | null;
                   PhotoPath?: string | null;
                 } | undefined)
               : undefined;
-            if (existingBox?.Location) {
-              boxLocationToPersist = existingBox.Location;
-              boxStandortLabelToPersist = existingBox.StandortLabel ?? resolveStandortLabel(existingBox.Location);
+            if (existingBox?.LocationId) {
+              boxLocationIdToPersist = existingBox.LocationId;
+              boxLabelToPersist = existingBox.Label ?? resolveStandortLabel(existingBox.LocationId);
               preservedBoxPhotoPath = existingBox.PhotoPath ?? null;
-              console.info('[import-item] Preserved existing box Location', { BoxID, Location: existingBox.Location });
+              console.info('[import-item] Preserved existing box LocationId', { BoxID, LocationId: existingBox.LocationId });
             } else {
-              boxLocationToPersist = null;
-              boxStandortLabelToPersist = null;
+              boxLocationIdToPersist = null;
+              boxLabelToPersist = null;
               console.info('[import-item] No existing Location found to preserve for box', { BoxID });
             }
           } catch (lookupErr) {
@@ -804,8 +804,8 @@ const action = defineHttpAction({
           }
         }
       } else {
-        boxLocationToPersist = null;
-        boxStandortLabelToPersist = null;
+        boxLocationIdToPersist = null;
+        boxLabelToPersist = null;
       }
 
       const txn = ctx.db.transaction(
@@ -823,8 +823,8 @@ const action = defineHttpAction({
           if (boxId) {
             ctx.upsertBox.run({
               BoxID: boxId,
-              Location: boxLocation,
-              StandortLabel: boxStandortLabelToPersist,
+              LocationId: boxLocation,
+              Label: boxLabelToPersist,
               CreatedAt: now,
               Notes: null,
               PhotoPath: boxPhotoPath,
@@ -931,7 +931,7 @@ const action = defineHttpAction({
         actor,
         agenticSearchQuery,
         agenticStatus,
-        boxLocationToPersist,
+        boxLocationIdToPersist,
         preservedBoxPhotoPath,
         Boolean(ctx.agenticServiceEnabled),
         agenticRunManuallySkipped

@@ -791,11 +791,12 @@ export async function ingestCsvFile(
         }
       }
       const identifierDate = resolveImportDate(final, nowDate, rowNumber);
-      const rawStandort = final.Standort || final.Location || '';
+      const rawStandort = final.LocationId || final.Standort || final.Location || '';
       const normalizedStandort = normalizeStandortCode(rawStandort);
-      const location = normalizedStandort || null;
-      const standortLabel = resolveStandortLabel(normalizedStandort);
-      if (normalizedStandort && !standortLabel) {
+      const locationId = normalizedStandort || null;
+      const explicitLabel = typeof final.Label === 'string' ? final.Label.trim() : '';
+      const standortLabel = explicitLabel || resolveStandortLabel(normalizedStandort);
+      if (normalizedStandort && !standortLabel && !explicitLabel) {
         console.warn('CSV ingestion: missing Standort label mapping', { standort: normalizedStandort });
       }
       let normalizedBoxId: string | null = null;
@@ -824,8 +825,8 @@ export async function ingestCsvFile(
         const placedAt = typeof final.PlacedAt === 'string' && final.PlacedAt.trim() ? final.PlacedAt.trim() : null;
         const box: Box = {
           BoxID: normalizedBoxId,
-          Location: location,
-          StandortLabel: standortLabel,
+          LocationId: locationId,
+          Label: standortLabel || null,
           CreatedAt: createdAt,
           Notes: notes,
           PhotoPath: photoPath,
@@ -1059,8 +1060,8 @@ export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: nu
         continue;
       }
 
-      const location = normalizeBoxField(record.Location);
-      const standortLabel = normalizeBoxField(record.StandortLabel);
+      const locationId = normalizeBoxField(record.LocationId ?? record.Location ?? record.Standort);
+      const label = normalizeBoxField(record.Label ?? record.StandortLabel);
       const createdAt = normalizeBoxField(record.CreatedAt);
       const notes = normalizeBoxField(record.Notes);
       const photoPath = normalizeBoxField(record.PhotoPath);
@@ -1070,8 +1071,8 @@ export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: nu
 
       const box: Box = {
         BoxID: boxId,
-        Location: location || null,
-        StandortLabel: standortLabel || null,
+        LocationId: locationId || null,
+        Label: label || null,
         CreatedAt: createdAt || null,
         Notes: notes || null,
         PhotoPath: photoPath || null,

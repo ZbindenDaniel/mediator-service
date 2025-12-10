@@ -1,7 +1,8 @@
 export interface Box {
   BoxID: string;
-  Location?: string | null;
-  StandortLabel?: string | null;
+  // TODO(agent): Validate LocationId/Label naming alignment once downstream clients migrate off legacy Standort mappings.
+  LocationId?: string | null;
+  Label?: string | null;
   CreatedAt?: string | null;
   Notes?: string | null;
   PlacedBy?: string | null;

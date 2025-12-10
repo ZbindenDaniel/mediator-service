@@ -128,7 +128,7 @@ function scoreItem(term: string, tokens: string[], item: any): number {
 }
 
 function scoreBox(term: string, tokens: string[], box: any): number {
-  const fields = [box?.BoxID, box?.Location, box?.StandortLabel];
+  const fields = [box?.BoxID, box?.LocationId, box?.Label];
   let best = 0;
   for (const field of fields) {
     const similarity = computeSimilarityScore(term, tokens, field);
@@ -460,16 +460,16 @@ const action = defineHttpAction({
       const boxTokenPresenceTerms = tokens.map(() => `
     CASE WHEN (
       lower(b.BoxID)    LIKE ?
-      OR lower(b.Location) LIKE ?
-      OR lower(COALESCE(b.StandortLabel, '')) LIKE ?
+      OR lower(b.LocationId) LIKE ?
+      OR lower(COALESCE(b.Label, '')) LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
 
       const boxExactMatchExpr = `
     CASE WHEN (
       lower(b.BoxID)    = ?
-      OR lower(b.Location) = ?
-      OR lower(COALESCE(b.StandortLabel, '')) = ?
+      OR lower(b.LocationId) = ?
+      OR lower(COALESCE(b.Label, '')) = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -477,7 +477,7 @@ const action = defineHttpAction({
     SELECT *
     FROM (
       SELECT
-        b.BoxID, b.Location, b.StandortLabel,
+        b.BoxID, b.LocationId, b.Label,
         (${boxTokenPresenceTerms}) AS token_hits,
         ${boxExactMatchExpr} AS exact_match,
         CASE

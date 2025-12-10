@@ -46,8 +46,8 @@ try {
   db.exec(`
 CREATE TABLE IF NOT EXISTS boxes (
   BoxID TEXT PRIMARY KEY,
-  Location TEXT,
-  StandortLabel TEXT,
+  LocationId TEXT,
+  Label TEXT,
   CreatedAt TEXT,
   Notes TEXT,
   PhotoPath TEXT,
@@ -103,51 +103,102 @@ CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_correlation
   throw err;
 }
 
-function ensureStandortLabelColumn(database: Database.Database = db): void {
-  let hasColumn = false;
+function ensureBoxLocationColumns(database: Database.Database = db): void {
+  let columns: Array<{ name: string }> = [];
   try {
-    const columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
-    hasColumn = columns.some((column) => column.name === 'StandortLabel');
+    columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
   } catch (err) {
-    console.error('Failed to inspect boxes schema for StandortLabel column', err);
+    console.error('Failed to inspect boxes schema for box location columns', err);
     throw err;
   }
 
-  if (hasColumn) {
+  const hasLocationId = columns.some((column) => column.name === 'LocationId');
+  const hasLabel = columns.some((column) => column.name === 'Label');
+  const hasLegacyLocation = columns.some((column) => column.name === 'Location');
+  const hasLegacyStandortLabel = columns.some((column) => column.name === 'StandortLabel');
+
+  const alterations: Array<{ name: string; sql: string }> = [];
+  if (!hasLocationId) {
+    alterations.push({ name: 'LocationId', sql: 'ALTER TABLE boxes ADD COLUMN LocationId TEXT' });
+  }
+  if (!hasLabel) {
+    alterations.push({ name: 'Label', sql: 'ALTER TABLE boxes ADD COLUMN Label TEXT' });
+  }
+
+  for (const { name, sql } of alterations) {
+    try {
+      database.prepare(sql).run();
+      console.info('[db] Added missing boxes column', name);
+    } catch (err) {
+      console.error('Failed to add boxes column', name, err);
+      throw err;
+    }
+  }
+
+  if (!(hasLegacyLocation || hasLegacyStandortLabel) || !(hasLocationId || alterations.some((alter) => alter.name === 'LocationId'))) {
     return;
   }
 
-  console.info('Adding StandortLabel column to boxes table for existing deployments');
+  const selectColumns = ['BoxID'];
+  if (hasLegacyLocation) {
+    selectColumns.push('Location');
+  }
+  if (hasLegacyStandortLabel) {
+    selectColumns.push('StandortLabel');
+  }
+  selectColumns.push('LocationId', 'Label');
 
+  const selectSql = `SELECT ${selectColumns.join(', ')} FROM boxes`;
+  let rows: Array<Record<string, any>> = [];
   try {
-    database.prepare('ALTER TABLE boxes ADD COLUMN StandortLabel TEXT').run();
+    rows = database.prepare(selectSql).all() as Array<Record<string, any>>;
   } catch (err) {
-    console.error('Failed to add StandortLabel column to boxes table', err);
+    console.error('Failed to load boxes for LocationId/Label migration', err);
     throw err;
   }
 
+  const updateFragments = ['LocationId=@LocationId', 'Label=@Label'];
+  if (hasLegacyLocation) {
+    updateFragments.push('Location=NULL');
+  }
+  if (hasLegacyStandortLabel) {
+    updateFragments.push('StandortLabel=NULL');
+  }
+  const updateSql = `UPDATE boxes SET ${updateFragments.join(', ')} WHERE BoxID=@BoxID`;
+  const updateBox = database.prepare(updateSql);
+
   try {
-    const selectBoxes = database.prepare('SELECT BoxID, Location FROM boxes');
-    const updateLabel = database.prepare('UPDATE boxes SET StandortLabel = @StandortLabel WHERE BoxID = @BoxID');
-    const rows = selectBoxes.all() as Array<{ BoxID: string; Location: string | null }>;
-    const backfill = database.transaction((entries: Array<{ BoxID: string; Location: string | null }>) => {
+    const migrate = database.transaction((entries: Array<Record<string, any>>) => {
+      let migrated = 0;
       for (const entry of entries) {
-        const label = resolveStandortLabel(entry.Location);
-        if (!label && entry.Location) {
-          console.warn('No StandortLabel mapping found during backfill', { location: entry.Location });
+        const nextLocationId = entry.LocationId ?? entry.Location ?? null;
+        const nextLabel =
+          entry.Label ?? entry.StandortLabel ?? (hasLegacyLocation ? resolveStandortLabel(entry.Location) : null);
+        if (
+          nextLocationId !== entry.LocationId ||
+          nextLabel !== entry.Label ||
+          (hasLegacyLocation && entry.Location !== null) ||
+          (hasLegacyStandortLabel && entry.StandortLabel !== null)
+        ) {
+          const result = updateBox.run({
+            BoxID: entry.BoxID,
+            LocationId: nextLocationId ?? null,
+            Label: nextLabel ?? null
+          });
+          migrated += typeof result.changes === 'number' ? result.changes : 0;
         }
-        updateLabel.run({ BoxID: entry.BoxID, StandortLabel: label });
       }
+      return migrated;
     });
-    backfill(rows);
-    console.info('Backfilled StandortLabel for existing boxes', { count: rows.length });
+    const migratedCount = migrate(rows);
+    console.info('[db] Migrated boxes LocationId/Label columns', { migratedCount });
   } catch (err) {
-    console.error('Failed to backfill StandortLabel values for boxes', err);
+    console.error('Failed to migrate boxes LocationId/Label columns', err);
     throw err;
   }
 }
 
-ensureStandortLabelColumn();
+ensureBoxLocationColumns();
 
 function ensureBoxPhotoPathColumn(database: Database.Database = db): void {
   let hasColumn = false;
@@ -180,16 +231,16 @@ function seedCategoryLocations(database: Database.Database = db): void {
     const now = new Date().toISOString();
     const entries = itemCategories.flatMap((category) =>
       category.subcategories.map((subcategory) => ({
-      LocationID: `S-${String(subcategory.code).padStart(4, '0')}-0001`,
-      Label: `Regal ${subcategory.label}`,
-      CreatedAt: now,
-      UpdatedAt: now
+        LocationId: `S-${String(subcategory.code).padStart(4, '0')}-0001`,
+        Label: `Regal ${subcategory.label}`,
+        CreatedAt: now,
+        UpdatedAt: now
       }))
     );
 
     const insertLocation = database.prepare(`
-      INSERT OR IGNORE INTO boxes (BoxID, Location, CreatedAt, UpdatedAt)
-      VALUES (@LocationID, @Label, @CreatedAt, @UpdatedAt)
+      INSERT OR IGNORE INTO boxes (BoxID, LocationId, Label, CreatedAt, UpdatedAt)
+      VALUES (@LocationId, @LocationId, @Label, @CreatedAt, @UpdatedAt)
     `);
 
     const seedLocations = database.transaction((records: typeof entries) => {
@@ -1120,11 +1171,11 @@ export { db };
 
 export const upsertBox = db.prepare(
   `
-      INSERT INTO boxes (BoxID, Location, StandortLabel, CreatedAt, Notes, PhotoPath, PlacedBy, PlacedAt, UpdatedAt)
-      VALUES (@BoxID, @Location, @StandortLabel, @CreatedAt, @Notes, @PhotoPath, @PlacedBy, @PlacedAt, @UpdatedAt)
+      INSERT INTO boxes (BoxID, LocationId, Label, CreatedAt, Notes, PhotoPath, PlacedBy, PlacedAt, UpdatedAt)
+      VALUES (@BoxID, @LocationId, @Label, @CreatedAt, @Notes, @PhotoPath, @PlacedBy, @PlacedAt, @UpdatedAt)
       ON CONFLICT(BoxID) DO UPDATE SET
-      Location=COALESCE(excluded.Location, boxes.Location),
-      StandortLabel=COALESCE(excluded.StandortLabel, boxes.StandortLabel),
+      LocationId=COALESCE(excluded.LocationId, boxes.LocationId),
+      Label=COALESCE(excluded.Label, boxes.Label),
       CreatedAt=COALESCE(excluded.CreatedAt, boxes.CreatedAt),
       Notes=COALESCE(excluded.Notes, boxes.Notes),
       PhotoPath=COALESCE(excluded.PhotoPath, boxes.PhotoPath),
@@ -2161,7 +2212,7 @@ export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
 export const listRecentBoxes = db.prepare(
-  `SELECT BoxID, Location, StandortLabel, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
+  `SELECT BoxID, LocationId, Label, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
 );
 export const getMaxBoxId = db.prepare(
   `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`

@@ -93,8 +93,8 @@ const action = defineHttpAction({
         type: 'box',
         id: box.BoxID,
         labelText: box.BoxID,
-        location: box.Location?.trim() || null,
-        standortLabel: box.StandortLabel?.trim() || null,
+        location: box.LocationId?.trim() || null,
+        standortLabel: box.Label?.trim() || null,
         description: box.Notes?.trim() || null,
         quantity: Number.isFinite(totalQuantity) ? totalQuantity : null,
         itemCount: items.length

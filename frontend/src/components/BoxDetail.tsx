@@ -348,7 +348,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <tbody>
                   <tr>
                     <th>Standort</th>
-                    <td><BoxColorTag locationKey={box.Location} labelOverride={box.StandortLabel} /></td>
+                    <td><BoxColorTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
                   </tr>
                   <tr>
                     <th>Platziert am</th>
@@ -390,8 +390,8 @@ export default function BoxDetail({ boxId }: Props) {
                     setNoteFeedback({ type: 'info', message: 'Speichern…' });
                     console.info('Saving box note', { boxId: box.BoxID });
                     const payload: Record<string, unknown> = { notes: note, actor };
-                    if (typeof box.Location === 'string' && box.Location.trim()) {
-                      payload.location = box.Location;
+                    if (typeof box.LocationId === 'string' && box.LocationId.trim()) {
+                      payload.location = box.LocationId;
                     }
                     if (photoUpload) {
                       payload.photo = photoUpload;

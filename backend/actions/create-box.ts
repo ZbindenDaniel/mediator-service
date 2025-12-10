@@ -35,8 +35,9 @@ const action = defineHttpAction({
       const txn = ctx.db.transaction((boxId: string, a: string) => {
         ctx.upsertBox.run({
           BoxID: boxId,
-          Location: null,
-          StandortLabel: null,
+          // TODO(agent): Capture an initial Label once box creation collects placement context.
+          LocationId: null,
+          Label: null,
           CreatedAt: now,
           Notes: null,
           PhotoPath: null,

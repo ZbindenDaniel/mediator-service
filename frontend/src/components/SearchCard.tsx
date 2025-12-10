@@ -25,7 +25,7 @@ export default function SearchCard() {
       console.log('Search data', data);
       const next: SearchResult[] = [];
       (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
-      (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, location: b.Location, standortLabel: b.StandortLabel }));
+      (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, location: b.LocationId, standortLabel: b.Label }));
       console.log('Search returned', (data.items || []).length, 'items', (data.boxes || []).length, 'behälter');
       setResults(next);
     } catch (err) {
