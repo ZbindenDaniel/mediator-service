@@ -56,13 +56,6 @@ CREATE TABLE IF NOT EXISTS boxes (
   UpdatedAt TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS locations (
-  LocationID TEXT PRIMARY KEY,
-  Label TEXT NOT NULL,
-  CreatedAt TEXT NOT NULL,
-  UpdatedAt TEXT NOT NULL
-);
-
 CREATE INDEX IF NOT EXISTS idx_locations_label ON locations(Label);
 
 CREATE TABLE IF NOT EXISTS label_queue (
@@ -185,15 +178,17 @@ ensureBoxPhotoPathColumn();
 function seedCategoryLocations(database: Database.Database = db): void {
   try {
     const now = new Date().toISOString();
-    const entries = itemCategories.map((category) => ({
-      LocationID: `S-${category.code}-0001`,
-      Label: `Regal ${category.label}`,
+    const entries = itemCategories.flatMap((category) =>
+      category.subcategories.map((subcategory) => ({
+      LocationID: `S-${String(subcategory.code).padStart(4, '0')}-0001`,
+      Label: `Regal ${subcategory.label}`,
       CreatedAt: now,
       UpdatedAt: now
-    }));
+      }))
+    );
 
     const insertLocation = database.prepare(`
-      INSERT OR IGNORE INTO locations (LocationID, Label, CreatedAt, UpdatedAt)
+      INSERT OR IGNORE INTO boxes (BoxID, Location, CreatedAt, UpdatedAt)
       VALUES (@LocationID, @Label, @CreatedAt, @UpdatedAt)
     `);
 

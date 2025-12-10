@@ -1765,7 +1765,11 @@ export default function ItemDetail({ itemId }: Props) {
               onCancel={handleAgenticCancel}
             />
 
-            <RelocateItemCard itemId={item.ItemUUID} onRelocated={() => load({ showSpinner: false })} />
+            <RelocateItemCard 
+              itemId={item.ItemUUID} 
+              onRelocated={() => load({ showSpinner: false })} 
+              itemdefautlLocationId={`S-${String(item.Unterkategorien_A ?? 0).padStart(4, '0')}-0001`} 
+            />
 
             <PrintLabelButton itemId={item.ItemUUID} />
 

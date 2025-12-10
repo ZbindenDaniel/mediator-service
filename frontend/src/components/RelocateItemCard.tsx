@@ -8,9 +8,10 @@ import { dialogService } from './dialog';
 interface Props {
   itemId: string;
   onRelocated?: () => void | Promise<void>;
+  itemdefautlLocationId: string | null; // based on the items category
 }
 
-export default function RelocateItemCard({ itemId, onRelocated }: Props) {
+export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocationId = null }: Props) {
   const [boxId, setBoxId] = useState('');
   const [status, setStatus] = useState('');
   const [boxLink, setBoxLink] = useState('');
@@ -71,6 +72,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
       setBoxLink('');
     }
   }
+
   async function handleRelocateSubmit(event: React.FormEvent<HTMLFormElement>, destinationOverride?: string) {
     event.preventDefault();
     const actor = await ensureActorOrAlert({ context: 'relocate item submit' });
@@ -205,7 +207,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
       <h3>Artikel umlagern</h3>
       <form onSubmit={handleRelocateSubmit}>
         <div className="row">
-          <label htmlFor="relocate-target-box">Zielbehälter wählen</label>
+          <label htmlFor="relocate-target-box">Ziel wählen</label>
         </div>
         <div className="row">
           <BoxSearchInput
@@ -217,6 +219,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
             disabled={isSubmitting}
           />
         </div>
+
         <div className="row">
           <div className="button-group">
             <button
@@ -227,6 +230,19 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
             >
               {/* <GoMoveToEnd aria-hidden="true" /> */}
               <span>Verschieben</span>
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              disabled={isSubmitting || !itemdefautlLocationId}
+              onClick={(e) => {
+              void handleRelocateSubmit(e as unknown as React.FormEvent<HTMLFormElement>, itemdefautlLocationId ?? undefined);
+              }}
+              title="Artikel in standard Ort verschieben"
+            >
+              {/* <GoMoveToEnd aria-hidden="true" /> */}
+              <span>zu standard Ort verschieben →  </span>
+              <span className='muted'> {itemdefautlLocationId}</span>
             </button>
             <button
               type="button"
