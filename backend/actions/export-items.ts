@@ -46,14 +46,14 @@ const partnerRequiredColumns = [
   'cvar_categories_B2'
 ] as const;
 
-const metadataColumns = ['itemUUID', 'BoxID', 'Location', 'UpdatedAt'] as const;
+const metadataColumns = ['itemUUID', 'BoxID', 'LocationId', 'Label', 'UpdatedAt'] as const;
 
 const columns = [...partnerRequiredColumns, ...metadataColumns] as const;
 
 const boxColumns = [
   'BoxID',
-  'Location',
-  'StandortLabel',
+  'LocationId',
+  'Label',
   'CreatedAt',
   'Notes',
   'PhotoPath',
@@ -94,7 +94,8 @@ const fieldMap: Record<ExportColumn, string | null> = {
   cvar_categories_B2: 'Unterkategorien_B',
   itemUUID: 'ItemUUID',
   BoxID: 'BoxID',
-  Location: 'Location',
+  LocationId: 'LocationId',
+  Label: 'Label',
   UpdatedAt: 'UpdatedAt'
 };
 

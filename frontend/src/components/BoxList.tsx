@@ -4,7 +4,7 @@ import type { Box } from '../../../models/box';
 import BoxColorTag from './BoxColorTag';
 import { formatDate } from '../lib/format';
 
-export type BoxSortKey = 'BoxID' | 'StandortLabel' | 'UpdatedAt';
+export type BoxSortKey = 'BoxID' | 'Label' | 'UpdatedAt';
 
 interface Props {
   boxes: Box[];
@@ -16,7 +16,7 @@ interface Props {
 
 const SORT_LABELS: Record<BoxSortKey, string> = {
   BoxID: 'Box-ID',
-  StandortLabel: 'Standort',
+  Label: 'Standort',
   UpdatedAt: 'Zuletzt aktualisiert',
 };
 
@@ -103,8 +103,8 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
         <tbody>
           {safeBoxes.map((box) => {
             try {
-              const rowLabel = box.StandortLabel?.trim()
-                ? `Details für Box ${box.BoxID} in ${box.StandortLabel} öffnen`
+              const rowLabel = box.Label?.trim()
+                ? `Details für Box ${box.BoxID} in ${box.Label} öffnen`
                 : `Details für Box ${box.BoxID} öffnen`;
 
               return (
@@ -134,7 +134,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                 >
                   <td className="col-box-id">{box.BoxID}</td>
                   <td className="col-location">
-                    <BoxColorTag locationKey={box.Location} labelOverride={box.StandortLabel} />
+                    <BoxColorTag locationKey={box.LocationId} labelOverride={box.Label} />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>
                 </tr>
