@@ -4,11 +4,17 @@ import { GoLinkExternal, GoMoveToEnd, GoPackageDependents } from 'react-icons/go
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { dialogService } from './dialog';
+// TODO(agent): Remove hardcoded relocation defaults once backend exposes canonical location metadata endpoints.
 
 interface Props {
   itemId: string;
   onRelocated?: () => void | Promise<void>;
   itemdefautlLocationId: string | null; // based on the items category
+}
+
+interface RelocateOptions {
+  destinationOverride?: string;
+  useDefaultLocation?: boolean;
 }
 
 export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocationId = null }: Props) {
@@ -18,20 +24,30 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
   const [selectedSuggestion, setSelectedSuggestion] = useState<BoxSuggestion | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function performRelocate(actor: string, destinationBoxId: string) {
+  async function performRelocate(actor: string, destinationBoxId?: string, options?: RelocateOptions) {
     try {
+      const payload: Record<string, unknown> = { actor };
+      if (options?.useDefaultLocation) {
+        payload.useDefaultLocation = true;
+      }
+      if (destinationBoxId) {
+        payload.toBoxId = destinationBoxId;
+      }
+
       const response = await fetch(`/api/items/${encodeURIComponent(itemId)}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toBoxId: destinationBoxId, actor })
+        body: JSON.stringify(payload)
       });
       const data = await response.json().catch(() => ({}));
+      const resolvedDestinationId = data.destinationBoxId ?? destinationBoxId ?? '';
       if (response.ok) {
         setStatus('Artikel verschoben');
-        setBoxLink(`/boxes/${encodeURIComponent(destinationBoxId)}`);
+        setBoxLink(resolvedDestinationId ? `/boxes/${encodeURIComponent(resolvedDestinationId)}` : '');
         console.info('Relocate item succeeded', {
           itemId,
-          toBoxId: destinationBoxId,
+          toBoxId: resolvedDestinationId || destinationBoxId,
+          useDefaultLocation: options?.useDefaultLocation === true,
           status: response.status,
           response: data,
           selectedSuggestion
@@ -41,12 +57,12 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
             await onRelocated();
             console.info('Relocate item onRelocated callback completed', {
               itemId,
-              toBoxId: destinationBoxId
+              toBoxId: resolvedDestinationId || destinationBoxId
             });
           } catch (callbackError) {
             console.error('Relocate item onRelocated callback failed', {
               itemId,
-              toBoxId: destinationBoxId,
+              toBoxId: resolvedDestinationId || destinationBoxId,
               error: callbackError
             });
           }
@@ -57,7 +73,8 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
         setBoxLink('');
         console.warn('Relocate item failed', {
           itemId,
-          toBoxId: destinationBoxId,
+          toBoxId: resolvedDestinationId || destinationBoxId,
+          useDefaultLocation: options?.useDefaultLocation === true,
           status: response.status,
           error: data.error ?? data
         });
@@ -66,6 +83,7 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
       console.error('Relocate item request failed', {
         itemId,
         toBoxId: destinationBoxId,
+        useDefaultLocation: options?.useDefaultLocation === true,
         error
       });
       setStatus('Verschieben fehlgeschlagen');
@@ -73,28 +91,28 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
     }
   }
 
-  async function handleRelocateSubmit(event: React.FormEvent<HTMLFormElement>, destinationOverride?: string) {
+  async function handleRelocateSubmit(event: React.FormEvent<HTMLFormElement>, options?: RelocateOptions) {
     event.preventDefault();
     const actor = await ensureActorOrAlert({ context: 'relocate item submit' });
     if (!actor) {
       return;
     }
 
-    const destinationBoxId = (destinationOverride ?? boxId).trim();
-    if (!destinationBoxId) {
+    const destinationBoxId = (options?.destinationOverride ?? boxId).trim();
+    if (!destinationBoxId && !options?.useDefaultLocation) {
       setStatus('Bitte einen Zielbehälter auswählen.');
       setBoxLink('');
       console.warn('Relocate item aborted: missing destination box id', { itemId });
       return;
     }
 
-    if (!destinationOverride) {
+    if (!options?.destinationOverride && !options?.useDefaultLocation) {
       setBoxId(destinationBoxId);
     }
 
     setIsSubmitting(true);
     try {
-      await performRelocate(actor, destinationBoxId);
+      await performRelocate(actor, destinationBoxId, options);
     } finally {
       setIsSubmitting(false);
     }
@@ -236,7 +254,7 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
               className="icon-button"
               disabled={isSubmitting || !itemdefautlLocationId}
               onClick={(e) => {
-              void handleRelocateSubmit(e as unknown as React.FormEvent<HTMLFormElement>, itemdefautlLocationId ?? undefined);
+              void handleRelocateSubmit(e as unknown as React.FormEvent<HTMLFormElement>, { useDefaultLocation: true });
               }}
               title="Artikel in standard Ort verschieben"
             >
