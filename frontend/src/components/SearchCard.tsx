@@ -4,7 +4,7 @@ import BoxColorTag from './BoxColorTag';
 import { Link } from 'react-router-dom';
 
 type SearchResult =
-  | { type: 'box'; id: string; location?: string | null; standortLabel?: string | null }
+  | { type: 'box'; id: string; locationId?: string | null; label?: string | null }
   | { type: 'item'; item: Item };
 
 export default function SearchCard() {
@@ -25,7 +25,7 @@ export default function SearchCard() {
       console.log('Search data', data);
       const next: SearchResult[] = [];
       (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
-      (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, location: b.LocationId, standortLabel: b.Label }));
+      (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, locationId: b.LocationId, label: b.Label }));
       console.log('Search returned', (data.items || []).length, 'items', (data.boxes || []).length, 'behälter');
       setResults(next);
     } catch (err) {
@@ -59,7 +59,7 @@ export default function SearchCard() {
                 Behälter: {res.id}
               </div>
               <div className="muted">
-                <BoxColorTag locationKey={res.location} labelOverride={res.standortLabel} />
+                <BoxColorTag locationKey={res.locationId} labelOverride={res.label} />
               </div>
              </Link>
             </div>

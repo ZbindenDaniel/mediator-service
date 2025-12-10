@@ -3,6 +3,7 @@ import { ensureUser } from '../lib/user';
 import { dialogService } from './dialog';
 
 // TODO(agent): Extend relocation picker to support searching/filtering when location lists grow larger.
+// TODO(agent): Confirm relocation flows fully rely on LocationId payloads once legacy Location fields are deprecated.
 
 interface Props {
   boxId: string;

@@ -22,7 +22,7 @@ const { db, listBoxes, listItemsForExport } = require('../backend/db');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { ingestCsvFile } = require('../backend/importer');
 
-const selectBox = db.prepare('SELECT BoxID, Location, StandortLabel FROM boxes WHERE BoxID = ?');
+const selectBox = db.prepare('SELECT BoxID, LocationId, Label FROM boxes WHERE BoxID = ?');
 const selectItem = db.prepare('SELECT ItemUUID, Location FROM items WHERE ItemUUID = ?');
 
 function clearDatabase() {
@@ -83,11 +83,11 @@ describe('CSV ingestion Standort label mapping', () => {
     expect(ingestionResult.count).toBe(1);
     expect(ingestionResult.boxes).toContain(boxId);
 
-    const persistedBox = selectBox.get(boxId) as { BoxID: string; Location: string | null; StandortLabel: string | null } | undefined;
-    expect(persistedBox).toEqual({ BoxID: boxId, Location: 'A', StandortLabel: 'Rot' });
+    const persistedBox = selectBox.get(boxId) as { BoxID: string; LocationId: string | null; Label: string | null } | undefined;
+    expect(persistedBox).toEqual({ BoxID: boxId, LocationId: 'A', Label: 'Rot' });
 
-    const exported = listBoxes.all() as Array<{ BoxID: string; StandortLabel?: string | null }>;
-    expect(exported.find((b) => b.BoxID === boxId)?.StandortLabel).toBe('Rot');
+    const exported = listBoxes.all() as Array<{ BoxID: string; Label?: string | null }>;
+    expect(exported.find((b) => b.BoxID === boxId)?.Label).toBe('Rot');
 
     const persistedItem = selectItem.get(itemId) as { ItemUUID: string; Location: string | null } | undefined;
     expect(persistedItem).toEqual({ ItemUUID: itemId, Location: 'A' });

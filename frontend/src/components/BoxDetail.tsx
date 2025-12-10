@@ -13,6 +13,7 @@ import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
 
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
+// TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
 
 interface Props {
   boxId: string;
@@ -29,6 +30,7 @@ export default function BoxDetail({ boxId }: Props) {
   type NoteFeedback = { type: 'info' | 'success' | 'error'; message: string } | null;
 
   const [note, setNote] = useState('');
+  const [label, setLabel] = useState('');
   const [noteFeedback, setNoteFeedback] = useState<NoteFeedback>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [photoPreview, setPhotoPreview] = useState('');
@@ -180,6 +182,7 @@ export default function BoxDetail({ boxId }: Props) {
         const data = await res.json();
         setBox(data.box);
         setNote(data.box?.Notes || '');
+        setLabel(data.box?.Label || '');
         setNoteFeedback(null);
         const nextPhotoPath = typeof data.box?.PhotoPath === 'string' ? data.box.PhotoPath.trim() : '';
         setPhotoPreview(nextPhotoPath);
@@ -194,6 +197,7 @@ export default function BoxDetail({ boxId }: Props) {
         setItems([]);
         setEvents([]);
         setNote('');
+        setLabel('');
         setPhotoPreview('');
         setPhotoUpload(null);
         setPhotoRemoved(false);
@@ -205,6 +209,7 @@ export default function BoxDetail({ boxId }: Props) {
       setPhotoPreview('');
       setPhotoUpload(null);
       setPhotoRemoved(false);
+      setLabel('');
     } finally {
       if (showSpinner) {
         setIsLoading(false);
@@ -314,6 +319,18 @@ export default function BoxDetail({ boxId }: Props) {
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
 
+  const isBoxRelocatable = useMemo(() => {
+    if (!box?.BoxID) {
+      return false;
+    }
+    try {
+      return box.BoxID.trim().toUpperCase().startsWith('B');
+    } catch (error) {
+      console.error('Failed to evaluate relocatable box id', error);
+      return false;
+    }
+  }, [box?.BoxID]);
+
   if (isLoading) {
     return <LoadingPage message="Behälter wird geladen…" />;
   }
@@ -365,7 +382,9 @@ export default function BoxDetail({ boxId }: Props) {
               </div>
             </div>
 
-            <RelocateBoxCard boxId={box.BoxID} onMoved={() => { void load({ showSpinner: false }); }} />
+            {isBoxRelocatable ? (
+              <RelocateBoxCard boxId={box.BoxID} onMoved={() => { void load({ showSpinner: false }); }} />
+            ) : null}
 
             <PrintLabelButton boxId={box.BoxID} />
             <div className="card">
@@ -389,9 +408,9 @@ export default function BoxDetail({ boxId }: Props) {
                     setIsSavingNote(true);
                     setNoteFeedback({ type: 'info', message: 'Speichern…' });
                     console.info('Saving box note', { boxId: box.BoxID });
-                    const payload: Record<string, unknown> = { notes: note, actor };
+                    const payload: Record<string, unknown> = { notes: note, actor, Label: label };
                     if (typeof box.LocationId === 'string' && box.LocationId.trim()) {
-                      payload.location = box.LocationId;
+                      payload.LocationId = box.LocationId.trim();
                     }
                     if (photoUpload) {
                       payload.photo = photoUpload;
@@ -411,7 +430,7 @@ export default function BoxDetail({ boxId }: Props) {
                     }
                     if (res.ok) {
                       const nextPhotoPath = typeof responseBody?.photoPath === 'string' ? responseBody.photoPath.trim() : '';
-                      setBox(b => b ? { ...b, Notes: note, PhotoPath: nextPhotoPath || null } : b);
+                      setBox(b => b ? { ...b, Notes: note, Label: label, PhotoPath: nextPhotoPath || null } : b);
                       setPhotoPreview(nextPhotoPath);
                       setPhotoUpload(null);
                       setPhotoRemoved(false);
@@ -470,21 +489,38 @@ export default function BoxDetail({ boxId }: Props) {
                         )}
                         {photoRemoved ? (
                           <p className="muted">Foto wird nach dem Speichern entfernt.</p>
-                        ) : null}
-                        <input
-                          type="file"
-                          id="box-note-photo"
-                          name="box-note-photo"
-                          accept="image/*"
-                          onChange={handlePhotoFileChange}
-                        />
-                      </div>
-                    </div>
+                    ) : null}
+                    <input
+                      type="file"
+                      id="box-note-photo"
+                      name="box-note-photo"
+                      accept="image/*"
+                      onChange={handlePhotoFileChange}
+                    />
+                  </div>
+                </div>
 
-                    <div className='row'>
-                      <textarea
-                        value={note}
-                        onChange={e => {
+                <div className='row'>
+                  <label htmlFor="box-label">Label</label>
+                  <input
+                    id="box-label"
+                    name="box-label"
+                    type="text"
+                    value={label}
+                    onChange={e => {
+                      setLabel(e.target.value);
+                      if (noteFeedback && noteFeedback.type !== 'info') {
+                        setNoteFeedback(null);
+                      }
+                    }}
+                  />
+                  <p className="muted">Anzeigename für den Standort.</p>
+                </div>
+
+                <div className='row'>
+                  <textarea
+                    value={note}
+                    onChange={e => {
                           setNote(e.target.value);
                           if (noteFeedback && noteFeedback.type !== 'info') {
                             setNoteFeedback(null);

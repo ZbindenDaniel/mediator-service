@@ -323,12 +323,14 @@ import { resolveEventLogLevel } from '../models';
 
 type BoxRow = {
   BoxID: string;
-  Location: string | null;
-  StandortLabel: string | null;
+  LocationId: string | null;
+  Location?: string | null;
+  Label: string | null;
   CreatedAt: string | null;
   Notes: string | null;
   PlacedBy: string | null;
   PlacedAt: string | null;
+  PhotoPath: string | null;
   UpdatedAt: string;
 };
 
@@ -396,12 +398,13 @@ function createMoveBoxContext(initialBox: Partial<BoxRow> & { BoxID: string }) {
   db.exec(`
     CREATE TABLE boxes (
       BoxID TEXT PRIMARY KEY,
-      Location TEXT,
-      StandortLabel TEXT,
+      LocationId TEXT,
+      Label TEXT,
       CreatedAt TEXT,
       Notes TEXT,
       PlacedBy TEXT,
       PlacedAt TEXT,
+      PhotoPath TEXT,
       UpdatedAt TEXT NOT NULL
     );
     CREATE TABLE events (
@@ -417,18 +420,19 @@ function createMoveBoxContext(initialBox: Partial<BoxRow> & { BoxID: string }) {
   `);
 
   const insertBox = db.prepare(`
-    INSERT INTO boxes (BoxID, Location, StandortLabel, CreatedAt, Notes, PlacedBy, PlacedAt, UpdatedAt)
-    VALUES (@BoxID, @Location, @StandortLabel, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @UpdatedAt)
+    INSERT INTO boxes (BoxID, LocationId, Label, CreatedAt, Notes, PlacedBy, PlacedAt, PhotoPath, UpdatedAt)
+    VALUES (@BoxID, @LocationId, @Label, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @PhotoPath, @UpdatedAt)
   `);
 
   insertBox.run({
     BoxID: initialBox.BoxID,
-    Location: initialBox.Location ?? null,
-    StandortLabel: initialBox.StandortLabel ?? null,
+    LocationId: (initialBox as any).LocationId ?? initialBox.Location ?? null,
+    Label: (initialBox as any).Label ?? (initialBox as any).StandortLabel ?? null,
     CreatedAt: initialBox.CreatedAt ?? '2000-01-01T00:00:00Z',
     Notes: initialBox.Notes ?? null,
     PlacedBy: initialBox.PlacedBy ?? null,
     PlacedAt: initialBox.PlacedAt ?? null,
+    PhotoPath: (initialBox as any).PhotoPath ?? null,
     UpdatedAt: initialBox.UpdatedAt ?? '2000-01-01T00:00:00Z'
   });
 
@@ -467,7 +471,7 @@ function createMoveBoxContext(initialBox: Partial<BoxRow> & { BoxID: string }) {
 
 describe('move-box action note updates', () => {
   test('updates notes without requiring location', async () => {
-    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-001', Location: null });
+    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-001', LocationId: null });
     const req = createMockRequest('/api/boxes/BOX-001/move', { actor: 'Tester', notes: '  Hello Note  ' });
     const { res, getStatus, getBody } = createMockResponse();
     let updated: BoxRow | null = null;
@@ -484,7 +488,8 @@ describe('move-box action note updates', () => {
     expect(getStatus()).toBe(200);
     expect(JSON.parse(getBody())).toEqual({ ok: true });
 
-    expect(updated?.Location ?? null).toBeNull();
+    expect((updated as any)?.Location ?? null).toBeNull();
+    expect(updated?.LocationId ?? null).toBeNull();
     expect(updated?.Notes ?? null).toBe('Hello Note');
     expect(updated?.PlacedBy ?? null).toBeNull();
     expect(updated?.PlacedAt ?? null).toBeNull();
@@ -496,8 +501,8 @@ describe('move-box action note updates', () => {
   });
 
   test('moves box placement when location provided', async () => {
-    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-002', Location: 'A-01-01', Notes: 'Old', StandortLabel: 'Rot' });
-    const req = createMockRequest('/api/boxes/BOX-002/move', { actor: 'Mover', location: 'b-02-03', notes: 'Moved note' });
+    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-002', LocationId: 'A-01-01', Notes: 'Old', Label: 'Rot' });
+    const req = createMockRequest('/api/boxes/BOX-002/move', { actor: 'Mover', LocationId: 'b-02-03', notes: 'Moved note', Label: 'Orange' });
     const { res, getStatus, getBody } = createMockResponse();
     let updated: BoxRow | null = null;
     let events: EventRow[] = [];
@@ -513,8 +518,9 @@ describe('move-box action note updates', () => {
     expect(getStatus()).toBe(200);
     expect(JSON.parse(getBody())).toEqual({ ok: true });
 
-    expect(updated?.Location ?? '').toBe('B-02-03');
-    expect(updated?.StandortLabel ?? null).toBe('Orange');
+    expect(updated?.LocationId ?? '').toBe('B-02-03');
+    expect((updated as any)?.Location ?? null).toBeNull();
+    expect(updated?.Label ?? null).toBe('Orange');
     expect(updated?.Notes ?? null).toBe('Moved note');
     expect(updated?.PlacedBy ?? null).toBe('Mover');
     expect(updated?.PlacedAt ?? null).not.toBeNull();
@@ -522,6 +528,6 @@ describe('move-box action note updates', () => {
 
     expect(events.length).toBe(1);
     expect(events[0].Event).toBe('Moved');
-    expect(JSON.parse(events[0].Meta || '{}')).toMatchObject({ location: 'B-02-03', notes: 'Moved note' });
+    expect(JSON.parse(events[0].Meta || '{}')).toMatchObject({ locationId: 'B-02-03', notes: 'Moved note', label: 'Orange' });
   });
 });
