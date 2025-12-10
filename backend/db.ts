@@ -1194,7 +1194,38 @@ export const getItemReference = wrapLangtextAwareStatement(
 export const findByMaterial = wrapLangtextAwareStatement(findByMaterialStatement, 'db:findByMaterial');
 export const itemsByBox = wrapLangtextAwareStatement(itemsByBoxStatement, 'db:itemsByBox');
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
-export const listBoxes = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
+// TODO(agent): Revisit list box queries once typed/location filters are stabilized for UI consumers.
+const listBoxesStatement = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
+const listBoxesByTypeStatement = db.prepare(
+  `SELECT * FROM boxes WHERE SUBSTR(BoxID, 1, 1) = @type ORDER BY BoxID`
+);
+
+export interface ListBoxesHelper {
+  all: () => any[];
+  byType: (type: string) => any[];
+}
+
+export const listBoxes: ListBoxesHelper = {
+  all: () => listBoxesStatement.all(),
+  byType: (type: string) => {
+    const normalized = (type ?? '').toString().trim().toUpperCase();
+    if (!normalized) {
+      console.warn('[db:listBoxes] Refusing to filter boxes by empty type');
+      return [];
+    }
+    if (!/^[A-Z0-9]$/.test(normalized)) {
+      console.warn('[db:listBoxes] Invalid box type filter provided', { type });
+      return [];
+    }
+
+    try {
+      return listBoxesByTypeStatement.all({ type: normalized });
+    } catch (err) {
+      console.error('[db:listBoxes] Failed to list boxes by type', { type: normalized, err });
+      return [];
+    }
+  }
+};
 export const getAdjacentItemIds = getAdjacentItemIdsStatement;
 
 const upsertAgenticRequestLogStatement = db.prepare(

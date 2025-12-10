@@ -102,7 +102,16 @@ const action = defineHttpAction({
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const rawLocationValue = typeof data.location === 'string' ? data.location : '';
-      const locationRaw = rawLocationValue.trim().toUpperCase();
+      const rawLocationIdValue = typeof data.LocationId === 'string' ? data.LocationId : '';
+      const locationInput = rawLocationIdValue || rawLocationValue;
+      if (rawLocationIdValue && rawLocationValue && rawLocationIdValue !== rawLocationValue) {
+        console.warn('[move-box] Conflicting location inputs provided', {
+          boxId: id,
+          location: rawLocationValue,
+          locationId: rawLocationIdValue
+        });
+      }
+      const locationRaw = locationInput.trim().toUpperCase();
       const hasLocation = locationRaw.length > 0;
       const notes = (data.notes ?? '').toString().trim();
       const hasNotesField = Object.prototype.hasOwnProperty.call(data, 'notes');
