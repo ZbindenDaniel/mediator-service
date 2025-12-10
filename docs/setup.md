@@ -28,6 +28,12 @@ the print job need to renderPDFs from the html templates. This need to happen he
 
 > **Tip:** Variables can also be injected directly via your process manager or deployment platform if you prefer not to use a `.env` file.
 
+## Location bootstrap seeding
+
+- During backend startup the `backend/db.ts` initialization seeds the `locations` table from `models/item-categories.ts`. Each category produces a row with ID `S-{code}-0001`, label `Regal {label}`, and current timestamps so rack labels stay consistent with the catalogue.
+- The seed runs inside a transaction with `INSERT OR IGNORE` semantics and structured logging; repeated restarts or multiple instances won't throw conflicts and will emit how many rows were inserted.
+- After adding or modifying categories, restart at least one backend instance (for example `npm start` after a build) so the seed executes. If a deployment skips the normal startup path, manually invoking the backend entrypoint ensures the bootstrap runs and prevents missing locations in production.
+
 ## Agentic run dispatch lifecycle
 
 - Triggering `startAgenticRun`/`restartAgenticRun` records the queued run and returns immediately; the Node.js event loop schedules the model invocation with `setImmediate`, so no dedicated worker loop needs to be enabled for this hop.

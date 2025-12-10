@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 // TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
 // TODO(agent): Audit ImageNames persistence once asset synchronization tracks discrete files.
+// TODO(agent): Fold location bootstrap seeding into the formal migration path once Postgres becomes the primary store.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -25,7 +26,8 @@ import {
   EventLogLevel,
   EVENT_LOG_LEVELS,
   parseEventLogLevelAllowList,
-  resolveEventLogLevel
+  resolveEventLogLevel,
+  itemCategories
 } from '../models';
 import { resolveStandortLabel } from './standort-label';
 
@@ -53,6 +55,15 @@ CREATE TABLE IF NOT EXISTS boxes (
   PlacedAt TEXT,
   UpdatedAt TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS locations (
+  LocationID TEXT PRIMARY KEY,
+  Label TEXT NOT NULL,
+  CreatedAt TEXT NOT NULL,
+  UpdatedAt TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_locations_label ON locations(Label);
 
 CREATE TABLE IF NOT EXISTS label_queue (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -170,6 +181,39 @@ function ensureBoxPhotoPathColumn(database: Database.Database = db): void {
 }
 
 ensureBoxPhotoPathColumn();
+
+function seedCategoryLocations(database: Database.Database = db): void {
+  try {
+    const now = new Date().toISOString();
+    const entries = itemCategories.map((category) => ({
+      LocationID: `S-${category.code}-0001`,
+      Label: `Regal ${category.label}`,
+      CreatedAt: now,
+      UpdatedAt: now
+    }));
+
+    const insertLocation = database.prepare(`
+      INSERT OR IGNORE INTO locations (LocationID, Label, CreatedAt, UpdatedAt)
+      VALUES (@LocationID, @Label, @CreatedAt, @UpdatedAt)
+    `);
+
+    const seedLocations = database.transaction((records: typeof entries) => {
+      let inserted = 0;
+      for (const record of records) {
+        const result = insertLocation.run(record);
+        inserted += typeof result.changes === 'number' ? result.changes : 0;
+      }
+      return inserted;
+    });
+
+    const insertedCount = seedLocations(entries);
+    console.info('[db] Category location bootstrap complete', { insertedCount });
+  } catch (err) {
+    console.error('[db] Failed to seed category locations', err);
+  }
+}
+
+seedCategoryLocations();
 
 const rawEventLogLevels = process.env.EVENT_LOG_LEVELS ?? null;
 const {
