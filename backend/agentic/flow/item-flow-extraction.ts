@@ -23,6 +23,7 @@ export interface ExtractionLogger {
 // TODO(agent): Monitor extraction target snapshots as schema fields grow to avoid prompt overflow.
 export interface RunExtractionOptions {
   llm: ChatModel;
+  correctionModel?: ChatModel;
   logger?: ExtractionLogger;
   itemId: string;
   maxAttempts: number;
@@ -32,6 +33,7 @@ export interface RunExtractionOptions {
   recordSources: (sources: SearchSource[]) => void;
   buildAggregatedSearchText: () => string;
   extractPrompt: string;
+  correctionPrompt: string;
   targetFormat: string;
   supervisorPrompt: string;
   categorizerPrompt: string;
@@ -98,6 +100,7 @@ function sanitizeForLog(value: unknown, depth = 0): unknown {
 
 export async function runExtractionAttempts({
   llm,
+  correctionModel,
   logger,
   itemId,
   maxAttempts,
@@ -107,6 +110,7 @@ export async function runExtractionAttempts({
   recordSources,
   buildAggregatedSearchText,
   extractPrompt,
+  correctionPrompt,
   targetFormat,
   supervisorPrompt,
   categorizerPrompt,
@@ -348,18 +352,89 @@ export async function runExtractionAttempts({
         thinkPreview: truncateForLog(thinkPreview),
         rawSnippet: itemContent.slice(0, 500)
       });
-      lastSupervision = 'INVALID_JSON';
-      lastValidationIssues = 'INVALID_JSON';
-      const nextAttempt = attempt + 1;
-      logger?.info?.({
-        msg: 'retrying extraction attempt',
-        attempt,
-        nextAttempt,
-        itemId,
-        reason: 'INVALID_JSON'
-      });
-      advanceAttempt();
-      continue;
+
+      const correctionAgent = correctionModel ?? llm;
+      const correctionSections = [
+        'The assistant response could not be parsed as JSON. Fix only formatting issues without changing any values.',
+        'Raw output:',
+        itemContent.trim() || sanitizedPayload
+      ];
+      if (sanitizedPayload && sanitizedPayload !== itemContent.trim()) {
+        correctionSections.push('Sanitized attempt:', sanitizedPayload);
+      }
+      if (thinkPreview) {
+        correctionSections.push('Think content (do not include in JSON):', thinkPreview);
+      }
+
+      let correctedContent: string | null = null;
+      try {
+        // TODO(agent): Capture correction agent telemetry once downstream metrics ingestion is available.
+        logger?.info?.({
+          msg: 'invoking json correction agent',
+          attempt,
+          itemId,
+          hasThinkPreview: Boolean(thinkPreview)
+        });
+        const correctionMessages = [
+          { role: 'system', content: correctionPrompt },
+          { role: 'user', content: correctionSections.join('\n\n') }
+        ];
+        const correctionRes = await correctionAgent.invoke(correctionMessages);
+        correctedContent = stringifyLangChainContent(correctionRes?.content, {
+          context: 'itemFlow.jsonCorrection',
+          logger
+        }).trim();
+      } catch (correctionErr) {
+        logger?.error?.({
+          err: correctionErr,
+          msg: 'json correction agent invocation failed',
+          attempt,
+          itemId
+        });
+      }
+
+      if (correctedContent) {
+        try {
+          parsed = parseJsonWithSanitizer(correctedContent, {
+            loggerInstance: logger,
+            context: { itemId, attempt, stage: 'extraction-json-correction', thinkContent }
+          });
+          lastInvalidJsonPayload = null;
+          lastInvalidJsonErrorHint = '';
+          itemContent = correctedContent;
+          logger?.info?.({
+            msg: 'json correction agent repaired payload',
+            attempt,
+            itemId,
+            correctedSnippet: truncateForLog(correctedContent)
+          });
+        } catch (parseAfterCorrectionErr) {
+          logger?.warn?.({
+            err: parseAfterCorrectionErr,
+            msg: 'json correction agent output still invalid',
+            attempt,
+            itemId,
+            correctionSnippet: truncateForLog(correctedContent)
+          });
+        }
+      }
+
+      if (!parsed) {
+        lastSupervision = 'INVALID_JSON';
+        lastValidationIssues = 'INVALID_JSON';
+        const nextAttempt = attempt + 1;
+        logger?.info?.({
+          msg: 'retrying extraction attempt',
+          attempt,
+          nextAttempt,
+          itemId,
+          reason: 'INVALID_JSON',
+          hasCorrectionAttempt: Boolean(correctedContent),
+          parseErrorHint: truncateForLog(lastInvalidJsonErrorHint)
+        });
+        advanceAttempt();
+        continue;
+      }
     }
 
     const agentParsed = AgentOutputSchema.safeParse(parsed);
