@@ -113,6 +113,28 @@ const action = defineHttpAction({
       }
       const locationRaw = locationInput.trim().toUpperCase();
       const hasLocation = locationRaw.length > 0;
+      const hasLabelField = Object.prototype.hasOwnProperty.call(data, 'Label') ||
+        Object.prototype.hasOwnProperty.call(data, 'label');
+      const rawLabelValue = typeof data.Label === 'string' ? data.Label : typeof data.label === 'string' ? data.label : '';
+      const normalizedLabel = rawLabelValue.trim();
+      const labelFromInput = hasLabelField ? (normalizedLabel ? normalizedLabel : null) : null;
+      const existingLocationId = typeof box.LocationId === 'string' && box.LocationId.trim()
+        ? box.LocationId.trim().toUpperCase()
+        : typeof (box as any).Location === 'string' && (box as any).Location.trim()
+          ? (box as any).Location.trim().toUpperCase()
+          : '';
+      const effectiveLocationId = hasLocation ? locationRaw : existingLocationId;
+      const fallbackLabel = typeof box.Label === 'string' && box.Label.trim()
+        ? box.Label.trim()
+        : typeof (box as any).StandortLabel === 'string' && (box as any).StandortLabel.trim()
+          ? (box as any).StandortLabel.trim()
+          : null;
+      const resolvedLabel = effectiveLocationId ? resolveStandortLabel(effectiveLocationId) : null;
+      const nextLabel = hasLabelField ? labelFromInput : (resolvedLabel ?? fallbackLabel ?? null);
+
+      if (hasLocation && !nextLabel) {
+        console.warn('[move-box] Missing label mapping for location', { boxId: id, locationId: locationRaw });
+      }
       const notes = (data.notes ?? '').toString().trim();
       const hasNotesField = Object.prototype.hasOwnProperty.call(data, 'notes');
       const hasPhotoField = Object.prototype.hasOwnProperty.call(data, 'photo');
@@ -138,26 +160,29 @@ const action = defineHttpAction({
         }
       }
 
-      if (!hasLocation && (hasNotesField || hasPhotoMutation)) {
-        const noteTxn = ctx.db.transaction((boxId: string, note: string, photoPath: string | null, a: string) => {
-          ctx.db
-            .prepare(`UPDATE boxes SET Notes=?, PhotoPath=?, UpdatedAt=datetime('now') WHERE BoxID=?`)
-            .run(note, photoPath, boxId);
-          ctx.logEvent({
-            Actor: a,
-            EntityType: 'Box',
-            EntityId: boxId,
-            Event: 'Note',
-            Meta: JSON.stringify({ notes: note, photoPath })
-          });
-        });
+      if (!hasLocation && (hasNotesField || hasPhotoMutation || hasLabelField)) {
+        const noteTxn = ctx.db.transaction(
+          (boxId: string, note: string, photoPath: string | null, a: string, labelValue: string | null, locationId: string | null) => {
+            ctx.db
+              .prepare(`UPDATE boxes SET Label=?, Notes=?, PhotoPath=?, UpdatedAt=datetime('now') WHERE BoxID=?`)
+              .run(labelValue, note, photoPath, boxId);
+            ctx.logEvent({
+              Actor: a,
+              EntityType: 'Box',
+              EntityId: boxId,
+              Event: 'Note',
+              Meta: JSON.stringify({ notes: note, photoPath, label: labelValue, locationId })
+            });
+          }
+        );
         try {
-          noteTxn(id, notes, nextPhotoPath, actor);
+          noteTxn(id, notes, nextPhotoPath, actor, nextLabel ?? null, effectiveLocationId || null);
           console.info('[move-box] Processed note/photo update', {
             boxId: id,
             actor,
             photoChanged,
-            hasNotesField
+            hasNotesField,
+            hasLabelField
           });
         } catch (noteErr) {
           console.error('Note/photo update failed', noteErr);
@@ -167,14 +192,10 @@ const action = defineHttpAction({
         return;
       }
 
-      if (!hasLocation) {
+      if (!hasLocation && !effectiveLocationId) {
         return sendJson(res, 400, { error: 'location is required' });
       }
 
-      const label = resolveStandortLabel(locationRaw);
-      if (locationRaw && !label) {
-        console.warn('[move-box] Missing Standort label mapping for location', { location: locationRaw });
-      }
       const txn = ctx.db.transaction(
         (boxId: string, loc: string, note: string, photoPath: string | null, a: string, resolvedLabel: string | null) => {
           ctx.db
@@ -182,21 +203,23 @@ const action = defineHttpAction({
               `UPDATE boxes SET LocationId=?, Label=?, Notes=?, PhotoPath=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`
             )
             .run(loc, resolvedLabel, note, photoPath, a, boxId);
-        ctx.logEvent({
-          Actor: a,
-          EntityType: 'Box',
-          EntityId: boxId,
-          Event: 'Moved',
-          Meta: JSON.stringify({ locationId: loc, notes: note, label: resolvedLabel, photoPath })
-        });
-      });
-      txn(id, locationRaw, notes, nextPhotoPath, actor, label);
+          ctx.logEvent({
+            Actor: a,
+            EntityType: 'Box',
+            EntityId: boxId,
+            Event: 'Moved',
+            Meta: JSON.stringify({ locationId: loc, notes: note, label: resolvedLabel, photoPath })
+          });
+        }
+      );
+      txn(id, hasLocation ? locationRaw : effectiveLocationId, notes, nextPhotoPath, actor, nextLabel ?? null);
       console.info('[move-box] Processed move update', {
         boxId: id,
         actor,
-        location: locationRaw,
+        location: hasLocation ? locationRaw : effectiveLocationId,
         photoChanged,
-        notesChanged: hasNotesField
+        notesChanged: hasNotesField,
+        hasLabelField
       });
       sendJson(res, 200, { ok: true, photoPath: nextPhotoPath });
     } catch (err) {

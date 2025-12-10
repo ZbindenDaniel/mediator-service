@@ -12,7 +12,7 @@ describe('BoxColorTag', () => {
     );
 
     expect(markup).toContain('(nicht gesetzt)');
-    expect(markup).not.toMatch(/background-color/i);
+    expect(markup).not.toMatch(/A-00-00/);
   });
 
   test('renders color swatch and label for mapped locations', () => {
@@ -22,7 +22,8 @@ describe('BoxColorTag', () => {
       })
     );
 
+    expect(markup).toContain('A-01-01');
     expect(markup).toContain('Rot');
-    expect(markup).toMatch(/background-color:\s?#c5221f/i);
+    expect(markup).not.toMatch(/background-color/i);
   });
 });

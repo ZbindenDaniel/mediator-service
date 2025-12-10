@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { isUnplacedLocation, resolveBoxColorFromLocation } from '../data/boxColors';
 
+// TODO(agent): Revisit color-based tags once all location displays emphasize labels over palette metadata.
+
 interface BoxColorTagProps {
   locationKey?: string | null;
   labelOverride?: string | null;
@@ -22,37 +24,27 @@ export default function BoxColorTag({ locationKey, labelOverride, className }: B
     return resolved;
   }, [normalizedLocation, unplaced]);
 
-  if (unplaced || !colorOption) {
+  if (unplaced || !normalizedLocation) {
     return <span className={className}>(nicht gesetzt)</span>;
   }
 
-  const label = labelOverride?.trim() || colorOption.label || normalizedLocation;
+  if (!colorOption) {
+    console.warn('No color mapping found for location', { location: normalizedLocation });
+  }
+
+  const label = labelOverride?.trim() || colorOption?.label || normalizedLocation;
 
   return (
     <span
       className={className}
       style={{
         display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.5rem'
+        flexDirection: 'column',
+        gap: '0.125rem'
       }}
     >
-      {colorOption ? (
-        <span
-          aria-hidden="true"
-          style={{
-            display: 'inline-block',
-            width: '0.75rem',
-            height: '0.75rem',
-            borderRadius: '2px',
-            backgroundColor: colorOption.hex,
-            border: '1px solid rgba(0, 0, 0, 0.2)'
-          }}
-        />
-      ) : null}
-      <span>
-        {label}
-      </span>
+      <span className="mono">{normalizedLocation}</span>
+      <span>{label}</span>
     </span>
   );
 }

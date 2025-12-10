@@ -144,13 +144,14 @@ describe('export-items action', () => {
     const now = new Date('2024-07-01T10:00:00.000Z');
     const placement = {
       BoxID: 'B-EXPORT-001',
-      Location: 'LOC-01'
+      LocationId: 'LOC-01',
+      Label: 'LOC-01'
     };
 
     upsertBox.run({
       BoxID: placement.BoxID,
-      Location: placement.Location,
-      StandortLabel: placement.Location,
+      LocationId: placement.LocationId,
+      Label: placement.Label,
       CreatedAt: now.toISOString(),
       Notes: '',
       PhotoPath: null,
@@ -163,7 +164,7 @@ describe('export-items action', () => {
       ItemUUID: 'I-EXPORT-METADATA-001',
       Artikel_Nummer: 'EXPORT-01',
       BoxID: placement.BoxID,
-      Location: placement.Location,
+      Location: placement.LocationId,
       UpdatedAt: now,
       Datum_erfasst: now,
       Auf_Lager: 1,
@@ -189,7 +190,7 @@ describe('export-items action', () => {
     expect(rowColumns.slice(-4)).toEqual([
       'I-EXPORT-METADATA-001',
       placement.BoxID,
-      placement.Location,
+      placement.LocationId,
       now.toISOString()
     ]);
   });
