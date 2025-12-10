@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function RelocateBoxCard({ boxId, onMoved }: Props) {
-  const LOCATION_BOX_TYPE = 'L';
+  const LOCATION_BOX_TYPE = 'S';
   const [selectedLocation, setSelectedLocation] = useState('');
   const [status, setStatus] = useState('');
   const [locationOptions, setLocationOptions] = useState<Array<{ id: string; label: string; sourceBoxId: string }>>([]);

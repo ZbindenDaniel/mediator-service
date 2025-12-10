@@ -5,20 +5,20 @@ describe('prepareBoxesForDisplay', () => {
   const baseBoxes: Box[] = [
     {
       BoxID: 'BX-002',
-      StandortLabel: 'Küche',
-      Location: 'LOC-2',
+      Label: 'Küche',
+      LocationId: 'LOC-2',
       UpdatedAt: '2024-05-01T10:00:00.000Z',
     },
     {
       BoxID: 'BX-001',
-      StandortLabel: 'Lager',
-      Location: 'LOC-1',
+      Label: 'Lager',
+      LocationId: 'LOC-1',
       UpdatedAt: '2024-05-02T09:00:00.000Z',
     },
     {
       BoxID: 'BX-010',
-      StandortLabel: 'Außenbereich',
-      Location: 'LOC-3',
+      Label: 'Außenbereich',
+      LocationId: 'LOC-3',
       UpdatedAt: '2024-04-29T12:00:00.000Z',
     },
   ];
@@ -37,20 +37,20 @@ describe('prepareBoxesForDisplay', () => {
     const input: Box[] = [
       {
         BoxID: 'BX-003',
-        StandortLabel: 'Archiv',
-        Location: 'LOC-4',
+        Label: 'Archiv',
+        LocationId: 'LOC-4',
         UpdatedAt: '2024-05-02T09:00:00.000Z',
       },
       {
         BoxID: 'BX-004',
-        StandortLabel: 'Archiv',
-        Location: 'LOC-5',
+        Label: 'Archiv',
+        LocationId: 'LOC-5',
         UpdatedAt: '2024-05-02T09:00:00.000Z',
       },
       {
         BoxID: 'BX-005',
-        StandortLabel: 'Archiv',
-        Location: 'LOC-6',
+        Label: 'Archiv',
+        LocationId: 'LOC-6',
         UpdatedAt: '2024-05-03T09:00:00.000Z',
       },
     ];
@@ -59,26 +59,26 @@ describe('prepareBoxesForDisplay', () => {
     expect(result.map((box) => box.BoxID)).toEqual(['BX-005', 'BX-003', 'BX-004']);
   });
 
-  test('sorts alphabetically by StandortLabel with BoxID tie breaker', () => {
+  test('sorts alphabetically by Label with BoxID tie breaker', () => {
     const input: Box[] = [
       {
         BoxID: 'BX-020',
-        StandortLabel: 'Zimmer',
+        Label: 'Zimmer',
         UpdatedAt: '2024-05-01T08:00:00.000Z',
       },
       {
         BoxID: 'BX-019',
-        StandortLabel: 'Zimmer',
+        Label: 'Zimmer',
         UpdatedAt: '2024-05-02T08:00:00.000Z',
       },
       {
         BoxID: 'BX-018',
-        StandortLabel: 'Büro',
+        Label: 'Büro',
         UpdatedAt: '2024-05-03T08:00:00.000Z',
       },
     ];
 
-    const result = prepareBoxesForDisplay(input, { searchText: '', sortKey: 'StandortLabel' });
+    const result = prepareBoxesForDisplay(input, { searchText: '', sortKey: 'Label' });
     expect(result.map((box) => box.BoxID)).toEqual(['BX-018', 'BX-019', 'BX-020']);
   });
 });
