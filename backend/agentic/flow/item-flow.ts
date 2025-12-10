@@ -29,6 +29,7 @@ export interface ItemFlowLogger extends ExtractionLogger {
 
 export interface ItemFlowDependencies {
   llm: ChatModel;
+  correctionLlm?: ChatModel;
   logger?: ItemFlowLogger;
   searchInvoker: SearchInvoker;
   rateLimiterLogger?: RateLimiterLogger;
@@ -149,7 +150,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     };
 
     const shopwareAvailable = isShopwareConfigured();
-    const { format, extract, supervisor, categorizer, searchPlanner, shopware } = await loadPrompts({
+    const { format, extract, supervisor, categorizer, jsonCorrection, searchPlanner, shopware } = await loadPrompts({
       itemId,
       logger,
       includeShopware: shopwareAvailable
@@ -286,6 +287,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       recordSources,
       buildAggregatedSearchText,
       extractPrompt: extract,
+      correctionPrompt: jsonCorrection,
       targetFormat: format,
       supervisorPrompt: supervisor,
       categorizerPrompt: categorizer,
@@ -293,6 +295,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       target,
       reviewNotes: reviewerNotes,
       skipSearch,
+      correctionModel: deps.correctionLlm,
       transcriptWriter
     });
 
