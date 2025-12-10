@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
+// TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 import type { Item, EventLog, AgenticRun } from '../../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,

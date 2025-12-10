@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
+import { ensureDefaultLocationForSubcategory } from '../lib/defaultLocation';
+// TODO(agent): Unify move-item payload normalization with default location helpers to reduce divergent validation paths.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -23,15 +25,39 @@ const action = defineHttpAction({
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const toBoxId = (data.toBoxId || null);
       const actor = (data.actor || '').trim();
-      if (!toBoxId || !actor) return sendJson(res, 400, { error: 'toBoxId and actor are required' });
-      const dest = ctx.getBox.get(toBoxId);
-      if (!dest) return sendJson(res, 404, { error: 'Behälter nicht gefunden!' });
-      const rawLocation = dest.Location;
-      const normalizedLocation = typeof rawLocation === 'string' ? rawLocation.trim() : null;
-      if (!normalizedLocation) {
-        console.warn('[move-item] Destination box missing Location', { itemId: uuid, boxId: toBoxId });
+      const useDefaultLocation = data.useDefaultLocation === true;
+      const toBoxId = typeof data.toBoxId === 'string' ? data.toBoxId.trim() : '';
+      if (!actor) return sendJson(res, 400, { error: 'actor is required' });
+
+      let destinationBoxId = useDefaultLocation ? null : toBoxId;
+
+      if (useDefaultLocation) {
+        destinationBoxId = ensureDefaultLocationForSubcategory(item.Unterkategorien_A ?? item.Unterkategorien_B, {
+          database: ctx.db,
+          logger: console
+        });
+
+        if (!destinationBoxId) {
+          console.warn('[move-item] Default location missing for item', {
+            itemId: uuid,
+            subcategory: item.Unterkategorien_A ?? item.Unterkategorien_B ?? null
+          });
+          return sendJson(res, 404, { error: 'Kein Standard-Standort gefunden' });
+        }
+      }
+
+      if (!destinationBoxId) return sendJson(res, 400, { error: 'toBoxId is required unless using default location' });
+      const dest = ctx.getBox.get(destinationBoxId);
+      if (!dest) {
+        console.warn('[move-item] Destination box not found', { itemId: uuid, boxId: destinationBoxId, useDefaultLocation });
+        return sendJson(res, 404, { error: 'Behälter nicht gefunden!' });
+      }
+      const rawLocationId = typeof dest.LocationId === 'string' ? dest.LocationId.trim() : null;
+      const rawLocation = typeof dest.Location === 'string' ? dest.Location.trim() : null;
+      const normalizedLocation = rawLocationId || rawLocation || null;
+      if (!normalizedLocation && useDefaultLocation) {
+        console.warn('[move-item] Default destination missing LocationId', { itemId: uuid, boxId: destinationBoxId });
       }
       const txn = ctx.db.transaction((u: string, to: string, a: string, from: string, location: string | null) => {
         ctx.db.prepare(`UPDATE items SET BoxID=?, Location=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(to, location, u);
@@ -64,8 +90,8 @@ const action = defineHttpAction({
           });
         }
       });
-      txn(uuid, toBoxId, actor, item.BoxID, normalizedLocation);
-      sendJson(res, 200, { ok: true });
+      txn(uuid, destinationBoxId, actor, item.BoxID, normalizedLocation);
+      sendJson(res, 200, { ok: true, destinationBoxId, locationId: normalizedLocation });
     } catch (err) {
       console.error('Move item failed', err);
       sendJson(res, 500, { error: (err as Error).message });
