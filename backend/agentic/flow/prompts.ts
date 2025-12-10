@@ -10,6 +10,7 @@ const EXTRACT_PROMPT_PATH = path.join(PROMPTS_DIR, 'extract.md');
 const SUPERVISOR_PROMPT_PATH = path.join(PROMPTS_DIR, 'supervisor.md');
 const SHOPWARE_PROMPT_PATH = path.join(PROMPTS_DIR, 'shopware-verify.md');
 const CATEGORIZER_PROMPT_PATH = path.join(PROMPTS_DIR, 'categorizer.md');
+const JSON_CORRECTION_PROMPT_PATH = path.join(PROMPTS_DIR, 'json-correction.md');
 const SEARCH_PLANNER_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-planner.md');
 const CHAT_PROMPT_PATH = path.join(PROMPTS_DIR, 'chat.md');
 const DB_SCHEMA_PATH = path.resolve(__dirname, '../../db.ts');
@@ -246,6 +247,7 @@ export interface LoadPromptsResult {
   extract: string;
   supervisor: string;
   categorizer: string;
+  jsonCorrection: string;
   searchPlanner: string;
   shopware?: string | null;
 }
@@ -264,6 +266,18 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       readPromptFile(SEARCH_PLANNER_PROMPT_PATH, { itemId, prompt: 'search-planner', logger })
     ]);
 
+    let jsonCorrection: string;
+    try {
+      jsonCorrection = await readPromptFile(JSON_CORRECTION_PROMPT_PATH, {
+        itemId,
+        prompt: 'json-correction',
+        logger
+      });
+    } catch (err) {
+      logger?.error?.({ err, msg: 'failed to load json correction prompt', itemId });
+      throw err;
+    }
+
     let shopware: string | null | undefined;
     if (includeShopware) {
       try {
@@ -278,10 +292,11 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       msg: 'prompts bundle loaded',
       itemId,
       includeShopware: Boolean(includeShopware),
+      hasJsonCorrection: Boolean(jsonCorrection),
       hasShopware: shopware != null
     });
 
-    return { format, extract, supervisor, categorizer, searchPlanner, shopware };
+    return { format, extract, supervisor, categorizer, jsonCorrection, searchPlanner, shopware };
   } catch (err) {
     if (err instanceof FlowError) {
       throw err;
@@ -329,6 +344,7 @@ export {
   SUPERVISOR_PROMPT_PATH,
   SHOPWARE_PROMPT_PATH,
   CATEGORIZER_PROMPT_PATH,
+  JSON_CORRECTION_PROMPT_PATH,
   SEARCH_PLANNER_PROMPT_PATH,
   CHAT_PROMPT_PATH
 };
