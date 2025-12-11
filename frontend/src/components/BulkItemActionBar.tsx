@@ -323,7 +323,7 @@ export default function BulkItemActionBar({
         title: 'Agentic starten',
         message: (
           <div className="bulk-item-action-bar__confirm-content">
-            <p>Sollen agentische Läufe für die Auswahl gestartet werden?</p>
+            <p>Sollen KI Läufe für die Auswahl gestartet werden?</p>
             <ul>
               <li>{selectionLabel}</li>
               {previewEntries.map((entry, index) => (

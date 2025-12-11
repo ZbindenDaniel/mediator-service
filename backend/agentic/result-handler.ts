@@ -308,7 +308,7 @@ export function handleAgenticResult(
       }
 
       const existingRun = ctx.getAgenticRun.get(itemUUID) as AgenticRun | undefined;
-      const shouldPersistItemUpdate = status !== AGENTIC_RUN_STATUS_REJECTED && status !== AGENTIC_RUN_STATUS_REVIEW;
+      const shouldPersistItemUpdate = status !== AGENTIC_RUN_STATUS_REJECTED;
       if (shouldPersistItemUpdate) {
         const merged: Record<string, any> = { ...existingItem };
         if (agenticPayload && typeof agenticPayload === 'object') {

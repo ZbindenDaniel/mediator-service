@@ -478,7 +478,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     return {
       label: 'Keine Daten',
       className: 'pill status status-info',
-      description: 'Es liegen keine agentischen Ergebnisse vor.',
+      description: 'Es liegen keine KI Ergebnisse vor.',
       variant: 'info',
       needsReviewBadge: false,
       isTerminal: false
@@ -501,7 +501,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     case AGENTIC_RUN_STATUS_NOT_STARTED:
       base = {
         label: 'Nicht gestartet',
-        description: 'Der agentische Durchlauf wurde noch nicht gestartet.',
+        description: 'Der KI Durchlauf wurde noch nicht gestartet.',
         variant: 'info',
         needsReviewBadge: false,
         isTerminal: true
@@ -510,7 +510,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     case AGENTIC_RUN_STATUS_FAILED:
       base = {
         label: 'Fehlgeschlagen',
-        description: 'Der agentische Durchlauf ist fehlgeschlagen.',
+        description: 'Der KI Durchlauf ist fehlgeschlagen.',
         variant: 'error',
         needsReviewBadge: false,
         isTerminal: true
@@ -519,7 +519,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     case AGENTIC_RUN_STATUS_RUNNING:
       base = {
         label: 'In Arbeit',
-        description: 'Der agentische Durchlauf läuft derzeit.',
+        description: 'Der KI Durchlauf läuft derzeit.',
         variant: 'info',
         needsReviewBadge: false,
         isTerminal: false
@@ -528,7 +528,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     case AGENTIC_RUN_STATUS_QUEUED:
       base = {
         label: 'Wartet',
-        description: 'Der agentische Durchlauf wartet auf Ausführung.',
+        description: 'Der KI Durchlauf wartet auf Ausführung.',
         variant: 'pending',
         needsReviewBadge: false,
         isTerminal: false
@@ -537,7 +537,7 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     case AGENTIC_RUN_STATUS_CANCELLED:
       base = {
         label: 'Abgebrochen',
-        description: 'Der agentische Durchlauf wurde abgebrochen.',
+        description: 'Der KI Durchlauf wurde abgebrochen.',
         variant: 'info',
         needsReviewBadge: false,
         isTerminal: true
@@ -1264,8 +1264,8 @@ export default function ItemDetail({ itemId }: Props) {
     }
     const confirmMessage =
       decision === 'approved'
-        ? 'Agentisches Ergebnis freigeben?'
-        : 'Agentisches Ergebnis ablehnen?';
+        ? 'KIs Ergebnis freigeben?'
+        : 'KIs Ergebnis ablehnen?';
     let confirmed = false;
     try {
       confirmed = await dialogService.confirm({
@@ -1531,7 +1531,7 @@ export default function ItemDetail({ itemId }: Props) {
   async function handleAgenticCancel() {
     if (!agentic) {
       console.warn('Agentic cancel requested without run data');
-      setAgenticError('Kein agentischer Durchlauf vorhanden.');
+      setAgenticError('Kein KI Durchlauf vorhanden.');
       return;
     }
 
@@ -1551,8 +1551,8 @@ export default function ItemDetail({ itemId }: Props) {
     let confirmed = false;
     try {
       confirmed = await dialogService.confirm({
-        title: 'Agentischen Durchlauf abbrechen',
-        message: 'Agentischen Durchlauf abbrechen?',
+        title: 'KI Durchlauf abbrechen',
+        message: 'KI Durchlauf abbrechen?',
         confirmLabel: 'Abbrechen',
         cancelLabel: 'Zurück'
       });
