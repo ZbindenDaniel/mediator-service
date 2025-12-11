@@ -17,6 +17,8 @@ export interface LoadingPageProps {
 
 const FLYER_WORD = 'revamp';
 // const FLYER_LETTERS = ['😄', '😚', '👌🏿', ,'🦚', '🦜', '🐉', '🦥', '🐦‍🔥', '🍋']; // https://getemoji.com/
+
+
  const FLYER_LETTERS = [
 '💻',
 '📟',
@@ -24,11 +26,25 @@ const FLYER_WORD = 'revamp';
 '📠',
 '💾',
 '📦',
+'🗄️',
 '🖱️',
 '⌨️',
 '🖨️',
 '🖥️',
-'💻']
+'💻',
+'☃︎',
+'🎅',
+'🎄',
+'❄️',
+'☃️',
+'🎁',
+'🎅',
+'🎄',
+'❄️',
+'☃️',
+'🎁',
+'🦌'
+]
 
 const COLORES = ['#ff4d4d', '#ffb84d', '#ffff4d', '#4dff4d', '#4dffff', '#4d4dff', '#ff4dff'];
 const FLYER_COUNT = 6 * 10; // FLYER_LETTERS.length * N

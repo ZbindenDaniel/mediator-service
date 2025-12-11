@@ -271,7 +271,7 @@ const action = defineHttpAction({
           LIMIT 1
         ) AS exemplar_box_id,
         (
-          SELECT COALESCE(i.Location, b.Location)
+          SELECT COALESCE(i.Location, b.Label)
           FROM items i
           LEFT JOIN boxes b ON i.BoxID = b.BoxID
           WHERE i.Artikel_Nummer = r.Artikel_Nummer
@@ -401,7 +401,7 @@ const action = defineHttpAction({
         i.ItemUUID,
         i.Artikel_Nummer,
         i.BoxID,
-        COALESCE(i.Location, b.Location) AS Location,
+        COALESCE(i.Location, b.Label) AS Location,
         i.UpdatedAt,
         i.Datum_erfasst,
         i.Auf_Lager,
@@ -460,7 +460,7 @@ const action = defineHttpAction({
       const boxTokenPresenceTerms = tokens.map(() => `
     CASE WHEN (
       lower(b.BoxID)    LIKE ?
-      OR lower(b.LocationId) LIKE ?
+      OR lower(b.Label) LIKE ?
       OR lower(COALESCE(b.Label, '')) LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
@@ -468,7 +468,7 @@ const action = defineHttpAction({
       const boxExactMatchExpr = `
     CASE WHEN (
       lower(b.BoxID)    = ?
-      OR lower(b.LocationId) = ?
+      OR lower(b.Label) = ?
       OR lower(COALESCE(b.Label, '')) = ?
     ) THEN 1 ELSE 0 END
   `;
@@ -477,7 +477,7 @@ const action = defineHttpAction({
     SELECT *
     FROM (
       SELECT
-        b.BoxID, b.LocationId, b.Label,
+        b.BoxID, b.Label, b.Label,
         (${boxTokenPresenceTerms}) AS token_hits,
         ${boxExactMatchExpr} AS exact_match,
         CASE

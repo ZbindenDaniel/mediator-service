@@ -952,13 +952,13 @@ export function ItemDetailsFields({
             Anzahl*
           </label>
           <div className="combined-input">
-            <button
+            {/* <button
               type="button"
               onClick={() => handleStock('remove')}
               disabled={quantityReadonly}
             >
               -
-            </button>
+            </button> */}
             <input
               type="number"
               value={form.Auf_Lager ?? 0}
@@ -967,13 +967,13 @@ export function ItemDetailsFields({
               disabled={quantityReadonly}
               min={0}
             />
-            <button
+            {/* <button
               type="button"
               onClick={() => handleStock('add')}
               disabled={quantityReadonly}
             >
               +
-            </button>
+            </button> */}
           </div>
         </div>
       )}

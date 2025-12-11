@@ -56,8 +56,6 @@ CREATE TABLE IF NOT EXISTS boxes (
   UpdatedAt TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_locations_label ON locations(Label);
-
 CREATE TABLE IF NOT EXISTS label_queue (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
   ItemUUID TEXT NOT NULL,
@@ -719,7 +717,7 @@ function ensureItemImageNamesColumn(database: Database.Database = db): void {
   }
 }
 
-const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Location,''))";
+const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Label,''))";
 
 const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
 

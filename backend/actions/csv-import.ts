@@ -24,7 +24,7 @@ import {
 
 const STAGING_TIMEOUT_MS = 30_000;
 const ENTRY_TIMEOUT_MS = 45_000;
-const MAX_ARCHIVE_BYTES = 75 * 1024 * 1024; // 75MB guardrail to prevent runaway buffering
+const MAX_ARCHIVE_BYTES = 90 * 1024 * 1024; // 75MB guardrail to prevent runaway buffering
 
 let tempDir: string | null = null;
 

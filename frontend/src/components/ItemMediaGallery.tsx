@@ -203,7 +203,7 @@ export default function ItemMediaGallery({
               ) : (
                 <div className="item-media-gallery__fallback" role="status">
                   <span>Medieninhalt konnte nicht geladen werden.</span>
-                  <small className="muted">{selectedAsset.src}</small>
+                  {/* <small className="muted">{selectedAsset.src}</small> */}
                 </div>
               )}
               <figcaption className="item-media-gallery__dialog-caption">{selectedAsset.label}</figcaption>
@@ -277,7 +277,7 @@ export default function ItemMediaGallery({
               ) : (
                 <div className="item-media-gallery__fallback" role="status">
                   <span>Medieninhalt konnte nicht geladen werden.</span>
-                  <small className="muted">{asset.src}</small>
+                  {/* <small className="muted">{asset.src}</small> */}
                 </div>
               )}
               {/* <figcaption>{asset.label}</figcaption> */}

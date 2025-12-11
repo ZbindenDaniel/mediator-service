@@ -958,7 +958,7 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     const rows: [string, React.ReactNode][] = [
-      ['Erstellt von', creator],
+      // ['Erstellt von', creator],
       ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],
       ['Artikelnummer', item.Artikel_Nummer ?? null],
       ['Anzahl', item.Auf_Lager ?? null],
@@ -967,7 +967,7 @@ export default function ItemDetail({ itemId }: Props) {
         item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
       ],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
-      ['Unterkategorie A', resolveUnterkategorieLabel(item.Unterkategorien_A)]
+      ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)]
     ];
 
     const unterkategorieB = resolveUnterkategorieLabel(item.Unterkategorien_B);
@@ -975,16 +975,11 @@ export default function ItemDetail({ itemId }: Props) {
       rows.push(['Unterkategorie B', unterkategorieB]);
     }
 
-    rows.push(
-      ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
-      ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
-      ['Verkaufspreis', item.Verkaufspreis ?? null]
-    );
-
+    
     if (langtextRows.length > 0) {
       rows.push(...langtextRows);
     }
-
+  
     rows.push(
       ['Hersteller', item.Hersteller ?? null],
       ['Länge (mm)', item.Länge_mm ?? null],
@@ -992,6 +987,12 @@ export default function ItemDetail({ itemId }: Props) {
       ['Höhe (mm)', item.Höhe_mm ?? null],
       ['Gewicht (kg)', item.Gewicht_kg ?? null],
       ['Einheit', resolveDetailEinheit(item.Einheit)]
+    );
+
+    rows.push(
+      ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
+      ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
+      ['Verkaufspreis', item.Verkaufspreis ?? null]
     );
 
     return rows;
