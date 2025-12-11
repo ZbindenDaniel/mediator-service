@@ -48,6 +48,19 @@ export interface AgenticRunCancelResult {
   reason?: string | null;
 }
 
+export interface AgenticRunDeleteInput {
+  itemId: string;
+  actor: string;
+  reason?: string | null;
+  request?: AgenticRequestContext | null;
+}
+
+export interface AgenticRunDeleteResult {
+  deleted: boolean;
+  agentic: AgenticRun | null;
+  reason?: string | null;
+}
+
 export interface AgenticRunRestartInput extends AgenticRunStartInput {
   previousStatus?: string | null;
 }

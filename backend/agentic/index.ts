@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import {
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_REVIEW,
   AGENTIC_RUN_STATUS_QUEUED,
   AGENTIC_RUN_STATUS_RUNNING,
@@ -9,6 +10,8 @@ import {
   type AgenticRun,
   type AgenticRunCancelInput,
   type AgenticRunCancelResult,
+  type AgenticRunDeleteInput,
+  type AgenticRunDeleteResult,
   type AgenticRunRestartInput,
   type AgenticRunReviewMetadata,
   type AgenticRunStartInput,
@@ -21,6 +24,7 @@ import {
   type AgenticHealthOptions,
   normalizeAgenticRunStatus
 } from '../../models';
+// TODO(agentic-run-delete): Confirm deletion flows preserve observability requirements as APIs evolve.
 import { appendTranscriptSection, createTranscriptWriter } from './flow/transcript';
 import {
   logAgenticRequestStart,
@@ -914,6 +918,98 @@ export async function cancelAgenticRun(
 
   const refreshed = fetchAgenticRun(itemId, deps, logger);
   return { cancelled: true, agentic: refreshed };
+}
+
+export async function deleteAgenticRun(
+  input: AgenticRunDeleteInput,
+  deps: AgenticServiceDependencies
+): Promise<AgenticRunDeleteResult> {
+  validateDependencies(deps);
+  const logger = resolveLogger(deps);
+  const request = normalizeRequestContext(input.request ?? null);
+  persistRequestPayloadSnapshot(request, logger);
+
+  const itemId = (input.itemId || '').trim();
+  if (!itemId) {
+    logger.warn?.('[agentic-service] deleteAgenticRun missing itemId');
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-item-id', logger);
+    return { deleted: false, agentic: null, reason: 'missing-item-id' };
+  }
+
+  const actor = (input.actor || '').trim();
+  if (!actor) {
+    logger.warn?.('[agentic-service] deleteAgenticRun missing actor', { itemId });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-actor', logger);
+    return { deleted: false, agentic: null, reason: 'missing-actor' };
+  }
+
+  const existing = fetchAgenticRun(itemId, deps, logger);
+  if (!existing) {
+    logger.warn?.('[agentic-service] deleteAgenticRun attempted without existing run', { itemId });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-found', logger);
+    return { deleted: false, agentic: null, reason: 'not-found' };
+  }
+
+  const normalizedStatus = normalizeAgenticRunStatus(existing.Status);
+  if (normalizedStatus === AGENTIC_RUN_STATUS_NOT_STARTED) {
+    logger.info?.('[agentic-service] deleteAgenticRun skipped because run is not started', { itemId });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-started', logger);
+    return { deleted: false, agentic: existing, reason: 'not-started' };
+  }
+
+  const nowIso = resolveNow(deps).toISOString();
+  const deletionReason = input.reason && input.reason.trim() ? input.reason.trim() : null;
+  const deleteStatement = deps.db.prepare('DELETE FROM agentic_runs WHERE ItemUUID = ?');
+
+  recordRequestLogStart(request, existing.SearchQuery ?? null, logger);
+  const txn = deps.db.transaction(() => {
+    const deleteResult = deleteStatement.run(itemId);
+    if (!deleteResult?.changes) {
+      throw new Error('Failed to delete agentic run');
+    }
+
+    const insertResult = deps.upsertAgenticRun.run({
+      ItemUUID: itemId,
+      SearchQuery: existing.SearchQuery ?? null,
+      Status: AGENTIC_RUN_STATUS_NOT_STARTED,
+      LastModified: nowIso,
+      ReviewState: 'not_required',
+      ReviewedBy: null,
+      LastReviewDecision: null,
+      LastReviewNotes: null
+    });
+
+    if (!insertResult?.changes) {
+      throw new Error('Failed to recreate agentic run after deletion');
+    }
+
+    deps.logEvent({
+      Actor: actor,
+      EntityType: 'Item',
+      EntityId: itemId,
+      Event: 'AgenticRunReset',
+      Meta: JSON.stringify({
+        previousStatus: existing.Status ?? null,
+        reason: deletionReason,
+        resetAt: nowIso
+      })
+    });
+  });
+
+  try {
+    txn();
+    finalizeRequestLog(request, REQUEST_STATUS_SUCCESS, null, logger);
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to delete agentic run', {
+      itemId,
+      error: err instanceof Error ? err.message : err
+    });
+    finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
+    throw err;
+  }
+
+  const refreshed = fetchAgenticRun(itemId, deps, logger);
+  return { deleted: true, agentic: refreshed };
 }
 
 export async function restartAgenticRun(
