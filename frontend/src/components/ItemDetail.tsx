@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
+// TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
 import type { Item, EventLog, AgenticRun } from '../../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
@@ -29,6 +30,7 @@ import {
   describeAgenticFailureReason,
   extractAgenticFailureReason,
   persistAgenticRunCancellation,
+  persistAgenticRunDeletion,
   triggerAgenticRun
 } from '../lib/agentic';
 import { parseLangtext } from '../lib/langtext';
@@ -95,12 +97,14 @@ export interface AgenticStatusCardProps {
   canCancel: boolean;
   canStart: boolean;
   canRestart: boolean;
+  canDelete: boolean;
   isInProgress: boolean;
   startLabel?: string;
   onStart?: () => void | Promise<void>;
   onRestart: () => void | Promise<void>;
   onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
   onCancel: () => void | Promise<void>;
+  onDelete?: () => void | Promise<void>;
 }
 
 interface NormalizedDetailValue {
@@ -266,12 +270,14 @@ export function AgenticStatusCard({
   canCancel,
   canStart,
   canRestart,
+  canDelete,
   isInProgress,
   startLabel,
   onStart,
   onRestart,
   onReview,
-  onCancel
+  onCancel,
+  onDelete
 }: AgenticStatusCardProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const contentId = useMemo(() => `agentic-status-panel-${Math.random().toString(36).slice(2)}`, []);
@@ -343,6 +349,13 @@ export function AgenticStatusCard({
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>
                 Abbrechen
+              </button>
+            </div>
+          ) : null}
+          {canDelete && onDelete ? (
+            <div className='row'>
+              <button type="button" className="btn danger" disabled={actionPending} onClick={onDelete}>
+                Lauf löschen
               </button>
             </div>
           ) : null}
@@ -1193,6 +1206,9 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticCanCancel = normalizedAgenticStatus
     ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
     : false;
+  const agenticCanDelete = Boolean(
+    agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
+  );
 
   async function promptAgenticReviewNote(
     decision: 'approved' | 'rejected'
@@ -1586,6 +1602,90 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticActionPending(false);
   }
 
+  async function handleAgenticDelete() {
+    if (!agentic) {
+      console.warn('Agentic delete requested without run data');
+      setAgenticError('Kein KI Durchlauf vorhanden.');
+      return;
+    }
+
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic delete user alert', error);
+      }
+      return;
+    }
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'KI-Lauf löschen',
+        message: 'Aktuellen KI-Lauf löschen und zurücksetzen?',
+        confirmLabel: 'Löschen',
+        cancelLabel: 'Zurück'
+      });
+    } catch (error) {
+      console.error('Failed to confirm agentic deletion', error);
+      return;
+    }
+
+    if (!confirmed) {
+      return;
+    }
+
+    let secondConfirmation = false;
+    try {
+      secondConfirmation = await dialogService.confirm({
+        title: 'Löschung bestätigen',
+        message:
+          'Der aktuelle KI-Lauf wird entfernt und auf "Nicht gestartet" gesetzt. Protokolle bleiben bestehen.',
+        confirmLabel: 'Ja, löschen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm agentic deletion final step', error);
+      return;
+    }
+
+    if (!secondConfirmation) {
+      return;
+    }
+
+    setAgenticActionPending(true);
+    setAgenticReviewIntent(null);
+    setAgenticError(null);
+
+    try {
+      const deletionResult = await persistAgenticRunDeletion({
+        itemId: agentic.ItemUUID,
+        actor,
+        reason: 'User requested agentic run reset',
+        context: 'item detail delete'
+      });
+
+      if (deletionResult.ok) {
+        setAgentic(deletionResult.agentic);
+        setAgenticError(null);
+      } else {
+        const deletionErrorMessage = deletionResult.reason === 'not-found'
+          ? 'Kein KI Durchlauf gefunden.'
+          : 'Ki-Lauf konnte nicht gelöscht werden.';
+        setAgenticError(deletionErrorMessage);
+      }
+    } catch (err) {
+      console.error('Ki-Lauf-Löschung fehlgeschlagen', err);
+      setAgenticError('Ki-Lauf konnte nicht gelöscht werden.');
+    } finally {
+      setAgenticActionPending(false);
+    }
+  }
+
   const agenticStartHandler = !agenticHasRun ? handleAgenticStart : handleAgenticRestart;
   const agenticStartLabel = agenticHasRun ? 'Starten' : 'Start KI-Lauf';
   const agenticStatus = agenticStatusDisplay(agentic);
@@ -1759,12 +1859,14 @@ export default function ItemDetail({ itemId }: Props) {
               canCancel={agenticCanCancel}
               canStart={agenticCanStart}
               canRestart={agenticCanRestart}
+              canDelete={agenticCanDelete}
               startLabel={agenticStartLabel}
               isInProgress={agenticIsInProgress}
               onStart={agenticCanStart ? agenticStartHandler : undefined}
               onRestart={handleAgenticRestart}
               onReview={handleAgenticReview}
               onCancel={handleAgenticCancel}
+              onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             />
 
             <RelocateItemCard 

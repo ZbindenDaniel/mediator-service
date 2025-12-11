@@ -275,3 +275,73 @@ export async function persistAgenticRunCancellation({
     return { ok: false, status: 0, agentic: null, message };
   }
 }
+
+export interface PersistAgenticRunDeletionOptions {
+  itemId: string | null | undefined;
+  actor?: string | null;
+  reason?: string | null;
+  context: string;
+}
+
+export interface PersistAgenticRunDeletionResult {
+  ok: boolean;
+  status: number;
+  agentic: AgenticRun | null;
+  message?: string;
+  reason?: string | null;
+}
+
+export async function persistAgenticRunDeletion({
+  itemId,
+  actor,
+  reason,
+  context
+}: PersistAgenticRunDeletionOptions): Promise<PersistAgenticRunDeletionResult> {
+  const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
+  if (!trimmedItemId) {
+    const message = `Agentic delete skipped (${context}): missing ItemUUID`;
+    console.warn(message);
+    return { ok: false, status: 400, agentic: null, message, reason: 'missing-item-id' };
+  }
+
+  const sanitizedActor = actor && actor.trim() ? actor.trim() : 'system';
+  const sanitizedReason = reason && reason.trim() ? reason.trim() : null;
+
+  try {
+    const response = await fetch(`/api/items/${encodeURIComponent(trimmedItemId)}/agentic/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor: sanitizedActor, reason: sanitizedReason })
+    });
+
+    if (!response.ok) {
+      const isNotFound = response.status === 404;
+      const message = isNotFound
+        ? `Agentic delete skipped during ${context}: run not found`
+        : `Agentic delete failed during ${context}`;
+      const logger = isNotFound ? console.warn : console.error;
+      logger(message, response.status);
+      return {
+        ok: false,
+        status: response.status,
+        agentic: null,
+        message,
+        reason: isNotFound ? 'not-found' : 'request-failed'
+      };
+    }
+
+    const data = await response
+      .json()
+      .catch((err) => {
+        console.error('Failed to parse persisted agentic delete response', err);
+        return null;
+      });
+
+    const agenticRun: AgenticRun | null = data?.agentic ?? null;
+    return { ok: true, status: response.status, agentic: agenticRun };
+  } catch (err) {
+    const message = `Agentic delete request threw during ${context}`;
+    console.error(message, err);
+    return { ok: false, status: 0, agentic: null, message, reason: 'network-error' };
+  }
+}
