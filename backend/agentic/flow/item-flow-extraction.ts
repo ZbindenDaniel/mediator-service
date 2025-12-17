@@ -4,7 +4,7 @@ import { formatSourcesForRetry, type SearchSource } from '../utils/source-format
 import { parseJsonWithSanitizer } from '../utils/json';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
-import { AgentOutputSchema } from './item-flow-schemas';
+import { AgentOutputSchema, TargetSchema } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
 import type { SearchInvoker } from './item-flow-search';
 import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
@@ -56,8 +56,14 @@ const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
 const MAX_LOG_DEPTH = 2;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
-// TODO(agent): Replace heuristic tool-call detection once providers expose structured parse errors.
+const NULL_TARGET_TEMPLATE = Object.freeze(
+  Object.keys(TargetSchema.shape).reduce<Record<string, null>>((acc, key) => {
+    acc[key] = null;
+    return acc;
+  }, {})
+);
 
+// TODO(agent): Replace heuristic tool-call detection once providers expose structured parse errors.
 function extractErrorMessage(err: unknown): string {
   if (err instanceof Error) {
     return err.message;
@@ -183,6 +189,8 @@ export async function runExtractionAttempts({
   // TODO(agent): Capture invalid payload snippets for downstream observability and retention.
   let lastInvalidJsonPayload: { sanitizedPayload: string; thinkContent?: string } | null = null;
   let lastInvalidJsonErrorHint = '';
+  // TODO(agent-placeholder): Persist placeholder detection telemetry for correction prompts.
+  let lastInvalidJsonPlaceholderIssues: string[] = [];
 
   let attempt = 1;
   const { itemUUid: _promptHiddenItemId, ...promptFacingTarget } = target;
@@ -447,16 +455,21 @@ export async function runExtractionAttempts({
       });
       lastInvalidJsonPayload = null;
       lastInvalidJsonErrorHint = '';
+      lastInvalidJsonPlaceholderIssues = [];
     } catch (err) {
       const sanitizedPayload = typeof (err as { sanitized?: string }).sanitized === 'string'
         ? (err as { sanitized?: string }).sanitized?.trim() ?? ''
         : itemContent.trim();
       const thinkPreview = thinkContent.trim();
+      const placeholderIssuesFromError = Array.isArray((err as { placeholderIssues?: Array<{ keyPath: string }> }).placeholderIssues)
+        ? (err as { placeholderIssues: Array<{ keyPath: string }> }).placeholderIssues.map((issue) => issue.keyPath)
+        : [];
       lastInvalidJsonPayload = {
         sanitizedPayload,
         thinkContent: thinkPreview || undefined
       };
       lastInvalidJsonErrorHint = err instanceof Error ? err.message : String(err);
+      lastInvalidJsonPlaceholderIssues = placeholderIssuesFromError;
       logger?.warn?.({
         err,
         msg: 'attempt produced invalid JSON after sanitization',
@@ -464,6 +477,7 @@ export async function runExtractionAttempts({
         itemId,
         sanitizedSnippet: truncateForLog(sanitizedPayload),
         parseErrorHint: truncateForLog(lastInvalidJsonErrorHint),
+        placeholderKeys: placeholderIssuesFromError,
         thinkPreview: truncateForLog(thinkPreview),
         rawSnippet: itemContent.slice(0, 500)
       });
@@ -479,6 +493,19 @@ export async function runExtractionAttempts({
       }
       if (thinkPreview) {
         correctionSections.push('Think content (do not include in JSON):', thinkPreview);
+      }
+      if (lastInvalidJsonPlaceholderIssues.length) {
+        const placeholderMessage = `Placeholder tokens detected at: ${lastInvalidJsonPlaceholderIssues.join(', ')}. Replace them with null or a concrete string.`;
+        const templatePreview = JSON.stringify(NULL_TARGET_TEMPLATE, null, 2);
+        correctionSections.push('Parsing hint:', placeholderMessage);
+        correctionSections.push('Template to replace placeholders:', templatePreview);
+        logger?.debug?.({
+          msg: 'added placeholder guidance for correction agent',
+          attempt,
+          itemId,
+          placeholderKeys: lastInvalidJsonPlaceholderIssues,
+          templatePreview: truncateForLog(templatePreview)
+        });
       }
 
       let correctedContent: string | null = null;
@@ -516,6 +543,7 @@ export async function runExtractionAttempts({
           });
           lastInvalidJsonPayload = null;
           lastInvalidJsonErrorHint = '';
+          lastInvalidJsonPlaceholderIssues = [];
           itemContent = correctedContent;
           logger?.info?.({
             msg: 'json correction agent repaired payload',
@@ -524,12 +552,17 @@ export async function runExtractionAttempts({
             correctedSnippet: truncateForLog(correctedContent)
           });
         } catch (parseAfterCorrectionErr) {
+          const placeholderIssuesFromCorrection = Array.isArray((parseAfterCorrectionErr as { placeholderIssues?: Array<{ keyPath: string }> }).placeholderIssues)
+            ? (parseAfterCorrectionErr as { placeholderIssues: Array<{ keyPath: string }> }).placeholderIssues.map((issue) => issue.keyPath)
+            : [];
+          lastInvalidJsonPlaceholderIssues = placeholderIssuesFromCorrection;
           logger?.warn?.({
             err: parseAfterCorrectionErr,
             msg: 'json correction agent output still invalid',
             attempt,
             itemId,
-            correctionSnippet: truncateForLog(correctedContent)
+            correctionSnippet: truncateForLog(correctedContent),
+            placeholderKeys: placeholderIssuesFromCorrection
           });
         }
       }
