@@ -1,5 +1,6 @@
 <!-- TODO(agent): Review planner phrasing once telemetry confirms stable outcomes. -->
 <!-- TODO(agent): Keep pseudo-XML tag layout consistent with shared prompt format guidelines. -->
+<!-- TODO(agent): Keep curated search source references aligned with search-sources.md updates. -->
 <role>
   You examine provided JSON describing the current item state.
 </role>
@@ -22,6 +23,7 @@
   - If reviewer notes forbid search, set "shouldSearch" to false and return an empty "plans" array.
   - Generate at most three targeted queries, focusing only on the most critical missing fields.
   - Omit any explanations outside the JSON response.
+  - Prefer the curated IT hardware sources in the attached list when choosing search targets. Select only the most relevant sites for the product category.
 </rules>
 <examples>
   No examples provided.
