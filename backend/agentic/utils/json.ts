@@ -6,9 +6,17 @@ export interface JsonLogger {
   debug?: Console['debug'];
 }
 
+// TODO(agent-placeholder): Centralize placeholder token rules with correction prompt assembly.
+
 interface SanitizeOptions {
   loggerInstance?: JsonLogger;
   context?: Record<string, unknown>;
+}
+
+interface PlaceholderIssue {
+  keyPath: string;
+  token: string;
+  position: number;
 }
 
 function extractBalancedJsonSegment(text: string, startIndex: number): string | null {
@@ -62,6 +70,31 @@ function extractBalancedJsonSegment(text: string, startIndex: number): string | 
   return segmentStart !== -1 ? text.slice(segmentStart) : null;
 }
 
+function detectPlaceholderTokens(jsonText: string): PlaceholderIssue[] {
+  const issues: PlaceholderIssue[] = [];
+  const objectPlaceholderRegex = /"([^"\\]+)"\s*:\s*(?!["'])(\.\.\.|—+|–+)(?=\s*[,}\]])/g;
+  const arrayPlaceholderRegex = /\[\s*(?!["'])(\.\.\.|—+|–+)(?=\s*[,\]])/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = objectPlaceholderRegex.exec(jsonText)) !== null) {
+    issues.push({
+      keyPath: match[1],
+      token: match[2],
+      position: match.index ?? -1
+    });
+  }
+
+  while ((match = arrayPlaceholderRegex.exec(jsonText)) !== null) {
+    issues.push({
+      keyPath: 'array-value',
+      token: match[1],
+      position: match.index ?? -1
+    });
+  }
+
+  return issues;
+}
+
 export function sanitizeJsonInput(rawInput: unknown, { loggerInstance, context }: SanitizeOptions = {}): string {
   if (typeof rawInput !== 'string') {
     throw new TypeError('sanitizeJsonInput expects a string input');
@@ -109,6 +142,25 @@ export function sanitizeJsonInput(rawInput: unknown, { loggerInstance, context }
 export function parseJsonWithSanitizer(rawInput: unknown, options?: SanitizeOptions): any {
   const { loggerInstance, context } = options ?? {};
   const sanitized = sanitizeJsonInput(rawInput, { loggerInstance, context });
+  const placeholderIssues = detectPlaceholderTokens(sanitized);
+  if (placeholderIssues.length) {
+    const distinctKeys = Array.from(new Set(placeholderIssues.map((issue) => issue.keyPath)));
+    const keyPhrase = distinctKeys.includes('array-value') && distinctKeys.length === 1
+      ? 'an array value'
+      : `key(s): ${distinctKeys.join(', ')}`;
+    const placeholderHint = `Placeholder token detected at ${keyPhrase}; replace with null or a string before retrying.`;
+    const placeholderError = new Error(placeholderHint);
+    (placeholderError as Error & { sanitized?: string }).sanitized = sanitized;
+    (placeholderError as Error & { placeholderIssues?: PlaceholderIssue[] }).placeholderIssues = placeholderIssues;
+    loggerInstance?.debug?.({
+      msg: 'placeholder token detected in sanitized payload',
+      keyPaths: distinctKeys,
+      issueCount: placeholderIssues.length,
+      placeholderPreview: sanitized.slice(0, 200),
+      ...context
+    });
+    throw placeholderError;
+  }
   try {
     return JSON.parse(sanitized);
   } catch (err) {
