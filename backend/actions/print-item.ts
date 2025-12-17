@@ -8,7 +8,6 @@ import { defineHttpAction } from './index';
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
-import { ensureLangtextString } from '../lib/langtext';
 
 // TODO(agent): Align item print payloads with upcoming label size templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
@@ -89,14 +88,8 @@ const action = defineHttpAction({
         if (Number.isFinite(parsed)) parsedQuantity = parsed;
       }
 
-      const langtextString = ensureLangtextString(item.Langtext ?? null, {
-        logger: console,
-        context: 'print-item:description',
-        artikelNummer: item.Artikel_Nummer ?? null,
-        itemUUID: item.ItemUUID
-      });
       const description =
-        item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim() || langtextString?.trim() || null;
+        (item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim()) ?? '';
       const toIsoString = (value: unknown): string | null => {
         if (!value) return null;
         const date = value instanceof Date ? value : new Date(value as string);

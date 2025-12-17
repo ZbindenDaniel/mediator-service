@@ -447,6 +447,23 @@ export async function runExtractionAttempts({
       }
     }
 
+    const jsonMatch = raw.match(/```json\s*([\s\S]*?)\s*```/i);
+    if (jsonMatch) {
+      const jsonontent = jsonMatch[1]?.trim?.() ?? '';
+      if (typeof jsonMatch.index === 'number') {
+        itemContent = jsonontent;
+      }
+    } else {
+      logger?.debug?.({
+        msg: 'json match missing. Trying again',
+        attempt,
+        itemId
+      });
+
+      advanceAttempt();
+      continue;
+    }
+
     let parsed: unknown = null;
     try {
       parsed = parseJsonWithSanitizer(itemContent, {
@@ -789,7 +806,7 @@ export async function runExtractionAttempts({
       supervisionPreview: sanitizeForLog(supervision)
     });
     const pass = normalizedSupervision.toLowerCase().includes('pass');
-    
+
     lastValidated = enrichedValidated;
     if (pass) {
       success = true;

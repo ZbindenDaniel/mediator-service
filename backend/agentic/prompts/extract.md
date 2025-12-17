@@ -8,7 +8,7 @@
   - Consider the user's original item input and existing target values before deciding whether any fields need new searches.
 </task>
 <rules>
-  - Return **only** the JSON payload for the target schema without code fences or prose.
+  - always format the response exactly as defined in the 'output_format' tags
   - Use only schema-approved keys; introduce additional fields only on the 'langtext' field.
   - When a required field is unknown, insert a placeholder such as an empty string instead of omitting the key.
   - Field expectations:
@@ -19,16 +19,35 @@
     - Hersteller: Copy directly from the source material or keep the supplied value when no evidence is available.
     - reviewNotes: Do not alter reviewer-provided content; treat it as guidance for your extraction.
   - Search policy:
-    - You may include a top-level "__searchQueries" array (maximum three entries) whenever vital schema details remain unresolved after considering the user's input and reviewer guidance.
-    - Additional searches do not require explicit user requests, but you must honour any reviewer limits or skip directives before adding new queries.
+    - YOu are not responsible nor allowed to search for content. You may include a "__searchQueries" array (maximum three entries) whenever vital schema details remain unresolved after considering the user's input and reviewer guidance. this may lead to new search result in the next itteration
     - Each query must be a precise string that could recover the missing schema data.
-  - Respond only after verifying the JSON matches the schema.
+  - Respond only after verifying the JSON matches the schema. Remember you must always provide a JSON output
 </rules>
+<output_format>
+Follow this format exactly: 
+
+  <think>
+  Your internal reasoning goes here.
+  </think>
+
+  ```json      
+  {
+    
+  }
+  ```
+</output_format>
+
 <examples>
   
 Input: The 109‑B27631‑00 is an ATI Radeon HD 2400 XT low‑profile graphics card equipped with 256 MB of DDR2 memory. It uses a PCI‑Express x16 interface and is optimized for slim form‑factor motherboards such as those found in Dell, HP and other OEM systems. The card supports DirectX 9.0c, OpenGL 2.0 and offers a DVI‑HD‑DisplayPort and a separate S‑Video connector for external display or TV‑out applications. Its low‑profile construction measures roughly 167 mm in length, 20 mm in width (thickness) and 69mm in height, with a net weight of about 0.18 kg, making it ideal for small‑case PCs, thin laptops, or kiosk/point‑of‑sale solutions.
 
 Output:
+
+<think> The search results are quite clearly talking about a graphics card.
+The input is already a good short description, allthough I have to translate and shorten it. I try to make a short pregnant paragraph.
+I know it is a graphics card so I list specific information in the Langtext. Things like APIs, Interfaces, connectors and alike.
+It seems like there is plenty of information regarding this product so I do not need additional queries for now.
+</think>
 
       ```json      
 {
@@ -58,6 +77,12 @@ Die Karte unterstützt DirectX 9.0c sowie OpenGL 2.0 und ist damit für klassisc
 Input: Die Toshiba 661697‑001 Festplatte bietet 500 GB Speicherplatz in kompakter 3,5‑Zoll‑Formfaktor. Sie ist für Desktop‑PCs, Server‑NAS‑Geräte und All‑Day‑Power‑Spares konzipiert und unterstützt SATA‑Schnittstelle (6 Gb/s) mit 7200 RPM Drehzahl. Mit einem 32‑MB Cache‑Speicher sorgt sie für flüssiges Datenhandling. Die Einheit ist robust, thermisch stabil und ideal für den Einsatz in geschäftlichen oder privaten Umgebungen.
 
 Output:
+<think> The search results are quite clearly talking about a harddrive due to the mentions of Speicherplatz. It seems to be a SATA Harddrive made by Toshiba. 
+'661697‑001' seems to be the actual product name so i will use it for the Artikelbeschreibung.
+The input is already a good short description, I will shorten it a bit but use it more or less. I try to make a short pregnant paragraph.
+I know It is a harddrive so I list harddrive specific information in the Langtext. Things like Capacity, Interfaces and alike.
+I do not see any Information regarding the physical dimensions so I will add this as an additional query to the output...
+</think>
 
       ```json
 {
@@ -70,7 +95,7 @@ Output:
   "Höhe_mm": 0,
   "Gewicht_kg": 0.0,
   "Langtext":{
-    "Kapaiität [GB]": "500",
+    "Kapaizität [GB]": "500",
     "Schnittstelle": "SATA 3",
     "Formfaktor": "3.5 Zoll"
     },

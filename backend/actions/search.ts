@@ -4,7 +4,6 @@ import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
 import { ItemEinheit, isItemEinheit } from '../../models';
-import { ensureLangtextString } from '../lib/langtext';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -96,12 +95,7 @@ function computeSimilarityScore(term: string, tokens: string[], candidate: unkno
 }
 
 function scoreItem(term: string, tokens: string[], item: any): number {
-  const langtextCandidate = ensureLangtextString(item?.Langtext ?? null, {
-    logger: console,
-    context: 'search:item',
-    artikelNummer: item?.Artikel_Nummer ?? null,
-    itemUUID: item?.ItemUUID ?? null
-  });
+  const langtextCandidate = {};
   const fields = [
     item?.Artikelbeschreibung,
     item?.Kurzbeschreibung,
@@ -144,11 +138,7 @@ function scoreBox(term: string, tokens: string[], box: any): number {
 }
 
 function scoreReference(term: string, tokens: string[], reference: any): number {
-  const langtextCandidate = ensureLangtextString(reference?.Langtext ?? null, {
-    logger: console,
-    context: 'search:reference',
-    artikelNummer: reference?.Artikel_Nummer ?? null
-  });
+  const langtextCandidate = {};
   const fields = [
     reference?.Artikelbeschreibung,
     reference?.Kurzbeschreibung,

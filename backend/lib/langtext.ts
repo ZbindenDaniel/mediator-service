@@ -371,18 +371,18 @@ export function serializeLangtextForExport(
   }
 }
 
-export function ensureLangtextString(
-  value: any,
-  context: LangtextHelperContext = {}
-): string | null {
-  if (value == null) {
-    return null;
-  }
+// export function ensureLangtextString(
+//   value: any,
+//   context: LangtextHelperContext = {}
+// ): string | null {
+//   if (value == null) {
+//     return null;
+//   }
 
-  if (typeof value === 'string') {
-    return value;
-  }
+//   if (typeof value === 'string') {
+//     return value;
+//   }
 
-  const serialized = stringifyLangtext(value, context);
-  return serialized ?? null;
-}
+//   const serialized = stringifyLangtext(value, context);
+//   return serialized ?? null;
+// }

@@ -13,7 +13,6 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
 } from '../db';
-import { ensureLangtextString } from '../lib/langtext';
 import { modelConfig, searchConfig } from './config';
 import { runItemFlow } from './flow/item-flow';
 import type { ItemFlowLogger } from './flow/item-flow';
@@ -58,21 +57,13 @@ function buildTargetFromRow(
   row: Record<string, unknown>,
   logger: AgenticModelInvokerLogger | undefined
 ): Record<string, unknown> {
-  const artikelNummer = (row.Artikel_Nummer ?? null) as string | null;
-  const itemUUID = (row.ItemUUID ?? null) as string | null;
-  const langtextCandidate = ensureLangtextString(row.Langtext ?? null, {
-    logger,
-    context: 'agentic:target',
-    artikelNummer,
-    itemUUID
-  });
 
   return {
     itemUUid: normalizeString(row.ItemUUID),
     Artikelbeschreibung: normalizeString(row.Artikelbeschreibung),
     Marktpreis: normalizeNullableNumber(row.Verkaufspreis),
     Kurzbeschreibung: normalizeString(row.Kurzbeschreibung),
-    Langtext: langtextCandidate ?? normalizeString(row.Langtext),
+    Langtext: row.Langtext ?? {},
     Hersteller: normalizeString(row.Hersteller),
     Länge_mm: normalizeNullableNumber(row.Länge_mm),
     Breite_mm: normalizeNullableNumber(row.Breite_mm),
@@ -385,12 +376,7 @@ export class AgenticModelInvoker {
     if (Object.prototype.hasOwnProperty.call(overrides, 'Langtext')) {
       const artikelNummerOverride =
         typeof overrides.Artikel_Nummer === 'string' ? overrides.Artikel_Nummer : null;
-      const normalizedLangtext = ensureLangtextString(overrides.Langtext, {
-        logger: this.logger,
-        context: 'agentic:target-override',
-        artikelNummer: artikelNummerOverride,
-        itemUUID: typeof target.itemUUid === 'string' ? target.itemUUid : null
-      });
+      const normalizedLangtext = overrides.Langtext ?? {};
 
       if (normalizedLangtext !== null) {
         sanitizedOverrides.Langtext = normalizedLangtext;
