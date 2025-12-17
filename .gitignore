@@ -10,9 +10,6 @@ frontend/public/styles.css.map
 dist/
 
 logs/
-ai-flow-service/logs/
-ai-flow-service/data.db
-ai-flow-service/.env
 
 public/styles.css
 public/styles.css.map

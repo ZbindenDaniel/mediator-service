@@ -14,9 +14,3 @@
   - Keep all internal reasoning inside <think> tags so that only the final verdict appears outside of them.
   - Reply with "PASS" if the data looks reasonable, otherwise respond with "FAIL" and a short reason, missing fields.
 </rules>
-<examples>
-  <example>
-    <text><think>Looking at the locked fields...</think>
-FAIL: brand field was overwritten</text>
-  </example>
-</examples>

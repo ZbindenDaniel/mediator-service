@@ -28,28 +28,27 @@
   
 Input: The 109‑B27631‑00 is an ATI Radeon HD 2400 XT low‑profile graphics card equipped with 256 MB of DDR2 memory. It uses a PCI‑Express x16 interface and is optimized for slim form‑factor motherboards such as those found in Dell, HP and other OEM systems. The card supports DirectX 9.0c, OpenGL 2.0 and offers a DVI‑HD‑DisplayPort and a separate S‑Video connector for external display or TV‑out applications. Its low‑profile construction measures roughly 167 mm in length, 20 mm in width (thickness) and 69mm in height, with a net weight of about 0.18 kg, making it ideal for small‑case PCs, thin laptops, or kiosk/point‑of‑sale solutions.
 
-  
 Output:
-      ```json
-      
-      {
+
+      ```json      
+{
   "Artikelbeschreibung": "ATI Radeon HD 2400 XT (109-B27631-00)",
-  "Verkaufspreis": 0;
+  "Verkaufspreis": 0,
   "Kurzbeschreibung": "Die ATI Radeon HD 2400 XT (109-B27631-00) ist eine kompakte Low-Profile-Grafikkarte für platzsparende Systeme. Ausgestattet mit 256 MB DDR2-Grafikspeicher und einer PCI-Express x16-Schnittstelle eignet sie sich besonders für Slim-Form-Factor-PCs und OEM-Systeme von Herstellern wie Dell, HP und vergleichbaren Anbietern.
 Die Karte unterstützt DirectX 9.0c sowie OpenGL 2.0 und ist damit für klassische Office-Anwendungen, Multimedia-Wiedergabe und einfache grafische Aufgaben ausgelegt. Für die Bildausgabe stehen ein DVI-HD-DisplayPort-Anschluss sowie ein separater S-Video-Anschluss zur Verfügung, wodurch auch der Anschluss externer Displays oder TV-Out-Anwendungen möglich ist.",
   "Hersteller": "Radeon",
-  "Länge_mm": 167;
-  "Breite_mm": 69;
-  "Höhe_mm": 20;
-  "Gewicht_kg": 0.18;
-      "Langtext":{
-        "Model": "ZX-5000 Ultra 8 GB",
-        "Schnittstelle": "PCI-Express x16",
-        "Grafikspeicher [MB]": "256"
-        "API": "DirectX 12 Ultimate", OpenGL 4.6",
-        "Anschlüsse": "DVI-HD-DisplayPort, S-Video"
+  "Länge_mm": 167,
+  "Breite_mm": 69,
+  "Höhe_mm": 20,
+  "Gewicht_kg": 0.18,
+  "Langtext":{
+      "Model": "ZX-5000 Ultra 8 GB",
+      "Schnittstelle": "PCI-Express x16",
+      "Grafikspeicher [MB]": "256",
+      "API": "DirectX 12 Ultimate, OpenGL 4.6",
+      "Anschlüsse": "DVI-HD-DisplayPort, S-Video"
       },
-      "__searchQueries":""
+  "__searchQueries":[]
       }
       
       ```
@@ -59,23 +58,23 @@ Die Karte unterstützt DirectX 9.0c sowie OpenGL 2.0 und ist damit für klassisc
 Input: Die Toshiba 661697‑001 Festplatte bietet 500 GB Speicherplatz in kompakter 3,5‑Zoll‑Formfaktor. Sie ist für Desktop‑PCs, Server‑NAS‑Geräte und All‑Day‑Power‑Spares konzipiert und unterstützt SATA‑Schnittstelle (6 Gb/s) mit 7200 RPM Drehzahl. Mit einem 32‑MB Cache‑Speicher sorgt sie für flüssiges Datenhandling. Die Einheit ist robust, thermisch stabil und ideal für den Einsatz in geschäftlichen oder privaten Umgebungen.
 
 Output:
+
       ```json
-      
-  {
+{
   "Artikelbeschreibung": "Toshiba 661697‑001",
-  "Verkaufspreis": 0;
+  "Verkaufspreis": 0,
   "Kurzbeschreibung": "Die Toshiba 661697-001 Festplatte bietet eine zuverlässige Speicherlösung mit 500 GB Kapazität im klassischen 3,5-Zoll-Formfaktor. Sie wurde für den Einsatz in Desktop-PCs, Server- und NAS-Systemen sowie als All-Day-Power-Spare konzipiert und eignet sich sowohl für den professionellen als auch den privaten Gebrauch.",
   "Hersteller": "Toshiba",
-  "Länge_mm": 0;
-  "Breite_mm": 0;
-  "Höhe_mm": 0;
-  "Gewicht_kg": 0.;
-      "Langtext":{
-        "Kapaiität [GB]": "500",
-        "Schnittstelle": "SATA 3",
-        "Formfaktor": "3.5 Zoll"
-      },
-      "__searchQueries":["Toshiba 661697‑001 physical dimensions"]
+  "Länge_mm": 0,
+  "Breite_mm": 0,
+  "Höhe_mm": 0,
+  "Gewicht_kg": 0.0,
+  "Langtext":{
+    "Kapaiität [GB]": "500",
+    "Schnittstelle": "SATA 3",
+    "Formfaktor": "3.5 Zoll"
+    },
+  "__searchQueries":["Toshiba 661697‑001 physical dimensions"]
       }
       
       ```
