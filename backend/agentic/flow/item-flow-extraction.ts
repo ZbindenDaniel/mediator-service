@@ -56,6 +56,60 @@ const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
 const MAX_LOG_DEPTH = 2;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
+// TODO(agent): Replace heuristic tool-call detection once providers expose structured parse errors.
+
+function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === 'string') {
+    return err;
+  }
+  return '';
+}
+
+function extractRawContentFromError(err: unknown): string | null {
+  if (!err || typeof err !== 'object') {
+    return null;
+  }
+  if (typeof (err as { raw?: unknown }).raw === 'string') {
+    return (err as { raw?: unknown }).raw as string;
+  }
+  const response = (err as { response?: { data?: unknown; message?: unknown } }).response;
+  if (response) {
+    if (typeof response.data === 'string') {
+      return response.data;
+    }
+    if (typeof response.message === 'string') {
+      return response.message;
+    }
+  }
+  if (typeof (err as { data?: unknown }).data === 'string') {
+    return (err as { data?: unknown }).data as string;
+  }
+  return null;
+}
+
+function isOllamaToolCallParseError(err: unknown): { match: boolean; rawText?: string } {
+  const message = extractErrorMessage(err).toLowerCase();
+  const toolCallParseIssue = message.includes('tool call') || message.includes('toolcall') || message.includes("invalid character '#'");
+  return { match: toolCallParseIssue, rawText: extractRawContentFromError(err) ?? (toolCallParseIssue ? extractErrorMessage(err) : undefined) };
+}
+
+function withNoToolCallInstruction(messages: Array<{ role: string; content: unknown }>): Array<{ role: string; content: unknown }> {
+  const toolCallWarning = 'IMPORTANT: Do not trigger or reference tool calls. Respond with plain JSON text that matches the target format only.';
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return [{ role: 'system', content: toolCallWarning }];
+  }
+  const cloned = messages.map((message) => ({ ...message }));
+  const firstMessage = cloned[0];
+  if (typeof firstMessage?.content === 'string') {
+    cloned[0] = { ...firstMessage, content: `${firstMessage.content}\n\n${toolCallWarning}` };
+  } else {
+    cloned.unshift({ role: 'system', content: toolCallWarning });
+  }
+  return cloned;
+}
 
 function truncateForLog(value: string, maxLength = MAX_LOG_STRING_LENGTH): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
@@ -279,11 +333,72 @@ export async function runExtractionAttempts({
       { role: 'user', content: userContent }
     ];
     let extractRes;
+    let fallbackRaw = '';
     try {
       extractRes = await llm.invoke(extractionMessages);
     } catch (err) {
-      logger?.error?.({ err, msg: 'extraction llm invocation failed', attempt, itemId });
-      throw err;
+      const { match: ollamaToolCallError, rawText } = isOllamaToolCallParseError(err);
+      fallbackRaw = rawText?.trim?.() ?? '';
+      if (ollamaToolCallError) {
+        const fallbackMessages = withNoToolCallInstruction(extractionMessages);
+        const toolCallInstructionAdded = fallbackMessages[0]?.content !== extractionMessages[0]?.content;
+        logger?.warn?.({
+          err,
+          msg: 'extraction llm invocation failed - possible tool call parse issue',
+          attempt,
+          itemId,
+          fallbackRawPreview: truncateForLog(fallbackRaw),
+          toolCallInstructionAdded
+        });
+        try {
+          extractRes = await llm.invoke(fallbackMessages);
+          logger?.info?.({
+            msg: 'retried extraction without tool calls after parse failure',
+            attempt,
+            itemId,
+            toolCallInstructionAdded
+          });
+        } catch (fallbackErr) {
+          const recoveredRaw = extractRawContentFromError(fallbackErr) ?? fallbackRaw ?? extractErrorMessage(fallbackErr);
+          const flowErr = new FlowError('MODEL_INVOCATION_PARSE_ERROR', 'Model invocation failed due to tool-call parsing', 502, {
+            cause: fallbackErr,
+            context: { provider: 'ollama', stage: 'extraction' }
+          });
+          logger?.warn?.({
+            err: fallbackErr,
+            msg: 'fallback extraction invocation failed after disabling tool calls',
+            attempt,
+            itemId,
+            recoveredRawPreview: truncateForLog(recoveredRaw)
+          });
+          if (recoveredRaw) {
+            extractRes = { content: recoveredRaw };
+            logger?.info?.({
+              msg: 'continuing with recovered raw content after tool call parse failure',
+              attempt,
+              itemId,
+              hasRecoveredRaw: true
+            });
+          } else {
+            const nextAttempt = attempt + 1;
+            lastValidationIssues = flowErr.code;
+            lastSupervision = flowErr.message;
+            logger?.info?.({
+              msg: 'retrying extraction attempt',
+              attempt,
+              nextAttempt,
+              itemId,
+              reason: flowErr.code,
+              hadRecoveredRaw: Boolean(recoveredRaw)
+            });
+            advanceAttempt();
+            continue;
+          }
+        }
+      } else {
+        logger?.error?.({ err, msg: 'extraction llm invocation failed', attempt, itemId });
+        throw err;
+      }
     }
 
     const raw = stringifyLangChainContent(extractRes?.content, {
