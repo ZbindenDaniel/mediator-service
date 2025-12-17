@@ -12,6 +12,7 @@ const SHOPWARE_PROMPT_PATH = path.join(PROMPTS_DIR, 'shopware-verify.md');
 const CATEGORIZER_PROMPT_PATH = path.join(PROMPTS_DIR, 'categorizer.md');
 const JSON_CORRECTION_PROMPT_PATH = path.join(PROMPTS_DIR, 'json-correction.md');
 const SEARCH_PLANNER_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-planner.md');
+const SEARCH_SOURCES_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-sources.md');
 const CHAT_PROMPT_PATH = path.join(PROMPTS_DIR, 'chat.md');
 const DB_SCHEMA_PATH = path.resolve(__dirname, '../../db.ts');
 const CHAT_SCHEMA_TOKEN = '{{ITEM_DATABASE_SCHEMA}}';
@@ -258,13 +259,23 @@ export interface LoadChatPromptOptions {
 
 export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromptsOptions): Promise<LoadPromptsResult> {
   try {
-    const [format, extract, supervisor, categorizer, searchPlanner] = await Promise.all([
+    // TODO(agent): Keep curated search source injection aligned with prompt updates.
+    const [format, extract, supervisor, categorizer, searchPlannerTemplate, searchSources] = await Promise.all([
       readPromptFile(FORMAT_PATH, { itemId, prompt: 'format', logger }),
       readPromptFile(EXTRACT_PROMPT_PATH, { itemId, prompt: 'extract', logger }),
       readPromptFile(SUPERVISOR_PROMPT_PATH, { itemId, prompt: 'supervisor', logger }),
       readPromptFile(CATEGORIZER_PROMPT_PATH, { itemId, prompt: 'categorizer', logger }),
-      readPromptFile(SEARCH_PLANNER_PROMPT_PATH, { itemId, prompt: 'search-planner', logger })
+      readPromptFile(SEARCH_PLANNER_PROMPT_PATH, { itemId, prompt: 'search-planner', logger }),
+      readPromptFile(SEARCH_SOURCES_PROMPT_PATH, { itemId, prompt: 'search-sources', logger })
     ]);
+
+    const searchPlanner = `${searchPlannerTemplate.trim()}\n\n<sources>\n${searchSources.trim()}\n</sources>\n`;
+
+    logger?.debug?.({
+      msg: 'search planner prompt composed with curated sources',
+      itemId,
+      sourcesLength: searchSources.length
+    });
 
     let jsonCorrection: string;
     try {
