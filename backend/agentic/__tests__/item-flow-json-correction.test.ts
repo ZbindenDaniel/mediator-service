@@ -3,12 +3,13 @@ import type { ChatModel } from '../flow/item-flow-extraction';
 import type { AgenticTarget } from '../flow/item-flow-schemas';
 import { runExtractionAttempts } from '../flow/item-flow-extraction';
 
+// TODO(agent): Extend Langtext defaults once schema scaffolding captures additional structured hints.
 const buildTarget = (): AgenticTarget => ({
   itemUUid: 'item-1',
   Artikelbeschreibung: 'Widget',
   Marktpreis: null,
   Kurzbeschreibung: 'Short description',
-  Langtext: '',
+  Langtext: { Veröffentlicht: '', Stromversorgung: '' },
   Hersteller: 'Acme',
   Länge_mm: null,
   Breite_mm: null,
@@ -25,12 +26,14 @@ describe('runExtractionAttempts JSON correction', () => {
     const target = buildTarget();
     const invalidExtraction =
       '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Marktpreis":null,"Kurzbeschreibung":"Short description",' +
-      '"Langtext":"","Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,"Höhe_mm":null,"Gewicht_kg":null,' +
-      '"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,"Unterkategorien_B":null this is incomplete';
+      '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,' +
+      '"Unterkategorien_B":null this is incomplete';
     const correctedExtraction =
       '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Marktpreis":null,"Kurzbeschreibung":"Short description",' +
-      '"Langtext":"","Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,"Höhe_mm":null,"Gewicht_kg":null,' +
-      '"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,"Unterkategorien_B":null}';
+      '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,' +
+      '"Unterkategorien_B":null}';
 
     const responses = [
       { content: invalidExtraction },

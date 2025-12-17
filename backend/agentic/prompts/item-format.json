@@ -2,7 +2,10 @@
  "Artikelbeschreibung": "",
  "Marktpreis": null,
  "Kurzbeschreibung": "",
- "Langtext": {},
+ "Langtext": {
+  "Veröffentlicht": "",
+  "Stromversorgung": ""
+ },
  "Hersteller": "",
  "Länge_mm": null,
  "Breite_mm": null,
