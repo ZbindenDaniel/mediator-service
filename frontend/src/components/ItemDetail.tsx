@@ -352,13 +352,6 @@ export function AgenticStatusCard({
               </button>
             </div>
           ) : null}
-          {canDelete && onDelete ? (
-            <div className='row'>
-              <button type="button" className="btn danger" disabled={actionPending} onClick={onDelete}>
-                Lauf löschen
-              </button>
-            </div>
-          ) : null}
           {!needsReview && (canStart || canRestart) ? (
             <div className='row'>
               {canStart && startHandler ? (
@@ -380,6 +373,13 @@ export function AgenticStatusCard({
               </button>
               <button type="button" className="btn danger" disabled={actionPending} onClick={() => onReview('rejected')}>
                 Ablehnen
+              </button>
+            </div>
+          ) : null}
+            {canDelete && onDelete ? (
+            <div className='row'>
+              <button type="button" className="btn danger" disabled={actionPending} onClick={onDelete}>
+                Lauf löschen
               </button>
             </div>
           ) : null}

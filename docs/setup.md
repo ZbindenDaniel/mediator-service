@@ -64,4 +64,4 @@ sudo ufw allow 3000
 
 ## registry
 
-- If the personal access token expires, regenerate it and login again to the registry: echo THE_NEW_PAT | docker login ghcr.io -u ZbindenDaniel --password-stdin
+- If the personal access token expires, regenerate it and login again to the registry: echo THE_NEW_PAT | sudo docker login ghcr.io -u ZbindenDaniel --password-stdin
