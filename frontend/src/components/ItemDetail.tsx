@@ -1670,7 +1670,13 @@ export default function ItemDetail({ itemId }: Props) {
       });
 
       if (deletionResult.ok) {
-        setAgentic(deletionResult.agentic);
+        if (deletionResult.agentic) {
+          console.info('Agentic run deleted; resetting state to not started', {
+            itemId: deletionResult.agentic.ItemUUID,
+            status: deletionResult.agentic.Status
+          });
+        }
+        setAgentic(null);
         setAgenticError(null);
       } else {
         const deletionErrorMessage = deletionResult.reason === 'not-found'
