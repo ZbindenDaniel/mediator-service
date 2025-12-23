@@ -1,9 +1,82 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED } from '../../models';
+import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED, type Item } from '../../models';
 import { getAgenticStatus, normalizeAgenticStatusUpdate } from '../agentic';
+import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 
 // TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
+// TODO(agent): Extract review-time side effects (like price defaults) into a dedicated helper to simplify reuse.
+
+export function applyPriceFallbackAfterReview(
+  itemId: string,
+  ctx: {
+    getItem: { get: (id: string) => Item | undefined };
+    persistItem?: (item: Item) => void;
+    persistItemWithinTransaction?: (item: Item) => void;
+  },
+  logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
+): void {
+  let item: Item | undefined;
+  try {
+    item = ctx.getItem.get(itemId);
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to load item for price lookup', { itemId, error });
+    return;
+  }
+
+  if (!item) {
+    logger.warn?.('[agentic-review] Item not found for price fallback', { itemId });
+    return;
+  }
+
+  if (typeof item.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis)) {
+    logger.debug?.('[agentic-review] Skipping price fallback because item already has a price', {
+      itemId,
+      verkaufspreis: item.Verkaufspreis
+    });
+    return;
+  }
+
+  const fallbackPrice = resolvePriceByCategoryAndType(
+    {
+      hauptkategorien: [item.Hauptkategorien_A, item.Hauptkategorien_B],
+      unterkategorien: [item.Unterkategorien_A, item.Unterkategorien_B],
+      artikeltyp: item.Artikeltyp
+    },
+    logger
+  );
+
+  if (fallbackPrice === null) {
+    logger.info?.('[agentic-review] No fallback price resolved during review completion', {
+      itemId,
+      hauptkategorien: [item.Hauptkategorien_A, item.Hauptkategorien_B],
+      unterkategorien: [item.Unterkategorien_A, item.Unterkategorien_B],
+      artikeltyp: item.Artikeltyp ?? null
+    });
+    return;
+  }
+
+  const persistItem = ctx.persistItem ?? ctx.persistItemWithinTransaction;
+  if (typeof persistItem !== 'function') {
+    logger.error?.('[agentic-review] Persistence helper unavailable; cannot apply fallback price', { itemId });
+    return;
+  }
+
+  try {
+    const updatedItem: Item = {
+      ...item,
+      Verkaufspreis: fallbackPrice,
+      UpdatedAt: new Date()
+    };
+    persistItem(updatedItem);
+    logger.info?.('[agentic-review] Applied fallback sale price after review', {
+      itemId,
+      appliedPrice: fallbackPrice
+    });
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to persist fallback sale price after review', { itemId, error });
+  }
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -130,6 +203,14 @@ const action = defineHttpAction({
         Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
         Meta: JSON.stringify({ decision, notes })
       });
+
+      if (decision === 'approved') {
+        try {
+          applyPriceFallbackAfterReview(itemId, ctx, console);
+        } catch (err) {
+          console.error('Failed to apply fallback sale price after review', err);
+        }
+      }
 
       try {
         const result = getAgenticStatus(itemId, {
