@@ -6,6 +6,7 @@ import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
+import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
 import { serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
 import { defineHttpAction } from './index';
@@ -13,6 +14,7 @@ import { collectMediaAssets } from './save-item';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
 // TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
+// TODO(agent): Normalize category fields to canonical labels once lookup utilities support code-to-name mapping.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -69,6 +71,12 @@ const boxColumns = [
 type ExportColumn = (typeof columns)[number];
 
 const metadataColumnSet = new Set<ExportColumn>(metadataColumns as readonly ExportColumn[]);
+const categoryFieldTypes: Record<string, CategoryFieldType> = {
+  Hauptkategorien_A: 'haupt',
+  Hauptkategorien_B: 'haupt',
+  Unterkategorien_A: 'unter',
+  Unterkategorien_B: 'unter',
+};
 
 const fieldMap: Record<ExportColumn, string | null> = {
   partnumber: 'Artikel_Nummer',
@@ -102,6 +110,7 @@ const fieldMap: Record<ExportColumn, string | null> = {
 
 const missingFieldWarnings = new Set<ExportColumn>();
 const missingMetadataValueWarnings = new Set<ExportColumn>();
+const categoryLabelFallbackWarnings = new Set<string>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
@@ -155,6 +164,58 @@ function filterExistingMediaAssets(assets: string[]): string[] {
     }
   }
   return filtered;
+}
+
+function normalizeCategoryValueForExport(field: string, rawValue: unknown): unknown {
+  const fieldType: CategoryFieldType | undefined = categoryFieldTypes[field];
+  if (!fieldType) {
+    return rawValue;
+  }
+
+  if (rawValue === null || rawValue === undefined) {
+    return rawValue;
+  }
+
+  let numericValue: number | null = null;
+  if (typeof rawValue === 'number') {
+    numericValue = rawValue;
+  } else if (typeof rawValue === 'string') {
+    const trimmed = rawValue.trim();
+    if (!trimmed) {
+      return rawValue;
+    }
+    if (!/^-?\d+$/u.test(trimmed)) {
+      return rawValue;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    numericValue = Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (numericValue === null) {
+    return rawValue;
+  }
+
+  try {
+    const resolvedLabel = resolveCategoryCodeToLabel(numericValue, fieldType);
+    if (resolvedLabel) {
+      return resolvedLabel;
+    }
+    if (!categoryLabelFallbackWarnings.has(field)) {
+      categoryLabelFallbackWarnings.add(field);
+      console.warn('[export-items] Missing category label for code during export; retaining numeric value.', {
+        field,
+        code: numericValue,
+      });
+    }
+  } catch (error) {
+    console.error('[export-items] Failed to resolve category label for export; retaining numeric value.', {
+      field,
+      code: numericValue,
+      error,
+    });
+  }
+
+  return numericValue;
 }
 
 function toCsvValue(val: any): string {
@@ -214,7 +275,8 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     return '';
   }
 
-  const value = rawRow[field];
+  let value = rawRow[field];
+  value = normalizeCategoryValueForExport(field, value);
 
   if (column === 'image_names') {
     const fallbackValue = value;

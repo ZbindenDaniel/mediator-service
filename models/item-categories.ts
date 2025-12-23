@@ -1,4 +1,5 @@
 // TODO(agent): Sync these definitions with upstream taxonomy service when available.
+// TODO(agent): Provide direct code-to-label accessors for exports that need canonical names.
 export interface ItemSubcategoryDefinition {
   code: number;
   label: string;
@@ -8,6 +9,15 @@ export interface ItemCategoryDefinition {
   code: number;
   label: string;
   subcategories: ItemSubcategoryDefinition[];
+}
+
+export function canonicalizeCategoryLabel(label: string): string {
+  const trimmed = label.trim();
+  const normalized = trimmed
+    .replace(/[^\p{L}\p{N}]+/gu, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized || trimmed;
 }
 
 export const itemCategories: ItemCategoryDefinition[] = [
@@ -268,3 +278,44 @@ export const itemCategories: ItemCategoryDefinition[] = [
     subcategories: []
   }
 ];
+
+const categoryLabelLookup = new Map<number, string>();
+const subcategoryLabelLookup = new Map<number, string>();
+
+try {
+  for (const category of itemCategories) {
+    const canonicalCategoryLabel = canonicalizeCategoryLabel(category.label);
+    if (!categoryLabelLookup.has(category.code)) {
+      categoryLabelLookup.set(category.code, canonicalCategoryLabel);
+    }
+
+    for (const subCategory of category.subcategories) {
+      const canonicalSubcategoryLabel = canonicalizeCategoryLabel(subCategory.label);
+      if (!subcategoryLabelLookup.has(subCategory.code)) {
+        subcategoryLabelLookup.set(subCategory.code, canonicalSubcategoryLabel);
+      }
+    }
+  }
+} catch (error) {
+  console.error('[item-categories] Failed to build category label lookup maps', error);
+}
+
+export interface CategoryLabelLookups {
+  haupt: ReadonlyMap<number, string>;
+  unter: ReadonlyMap<number, string>;
+}
+
+export function getCategoryLabelLookups(): CategoryLabelLookups {
+  return {
+    haupt: categoryLabelLookup,
+    unter: subcategoryLabelLookup,
+  };
+}
+
+export function getCategoryLabelFromCode(code: number): string | undefined {
+  return categoryLabelLookup.get(code);
+}
+
+export function getSubcategoryLabelFromCode(code: number): string | undefined {
+  return subcategoryLabelLookup.get(code);
+}
