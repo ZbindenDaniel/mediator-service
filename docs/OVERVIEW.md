@@ -110,6 +110,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added a review-time fallback that assigns `Verkaufspreis` from the category/type lookup table when approvals finish without a price.
 - Normalized CSV exports to emit canonical category labels when serializing category codes for partner payloads.
 - Update the closing of larger tasks in [RECENT_HIGHLIGHTS]()
+- Introduced topic-based event log allowlists across backend and frontend feeds, defaulting to full visibility unless configured.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)

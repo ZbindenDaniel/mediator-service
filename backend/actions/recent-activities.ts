@@ -11,6 +11,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
+// TODO(agent): Include active topic allow list details in diagnostics metadata responses.
 const action = defineHttpAction({
   key: 'recent-activities',
   label: 'Recent activities',

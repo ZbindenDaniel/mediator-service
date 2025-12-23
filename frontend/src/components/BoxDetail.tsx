@@ -7,7 +7,7 @@ import type { Box, Item, EventLog } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
-import { filterAllowedEvents } from '../utils/eventLogLevels';
+import { filterVisibleEvents } from '../utils/eventLogTopics';
 import BoxColorTag from './BoxColorTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
@@ -189,7 +189,7 @@ export default function BoxDetail({ boxId }: Props) {
         setPhotoUpload(null);
         setPhotoRemoved(false);
         setItems(data.items || []);
-        setEvents(Array.isArray(data.events) ? filterAllowedEvents(data.events) : []);
+        setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
         setLoadError(null);
       } else {
         console.error('Failed to fetch box', res.status);
