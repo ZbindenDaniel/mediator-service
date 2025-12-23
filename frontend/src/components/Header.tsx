@@ -1,11 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import { GoArrowLeft } from 'react-icons/go';
+import {
+  clearItemListFilters,
+  getActiveFilterDescriptions,
+  getDefaultItemListFilters,
+  hasNonDefaultFilters,
+  ITEM_LIST_FILTERS_CHANGED_EVENT,
+  ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT,
+  ItemListFilterChangeDetail,
+  loadItemListFilters
+} from '../lib/itemListFiltersStorage';
+import { GoArrowLeft, GoFilter } from 'react-icons/go';
 
+// TODO(filter-indicator): Surface stored filter state changes in the header and allow quick reset.
 export default function Header() {
   const dialog = useDialog();
   const [user, setUserState] = useState(() => getUser().trim());
+  const [filterSummaries, setFilterSummaries] = useState<string[]>([]);
+  const [hasStoredFilters, setHasStoredFilters] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +43,33 @@ export default function Header() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const defaults = getDefaultItemListFilters();
+    const syncFromStorage = () => {
+      const stored = loadItemListFilters(defaults);
+      if (stored) {
+        setFilterSummaries(getActiveFilterDescriptions(stored, defaults));
+        setHasStoredFilters(hasNonDefaultFilters(stored, defaults));
+      } else {
+        setFilterSummaries([]);
+        setHasStoredFilters(false);
+      }
+    };
+
+    syncFromStorage();
+
+    const handleFilterChange = (event: Event) => {
+      const customEvent = event as CustomEvent<ItemListFilterChangeDetail>;
+      const activeFilters = customEvent.detail?.activeFilters ?? [];
+      const hasOverrides = customEvent.detail?.hasOverrides ?? false;
+      setFilterSummaries(activeFilters);
+      setHasStoredFilters(hasOverrides);
+    };
+
+    window.addEventListener(ITEM_LIST_FILTERS_CHANGED_EVENT, handleFilterChange as EventListener);
+    return () => window.removeEventListener(ITEM_LIST_FILTERS_CHANGED_EVENT, handleFilterChange as EventListener);
   }, []);
 
   const handleUserDoubleClick = useCallback(async () => {
@@ -58,6 +98,22 @@ export default function Header() {
     }
   }, [dialog, user]);
 
+  const handleClearFiltersClick = useCallback(() => {
+    try {
+      clearItemListFilters();
+      window.dispatchEvent(new Event(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT));
+      setFilterSummaries([]);
+      setHasStoredFilters(false);
+      console.info('Stored item list filters cleared from header control.');
+    } catch (err) {
+      console.error('Failed to clear stored filters from header control', err);
+    }
+  }, []);
+
+  const filterTooltip = filterSummaries.length
+    ? `Aktive Filter:\n- ${filterSummaries.join('\n- ')}`
+    : 'Gespeicherte Filter zurücksetzen';
+
   return (
     <header className="header">
       <div className="left">
@@ -66,13 +122,26 @@ export default function Header() {
         </nav>
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
       </div>
-      <div
-        className="user"
-        onDoubleClick={handleUserDoubleClick}
-        title="Doppelklicken zum Bearbeiten des Benutzernamens"
-        aria-label="Benutzername, doppelklicken zum Bearbeiten"
-      >
-        {user}
+      <div className="right">
+        {hasStoredFilters ? (
+          <button
+            aria-label="Gespeicherte Filter löschen"
+            className="header-filter-indicator"
+            onClick={handleClearFiltersClick}
+            title={filterTooltip}
+            type="button"
+          >
+            <GoFilter aria-hidden="true" />
+          </button>
+        ) : null}
+        <div
+          className="user"
+          onDoubleClick={handleUserDoubleClick}
+          title="Doppelklicken zum Bearbeiten des Benutzernamens"
+          aria-label="Benutzername, doppelklicken zum Bearbeiten"
+        >
+          {user}
+        </div>
       </div>
     </header>
   );

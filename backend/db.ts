@@ -720,6 +720,7 @@ function ensureItemImageNamesColumn(database: Database.Database = db): void {
 const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Label,''))";
 
 const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
+// TODO(item-entity-filter): Extract shared projections for instance/reference list unions once API coverage expands.
 
 const ITEM_JOIN_BASE = `
   FROM items i
@@ -2291,6 +2292,114 @@ ORDER BY i.ItemUUID
 `);
 
 export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
+
+const listItemsWithFiltersStatement = db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
+  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
+])}
+${ITEM_JOIN_WITH_BOX}
+LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+WHERE (
+  @searchTerm IS NULL
+  OR @searchTerm = ''
+  OR LOWER(COALESCE(i.Artikelbeschreibung, '')) LIKE @searchTerm
+  OR LOWER(COALESCE(i.Artikel_Nummer, '')) LIKE @searchTerm
+  OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
+)
+AND (
+  @boxFilter IS NULL
+  OR @boxFilter = ''
+  OR LOWER(COALESCE(i.BoxID, '')) LIKE @boxFilter
+)
+AND (
+  @agenticStatus IS NULL
+  OR @agenticStatus = ''
+  OR COALESCE(ar.Status, 'notStarted') = @agenticStatus
+)
+AND (
+  @unplacedOnly IS NULL
+  OR @unplacedOnly = 0
+  OR i.BoxID IS NULL
+)
+ORDER BY i.ItemUUID
+`);
+
+export const listItemsWithFilters = wrapLangtextAwareStatement(
+  listItemsWithFiltersStatement,
+  'db:listItemsWithFilters'
+);
+
+const listItemReferencesWithFiltersStatement = db.prepare(`
+SELECT
+  COALESCE(NULLIF(i.ItemUUID, ''), r.Artikel_Nummer) AS ItemUUID,
+  COALESCE(NULLIF(r.Artikel_Nummer, ''), i.ItemUUID) AS Artikel_Nummer,
+  i.BoxID AS BoxID,
+  ${LOCATION_WITH_BOX_FALLBACK} AS Location,
+  i.UpdatedAt AS UpdatedAt,
+  i.Datum_erfasst AS Datum_erfasst,
+  i.Auf_Lager AS Auf_Lager,
+  i.ShopwareVariantId AS ShopwareVariantId,
+  r.Grafikname AS Grafikname,
+  r.ImageNames AS ImageNames,
+  r.Artikelbeschreibung AS Artikelbeschreibung,
+  r.Verkaufspreis AS Verkaufspreis,
+  r.Kurzbeschreibung AS Kurzbeschreibung,
+  r.Langtext AS Langtext,
+  r.Hersteller AS Hersteller,
+  r.Länge_mm AS Länge_mm,
+  r.Breite_mm AS Breite_mm,
+  r.Höhe_mm AS Höhe_mm,
+  r.Gewicht_kg AS Gewicht_kg,
+  CAST(r.Hauptkategorien_A AS INTEGER) AS Hauptkategorien_A,
+  CAST(r.Unterkategorien_A AS INTEGER) AS Unterkategorien_A,
+  CAST(r.Hauptkategorien_B AS INTEGER) AS Hauptkategorien_B,
+  CAST(r.Unterkategorien_B AS INTEGER) AS Unterkategorien_B,
+  r.Veröffentlicht_Status AS Veröffentlicht_Status,
+  r.Shopartikel AS Shopartikel,
+  r.Artikeltyp AS Artikeltyp,
+  r.Einheit AS Einheit,
+  r.EntityType AS EntityType,
+  r.ShopwareProductId AS ShopwareProductId,
+  COALESCE(ar.Status, 'notStarted') AS AgenticStatus,
+  COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState
+FROM item_refs r
+LEFT JOIN items i ON i.Artikel_Nummer = r.Artikel_Nummer
+LEFT JOIN boxes b ON i.BoxID = b.BoxID
+LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+WHERE (
+  i.ItemUUID IS NULL
+  OR i.ItemUUID = ''
+)
+AND (
+  @searchTerm IS NULL
+  OR @searchTerm = ''
+  OR LOWER(COALESCE(r.Artikelbeschreibung, '')) LIKE @searchTerm
+  OR LOWER(COALESCE(r.Artikel_Nummer, '')) LIKE @searchTerm
+  OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
+)
+AND (
+  @boxFilter IS NULL
+  OR @boxFilter = ''
+  OR LOWER(COALESCE(i.BoxID, '')) LIKE @boxFilter
+)
+AND (
+  @agenticStatus IS NULL
+  OR @agenticStatus = ''
+  OR COALESCE(ar.Status, 'notStarted') = @agenticStatus
+)
+AND (
+  @unplacedOnly IS NULL
+  OR @unplacedOnly = 0
+  OR i.BoxID IS NULL
+)
+ORDER BY COALESCE(NULLIF(r.Artikel_Nummer, ''), i.ItemUUID)
+`);
+
+export const listItemReferencesWithFilters = wrapLangtextAwareStatement(
+  listItemReferencesWithFiltersStatement,
+  'db:listItemReferencesWithFilters'
+);
 
 // TODO(agent): Capture real-world export sorting expectations once Artikel_Nummer coverage is universal.
 // TODO(agent): Add export-level item ID filtering to reduce payload size for targeted ERP syncs.
