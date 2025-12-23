@@ -293,6 +293,31 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
   let value = rawRow[field];
   value = normalizeCategoryValueForExport(field, value);
 
+  // TODO(agent): Revisit published status gating once agentic review policies evolve beyond reviewed/notReviewed.
+  if (field === 'Veröffentlicht_Status') {
+    const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    const agenticStatus = typeof rawRow.AgenticStatus === 'string' ? rawRow.AgenticStatus : null;
+    const storedPublished = Boolean(value);
+    const gatedPublished = storedPublished && agenticStatus === 'reviewed';
+
+    if (storedPublished && !gatedPublished) {
+      try {
+        console.info('[export-items] Agentic review gate suppressed published status during export.', {
+          agenticStatus,
+          itemUUID,
+        });
+      } catch (loggingError) {
+        console.error('[export-items] Failed to log agentic review gate suppression for export.', {
+          agenticStatus,
+          itemUUID,
+          loggingError,
+        });
+      }
+    }
+
+    return gatedPublished;
+  }
+
   if (column === 'image_names') {
     const fallbackValue = value;
     const grafikname = typeof value === 'string' ? value : null;

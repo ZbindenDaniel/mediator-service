@@ -89,3 +89,68 @@ describe('export-items category serialization', () => {
     );
   });
 });
+
+describe('export-items published status gating', () => {
+  const baseRow = {
+    Artikel_Nummer: 'A-1000',
+    Artikeltyp: 'Laptop',
+    Datum_erfasst: '2024-01-01',
+    Grafikname: 'primary.png',
+    Artikelbeschreibung: 'Test item',
+    Kurzbeschreibung: 'Short',
+    Langtext: 'Detail',
+    Hersteller: 'Example Inc',
+    Länge_mm: 100,
+    Breite_mm: 50,
+    Höhe_mm: 25,
+    Gewicht_kg: 2,
+    Verkaufspreis: 199.99,
+    Auf_Lager: 4,
+    Veröffentlicht_Status: true,
+    Shopartikel: 'shop-article',
+    Einheit: 'Stk',
+    Hauptkategorien_A: 10,
+    Unterkategorien_A: 101,
+    Hauptkategorien_B: 50,
+    Unterkategorien_B: 503,
+    ItemUUID: 'item-uuid-1',
+    BoxID: 'box-123',
+    LocationId: 'loc-9',
+    Label: 'box label',
+    UpdatedAt: '2024-02-02T00:00:00.000Z'
+  };
+
+  test('preserves published status when agentic status is reviewed', () => {
+    const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticStatus: 'reviewed' }]);
+    const [, dataLine] = csv.split('\n');
+    const values = dataLine.split(',');
+    const publishedIndex = 14;
+    expect(values[publishedIndex]).toBe('true');
+  });
+
+  test('drops published status when agentic status is not reviewed', () => {
+    const logSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticStatus: 'inProgress' }]);
+    const [, dataLine] = csv.split('\n');
+    const values = dataLine.split(',');
+    const publishedIndex = 14;
+
+    expect(values[publishedIndex]).toBe('false');
+    expect(logSpy).toHaveBeenCalledWith(
+      '[export-items] Agentic review gate suppressed published status during export.',
+      expect.objectContaining({ agenticStatus: 'inProgress', itemUUID: 'item-uuid-1' })
+    );
+
+    logSpy.mockRestore();
+  });
+
+  test('keeps unpublished rows unaffected by agentic status gating', () => {
+    const { csv } = serializeItemsToCsv([{ ...baseRow, Veröffentlicht_Status: false, AgenticStatus: 'notStarted' }]);
+    const [, dataLine] = csv.split('\n');
+    const values = dataLine.split(',');
+    const publishedIndex = 14;
+
+    expect(values[publishedIndex]).toBe('false');
+  });
+});
