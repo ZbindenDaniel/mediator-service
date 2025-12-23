@@ -24,7 +24,7 @@ import {
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
-import { filterAllowedEvents } from '../utils/eventLogLevels';
+import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
   describeAgenticFailureReason,
@@ -1101,7 +1101,7 @@ export default function ItemDetail({ itemId }: Props) {
       if (res.ok) {
         const data = await res.json();
         setItem(data.item);
-        setEvents(Array.isArray(data.events) ? filterAllowedEvents(data.events) : []);
+        setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
         setAgentic(data.agentic ?? null);
         const media = Array.isArray(data.media)
           ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')

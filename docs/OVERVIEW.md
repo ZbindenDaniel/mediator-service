@@ -108,6 +108,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Recent Highlights
 - Added a bulk “Sync to ERP” action button on the item list to trigger `/api/sync/erp` with selected IDs.
 - Update the closing of larger tasks in [RECENT_HIGHLIGHTS]()
+- Introduced topic-based event log allowlists across backend and frontend feeds, defaulting to full visibility unless configured.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)

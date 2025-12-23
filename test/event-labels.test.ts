@@ -2,8 +2,11 @@ import {
   EVENT_DEFAULT_LEVEL,
   EVENT_LABELS,
   EVENT_RESOURCES,
+  EVENT_TOPICS,
+  eventKeysForTopics,
   eventLabel,
   eventLevel,
+  parseEventTopicAllowList,
   resolveEventResource,
 } from '../models/event-labels';
 
@@ -31,4 +34,31 @@ test('event resources expose lookup map', () => {
 test('event resources include topic metadata', () => {
   const agentic = resolveEventResource('AgenticReviewRejected');
   expect(agentic?.topic).toBe('agentic');
+});
+
+test('event topic allow list parsing recognizes configured topics', () => {
+  const { topics, invalid, hadInput, usedFallback } = parseEventTopicAllowList('general, agentic ,UNKNOWN');
+  expect(hadInput).toBe(true);
+  expect(usedFallback).toBe(false);
+  expect(invalid).toEqual(['UNKNOWN']);
+  expect(topics).toEqual(['general', 'agentic']);
+});
+
+test('event topic allow list falls back to all topics when none match', () => {
+  const { topics, invalid, usedFallback } = parseEventTopicAllowList('missing');
+  expect(usedFallback).toBe(true);
+  expect(invalid).toEqual(['missing']);
+  expect(topics).toEqual([...EVENT_TOPICS]);
+});
+
+test('eventKeysForTopics maps topics to event keys', () => {
+  const agenticKeys = eventKeysForTopics(['agentic']);
+  expect(agenticKeys).toEqual(
+    expect.arrayContaining([
+      'AgenticRunRestarted',
+      'AgenticResultFailed',
+      'AgenticReviewRejected'
+    ])
+  );
+  expect(agenticKeys).not.toContain('Moved');
 });
