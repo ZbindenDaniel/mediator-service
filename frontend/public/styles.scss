@@ -914,6 +914,9 @@ button:focus {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    // position: sticky;
+    // top: 60vh;
+
 }
 
 .bulk-item-action-bar__summary {
@@ -1205,6 +1208,7 @@ button:focus {
     align-items: center;
     justify-content: space-between;
     gap: 6px;
+    width: 40%;
 }
 
 .filter-control {
@@ -1220,7 +1224,7 @@ button:focus {
     padding: 6px;
     border-radius: 6px;
     border: 1px solid var(--line);
-    min-width: 140px;
+    min-width: 190px;
 }
 
 .filter-control__input {

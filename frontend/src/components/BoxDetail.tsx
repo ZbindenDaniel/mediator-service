@@ -562,7 +562,7 @@ export default function BoxDetail({ boxId }: Props) {
                           <div className="mono">{it.BoxID || ''}</div>
                           <div className="mono">{it.Artikel_Nummer || it.ItemUUID}</div>
                           <div>{it.Artikelbeschreibung}</div>
-                          <div className="muted">Auf Lager: {it.Auf_Lager}</div>
+                          <div className="muted">Anzahl: {it.Auf_Lager}</div>
                         </Link>
                         <div className='row'>
                           <button type="button" className="btn" onClick={() => removeItem(it.ItemUUID)}>Entnehmen</button>

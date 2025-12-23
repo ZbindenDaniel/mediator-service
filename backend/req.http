@@ -1,5 +1,8 @@
 
-POST http://192.168.10.202:8080/api/agentic/queue?mode=missing&actor=Dani
+
+###
+
+POST http://192.168.10.202:8080/api/agentic/queue?mode=all&actor=Dani
 Content-Type: application/json
 
 {
@@ -8,3 +11,8 @@ Content-Type: application/json
 ###
 
 
+POST http://localhost:8080/api/agentic/queue?mode=all&actor=Dani
+Content-Type: application/json
+
+{
+}

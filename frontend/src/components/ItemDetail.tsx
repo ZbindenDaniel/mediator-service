@@ -313,7 +313,6 @@ export function AgenticStatusCard({
       {!isCollapsed ? (
         <div className="agentic-status-card__content" id={contentId}>
           <div className="row status-row">
-            <span className={status.className}>{status.label}</span>
             {isInProgress ? <span className="status-spinner" aria-hidden="true" /> : null}
           </div>
           <p className="muted">{status.description}</p>
@@ -1083,7 +1082,6 @@ export default function ItemDetail({ itemId }: Props) {
     else if (reviewStateNormalized && reviewStateNormalized !== 'not_required') {
       reviewLabel = agentic.ReviewState;
     }
-    agenticRows.push(['Review-Status', reviewLabel]);
   }
   if (agentic?.ReviewedBy) {
     agenticRows.push(['Geprüft von', agentic.ReviewedBy]);

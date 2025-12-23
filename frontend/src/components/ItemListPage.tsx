@@ -286,6 +286,7 @@ export default function ItemListPage() {
               </select>
             </label>
           </div>
+
           <div className='row'>
 
             <label className="sort-direction-control">
@@ -298,6 +299,23 @@ export default function ItemListPage() {
                 <option value="asc">Aufsteigend</option>
                 <option value="desc">Absteigend</option>
               </select>
+            </label>
+          </div>
+          
+          <div className='row'>
+
+            <label className="sort-control sort-control--box">
+              <span>Behälter</span>
+              <div className="sort-control__input">
+                <GoContainer aria-hidden="true" />
+                <input
+                  aria-label="Behälter filtern"
+                  onChange={(event) => setBoxFilter(event.target.value)}
+                  placeholder="Box-ID oder Standort"
+                  type="search"
+                  value={boxFilter}
+                />
+              </div>
             </label>
           </div>
         </div>
@@ -329,21 +347,6 @@ export default function ItemListPage() {
               </select>
             </label>
           </div> */}
-          <div className='row'>
-            <label className="filter-control filter-control--box">
-              <span>Behälter</span>
-              <div className="filter-control__input">
-                <GoContainer aria-hidden="true" />
-                <input
-                  aria-label="Behälter filtern"
-                  onChange={(event) => setBoxFilter(event.target.value)}
-                  placeholder="Box-ID oder Standort"
-                  type="search"
-                  value={boxFilter}
-                />
-              </div>
-            </label>
-          </div>
           <div className='row'>
             <label className="filter-control">
               <span>Agentic-Status</span>
