@@ -3,6 +3,8 @@ import path from 'path';
 import { Entity } from '../../models';
 import type { IncomingMessage, ServerResponse } from 'http';
 
+// TODO(agent): Ensure new ERP sync actions register cleanly through the loader to keep CLI parity.
+
 export interface Action {
   key: string;
   label: string;
@@ -59,3 +61,4 @@ export default { loadActions };
 
 export { default as bulkMoveItemsAction } from './bulk-move-items';
 export { default as bulkDeleteItemsAction } from './bulk-delete-items';
+export { default as syncErpAction } from './sync-erp';

@@ -2293,6 +2293,7 @@ ORDER BY i.ItemUUID
 export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
 
 // TODO(agent): Capture real-world export sorting expectations once Artikel_Nummer coverage is universal.
+// TODO(agent): Add export-level item ID filtering to reduce payload size for targeted ERP syncs.
 const listItemsForExportStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
@@ -2302,10 +2303,83 @@ WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
 ORDER BY COALESCE(NULLIF(i.Artikel_Nummer, ''), i.ItemUUID), i.ItemUUID
 `);
 
-export const listItemsForExport = wrapLangtextAwareStatement(
+const listItemsForExportStatements = new Map<number, Database.Statement>();
+const baseListItemsForExport = wrapLangtextAwareStatement(
   listItemsForExportStatement,
   'db:listItemsForExport'
 );
+
+export interface ListItemsForExportFilters {
+  createdAfter: string | null;
+  updatedAfter: string | null;
+  itemIds?: string[] | null;
+}
+
+function normalizeItemIdFilters(rawItemIds: unknown): string[] {
+  if (!Array.isArray(rawItemIds)) {
+    return [];
+  }
+  const normalized: string[] = [];
+  for (const candidate of rawItemIds) {
+    if (typeof candidate !== 'string') {
+      continue;
+    }
+    const trimmed = candidate.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (!normalized.includes(trimmed)) {
+      normalized.push(trimmed);
+    }
+  }
+  return normalized;
+}
+
+function getListItemsForExportStatement(itemIdCount: number): Database.Statement {
+  if (!Number.isFinite(itemIdCount) || itemIdCount <= 0) {
+    return baseListItemsForExport;
+  }
+
+  const cached = listItemsForExportStatements.get(itemIdCount);
+  if (cached) {
+    return cached;
+  }
+
+  const placeholderList = Array.from({ length: itemIdCount }, (_value, index) => `@itemId${index}`).join(', ');
+  const filteredStatement = wrapLangtextAwareStatement(
+    db.prepare(`
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${ITEM_JOIN_WITH_BOX}
+WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
+  AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
+  AND i.ItemUUID IN (${placeholderList})
+ORDER BY COALESCE(NULLIF(i.Artikel_Nummer, ''), i.ItemUUID), i.ItemUUID
+`),
+    `db:listItemsForExport:itemIds:${itemIdCount}`
+  );
+  listItemsForExportStatements.set(itemIdCount, filteredStatement);
+  return filteredStatement;
+}
+
+export const listItemsForExport = {
+  all(filters: Partial<ListItemsForExportFilters>) {
+    const normalizedFilters: ListItemsForExportFilters = {
+      createdAfter: filters?.createdAfter ?? null,
+      updatedAfter: filters?.updatedAfter ?? null,
+      itemIds: filters?.itemIds
+    };
+    const normalizedItemIds = normalizeItemIdFilters(normalizedFilters.itemIds);
+    const bindings: Record<string, unknown> = {
+      createdAfter: normalizedFilters.createdAfter,
+      updatedAfter: normalizedFilters.updatedAfter
+    };
+    normalizedItemIds.forEach((itemId, index) => {
+      bindings[`itemId${index}`] = itemId;
+    });
+    const statement = getListItemsForExportStatement(normalizedItemIds.length);
+    return statement.all(bindings);
+  }
+};
 
 export type {
   AgenticRun,
@@ -2318,4 +2392,3 @@ export type {
 };
 
 export type { ShopwareSyncQueueEntry, ShopwareSyncQueueInsert, ShopwareSyncQueueStatus } from './shopware/queueTypes';
-

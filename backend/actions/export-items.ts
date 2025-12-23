@@ -12,6 +12,7 @@ import { defineHttpAction } from './index';
 import { collectMediaAssets } from './save-item';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
+// TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -105,7 +106,23 @@ const missingMetadataValueWarnings = new Set<ExportColumn>();
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
 
-let tempDir: string | null = null;
+export interface ItemsExportArtifact {
+  archivePath: string;
+  boxesPath: string;
+  cleanup: () => Promise<void>;
+  itemsPath: string;
+  kind: 'csv' | 'zip';
+  tempDir: string;
+}
+
+export interface StageItemsExportOptions {
+  archiveBaseName?: string;
+  boxes: Record<string, unknown>[];
+  includeMedia: boolean;
+  items: Record<string, unknown>[];
+  logger?: Pick<Console, 'error' | 'info' | 'warn'>;
+  mediaDir?: string;
+}
 
 function filterExistingMediaAssets(assets: string[]): string[] {
   const filtered: string[] = [];
@@ -150,6 +167,10 @@ function serializeBoxes(rows: Record<string, unknown>[]): string {
   const header = boxColumns.join(',');
   const lines = rows.map((row) => boxColumns.map((column) => toCsvValue(row[column] ?? '')).join(','));
   return [header, ...lines].join('\n');
+}
+
+export function serializeBoxesToCsv(rows: Record<string, unknown>[]): string {
+  return serializeBoxes(rows);
 }
 
 function logMissingMetadataValue(
@@ -362,6 +383,118 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
   return DEFAULT_EINHEIT;
 }
 
+export function serializeItemsToCsv(rows: Record<string, unknown>[]): { csv: string; columns: readonly ExportColumn[] } {
+  const header = columns.join(',');
+  const lines = rows.map((row: any) =>
+    columns
+      .map((column: ExportColumn) => {
+        const resolvedValue = resolveExportValue(column, row);
+        return toCsvValue(resolvedValue);
+      })
+      .join(',')
+  );
+  return {
+    csv: [header, ...lines].join('\n'),
+    columns
+  };
+}
+
+interface ZipArchiveOptions {
+  archiveName: string;
+  cwd: string;
+  entries: string[];
+  logger: Pick<Console, 'error' | 'info' | 'warn'>;
+}
+
+async function createZipArchive(options: ZipArchiveOptions): Promise<void> {
+  const { archiveName, cwd, entries, logger } = options;
+  const zipArgs = ['-r', archiveName, ...entries];
+
+  await new Promise<void>((resolve, reject) => {
+    const zipProc = spawn('zip', zipArgs, { cwd });
+
+    zipProc.stderr.on('data', (data: Buffer) => {
+      logger.warn?.('[export-items] zip stderr', data.toString());
+    });
+
+    zipProc.on('error', (zipError) => {
+      logger.error?.('[export-items] Failed to spawn zip process', zipError);
+      reject(zipError);
+    });
+
+    zipProc.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      logger.error?.('[export-items] zip process exited with error code', { code });
+      reject(new Error(`zip exited with code ${code}`));
+    });
+  });
+}
+
+export async function stageItemsExport(options: StageItemsExportOptions): Promise<ItemsExportArtifact> {
+  const logger = options.logger ?? console;
+  const mediaDir = options.mediaDir ?? MEDIA_DIR;
+  const archiveBaseName = options.archiveBaseName || 'items-export';
+
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), `${archiveBaseName}-`));
+  const cleanup = async (): Promise<void> => {
+    try {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    } catch (cleanupError) {
+      logger.error?.('[export-items] Failed to clean up export staging directory', { tempDir, cleanupError });
+    }
+  };
+
+  try {
+    const { csv } = serializeItemsToCsv(options.items);
+    const boxesCsv = serializeBoxes(options.boxes ?? []);
+    const itemsPath = path.join(tempDir, 'items.csv');
+    const boxesPath = path.join(tempDir, 'boxes.csv');
+    await fs.promises.writeFile(itemsPath, csv, 'utf8');
+    await fs.promises.writeFile(boxesPath, boxesCsv, 'utf8');
+
+    if (!options.includeMedia) {
+      return { archivePath: itemsPath, boxesPath, cleanup, itemsPath, kind: 'csv', tempDir };
+    }
+
+    let mediaLinked = false;
+    const mediaLink = path.join(tempDir, 'media');
+    try {
+      if (fs.existsSync(mediaDir)) {
+        await fs.promises.symlink(mediaDir, mediaLink, 'dir');
+        mediaLinked = true;
+      } else {
+        logger.warn?.('[export-items] MEDIA_DIR missing during export; media folder omitted from archive.', {
+          mediaDir
+        });
+      }
+    } catch (mediaError) {
+      logger.error?.('[export-items] Failed to link media directory into export archive staging area', mediaError);
+    }
+
+    const archiveName = `${archiveBaseName}.zip`;
+    const zipEntries = [path.basename(itemsPath), path.basename(boxesPath)];
+    if (mediaLinked) {
+      zipEntries.push('media');
+    }
+
+    await createZipArchive({
+      archiveName,
+      cwd: tempDir,
+      entries: zipEntries,
+      logger
+    });
+
+    const archivePath = path.join(tempDir, archiveName);
+    return { archivePath, boxesPath, cleanup, itemsPath, kind: 'zip', tempDir };
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+}
+
 const action = defineHttpAction({
   key: 'export-items',
   label: 'Export items',
@@ -390,77 +523,26 @@ const action = defineHttpAction({
         }
       });
       log(items, actor);
-      const header = columns.join(',');
-      const lines = items.map((row: any) =>
-        columns
-          .map((column: ExportColumn) => {
-            const resolvedValue = resolveExportValue(column, row);
-            return toCsvValue(resolvedValue);
-          })
-          .join(',')
-      );
-      const csv = [header, ...lines].join('\n');
       const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
-      const boxesCsv = serializeBoxes(Array.isArray(boxes) ? boxes : []);
-      const archiveName = `items-export-${Date.now()}.zip`;
+      const stagedExport = await stageItemsExport({
+        archiveBaseName: `items-export-${Date.now()}`,
+        boxes: Array.isArray(boxes) ? boxes : [],
+        includeMedia: true,
+        items,
+        logger: console,
+        mediaDir: MEDIA_DIR
+      });
+
       res.writeHead(200, {
-        'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${archiveName}"`
-      });
-
-      tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'items-export-'));
-      const itemsPath = path.join(tempDir, 'items.csv');
-      const boxesPath = path.join(tempDir, 'boxes.csv');
-      await fs.promises.writeFile(itemsPath, csv, 'utf8');
-      await fs.promises.writeFile(boxesPath, boxesCsv, 'utf8');
-
-      let mediaLinked = false;
-      const mediaLink = path.join(tempDir, 'media');
-      try {
-        if (fs.existsSync(MEDIA_DIR)) {
-          await fs.promises.symlink(MEDIA_DIR, mediaLink, 'dir');
-          mediaLinked = true;
-        } else {
-          console.warn('[export-items] MEDIA_DIR missing during export; media folder omitted from archive.', {
-            mediaDir: MEDIA_DIR
-          });
-        }
-      } catch (mediaError) {
-        console.error('[export-items] Failed to link media directory into export archive staging area', mediaError);
-      }
-
-      const zipArgs = ['-r', '-', path.basename(itemsPath), path.basename(boxesPath)];
-      if (mediaLinked) {
-        zipArgs.push('media');
-      }
-
-      // TODO(agent): Add preflight checks for zip binary availability to return clearer client errors before streaming.
-      const zipProc = spawn('zip', zipArgs, { cwd: tempDir });
-      zipProc.stderr.on('data', (data: Buffer) => {
-        console.warn('[export-items] zip stderr', data.toString());
-      });
-      zipProc.on('error', (zipError) => {
-        console.error('[export-items] Failed to spawn zip process', zipError);
+        'Content-Type': stagedExport.kind === 'zip' ? 'application/zip' : 'text/csv',
+        'Content-Disposition': `attachment; filename="${path.basename(stagedExport.archivePath)}"`
       });
 
       try {
-        await pipeline(zipProc.stdout, res);
-      } catch (zipStreamError) {
-        console.error('[export-items] Failed to stream zip archive to client', zipStreamError);
-        throw zipStreamError;
+        await pipeline(fs.createReadStream(stagedExport.archivePath), res);
+      } finally {
+        await stagedExport.cleanup();
       }
-
-      await new Promise<void>((resolve, reject) => {
-        zipProc.on('close', (code) => {
-          if (code === 0) {
-            resolve();
-          } else {
-            const err = new Error(`zip exited with code ${code}`);
-            console.error('[export-items] zip process exited with error code', { code });
-            reject(err);
-          }
-        });
-      });
     } catch (err) {
       console.error('Export items failed', err);
       if (!res.headersSent) {
@@ -472,18 +554,9 @@ const action = defineHttpAction({
           console.error('[export-items] Failed to close response after error', responseError);
         }
       }
-    } finally {
-      if (tempDir) {
-        try {
-          await fs.promises.rm(tempDir, { recursive: true, force: true });
-        } catch (cleanupError) {
-          console.error('[export-items] Failed to clean up export staging directory', { tempDir, cleanupError });
-        }
-      }
     }
   },
   view: () => '<div class="card"><p class="muted">Export items API</p></div>'
 });
 
 export default action;
-
