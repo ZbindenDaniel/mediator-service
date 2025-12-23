@@ -56,6 +56,7 @@ if (!envLoaded) {
 
 // TODO(agentic-config): Replace ad-hoc parsing with a shared zod schema that also validates agentic settings.
 // TODO(langtext-export-config): Extend Langtext export format handling once UI level preferences are introduced.
+// TODO(agent): Capture ERP sync configuration in a typed schema once integration stabilizes.
 
 export const HTTP_PORT = parseInt(process.env.HTTP_PORT || '8080', 10);
 // TODO(database-migration): Remove DB_PATH fallback once all services rely on DATABASE_URL.
@@ -216,6 +217,19 @@ const importerForceZeroStockFlag =
   parseBooleanFlag(process.env.IMPORTER_FORCE_ZERO_STOCK, 'IMPORTER_FORCE_ZERO_STOCK') ?? false;
 export const IMPORTER_FORCE_ZERO_STOCK = importerForceZeroStockFlag;
 
+const erpImportIncludeMedia =
+  parseBooleanFlag(process.env.ERP_IMPORT_INCLUDE_MEDIA, 'ERP_IMPORT_INCLUDE_MEDIA') ?? false;
+export const ERP_IMPORT_INCLUDE_MEDIA = erpImportIncludeMedia;
+export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || '').trim());
+export const ERP_IMPORT_USERNAME = (process.env.ERP_IMPORT_USERNAME || '').trim();
+export const ERP_IMPORT_PASSWORD = (process.env.ERP_IMPORT_PASSWORD || '').trim();
+export const ERP_IMPORT_FORM_FIELD = (process.env.ERP_IMPORT_FORM_FIELD || 'file').trim() || 'file';
+export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
+  process.env.ERP_IMPORT_TIMEOUT_MS,
+  30000,
+  'ERP_IMPORT_TIMEOUT_MS'
+);
+
 export interface ShopwareCredentialsConfig {
   clientId?: string;
   clientSecret?: string;
@@ -347,4 +361,3 @@ export function logShopwareConfigIssues(
 
   return issues;
 }
-

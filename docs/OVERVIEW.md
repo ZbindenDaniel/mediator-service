@@ -56,6 +56,19 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
   frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before
   ingestion.
 
+## ERP Sync Bridge
+- `POST /api/sync/erp` accepts `{ actor, itemIds? }` and reuses the export serializer to assemble `items.csv` plus `boxes.csv`,
+  producing a ZIP archive when media uploads are enabled. Item filters narrow the export set without changing column ordering
+  or Langtext serialization.
+- Environment variables:
+  - `ERP_IMPORT_URL` (required): ERP endpoint used by the action's `curl` invocation.
+  - `ERP_IMPORT_USERNAME` / `ERP_IMPORT_PASSWORD`: optional basic-auth credentials.
+  - `ERP_IMPORT_FORM_FIELD`: multipart field name for the staged file (defaults to `file`).
+  - `ERP_IMPORT_INCLUDE_MEDIA`: toggles ZIP output with media/ folder linkage instead of a CSV-only upload.
+  - `ERP_IMPORT_TIMEOUT_MS`: max execution time for the `curl` request in milliseconds.
+- Payload mapping: `curl -X POST $ERP_IMPORT_URL -f -F "${ERP_IMPORT_FORM_FIELD}=@items.csv;type=text/csv" -F "actor=<actor>" [-u user:pass]`.
+  When media is enabled the action uploads the staged ZIP (`items.csv`, `boxes.csv`, optional `media/`) under the same field.
+
 ## Next Steps
 - Finish wiring the new `AgenticModelInvoker` through backend services so queue workers and actions invoke models without the
   HTTP proxy fallback.

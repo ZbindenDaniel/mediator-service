@@ -92,4 +92,53 @@ describe('listItemsForExport ordering', () => {
 
     expect(orderedItemUUIDs).toEqual(['I-EXPORT-0002', 'I-EXPORT-0003', 'I-EXPORT-0001']);
   });
+
+  test('filters exports when itemIds are provided', () => {
+    const baseTimestamp = new Date('2024-02-01T00:00:00.000Z');
+
+    const fixtures = [
+      {
+        ItemUUID: 'I-EXPORT-0001',
+        Artikel_Nummer: 'B-200',
+        Datum_erfasst: new Date(baseTimestamp.getTime() + 2),
+      },
+      {
+        ItemUUID: 'I-EXPORT-0002',
+        Artikel_Nummer: 'C-300',
+        Datum_erfasst: new Date(baseTimestamp.getTime() + 3),
+      },
+      {
+        ItemUUID: 'I-EXPORT-0003',
+        Artikel_Nummer: 'A-100',
+        Datum_erfasst: new Date(baseTimestamp.getTime() + 1),
+      },
+    ];
+
+    try {
+      for (const fixture of fixtures) {
+        persistItem({
+          ItemUUID: fixture.ItemUUID,
+          Artikel_Nummer: fixture.Artikel_Nummer,
+          BoxID: null,
+          Location: null,
+          UpdatedAt: fixture.Datum_erfasst,
+          Datum_erfasst: fixture.Datum_erfasst,
+          Auf_Lager: 1,
+          Langtext: null,
+        });
+      }
+    } catch (error) {
+      console.error('[list-items-for-export-order.test] Failed to persist fixtures for filtering', error);
+      throw error;
+    }
+
+    const filtered = listItemsForExport.all({
+      createdAfter: null,
+      updatedAfter: null,
+      itemIds: ['I-EXPORT-0003', 'I-EXPORT-0001', 'I-EXPORT-0003 ']
+    });
+    const filteredItemUUIDs = filtered.map((row: any) => row.ItemUUID);
+
+    expect(filteredItemUUIDs).toEqual(['I-EXPORT-0003', 'I-EXPORT-0001']);
+  });
 });
