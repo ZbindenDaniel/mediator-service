@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import type { AgenticRunStatus, Item } from '../../../models';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import BoxColorTag from './BoxColorTag';
+import QualityBadge from './QualityBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
@@ -88,6 +89,7 @@ export default function ItemList({
             <th className="col-location">Lagerort</th>
             <th className="col-agentic optional-column">Agentic</th>
             <th className="col-stock optional-column">Auf Lager</th>
+            <th className="col-quality optional-column">Qualität</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
           </tr>
         </thead>
@@ -112,6 +114,7 @@ export default function ItemList({
                 : (typeof it.Unterkategorien_A === 'string' ? it.Unterkategorien_A : null);
             const agenticStatus = (it.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus | null;
             const agenticLabel = describeAgenticStatus(agenticStatus);
+            const qualityValue = typeof it.Quality === 'number' ? it.Quality : null;
 
             return (
               <tr
@@ -160,6 +163,9 @@ export default function ItemList({
                 </td>
                 <td className="col-agentic optional-column">{agenticLabel}</td>
                 <td className="col-stock optional-column">{stockValue ?? '—'}</td>
+                <td className="col-quality optional-column">
+                  <QualityBadge compact value={qualityValue} />
+                </td>
                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
               </tr>
             );

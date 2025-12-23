@@ -21,6 +21,7 @@ import {
   isItemEinheit,
   normalizeAgenticRunStatus
 } from '../../../models';
+import { describeQuality, QUALITY_DEFAULT } from '../../../models/quality';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -43,6 +44,7 @@ import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
+import QualityBadge from './QualityBadge';
 
 interface Props {
   itemId: string;
@@ -670,6 +672,8 @@ export default function ItemDetail({ itemId }: Props) {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
+
+  const qualitySummary = useMemo(() => describeQuality(item?.Quality ?? QUALITY_DEFAULT), [item?.Quality]);
 
   const { unter: unterCategoryLookup } = categoryLookups;
 
@@ -1776,7 +1780,12 @@ export default function ItemDetail({ itemId }: Props) {
                 </button>
               </div>
               
-              <h2>Artikel <span className="muted">({item.ItemUUID})</span></h2>
+              <h2 className="item-detail__title">
+                Artikel <span className="muted">({item.ItemUUID})</span>
+                <span style={{ marginLeft: '8px' }}>
+                  <QualityBadge compact value={qualitySummary.value} />
+                </span>
+              </h2>
               <section className="item-media-section">
                 <h3>Medien</h3>
                 <ItemMediaGallery

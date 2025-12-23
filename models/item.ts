@@ -1,6 +1,7 @@
 // TODO(agent): Track Langtext payload migration and remove legacy fallback types when safe.
 // TODO(agent): Remove ImageNames serialization once assets migrate to dedicated tables.
 // TODO(agentic-status-model): Consider splitting agentic metadata into a dedicated view model to avoid bloating Item shape.
+// TODO(quality-metadata): Align Quality field naming with ERP schema once upstream attributes are finalised.
 import type { AgenticRunStatus } from './agentic-statuses';
 export enum ItemEinheit {
   Stk = 'Stk',
@@ -25,6 +26,7 @@ export interface ItemInstance {
   Datum_erfasst?: Date;
   Auf_Lager?: number;
   ShopwareVariantId?: string | null;
+  Quality?: number | null;
 }
 
 export type LangtextPayload = Record<string, string>;
@@ -52,6 +54,7 @@ export interface ItemRef {
   Einheit?: ItemEinheit;
   EntityType?: string;
   ShopwareProductId?: string | null;
+  Quality?: number | null;
 }
 
 // TODO(agent): Verify Item metadata typing whenever export/import parity requirements evolve.

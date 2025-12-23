@@ -1,0 +1,67 @@
+// TODO(quality-scale): Revisit quality labels and thresholds when merchandising finalizes the rubric.
+export const QUALITY_MIN = 1 as const;
+export const QUALITY_MAX = 5 as const;
+export const QUALITY_DEFAULT = 3 as const;
+
+export const QUALITY_COLOR_MAP: Record<number, 'purple' | 'red' | 'yellow' | 'orange' | 'green'> = {
+  1: 'purple',
+  2: 'red',
+  3: 'yellow',
+  4: 'orange',
+  5: 'green'
+};
+
+export const QUALITY_LABELS: Record<number, string> = {
+  1: 'Ausgemustert',
+  2: 'Überarbeiten',
+  3: 'Standard',
+  4: 'Gut',
+  5: 'Neuwertig'
+};
+
+export function normalizeQuality(
+  value: unknown,
+  logger: Pick<Console, 'warn' | 'error'> = console
+): number {
+  try {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return clampQuality(Math.round(value));
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return QUALITY_DEFAULT;
+      }
+      const parsed = Number.parseInt(trimmed, 10);
+      if (Number.isNaN(parsed)) {
+        logger.warn?.('[quality] Ignoring non-numeric quality value', { value });
+        return QUALITY_DEFAULT;
+      }
+      return clampQuality(parsed);
+    }
+    if (value === null || value === undefined) {
+      return QUALITY_DEFAULT;
+    }
+    logger.warn?.('[quality] Unexpected quality type, applying default', { type: typeof value });
+  } catch (error) {
+    logger.error?.('[quality] Failed to normalize quality value', error);
+  }
+  return QUALITY_DEFAULT;
+}
+
+function clampQuality(value: number): number {
+  if (value < QUALITY_MIN) {
+    return QUALITY_MIN;
+  }
+  if (value > QUALITY_MAX) {
+    return QUALITY_MAX;
+  }
+  return value;
+}
+
+export function describeQuality(value: unknown): { value: number; label: string; color: string } {
+  const normalized = normalizeQuality(value);
+  const label = QUALITY_LABELS[normalized] ?? QUALITY_LABELS[QUALITY_DEFAULT];
+  const color = QUALITY_COLOR_MAP[normalized] ?? QUALITY_COLOR_MAP[QUALITY_DEFAULT];
+  return { value: normalized, label, color };
+}
