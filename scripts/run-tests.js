@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+// TODO(agent): Keep the Jest helper exposure obvious so future harness updates remain straightforward.
 let ts;
 try {
   ts = require('typescript');
@@ -20,6 +21,10 @@ try {
 }
 const harness = require('../test/harness');
 const { runSuite, rootSuite } = harness;
+
+if (harness.jest) {
+  global.jest = harness.jest;
+}
 
 const harnessGlobals = ['describe', 'test', 'it', 'beforeAll', 'afterAll', 'beforeEach', 'afterEach', 'expect', 'jest'];
 for (const key of harnessGlobals) {
