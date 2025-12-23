@@ -5,6 +5,7 @@ import path from 'path';
 // TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
 // TODO(agent): Audit ImageNames persistence once asset synchronization tracks discrete files.
 // TODO(agent): Fold location bootstrap seeding into the formal migration path once Postgres becomes the primary store.
+// TODO(quality-migration): Confirm Quality defaults remain accurate once upstream ERP integration defines quality grades.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -29,6 +30,7 @@ import {
   resolveEventLogLevel,
   itemCategories
 } from '../models';
+import { normalizeQuality, QUALITY_DEFAULT } from '../models/quality';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
 import { resolveStandortLabel } from './standort-label';
 
@@ -380,6 +382,7 @@ CREATE TABLE IF NOT EXISTS item_refs (
   Hauptkategorien_B TEXT,
   Unterkategorien_B TEXT,
   Veröffentlicht_Status TEXT,
+  Quality INTEGER NOT NULL DEFAULT 3,
   Shopartikel INTEGER,
   Artikeltyp TEXT,
   Einheit TEXT,
@@ -397,6 +400,7 @@ CREATE TABLE IF NOT EXISTS items (
   UpdatedAt TEXT NOT NULL,
   Datum_erfasst TEXT,
   Auf_Lager INTEGER,
+  Quality INTEGER NOT NULL DEFAULT 3,
   ShopwareVariantId TEXT,
   FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE SET NULL ON UPDATE CASCADE,
   FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE
@@ -410,13 +414,13 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Artikel_Nummer, Grafikname, ImageNames, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
     Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
     Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
-    Veröffentlicht_Status, Shopartikel, Artikeltyp, Einheit, EntityType, ShopwareProductId
+    Veröffentlicht_Status, Quality, Shopartikel, Artikeltyp, Einheit, EntityType, ShopwareProductId
   )
   VALUES (
     @Artikel_Nummer, @Grafikname, @ImageNames, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
     @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
     @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
-    @Veröffentlicht_Status, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @ShopwareProductId
+    @Veröffentlicht_Status, @Quality, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @ShopwareProductId
   )
   ON CONFLICT(Artikel_Nummer) DO UPDATE SET
     Grafikname=excluded.Grafikname,
@@ -435,6 +439,7 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Hauptkategorien_B=excluded.Hauptkategorien_B,
     Unterkategorien_B=excluded.Unterkategorien_B,
     Veröffentlicht_Status=excluded.Veröffentlicht_Status,
+    Quality=excluded.Quality,
     Shopartikel=excluded.Shopartikel,
     Artikeltyp=excluded.Artikeltyp,
     Einheit=excluded.Einheit,
@@ -444,10 +449,10 @@ const UPSERT_ITEM_REFERENCE_SQL = `
 
 const UPSERT_ITEM_INSTANCE_SQL = `
   INSERT INTO items (
-    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager, ShopwareVariantId
+    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager, Quality, ShopwareVariantId
   )
   VALUES (
-    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager, @ShopwareVariantId
+    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager, @Quality, @ShopwareVariantId
   )
   ON CONFLICT(ItemUUID) DO UPDATE SET
     Artikel_Nummer=excluded.Artikel_Nummer,
@@ -456,6 +461,7 @@ const UPSERT_ITEM_INSTANCE_SQL = `
     UpdatedAt=excluded.UpdatedAt,
     Datum_erfasst=excluded.Datum_erfasst,
     Auf_Lager=excluded.Auf_Lager,
+    Quality=excluded.Quality,
     ShopwareVariantId=excluded.ShopwareVariantId
 `;
 
@@ -467,6 +473,7 @@ type ItemInstanceRow = {
   UpdatedAt: string;
   Datum_erfasst: string | null;
   Auf_Lager: number | null;
+  Quality: number;
   ShopwareVariantId: string | null;
 };
 
@@ -488,6 +495,7 @@ type ItemRefRow = {
   Hauptkategorien_B: number | null;
   Unterkategorien_B: number | null;
   Veröffentlicht_Status: string | null;
+  Quality: number;
   Shopartikel: number | null;
   Artikeltyp: string | null;
   Einheit: string | null;
@@ -624,8 +632,19 @@ function toIsoString(value: unknown): string | null {
   return null;
 }
 
+function resolveQualityValue(value: unknown, context: string): number {
+  try {
+    const normalized = normalizeQuality(value, console);
+    return normalized ?? QUALITY_DEFAULT;
+  } catch (error) {
+    console.error('[db] Failed to normalize quality value, applying default', { context, error });
+    return QUALITY_DEFAULT;
+  }
+}
+
 function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
   const artikelNummer = asNullableTrimmedString(instance.Artikel_Nummer);
+  const resolvedQuality = resolveQualityValue((instance as ItemInstance & { Quality?: unknown }).Quality, 'prepareInstanceRow');
   return {
     ItemUUID: instance.ItemUUID,
     Artikel_Nummer: artikelNummer,
@@ -634,6 +653,7 @@ function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
     UpdatedAt: toIsoString(instance.UpdatedAt) || new Date().toISOString(),
     Datum_erfasst: toIsoString(instance.Datum_erfasst),
     Auf_Lager: asNullableInteger(instance.Auf_Lager),
+    Quality: resolvedQuality,
     ShopwareVariantId: asNullableTrimmedString((instance as ItemInstance & { ShopwareVariantId?: string | null }).ShopwareVariantId)
   };
 }
@@ -648,6 +668,7 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
     context: 'prepareRefRow',
     artikelNummer
   });
+  const resolvedQuality = resolveQualityValue((ref as ItemRef & { Quality?: unknown }).Quality, 'prepareRefRow');
   return {
     Artikel_Nummer: artikelNummer,
     Grafikname: asNullableString(ref.Grafikname),
@@ -666,6 +687,7 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
     Hauptkategorien_B: asNullableInteger(ref.Hauptkategorien_B),
     Unterkategorien_B: asNullableInteger(ref.Unterkategorien_B),
     Veröffentlicht_Status: normalizePublishedValue(ref.Veröffentlicht_Status),
+    Quality: resolvedQuality,
     Shopartikel: asNullableInteger(ref.Shopartikel),
     Artikeltyp: asNullableString(ref.Artikeltyp),
     Einheit: asNullableString(ref.Einheit),
@@ -831,6 +853,50 @@ function ensureItemShopwareColumns(database: Database.Database = db): void {
 
 ensureItemShopwareColumns(db);
 
+function ensureItemQualityColumns(database: Database.Database = db): void {
+  const qualityDefault = QUALITY_DEFAULT;
+
+  const addQualityColumn = (table: 'items' | 'item_refs') => {
+    try {
+      database.prepare(`ALTER TABLE ${table} ADD COLUMN Quality INTEGER NOT NULL DEFAULT ${qualityDefault}`).run();
+      console.info('[db] Added Quality column', { table });
+    } catch (err) {
+      console.error('Failed to add Quality column', { table, error: err });
+      throw err;
+    }
+  };
+
+  const backfillQuality = (table: 'items' | 'item_refs') => {
+    try {
+      database.prepare(`UPDATE ${table} SET Quality = ${qualityDefault} WHERE Quality IS NULL`).run();
+      console.info('[db] Backfilled missing Quality values', { table });
+    } catch (err) {
+      console.error('Failed to backfill Quality values', { table, error: err });
+      throw err;
+    }
+  };
+
+  const inspectTable = (table: 'items' | 'item_refs') => {
+    let columns: Array<{ name: string }>; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+    try {
+      columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    } catch (err) {
+      console.error('Failed to inspect table for Quality column', { table, error: err });
+      throw err;
+    }
+    const hasQuality = columns.some((column) => column.name === 'Quality');
+    if (!hasQuality) {
+      addQualityColumn(table);
+    }
+    backfillQuality(table);
+  };
+
+  inspectTable('item_refs');
+  inspectTable('items');
+}
+
+ensureItemQualityColumns(db);
+
 let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
 let getItemReferenceStatement: Database.Statement;
@@ -861,6 +927,7 @@ try {
       Hauptkategorien_B,
       Unterkategorien_B,
       Veröffentlicht_Status,
+      Quality,
       Shopartikel,
       Artikeltyp,
       Einheit,
@@ -960,6 +1027,7 @@ SELECT
   i.UpdatedAt AS UpdatedAt,
   i.Datum_erfasst AS Datum_erfasst,
   i.Auf_Lager AS Auf_Lager,
+  CAST(COALESCE(r.Quality, i.Quality, ${QUALITY_DEFAULT}) AS INTEGER) AS Quality,
   i.ShopwareVariantId AS ShopwareVariantId,
   r.Grafikname AS Grafikname,
   r.ImageNames AS ImageNames,
@@ -2364,13 +2432,13 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
 ])}
 ${ITEM_JOIN_WITH_BOX}
 LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
-WHERE (
-  @searchTerm IS NULL
-  OR @searchTerm = ''
-  OR LOWER(COALESCE(i.Artikelbeschreibung, '')) LIKE @searchTerm
-  OR LOWER(COALESCE(i.Artikel_Nummer, '')) LIKE @searchTerm
-  OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
-)
+  WHERE (
+    @searchTerm IS NULL
+    OR @searchTerm = ''
+    OR LOWER(COALESCE(r.Artikelbeschreibung, '')) LIKE @searchTerm
+    OR LOWER(COALESCE(i.Artikel_Nummer, '')) LIKE @searchTerm
+    OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
+  )
 AND (
   @boxFilter IS NULL
   OR @boxFilter = ''

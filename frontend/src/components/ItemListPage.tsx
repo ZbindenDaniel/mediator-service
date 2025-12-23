@@ -5,6 +5,7 @@ import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUSES
 } from '../../../models';
+import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS, QUALITY_MIN } from '../../../models/quality';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import {
   clearItemListFilters,
@@ -29,6 +30,126 @@ import LoadingPage from './LoadingPage';
 // TODO(item-entity-filter): Confirm UX for reference-only rows when enriching the item repository view.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
+const resolveItemQuality = (value: unknown) => normalizeQuality(value ?? QUALITY_DEFAULT, console);
+
+export interface ItemListComputationOptions {
+  items: Item[];
+  showUnplaced: boolean;
+  normalizedSearch: string;
+  normalizedSubcategoryFilter: string;
+  normalizedBoxFilter: string;
+  stockFilter: 'any' | 'instock' | 'outofstock';
+  normalizedAgenticFilter: AgenticRunStatus | null;
+  sortKey: ItemListSortKey;
+  sortDirection: 'asc' | 'desc';
+  qualityThreshold: number;
+}
+
+export function filterAndSortItems(options: ItemListComputationOptions): Item[] {
+  const {
+    items,
+    showUnplaced,
+    normalizedSearch,
+    normalizedSubcategoryFilter,
+    normalizedBoxFilter,
+    stockFilter,
+    normalizedAgenticFilter,
+    sortKey,
+    sortDirection,
+    qualityThreshold
+  } = options;
+
+  const baseItems = showUnplaced ? items.filter((it) => !it.BoxID) : items;
+  const searched = baseItems.filter((item) => {
+    const description = item.Artikelbeschreibung?.toLowerCase() ?? '';
+    const number = item.Artikel_Nummer?.toLowerCase() ?? '';
+    const uuid = item.ItemUUID.toLowerCase();
+    const matchesSearch = normalizedSearch
+      ? description.includes(normalizedSearch)
+      || number.includes(normalizedSearch)
+      || uuid.includes(normalizedSearch)
+      : true;
+    const matchesSubcategory = normalizedSubcategoryFilter
+      ? (item.Unterkategorien_A?.toString().toLowerCase() ?? '').includes(normalizedSubcategoryFilter)
+      : true;
+    const matchesBox = normalizedBoxFilter
+      ? (item.BoxID?.toLowerCase() ?? '').includes(normalizedBoxFilter)
+      : true;
+    const stockValue = typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0;
+    const matchesStock =
+      stockFilter === 'instock'
+        ? stockValue > 0
+        : stockFilter === 'outofstock'
+          ? stockValue <= 0
+          : true;
+    const agenticStatus = (item.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus;
+    const matchesAgenticStatus = normalizedAgenticFilter
+      ? agenticStatus === normalizedAgenticFilter
+      : true;
+    const matchesQuality = resolveItemQuality(item.Quality) >= qualityThreshold;
+
+    return matchesSearch && matchesSubcategory && matchesBox && matchesStock && matchesAgenticStatus && matchesQuality;
+  });
+
+  const sorted = [...searched].sort((a, b) => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    if (sortKey === 'stock') {
+      const aStock = typeof a.Auf_Lager === 'number' ? a.Auf_Lager : -Infinity;
+      const bStock = typeof b.Auf_Lager === 'number' ? b.Auf_Lager : -Infinity;
+      if (aStock === bStock) {
+        return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+      }
+      return (aStock - bStock) * direction;
+    }
+
+    if (sortKey === 'agenticStatus') {
+      const statusOrder = (status: AgenticRunStatus | null | undefined) => {
+        const resolved = status ?? AGENTIC_RUN_STATUS_NOT_STARTED;
+        const idx = AGENTIC_RUN_STATUSES.indexOf(resolved);
+        return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+      };
+      const aStatusOrder = statusOrder(a.AgenticStatus as AgenticRunStatus | null | undefined);
+      const bStatusOrder = statusOrder(b.AgenticStatus as AgenticRunStatus | null | undefined);
+      if (aStatusOrder === bStatusOrder) {
+        return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+      }
+      return (aStatusOrder - bStatusOrder) * direction;
+    }
+
+    if (sortKey === 'quality') {
+      const aQuality = resolveItemQuality(a.Quality);
+      const bQuality = resolveItemQuality(b.Quality);
+      if (aQuality === bQuality) {
+        return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+      }
+      return (aQuality - bQuality) * direction;
+    }
+
+    const valueFor = (item: Item) => {
+      switch (sortKey) {
+        case 'artikelnummer':
+          return item.Artikel_Nummer?.trim().toLowerCase() ?? '';
+        case 'box':
+          return item.BoxID?.trim().toLowerCase() ?? '';
+        case 'uuid':
+          return item.ItemUUID?.trim().toLowerCase() ?? '';
+        case 'subcategory':
+          return item.Unterkategorien_A?.toString().toLowerCase() ?? '';
+        case 'artikelbeschreibung':
+        default:
+          return item.Artikelbeschreibung?.trim().toLowerCase() ?? '';
+      }
+    };
+    const aVal = valueFor(a);
+    const bVal = valueFor(b);
+    if (aVal === bVal) {
+      return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+    }
+    return aVal.localeCompare(bVal) * direction;
+  });
+
+  return sorted;
+}
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -45,6 +166,7 @@ export default function ItemListPage() {
   const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
+  const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
   const [filtersReady, setFiltersReady] = useState(false);
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -59,6 +181,7 @@ export default function ItemListPage() {
       setSortKey(storedFilters.sortKey);
       setSortDirection(storedFilters.sortDirection);
       setEntityFilter(storedFilters.entityFilter);
+      setQualityThreshold(storedFilters.qualityThreshold);
       console.info('Restored item list filters from localStorage');
     }
     latestFiltersRef.current = storedFilters || ITEM_LIST_DEFAULT_FILTERS;
@@ -74,6 +197,7 @@ export default function ItemListPage() {
       setSortKey(ITEM_LIST_DEFAULT_FILTERS.sortKey);
       setSortDirection(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
       setEntityFilter(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
+      setQualityThreshold(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
       clearItemListFilters();
       setSelectedIds(new Set());
       console.info('Item list filters reset to defaults via header');
@@ -90,8 +214,9 @@ export default function ItemListPage() {
     showUnplaced,
     entityFilter,
     sortKey,
-    sortDirection
-  }), [searchTerm, boxFilter, agenticStatusFilter, showUnplaced, entityFilter, sortKey, sortDirection]);
+    sortDirection,
+    qualityThreshold
+  }), [searchTerm, boxFilter, agenticStatusFilter, showUnplaced, entityFilter, sortKey, sortDirection, qualityThreshold]);
 
   useEffect(() => {
     latestFiltersRef.current = currentFilters;
@@ -125,6 +250,9 @@ export default function ItemListPage() {
       }
       query.set('sortKey', effectiveFilters.sortKey);
       query.set('sortDirection', effectiveFilters.sortDirection);
+      if (effectiveFilters.qualityThreshold > QUALITY_MIN) {
+        query.set('qualityAtLeast', effectiveFilters.qualityThreshold.toString());
+      }
       const response = await fetch(`/api/items?${query.toString()}`);
       if (!response.ok) {
         console.error('load items failed', response.status);
@@ -209,98 +337,33 @@ export default function ItemListPage() {
     };
   }, [currentFilters, filtersReady]);
 
-  const filtered = useMemo(() => {
-    const baseItems = showUnplaced ? items.filter((it) => !it.BoxID) : items;
-    const searched = baseItems.filter((item) => {
-      const description = item.Artikelbeschreibung?.toLowerCase() ?? '';
-      const number = item.Artikel_Nummer?.toLowerCase() ?? '';
-      const uuid = item.ItemUUID.toLowerCase();
-      const matchesSearch = normalizedSearch
-        ? description.includes(normalizedSearch)
-        || number.includes(normalizedSearch)
-        || uuid.includes(normalizedSearch)
-        : true;
-      const matchesSubcategory = normalizedSubcategoryFilter
-        ? (item.Unterkategorien_A?.toString().toLowerCase() ?? '').includes(normalizedSubcategoryFilter)
-        : true;
-      const matchesBox = normalizedBoxFilter
-        ? (item.BoxID?.toLowerCase() ?? '').includes(normalizedBoxFilter)
-        : true;
-      const stockValue = typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0;
-      const matchesStock =
-        stockFilter === 'instock'
-          ? stockValue > 0
-          : stockFilter === 'outofstock'
-            ? stockValue <= 0
-            : true;
-      const agenticStatus = (item.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus;
-      const matchesAgenticStatus = normalizedAgenticFilter
-        ? agenticStatus === normalizedAgenticFilter
-        : true;
-
-      return matchesSearch && matchesSubcategory && matchesBox && matchesStock && matchesAgenticStatus;
-    });
-
-    const sorted = [...searched].sort((a, b) => {
-      const direction = sortDirection === 'asc' ? 1 : -1;
-      if (sortKey === 'stock') {
-        const aStock = typeof a.Auf_Lager === 'number' ? a.Auf_Lager : -Infinity;
-        const bStock = typeof b.Auf_Lager === 'number' ? b.Auf_Lager : -Infinity;
-        if (aStock === bStock) {
-          return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
-        }
-        return (aStock - bStock) * direction;
-      }
-
-      if (sortKey === 'agenticStatus') {
-        const statusOrder = (status: AgenticRunStatus | null | undefined) => {
-          const resolved = status ?? AGENTIC_RUN_STATUS_NOT_STARTED;
-          const idx = AGENTIC_RUN_STATUSES.indexOf(resolved);
-          return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
-        };
-        const aStatusOrder = statusOrder(a.AgenticStatus as AgenticRunStatus | null | undefined);
-        const bStatusOrder = statusOrder(b.AgenticStatus as AgenticRunStatus | null | undefined);
-        if (aStatusOrder === bStatusOrder) {
-          return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
-        }
-        return (aStatusOrder - bStatusOrder) * direction;
-      }
-
-      const valueFor = (item: Item) => {
-        switch (sortKey) {
-          case 'artikelnummer':
-            return item.Artikel_Nummer?.trim().toLowerCase() ?? '';
-          case 'box':
-            return item.BoxID?.trim().toLowerCase() ?? '';
-          case 'uuid':
-            return item.ItemUUID?.trim().toLowerCase() ?? '';
-          case 'subcategory':
-            return item.Unterkategorien_A?.toString().toLowerCase() ?? '';
-          case 'artikelbeschreibung':
-          default:
-            return item.Artikelbeschreibung?.trim().toLowerCase() ?? '';
-        }
-      };
-      const aVal = valueFor(a);
-      const bVal = valueFor(b);
-      if (aVal === bVal) {
-        return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
-      }
-      return aVal.localeCompare(bVal) * direction;
-    });
-
-    return sorted;
-  }, [
-    items,
-    normalizedBoxFilter,
-    normalizedAgenticFilter,
-    normalizedSearch,
-    normalizedSubcategoryFilter,
-    showUnplaced,
-    sortDirection,
-    sortKey,
-    stockFilter
-  ]);
+  const filtered = useMemo(
+    () =>
+      filterAndSortItems({
+        items,
+        showUnplaced,
+        normalizedSearch,
+        normalizedSubcategoryFilter,
+        normalizedBoxFilter,
+        stockFilter,
+        normalizedAgenticFilter,
+        sortKey,
+        sortDirection,
+        qualityThreshold
+      }),
+    [
+      items,
+      normalizedBoxFilter,
+      normalizedAgenticFilter,
+      normalizedSearch,
+      normalizedSubcategoryFilter,
+      showUnplaced,
+      sortDirection,
+      sortKey,
+      stockFilter,
+      qualityThreshold
+    ]
+  );
 
   const visibleIds = useMemo(() => filtered.map((item) => item.ItemUUID), [filtered]);
   const agenticStatusOptions = useMemo(() => [
@@ -403,6 +466,7 @@ export default function ItemListPage() {
                 <option value="artikelnummer">Artikelnummer</option>
                 <option value="box">Behälter</option>
                 <option value="agenticStatus">Agentic-Status</option>
+                <option value="quality">Qualität</option>
                 <option value="uuid">UUID</option>
                 <option value="stock">Bestand</option>
                 <option value="subcategory">Unterkategorie</option>
@@ -482,6 +546,25 @@ export default function ItemListPage() {
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
+            </label>
+          </div>
+          <div className='row'>
+            <label className="filter-control">
+              <span>Qualität ab</span>
+              <input
+                type="range"
+                min={QUALITY_MIN}
+                max={5}
+                step={1}
+                value={qualityThreshold}
+                onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console))}
+                aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
+              />
+              <div className="quality-slider__labels">
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <span key={`filter-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
+                ))}
+              </div>
             </label>
           </div>
           <div className='row'>

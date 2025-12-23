@@ -1,8 +1,10 @@
 import type { AgenticRunStatus } from '../../models';
 import { AGENTIC_RUN_STATUSES } from '../../models';
+import { normalizeQuality, QUALITY_LABELS, QUALITY_MIN } from '../../models/quality';
 import { describeAgenticStatus } from './agenticStatusLabels';
 
 // TODO(item-entity-filter): Consider centralizing filter type constants for cross-view reuse once repository navigation shares state.
+// TODO(filter-normalization): Extract shared filter parsing helpers so list pages stay aligned when new fields arrive.
 export type ItemListSortKey =
   | 'artikelbeschreibung'
   | 'artikelnummer'
@@ -10,7 +12,8 @@ export type ItemListSortKey =
   | 'uuid'
   | 'stock'
   | 'subcategory'
-  | 'agenticStatus';
+  | 'agenticStatus'
+  | 'quality';
 
 export type ItemListFilters = {
   searchTerm: string;
@@ -20,6 +23,7 @@ export type ItemListFilters = {
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   entityFilter: 'all' | 'instances' | 'references';
+  qualityThreshold: number;
 };
 
 export type ItemListFilterChangeDetail = {
@@ -38,7 +42,8 @@ const SORT_KEYS: ItemListSortKey[] = [
   'uuid',
   'stock',
   'subcategory',
-  'agenticStatus'
+  'agenticStatus',
+  'quality'
 ];
 
 const DEFAULT_FILTERS: ItemListFilters = {
@@ -48,7 +53,8 @@ const DEFAULT_FILTERS: ItemListFilters = {
   showUnplaced: false,
   sortKey: 'artikelbeschreibung',
   sortDirection: 'asc',
-  entityFilter: 'instances'
+  entityFilter: 'instances',
+  qualityThreshold: QUALITY_MIN
 };
 
 export function getDefaultItemListFilters(): ItemListFilters {
@@ -67,6 +73,7 @@ export function hasNonDefaultFilters(
     || filters.sortKey !== defaults.sortKey
     || filters.sortDirection !== defaults.sortDirection
     || filters.entityFilter !== defaults.entityFilter
+    || filters.qualityThreshold !== defaults.qualityThreshold
   );
 }
 
@@ -86,6 +93,10 @@ export function getActiveFilterDescriptions(
       ? 'Alle Agentic-Status'
       : describeAgenticStatus(filters.agenticStatusFilter);
     active.push(`Agentic: ${statusLabel}`);
+  }
+  if (filters.qualityThreshold > defaults.qualityThreshold) {
+    const label = QUALITY_LABELS[filters.qualityThreshold] ?? `mind. ${filters.qualityThreshold}`;
+    active.push(`Qualität: ${label} oder besser`);
   }
   if (filters.showUnplaced !== defaults.showUnplaced) {
     active.push('Nur unplatzierte Artikel');
@@ -121,30 +132,41 @@ export function loadItemListFilters(
       return null;
     }
     const merged: ItemListFilters = { ...defaults };
+
     if (typeof parsed.searchTerm === 'string') {
       merged.searchTerm = parsed.searchTerm;
     }
+
     if (typeof parsed.boxFilter === 'string') {
       merged.boxFilter = parsed.boxFilter;
     }
+
+    if (typeof parsed.qualityThreshold === 'number') {
+      merged.qualityThreshold = normalizeQuality(parsed.qualityThreshold, logger);
+    }
+
     if (parsed.agenticStatusFilter === 'any' || AGENTIC_RUN_STATUSES.includes(parsed.agenticStatusFilter as AgenticRunStatus)) {
       merged.agenticStatusFilter = parsed.agenticStatusFilter as ItemListFilters['agenticStatusFilter'];
     } else if (parsed.agenticStatusFilter !== undefined) {
       logger.warn?.('Ignoring invalid stored agentic status filter', parsed.agenticStatusFilter);
     }
+
     if (typeof parsed.showUnplaced === 'boolean') {
       merged.showUnplaced = parsed.showUnplaced;
     }
+
     if (typeof parsed.sortKey === 'string' && SORT_KEYS.includes(parsed.sortKey as ItemListSortKey)) {
       merged.sortKey = parsed.sortKey as ItemListSortKey;
     } else if (parsed.sortKey !== undefined) {
       logger.warn?.('Ignoring invalid stored sort key', parsed.sortKey);
     }
+
     if (parsed.sortDirection === 'asc' || parsed.sortDirection === 'desc') {
       merged.sortDirection = parsed.sortDirection;
     } else if (parsed.sortDirection !== undefined) {
       logger.warn?.('Ignoring invalid stored sort direction', parsed.sortDirection);
     }
+
     if (
       parsed.entityFilter === 'all'
       || parsed.entityFilter === 'instances'
@@ -154,6 +176,7 @@ export function loadItemListFilters(
     } else if (parsed.entityFilter !== undefined) {
       logger.warn?.('Ignoring invalid stored entity filter', parsed.entityFilter);
     }
+
     return merged;
   } catch (err) {
     logger.error?.('Failed to load stored item list filters', err);

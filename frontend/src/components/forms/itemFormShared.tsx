@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { AgenticRunStatus, Item, ItemRef } from '../../../../models';
 import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../../models';
+import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS } from '../../../../models/quality';
 import { ensureUser, getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import { buildItemCategoryLookups } from '../../lib/categoryLookup';
@@ -8,6 +9,7 @@ import type { ConfirmDialogOptions } from '../dialog';
 import { dialogService } from '../dialog';
 import { parseLangtext, stringifyLangtextEntries } from '../../lib/langtext';
 import { metaDataKeys } from '../../data/metaDataKeys';
+import QualityBadge from '../QualityBadge';
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -25,6 +27,15 @@ function normalisePhotoSeedValue(candidate: unknown): string | null {
 
 function normalisePhotoSeedList(seeds?: readonly PhotoSeedCandidate[]): (string | null)[] {
   return PHOTO_FIELD_KEYS.map((_, index) => normalisePhotoSeedValue(seeds?.[index]));
+}
+
+function normalizeQualityForForm(value: unknown, context: string): number {
+  try {
+    return normalizeQuality(value, console);
+  } catch (error) {
+    console.error('[itemForm] Failed to normalize quality value', { context, error });
+    return QUALITY_DEFAULT;
+  }
 }
 
 export interface ItemFormData extends Item {
@@ -124,9 +135,11 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
   const [seededPhotos, setSeededPhotos] = useState<(string | null)[]>(initialPhotoSeedsRef.current);
   const [form, setForm] = useState<Partial<ItemFormData>>(() => {
     const initialEinheit = initialItem ? resolveFormEinheit(initialItem.Einheit, 'initialState') : ITEM_FORM_DEFAULT_EINHEIT;
+    const initialQuality = normalizeQualityForForm(initialItem?.Quality ?? QUALITY_DEFAULT, 'initialState');
     const draft: Partial<ItemFormData> = {
       ...initialItem,
-      Einheit: initialEinheit
+      Einheit: initialEinheit,
+      Quality: initialQuality
     };
     const draftRecord = draft as Record<PhotoFieldKey, string | null | undefined>;
     initialPhotoSeedsRef.current.forEach((seed, index) => {
@@ -141,17 +154,23 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
     return draft;
   });
   const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    const normalizedValue = key === 'Quality' ? (normalizeQualityForForm(value, 'update') as ItemFormData[K]) : value;
+    setForm((prev) => ({ ...prev, [key]: normalizedValue }));
   }, []);
 
   const mergeForm = useCallback((next: Partial<ItemFormData>) => {
     setForm((prev) => {
       const requestedEinheit = next.Einheit ?? prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT;
       const normalizedEinheit = resolveFormEinheit(requestedEinheit, 'mergeForm');
+      const normalizedQuality = normalizeQualityForForm(
+        next.Quality ?? prev.Quality ?? QUALITY_DEFAULT,
+        'mergeForm'
+      );
       return {
         ...prev,
         ...next,
-        Einheit: normalizedEinheit
+        Einheit: normalizedEinheit,
+        Quality: normalizedQuality
       };
     });
   }, []);
@@ -159,7 +178,8 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
   const resetForm = useCallback((next: Partial<ItemFormData>) => {
     setForm({
       ...next,
-      Einheit: resolveFormEinheit(next.Einheit, 'resetForm')
+      Einheit: resolveFormEinheit(next.Einheit, 'resetForm'),
+      Quality: normalizeQualityForForm(next.Quality ?? QUALITY_DEFAULT, 'resetForm')
     });
   }, []);
 
@@ -428,6 +448,7 @@ export function ItemDetailsFields({
   const [langtextFocusKey, setLangtextFocusKey] = useState<string | null>(null);
   const langtextValueRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const langtextFieldIdPrefix = useId();
+  const qualitySummary = useMemo(() => describeQuality(form.Quality ?? QUALITY_DEFAULT), [form.Quality]);
 
   // TODO(langtext-type-guards): Consider splitting JSON and text Langtext editors into
   // dedicated components so union handling is localised and type-safe.
@@ -852,6 +873,15 @@ export function ItemDetailsFields({
     [buildUnterOptions, form.Hauptkategorien_B, form.Unterkategorien_B]
   );
 
+  const handleQualityChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const nextValue = normalizeQuality(event.target.value, console);
+      onUpdate('Quality', nextValue as ItemFormData['Quality']);
+    } catch (error) {
+      console.error('Failed to update quality value in item form', error);
+    }
+  }, [onUpdate]);
+
   useEffect(() => {
     if (typeof form.Hauptkategorien_A === 'number' && !categoryLookup.has(form.Hauptkategorien_A)) {
       console.warn('Missing Hauptkategorie mapping for Hauptkategorien_A', form.Hauptkategorien_A);
@@ -977,6 +1007,31 @@ export function ItemDetailsFields({
           </div>
         </div>
       )}
+
+      <div className="row">
+        <label>
+          Qualität
+        </label>
+        <div className="combined-input">
+          <input
+            type="range"
+            min={1}
+            max={5}
+            step={1}
+            value={qualitySummary.value}
+            onChange={handleQualityChange}
+            aria-valuetext={`${qualitySummary.label} (${qualitySummary.value})`}
+          />
+        </div>
+        <div className="quality-slider__labels">
+          {[1, 2, 3, 4, 5].map((level) => (
+            <span key={`quality-label-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
+          ))}
+        </div>
+        <div className="muted">
+          <QualityBadge compact labelPrefix="Qualität" value={qualitySummary.value} />
+        </div>
+      </div>
 
       <div className="row">
         <label>

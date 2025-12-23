@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit } from '../models';
+import { QUALITY_DEFAULT } from '../models/quality';
 
 const TEST_DB_FILE = path.join(__dirname, 'item-persistence-reference-behavior.sqlite');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
@@ -21,10 +22,10 @@ process.env.DB_PATH = TEST_DB_FILE;
 const { db, persistItemWithinTransaction } = require('../backend/db');
 
 const selectReference = db.prepare(
-  `SELECT Artikel_Nummer, Artikelbeschreibung, Kurzbeschreibung, Langtext, Hersteller, Verkaufspreis, Einheit, Shopartikel
+  `SELECT Artikel_Nummer, Artikelbeschreibung, Kurzbeschreibung, Langtext, Hersteller, Verkaufspreis, Einheit, Shopartikel, Quality
    FROM item_refs WHERE Artikel_Nummer = ?`
 );
-const selectInstance = db.prepare('SELECT Artikel_Nummer FROM items WHERE ItemUUID = ?');
+const selectInstance = db.prepare('SELECT Artikel_Nummer, Quality FROM items WHERE ItemUUID = ?');
 
 function clearDatabase(): void {
   db.exec('DELETE FROM events; DELETE FROM item_refs; DELETE FROM items; DELETE FROM boxes; DELETE FROM label_queue;');
@@ -78,6 +79,7 @@ describe('item persistence reference behavior', () => {
           Verkaufspreis: number | null;
           Einheit: string | null;
           Shopartikel: number | null;
+          Quality: number | null;
         }
       | undefined;
     expect(referenceRow).toEqual({
@@ -88,11 +90,12 @@ describe('item persistence reference behavior', () => {
       Hersteller: 'Test GmbH',
       Verkaufspreis: 5.75,
       Einheit: ItemEinheit.Stk,
-      Shopartikel: 1
+      Shopartikel: 1,
+      Quality: QUALITY_DEFAULT
     });
 
-    const instanceRow = selectInstance.get('I-DB-0001') as { Artikel_Nummer: string | null } | undefined;
-    expect(instanceRow).toEqual({ Artikel_Nummer: 'DB-REF-0001' });
+    const instanceRow = selectInstance.get('I-DB-0001') as { Artikel_Nummer: string | null; Quality: number } | undefined;
+    expect(instanceRow).toEqual({ Artikel_Nummer: 'DB-REF-0001', Quality: QUALITY_DEFAULT });
   });
 
   test('creating an item from an existing reference leaves the reference row untouched', () => {

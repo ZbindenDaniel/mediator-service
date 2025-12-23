@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, isItemEinheit } from '../../models';
 import type { Item } from '../../models';
+import { normalizeQuality, QUALITY_DEFAULT } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { MEDIA_DIR } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
@@ -372,6 +373,36 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 const DEFAULT_ITEM_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
+function resolveItemQualityValue(value: unknown, context: string): number {
+  try {
+    const candidate = value ?? QUALITY_DEFAULT;
+    return normalizeQuality(candidate, console);
+  } catch (error) {
+    console.error('[save-item] Failed to normalize quality value; using default.', { context, error });
+    return QUALITY_DEFAULT;
+  }
+}
+
+function resolveShopartikelFlag(value: unknown, quality: number): number {
+  const derivedFlag = quality < 3 ? 0 : 1;
+  try {
+    if (value === undefined || value === null || value === '') {
+      return derivedFlag;
+    }
+
+    const numericValue = typeof value === 'string' ? Number(value.trim()) : Number(value);
+    if (!Number.isNaN(numericValue)) {
+      return numericValue >= 1 ? 1 : 0;
+    }
+
+    console.warn('[save-item] Unexpected Shopartikel value; deriving from quality', { value, quality });
+    return derivedFlag;
+  } catch (error) {
+    console.error('[save-item] Failed to resolve Shopartikel flag; deriving from quality', { value, quality, error });
+    return derivedFlag;
+  }
+}
+
 function resolveItemEinheitValue(value: unknown, context: string): ItemEinheit {
   try {
     if (isItemEinheit(value)) {
@@ -422,7 +453,11 @@ const action = defineHttpAction({
         const agentic = ctx.getAgenticRun ? ctx.getAgenticRun.get(itemId) : null;
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
-        const sanitizedItem = { ...item, Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse') };
+        const sanitizedItem = {
+          ...item,
+          Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse'),
+          Quality: resolveItemQualityValue(item.Quality, 'fetchResponse')
+        };
         const normalisedCategories = {
           Hauptkategorien_A: normaliseCategoryValue(itemId, 'Hauptkategorien_A', sanitizedItem.Hauptkategorien_A),
           Unterkategorien_A: normaliseCategoryValue(itemId, 'Unterkategorien_A', sanitizedItem.Unterkategorien_A),
@@ -558,6 +593,8 @@ const action = defineHttpAction({
         BoxID: incomingBoxId,
         Einheit: incomingEinheit,
         Datum_erfasst: incomingDatumErfasst,
+        Quality: incomingQuality,
+        Shopartikel: incomingShopartikel,
         ...rest
       } = data;
       const selectedBoxId = incomingBoxId !== undefined ? incomingBoxId : existing.BoxID;
@@ -578,6 +615,14 @@ const action = defineHttpAction({
         incomingEinheit !== undefined
           ? resolveItemEinheitValue(incomingEinheit, 'updatePayload')
           : resolveItemEinheitValue(existing.Einheit, 'existingRecord');
+      const resolvedQuality = resolveItemQualityValue(
+        incomingQuality ?? existing.Quality ?? QUALITY_DEFAULT,
+        'updatePayload'
+      );
+      const hasShopartikelOverride = Object.prototype.hasOwnProperty.call(data, 'Shopartikel');
+      const resolvedShopartikel = hasShopartikelOverride
+        ? resolveShopartikelFlag(incomingShopartikel, resolvedQuality)
+        : resolveShopartikelFlag(undefined, resolvedQuality);
       const now = new Date();
       let datumErfasst: Date | string | null | undefined = existing.Datum_erfasst ?? incomingDatumErfasst;
       if (datumErfasst === undefined || datumErfasst === null || datumErfasst === '') {
@@ -597,7 +642,9 @@ const action = defineHttpAction({
         BoxID: normalizedBoxId,
         Datum_erfasst: datumErfasst ?? undefined,
         UpdatedAt: isNewItem ? now : new Date(),
-        Einheit: resolvedEinheit
+        Einheit: resolvedEinheit,
+        Quality: resolvedQuality,
+        Shopartikel: resolvedShopartikel
       };
       const txn = ctx.db.transaction((it: Item, a: string) => {
         ctx.persistItemWithinTransaction(it);

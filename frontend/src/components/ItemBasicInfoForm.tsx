@@ -1,5 +1,8 @@
-import React, { useEffect } from 'react';
+// TODO(quality-wizard): Revisit quality slider placement after validating onboarding feedback.
+import React, { useEffect, useMemo } from 'react';
+import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS } from '../../../models/quality';
 import { ItemFormData, useItemFormState } from './forms/itemFormShared';
+import QualityBadge from './QualityBadge';
 
 interface ItemBasicInfoFormProps {
   initialValues: Partial<ItemFormData>;
@@ -9,6 +12,7 @@ interface ItemBasicInfoFormProps {
 
 export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weiter' }: ItemBasicInfoFormProps) {
   const { form, update, mergeForm, generateMaterialNumber } = useItemFormState({ initialItem: initialValues });
+  const qualitySummary = useMemo(() => describeQuality(form.Quality ?? QUALITY_DEFAULT), [form.Quality]);
 
   useEffect(() => {
     mergeForm(initialValues);
@@ -45,6 +49,27 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
               onChange={(event) => update('Auf_Lager', parseInt(event.target.value, 10) || 0)}
               required
             />
+          </div>
+
+          <div className="row">
+            <label>Qualität</label>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              step={1}
+              value={qualitySummary.value}
+              onChange={(event) => update('Quality', normalizeQuality(event.target.value, console) as ItemFormData['Quality'])}
+              aria-valuetext={`${qualitySummary.label} (${qualitySummary.value})`}
+            />
+            <div className="quality-slider__labels">
+              {[1, 2, 3, 4, 5].map((level) => (
+                <span key={`basic-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
+              ))}
+            </div>
+            <div className="muted">
+              <QualityBadge compact value={qualitySummary.value} />
+            </div>
           </div>
 
 
