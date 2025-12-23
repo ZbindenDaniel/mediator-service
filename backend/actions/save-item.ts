@@ -8,6 +8,28 @@ import { MEDIA_DIR } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
 
 const MEDIA_PREFIX = '/media/';
+// TODO(agent): Centralize media asset validation to avoid shipping document artifacts alongside images.
+// TODO(agent): Revisit allowed media extensions when new asset types need exporting.
+const ALLOWED_MEDIA_EXTENSIONS = new Set<string>([
+  '.bmp',
+  '.gif',
+  '.jpeg',
+  '.jpg',
+  '.png',
+  '.tif',
+  '.tiff',
+  '.webp',
+]);
+
+export function isAllowedMediaAsset(candidate: string | null | undefined): boolean {
+  if (!candidate) {
+    return false;
+  }
+
+  const [withoutQuery] = candidate.split('?');
+  const ext = path.posix.extname(withoutQuery.toLowerCase());
+  return ALLOWED_MEDIA_EXTENSIONS.has(ext);
+}
 
 function pushMedia(target: string[], value: string | null | undefined, seen: Set<string>): void {
   if (!value) return;
@@ -145,8 +167,16 @@ export function collectMediaAssets(
     trimmedPrimary && trimmedPrimary.startsWith(MEDIA_PREFIX)
       ? trimmedPrimary
       : normaliseMediaReference(itemId, trimmedPrimary || null);
-  pushMedia(assets, normalisedPrimary || '', seen);
-  const expectedStems = deriveExpectedStems(normalisedPrimary, artikelNummer);
+  if (normalisedPrimary && !isAllowedMediaAsset(normalisedPrimary)) {
+    console.info('[save-item] Skipping non-image media asset from Grafikname', {
+      itemId,
+      candidate: normalisedPrimary,
+    });
+  } else {
+    pushMedia(assets, normalisedPrimary || '', seen);
+  }
+  const stemSource = normalisedPrimary && isAllowedMediaAsset(normalisedPrimary) ? normalisedPrimary : null;
+  const expectedStems = deriveExpectedStems(stemSource, artikelNummer);
 
   try {
     const dir = path.join(MEDIA_DIR, itemId);
@@ -154,16 +184,32 @@ export function collectMediaAssets(
       const stat = fs.statSync(dir);
       if (stat.isDirectory()) {
         const entries = fs.readdirSync(dir).sort();
+        const mediaEntries = entries.filter((entry) => {
+          const resolvedPath = `${MEDIA_PREFIX}${itemId}/${entry}`;
+          if (!isAllowedMediaAsset(entry)) {
+            console.info('[save-item] Skipping non-image media asset from media directory', {
+              itemId,
+              entry: resolvedPath,
+            });
+            return false;
+          }
+          return true;
+        });
         const matchingEntries =
           expectedStems.size > 0
-            ? entries.filter((entry) => {
+            ? mediaEntries.filter((entry) => {
                 const stem = extractStemFromFilename(entry);
                 return !!stem && expectedStems.has(stem);
               })
-            : entries;
+            : mediaEntries;
         const entriesToPush =
-          expectedStems.size > 0 && matchingEntries.length === 0 ? entries : matchingEntries;
-        if (entriesToPush === entries && matchingEntries.length === 0 && entries.length > 0 && expectedStems.size > 0) {
+          expectedStems.size > 0 && matchingEntries.length === 0 ? mediaEntries : matchingEntries;
+        if (
+          entriesToPush === mediaEntries &&
+          matchingEntries.length === 0 &&
+          mediaEntries.length > 0 &&
+          expectedStems.size > 0
+        ) {
           console.info('Falling back to legacy media listing', {
             itemId,
             expectedStems: Array.from(expectedStems)
