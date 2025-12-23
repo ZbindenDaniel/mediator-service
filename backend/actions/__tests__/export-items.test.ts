@@ -37,6 +37,37 @@ describe('export-items category serialization', () => {
     const { csv } = serializeItemsToCsv(rows);
     const [header, dataLine] = csv.split('\n');
     const headers = header.split(',');
+    const expectedHeaders = [
+      'Artikel-Nummer',
+      'Artikeltyp',
+      'CreatedAt',
+      'Grafikname(n)',
+      'Artikelbeschreibung',
+      'Kurzbeschreibung',
+      'Langtext',
+      'Hersteller',
+      'Länge(mm)',
+      'Breite(mm)',
+      'Höhe(mm)',
+      'Gewicht(kg)',
+      'Verkaufspreis',
+      'Auf Lager',
+      'Veröffentlicht_Status',
+      'Shopartikel',
+      'Einheit',
+      'EAN',
+      'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+      'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+      'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+      'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+      'ItemUUID',
+      'BoxID',
+      'Location',
+      'Label',
+      'UpdatedAt'
+    ];
+
+    expect(headers).toEqual(expectedHeaders);
     const values = dataLine.split(',');
 
     const record: Record<string, string> = {};
@@ -46,9 +77,15 @@ describe('export-items category serialization', () => {
       record[key] = value.replace(/^"|"$/g, '');
     }
 
-    expect(record.cvar_categories_A1).toBe('Computer_und_Komplettsysteme');
-    expect(record.cvar_categories_A2).toBe('Komplettsysteme');
-    expect(record.cvar_categories_B1).toBe('Tastatur_Maus_Spielsteuerung_Virtual_Reality');
-    expect(record.cvar_categories_B2).toBe('Desktop_Set_Tastatur_und_Maus');
+    expect(record['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)']).toBe(
+      'Computer_und_Komplettsysteme'
+    );
+    expect(record['Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)']).toBe('Komplettsysteme');
+    expect(record['Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)']).toBe(
+      'Tastatur_Maus_Spielsteuerung_Virtual_Reality'
+    );
+    expect(record['Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)']).toBe(
+      'Desktop_Set_Tastatur_und_Maus'
+    );
   });
 });

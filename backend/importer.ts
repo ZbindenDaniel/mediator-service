@@ -50,6 +50,7 @@ type ImportDateFieldDescriptor = {
 const IMPORT_DATE_FIELD_PRIORITY_DESCRIPTORS: readonly ImportDateFieldDescriptor[] = Object.freeze([
   { field: 'idate', priority: 10 },
   { field: 'Datum erfasst', priority: 20 },
+  { field: 'CreatedAt', priority: 25, isAlias: true },
   { field: 'Datum_erfasst', priority: 30 },
   { field: 'entrydate', priority: 40, isAlias: true },
   { field: 'entry_date', priority: 50, isAlias: true },

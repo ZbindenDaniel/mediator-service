@@ -9,6 +9,35 @@ import { MEDIA_DIR } from '../backend/lib/media';
 const TEST_DB_FILE = path.join(__dirname, 'export-items.test.sqlite');
 const ROUNDTRIP_CSV_FILE = path.join(__dirname, 'export-items-roundtrip.csv');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
+const EXPECTED_ITEMS_HEADER = [
+  'Artikel-Nummer',
+  'Artikeltyp',
+  'CreatedAt',
+  'Grafikname(n)',
+  'Artikelbeschreibung',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge(mm)',
+  'Breite(mm)',
+  'Höhe(mm)',
+  'Gewicht(kg)',
+  'Verkaufspreis',
+  'Auf Lager',
+  'Veröffentlicht_Status',
+  'Shopartikel',
+  'Einheit',
+  'EAN',
+  'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+  'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+  'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+  'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+  'ItemUUID',
+  'BoxID',
+  'Location',
+  'Label',
+  'UpdatedAt'
+];
 
 function removeTestDatabase(): void {
   for (const suffix of ['', '-wal', '-shm']) {
@@ -184,15 +213,19 @@ describe('export-items action', () => {
     expect(lines.length).toBeGreaterThan(1);
 
     const headerColumns = lines[0].split(',');
-    expect(headerColumns.slice(-4)).toEqual(['itemUUID', 'BoxID', 'Location', 'UpdatedAt']);
+    expect(headerColumns).toEqual(EXPECTED_ITEMS_HEADER);
+
+    const headerIndex: Record<string, number> = {};
+    headerColumns.forEach((header, index) => {
+      headerIndex[header] = index;
+    });
 
     const rowColumns = lines[1].split(',');
-    expect(rowColumns.slice(-4)).toEqual([
-      'I-EXPORT-METADATA-001',
-      placement.BoxID,
-      placement.LocationId,
-      now.toISOString()
-    ]);
+    expect(rowColumns[headerIndex.ItemUUID]).toBe('I-EXPORT-METADATA-001');
+    expect(rowColumns[headerIndex.BoxID]).toBe(placement.BoxID);
+    expect(rowColumns[headerIndex.Location]).toBe(placement.LocationId);
+    expect(rowColumns[headerIndex.Label]).toBe(placement.Label);
+    expect(rowColumns[headerIndex.UpdatedAt]).toBe(now.toISOString());
   });
 
   // TODO(agent): Broaden round-trip assertions to cover Langtext payload objects once exporters emit structured content.
@@ -245,11 +278,12 @@ describe('export-items action', () => {
     const parsedRows = parseCsv(csvPayload, { skip_empty_lines: true });
     expect(parsedRows.length).toBeGreaterThan(1);
     const headerColumns = parsedRows[0].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
+    expect(headerColumns).toEqual(EXPECTED_ITEMS_HEADER);
     const dataColumns = parsedRows[1].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
-    const entrydateIndex = headerColumns.indexOf('entrydate');
+    const entrydateIndex = headerColumns.indexOf('CreatedAt');
     expect(entrydateIndex).toBeGreaterThan(-1);
     headerColumns[entrydateIndex] = 'entry_date';
-    const itemUUIDIndex = headerColumns.indexOf('itemUUID');
+    const itemUUIDIndex = headerColumns.indexOf('ItemUUID');
     expect(itemUUIDIndex).toBeGreaterThan(-1);
     dataColumns[itemUUIDIndex] = '';
     // TODO(agent): Extend identifier date alias regression once multi-row CSV fixtures cover BoxID remapping determinism.
@@ -334,7 +368,7 @@ describe('export-items action', () => {
 
       const headerColumns = csvLines[0].split(',');
       const dataColumns = csvLines[1].split(',');
-      const imageNamesIndex = headerColumns.indexOf('image_names');
+      const imageNamesIndex = headerColumns.indexOf('Grafikname(n)');
       expect(imageNamesIndex).toBeGreaterThan(-1);
 
       const imageNamesCell = dataColumns[imageNamesIndex];
