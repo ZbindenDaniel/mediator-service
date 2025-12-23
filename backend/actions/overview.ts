@@ -6,6 +6,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// TODO(agent): Surface topic filter summaries to help operators verify overview feed constraints.
 const action = defineHttpAction({
   key: 'overview',
   label: 'Overview',

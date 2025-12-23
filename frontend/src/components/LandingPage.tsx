@@ -8,7 +8,7 @@ import RecentEventsCard, { RecentEventsList } from './RecentEventsCard';
 import ImportCard from './ImportCard';
 import LoadingPage from './LoadingPage';
 import type { Box, EventLog } from '../../../models';
-import { filterAllowedEvents } from '../utils/eventLogLevels';
+import { filterVisibleEvents } from '../utils/eventLogTopics';
 
 interface OverviewCounts {
   boxes: number;
@@ -37,7 +37,7 @@ export default function LandingPage() {
         const d = await r.json();
         setOverview(d);
         if (Array.isArray(d?.recentEvents)) {
-          const filtered = filterAllowedEvents(d.recentEvents);
+          const filtered = filterVisibleEvents(d.recentEvents);
           const limited = filtered.slice(0, 3);
           if (filtered.length > 3) {
             console.info('Truncating overview events to preview limit', { total: filtered.length });

@@ -1,0 +1,27 @@
+[
+  {
+    "hauptkategorie": 20,
+    "unterkategorie": 201,
+    "artikeltyp": "part",
+    "verkaufspreis": 120,
+    "hinweis": "Fallback price for laptop parts when no explicit price was provided."
+  },
+  {
+    "hauptkategorie": 40,
+    "unterkategorie": 401,
+    "artikeltyp": "part",
+    "verkaufspreis": 80,
+    "hinweis": "Standard fallback for flat panel displays (Flachbildschirm) marked as parts."
+  },
+  {
+    "hauptkategorie": 70,
+    "artikeltyp": "part",
+    "verkaufspreis": 45,
+    "hinweis": "Generic spare part pricing baseline for Steckkarten."
+  },
+  {
+    "artikeltyp": "part",
+    "verkaufspreis": 25,
+    "hinweis": "Global fallback for items tagged as parts when no category match is found."
+  }
+]

@@ -3,7 +3,9 @@ import type { EventLog } from '../../../models';
 import { formatDate } from '../lib/format';
 import { eventLabel } from '../../../models/event-labels';
 import { Link } from 'react-router-dom';
-import { filterAllowedEvents } from '../utils/eventLogLevels';
+import { filterVisibleEvents } from '../utils/eventLogTopics';
+
+// TODO(agent): Surface active topic filters in the UI to avoid confusing operators.
 
 interface ResolvedEventLink {
   path: string;
@@ -69,7 +71,7 @@ interface Props {
 }
 
 export function RecentEventsList({ events }: Props) {
-  const allowedEvents = filterAllowedEvents(events);
+  const allowedEvents = filterVisibleEvents(events);
   return (
     <div id="eventsOut" className="list">
       {allowedEvents.length ? (

@@ -6,6 +6,7 @@ import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
+import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
 import { serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
 import { defineHttpAction } from './index';
@@ -13,6 +14,7 @@ import { collectMediaAssets } from './save-item';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
 // TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
+// TODO(agent): Normalize category fields to canonical labels once lookup utilities support code-to-name mapping.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -22,34 +24,62 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 // TODO(agent): Keep exporter metadata parity intact when partner CSV specs change.
 // TODO(agent): Remove ImageNames fallback once disk-backed assets are guaranteed for exports.
 // TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
-const partnerRequiredColumns = [
-  'partnumber',
-  'type_and_classific',
-  'entrydate',
-  'image_names',
-  'description',
-  'notes',
-  'longdescription',
-  'manufacturer',
-  'length_mm',
-  'width_mm',
-  'height_mm',
-  'weight_kg',
-  'sellprice',
-  'onhand',
-  'published_status',
-  'shoparticle',
-  'unit',
-  'ean',
-  'cvar_categories_A1',
-  'cvar_categories_A2',
-  'cvar_categories_B1',
-  'cvar_categories_B2'
+// TODO(agent): Mirror header label updates in importer alias definitions to avoid ingest/export drift.
+const columnDescriptors = [
+  { key: 'partnumber', header: 'Artikel-Nummer', field: 'Artikel_Nummer' },
+  { key: 'type_and_classific', header: 'Artikeltyp', field: 'Artikeltyp' },
+  { key: 'entrydate', header: 'CreatedAt', field: 'Datum_erfasst' },
+  { key: 'image_names', header: 'Grafikname(n)', field: 'Grafikname' },
+  { key: 'description', header: 'Artikelbeschreibung', field: 'Artikelbeschreibung' },
+  { key: 'notes', header: 'Kurzbeschreibung', field: 'Kurzbeschreibung' },
+  { key: 'longdescription', header: 'Langtext', field: 'Langtext' },
+  { key: 'manufacturer', header: 'Hersteller', field: 'Hersteller' },
+  { key: 'length_mm', header: 'Länge(mm)', field: 'Länge_mm' },
+  { key: 'width_mm', header: 'Breite(mm)', field: 'Breite_mm' },
+  { key: 'height_mm', header: 'Höhe(mm)', field: 'Höhe_mm' },
+  { key: 'weight_kg', header: 'Gewicht(kg)', field: 'Gewicht_kg' },
+  { key: 'sellprice', header: 'Verkaufspreis', field: 'Verkaufspreis' },
+  { key: 'onhand', header: 'Auf Lager', field: 'Auf_Lager' },
+  { key: 'published_status', header: 'Veröffentlicht_Status', field: 'Veröffentlicht_Status' },
+  { key: 'shoparticle', header: 'Shopartikel', field: 'Shopartikel' },
+  { key: 'unit', header: 'Einheit', field: 'Einheit' },
+  { key: 'ean', header: 'EAN', field: null },
+  {
+    key: 'cvar_categories_A1',
+    header: 'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+    field: 'Hauptkategorien_A'
+  },
+  {
+    key: 'cvar_categories_A2',
+    header: 'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+    field: 'Unterkategorien_A'
+  },
+  {
+    key: 'cvar_categories_B1',
+    header: 'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+    field: 'Hauptkategorien_B'
+  },
+  {
+    key: 'cvar_categories_B2',
+    header: 'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+    field: 'Unterkategorien_B'
+  },
+  { key: 'itemUUID', header: 'ItemUUID', field: 'ItemUUID' },
+  { key: 'BoxID', header: 'BoxID', field: 'BoxID' },
+  { key: 'LocationId', header: 'Location', field: 'LocationId' },
+  { key: 'Label', header: 'Label', field: 'Label' },
+  { key: 'UpdatedAt', header: 'UpdatedAt', field: 'UpdatedAt' }
 ] as const;
 
-const metadataColumns = ['itemUUID', 'BoxID', 'LocationId', 'Label', 'UpdatedAt'] as const;
+type ExportColumnDescriptor = (typeof columnDescriptors)[number];
+type ExportColumn = ExportColumnDescriptor['key'];
 
-const columns = [...partnerRequiredColumns, ...metadataColumns] as const;
+const metadataColumns = columnDescriptors
+  .filter((descriptor) => ['itemUUID', 'BoxID', 'LocationId', 'Label', 'UpdatedAt'].includes(descriptor.key))
+  .map((descriptor) => descriptor.key as ExportColumn);
+
+const columns = columnDescriptors.map((descriptor) => descriptor.key) as readonly ExportColumn[];
+const columnHeaders = columnDescriptors.map((descriptor) => descriptor.header) as readonly string[];
 
 const boxColumns = [
   'BoxID',
@@ -66,42 +96,22 @@ const boxColumns = [
 // TODO(agent): Replace CSV-specific Langtext serialization once exports move to typed clients.
 // TODO(langtext-export): Align CSV Langtext serialization with downstream channel requirements when available.
 
-type ExportColumn = (typeof columns)[number];
-
 const metadataColumnSet = new Set<ExportColumn>(metadataColumns as readonly ExportColumn[]);
-
-const fieldMap: Record<ExportColumn, string | null> = {
-  partnumber: 'Artikel_Nummer',
-  type_and_classific: 'Artikeltyp',
-  entrydate: 'Datum_erfasst',
-  image_names: 'Grafikname',
-  description: 'Artikelbeschreibung',
-  notes: 'Kurzbeschreibung',
-  longdescription: 'Langtext',
-  manufacturer: 'Hersteller',
-  length_mm: 'Länge_mm',
-  width_mm: 'Breite_mm',
-  height_mm: 'Höhe_mm',
-  weight_kg: 'Gewicht_kg',
-  sellprice: 'Verkaufspreis',
-  onhand: 'Auf_Lager',
-  published_status: 'Veröffentlicht_Status',
-  shoparticle: 'Shopartikel',
-  unit: 'Einheit',
-  ean: null,
-  cvar_categories_A1: 'Hauptkategorien_A',
-  cvar_categories_A2: 'Unterkategorien_A',
-  cvar_categories_B1: 'Hauptkategorien_B',
-  cvar_categories_B2: 'Unterkategorien_B',
-  itemUUID: 'ItemUUID',
-  BoxID: 'BoxID',
-  LocationId: 'LocationId',
-  Label: 'Label',
-  UpdatedAt: 'UpdatedAt'
+const categoryFieldTypes: Record<string, CategoryFieldType> = {
+  Hauptkategorien_A: 'haupt',
+  Hauptkategorien_B: 'haupt',
+  Unterkategorien_A: 'unter',
+  Unterkategorien_B: 'unter',
 };
+
+const fieldMap: Record<ExportColumn, string | null> = columnDescriptors.reduce(
+  (acc, descriptor) => ({ ...acc, [descriptor.key]: descriptor.field }),
+  {} as Record<ExportColumn, string | null>
+);
 
 const missingFieldWarnings = new Set<ExportColumn>();
 const missingMetadataValueWarnings = new Set<ExportColumn>();
+const categoryLabelFallbackWarnings = new Set<string>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
@@ -155,6 +165,58 @@ function filterExistingMediaAssets(assets: string[]): string[] {
     }
   }
   return filtered;
+}
+
+function normalizeCategoryValueForExport(field: string, rawValue: unknown): unknown {
+  const fieldType: CategoryFieldType | undefined = categoryFieldTypes[field];
+  if (!fieldType) {
+    return rawValue;
+  }
+
+  if (rawValue === null || rawValue === undefined) {
+    return rawValue;
+  }
+
+  let numericValue: number | null = null;
+  if (typeof rawValue === 'number') {
+    numericValue = rawValue;
+  } else if (typeof rawValue === 'string') {
+    const trimmed = rawValue.trim();
+    if (!trimmed) {
+      return rawValue;
+    }
+    if (!/^-?\d+$/u.test(trimmed)) {
+      return rawValue;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    numericValue = Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (numericValue === null) {
+    return rawValue;
+  }
+
+  try {
+    const resolvedLabel = resolveCategoryCodeToLabel(numericValue, fieldType);
+    if (resolvedLabel) {
+      return resolvedLabel;
+    }
+    if (!categoryLabelFallbackWarnings.has(field)) {
+      categoryLabelFallbackWarnings.add(field);
+      console.warn('[export-items] Missing category label for code during export; retaining numeric value.', {
+        field,
+        code: numericValue,
+      });
+    }
+  } catch (error) {
+    console.error('[export-items] Failed to resolve category label for export; retaining numeric value.', {
+      field,
+      code: numericValue,
+      error,
+    });
+  }
+
+  return numericValue;
 }
 
 function toCsvValue(val: any): string {
@@ -214,7 +276,8 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     return '';
   }
 
-  const value = rawRow[field];
+  let value = rawRow[field];
+  value = normalizeCategoryValueForExport(field, value);
 
   if (column === 'image_names') {
     const fallbackValue = value;
@@ -384,7 +447,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
 }
 
 export function serializeItemsToCsv(rows: Record<string, unknown>[]): { csv: string; columns: readonly ExportColumn[] } {
-  const header = columns.join(',');
+  const header = columnHeaders.join(',');
   const lines = rows.map((row: any) =>
     columns
       .map((column: ExportColumn) => {

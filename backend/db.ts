@@ -29,6 +29,7 @@ import {
   resolveEventLogLevel,
   itemCategories
 } from '../models';
+import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
 import { resolveStandortLabel } from './standort-label';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -259,6 +260,8 @@ function seedCategoryLocations(database: Database.Database = db): void {
 
 seedCategoryLocations();
 
+// TODO(agent): Allow runtime refresh of event allow lists without requiring a process restart.
+
 const rawEventLogLevels = process.env.EVENT_LOG_LEVELS ?? null;
 const {
   levels: resolvedLevels,
@@ -294,6 +297,48 @@ const EVENT_LOG_LEVEL_SQL_LIST = EVENT_LOG_LEVEL_ALLOW_LIST
   .map((level) => `'${level.replace(/'/g, "''")}'`)
   .join(', ');
 
+const rawEventLogTopics = process.env.EVENT_LOG_TOPICS ?? null;
+const {
+  topics: resolvedEventLogTopics,
+  invalid: invalidEventLogTopics,
+  hadInput: hadEventLogTopicInput,
+  usedFallback: usedEventLogTopicFallback
+} = parseEventTopicAllowList(rawEventLogTopics);
+
+if (!hadEventLogTopicInput) {
+  console.info('[db] EVENT_LOG_TOPICS not configured; defaulting to all topics.');
+} else {
+  if (invalidEventLogTopics.length > 0) {
+    console.warn('[db] EVENT_LOG_TOPICS contains unknown values; ignoring invalid entries.', {
+      invalid: invalidEventLogTopics
+    });
+  }
+  if (usedEventLogTopicFallback) {
+    console.warn('[db] EVENT_LOG_TOPICS produced no recognized topics; defaulting to all topics.');
+  }
+}
+
+const computedTopicAllowList = resolvedEventLogTopics.length > 0 ? resolvedEventLogTopics : [...EVENT_TOPICS];
+
+if (resolvedEventLogTopics.length === 0) {
+  console.warn('[db] EVENT_LOG_TOPIC_ALLOW_LIST resolved empty; reverting to full topic set.');
+}
+
+export const EVENT_LOG_TOPIC_ALLOW_LIST: readonly string[] = Object.freeze([...computedTopicAllowList]);
+const EVENT_LOG_TOPIC_EVENT_KEYS: readonly string[] = eventKeysForTopics(EVENT_LOG_TOPIC_ALLOW_LIST);
+const EVENT_TOPIC_FILTER_ENABLED =
+  EVENT_LOG_TOPIC_ALLOW_LIST.length > 0 &&
+  EVENT_LOG_TOPIC_ALLOW_LIST.length < EVENT_TOPICS.length &&
+  EVENT_LOG_TOPIC_EVENT_KEYS.length > 0;
+
+if (!EVENT_TOPIC_FILTER_ENABLED && EVENT_LOG_TOPIC_ALLOW_LIST.length < EVENT_TOPICS.length) {
+  console.warn('[db] EVENT_LOG_TOPICS filtering disabled because no matching events were found for allowed topics.', {
+    configuredTopics: EVENT_LOG_TOPIC_ALLOW_LIST
+  });
+}
+
+const EVENT_LOG_TOPIC_SQL_LIST = EVENT_LOG_TOPIC_EVENT_KEYS.map((key) => `'${key.replace(/'/g, "''")}'`).join(', ');
+
 function levelFilterExpression(alias?: string): string {
   if (EVENT_LOG_LEVEL_ALLOW_LIST.length === 0) {
     return '0';
@@ -301,6 +346,19 @@ function levelFilterExpression(alias?: string): string {
 
   const column = alias ? `${alias}.Level` : 'Level';
   return `${column} IN (${EVENT_LOG_LEVEL_SQL_LIST})`;
+}
+
+function topicFilterExpression(alias?: string): string {
+  if (!EVENT_TOPIC_FILTER_ENABLED) {
+    return '1';
+  }
+
+  if (!EVENT_LOG_TOPIC_SQL_LIST) {
+    return '0';
+  }
+
+  const column = alias ? `${alias}.Event` : 'Event';
+  return `${column} IN (${EVENT_LOG_TOPIC_SQL_LIST})`;
 }
 
 const CREATE_ITEM_REFS_SQL = `
@@ -2208,6 +2266,7 @@ export const listEventsForBox = db.prepare(`
   WHERE EntityType='Box'
     AND EntityId=?
     AND ${levelFilterExpression()}
+    AND ${topicFilterExpression()}
   ORDER BY Id DESC
   LIMIT 200`);
 export const listEventsForItem = db.prepare(`
@@ -2216,6 +2275,7 @@ export const listEventsForItem = db.prepare(`
   WHERE EntityType='Item'
     AND EntityId=?
     AND ${levelFilterExpression()}
+    AND ${topicFilterExpression()}
   ORDER BY Id DESC
   LIMIT 200`);
 export const listRecentEvents = db.prepare(`
@@ -2226,6 +2286,7 @@ export const listRecentEvents = db.prepare(`
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
   LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
   WHERE ${levelFilterExpression('e')}
+    AND ${topicFilterExpression('e')}
   ORDER BY e.Id DESC LIMIT 3`);
 export const listRecentActivities = db.prepare(`
   SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
@@ -2235,9 +2296,12 @@ export const listRecentActivities = db.prepare(`
   LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
   LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
   WHERE ${levelFilterExpression('e')}
+    AND ${topicFilterExpression('e')}
   ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
-export const countEvents = db.prepare(`SELECT COUNT(*) as c FROM events WHERE ${levelFilterExpression()}`);
+export const countEvents = db.prepare(
+  `SELECT COUNT(*) as c FROM events WHERE ${levelFilterExpression()} AND ${topicFilterExpression()}`
+);
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
