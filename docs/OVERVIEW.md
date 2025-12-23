@@ -106,6 +106,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Added a bulk “Sync to ERP” action button on the item list to trigger `/api/sync/erp` with selected IDs.
 - Update the closing of larger tasks in [RECENT_HIGHLIGHTS]()
 
 ## Reference Links
