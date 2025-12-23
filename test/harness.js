@@ -1,7 +1,60 @@
 const assert = require('node:assert/strict');
+const Module = require('module');
 
 // TODO: Extend this harness with additional Jest-compatible utilities as more
 //       matcher coverage is required by future test suites.
+// TODO(agent): Map out module mocking cleanup strategies if we broaden the Jest surface further.
+
+const originalLoad = Module._load;
+const mockRegistry = new Map();
+const trackedMocks = new Set();
+
+function resolveRequest(request, parentModule = module) {
+  try {
+    return Module._resolveFilename(request, parentModule);
+  } catch (error) {
+    console.warn(`[harness] Unable to resolve module ${request} for mocking`, error);
+    return request;
+  }
+}
+
+function trackMock(mockFn) {
+  trackedMocks.add(mockFn);
+  return mockFn;
+}
+
+function storeMockEntry(request, entry) {
+  const resolved = resolveRequest(request);
+  mockRegistry.set(resolved, entry);
+  mockRegistry.set(request, entry);
+  delete require.cache[resolved];
+  return resolved;
+}
+
+function getMockEntry(request, parentModule) {
+  const resolved = resolveRequest(request, parentModule);
+  return mockRegistry.get(resolved) || mockRegistry.get(request);
+}
+
+function instantiateMock(entry, request) {
+  if (!entry.instance) {
+    try {
+      entry.instance = entry.factory();
+    } catch (error) {
+      console.error(`[harness] Failed to instantiate mock for ${request}`, error);
+      throw error;
+    }
+  }
+  return entry.instance;
+}
+
+Module._load = function patchedLoad(request, parent, isMain) {
+  const mockEntry = getMockEntry(request, parent);
+  if (mockEntry) {
+    return instantiateMock(mockEntry, request);
+  }
+  return originalLoad(request, parent, isMain);
+};
 
 function createSuite(name, parent = null) {
   return {
@@ -272,6 +325,93 @@ const jestApi = {
     }, restore);
     target[method] = spy;
     return spy;
+  },
+  mock(request, factory) {
+    const factoryFn = typeof factory === 'function' ? factory : () => factory;
+    storeMockEntry(request, { factory: factoryFn, instance: null });
+  },
+  requireActual(request) {
+    const resolved = resolveRequest(request);
+    const mockEntry = getMockEntry(request);
+    mockRegistry.delete(resolved);
+    mockRegistry.delete(request);
+    const cached = require.cache[resolved];
+    try {
+      delete require.cache[resolved];
+      return originalLoad(resolved, module, false);
+    } catch (error) {
+      console.error(`[harness] Failed to require actual module for ${request}`, error);
+      throw error;
+    } finally {
+      if (mockEntry) {
+        storeMockEntry(request, mockEntry);
+      }
+      if (cached) {
+        require.cache[resolved] = cached;
+      } else {
+        delete require.cache[resolved];
+      }
+    }
+  },
+  requireMock(request) {
+    const entry = getMockEntry(request);
+    if (!entry) {
+      throw new Error(`[harness] No mock registered for ${request}`);
+    }
+    return instantiateMock(entry, request);
+  },
+  clearAllMocks() {
+    for (const mockFn of trackedMocks) {
+      if (typeof mockFn?.mockClear === 'function') {
+        try {
+          mockFn.mockClear();
+        } catch (error) {
+          console.error('[harness] Failed to clear mock state', error);
+          throw error;
+        }
+      }
+    }
+  },
+  resetAllMocks() {
+    for (const mockFn of trackedMocks) {
+      if (typeof mockFn?.mockReset === 'function') {
+        try {
+          mockFn.mockReset();
+        } catch (error) {
+          console.error('[harness] Failed to reset mock state', error);
+          throw error;
+        }
+      } else if (typeof mockFn?.mockClear === 'function') {
+        try {
+          mockFn.mockClear();
+        } catch (error) {
+          console.error('[harness] Failed to clear mock state during reset', error);
+          throw error;
+        }
+      }
+    }
+    for (const entry of new Set(mockRegistry.values())) {
+      entry.instance = null;
+    }
+  },
+  isolateModulesAsync: async (callback) => {
+    const cachedEntries = new Map(Object.entries(require.cache));
+    try {
+      for (const key of Object.keys(require.cache)) {
+        delete require.cache[key];
+      }
+      return await callback();
+    } catch (error) {
+      console.error('[harness] isolateModulesAsync callback failed', error);
+      throw error;
+    } finally {
+      for (const key of Object.keys(require.cache)) {
+        delete require.cache[key];
+      }
+      for (const [key, value] of cachedEntries.entries()) {
+        require.cache[key] = value;
+      }
+    }
   }
 };
 
