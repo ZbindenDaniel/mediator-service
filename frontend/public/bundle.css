@@ -16,12 +16,33 @@ body {
   align-items: center;
   gap: 1rem;
 }
+.header .right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
 .header .user {
   font-weight: bold;
 }
 .header nav a {
   color: #fff;
   margin-right: 1rem;
+}
+.header-filter-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #444;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.header-filter-indicator:hover,
+.header-filter-indicator:focus-visible {
+  background: #2f2f2f;
 }
 .layout main {
   height: 100vh;

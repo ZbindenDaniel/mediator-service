@@ -68,9 +68,11 @@ import {
   getMaxArtikelNummer,
   getAdjacentItemIds,
   listItemReferences,
+  listItemReferencesWithFilters,
   listItemsForExport,
   updateAgenticReview,
   listItems,
+  listItemsWithFilters,
   decrementItemStock,
   incrementItemStock,
   deleteItem,
@@ -333,6 +335,7 @@ type ActionContext = {
   getAgenticRun: typeof getAgenticRun;
   updateAgenticRunStatus: typeof updateAgenticRunStatus;
   listItems: typeof listItems;
+  listItemsWithFilters: typeof listItemsWithFilters;
   getAdjacentItemIds: typeof getAdjacentItemIds;
   htmlForBox: typeof htmlForBox;
   htmlForItem: typeof htmlForItem;
@@ -353,6 +356,7 @@ type ActionContext = {
   getMaxBoxId: typeof getMaxBoxId;
   getMaxArtikelNummer: typeof getMaxArtikelNummer;
   listItemReferences: typeof listItemReferences;
+  listItemReferencesWithFilters: typeof listItemReferencesWithFilters;
   listItemsForExport: typeof listItemsForExport;
   updateAgenticReview: typeof updateAgenticReview;
   INBOX_DIR: typeof INBOX_DIR;
@@ -586,7 +590,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           getMaxItemId,
           getMaxArtikelNummer,
           listItemReferences,
+          listItemReferencesWithFilters,
           listItemsForExport,
+          listItemsWithFilters,
           updateAgenticReview,
           INBOX_DIR,
           PUBLIC_DIR,

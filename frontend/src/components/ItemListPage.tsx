@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoContainer, GoSearch } from 'react-icons/go';
 import type { AgenticRunStatus, Item } from '../../../models';
 import {
@@ -6,31 +6,100 @@ import {
   AGENTIC_RUN_STATUSES
 } from '../../../models';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
+import {
+  clearItemListFilters,
+  getActiveFilterDescriptions,
+  getDefaultItemListFilters,
+  hasNonDefaultFilters,
+  ITEM_LIST_FILTERS_CHANGED_EVENT,
+  ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT,
+  ItemListFilterChangeDetail,
+  ItemListFilters,
+  ItemListSortKey,
+  loadItemListFilters,
+  persistItemListFilters
+} from '../lib/itemListFiltersStorage';
 import BulkItemActionBar from './BulkItemActionBar';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
 
 // TODO(agentic): Extend item list page sorting and filtering controls for enriched inventory views.
 // TODO(agentic-status-ui): Replace single-select status filtering with quick filters once reviewer workflows expand.
+// TODO(storage-sync): Persist list filters to localStorage so returning users keep their preferences across sessions.
+// TODO(item-entity-filter): Confirm UX for reference-only rows when enriching the item repository view.
 
-type SortKey = 'artikelbeschreibung' | 'artikelnummer' | 'box' | 'uuid' | 'stock' | 'subcategory' | 'agenticStatus';
+const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
-  const [showUnplaced, setShowUnplaced] = useState(false);
+  const [showUnplaced, setShowUnplaced] = useState(ITEM_LIST_DEFAULT_FILTERS.showUnplaced);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('artikelbeschreibung');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [searchTerm, setSearchTerm] = useState(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
+  const [sortKey, setSortKey] = useState<ItemListSortKey>(ITEM_LIST_DEFAULT_FILTERS.sortKey);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [subcategoryFilter, setSubcategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
-  const [boxFilter, setBoxFilter] = useState('');
-  const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>('any');
+  const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
+  const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
+  const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
+  const [filtersReady, setFiltersReady] = useState(false);
+  const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
+  const persistTimeoutRef = useRef<number | null>(null);
 
-  const loadItems = useCallback(async ({ silent = false } = {}) => {
+  useEffect(() => {
+    const storedFilters = loadItemListFilters(ITEM_LIST_DEFAULT_FILTERS);
+    if (storedFilters) {
+      setSearchTerm(storedFilters.searchTerm);
+      setBoxFilter(storedFilters.boxFilter);
+      setAgenticStatusFilter(storedFilters.agenticStatusFilter);
+      setShowUnplaced(storedFilters.showUnplaced);
+      setSortKey(storedFilters.sortKey);
+      setSortDirection(storedFilters.sortDirection);
+      setEntityFilter(storedFilters.entityFilter);
+      console.info('Restored item list filters from localStorage');
+    }
+    latestFiltersRef.current = storedFilters || ITEM_LIST_DEFAULT_FILTERS;
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    const handleFilterReset = () => {
+      setSearchTerm(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
+      setBoxFilter(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
+      setAgenticStatusFilter(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
+      setShowUnplaced(ITEM_LIST_DEFAULT_FILTERS.showUnplaced);
+      setSortKey(ITEM_LIST_DEFAULT_FILTERS.sortKey);
+      setSortDirection(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
+      setEntityFilter(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
+      clearItemListFilters();
+      setSelectedIds(new Set());
+      console.info('Item list filters reset to defaults via header');
+    };
+
+    window.addEventListener(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT, handleFilterReset);
+    return () => window.removeEventListener(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT, handleFilterReset);
+  }, []);
+
+  const currentFilters: ItemListFilters = useMemo(() => ({
+    searchTerm,
+    boxFilter,
+    agenticStatusFilter,
+    showUnplaced,
+    entityFilter,
+    sortKey,
+    sortDirection
+  }), [searchTerm, boxFilter, agenticStatusFilter, showUnplaced, entityFilter, sortKey, sortDirection]);
+
+  useEffect(() => {
+    latestFiltersRef.current = currentFilters;
+  }, [currentFilters]);
+
+  const loadItems = useCallback(async ({ silent = false, filters }: { silent?: boolean; filters?: ItemListFilters } = {}) => {
+    const effectiveFilters = filters || latestFiltersRef.current;
+    latestFiltersRef.current = effectiveFilters;
     if (silent) {
       setIsRefreshing(true);
     } else {
@@ -38,7 +107,25 @@ export default function ItemListPage() {
     }
     try {
       setError(null);
-      const response = await fetch('/api/items');
+      const query = new URLSearchParams();
+      if (effectiveFilters.searchTerm.trim()) {
+        query.set('search', effectiveFilters.searchTerm.trim());
+      }
+      if (effectiveFilters.boxFilter.trim()) {
+        query.set('box', effectiveFilters.boxFilter.trim());
+      }
+      if (effectiveFilters.agenticStatusFilter !== 'any') {
+        query.set('agenticStatus', effectiveFilters.agenticStatusFilter);
+      }
+      if (effectiveFilters.showUnplaced) {
+        query.set('showUnplaced', 'true');
+      }
+      if (effectiveFilters.entityFilter !== 'all') {
+        query.set('entityFilter', effectiveFilters.entityFilter);
+      }
+      query.set('sortKey', effectiveFilters.sortKey);
+      query.set('sortDirection', effectiveFilters.sortDirection);
+      const response = await fetch(`/api/items?${query.toString()}`);
       if (!response.ok) {
         console.error('load items failed', response.status);
         try {
@@ -67,8 +154,11 @@ export default function ItemListPage() {
   }, []);
 
   useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+    if (!filtersReady) {
+      return;
+    }
+    loadItems({ filters: currentFilters });
+  }, [currentFilters, filtersReady, loadItems]);
 
   useEffect(() => {
     const validIds = new Set(items.map((item) => item.ItemUUID));
@@ -85,6 +175,39 @@ export default function ItemListPage() {
   const normalizedSubcategoryFilter = subcategoryFilter.trim().toLowerCase();
   const normalizedBoxFilter = boxFilter.trim().toLowerCase();
   const normalizedAgenticFilter = agenticStatusFilter === 'any' ? null : agenticStatusFilter;
+
+  useEffect(() => {
+    if (!filtersReady) {
+      return undefined;
+    }
+
+    const activeFilters = getActiveFilterDescriptions(currentFilters, ITEM_LIST_DEFAULT_FILTERS);
+    const hasOverrides = hasNonDefaultFilters(currentFilters, ITEM_LIST_DEFAULT_FILTERS);
+    const detail: ItemListFilterChangeDetail = {
+      activeFilters,
+      hasOverrides
+    };
+    window.dispatchEvent(new CustomEvent<ItemListFilterChangeDetail>(ITEM_LIST_FILTERS_CHANGED_EVENT, { detail }));
+
+    if (persistTimeoutRef.current) {
+      window.clearTimeout(persistTimeoutRef.current);
+      persistTimeoutRef.current = null;
+    }
+    if (!hasOverrides) {
+      clearItemListFilters();
+      return undefined;
+    }
+    persistTimeoutRef.current = window.setTimeout(() => {
+      persistItemListFilters(currentFilters);
+    }, 250);
+
+    return () => {
+      if (persistTimeoutRef.current) {
+        window.clearTimeout(persistTimeoutRef.current);
+        persistTimeoutRef.current = null;
+      }
+    };
+  }, [currentFilters, filtersReady]);
 
   const filtered = useMemo(() => {
     const baseItems = showUnplaced ? items.filter((it) => !it.BoxID) : items;
@@ -273,7 +396,7 @@ export default function ItemListPage() {
               <span>Sortieren nach</span>
               <select
                 aria-label="Sortierkriterium wählen"
-                onChange={(event) => setSortKey(event.target.value as SortKey)}
+                onChange={(event) => setSortKey(event.target.value as ItemListSortKey)}
                 value={sortKey}
               >
                 <option value="artikelbeschreibung">Artikel</option>
@@ -358,6 +481,20 @@ export default function ItemListPage() {
                 {agenticStatusOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
+              </select>
+            </label>
+          </div>
+          <div className='row'>
+            <label className="filter-control">
+              <span>Typ</span>
+              <select
+                aria-label="Instanzen oder Referenzen anzeigen"
+                onChange={(event) => setEntityFilter(event.target.value as ItemListFilters['entityFilter'])}
+                value={entityFilter}
+              >
+                <option value="all">Alle</option>
+                <option value="instances">Instanzen</option>
+                <option value="references">Referenzen</option>
               </select>
             </label>
           </div>
