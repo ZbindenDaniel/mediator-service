@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { GoMoveToEnd, GoPackageDependents, GoTrash, GoXCircle } from 'react-icons/go';
+import { GoMoveToEnd, GoPackageDependents, GoSync, GoTrash, GoXCircle } from 'react-icons/go';
 import type { Item } from '../../../models';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { dialogService } from './dialog';
@@ -7,6 +7,7 @@ import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocat
 import { ensureUser } from '../lib/user';
 
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
+// TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
 
 interface BulkItemActionBarProps {
   selectedIds: string[];
@@ -433,6 +434,108 @@ export default function BulkItemActionBar({
     }
   }
 
+  async function handleBulkSyncToErp(): Promise<void> {
+    if (!hasSelection) {
+      setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
+      return;
+    }
+
+    setFeedback(null);
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'ERP Sync',
+        message: (
+          <div className="bulk-item-action-bar__confirm-content">
+            <p>Sollen die ausgewählten Artikel an das ERP synchronisiert werden?</p>
+            <p>{selectionLabel}</p>
+          </div>
+        ),
+        confirmLabel: 'Sync starten',
+        cancelLabel: 'Abbrechen'
+      });
+      console.info('Bulk ERP sync confirmation resolved', {
+        confirmed,
+        selectionCount: selectedCount
+      });
+    } catch (dialogError) {
+      console.error('Bulk ERP sync confirmation dialog failed', dialogError);
+      setFeedback({ type: 'error', message: 'Bestätigung fehlgeschlagen. Bitte erneut versuchen.' });
+      return;
+    }
+
+    if (!confirmed) {
+      console.info('Bulk ERP sync cancelled via dialog', { selectionCount: selectedCount });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const actor = await ensureActorOrAlert({
+        context: 'bulk sync erp',
+        resolveActor: effectiveResolveActor
+      });
+      if (!actor) {
+        setFeedback({
+          type: 'error',
+          message: 'Aktion abgebrochen: Es wurde kein Benutzername angegeben.'
+        });
+        return;
+      }
+
+      console.log('Bulk ERP sync requested', {
+        count: selectedCount,
+        selectedIds
+      });
+
+      const response = await fetch('/api/sync/erp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          actor,
+          itemIds: selectedIds
+        })
+      });
+
+      if (!response.ok) {
+        const message = await readErrorMessage(response);
+        console.error('Bulk ERP sync failed', { status: response.status, message });
+        setFeedback({ type: 'error', message });
+        return;
+      }
+
+      let payload: any = null;
+      try {
+        payload = await response.json();
+      } catch (parseError) {
+        console.warn('Bulk ERP sync response parsing failed', parseError);
+      }
+
+      console.info('Bulk ERP sync completed', {
+        count: selectedCount,
+        itemCount: payload?.itemCount ?? selectedCount,
+        includeMedia: payload?.includeMedia
+      });
+
+      await handleAfterSuccess();
+      setFeedback({
+        type: 'info',
+        message: `ERP-Sync für ${payload?.itemCount ?? selectedCount} Artikel ausgelöst.`
+      });
+    } catch (error) {
+      console.error('Bulk ERP sync request failed', error);
+      setFeedback({
+        type: 'error',
+        message: (error as Error).message || 'Unbekannter Fehler beim ERP Sync.'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   async function handleBulkDelete(): Promise<void> {
     if (!hasSelection) {
       setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
@@ -554,6 +657,17 @@ export default function BulkItemActionBar({
           type="button"
         >
           <span>Agentisch starten</span>
+        </button>
+        <button
+          className="bulk-item-action-bar__button"
+          disabled={isProcessing || !hasSelection}
+          onClick={() => {
+            void handleBulkSyncToErp();
+          }}
+          type="button"
+        >
+          <GoSync aria-hidden="true" />
+          <span>Sync to ERP</span>
         </button>
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--primary"
