@@ -10,7 +10,7 @@ import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLa
 import { serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
 import { defineHttpAction } from './index';
-import { collectMediaAssets } from './save-item';
+import { collectMediaAssets, isAllowedMediaAsset } from './save-item';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
 // TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
@@ -25,6 +25,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 // TODO(agent): Remove ImageNames fallback once disk-backed assets are guaranteed for exports.
 // TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
 // TODO(agent): Mirror header label updates in importer alias definitions to avoid ingest/export drift.
+// TODO(agent): Harden exporter media listings against document artifacts slipping into partner feeds.
 const columnDescriptors = [
   { key: 'partnumber', header: 'Artikel-Nummer', field: 'Artikel_Nummer' },
   { key: 'type_and_classific', header: 'Artikeltyp', field: 'Artikeltyp' },
@@ -144,6 +145,10 @@ function filterExistingMediaAssets(assets: string[]): string[] {
     if (!trimmed) {
       continue;
     }
+    if (!isAllowedMediaAsset(trimmed)) {
+      console.info('[export-items] Skipping non-image media asset during export serialization', { asset: trimmed });
+      continue;
+    }
     if (!trimmed.startsWith(MEDIA_PREFIX)) {
       filtered.push(trimmed);
       continue;
@@ -151,11 +156,20 @@ function filterExistingMediaAssets(assets: string[]): string[] {
     const relative = trimmed.slice(MEDIA_PREFIX.length);
     const absolute = path.join(MEDIA_DIR, relative);
     if (!absolute.startsWith(MEDIA_DIR)) {
+      console.warn('[export-items] Refused to include media asset outside MEDIA_DIR during export', {
+        asset: trimmed,
+        resolved: absolute,
+      });
       continue;
     }
     try {
       if (fs.existsSync(absolute)) {
         filtered.push(trimmed);
+      } else {
+        console.info('[export-items] Media asset missing on disk during export serialization', {
+          asset: trimmed,
+          resolved: absolute,
+        });
       }
     } catch (error) {
       console.error('[export-items] Failed to verify media asset existence for export', {
@@ -292,8 +306,16 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
 
     try {
       const mediaAssets = collectMediaAssets(itemUUID, grafikname, artikelNummer);
-      if (Array.isArray(mediaAssets) && mediaAssets.length > 0) {
-        return mediaAssets.join('|');
+      const filteredMediaAssets = filterExistingMediaAssets(mediaAssets);
+      if (Array.isArray(filteredMediaAssets) && filteredMediaAssets.length > 0) {
+        return filteredMediaAssets.join('|');
+      }
+      if (mediaAssets.length > 0 && filteredMediaAssets.length === 0) {
+        console.info('[export-items] Media assets skipped after filtering; falling back to Grafikname.', {
+          itemUUID,
+          artikelNummer,
+          skippedAssets: mediaAssets,
+        });
       }
       console.info('[export-items] No media assets discovered for export row, falling back to Grafikname.', {
         itemUUID,
@@ -336,6 +358,13 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     const existingMediaAssets = filterExistingMediaAssets(mediaAssets);
     if (existingMediaAssets.length > 0) {
       return existingMediaAssets.join('|');
+    }
+    if (mediaAssets.length > 0 && existingMediaAssets.length === 0) {
+      console.info('[export-items] Media assets skipped after filtering existing files; using metadata fallbacks.', {
+        itemUUID,
+        artikelNummer,
+        skippedAssets: mediaAssets,
+      });
     }
     try {
       const storedList = typeof rawRow.ImageNames === 'string' ? rawRow.ImageNames.trim() : '';

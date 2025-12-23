@@ -380,4 +380,60 @@ describe('export-items action', () => {
       }
     }
   });
+
+  test('image_names column excludes non-image assets when media directories are mixed', async () => {
+    const now = new Date('2024-10-01T12:00:00.000Z');
+    const itemUUID = 'I-EXPORT-MEDIA-HTML-001';
+    const artikelNummer = 'EXPORT-MEDIA-HTML-001';
+    const grafikname = `/media/${itemUUID}/primary.jpg`;
+    const mediaDir = path.join(MEDIA_DIR, itemUUID);
+    const mediaFiles = ['detail-01.png', 'primary.jpg'];
+    const htmlFiles = ['index.htm', 'readme.html'];
+    const otherNonMediaFiles = ['manual.pdf', 'notes.txt'];
+
+    persistItemWithinTransaction({
+      ItemUUID: itemUUID,
+      Artikel_Nummer: artikelNummer,
+      Grafikname: grafikname,
+      Artikelbeschreibung: 'Mixed media directory export test',
+      Kurzbeschreibung: 'Mixed media short',
+      Langtext: 'Mixed media long',
+      UpdatedAt: now,
+      Datum_erfasst: now,
+      Auf_Lager: 3
+    });
+
+    fs.mkdirSync(mediaDir, { recursive: true });
+    for (const file of [...mediaFiles, ...htmlFiles, ...otherNonMediaFiles]) {
+      fs.writeFileSync(path.join(mediaDir, file), 'fixture');
+    }
+
+    try {
+      const response = await runAction(
+        exportItems,
+        mockRequest('/api/export/items?actor=tester'),
+        { db, listItemsForExport, logEvent }
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toBeInstanceOf(Buffer);
+
+      const csvPayload = (response.body as Buffer).toString('utf8').trim();
+      const csvLines = csvPayload.split(/\r?\n/);
+      expect(csvLines).toHaveLength(2);
+
+      const headerColumns = csvLines[0].split(',');
+      const dataColumns = csvLines[1].split(',');
+      const imageNamesIndex = headerColumns.indexOf('Grafikname(n)');
+      expect(imageNamesIndex).toBeGreaterThan(-1);
+
+      const imageNamesCell = dataColumns[imageNamesIndex];
+      const expectedAssets = mediaFiles.map((file) => `/media/${itemUUID}/${file}`);
+      expect(imageNamesCell.split('|')).toEqual(expectedAssets);
+    } finally {
+      if (fs.existsSync(mediaDir)) {
+        fs.rmSync(mediaDir, { recursive: true, force: true });
+      }
+    }
+  });
 });
