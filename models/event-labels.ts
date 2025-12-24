@@ -11,7 +11,7 @@ export interface EventResource {
 }
 
 const LOGGER_PREFIX = '[event-labels]';
-export const EVENT_DEFAULT_LEVEL: EventLevel = 'info';
+export const EVENT_DEFAULT_LEVEL: EventLevel = 'error';
 const EVENT_TOPIC_INDEX = new Map<string, string>();
 
 function normalizeEventResources(data: unknown): EventResource[] {
