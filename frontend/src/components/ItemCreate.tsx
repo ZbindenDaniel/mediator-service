@@ -845,17 +845,46 @@ export default function ItemCreate() {
       });
     }
 
-    const isManualSubmission =
-      !shouldUseAgenticForm || context === 'manual-edit' || context === 'match-selection';
     const submissionData: Partial<ItemFormData> = {
       ...data
     };
 
-    if (isManualSubmission) {
+    const matchSelectionContext = context === 'match-selection';
+    let isManualSubmission = !shouldUseAgenticForm || context === 'manual-edit';
+    try {
+      if (matchSelectionContext && shouldUseAgenticForm) {
+        console.info('Processing match selection with agentic workflow enabled.', {
+          normalizedBoxId,
+          hasReferenceDescription: Boolean(submissionData.Artikelbeschreibung)
+        });
+        isManualSubmission = false;
+        submissionData.agenticStatus = submissionData.agenticStatus ?? AGENTIC_RUN_STATUS_RUNNING;
+        if ('agenticManualFallback' in submissionData) {
+          delete (submissionData as Record<string, unknown>).agenticManualFallback;
+        }
+        if (
+          typeof submissionData.agenticSearch !== 'string' &&
+          typeof submissionData.Artikelbeschreibung === 'string'
+        ) {
+          submissionData.agenticSearch = submissionData.Artikelbeschreibung.trim();
+        }
+      } else {
+        isManualSubmission = !shouldUseAgenticForm || context === 'manual-edit' || matchSelectionContext;
+        if (isManualSubmission) {
+          submissionData.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
+          submissionData.agenticManualFallback = true;
+        }
+      }
+    } catch (modeResolutionError) {
+      console.error('Failed to resolve submission mode; defaulting to manual fallback.', modeResolutionError);
+      isManualSubmission = true;
       submissionData.agenticStatus = AGENTIC_RUN_STATUS_NOT_STARTED;
       submissionData.agenticManualFallback = true;
-    } else if ('agenticManualFallback' in submissionData) {
-      delete (submissionData as Record<string, unknown>).agenticManualFallback;
+    }
+
+    if (typeof submissionData.Artikelbeschreibung === 'string') {
+      const trimmedDescription = submissionData.Artikelbeschreibung.trim();
+      submissionData.Artikelbeschreibung = trimmedDescription;
     }
 
     const params = buildCreationParams(submissionData, actor);
@@ -874,7 +903,9 @@ export default function ItemCreate() {
 
       const body = await response.json();
       const createdItem: Item | undefined = body?.item;
-      const searchText = createdItem?.Artikelbeschreibung || data.Artikelbeschreibung || '';
+      const searchText = (createdItem?.Artikelbeschreibung || submissionData.Artikelbeschreibung || '')
+        .toString()
+        .trim();
       const backendDispatched = body?.agenticTriggerDispatched === true;
       if (backendDispatched) {
         console.info('Skipping client-side agentic trigger because backend already dispatched.', { context });
@@ -969,6 +1000,7 @@ export default function ItemCreate() {
       console.warn('Skipping match selection submit; creation already running.');
       return;
     }
+    // TODO: Capture metrics on match-selection agentic submissions to validate flow effectiveness.
     try {
       const referenceFields = extractReferenceFields(item);
       const basicReferenceOverrides = extractReferenceFields(basicInfo);
