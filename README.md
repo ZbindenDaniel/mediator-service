@@ -126,6 +126,10 @@ Override values by editing the `environment` block, supplying a Compose `env_fil
 
 Quick commands:
 
+Tests rely on the compiled `better-sqlite3` native module. The `npm test` pretest hook will run `npm run build` automatically if
+`node_modules/better-sqlite3/build/Release/better_sqlite3.node` is missing, but performing a full install/build first keeps run
+s consistent. _TODO:_ Cache the native build output to avoid redundant rebuilds during repeated test cycles.
+
 ```bash
 # build (compiles TS, bundles frontend, copies public into dist)
 npm run build
