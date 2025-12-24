@@ -5,10 +5,33 @@ const Module = require('module');
 // TODO: Extend this harness with additional Jest-compatible utilities as more
 //       matcher coverage is required by future test suites.
 // TODO(agent): Map out module mocking cleanup strategies if we broaden the Jest surface further.
+// TODO(agent): Keep module alias resolution in sync with TypeScript path mappings to avoid drift during test loads.
 
 const originalLoad = Module._load;
+const originalResolveFilename = Module._resolveFilename;
 const mockRegistry = new Map();
 const trackedMocks = new Set();
+const aliasResolvers = [
+  (request) => {
+    if (request === 'models') {
+      return path.join(process.cwd(), 'models');
+    }
+    if (request.startsWith('models/')) {
+      return path.join(process.cwd(), 'models', request.slice('models/'.length));
+    }
+    return null;
+  }
+];
+
+function applyAlias(request) {
+  for (const aliasResolver of aliasResolvers) {
+    const aliasPath = aliasResolver(request);
+    if (aliasPath) {
+      return aliasPath;
+    }
+  }
+  return null;
+}
 
 function findCallerModule() {
   // TODO(agent): Replace stack-based caller detection with explicit parent wiring if the harness grows.
@@ -21,7 +44,7 @@ function findCallerModule() {
     if (Array.isArray(stack)) {
       for (const frame of stack) {
         const framePath = frame?.getFileName();
-        if (framePath && framePath !== __filename) {
+        if (framePath && framePath !== __filename && !frame.isNative()) {
           return require.cache[framePath] || module;
         }
       }
@@ -30,13 +53,47 @@ function findCallerModule() {
     console.warn('[harness] Unable to resolve caller module; falling back to harness module', error);
   }
 
+  if (module.parent) {
+    return module.parent;
+  }
+
   return module;
 }
 
+Module._resolveFilename = function resolveWithAliases(request, parent, isMain, options = {}) {
+  const aliasPath = applyAlias(request);
+  const candidate = aliasPath || request;
+  const parentDir = parent?.filename ? path.dirname(parent.filename) : process.cwd();
+  const searchPaths = Array.from(new Set([...(options.paths || []), parentDir, process.cwd()]));
+
+  try {
+    return originalResolveFilename.call(Module, candidate, parent, isMain, { ...options, paths: searchPaths });
+  } catch (error) {
+    if (aliasPath) {
+      console.warn(`[harness] Alias resolution failed for ${request} -> ${aliasPath}`, error);
+    }
+    try {
+      return originalResolveFilename.call(Module, request, parent, isMain, { ...options, paths: searchPaths });
+    } catch (fallbackError) {
+      console.warn(`[harness] Unable to resolve module ${request}`, fallbackError);
+      throw fallbackError;
+    }
+  }
+};
+
 function resolveRequest(request, parentModule = module) {
   try {
+    const aliasPath = applyAlias(request);
+    if (aliasPath) {
+      return require.resolve(aliasPath, { paths: [process.cwd()] });
+    }
+  } catch (aliasResolveError) {
+    console.warn('[harness] Unexpected error while applying module aliases', aliasResolveError);
+  }
+
+  try {
     const baseDir = parentModule?.filename ? path.dirname(parentModule.filename) : process.cwd();
-    return require.resolve(request, { paths: [baseDir] });
+    return require.resolve(request, { paths: [baseDir, process.cwd()] });
   } catch (error) {
     console.warn(`[harness] Unable to resolve module ${request} for mocking`, error);
     return request;

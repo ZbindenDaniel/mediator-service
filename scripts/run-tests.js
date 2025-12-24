@@ -74,7 +74,10 @@ function collectTests(dir, matches) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       collectTests(full, matches);
-    } else if (entry.isFile() && entry.name.endsWith('.test.ts')) {
+    } else if (
+      entry.isFile() &&
+      (entry.name.endsWith('.test.ts') || entry.name.endsWith('.test.tsx'))
+    ) {
       matches.push(full);
     }
   }
