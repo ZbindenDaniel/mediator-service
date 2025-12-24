@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const Module = require('module');
 
 // TODO: Extend this harness with additional Jest-compatible utilities as more
@@ -9,9 +10,33 @@ const originalLoad = Module._load;
 const mockRegistry = new Map();
 const trackedMocks = new Set();
 
+function findCallerModule() {
+  // TODO(agent): Replace stack-based caller detection with explicit parent wiring if the harness grows.
+  try {
+    const originalPrepare = Error.prepareStackTrace;
+    Error.prepareStackTrace = (_, structured) => structured;
+    const stack = new Error().stack;
+    Error.prepareStackTrace = originalPrepare;
+
+    if (Array.isArray(stack)) {
+      for (const frame of stack) {
+        const framePath = frame?.getFileName();
+        if (framePath && framePath !== __filename) {
+          return require.cache[framePath] || module;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[harness] Unable to resolve caller module; falling back to harness module', error);
+  }
+
+  return module;
+}
+
 function resolveRequest(request, parentModule = module) {
   try {
-    return Module._resolveFilename(request, parentModule);
+    const baseDir = parentModule?.filename ? path.dirname(parentModule.filename) : process.cwd();
+    return require.resolve(request, { paths: [baseDir] });
   } catch (error) {
     console.warn(`[harness] Unable to resolve module ${request} for mocking`, error);
     return request;
@@ -23,8 +48,8 @@ function trackMock(mockFn) {
   return mockFn;
 }
 
-function storeMockEntry(request, entry) {
-  const resolved = resolveRequest(request);
+function storeMockEntry(request, entry, parentModule = module) {
+  const resolved = resolveRequest(request, parentModule);
   mockRegistry.set(resolved, entry);
   mockRegistry.set(request, entry);
   delete require.cache[resolved];
@@ -328,17 +353,19 @@ const jestApi = {
   },
   mock(request, factory) {
     const factoryFn = typeof factory === 'function' ? factory : () => factory;
-    storeMockEntry(request, { factory: factoryFn, instance: null });
+    const callerModule = findCallerModule();
+    storeMockEntry(request, { factory: factoryFn, instance: null }, callerModule);
   },
   requireActual(request) {
-    const resolved = resolveRequest(request);
-    const mockEntry = getMockEntry(request);
+    const callerModule = findCallerModule();
+    const resolved = resolveRequest(request, callerModule);
+    const mockEntry = getMockEntry(request, callerModule);
     mockRegistry.delete(resolved);
     mockRegistry.delete(request);
     const cached = require.cache[resolved];
     try {
       delete require.cache[resolved];
-      return originalLoad(resolved, module, false);
+      return originalLoad(resolved, callerModule, false);
     } catch (error) {
       console.error(`[harness] Failed to require actual module for ${request}`, error);
       throw error;

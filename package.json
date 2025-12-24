@@ -8,6 +8,7 @@
     "bundle": "node frontend/bundle.js",
     "prestart": "npm run build",
     "start": "node dist/backend/server.js",
+    "pretest": "node -e \"const fs = require('fs'); const { execSync } = require('child_process'); const nativePath = 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'; try { if (!fs.existsSync(nativePath)) { console.warn('Missing better-sqlite3 native module; running npm run build before tests.'); execSync('npm run build', { stdio: 'inherit' }); } } catch (error) { console.error('Pretest check failed while preparing better-sqlite3:', error); process.exit(1); }\"",
     "test": "npm run prebuild && node scripts/run-tests.js",
     "smoke": "ts-node --transpile-only scripts/smoke-server.ts"
   },
