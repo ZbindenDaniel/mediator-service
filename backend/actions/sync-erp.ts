@@ -3,6 +3,7 @@ import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   ERP_IMPORT_FORM_FIELD,
+  ERP_IMPORT_CLIENT_ID,
   ERP_IMPORT_INCLUDE_MEDIA,
   ERP_IMPORT_PASSWORD,
   ERP_IMPORT_TIMEOUT_MS,
@@ -64,6 +65,7 @@ function normalizeItemIds(rawItemIds: unknown): string[] {
 interface CurlImportOptions {
   actor: string;
   artifact: ItemsExportArtifact;
+  clientId: string;
   formField: string;
   includeMedia: boolean;
   logger?: Pick<Console, 'error' | 'info' | 'warn'>;
@@ -80,16 +82,71 @@ interface CurlResult {
 }
 
 async function runCurlImport(options: CurlImportOptions): Promise<CurlResult> {
-  const { actor, artifact, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
+  const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
   const mimeType = includeMedia ? 'application/zip' : 'text/csv';
   const fieldName = formField || 'file';
 
-  const args = ['-X', 'POST', url, '-f', '-F', `${fieldName}=@${artifact.archivePath};type=${mimeType}`, '-F', `actor=${actor}`];
+  // TODO(agent): Keep curl CLI parity with docs/OVERVIEW payload mapping when import expectations change.
+  const args = [
+    '-X',
+    'POST',
+    '-H',
+    'Content-Type:multipart/form-data',
+    '--silent',
+    '--insecure',
+    '-F',
+    'action=CsvImport/import',
+    '-F',
+    'action_import=1',
+    '-F',
+    'escape_char=quote',
+    '-F',
+    'profile.type=parts',
+    '-F',
+    'quote_char=quote',
+    '-F',
+    'sep_char=semicolon',
+    '-F',
+    'settings.apply_buchungsgruppe=all',
+    '-F',
+    'settings.article_number_policy=update_prices',
+    '-F',
+    'settings.charset=CP850',
+    '-F',
+    'settings.default_buchungsgruppe=395',
+    '-F',
+    'settings.duplicates=no_check',
+    '-F',
+    'settings.numberformat=1.000,00',
+    '-F',
+    'settings.part_type=part',
+    '-F',
+    'settings.sellprice_adjustment=0',
+    '-F',
+    'settings.sellprice_adjustment_type=percent',
+    '-F',
+    'settings.sellprice_places=2',
+    '-F',
+    'settings.shoparticle_if_missing=0'
+  ];
 
-  if (username || password) {
-    args.push('-u', `${username}:${password}`);
+  if (username) {
+    args.push('-F', `login=${username}`);
   }
+
+  if (password) {
+    args.push('-F', `password=${password}`);
+  }
+
+  if (clientId) {
+    args.push('-F', `client_id=${clientId}`);
+  }
+
+  args.push('-F', `${fieldName}=@${artifact.archivePath};type=${mimeType}`);
+  args.push('-F', `actor=${actor}`);
+
+  args.push(url);
 
   if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
     const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
@@ -207,6 +264,7 @@ const action = defineHttpAction({
         curlResult = await runCurlImport({
           actor,
           artifact: stagedExport,
+          clientId: ERP_IMPORT_CLIENT_ID,
           formField: ERP_IMPORT_FORM_FIELD,
           includeMedia: ERP_IMPORT_INCLUDE_MEDIA,
           logger: console,

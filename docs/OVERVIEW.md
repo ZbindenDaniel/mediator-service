@@ -63,11 +63,41 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Environment variables:
   - `ERP_IMPORT_URL` (required): ERP endpoint used by the action's `curl` invocation.
   - `ERP_IMPORT_USERNAME` / `ERP_IMPORT_PASSWORD`: optional basic-auth credentials.
+  - `ERP_IMPORT_CLIENT_ID`: optional ERP client identifier forwarded to the import endpoint.
   - `ERP_IMPORT_FORM_FIELD`: multipart field name for the staged file (defaults to `file`).
   - `ERP_IMPORT_INCLUDE_MEDIA`: toggles ZIP output with media/ folder linkage instead of a CSV-only upload.
   - `ERP_IMPORT_TIMEOUT_MS`: max execution time for the `curl` request in milliseconds.
-- Payload mapping: `curl -X POST $ERP_IMPORT_URL -f -F "${ERP_IMPORT_FORM_FIELD}=@items.csv;type=text/csv" -F "actor=<actor>" [-u user:pass]`.
-  When media is enabled the action uploads the staged ZIP (`items.csv`, `boxes.csv`, optional `media/`) under the same field.
+- Payload mapping (mirrors the ERP's example import script):
+  ```bash
+  curl \
+    -X 'POST' \
+    -H 'Content-Type:multipart/form-data' \
+    --silent --insecure \
+    -F 'action=CsvImport/import' \
+    -F 'action_import=1' \
+    -F 'escape_char=quote' \
+    -F 'profile.type=parts' \
+    -F 'quote_char=quote' \
+    -F 'sep_char=semicolon' \
+    -F 'settings.apply_buchungsgruppe=all' \
+    -F 'settings.article_number_policy=update_prices' \
+    -F 'settings.charset=CP850' \
+    -F 'settings.default_buchungsgruppe=395' \
+    -F 'settings.duplicates=no_check' \
+    -F 'settings.numberformat=1.000,00' \
+    -F 'settings.part_type=part' \
+    -F 'settings.sellprice_adjustment=0' \
+    -F 'settings.sellprice_adjustment_type=percent' \
+    -F 'settings.sellprice_places=2' \
+    -F 'settings.shoparticle_if_missing=0' \
+    -F "${ERP_IMPORT_FORM_FIELD}=@<export path>;type=${ERP_IMPORT_INCLUDE_MEDIA ? 'application/zip' : 'text/csv'}" \
+    -F "login=${ERP_IMPORT_USERNAME}" \
+    -F "password=${ERP_IMPORT_PASSWORD}" \
+    -F "client_id=${ERP_IMPORT_CLIENT_ID}" \
+    -F "actor=<actor>" \
+    "${ERP_IMPORT_URL}"
+  ```
+  When media is enabled the action uploads the staged ZIP (`items.csv`, `boxes.csv`, optional `media/`) under the same field while the CSV-only path keeps `text/csv` as the content type.
 
 ## Next Steps
 - Finish wiring the new `AgenticModelInvoker` through backend services so queue workers and actions invoke models without the
