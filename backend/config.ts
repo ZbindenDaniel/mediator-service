@@ -229,6 +229,7 @@ export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   30000,
   'ERP_IMPORT_TIMEOUT_MS'
 );
+export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').trim();
 
 export interface ShopwareCredentialsConfig {
   clientId?: string;
