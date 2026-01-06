@@ -1,5 +1,5 @@
 import path from 'path';
-import { createReadStream } from 'fs';
+import { readFileSync } from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   ERP_IMPORT_FORM_FIELD,
@@ -106,21 +106,20 @@ async function runHttpImport(options: ImportOptions): Promise<ImportResult> {
   form.set('settings.sellprice_adjustment_type', 'percent');
   form.set('settings.sellprice_places', '2');
   form.set('settings.shoparticle_if_missing', '0');
-  form.set('client_id', clientId || '1');
+  form.set('{AUTH}client_id', clientId || '1');
 
   if (username) {
-    form.set('login', username);
+    form.set('{AUTH}login', username);
   }
 
   if (password) {
-    form.set('password', password);
+    form.set('{AUTH}password', password);
   }
 
   form.set('actor', actor);
-  form.append(fieldName, createReadStream(artifact.archivePath), {
-    filename: path.basename(artifact.archivePath),
-    contentType: mimeType
-  });
+  const fileBuffer = readFileSync(artifact.archivePath);
+  const blob = new Blob([fileBuffer], { type: mimeType });
+  form.append(fieldName, blob, path.basename(artifact.archivePath));
 
   const controller = new AbortController();
   const timeoutHandle = Number.isFinite(timeoutMs) && timeoutMs > 0

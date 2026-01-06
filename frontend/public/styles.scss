@@ -1655,3 +1655,37 @@ button:focus {
         gap: 0.25rem;
     }
 }
+
+.quality-badge {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid rgba(37, 36, 36);
+  border-radius: 50%;
+  width: 25px;
+  height: 25px;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.quality-badge--compact {
+  padding: 2px 6px;
+  font-size: 10px;
+}
+
+.quality-slider__labels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #444;
+}
+
+.quality-slider__labels span {
+  text-align: center;
+}

@@ -550,7 +550,7 @@ export default function ItemListPage() {
           </div>
           <div className='row'>
             <label className="filter-control">
-              <span>Qualität ab</span>
+              <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
               <input
                 type="range"
                 min={QUALITY_MIN}
@@ -560,11 +560,11 @@ export default function ItemListPage() {
                 onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console))}
                 aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
               />
-              <div className="quality-slider__labels">
+              {/* <div className="quality-slider__labels">
                 {[1, 2, 3, 4, 5].map((level) => (
                   <span key={`filter-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
                 ))}
-              </div>
+              </div> */}
             </label>
           </div>
           <div className='row'>

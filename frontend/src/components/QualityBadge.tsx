@@ -16,7 +16,7 @@ interface Props {
   labelPrefix?: string;
 }
 
-export default function QualityBadge({ value, compact, labelPrefix = 'Qualität' }: Props) {
+export default function QualityBadge({ value, compact, labelPrefix = '' }: Props) {
   const { label, color, value: normalized } = describeQuality(value);
   const backgroundColor = QUALITY_COLOR_HEX[color];
   const textColor = color === 'yellow' ? '#0f172a' : '#ffffff';
@@ -28,8 +28,7 @@ export default function QualityBadge({ value, compact, labelPrefix = 'Qualität'
       className={className}
       style={{ backgroundColor, color: textColor }}
     >
-      <span className="quality-badge__dot" aria-hidden="true" />
-      <span className="quality-badge__label">{labelPrefix}: {label} ({normalized})</span>
+      <span className="quality-badge__label">{normalized}</span>
     </span>
   );
 }
