@@ -6,8 +6,10 @@ import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, isItemEinheit } from '../../models';
+import type { LangtextPayload } from '../../models';
+import { describeQuality } from '../../models/quality';
 import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
-import { serializeLangtextForExport } from '../lib/langtext';
+import { parseLangtext, serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
 import { defineHttpAction } from './index';
 import { collectMediaAssets, isAllowedMediaAsset } from './save-item';
@@ -413,8 +415,39 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
       itemUUID
     } as const;
 
+    // TODO(agent): Externalize Langtext quality localization once export consumers define translation needs.
+    const langtextValueForExport = (() => {
+      try {
+        const parsedLangtext = parseLangtext(value, helperContext);
+        if (parsedLangtext && typeof parsedLangtext !== 'string') {
+          try {
+            const { label } = describeQuality((rawRow as Record<string, unknown>).Quality);
+            const enriched: LangtextPayload = { ...parsedLangtext, Qualität: label };
+            return enriched;
+          } catch (qualityError) {
+            console.warn(
+              '[export-items] Unable to resolve quality for Langtext enrichment; exporting original payload.',
+              {
+                artikelNummer,
+                itemUUID,
+                error: qualityError
+              }
+            );
+          }
+        }
+      } catch (parsingError) {
+        console.error('[export-items] Failed to parse Langtext for quality enrichment during export.', {
+          artikelNummer,
+          itemUUID,
+          error: parsingError
+        });
+      }
+
+      return value;
+    })();
+
     try {
-      const serialized = serializeLangtextForExport(value, LANGTEXT_EXPORT_FORMAT, helperContext);
+      const serialized = serializeLangtextForExport(langtextValueForExport, LANGTEXT_EXPORT_FORMAT, helperContext);
       if (serialized !== null && serialized !== undefined) {
         return serialized;
       }
