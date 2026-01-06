@@ -96,6 +96,9 @@ export interface AgenticStatusCardProps {
   reviewIntent: 'approved' | 'rejected' | null;
   error: string | null;
   needsReview: boolean;
+  searchTerm?: string;
+  searchTermError?: string | null;
+  onSearchTermChange?: (value: string) => void;
   canCancel: boolean;
   canStart: boolean;
   canRestart: boolean;
@@ -269,6 +272,9 @@ export function AgenticStatusCard({
   reviewIntent,
   error,
   needsReview,
+  searchTerm,
+  searchTermError,
+  onSearchTermChange,
   canCancel,
   canStart,
   canRestart,
@@ -336,6 +342,23 @@ export function AgenticStatusCard({
                 ))}
               </tbody>
             </table>
+          ) : null}
+          {!needsReview && (canStart || canRestart) ? (
+            <div className="row">
+              <label className="agentic-status-card__search" htmlFor={`${contentId}-search`}>
+                Suchbegriff
+                <input
+                  id={`${contentId}-search`}
+                  type="text"
+                  value={searchTerm ?? ''}
+                  onChange={(event) => onSearchTermChange?.(event.target.value)}
+                  disabled={actionPending}
+                />
+              </label>
+              {searchTermError ? (
+                <p className="muted" style={{ color: '#a30000' }}>{searchTermError}</p>
+              ) : null}
+            </div>
           ) : null}
           {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
           {reviewIntent ? (
@@ -657,6 +680,9 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
+  // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
+  const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
+  const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -775,6 +801,20 @@ export default function ItemDetail({ itemId }: Props) {
       cancelled = true;
     };
   }, [itemId, neighborContext]);
+
+  useEffect(() => {
+    try {
+      const resolved = resolveAgenticSearchTerm(agentic, item);
+      setAgenticSearchTerm((prev) => {
+        if (prev && prev.trim()) {
+          return prev;
+        }
+        return resolved;
+      });
+    } catch (error) {
+      console.error('ItemDetail: Failed to sync agentic search term state', error);
+    }
+  }, [agentic, item]);
 
   const langtextRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
@@ -1050,6 +1090,35 @@ export default function ItemDetail({ itemId }: Props) {
 
     return latestNote;
   }, [events]);
+
+  const handleAgenticSearchTermChange = useCallback((value: string) => {
+    try {
+      setAgenticSearchTerm(value);
+      if (value.trim()) {
+        setAgenticSearchError(null);
+      }
+    } catch (error) {
+      console.error('ItemDetail: Failed to update agentic search term input', error);
+      setAgenticError('Suchbegriff konnte nicht aktualisiert werden.');
+    }
+  }, []);
+
+  const getNormalizedAgenticSearchTerm = useCallback((): string => {
+    try {
+      const normalized = (agenticSearchTerm ?? '').trim();
+      if (!normalized) {
+        setAgenticSearchError('Suchbegriff darf nicht leer sein.');
+        console.warn('Agentic search term validation failed: empty input');
+        return '';
+      }
+      setAgenticSearchError(null);
+      return normalized;
+    } catch (error) {
+      console.error('Failed to normalize agentic search term input', error);
+      setAgenticError('Suchbegriff konnte nicht verarbeitet werden.');
+      return '';
+    }
+  }, [agenticSearchTerm]);
 
   const agenticRows: [string, React.ReactNode][] = [];
   // TODO(agentic-transcript-ui): Keep the transcript link visible regardless of agentic run state once backend exposes it.
@@ -1354,12 +1423,15 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const searchTerm = resolveAgenticSearchTerm(agentic, item);
+    const searchTerm = getNormalizedAgenticSearchTerm();
     if (!searchTerm) {
-      console.warn('Agentic start skipped due to missing search term', { itemId: item.ItemUUID });
+      console.warn('Agentic start skipped due to missing or invalid search term', { itemId: item.ItemUUID });
       setAgenticError('Ki-Lauf konnte nicht gestartet werden (fehlender Suchbegriff).');
+      setAgenticSearchTerm('');
       return;
     }
+
+    setAgenticSearchTerm(searchTerm);
 
     setAgenticActionPending(true);
     setAgenticError(null);
@@ -1391,7 +1463,12 @@ export default function ItemDetail({ itemId }: Props) {
       const refreshed = triggerResult.agentic
         ? triggerResult.agentic
         : await refreshAgenticStatus(item.ItemUUID);
-      setAgentic(refreshed ?? agentic);
+      const nextRun = refreshed ?? agentic;
+      if (nextRun) {
+        setAgentic({ ...nextRun, SearchQuery: searchTerm });
+      } else {
+        setAgentic(nextRun);
+      }
       setAgenticError(null);
     } catch (err) {
       console.error('Ki-Start request failed', err);
@@ -1421,12 +1498,15 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const baseSearchTerm = resolveAgenticSearchTerm(agentic, item);
+    const baseSearchTerm = getNormalizedAgenticSearchTerm();
     if (!baseSearchTerm) {
       console.warn('Agentic restart skipped due to missing search term', { itemId: item.ItemUUID });
       setAgenticError('Ki-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
+      setAgenticSearchTerm('');
       return;
     }
+
+    setAgenticSearchTerm(baseSearchTerm);
 
     const restartRequestPayload = buildAgenticRestartRequestPayload({
       actor,
@@ -1464,7 +1544,11 @@ export default function ItemDetail({ itemId }: Props) {
         });
 
       const refreshedRun: AgenticRun | null = body?.agentic ?? null;
-      setAgentic(refreshedRun);
+      if (refreshedRun) {
+        setAgentic({ ...refreshedRun, SearchQuery: baseSearchTerm });
+      } else {
+        setAgentic(refreshedRun);
+      }
 
       if (!refreshedRun) {
         console.warn('Agentic restart succeeded without returning a run');
@@ -1869,6 +1953,9 @@ export default function ItemDetail({ itemId }: Props) {
               reviewIntent={agenticReviewIntent}
               error={agenticError}
               needsReview={agenticNeedsReview}
+              searchTerm={agenticSearchTerm}
+              searchTermError={agenticSearchError}
+              onSearchTermChange={handleAgenticSearchTermChange}
               canCancel={agenticCanCancel}
               canStart={agenticCanStart}
               canRestart={agenticCanRestart}
