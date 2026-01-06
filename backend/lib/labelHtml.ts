@@ -95,7 +95,7 @@ export interface ItemLabelPayload {
   materialNumber: string | null;
   boxId?: string | null;
   location?: string | null;
-  description: string | null;
+  category: string | null;
   quantity: number | null;
   addedAt: string | null;
   updatedAt: string | null;

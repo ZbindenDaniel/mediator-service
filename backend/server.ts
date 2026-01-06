@@ -148,8 +148,8 @@ try {
   PUBLIC_DIR = fs.existsSync(path.join(DIST_PUBLIC, 'index.html'))
     ? DIST_PUBLIC
     : fs.existsSync(path.join(REPO_PUBLIC, 'index.html'))
-    ? REPO_PUBLIC
-    : DIST_PUBLIC;
+      ? REPO_PUBLIC
+      : DIST_PUBLIC;
   PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
   fs.mkdirSync(PREVIEW_DIR, { recursive: true });
   fs.mkdirSync(MEDIA_DIR, { recursive: true });
@@ -236,7 +236,6 @@ async function runPrintWorker(): Promise<void> {
       if (Number.isFinite(parsed)) parsedQuantity = parsed;
     }
 
-    const description = (item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim()) ?? '';
 
     const toIsoString = (value: unknown): string | null => {
       if (!value) return null;
@@ -251,7 +250,7 @@ async function runPrintWorker(): Promise<void> {
       materialNumber: item.Artikel_Nummer?.trim() || null,
       boxId: item.BoxID || null,
       location: item.Location?.trim() || null,
-      description,
+      category: 'Find Me !è',
       quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
       addedAt: toIsoString(item.Datum_erfasst || item.UpdatedAt),
       updatedAt: toIsoString(item.UpdatedAt)
@@ -513,8 +512,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         const ct = ext === '.png'
           ? 'image/png'
           : ext === '.jpg' || ext === '.jpeg'
-          ? 'image/jpeg'
-          : 'application/octet-stream';
+            ? 'image/jpeg'
+            : 'application/octet-stream';
         res.writeHead(200, { 'Content-Type': ct });
         return res.end(data);
       } catch (err) {

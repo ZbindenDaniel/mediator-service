@@ -12,9 +12,9 @@ export const QUALITY_COLOR_MAP: Record<number, 'purple' | 'red' | 'yellow' | 'or
 };
 
 export const QUALITY_LABELS: Record<number, string> = {
-  1: 'Ausgemustert',
-  2: 'Überarbeiten',
-  3: 'Standard',
+  1: 'Ersatzteil',
+  2: 'Upcycling',
+  3: 'Ok',
   4: 'Gut',
   5: 'Neuwertig'
 };

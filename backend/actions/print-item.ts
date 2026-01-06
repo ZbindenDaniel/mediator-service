@@ -8,6 +8,7 @@ import { defineHttpAction } from './index';
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
+import { buildItemCategoryLookups } from 'frontend/src/lib/categoryLookup';
 
 // TODO(agent): Align item print payloads with upcoming label size templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
@@ -88,8 +89,12 @@ const action = defineHttpAction({
         if (Number.isFinite(parsed)) parsedQuantity = parsed;
       }
 
-      const description =
-        (item.Kurzbeschreibung?.trim() || item.Artikelbeschreibung?.trim()) ?? '';
+      // const lookUps = buildItemCategoryLookups()
+      // let category = '-';
+      // if(item.Unterkategorien_A){
+      //   category = lookUps?.unter?.get(item.Unterkategorien_A)?.label ?? '?';
+      // }
+  
       const toIsoString = (value: unknown): string | null => {
         if (!value) return null;
         const date = value instanceof Date ? value : new Date(value as string);
@@ -99,11 +104,11 @@ const action = defineHttpAction({
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
-        labelText: item.Artikel_Nummer?.trim() || item.ItemUUID,
+        labelText: item.Artikelbeschreibung?.trim() || item.ItemUUID,
         materialNumber: item.Artikel_Nummer?.trim() || null,
         boxId: item.BoxID || null,
         location: item.Location?.trim() || null,
-        description,
+        category: item.Unterkategorien_A?.toString() ?? '',
         quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
         addedAt: toIsoString(item.Datum_erfasst || item.UpdatedAt),
         updatedAt: toIsoString(item.UpdatedAt)
@@ -184,3 +189,7 @@ const action = defineHttpAction({
 });
 
 export default action;
+function resolveUnterkategorieLabel(Unterkategorien_A: number | undefined) {
+  throw new Error('Function not implemented.');
+}
+
