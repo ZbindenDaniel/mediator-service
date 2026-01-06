@@ -154,3 +154,80 @@ describe('export-items published status gating', () => {
     expect(values[publishedIndex]).toBe('false');
   });
 });
+
+describe('export-items Langtext quality enrichment', () => {
+  const baseRow = {
+    Artikel_Nummer: 'A-1000',
+    Artikeltyp: 'Laptop',
+    Datum_erfasst: '2024-01-01',
+    Grafikname: 'primary.png',
+    Artikelbeschreibung: 'Test item',
+    Kurzbeschreibung: 'Short',
+    Langtext: { Specs: 'Detail block' },
+    Hersteller: 'Example Inc',
+    Länge_mm: 100,
+    Breite_mm: 50,
+    Höhe_mm: 25,
+    Gewicht_kg: 2,
+    Verkaufspreis: 199.99,
+    Auf_Lager: 4,
+    Veröffentlicht_Status: true,
+    Shopartikel: 'shop-article',
+    Einheit: 'Stk',
+    Quality: 4,
+    Hauptkategorien_A: 10,
+    Unterkategorien_A: 101,
+    Hauptkategorien_B: 50,
+    Unterkategorien_B: 503,
+    ItemUUID: 'item-uuid-1',
+    BoxID: 'box-123',
+    LocationId: 'loc-9',
+    Label: 'box label',
+    UpdatedAt: '2024-02-02T00:00:00.000Z'
+  };
+
+  const serializeForFormat = (format: string): string => {
+    const previousFormat = process.env.LANGTEXT_EXPORT_FORMAT;
+    process.env.LANGTEXT_EXPORT_FORMAT = format;
+    let dataLine = '';
+
+    jest.isolateModules(() => {
+      // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
+      const { serializeItemsToCsv } = require('../export-items');
+      const { csv } = serializeItemsToCsv([{ ...baseRow }]);
+      [, dataLine] = csv.split('\n');
+    });
+
+    if (previousFormat === undefined) {
+      delete process.env.LANGTEXT_EXPORT_FORMAT;
+    } else {
+      process.env.LANGTEXT_EXPORT_FORMAT = previousFormat;
+    }
+
+    return dataLine;
+  };
+
+  for (const [format, snippet] of [
+    ['json', 'Qualität'],
+    ['markdown', '**Qualität** Gut'],
+    ['html', '<strong>Qualität</strong> Gut']
+  ] as const) {
+    test(`adds normalized quality label to Langtext payload for ${format} export format`, () => {
+      const dataLine = serializeForFormat(format);
+      expect(dataLine).toContain(snippet);
+      expect(dataLine).toContain('Gut');
+    });
+  }
+
+  test('does not mutate the original Langtext payload during enrichment', () => {
+    const row = { ...baseRow, Langtext: { Specs: 'Detail block' } };
+
+    jest.isolateModules(() => {
+      // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
+      const { serializeItemsToCsv } = require('../export-items');
+      serializeItemsToCsv([row]);
+    });
+
+    expect(row.Langtext).toEqual({ Specs: 'Detail block' });
+  });
+});
