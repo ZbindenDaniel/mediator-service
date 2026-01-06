@@ -1,5 +1,5 @@
 import path from 'path';
-import { spawn } from 'child_process';
+import { createReadStream } from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   ERP_IMPORT_FORM_FIELD,
@@ -15,6 +15,7 @@ import { ItemsExportArtifact, stageItemsExport } from './export-items';
 import { defineHttpAction } from './index';
 
 // TODO(agent): Capture ERP sync response metadata (job IDs) once the upstream API returns them.
+// TODO(agent): Consolidate ERP import HTTP client with shared networking utilities once available.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -62,7 +63,7 @@ function normalizeItemIds(rawItemIds: unknown): string[] {
   return normalized;
 }
 
-interface CurlImportOptions {
+interface ImportOptions {
   actor: string;
   artifact: ItemsExportArtifact;
   clientId: string;
@@ -75,117 +76,107 @@ interface CurlImportOptions {
   username: string;
 }
 
-interface CurlResult {
+interface ImportResult {
   exitCode: number;
   stdout: string;
   stderr: string;
 }
 
-async function runCurlImport(options: CurlImportOptions): Promise<CurlResult> {
+async function runHttpImport(options: ImportOptions): Promise<ImportResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
   const mimeType = includeMedia ? 'application/zip' : 'text/csv';
   const fieldName = formField || 'file';
 
-  // TODO(agent): Keep curl CLI parity with docs/OVERVIEW payload mapping when import expectations change.
-  const args = [
-    '-X',
-    'POST',
-    '-H',
-    'Content-Type:multipart/form-data',
-    '--silent',
-    '--insecure',
-    '-F',
-    'action=CsvImport/import',
-    '-F',
-    'action_import=1',
-    '-F',
-    'escape_char=quote',
-    '-F',
-    'profile.type=parts',
-    '-F',
-    'quote_char=quote',
-    '-F',
-    'sep_char=semicolon',
-    '-F',
-    'settings.apply_buchungsgruppe=all',
-    '-F',
-    'settings.article_number_policy=update_prices',
-    '-F',
-    'settings.charset=CP850',
-    '-F',
-    'settings.default_buchungsgruppe=395',
-    '-F',
-    'settings.duplicates=no_check',
-    '-F',
-    'settings.numberformat=1.000,00',
-    '-F',
-    'settings.part_type=part',
-    '-F',
-    'settings.sellprice_adjustment=0',
-    '-F',
-    'settings.sellprice_adjustment_type=percent',
-    '-F',
-    'settings.sellprice_places=2',
-    '-F',
-    'settings.shoparticle_if_missing=0',
-    '-F',
-    'client_id=1'
-  ];
+  const form = new FormData();
+  form.set('action', 'CsvImport/import');
+  form.set('action_import', '1');
+  form.set('escape_char', 'quote');
+  form.set('profile.type', 'parts');
+  form.set('quote_char', 'quote');
+  form.set('sep_char', 'semicolon');
+  form.set('settings.apply_buchungsgruppe', 'all');
+  form.set('settings.article_number_policy', 'update_prices');
+  form.set('settings.charset', 'CP850');
+  form.set('settings.default_buchungsgruppe', '395');
+  form.set('settings.duplicates', 'no_check');
+  form.set('settings.numberformat', '1.000,00');
+  form.set('settings.part_type', 'part');
+  form.set('settings.sellprice_adjustment', '0');
+  form.set('settings.sellprice_adjustment_type', 'percent');
+  form.set('settings.sellprice_places', '2');
+  form.set('settings.shoparticle_if_missing', '0');
+  form.set('client_id', clientId || '1');
 
   if (username) {
-    args.push('-F', `login=${username}`);
+    form.set('login', username);
   }
 
   if (password) {
-    args.push('-F', `password=${password}`);
+    form.set('password', password);
   }
 
-  args.push('-F', `${fieldName}=@${artifact.archivePath};type=${mimeType}`);
-  args.push('-F', `actor=${actor}`);
-
-  args.push(url);
-
-  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
-    const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
-    args.push('--max-time', String(timeoutSeconds));
-  }
-
-  const stdoutChunks: string[] = [];
-  const stderrChunks: string[] = [];
-
-  // logger?.info('Resolve import ', args)
-  const exitCode = await new Promise<number>((resolve, reject) => {
-    console.log(['curl', ...args].map((s) => `'${String(s).replace(/'/g,"'\\''")}'`).join(' '));
-    const curlProc = spawn('curl', args);
-    curlProc.stdout.on('data', (data: Buffer) => {
-      const text = data.toString();
-      stdoutChunks.push(text);
-      loggerRef.info?.('[sync-erp] curl stdout', text.trim());
-    });
-
-    curlProc.stderr.on('data', (data: Buffer) => {
-      const text = data.toString();
-      stderrChunks.push(text);
-      loggerRef.warn?.('[sync-erp] curl stderr', text.trim());
-    });
-
-    curlProc.on('error', (error) => {
-      loggerRef.error?.('[sync-erp] Failed to spawn curl process', error);
-      reject(error);
-    });
-
-    curlProc.on('close', (code) => {
-      logger?.info('[sync-erp]  curl finished with code', code)
-      resolve(typeof code === 'number' ? code : -1);
-    });
+  form.set('actor', actor);
+  form.append(fieldName, createReadStream(artifact.archivePath), {
+    filename: path.basename(artifact.archivePath),
+    contentType: mimeType
   });
 
-  return {
-    exitCode,
-    stdout: stdoutChunks.join(''),
-    stderr: stderrChunks.join('')
-  };
+  const controller = new AbortController();
+  const timeoutHandle = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : undefined;
+
+  try {
+    loggerRef.info?.('[sync-erp] HTTP import request', {
+      url,
+      fieldName,
+      includeMedia,
+      archivePath: artifact.archivePath,
+      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : undefined
+    });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: form as any,
+      signal: controller.signal
+    });
+    const responseText = await response.text();
+
+    loggerRef.info?.('[sync-erp] HTTP import response', {
+      status: response.status,
+      ok: response.ok
+    });
+
+    if (!response.ok) {
+      loggerRef.warn?.('[sync-erp] ERP import returned non-success status', {
+        status: response.status,
+        statusText: response.statusText
+      });
+      return {
+        exitCode: response.status || -1,
+        stdout: responseText,
+        stderr: ''
+      };
+    }
+
+    if (responseText.trim()) {
+      loggerRef.info?.('[sync-erp] ERP import body', responseText.trim());
+    }
+
+    return {
+      exitCode: 0,
+      stdout: responseText,
+      stderr: ''
+    };
+  } catch (error) {
+    loggerRef.error?.('[sync-erp] ERP import request failed', error);
+    throw error;
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
 }
 
 const action = defineHttpAction({
@@ -259,10 +250,10 @@ const action = defineHttpAction({
         }
       }
       
-      console.info('[sync-erp] Starting CURL import');
-      let curlResult: CurlResult;
+      console.info('[sync-erp] Starting ERP HTTP import');
+      let curlResult: ImportResult;
       try {
-        curlResult = await runCurlImport({
+        curlResult = await runHttpImport({
           actor,
           artifact: stagedExport,
           clientId: ERP_IMPORT_CLIENT_ID,
