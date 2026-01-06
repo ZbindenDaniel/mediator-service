@@ -128,7 +128,9 @@ async function runCurlImport(options: CurlImportOptions): Promise<CurlResult> {
     '-F',
     'settings.sellprice_places=2',
     '-F',
-    'settings.shoparticle_if_missing=0'
+    'settings.shoparticle_if_missing=0',
+    '-F',
+    'client_id=1'
   ];
 
   if (username) {
@@ -137,10 +139,6 @@ async function runCurlImport(options: CurlImportOptions): Promise<CurlResult> {
 
   if (password) {
     args.push('-F', `password=${password}`);
-  }
-
-  if (clientId) {
-    args.push('-F', `client_id=${clientId}`);
   }
 
   args.push('-F', `${fieldName}=@${artifact.archivePath};type=${mimeType}`);
@@ -156,9 +154,10 @@ async function runCurlImport(options: CurlImportOptions): Promise<CurlResult> {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
 
+  // logger?.info('Resolve import ', args)
   const exitCode = await new Promise<number>((resolve, reject) => {
+    console.log(['curl', ...args].map((s) => `'${String(s).replace(/'/g,"'\\''")}'`).join(' '));
     const curlProc = spawn('curl', args);
-
     curlProc.stdout.on('data', (data: Buffer) => {
       const text = data.toString();
       stdoutChunks.push(text);
@@ -177,6 +176,7 @@ async function runCurlImport(options: CurlImportOptions): Promise<CurlResult> {
     });
 
     curlProc.on('close', (code) => {
+      logger?.info('[sync-erp]  curl finished with code', code)
       resolve(typeof code === 'number' ? code : -1);
     });
   });
@@ -258,7 +258,8 @@ const action = defineHttpAction({
           console.error('[sync-erp] Failed to log ERP export events', logError);
         }
       }
-
+      
+      console.info('[sync-erp] Starting CURL import');
       let curlResult: CurlResult;
       try {
         curlResult = await runCurlImport({

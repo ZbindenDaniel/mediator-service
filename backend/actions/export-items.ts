@@ -278,6 +278,7 @@ function logMissingMetadataValue(
 function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
   const field = fieldMap[column];
 
+  
   if (!field) {
     if (!missingFieldWarnings.has(column)) {
       missingFieldWarnings.add(column);
@@ -301,18 +302,10 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     const gatedPublished = storedPublished && agenticStatus === 'reviewed';
 
     if (storedPublished && !gatedPublished) {
-      try {
-        console.info('[export-items] Agentic review gate suppressed published status during export.', {
-          agenticStatus,
-          itemUUID,
-        });
-      } catch (loggingError) {
-        console.error('[export-items] Failed to log agentic review gate suppression for export.', {
-          agenticStatus,
-          itemUUID,
-          loggingError,
-        });
-      }
+      console.info('[export-items] Agentic review gate suppressed published status during export.', {
+        agenticStatus,
+        itemUUID,
+      });
     }
 
     return gatedPublished;
