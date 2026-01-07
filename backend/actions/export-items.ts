@@ -17,6 +17,7 @@ import { collectMediaAssets, isAllowedMediaAsset } from './save-item';
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
 // TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
 // TODO(agent): Normalize category fields to canonical labels once lookup utilities support code-to-name mapping.
+// TODO(agent): Confirm Artikel-Nummer zero-padding requirements remain at six digits for ERP exports.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -118,6 +119,60 @@ const categoryLabelFallbackWarnings = new Set<string>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
+
+function formatArtikelnummerForExport(value: unknown, itemUUID: string | null): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  try {
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) {
+        console.warn('[export-items] Artikel-Nummer was non-finite number during export; leaving as-is.', {
+          itemUUID,
+          provided: value
+        });
+        return value;
+      }
+      const integerValue = Math.trunc(value);
+      const formatted = String(integerValue).padStart(6, '0');
+      if (formatted.length > 6) {
+        console.warn('[export-items] Artikel-Nummer exceeds 6 digits during export; retaining full value.', {
+          itemUUID,
+          provided: value,
+          formatted
+        });
+      }
+      return formatted;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return trimmed;
+      }
+      if (/^\d+$/u.test(trimmed)) {
+        const formatted = trimmed.padStart(6, '0');
+        if (formatted.length > 6) {
+          console.warn('[export-items] Artikel-Nummer exceeds 6 digits during export; retaining full value.', {
+            itemUUID,
+            provided: trimmed,
+            formatted
+          });
+        }
+        return formatted;
+      }
+    }
+  } catch (error) {
+    console.error('[export-items] Failed to format Artikel-Nummer for export; leaving as-is.', {
+      itemUUID,
+      provided: value,
+      error
+    });
+  }
+
+  return value;
+}
 
 export interface ItemsExportArtifact {
   archivePath: string;
@@ -295,6 +350,11 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
 
   let value = rawRow[field];
   value = normalizeCategoryValueForExport(field, value);
+
+  if (field === 'Artikel_Nummer') {
+    const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    return formatArtikelnummerForExport(value, itemUUID);
+  }
 
   // TODO(agent): Revisit published status gating once agentic review policies evolve beyond reviewed/notReviewed.
   if (field === 'Veröffentlicht_Status') {
