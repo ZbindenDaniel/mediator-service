@@ -1,15 +1,39 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { EventLog } from '../../../models';
-import RecentEventsCard, { RecentEventsList } from './RecentEventsCard';
+import { RecentEventsList } from './RecentEventsCard';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 
 const DEFAULT_LIMIT = 50;
+// TODO(agent): Apply activities search term to feed request once API supports filtering.
 
 export default function RecentActivitiesPage() {
   const [events, setEvents] = useState<EventLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const term = params.get('term') ?? '';
+    setSearchTerm(term);
+  }, [location.search]);
+
+  const handleSearchSubmit = () => {
+    const trimmed = searchTerm.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    try {
+      console.info('RecentActivitiesPage: updating activities search term', { term: trimmed });
+      navigate(`/activities?term=${encodeURIComponent(trimmed)}`);
+    } catch (err) {
+      console.error('RecentActivitiesPage: Failed to update activities search term', err);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +74,22 @@ export default function RecentActivitiesPage() {
     <div className="list-container activities">
       <div className="page-header">
         <h1>Letzte Aktivitäten</h1>
+      </div>
+      <div className="row">
+        <input
+          value={searchTerm}
+          onChange={event => setSearchTerm(event.target.value)}
+          placeholder="Artikelnummer oder UUID"
+          aria-label="Aktivitäten durchsuchen nach Artikelnummer oder UUID"
+          onKeyDown={event => {
+            if (event.key === 'Enter') {
+              handleSearchSubmit();
+            }
+          }}
+        />
+        <button className="btn" onClick={handleSearchSubmit}>
+          Suchen
+        </button>
       </div>
       {loading && <p className="muted">Aktivitäten werden geladen…</p>}
       {error && (
