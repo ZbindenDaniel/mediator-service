@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { EventLog } from '../../../models';
 import { formatDate } from '../lib/format';
 import { eventLabel } from '../../../models/event-labels';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 
 // TODO(agent): Surface active topic filters in the UI to avoid confusing operators.
+// TODO(agent): Follow up on filtering the activities feed by query once backend support lands.
 
 interface ResolvedEventLink {
   path: string;
@@ -112,6 +113,23 @@ export function RecentEventsList({ events }: Props) {
 }
 
 export default function RecentEventsCard({ events }: Props) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
+
+  const handleSearchSubmit = () => {
+    const trimmed = searchTerm.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    try {
+      console.info('RecentEventsCard: submitting activities search', { term: trimmed });
+      navigate(`/activities?term=${encodeURIComponent(trimmed)}`);
+    } catch (error) {
+      console.error('RecentEventsCard: Failed to navigate to activities search', error);
+    }
+  };
+
   return (
     <div className="card">
       <div className="card-header">
@@ -119,6 +137,22 @@ export default function RecentEventsCard({ events }: Props) {
         <Link to="/activities" id="all-events" aria-label="Alle Aktivitäten anzeigen">
           Alle
         </Link>
+      </div>
+      <div className="row">
+        <input
+          value={searchTerm}
+          onChange={event => setSearchTerm(event.target.value)}
+          placeholder="Artikelnummer oder UUID"
+          aria-label="Aktivitäten durchsuchen nach Artikelnummer oder UUID"
+          onKeyDown={event => {
+            if (event.key === 'Enter') {
+              handleSearchSubmit();
+            }
+          }}
+        />
+        <button className="btn" onClick={handleSearchSubmit}>
+          Suchen
+        </button>
       </div>
       <RecentEventsList events={events} />
     </div>
