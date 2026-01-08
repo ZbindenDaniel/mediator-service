@@ -6,6 +6,7 @@ import path from 'path';
 // TODO(agent): Audit ImageNames persistence once asset synchronization tracks discrete files.
 // TODO(agent): Fold location bootstrap seeding into the formal migration path once Postgres becomes the primary store.
 // TODO(quality-migration): Confirm Quality defaults remain accurate once upstream ERP integration defines quality grades.
+// TODO(agent): Reconfirm recent activities search filtering once term usage is finalized.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -2365,6 +2366,21 @@ export const listRecentActivities = db.prepare(`
   LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
   WHERE ${levelFilterExpression('e')}
     AND ${topicFilterExpression('e')}
+  ORDER BY e.CreatedAt DESC
+  LIMIT @limit`);
+export const listRecentActivitiesByTerm = db.prepare(`
+  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
+         r.Artikelbeschreibung AS Artikelbeschreibung,
+         COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
+  FROM events e
+  LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
+  WHERE ${levelFilterExpression('e')}
+    AND ${topicFilterExpression('e')}
+    AND (
+      e.EntityId LIKE @term
+      OR COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) LIKE @term
+    )
   ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
 export const countEvents = db.prepare(
