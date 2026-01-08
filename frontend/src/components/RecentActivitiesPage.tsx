@@ -5,7 +5,7 @@ import { RecentEventsList } from './RecentEventsCard';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 
 const DEFAULT_LIMIT = 50;
-// TODO(agent): Apply activities search term to feed request once API supports filtering.
+// TODO(agent): Include activities search term in feed request once the API confirms term filtering.
 
 export default function RecentActivitiesPage() {
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -40,7 +40,15 @@ export default function RecentActivitiesPage() {
 
     const loadActivities = async () => {
       try {
-        const response = await fetch(`/api/activities?limit=${DEFAULT_LIMIT}`);
+        const params = new URLSearchParams(location.search);
+        const termFromUrl = params.get('term') ?? '';
+        const trimmed = (termFromUrl || searchTerm).trim();
+        const termParam = trimmed ? `&term=${encodeURIComponent(trimmed)}` : '';
+        console.info('RecentActivitiesPage: fetching activities', {
+          limit: DEFAULT_LIMIT,
+          term: trimmed || undefined,
+        });
+        const response = await fetch(`/api/activities?limit=${DEFAULT_LIMIT}${termParam}`);
         if (!response.ok) {
           throw new Error(`Aktivitäten konnten nicht geladen werden (Status ${response.status}).`);
         }
@@ -68,7 +76,7 @@ export default function RecentActivitiesPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [location.search, searchTerm]);
 
   return (
     <div className="list-container activities">
