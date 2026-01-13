@@ -87,7 +87,10 @@ interface ImportResult {
 async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
-  const mimeType = includeMedia ? 'application/zip' : 'text/csv';
+  // TODO(agent): Reconcile ERP import content type selection with export artifact shape when media rules evolve.
+  const expectedKind = includeMedia ? 'zip' : 'csv';
+  const archiveKind = artifact.kind;
+  const mimeType = archiveKind === 'zip' ? 'application/zip' : 'text/csv';
   const fieldName = formField || 'file';
   const timeoutSeconds = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.ceil(timeoutMs / 1000) : undefined;
   const args: string[] = [
