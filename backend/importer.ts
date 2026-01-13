@@ -29,6 +29,7 @@ const BOX_ID_PREFIX = 'B-';
 const ID_SEQUENCE_WIDTH = 4;
 const ARTIKEL_NUMMER_WIDTH = 5;
 
+// TODO(agent): Revisit shelf BoxID validation if location normalization rules evolve.
 // TODO(agent): Expand quantity field resolution when additional column spellings surface.
 const QUANTITY_FIELD_PRIORITIES = [
   { field: 'Auf_Lager', warnOnUse: false },
@@ -1046,6 +1047,21 @@ function normalizeBoxField(value: unknown): string {
   }
 }
 
+const SHELF_BOX_ID_PATTERN = /^S-\d{4}-\d-\d{4}-\d$/;
+
+function isValidShelfBoxId(value: string, context: { rowNumber: number }): boolean {
+  try {
+    return SHELF_BOX_ID_PATTERN.test(value);
+  } catch (error) {
+    console.error('[importer] Failed to validate shelf BoxID format', {
+      ...context,
+      boxId: value,
+      error,
+    });
+    return false;
+  }
+}
+
 export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: number }> {
   console.log('[importer] Ingesting boxes.csv payload');
   const now = new Date().toISOString();
@@ -1059,6 +1075,25 @@ export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: nu
       if (!boxId) {
         console.warn('[importer] Skipping boxes.csv row without BoxID', { rowNumber: index + 1 });
         continue;
+      }
+      if (boxId.startsWith('S-')) {
+        let isValidShelfId = false;
+        try {
+          isValidShelfId = isValidShelfBoxId(boxId, { rowNumber: index + 1 });
+        } catch (validationError) {
+          console.error('[importer] Shelf BoxID validation failed unexpectedly', {
+            rowNumber: index + 1,
+            boxId,
+            error: validationError,
+          });
+        }
+        if (!isValidShelfId) {
+          console.warn('[importer] Skipping boxes.csv row with invalid shelf BoxID', {
+            rowNumber: index + 1,
+            boxId,
+          });
+          continue;
+        }
       }
 
       const locationId = normalizeBoxField(record.LocationId ?? record.Location ?? record.Standort);

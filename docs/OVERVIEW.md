@@ -152,6 +152,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Update the closing of larger tasks in [RECENT_HIGHLIGHTS]()
 - Introduced topic-based event log allowlists across backend and frontend feeds, defaulting to full visibility unless configured.
 - Introduced default shelf location mapping configuration for subcategory-backed location IDs, logging missing mappings to protect data quality.
+- Added shelf BoxID format validation for boxes.csv ingestion to warn and skip malformed shelf IDs.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
