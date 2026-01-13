@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Regaletikett A4</title>
+  <!-- TODO(agent): Confirm shelf payload fields once backend print action is wired. -->
+  <!-- TODO(agentic-printing): Validate QR sizing and margins on A4 for shelf labels. -->
+  <style>
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+
+    :root {
+      color-scheme: only light;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f3f4f6;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .label {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 180mm;
+      min-height: 260mm;
+      padding: 10mm;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 12mm;
+      border: 2px solid #111827;
+      border-radius: 6mm;
+    }
+
+    .meta {
+      display: grid;
+      gap: 6mm;
+    }
+
+    .headline {
+      font-size: 36pt;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .category {
+      font-size: 20pt;
+      font-weight: 600;
+      color: #1f2937;
+    }
+
+    .qr {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .qr img,
+    .qr canvas {
+      width: 150mm;
+      height: 150mm;
+      max-width: 150mm;
+      max-height: 150mm;
+      aspect-ratio: 1 / 1;
+      image-rendering: pixelated;
+    }
+
+    .error {
+      margin: 16px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 12pt;
+      max-width: 420px;
+    }
+
+    @media print {
+      body {
+        background: none;
+      }
+
+      .label {
+        box-shadow: none;
+        border-color: #111827;
+        page-break-inside: avoid;
+      }
+
+      .error {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="label" id="label" hidden>
+    <div class="meta">
+      <div class="headline" id="shelfId">Regal</div>
+      <div class="category" id="category">Kategorie</div>
+    </div>
+    <div class="qr">
+      <img id="qrImage" alt="QR-Code" href="testQR.png" />
+      <canvas id="qrCanvas" hidden></canvas>
+    </div>
+  </div>
+  <div class="error" id="error" hidden></div>
+  <script>
+    (function init() {
+      const state = { payload: null };
+      const labelEl = document.getElementById('label');
+      const qrImage = document.getElementById('qrImage');
+      const qrCanvas = document.getElementById('qrCanvas');
+      const shelfIdEl = document.getElementById('shelfId');
+      const categoryEl = document.getElementById('category');
+      const errorEl = document.getElementById('error');
+
+      function drawMatrix(modules, margin = 0) {
+        if (!qrCanvas || !Array.isArray(modules) || modules.length === 0) return false;
+        try {
+          const size = modules.length;
+          const pixelSize = 900;
+          const available = pixelSize - margin * 2;
+          const scale = Math.floor(available / size);
+          const offset = Math.floor((pixelSize - size * scale) / 2);
+          const ctx = qrCanvas.getContext('2d');
+          if (!ctx) return false;
+          qrCanvas.width = pixelSize;
+          qrCanvas.height = pixelSize;
+          ctx.clearRect(0, 0, pixelSize, pixelSize);
+          ctx.fillStyle = '#111827';
+          modules.forEach((row, y) => {
+            row.forEach((cell, x) => {
+              if (cell) ctx.fillRect(offset + x * scale, offset + y * scale, scale, scale);
+            });
+          });
+          qrCanvas.hidden = false;
+          return true;
+        } catch (err) {
+          console.error('Failed to draw QR matrix on canvas', err);
+          return false;
+        }
+      }
+
+      function showError(message) {
+        if (!errorEl) return;
+        errorEl.textContent = message;
+        errorEl.hidden = false;
+        if (labelEl) labelEl.hidden = true;
+      }
+
+      function render(payload) {
+        if (!payload || typeof payload !== 'object') {
+          showError('Kein gültiger Payload vorhanden.');
+          return;
+        }
+        try {
+          const shelfId = payload.shelfId || payload.id || '';
+          const category = payload.category || payload.categoryLabel || '';
+          if (shelfIdEl && shelfId) shelfIdEl.textContent = `${shelfId}`;
+          if (categoryEl && category) categoryEl.textContent = `${category}`;
+          if (labelEl) labelEl.hidden = false;
+
+          const hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
+          if (qrImage) {
+            if (hasDataUri) {
+              qrImage.src = payload.qrDataUri;
+              qrImage.hidden = false;
+            } else {
+              qrImage.hidden = true;
+            }
+          }
+
+          let fallbackRendered = false;
+          if (!hasDataUri && Array.isArray(payload.qrModules)) {
+            fallbackRendered = drawMatrix(payload.qrModules, payload.qrMargin);
+          }
+          if (qrCanvas) {
+            qrCanvas.hidden = hasDataUri ? true : !fallbackRendered;
+          }
+          if (!hasDataUri && !fallbackRendered) {
+            console.warn('QR fallback rendering skipped: no modules available.');
+          }
+
+          state.payload = payload;
+        } catch (err) {
+          console.error('Render error in shelf A4 label', err);
+          showError('Vorlage konnte nicht gerendert werden.');
+        }
+      }
+
+      function tryFromStorage(key) {
+        if (!key) return false;
+        try {
+          const raw = sessionStorage.getItem(key);
+          if (!raw) {
+            showError('Kein zwischengespeicherter Payload gefunden.');
+            return true;
+          }
+          const payload = JSON.parse(raw);
+          sessionStorage.removeItem(key);
+          render(payload);
+          return true;
+        } catch (err) {
+          console.error('Failed to load payload from storage', err);
+          showError('Payload konnte nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function tryInlinePayload() {
+        const inlinePayload = window.__LABEL_PAYLOAD__;
+        if (!inlinePayload) return false;
+        try {
+          render(inlinePayload);
+          return true;
+        } catch (err) {
+          console.error('Failed to render inline payload', err);
+          showError('Eingebettete Druckdaten konnten nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function handleMessage(event) {
+        if (event.origin && event.origin !== window.location.origin) {
+          console.warn('Ignoring message from unexpected origin', event.origin);
+          return;
+        }
+        try {
+          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+          if (data && data.payload) {
+            render(data.payload);
+          }
+        } catch (err) {
+          console.error('Failed to parse postMessage payload', err);
+          showError('Übertragene Daten ungültig.');
+        }
+      }
+
+      window.addEventListener('message', handleMessage, { once: true });
+
+      const params = new URLSearchParams(window.location.search);
+      const key = params.get('key');
+      if (!tryInlinePayload() && !tryFromStorage(key)) {
+        console.warn('Warte auf Payload via postMessage…');
+      }
+    })();
+  </script>
+</body>
+
+</html>
