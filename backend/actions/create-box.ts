@@ -1,9 +1,39 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
+
+// TODO(agent): Verify shelf ID padding once the label template specification is clarified.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
+}
+
+async function readRequestBody(req: IncomingMessage): Promise<string> {
+  let raw = '';
+  for await (const chunk of req) {
+    raw += chunk;
+  }
+  return raw;
+}
+
+function normalizeShelfField(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (!/^[A-Za-z0-9]+$/.test(trimmed)) {
+      return null;
+    }
+    return trimmed.toUpperCase();
+  }
+
+  return null;
 }
 
 const action = defineHttpAction({
@@ -14,11 +44,156 @@ const action = defineHttpAction({
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       let raw = '';
-      for await (const c of req) raw += c;
-      let data: any = {};
-      try { data = JSON.parse(raw || '{}'); } catch {}
+      try {
+        raw = await readRequestBody(req);
+      } catch (err) {
+        console.error('[create-box] Failed to read request body', err);
+        return sendJson(res, 400, { error: 'Invalid request body' });
+      }
+
+      if (!raw) {
+        console.error('[create-box] Missing request body');
+        return sendJson(res, 400, { error: 'Request body required' });
+      }
+
+      let data: CreateBoxPayload;
+      try {
+        data = JSON.parse(raw) as CreateBoxPayload;
+      } catch (err) {
+        console.error('[create-box] Failed to parse JSON body', err);
+        return sendJson(res, 400, { error: 'Invalid JSON body' });
+      }
+
       const actor = (data.actor || '').trim();
-      if (!actor) return sendJson(res, 400, { error: 'actor is required' });
+      if (!actor) {
+        console.error('[create-box] Missing actor');
+        return sendJson(res, 400, { error: 'actor is required' });
+      }
+
+      const normalizedType = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
+      if (normalizedType === 'shelf') {
+        const shelfPayload = data as CreateShelfPayload;
+        const missingFields: string[] = [];
+        const invalidFields: string[] = [];
+
+        const rawLocation = shelfPayload.location;
+        const location = normalizeShelfField(rawLocation);
+        if (rawLocation === undefined || rawLocation === null || rawLocation === '') {
+          missingFields.push('location');
+        } else if (!location) {
+          invalidFields.push('location');
+        }
+
+        const rawFloor = shelfPayload.floor;
+        const floor = normalizeShelfField(rawFloor);
+        if (rawFloor === undefined || rawFloor === null || rawFloor === '') {
+          missingFields.push('floor');
+        } else if (!floor) {
+          invalidFields.push('floor');
+        }
+
+        const rawCategory = shelfPayload.category;
+        const category = normalizeShelfField(rawCategory);
+        if (rawCategory === undefined || rawCategory === null || rawCategory === '') {
+          missingFields.push('category');
+        } else if (!category) {
+          invalidFields.push('category');
+        }
+
+        if (missingFields.length > 0 || invalidFields.length > 0) {
+          console.error('[shelf] Invalid shelf payload', {
+            missingFields,
+            invalidFields,
+            provided: { location: rawLocation, floor: rawFloor, category: rawCategory }
+          });
+          const messages: string[] = [];
+          if (missingFields.length > 0) {
+            messages.push(`Missing fields: ${missingFields.join(', ')}`);
+          }
+          if (invalidFields.length > 0) {
+            messages.push(`Invalid fields: ${invalidFields.join(', ')}`);
+          }
+          return sendJson(res, 400, { error: messages.join('. ') });
+        }
+
+        const prefix = `S-${location}-${floor}-${category}-`;
+        const nowDate = new Date();
+        const now = nowDate.toISOString();
+        const shelfTxn = ctx.db.transaction(
+          (payload: {
+            actor: string;
+            prefix: string;
+            location: string;
+            floor: string;
+            category: string;
+            now: string;
+          }) => {
+            const maxRow = ctx.getMaxShelfIndex.get({ prefix: payload.prefix }) as
+              | { MaxIndex: number | null }
+              | undefined;
+            let nextIndex = typeof maxRow?.MaxIndex === 'number' && Number.isFinite(maxRow.MaxIndex)
+              ? maxRow.MaxIndex + 1
+              : 1;
+            let attempts = 0;
+            const maxAttempts = 25;
+
+            while (attempts < maxAttempts) {
+              const candidate = `${payload.prefix}${String(nextIndex).padStart(4, '0')}`;
+              const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
+              if (existing?.BoxID) {
+                console.warn('[shelf] Shelf ID collision detected, retrying', {
+                  candidate,
+                  location: payload.location,
+                  floor: payload.floor,
+                  category: payload.category
+                });
+                attempts += 1;
+                nextIndex += 1;
+                continue;
+              }
+
+              ctx.upsertBox.run({
+                BoxID: candidate,
+                LocationId: candidate,
+                Label: `Regal ${payload.location}-${payload.floor}-${payload.category}`,
+                CreatedAt: payload.now,
+                Notes: null,
+                PhotoPath: null,
+                PlacedBy: payload.actor,
+                PlacedAt: null,
+                UpdatedAt: payload.now
+              });
+              ctx.logEvent({
+                Actor: payload.actor,
+                EntityType: 'Box',
+                EntityId: candidate,
+                Event: 'Created',
+                Meta: JSON.stringify({
+                  type: 'shelf',
+                  location: payload.location,
+                  floor: payload.floor,
+                  category: payload.category
+                })
+              });
+              return candidate;
+            }
+
+            throw new Error('Failed to allocate shelf ID');
+          }
+        );
+
+        const shelfId = shelfTxn({
+          actor,
+          prefix,
+          location,
+          floor,
+          category,
+          now
+        });
+        console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, category, actor });
+        return sendJson(res, 200, { ok: true, id: shelfId });
+      }
+
       const last = ctx.getMaxBoxId.get() as { BoxID: string } | undefined;
       let seq = 0;
       if (last?.BoxID) {
@@ -57,7 +232,7 @@ const action = defineHttpAction({
       txn(id, actor);
       sendJson(res, 200, { ok: true, id });
     } catch (err) {
-      console.error('Create box failed', err);
+      console.error('[create-box] Create box failed', err);
       sendJson(res, 500, { error: (err as Error).message });
     }
   },

@@ -63,6 +63,7 @@ import {
   countItems,
   countItemsNoBox,
   listRecentBoxes,
+  getMaxShelfIndex,
   getMaxBoxId,
   getMaxItemId,
   getMaxArtikelNummer,
@@ -352,6 +353,7 @@ type ActionContext = {
   countItems: typeof countItems;
   countItemsNoBox: typeof countItemsNoBox;
   listRecentBoxes: typeof listRecentBoxes;
+  getMaxShelfIndex: typeof getMaxShelfIndex;
   getMaxBoxId: typeof getMaxBoxId;
   getMaxArtikelNummer: typeof getMaxArtikelNummer;
   listItemReferences: typeof listItemReferences;
@@ -585,6 +587,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           countItems,
           countItemsNoBox,
           listRecentBoxes,
+          getMaxShelfIndex,
           getMaxBoxId,
           getMaxItemId,
           getMaxArtikelNummer,
