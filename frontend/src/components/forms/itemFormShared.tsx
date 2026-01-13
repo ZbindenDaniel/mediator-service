@@ -38,6 +38,31 @@ function normalizeQualityForForm(value: unknown, context: string): number {
   }
 }
 
+export function captureMediaStreamFrame(video: HTMLVideoElement): string | null {
+  try {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) {
+      console.warn('Unable to capture media stream frame: video metadata unavailable', { width, height });
+      return null;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.error('Unable to capture media stream frame: missing 2D context');
+      return null;
+    }
+    ctx.drawImage(video, 0, 0, width, height);
+    return canvas.toDataURL('image/png');
+  } catch (error) {
+    console.error('Failed to capture media stream frame', error);
+    return null;
+  }
+}
+
 export interface ItemFormData extends Item {
   picture1?: string | null;
   picture2?: string | null;

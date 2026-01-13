@@ -3,10 +3,11 @@ import {
   ItemDetailsFields,
   ItemFormData,
   PhotoFieldKey,
+  PHOTO_INPUT_FIELDS,
   createPhotoChangeHandler,
-  useItemFormState,
-  usePhotoInputModes
+  useItemFormState
 } from './forms/itemFormShared';
+import PhotoCaptureModal from './PhotoCaptureModal';
 
 type AgenticFormMode = 'details' | 'photos';
 
@@ -33,7 +34,11 @@ export default function ItemForm_Agentic({
     initialItem: draft,
     initialPhotos
   });
-  const {  toggleMode } = usePhotoInputModes();
+  const [activePhotoField, setActivePhotoField] = useState<PhotoFieldKey | null>(null);
+  const isCameraAvailable = useMemo(
+    () => typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia),
+    []
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const hasBasicDraftInfo = useMemo(
     () => typeof draft.Artikelbeschreibung === 'string' && draft.Artikelbeschreibung.trim().length > 0,
@@ -117,16 +122,46 @@ export default function ItemForm_Agentic({
     [update]
   );
 
-  const handlePhotoModeToggle = useCallback(
-    (field: PhotoFieldKey) => {
+  const handleOpenCamera = useCallback((field: PhotoFieldKey) => {
+    try {
+      setActivePhotoField(field);
+    } catch (error) {
+      console.error('Failed to open camera capture modal for agentic form', { error, field });
+    }
+  }, []);
+
+  const handleCloseCamera = useCallback(() => {
+    try {
+      setActivePhotoField(null);
+    } catch (error) {
+      console.error('Failed to close camera capture modal for agentic form', error);
+    }
+  }, []);
+
+  const handleCapturePhoto = useCallback(
+    (dataUrl: string) => {
+      if (!activePhotoField) {
+        console.warn('Captured photo without active agentic field');
+        return;
+      }
       try {
-        toggleMode(field);
+        update(activePhotoField, dataUrl as ItemFormData[typeof activePhotoField]);
       } catch (error) {
-        console.error('Failed to toggle photo input mode in agentic item form', error);
+        console.error('Failed to apply captured photo to agentic item form', { error, field: activePhotoField });
       }
     },
-    [toggleMode]
+    [activePhotoField, update]
   );
+  const cameraTitle = useMemo(() => {
+    if (!activePhotoField) {
+      return 'Foto aufnehmen';
+    }
+    const index = PHOTO_INPUT_FIELDS.indexOf(activePhotoField);
+    if (index < 0) {
+      return 'Foto aufnehmen';
+    }
+    return `Foto ${index + 1} aufnehmen`;
+  }, [activePhotoField]);
 
   const handleManualFallback = useCallback(() => {
     if (!onFallbackToManual) {
@@ -252,6 +287,15 @@ export default function ItemForm_Agentic({
                     required
                     onChange={handlePhoto1Change}
                   />
+                  {isCameraAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCamera('picture1')}
+                      aria-label="Kamera öffnen für Foto 1"
+                    >
+                      Kamera öffnen
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
@@ -269,6 +313,15 @@ export default function ItemForm_Agentic({
                     capture={undefined}
                       onChange={handlePhoto2Change}
                     />
+                    {isCameraAvailable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCamera('picture2')}
+                        aria-label="Kamera öffnen für Foto 2"
+                      >
+                        Kamera öffnen
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -287,6 +340,15 @@ export default function ItemForm_Agentic({
                     capture={undefined}
                       onChange={handlePhoto3Change}
                     />
+                    {isCameraAvailable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCamera('picture3')}
+                        aria-label="Kamera öffnen für Foto 3"
+                      >
+                        Kamera öffnen
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -316,6 +378,12 @@ export default function ItemForm_Agentic({
           )}
         </form >
       </div>
+      <PhotoCaptureModal
+        isOpen={activePhotoField !== null}
+        onClose={handleCloseCamera}
+        onCapture={handleCapturePhoto}
+        title={cameraTitle}
+      />
     </div>
   );
 }
