@@ -2,6 +2,7 @@ import { RateLimitError } from '../tools/tavily-client';
 import { stringifyLangChainContent } from '../utils/langchain';
 import { formatSourcesForRetry, type SearchSource } from '../utils/source-formatter';
 import { parseJsonWithSanitizer } from '../utils/json';
+import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
 import { AgentOutputSchema, TargetSchema } from './item-flow-schemas';
@@ -164,7 +165,7 @@ export async function runExtractionAttempts({
   logger,
   itemId,
   maxAttempts,
-  maxAgentSearchesPerRequest = 1,
+  maxAgentSearchesPerRequest = searchLimits.maxAgentQueriesPerRequest,
   searchContexts,
   aggregatedSources,
   recordSources,
@@ -209,6 +210,17 @@ export async function runExtractionAttempts({
   const searchesPerRequestLimit = Number.isFinite(numericSearchLimit) && numericSearchLimit > 0
     ? Math.floor(numericSearchLimit)
     : 1;
+  // TODO(agent): Review search request limit telemetry after env overrides roll out.
+  try {
+    logger?.info?.({
+      msg: 'resolved agent search request limit',
+      itemId,
+      maxAgentSearchesPerRequest: searchesPerRequestLimit,
+      configuredMaxAgentSearchesPerRequest: maxAgentSearchesPerRequest
+    });
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to log resolved agent search limit', itemId });
+  }
   let searchRequestCycles = 0;
   const MAX_SEARCH_REQUEST_CYCLES = Math.max(3 * searchesPerRequestLimit, maxAttempts * searchesPerRequestLimit);
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';

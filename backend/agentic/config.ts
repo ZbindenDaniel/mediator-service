@@ -15,6 +15,8 @@ const envSchema = z.object({
   MODEL_API_KEY: z.string().min(1).optional(),
   TAVILY_API_KEY: z.string().min(1).optional(),
   SEARCH_RATE_LIMIT_DELAY_MS: z.coerce.number().int().nonnegative().optional(),
+  SEARCH_MAX_PLANS: z.coerce.number().int().min(1).optional(),
+  SEARCH_MAX_AGENT_QUERIES_PER_REQUEST: z.coerce.number().int().min(1).optional(),
   SHOPWARE_BASE_URL: z.string().url().optional(),
   SHOPWARE_CLIENT_ID: z.string().min(1).optional(),
   SHOPWARE_CLIENT_SECRET: z.string().min(1).optional(),
@@ -125,6 +127,8 @@ const envInput: EnvSchemaInput = {
   MODEL_API_KEY: resolveEnvValue('AGENTIC_MODEL_API_KEY', 'MODEL_API_KEY'),
   TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
   SEARCH_RATE_LIMIT_DELAY_MS: resolveNumber('SEARCH_RATE_LIMIT_DELAY_MS'),
+  SEARCH_MAX_PLANS: resolveNumber('SEARCH_MAX_PLANS'),
+  SEARCH_MAX_AGENT_QUERIES_PER_REQUEST: resolveNumber('SEARCH_MAX_AGENT_QUERIES_PER_REQUEST'),
   SHOPWARE_BASE_URL: resolveEnvValue('SHOPWARE_BASE_URL'),
   SHOPWARE_CLIENT_ID: resolveEnvValue('SHOPWARE_CLIENT_ID'),
   SHOPWARE_CLIENT_SECRET: resolveEnvValue('SHOPWARE_CLIENT_SECRET'),
@@ -172,6 +176,11 @@ export interface AgenticSearchConfig {
   rateLimitDelayMs?: number;
 }
 
+export interface AgenticSearchLimitsConfig {
+  maxPlans: number;
+  maxAgentQueriesPerRequest: number;
+}
+
 export interface ShopwareCredentialsConfig {
   clientId?: string;
   clientSecret?: string;
@@ -188,6 +197,9 @@ const resolvedModelName = parsedEnv.OLLAMA_MODEL ?? parsedEnv.MODEL_NAME;
 const resolvedOpenAiBaseUrl = parsedEnv.OPENAI_BASE_URL ?? parsedEnv.MODEL_BASE_URL;
 const resolvedOpenAiModel = parsedEnv.OPENAI_MODEL ?? parsedEnv.MODEL_NAME;
 const resolvedOpenAiKey = parsedEnv.OPENAI_API_KEY ?? parsedEnv.MODEL_API_KEY;
+// TODO(agent): Validate configured search limits against production runbooks once env overrides are available.
+const resolvedSearchMaxPlans = parsedEnv.SEARCH_MAX_PLANS ?? 3;
+const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 1;
 
 export const modelConfig: AgenticModelConfig = {
   provider: parsedEnv.MODEL_PROVIDER,
@@ -205,6 +217,11 @@ export const modelConfig: AgenticModelConfig = {
 export const searchConfig: AgenticSearchConfig = {
   tavilyApiKey: parsedEnv.TAVILY_API_KEY,
   rateLimitDelayMs: parsedEnv.SEARCH_RATE_LIMIT_DELAY_MS
+};
+
+export const searchLimits: AgenticSearchLimitsConfig = {
+  maxPlans: resolvedSearchMaxPlans,
+  maxAgentQueriesPerRequest: resolvedSearchMaxAgentQueriesPerRequest
 };
 
 const shopwareConfigSchema = z

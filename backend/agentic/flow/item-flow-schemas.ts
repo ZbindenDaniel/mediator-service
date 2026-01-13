@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import type { LangtextPayload } from '../../../models';
 import { parseLangtext } from '../../lib/langtext';
+import { searchLimits } from '../config';
 
 function normalizeLocalizedNumberInput(value: unknown): number | null | unknown {
   if (value == null || value === '') {
@@ -127,7 +128,9 @@ export const TargetSchema = z
 
 export const AgentOutputSchema = TargetSchema.extend({
   itemUUid: z.string().optional(),
-  __searchQueries: z.array(z.string().min(1).max(512)).max(3).optional(),
+  __searchQueries: z.array(z.string().min(1).max(512)).max(
+    Math.max(1, Math.floor(searchLimits.maxAgentQueriesPerRequest))
+  ).optional(),
   sources: z.array(AgentSourceSchema).optional(),
   confidence: z.number().min(0).max(1).optional(),
   confidenceNote: z.string().min(1).max(1024).optional()
