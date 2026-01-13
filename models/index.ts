@@ -11,4 +11,5 @@ export * from './agentic-statuses';
 export * from './agentic-orchestrator';
 export * from './box-colors';
 export * from './item-categories';
+export * from './default-shelf-locations';
 export * from './quality';
