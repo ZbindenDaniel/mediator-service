@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { Box } from '../../../models';
 import BoxList, { BoxSortKey } from './BoxList';
 import { prepareBoxesForDisplay } from './boxListUtils';
+import ShelfCreateForm from './ShelfCreateForm';
 
 export default function BoxListPage() {
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -9,6 +10,7 @@ export default function BoxListPage() {
   const [searchText, setSearchText] = useState('');
   const [sortKey, setSortKey] = useState<BoxSortKey>('BoxID');
   // TODO: Evaluate server-side pagination when the number of boxes grows.
+  // TODO(agent): Confirm shelf creation entry point placement once box list UX is reviewed.
 
   useEffect(() => {
     let isMounted = true;
@@ -83,6 +85,7 @@ export default function BoxListPage() {
   return (
     <div className="list-container box">
       <h2>Alle Behälter</h2>
+      <ShelfCreateForm />
       {error ? (
         <div className="muted">{error}</div>
       ) : boxes.length ? (
