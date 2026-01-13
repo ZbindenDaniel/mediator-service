@@ -14,6 +14,9 @@ import ItemListPage from './ItemListPage';
 import BoxListPage from './BoxListPage';
 import RecentActivitiesPage from './RecentActivitiesPage';
 import ChatPlaceholder from './ChatPlaceholder';
+import ShelfCreateForm from './ShelfCreateForm';
+
+// TODO(agent): Confirm admin-only shelf create route visibility expectations with product.
 
 function BoxRoute() {
   const { boxId } = useParams();
@@ -49,6 +52,7 @@ export function AppRoutes() {
       <Route path="/scan" element={<QrScannerPage />} />
       <Route path="/activities" element={<RecentActivitiesPage />} />
       <Route path="/chat" element={<ChatPlaceholder />} />
+      <Route path="/admin/shelves/new" element={<ShelfCreateForm />} />
     </Routes>
   );
 }

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { itemCategories } from '../data/itemCategories';
 import { shelfLocations } from '../data/shelfLocations';
 import { ensureUser } from '../lib/user';
-import { logError } from '../utils/logger';
+import { logger, logError } from '../utils/logger';
 import { dialogService } from './dialog';
 
 // TODO(agent): Confirm shelf creation copy once warehouse naming conventions are finalized.
@@ -44,6 +44,46 @@ export default function ShelfCreateForm() {
 
   const categoryOptions = useMemo(() => itemCategories.map((categoryOption) => categoryOption.label), []);
 
+  useEffect(() => {
+    if (!location) {
+      return;
+    }
+
+    if (!activeLocation) {
+      logger.warn('[shelf-create] Unknown location selection', {
+        location,
+        availableLocations: shelfLocations.map((entry) => entry.id)
+      });
+    }
+  }, [activeLocation, location]);
+
+  useEffect(() => {
+    if (!location || !floor) {
+      return;
+    }
+
+    if (!floorOptions.includes(floor)) {
+      logger.warn('[shelf-create] Invalid floor selection', {
+        location,
+        floor,
+        availableFloors: floorOptions
+      });
+    }
+  }, [floor, floorOptions, location]);
+
+  useEffect(() => {
+    if (!category) {
+      return;
+    }
+
+    if (!categoryOptions.includes(category)) {
+      logger.warn('[shelf-create] Invalid category selection', {
+        category,
+        availableCategories: categoryOptions
+      });
+    }
+  }, [category, categoryOptions]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -53,18 +93,102 @@ export default function ShelfCreateForm() {
 
     if (!selectedLocation || !selectedFloor || !selectedCategory) {
       setStatus('Bitte alle Felder auswählen.');
-      console.warn('[shelf-create] Missing selection before submit', {
+      logger.warn('[shelf-create] Missing selection before submit', {
         selectedLocation,
         selectedFloor,
         selectedCategory
       });
+      try {
+        await dialogService.alert({
+          title: 'Eingaben fehlen',
+          message: 'Bitte Standort, Ebene und Kategorie auswählen.'
+        });
+      } catch (error) {
+        logError('Failed to display missing selection alert for shelf creation', error);
+      }
       return;
     }
 
-    const actor = await ensureUser({
-      title: 'Benutzername',
-      message: 'Bitte geben Sie Ihren Benutzernamen für die Regal-Erstellung ein:'
-    });
+    if (!activeLocation) {
+      setStatus('Ungültiger Standort ausgewählt.');
+      logger.warn('[shelf-create] Invalid location before submit', {
+        selectedLocation
+      });
+      try {
+        await dialogService.alert({
+          title: 'Ungültiger Standort',
+          message: 'Bitte einen gültigen Standort auswählen.'
+        });
+      } catch (error) {
+        logError('Failed to display invalid location alert for shelf creation', error, {
+          selectedLocation
+        });
+      }
+      return;
+    }
+
+    if (!floorOptions.includes(selectedFloor)) {
+      setStatus('Ungültige Ebene ausgewählt.');
+      logger.warn('[shelf-create] Invalid floor before submit', {
+        selectedLocation,
+        selectedFloor,
+        availableFloors: floorOptions
+      });
+      try {
+        await dialogService.alert({
+          title: 'Ungültige Ebene',
+          message: 'Bitte eine gültige Ebene auswählen.'
+        });
+      } catch (error) {
+        logError('Failed to display invalid floor alert for shelf creation', error, {
+          selectedLocation,
+          selectedFloor
+        });
+      }
+      return;
+    }
+
+    if (!categoryOptions.includes(selectedCategory)) {
+      setStatus('Ungültige Kategorie ausgewählt.');
+      logger.warn('[shelf-create] Invalid category before submit', {
+        selectedCategory
+      });
+      try {
+        await dialogService.alert({
+          title: 'Ungültige Kategorie',
+          message: 'Bitte eine gültige Kategorie auswählen.'
+        });
+      } catch (error) {
+        logError('Failed to display invalid category alert for shelf creation', error, {
+          selectedCategory
+        });
+      }
+      return;
+    }
+
+    let actor: string | undefined;
+    try {
+      actor = await ensureUser({
+        title: 'Benutzername',
+        message: 'Bitte geben Sie Ihren Benutzernamen für die Regal-Erstellung ein:'
+      });
+    } catch (error) {
+      logError('Failed to resolve user for shelf creation', error, {
+        selectedLocation,
+        selectedFloor,
+        selectedCategory
+      });
+      setStatus('Benutzer konnte nicht geladen werden.');
+      try {
+        await dialogService.alert({
+          title: 'Benutzer fehlt',
+          message: 'Der Benutzer konnte nicht geladen werden. Bitte erneut versuchen.'
+        });
+      } catch (dialogError) {
+        logError('Failed to display user lookup alert for shelf creation', dialogError);
+      }
+      return;
+    }
 
     if (!actor) {
       try {
@@ -120,13 +244,26 @@ export default function ShelfCreateForm() {
         const errorMessage = data.error || `HTTP ${response.status}`;
         setStatus(`Fehler: ${errorMessage}`);
         setMintedId('');
-        console.warn('[shelf-create] Shelf creation failed', {
+        logger.warn('[shelf-create] Shelf creation failed', {
           status: response.status,
           error: data.error ?? data,
           location: selectedLocation,
           floor: selectedFloor,
           category: selectedCategory
         });
+        try {
+          await dialogService.alert({
+            title: 'Regal-Erstellung fehlgeschlagen',
+            message: `Fehler: ${errorMessage}`
+          });
+        } catch (error) {
+          logError('Failed to display shelf error dialog', error, {
+            location: selectedLocation,
+            floor: selectedFloor,
+            category: selectedCategory,
+            status: response.status
+          });
+        }
       }
     } catch (error) {
       logError('Shelf creation request failed', error, {
@@ -136,6 +273,18 @@ export default function ShelfCreateForm() {
       });
       setStatus('Regal-Erstellung fehlgeschlagen.');
       setMintedId('');
+      try {
+        await dialogService.alert({
+          title: 'Regal-Erstellung fehlgeschlagen',
+          message: 'Die Anfrage konnte nicht abgeschlossen werden.'
+        });
+      } catch (dialogError) {
+        logError('Failed to display shelf request failure alert', dialogError, {
+          location: selectedLocation,
+          floor: selectedFloor,
+          category: selectedCategory
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
