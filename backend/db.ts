@@ -2392,6 +2392,14 @@ export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE
 export const listRecentBoxes = db.prepare(
   `SELECT BoxID, LocationId, Label, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
 );
+// TODO(agent): Revisit shelf index padding once shelf label requirements are finalized.
+export const getMaxShelfIndex = db.prepare(
+  `
+  SELECT MAX(CAST(substr(BoxID, length(@prefix) + 1) AS INTEGER)) AS MaxIndex
+  FROM boxes
+  WHERE BoxID LIKE @prefix || '%'
+  `
+);
 export const getMaxBoxId = db.prepare(
   `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`
 );
