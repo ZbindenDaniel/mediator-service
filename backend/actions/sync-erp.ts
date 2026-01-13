@@ -1,5 +1,5 @@
 import path from 'path';
-import { readFileSync } from 'fs';
+import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   ERP_IMPORT_FORM_FIELD,
@@ -82,7 +82,9 @@ interface ImportResult {
   stderr: string;
 }
 
-async function runHttpImport(options: ImportOptions): Promise<ImportResult> {
+// TODO(agent): Confirm whether ERP import requires curl retries on transient 5xx responses.
+// TODO(agent): Add structured log fields for curl timing metrics once we track ERP latency.
+async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
   // TODO(agent): Reconcile ERP import content type selection with export artifact shape when media rules evolve.
@@ -90,113 +92,133 @@ async function runHttpImport(options: ImportOptions): Promise<ImportResult> {
   const archiveKind = artifact.kind;
   const mimeType = archiveKind === 'zip' ? 'application/zip' : 'text/csv';
   const fieldName = formField || 'file';
-
-  const form = new FormData();
-  form.set('action', 'CsvImport/import');
-  form.set('action_import', '1');
-  form.set('escape_char', 'quote');
-  form.set('profile.type', 'parts');
-  form.set('quote_char', 'quote');
-  form.set('sep_char', 'semicolon');
-  form.set('settings.apply_buchungsgruppe', 'all');
-  form.set('settings.article_number_policy', 'update_prices');
-  form.set('settings.charset', 'CP850');
-  form.set('settings.default_buchungsgruppe', '395');
-  form.set('settings.duplicates', 'no_check');
-  form.set('settings.numberformat', '1.000,00');
-  form.set('settings.part_type', 'part');
-  form.set('settings.sellprice_adjustment', '0');
-  form.set('settings.sellprice_adjustment_type', 'percent');
-  form.set('settings.sellprice_places', '2');
-  form.set('settings.shoparticle_if_missing', '0');
-  // TODO(agent): Keep ERP credential field names aligned with docs/OVERVIEW.md payload mapping.
-  form.set('client_id', clientId || '1');
+  const timeoutSeconds = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.ceil(timeoutMs / 1000) : undefined;
+  const args: string[] = [
+    '-X',
+    'POST',
+    '--silent',
+    '--insecure',
+    '--show-error',
+    '-F',
+    'action=CsvImport/import',
+    '-F',
+    'action_import=1',
+    '-F',
+    'escape_char=quote',
+    '-F',
+    'profile.type=parts',
+    '-F',
+    'quote_char=quote',
+    '-F',
+    'sep_char=semicolon',
+    '-F',
+    'settings.apply_buchungsgruppe=all',
+    '-F',
+    'settings.article_number_policy=update_prices',
+    '-F',
+    'settings.charset=CP850',
+    '-F',
+    'settings.default_buchungsgruppe=395',
+    '-F',
+    'settings.duplicates=no_check',
+    '-F',
+    'settings.numberformat=1.000,00',
+    '-F',
+    'settings.part_type=part',
+    '-F',
+    'settings.sellprice_adjustment=0',
+    '-F',
+    'settings.sellprice_adjustment_type=percent',
+    '-F',
+    'settings.sellprice_places=2',
+    '-F',
+    'settings.shoparticle_if_missing=0',
+    '-F',
+    `${fieldName}=@${artifact.archivePath};type=${mimeType}`,
+    '-F',
+    `client_id=${clientId || '1'}`,
+    '-F',
+    `actor=${actor}`,
+    url
+  ];
 
   if (username) {
-    form.set('login', username);
+    args.splice(args.length - 1, 0, '-F', `login=${username}`);
   }
 
   if (password) {
-    form.set('password', password);
+    args.splice(args.length - 1, 0, '-F', `password=${password}`);
   }
 
-  form.set('actor', actor);
-  const fileBuffer = readFileSync(artifact.archivePath);
-  const blob = new Blob([fileBuffer], { type: mimeType });
-  form.append(fieldName, blob, path.basename(artifact.archivePath));
+  if (timeoutSeconds) {
+    args.splice(4, 0, '--max-time', `${timeoutSeconds}`);
+  }
 
-  const controller = new AbortController();
-  const timeoutHandle = Number.isFinite(timeoutMs) && timeoutMs > 0
-    ? setTimeout(() => controller.abort(), timeoutMs)
-    : undefined;
+  const redactedArgs = args.map((arg) => {
+    if (arg.startsWith('login=')) {
+      return 'login=***';
+    }
+    if (arg.startsWith('password=')) {
+      return 'password=***';
+    }
+    if (arg.startsWith('client_id=')) {
+      return 'client_id=***';
+    }
+    return arg;
+  });
+
+  loggerRef.info?.('[sync-erp] curl import request', {
+    url,
+    fieldName,
+    includeMedia,
+    archivePath: artifact.archivePath,
+    timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : undefined,
+    args: redactedArgs
+  });
 
   try {
-    const credentialFields = ['client_id'];
-    if (username) {
-      credentialFields.push('login');
-    }
-    if (password) {
-      credentialFields.push('password');
-    }
+    const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
 
-    if (archiveKind !== expectedKind) {
-      loggerRef.warn?.('[sync-erp] Export artifact kind did not match ERP import media flag', {
-        archiveKind,
-        expectedKind
+    if (child.stdout) {
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
       });
     }
 
-    loggerRef.info?.('[sync-erp] HTTP import request', {
-      url,
-      fieldName,
-      includeMedia,
-      archiveKind,
-      expectedKind,
-      credentialFields,
-      archivePath: artifact.archivePath,
-      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : undefined
-    });
-
-    const response = await fetch(url, {
-      method: 'POST',
-      body: form as any,
-      signal: controller.signal
-    });
-    const responseText = await response.text();
-
-    loggerRef.info?.('[sync-erp] HTTP import response', {
-      status: response.status,
-      ok: response.ok
-    });
-
-    if (!response.ok) {
-      loggerRef.warn?.('[sync-erp] ERP import returned non-success status', {
-        status: response.status,
-        statusText: response.statusText
+    if (child.stderr) {
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
       });
-      return {
-        exitCode: response.status || -1,
-        stdout: responseText,
-        stderr: ''
-      };
     }
 
-    if (responseText.trim()) {
-      loggerRef.info?.('[sync-erp] ERP import body', responseText.trim());
-    }
+    return await new Promise<ImportResult>((resolve, reject) => {
+      child.on('error', (error) => {
+        loggerRef.error?.('[sync-erp] curl spawn failed', error);
+        reject(error);
+      });
 
-    return {
-      exitCode: 0,
-      stdout: responseText,
-      stderr: ''
-    };
+      child.on('close', (code, signal) => {
+        if (signal) {
+          stderr = `${stderr}${stderr ? '\n' : ''}curl terminated with signal ${signal}`;
+        }
+        const exitCode = typeof code === 'number' ? code : -1;
+
+        if (stdout.trim()) {
+          loggerRef.info?.('[sync-erp] curl stdout', stdout.trim());
+        }
+
+        if (stderr.trim()) {
+          loggerRef.warn?.('[sync-erp] curl stderr', stderr.trim());
+        }
+
+        resolve({ exitCode, stdout, stderr });
+      });
+    });
   } catch (error) {
-    loggerRef.error?.('[sync-erp] ERP import request failed', error);
+    loggerRef.error?.('[sync-erp] curl execution failed', error);
     throw error;
-  } finally {
-    if (timeoutHandle) {
-      clearTimeout(timeoutHandle);
-    }
   }
 }
 
@@ -271,10 +293,10 @@ const action = defineHttpAction({
         }
       }
       
-      console.info('[sync-erp] Starting ERP HTTP import');
+      console.info('[sync-erp] Starting ERP curl import');
       let curlResult: ImportResult;
       try {
-        curlResult = await runHttpImport({
+        curlResult = await runCurlImport({
           actor,
           artifact: stagedExport,
           clientId: ERP_IMPORT_CLIENT_ID,

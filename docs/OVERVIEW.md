@@ -136,6 +136,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Switched ERP sync imports to a curl-based multipart upload that matches the ERP payload fields and timeout semantics.
 - Added a bulk “Sync to ERP” action button on the item list to trigger `/api/sync/erp` with selected IDs.
 - Persisted item list filter preferences with a header reset indicator to keep search context between visits.
 - Added a review-time fallback that assigns `Verkaufspreis` from the category/type lookup table when approvals finish without a price.
