@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ItemDetailsFields,
   ItemFormData,
@@ -6,9 +6,9 @@ import {
   PhotoFieldKey,
   PHOTO_INPUT_FIELDS,
   createPhotoChangeHandler,
-  useItemFormState,
-  usePhotoInputModes
+  useItemFormState
 } from './forms/itemFormShared';
+import PhotoCaptureModal from './PhotoCaptureModal';
 
 interface Props {
   item: Partial<ItemFormData>;
@@ -35,7 +35,11 @@ export default function ItemForm({
     initialItem: item,
     initialPhotos
   });
-  const { getCapture, isCameraMode, toggleMode } = usePhotoInputModes();
+  const [activePhotoField, setActivePhotoField] = useState<PhotoFieldKey | null>(null);
+  const isCameraAvailable = useMemo(
+    () => typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia),
+    []
+  );
 
   useEffect(() => {
     try {
@@ -52,17 +56,6 @@ export default function ItemForm({
       console.error('Failed to apply initial photos to item form state', error);
     }
   }, [initialPhotos, seedPhotos]);
-
-  const handlePhotoModeToggle = useCallback(
-    (field: PhotoFieldKey) => {
-      try {
-        toggleMode(field);
-      } catch (error) {
-        console.error('Failed to toggle photo input mode in standard item form', error);
-      }
-    },
-    [toggleMode]
-  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,6 +90,47 @@ export default function ItemForm({
     },
     [clearPhoto]
   );
+
+  const handleOpenCamera = useCallback((field: PhotoFieldKey) => {
+    try {
+      setActivePhotoField(field);
+    } catch (error) {
+      console.error('Failed to open camera capture modal', { error, field });
+    }
+  }, []);
+
+  const handleCloseCamera = useCallback(() => {
+    try {
+      setActivePhotoField(null);
+    } catch (error) {
+      console.error('Failed to close camera capture modal', error);
+    }
+  }, []);
+
+  const handleCapturePhoto = useCallback(
+    (dataUrl: string) => {
+      if (!activePhotoField) {
+        console.warn('Captured photo without active field');
+        return;
+      }
+      try {
+        update(activePhotoField, dataUrl as ItemFormData[typeof activePhotoField]);
+      } catch (error) {
+        console.error('Failed to apply captured photo to item form', { error, field: activePhotoField });
+      }
+    },
+    [activePhotoField, update]
+  );
+  const cameraTitle = useMemo(() => {
+    if (!activePhotoField) {
+      return 'Foto aufnehmen';
+    }
+    const index = PHOTO_INPUT_FIELDS.indexOf(activePhotoField);
+    if (index < 0) {
+      return 'Foto aufnehmen';
+    }
+    return `Foto ${index + 1} aufnehmen`;
+  }, [activePhotoField]);
 
   const photoPreview = useMemo(() => {
     const entries = PHOTO_INPUT_FIELDS.map((field, index) => {
@@ -165,6 +199,15 @@ export default function ItemForm({
                     required={isNew}
                     onChange={handlePhoto1Change}
                   />
+                  {isCameraAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCamera('picture1')}
+                      aria-label="Kamera öffnen für Foto 1"
+                    >
+                      Kamera öffnen
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
@@ -182,6 +225,15 @@ export default function ItemForm({
                     capture={undefined}
                       onChange={handlePhoto2Change}
                     />
+                    {isCameraAvailable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCamera('picture2')}
+                        aria-label="Kamera öffnen für Foto 2"
+                      >
+                        Kamera öffnen
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -200,6 +252,15 @@ export default function ItemForm({
                     capture={undefined}
                       onChange={handlePhoto3Change}
                     />
+                    {isCameraAvailable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCamera('picture3')}
+                        aria-label="Kamera öffnen für Foto 3"
+                      >
+                        Kamera öffnen
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -213,6 +274,12 @@ export default function ItemForm({
           </div>
         </form >
       </div>
+      <PhotoCaptureModal
+        isOpen={activePhotoField !== null}
+        onClose={handleCloseCamera}
+        onCapture={handleCapturePhoto}
+        title={cameraTitle}
+      />
     </div>
   );
 }
