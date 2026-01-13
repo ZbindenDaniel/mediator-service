@@ -22,7 +22,10 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
   Shopware) will build on the same ingestion path.
 - **Printing & QR Labels** – Boxes and larger standalone items receive QR codes and human-readable stickers. The printing stack
   generates label PDFs from the canonical `frontend/public/print/62x100.html` template, stores previews, and dispatches jobs to
-  CUPS-compatible printers.
+  CUPS-compatible printers. Shelf labels use the A4 template (`frontend/public/print/shelf-a4.html`) with QR payloads that include
+  the shelf ID plus a category label resolved from the shelf ID segment (`S-<location>-<floor>-<category>-<index>`). Category
+  segments are matched against canonical item category labels (see `models/item-categories.ts`), with numeric segments falling back
+  to category code lookups.
 
 ## Architectural Patterns in Practice
 - **Action architecture** – The backend dynamically loads `backend/actions/*` modules that wrap database calls in
@@ -140,7 +143,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added a shelf creation form in the box list UI backed by shared shelf location metadata for consistent ID generation.
 - Added a hidden admin shelf creation route with stronger validation and logging around shelf location selections.
 - Added shelf creation payload handling with prefix-based sequencing for shelf IDs.
-- Added an A4 shelf label print template to prepare for shelf-specific print endpoints.
+- Wired the A4 shelf label print template into the box print action with shelf category resolution for QR payloads.
 - Added a bulk “Sync to ERP” action button on the item list to trigger `/api/sync/erp` with selected IDs.
 - Added camera capture support in item forms so photos can be captured directly into data URLs.
 - Persisted item list filter preferences with a header reset indicator to keep search context between visits.

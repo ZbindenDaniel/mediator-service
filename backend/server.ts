@@ -83,7 +83,7 @@ import {
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
 import { printFile, testPrinterConnection } from './print';
-import { htmlForBox, htmlForItem } from './lib/labelHtml';
+import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
@@ -339,6 +339,7 @@ type ActionContext = {
   getAdjacentItemIds: typeof getAdjacentItemIds;
   htmlForBox: typeof htmlForBox;
   htmlForItem: typeof htmlForItem;
+  htmlForShelf: typeof htmlForShelf;
   printFile: typeof printFile;
   testPrinterConnection: typeof testPrinterConnection;
   EVENT_LABELS: typeof EVENT_LABELS;
@@ -573,6 +574,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           getAdjacentItemIds,
           htmlForBox,
           htmlForItem,
+          htmlForShelf,
           printFile,
           testPrinterConnection,
           EVENT_LABELS,

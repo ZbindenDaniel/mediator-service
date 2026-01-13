@@ -165,7 +165,7 @@
         }
         try {
           const shelfId = payload.shelfId || payload.id || '';
-          const category = payload.category || payload.categoryLabel || '';
+          const category = payload.categoryLabel || payload.category || payload.labelText || '';
           if (shelfIdEl && shelfId) shelfIdEl.textContent = `${shelfId}`;
           if (categoryEl && category) categoryEl.textContent = `${category}`;
           if (labelEl) labelEl.hidden = false;

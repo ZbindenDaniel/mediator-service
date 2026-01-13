@@ -3,13 +3,15 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { Box, Item } from '../../models';
-import type { BoxLabelPayload } from '../lib/labelHtml';
+import { canonicalizeCategoryLabel, getCategoryLabelFromCode, itemCategories } from '../../models';
+import type { BoxLabelPayload, ShelfLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
 
 // TODO(agent): Surface label size enforcement in UI once additional templates exist.
 // TODO(agent): Capture HTML label previews to help debug print regressions.
 // TODO(agent): Track rejected template query attempts while only 62x100 is permitted.
 // TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
+// TODO(agent): Confirm shelf category mapping once shelf ID schema changes are confirmed.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -37,6 +39,57 @@ function logUnexpectedTemplateQuery(req: IncomingMessage): void {
   } catch (err) {
     console.error('Failed to inspect label template from box print query', err);
   }
+}
+
+const shelfCategoryLookup = new Map<string, string>();
+try {
+  for (const category of itemCategories) {
+    const canonicalLabel = canonicalizeCategoryLabel(category.label).toUpperCase();
+    if (!shelfCategoryLookup.has(canonicalLabel)) {
+      shelfCategoryLookup.set(canonicalLabel, category.label);
+    }
+  }
+} catch (err) {
+  console.error('[print-box] Failed to build shelf category lookup', err);
+}
+
+function parseShelfIdSegments(shelfId: string): {
+  location: string;
+  floor: string;
+  category: string;
+  index: string;
+} | null {
+  const match = shelfId.match(/^S-([A-Z0-9_]+)-([A-Z0-9_]+)-([A-Z0-9_]+)-([A-Z0-9_]+)$/i);
+  if (!match) return null;
+  return {
+    location: match[1].toUpperCase(),
+    floor: match[2].toUpperCase(),
+    category: match[3].toUpperCase(),
+    index: match[4].toUpperCase()
+  };
+}
+
+function resolveShelfCategoryLabel(shelfId: string): { label: string | null; source: string; segment: string | null } {
+  const segments = parseShelfIdSegments(shelfId);
+  if (!segments) {
+    return { label: null, source: 'missing_segments', segment: null };
+  }
+
+  const rawSegment = segments.category;
+  if (/^\d+$/.test(rawSegment)) {
+    const numeric = Number.parseInt(rawSegment, 10);
+    const fromCode = Number.isFinite(numeric) ? getCategoryLabelFromCode(numeric) : undefined;
+    if (fromCode) {
+      return { label: fromCode, source: 'code_lookup', segment: rawSegment };
+    }
+  }
+
+  const fromLabel = shelfCategoryLookup.get(rawSegment);
+  if (fromLabel) {
+    return { label: fromLabel, source: 'label_lookup', segment: rawSegment };
+  }
+
+  return { label: rawSegment, source: 'segment_fallback', segment: rawSegment };
 }
 
 const action = defineHttpAction({
@@ -76,8 +129,15 @@ const action = defineHttpAction({
       if (!id) return sendJson(res, 400, { error: 'invalid box id' });
       const box = ctx.getBox.get(id) as Box | undefined;
       if (!box) return sendJson(res, 404, { error: 'box not found' });
-      const items = (ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [];
+      const isShelf = box.BoxID.startsWith('S-');
+      console.info('[print-box] Template selected', {
+        boxId: box.BoxID,
+        labelType: isShelf ? 'shelf' : 'box',
+        template: isShelf ? 'shelf-a4' : '62x100'
+      });
       logUnexpectedTemplateQuery(req);
+      const items = isShelf ? [] : (ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [];
+
       const totalQuantity = items.reduce((sum, item) => {
         const raw = (item as Item)?.Auf_Lager as unknown;
         if (typeof raw === 'number' && Number.isFinite(raw)) return sum + raw;
@@ -88,7 +148,6 @@ const action = defineHttpAction({
         return sum;
       }, 0);
 
-      const template = '62x100';
       const boxData: BoxLabelPayload = {
         type: 'box',
         id: box.BoxID,
@@ -100,29 +159,66 @@ const action = defineHttpAction({
         itemCount: items.length
       };
 
+      const shelfSegments = isShelf ? parseShelfIdSegments(box.BoxID) : null;
+      const shelfCategory = isShelf ? resolveShelfCategoryLabel(box.BoxID) : null;
+      if (isShelf) {
+        console.info('[print-box] Resolved shelf category', {
+          boxId: box.BoxID,
+          category: shelfCategory?.label,
+          source: shelfCategory?.source,
+          segment: shelfCategory?.segment
+        });
+      }
+      const shelfData: ShelfLabelPayload | null = isShelf
+        ? {
+            type: 'shelf',
+            id: box.BoxID,
+            shelfId: box.BoxID,
+            labelText: box.Label?.trim() || null,
+            category: shelfCategory?.label ?? null,
+            categoryLabel: shelfCategory?.label ?? null,
+            location: shelfSegments?.location ?? null,
+            floor: shelfSegments?.floor ?? null
+          }
+        : null;
+
       let previewUrl = '';
       let htmlPath = '';
       try {
         htmlPath = path
-          .join(ctx.PREVIEW_DIR, `box-${box.BoxID}-${Date.now()}.html`.replace(/[^\w.\-]/g, '_'));
+          .join(
+            ctx.PREVIEW_DIR,
+            `${isShelf ? 'shelf' : 'box'}-${box.BoxID}-${Date.now()}.html`.replace(/[^\w.\-]/g, '_')
+          );
         fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
-        await ctx.htmlForBox({ boxData, outPath: htmlPath });
+        if (isShelf && shelfData) {
+          await ctx.htmlForShelf({ shelfData, outPath: htmlPath });
+        } else {
+          await ctx.htmlForBox({ boxData, outPath: htmlPath });
+        }
         previewUrl = `/prints/${path.basename(htmlPath)}`;
         ctx.logEvent({
           Actor: actor,
           EntityType: 'Box',
           EntityId: box.BoxID,
           Event: 'PrintPreviewSaved',
-          Meta: JSON.stringify({ file: previewUrl, qrPayload: boxData })
+          Meta: JSON.stringify({ file: previewUrl, qrPayload: isShelf && shelfData ? shelfData : boxData })
         });
-        console.log('Box label preview generated', {
+        console.log('Label preview generated', {
           boxId: box.BoxID,
+          labelType: isShelf ? 'shelf' : 'box',
+          template: isShelf ? 'shelf-a4' : '62x100',
           previewUrl,
-          qrPayload: boxData,
+          qrPayload: isShelf && shelfData ? shelfData : boxData,
           htmlPath
         });
       } catch (err) {
-        console.error('Preview generation failed', err);
+        console.error('[print-box] Preview generation failed', {
+          boxId: box.BoxID,
+          labelType: isShelf ? 'shelf' : 'box',
+          template: isShelf ? 'shelf-a4' : '62x100',
+          error: err
+        });
         return sendJson(res, 500, { error: 'preview_generation_failed' });
       }
 
