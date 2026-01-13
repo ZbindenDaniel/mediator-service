@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { itemCategories } from '../../models';
+import { defaultShelfLocationBySubcategory, itemCategories } from '../../models';
 import { db } from '../db';
 
 interface EnsureDefaultLocationOptions {
@@ -7,6 +7,7 @@ interface EnsureDefaultLocationOptions {
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
 
+// TODO(agent): Validate default shelf mapping entries against a canonical warehouse layout source.
 function normalizeSubcategoryCode(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) {
     return Math.trunc(raw);
@@ -22,8 +23,21 @@ function normalizeSubcategoryCode(raw: unknown): number | null {
   return null;
 }
 
-function formatLocationId(code: number): string {
+function formatLegacyLocationId(code: number): string {
   return `S-${String(code).padStart(4, '0')}-0001`;
+}
+
+function formatLocationId(input: { location: string; floor: string; category: string; index: number }): string {
+  const { location, floor, category, index } = input;
+  return `S-${location}-${floor}-${category}-${String(index).padStart(4, '0')}`;
+}
+
+function normalizeShelfSegment(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim().toUpperCase();
+  return trimmed ? trimmed : null;
 }
 
 function resolveSubcategoryLabel(code: number): string | null {
@@ -53,7 +67,30 @@ export function ensureDefaultLocationForSubcategory(
     return null;
   }
 
-  const locationId = formatLocationId(normalizedCode);
+  const mapping = defaultShelfLocationBySubcategory[normalizedCode];
+  if (!mapping) {
+    const fallback = formatLegacyLocationId(normalizedCode);
+    logger.warn('[default-location] Missing default shelf mapping for subcategory', {
+      subcategoryCode: normalizedCode,
+      attemptedFallback: fallback
+    });
+    return null;
+  }
+
+  const location = normalizeShelfSegment(mapping.location);
+  const floor = normalizeShelfSegment(mapping.floor);
+  if (!location || !floor) {
+    const fallback = formatLegacyLocationId(normalizedCode);
+    logger.warn('[default-location] Invalid default shelf mapping for subcategory', {
+      subcategoryCode: normalizedCode,
+      attemptedFallback: fallback,
+      mapping
+    });
+    return null;
+  }
+
+  const categorySegment = String(normalizedCode).padStart(4, '0');
+  const locationId = formatLocationId({ location, floor, category: categorySegment, index: 1 });
 
   try {
     const existing = database
@@ -99,5 +136,21 @@ export function ensureDefaultLocationForSubcategory(
 
 export function deriveLocationIdFromSubcategory(subcategoryCode: unknown): string | null {
   const normalizedCode = normalizeSubcategoryCode(subcategoryCode);
-  return normalizedCode === null ? null : formatLocationId(normalizedCode);
+  if (normalizedCode === null) {
+    return null;
+  }
+
+  const mapping = defaultShelfLocationBySubcategory[normalizedCode];
+  if (!mapping) {
+    return null;
+  }
+
+  const location = normalizeShelfSegment(mapping.location);
+  const floor = normalizeShelfSegment(mapping.floor);
+  if (!location || !floor) {
+    return null;
+  }
+
+  const categorySegment = String(normalizedCode).padStart(4, '0');
+  return formatLocationId({ location, floor, category: categorySegment, index: 1 });
 }

@@ -149,6 +149,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Wired the activities search term into the activities page API request so filtering updates with the URL state.
 - Update the closing of larger tasks in [RECENT_HIGHLIGHTS]()
 - Introduced topic-based event log allowlists across backend and frontend feeds, defaulting to full visibility unless configured.
+- Introduced default shelf location mapping configuration for subcategory-backed location IDs, logging missing mappings to protect data quality.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
