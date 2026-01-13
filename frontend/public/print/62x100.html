@@ -164,10 +164,10 @@
           return;
         }
         try {
-          if (artikelnummerEl) artikelnummerEl.textContent = `${payload.materialNumber}`;
-          if (idEl) idEl.textContent = `${payload.id}`;
-          if (artikelBeschrEl) artikelBeschrEl.textContent = `${payload.labelText}`;
-          if (categoryEl) categoryEl.textContent = `${payload.category}`;
+          if (artikelnummerEl && payload.materialNumber) artikelnummerEl.textContent = `${payload.materialNumber}`;
+          if (idEl && payload.id) idEl.textContent = `${payload.id}`;
+          if (artikelBeschrEl && payload.labelText) artikelBeschrEl.textContent = `${payload.labelText}`;
+          if (categoryEl && payload.category) categoryEl.textContent = `${payload.category}`;
           if (labelEl) labelEl.hidden = false;
 
           const hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
