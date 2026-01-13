@@ -85,7 +85,10 @@ interface ImportResult {
 async function runHttpImport(options: ImportOptions): Promise<ImportResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
-  const mimeType = includeMedia ? 'application/zip' : 'text/csv';
+  // TODO(agent): Reconcile ERP import content type selection with export artifact shape when media rules evolve.
+  const expectedKind = includeMedia ? 'zip' : 'csv';
+  const archiveKind = artifact.kind;
+  const mimeType = archiveKind === 'zip' ? 'application/zip' : 'text/csv';
   const fieldName = formField || 'file';
 
   const form = new FormData();
@@ -106,14 +109,15 @@ async function runHttpImport(options: ImportOptions): Promise<ImportResult> {
   form.set('settings.sellprice_adjustment_type', 'percent');
   form.set('settings.sellprice_places', '2');
   form.set('settings.shoparticle_if_missing', '0');
-  form.set('{AUTH}client_id', clientId || '1');
+  // TODO(agent): Keep ERP credential field names aligned with docs/OVERVIEW.md payload mapping.
+  form.set('client_id', clientId || '1');
 
   if (username) {
-    form.set('{AUTH}login', username);
+    form.set('login', username);
   }
 
   if (password) {
-    form.set('{AUTH}password', password);
+    form.set('password', password);
   }
 
   form.set('actor', actor);
@@ -127,10 +131,28 @@ async function runHttpImport(options: ImportOptions): Promise<ImportResult> {
     : undefined;
 
   try {
+    const credentialFields = ['client_id'];
+    if (username) {
+      credentialFields.push('login');
+    }
+    if (password) {
+      credentialFields.push('password');
+    }
+
+    if (archiveKind !== expectedKind) {
+      loggerRef.warn?.('[sync-erp] Export artifact kind did not match ERP import media flag', {
+        archiveKind,
+        expectedKind
+      });
+    }
+
     loggerRef.info?.('[sync-erp] HTTP import request', {
       url,
       fieldName,
       includeMedia,
+      archiveKind,
+      expectedKind,
+      credentialFields,
       archivePath: artifact.archivePath,
       timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : undefined
     });
