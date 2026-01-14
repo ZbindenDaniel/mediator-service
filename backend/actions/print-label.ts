@@ -19,9 +19,21 @@ const action: Action = {
         async function printBoxLabel(boxId, statusId) {
           const el = document.getElementById(statusId);
           if (!el) return;
+          // TODO: confirm whether the actor should be persisted across sessions for print requests
           el.textContent = 'Drucke…';
+          const rawActor = window.prompt('Name');
+          const actor = typeof rawActor === 'string' ? rawActor.trim() : '';
+          if (!actor) {
+            console.warn('Print label aborted: missing actor.', { boxId });
+            el.textContent = 'Fehler: Name fehlt.';
+            return;
+          }
           try {
-            const r = await fetch('/api/print/box/' + boxId, { method: 'POST' });
+            const r = await fetch('/api/print/box/' + boxId, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actor })
+            });
             const j = await r.json().catch(()=>({}));
             if (r.ok && j.sent) {
               el.textContent = 'Gesendet an Drucker.';
