@@ -86,7 +86,6 @@ export default function BoxListPage() {
   return (
     <div className="list-container box">
       <h2>Alle Behälter</h2>
-      <ShelfCreateForm />
       {error ? (
         <div className="muted">{error}</div>
       ) : boxes.length ? (

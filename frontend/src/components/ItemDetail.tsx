@@ -1871,7 +1871,6 @@ export default function ItemDetail({ itemId }: Props) {
                 </span>
               </h2>
               <section className="item-media-section">
-                <h3>Medien</h3>
                 <ItemMediaGallery
                   itemId={item.ItemUUID}
                   grafikname={item.Grafikname}

@@ -39,8 +39,8 @@ export default function BoxTag({ locationKey, labelOverride, className }: BoxTag
         gap: '0.125rem'
       }}
     >
-      <span className="mono">{normalizedLocation}</span>
       {normalizedLabel ? <span>{normalizedLabel}</span> : null}
+      <span className="mono">{normalizedLocation}</span>
     </span>
   );
 }
