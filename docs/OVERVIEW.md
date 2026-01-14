@@ -136,6 +136,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Updated shelf creation to resolve category labels from taxonomy lookups with fallback logging, and removed legacy category seeding now that CSV imports will own this workflow.
 - Added shelf box detail payloads that surface contained boxes and render them in the UI detail view alongside items.
 - Switched ERP sync imports to a curl-based multipart upload that matches the ERP payload fields and timeout semantics.
 - Added a minimal pricing stage in the agentic item flow with a dedicated pricing rules prompt to align Verkaufspreis handling across prompts and schemas.
@@ -164,6 +165,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added shelf BoxID format validation for boxes.csv ingestion to warn and skip malformed shelf IDs.
 - Simplified box location tags in the UI to show normalized locations and optional labels without color mapping.
 - Added a dedicated 29x90 item label template and routed item print jobs to it for the new item label format.
+- Filtered the Behälter list view to exclude shelf records so shelves no longer appear as boxes.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
