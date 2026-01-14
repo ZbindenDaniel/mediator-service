@@ -6,6 +6,7 @@ import {
   AGENTIC_RUN_STATUSES
 } from '../../../models';
 import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS, QUALITY_MIN } from '../../../models/quality';
+import { itemCategories } from '../data/itemCategories';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import {
   clearItemListFilters,
@@ -20,6 +21,7 @@ import {
   loadItemListFilters,
   persistItemListFilters
 } from '../lib/itemListFiltersStorage';
+import { logError, logger } from '../utils/logger';
 import BulkItemActionBar from './BulkItemActionBar';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
@@ -29,6 +31,7 @@ import LoadingPage from './LoadingPage';
 // TODO(storage-sync): Persist list filters to localStorage so returning users keep their preferences across sessions.
 // TODO(item-entity-filter): Confirm UX for reference-only rows when enriching the item repository view.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
+// TODO(subcategory-select): Validate the subcategory filter options against updated taxonomy definitions.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 const resolveItemQuality = (value: unknown) => normalizeQuality(value ?? QUALITY_DEFAULT, console);
@@ -44,6 +47,12 @@ export interface ItemListComputationOptions {
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   qualityThreshold: number;
+}
+
+interface SubcategoryOption {
+  value: string;
+  label: string;
+  categoryLabel: string;
 }
 
 export function filterAndSortItems(options: ItemListComputationOptions): Item[] {
@@ -321,6 +330,76 @@ export default function ItemListPage() {
   const normalizedBoxFilter = boxFilter.trim().toLowerCase();
   const normalizedAgenticFilter = agenticStatusFilter === 'any' ? null : agenticStatusFilter;
 
+  const subcategoryOptions = useMemo<SubcategoryOption[]>(() => {
+    try {
+      return itemCategories.flatMap((category) => (
+        category.subcategories.map((subcategory) => ({
+          value: subcategory.code.toString(),
+          label: `${subcategory.code} · ${subcategory.label}`,
+          categoryLabel: category.label
+        }))
+      ));
+    } catch (error) {
+      logError('Failed to build subcategory filter options', error, {
+        itemCategoriesCount: Array.isArray(itemCategories) ? itemCategories.length : 0
+      });
+      return [];
+    }
+  }, []);
+
+  const subcategoryLookup = useMemo(() => {
+    try {
+      return new Map(subcategoryOptions.map((option) => [option.value, option]));
+    } catch (error) {
+      logError('Failed to build subcategory filter lookup', error, {
+        optionCount: subcategoryOptions.length
+      });
+      return new Map<string, SubcategoryOption>();
+    }
+  }, [subcategoryOptions]);
+
+  const subcategorySelectOptions = useMemo(() => {
+    try {
+      const trimmedValue = subcategoryFilter.trim();
+      const options = [...subcategoryOptions];
+      if (trimmedValue && !subcategoryLookup.has(trimmedValue)) {
+        options.unshift({
+          value: trimmedValue,
+          label: `Unbekannte Unterkategorie (${trimmedValue})`,
+          categoryLabel: 'unknown'
+        });
+      }
+      return options;
+    } catch (error) {
+      logError('Failed to build subcategory select options', error, {
+        selectedValue: subcategoryFilter
+      });
+      return [];
+    }
+  }, [subcategoryFilter, subcategoryLookup, subcategoryOptions]);
+
+  useEffect(() => {
+    if (!filtersReady) {
+      return;
+    }
+    const trimmedValue = subcategoryFilter.trim();
+    if (!trimmedValue) {
+      return;
+    }
+    try {
+      if (!subcategoryLookup.has(trimmedValue)) {
+        logger.warn?.('Unknown subcategory filter selection', {
+          value: trimmedValue,
+          optionCount: subcategoryOptions.length
+        });
+      }
+    } catch (error) {
+      logError('Failed to validate subcategory filter selection', error, {
+        value: subcategoryFilter
+      });
+    }
+  }, [filtersReady, subcategoryFilter, subcategoryLookup, subcategoryOptions]);
+
   useEffect(() => {
     if (!filtersReady) {
       return undefined;
@@ -528,13 +607,18 @@ export default function ItemListPage() {
           <div className='row'>
             <label className="filter-control">
               <span>Unterkategorie</span>
-              <input
+              <select
                 aria-label="Unterkategorie filtern"
                 onChange={(event) => setSubcategoryFilter(event.target.value)}
-                placeholder="Z.B. 101"
-                type="search"
                 value={subcategoryFilter}
-              />
+              >
+                <option value="">Alle</option>
+                {subcategorySelectOptions.map((option) => (
+                  <option key={`${option.categoryLabel}-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
           {/* <div className='row'>
