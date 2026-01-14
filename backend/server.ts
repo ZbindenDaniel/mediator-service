@@ -9,6 +9,7 @@ import { MEDIA_DIR } from './lib/media';
 
 export { MEDIA_DIR } from './lib/media';
 import { resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
+// TODO(agent): Verify recent activities term helper wiring in the action context.
 // TODO(agent): Audit Langtext response serialization once structured payload adoption completes.
 // TODO(agent): Revisit inbox watcher patterns once ZIP uploads introduce mixed payload sequencing.
 import {
@@ -58,6 +59,7 @@ import {
   listEventsForBox,
   listEventsForItem,
   listRecentActivities,
+  listRecentActivitiesByTerm,
   listRecentEvents,
   countBoxes,
   countEvents,
@@ -350,6 +352,7 @@ type ActionContext = {
   listEventsForBox: typeof listEventsForBox;
   listEventsForItem: typeof listEventsForItem;
   listRecentActivities: typeof listRecentActivities;
+  listRecentActivitiesByTerm: typeof listRecentActivitiesByTerm;
   listRecentEvents: typeof listRecentEvents;
   countBoxes: typeof countBoxes;
   countEvents: typeof countEvents;
@@ -590,6 +593,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           listEventsForBox,
           listEventsForItem,
           listRecentActivities,
+          listRecentActivitiesByTerm,
           listRecentEvents,
           countBoxes,
           countEvents,

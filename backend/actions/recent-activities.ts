@@ -11,6 +11,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
+// TODO(agent): Validate listRecentActivitiesByTerm wiring before removing fallback logging.
 // TODO(agent): Revisit recent activity search filtering once UI wiring is finalized.
 // TODO(agent): Include active topic allow list details in diagnostics metadata responses.
 const action = defineHttpAction({
@@ -30,9 +31,20 @@ const action = defineHttpAction({
         ? Math.min(Math.max(1, Math.floor(parsedLimit)), MAX_LIMIT)
         : DEFAULT_LIMIT;
 
-      const events = hasTerm
-        ? ctx.listRecentActivitiesByTerm.all({ limit, term: `%${normalizedTerm}%` })
-        : ctx.listRecentActivities.all({ limit });
+      let events: unknown[];
+      if (hasTerm) {
+        if (!ctx.listRecentActivitiesByTerm?.all) {
+          console.error('Activities term helper missing; falling back to unfiltered feed', {
+            term: normalizedTerm,
+            limit
+          });
+          events = ctx.listRecentActivities.all({ limit });
+        } else {
+          events = ctx.listRecentActivitiesByTerm.all({ limit, term: `%${normalizedTerm}%` });
+        }
+      } else {
+        events = ctx.listRecentActivities.all({ limit });
+      }
       if (hasTerm) {
         console.info('Activities feed filtered by search term', { term: normalizedTerm, limit });
       }
