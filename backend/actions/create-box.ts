@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
+// TODO(agent): Share shelf category validation with model-level helpers for consistency.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -31,6 +32,33 @@ function normalizeShelfField(value: unknown): string | null {
       return null;
     }
     return trimmed.toUpperCase();
+  }
+
+  return null;
+}
+
+function isMissingShelfValue(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+}
+
+function normalizeShelfCategory(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    if (normalized <= 0) {
+      return null;
+    }
+    return String(normalized);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (!/^\d+$/.test(trimmed)) {
+      return null;
+    }
+    return trimmed;
   }
 
   return null;
@@ -78,7 +106,7 @@ const action = defineHttpAction({
 
         const rawLocation = shelfPayload.location;
         const location = normalizeShelfField(rawLocation);
-        if (rawLocation === undefined || rawLocation === null || rawLocation === '') {
+        if (isMissingShelfValue(rawLocation)) {
           missingFields.push('location');
         } else if (!location) {
           invalidFields.push('location');
@@ -86,15 +114,15 @@ const action = defineHttpAction({
 
         const rawFloor = shelfPayload.floor;
         const floor = normalizeShelfField(rawFloor);
-        if (rawFloor === undefined || rawFloor === null || rawFloor === '') {
+        if (isMissingShelfValue(rawFloor)) {
           missingFields.push('floor');
         } else if (!floor) {
           invalidFields.push('floor');
         }
 
         const rawCategory = shelfPayload.category;
-        const category = normalizeShelfField(rawCategory);
-        if (rawCategory === undefined || rawCategory === null || rawCategory === '') {
+        const category = normalizeShelfCategory(rawCategory);
+        if (isMissingShelfValue(rawCategory)) {
           missingFields.push('category');
         } else if (!category) {
           invalidFields.push('category');
@@ -116,7 +144,15 @@ const action = defineHttpAction({
           return sendJson(res, 400, { error: messages.join('. ') });
         }
 
-        const prefix = `S-${location}-${floor}-${category}-`;
+        if (!category) {
+          console.error('[shelf] Category normalization failed after validation', {
+            rawCategory
+          });
+          return sendJson(res, 400, { error: 'Invalid category field' });
+        }
+
+        const categorySegment = category.padStart(4, '0');
+        const prefix = `S-${location}-${floor}-${categorySegment}-`;
         const nowDate = new Date();
         const now = nowDate.toISOString();
         const shelfTxn = ctx.db.transaction(
@@ -187,10 +223,10 @@ const action = defineHttpAction({
           prefix,
           location,
           floor,
-          category,
+          category: categorySegment,
           now
         });
-        console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, category, actor });
+        console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, category: categorySegment, actor });
         return sendJson(res, 200, { ok: true, id: shelfId });
       }
 

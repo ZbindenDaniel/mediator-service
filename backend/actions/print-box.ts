@@ -3,7 +3,12 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { Box, Item } from '../../models';
-import { canonicalizeCategoryLabel, getCategoryLabelFromCode, itemCategories } from '../../models';
+import {
+  canonicalizeCategoryLabel,
+  getCategoryLabelFromCode,
+  getSubcategoryLabelFromCode,
+  itemCategories
+} from '../../models';
 import type { BoxLabelPayload, ShelfLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
 
@@ -78,9 +83,13 @@ function resolveShelfCategoryLabel(shelfId: string): { label: string | null; sou
   const rawSegment = segments.category;
   if (/^\d+$/.test(rawSegment)) {
     const numeric = Number.parseInt(rawSegment, 10);
-    const fromCode = Number.isFinite(numeric) ? getCategoryLabelFromCode(numeric) : undefined;
-    if (fromCode) {
-      return { label: fromCode, source: 'code_lookup', segment: rawSegment };
+    const fromSubcategory = Number.isFinite(numeric) ? getSubcategoryLabelFromCode(numeric) : undefined;
+    if (fromSubcategory) {
+      return { label: fromSubcategory, source: 'subcategory_code_lookup', segment: rawSegment };
+    }
+    const fromCategory = Number.isFinite(numeric) ? getCategoryLabelFromCode(numeric) : undefined;
+    if (fromCategory) {
+      return { label: fromCategory, source: 'category_code_lookup', segment: rawSegment };
     }
   }
 
