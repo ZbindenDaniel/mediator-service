@@ -4,6 +4,7 @@ import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
+// TODO(agentic-close): Confirm close action copy and endpoint payload once backend wiring lands.
 import type { Item, EventLog, AgenticRun } from '../../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
@@ -30,6 +31,7 @@ import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
   describeAgenticFailureReason,
   extractAgenticFailureReason,
+  persistAgenticRunClose,
   persistAgenticRunCancellation,
   persistAgenticRunDeletion,
   triggerAgenticRun
@@ -100,6 +102,7 @@ export interface AgenticStatusCardProps {
   searchTermError?: string | null;
   onSearchTermChange?: (value: string) => void;
   canCancel: boolean;
+  canClose: boolean;
   canStart: boolean;
   canRestart: boolean;
   canDelete: boolean;
@@ -109,6 +112,7 @@ export interface AgenticStatusCardProps {
   onRestart: () => void | Promise<void>;
   onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
   onCancel: () => void | Promise<void>;
+  onClose?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
 }
 
@@ -276,6 +280,7 @@ export function AgenticStatusCard({
   searchTermError,
   onSearchTermChange,
   canCancel,
+  canClose,
   canStart,
   canRestart,
   canDelete,
@@ -285,6 +290,7 @@ export function AgenticStatusCard({
   onRestart,
   onReview,
   onCancel,
+  onClose,
   onDelete
 }: AgenticStatusCardProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
@@ -373,6 +379,13 @@ export function AgenticStatusCard({
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>
                 Abbrechen
+              </button>
+            </div>
+          ) : null}
+          {canClose && onClose ? (
+            <div className='row'>
+              <button type="button" className="btn" disabled={actionPending} onClick={onClose}>
+                Ki Suche abschliessen
               </button>
             </div>
           ) : null}
@@ -1277,6 +1290,9 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticCanCancel = normalizedAgenticStatus
     ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
     : false;
+  const agenticCanClose = Boolean(
+    agenticHasRun && normalizedAgenticStatus && !AGENTIC_RUN_TERMINAL_STATUSES.has(normalizedAgenticStatus)
+  );
   const agenticCanDelete = Boolean(
     agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
   );
@@ -1331,6 +1347,29 @@ export default function ItemDetail({ itemId }: Props) {
 
       return trimmed;
     }
+  }
+
+  async function promptAgenticCloseNote(): Promise<string | null> {
+    let promptResult: string | null;
+    try {
+      promptResult = await dialogService.prompt({
+        title: 'Abschluss-Notiz',
+        message: 'Optional eine Notiz für den Abschluss hinzufügen.',
+        confirmLabel: 'Speichern',
+        cancelLabel: 'Ohne Notiz',
+        placeholder: 'Notiz (optional)',
+        defaultValue: ''
+      });
+    } catch (error) {
+      console.error('Failed to prompt for agentic close note', error);
+      return null;
+    }
+
+    if (promptResult === null) {
+      return '';
+    }
+
+    return promptResult.trim();
   }
 
   
@@ -1688,6 +1727,80 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticActionPending(false);
   }
 
+  async function handleAgenticClose() {
+    if (!agentic) {
+      console.warn('Agentic close requested without run data');
+      setAgenticError('Kein KI Durchlauf vorhanden.');
+      return;
+    }
+
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic close user alert', error);
+      }
+      return;
+    }
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'KI Suche abschliessen',
+        message: 'KI Suche abschliessen und als freigegeben markieren?',
+        confirmLabel: 'Abschliessen',
+        cancelLabel: 'Zurück'
+      });
+    } catch (error) {
+      console.error('Failed to confirm agentic close', error);
+      return;
+    }
+
+    if (!confirmed) {
+      return;
+    }
+
+    const noteInput = await promptAgenticCloseNote();
+    if (noteInput === null) {
+      return;
+    }
+
+    setAgenticActionPending(true);
+    setAgenticReviewIntent(null);
+    setAgenticError(null);
+
+    try {
+      const closeResult = await persistAgenticRunClose({
+        itemId: agentic.ItemUUID,
+        actor,
+        notes: noteInput,
+        context: 'item detail close'
+      });
+
+      if (closeResult.ok) {
+        if (closeResult.agentic) {
+          setAgentic(closeResult.agentic);
+        }
+        setAgenticError(null);
+      } else {
+        const fallbackMessage =
+          closeResult.status === 404
+            ? 'Kein KI Durchlauf gefunden.'
+            : 'Ki-Suche konnte nicht abgeschlossen werden.';
+        setAgenticError(closeResult.message ?? fallbackMessage);
+      }
+    } catch (err) {
+      console.error('Ki-Abschlussanfrage fehlgeschlagen', err);
+      setAgenticError('Ki-Suche konnte nicht abgeschlossen werden.');
+    } finally {
+      setAgenticActionPending(false);
+    }
+  }
+
   async function handleAgenticDelete() {
     if (!agentic) {
       console.warn('Agentic delete requested without run data');
@@ -1956,6 +2069,7 @@ export default function ItemDetail({ itemId }: Props) {
               searchTermError={agenticSearchError}
               onSearchTermChange={handleAgenticSearchTermChange}
               canCancel={agenticCanCancel}
+              canClose={agenticCanClose}
               canStart={agenticCanStart}
               canRestart={agenticCanRestart}
               canDelete={agenticCanDelete}
@@ -1965,6 +2079,7 @@ export default function ItemDetail({ itemId }: Props) {
               onRestart={handleAgenticRestart}
               onReview={handleAgenticReview}
               onCancel={handleAgenticCancel}
+              onClose={agenticCanClose ? handleAgenticClose : undefined}
               onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             />
 

@@ -28,6 +28,7 @@ import LoadingPage from './LoadingPage';
 // TODO(agentic-status-ui): Replace single-select status filtering with quick filters once reviewer workflows expand.
 // TODO(storage-sync): Persist list filters to localStorage so returning users keep their preferences across sessions.
 // TODO(item-entity-filter): Confirm UX for reference-only rows when enriching the item repository view.
+// TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 const resolveItemQuality = (value: unknown) => normalizeQuality(value ?? QUALITY_DEFAULT, console);
@@ -161,7 +162,7 @@ export default function ItemListPage() {
   const [sortKey, setSortKey] = useState<ItemListSortKey>(ITEM_LIST_DEFAULT_FILTERS.sortKey);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [subcategoryFilter, setSubcategoryFilter] = useState('');
+  const [subcategoryFilter, setSubcategoryFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
   const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
   const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
@@ -175,6 +176,7 @@ export default function ItemListPage() {
     const storedFilters = loadItemListFilters(ITEM_LIST_DEFAULT_FILTERS);
     if (storedFilters) {
       setSearchTerm(storedFilters.searchTerm);
+      setSubcategoryFilter(storedFilters.subcategoryFilter);
       setBoxFilter(storedFilters.boxFilter);
       setAgenticStatusFilter(storedFilters.agenticStatusFilter);
       setShowUnplaced(storedFilters.showUnplaced);
@@ -191,6 +193,7 @@ export default function ItemListPage() {
   useEffect(() => {
     const handleFilterReset = () => {
       setSearchTerm(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
+      setSubcategoryFilter(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
       setBoxFilter(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
       setAgenticStatusFilter(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
       setShowUnplaced(ITEM_LIST_DEFAULT_FILTERS.showUnplaced);
@@ -209,6 +212,7 @@ export default function ItemListPage() {
 
   const currentFilters: ItemListFilters = useMemo(() => ({
     searchTerm,
+    subcategoryFilter,
     boxFilter,
     agenticStatusFilter,
     showUnplaced,
@@ -216,7 +220,17 @@ export default function ItemListPage() {
     sortKey,
     sortDirection,
     qualityThreshold
-  }), [searchTerm, boxFilter, agenticStatusFilter, showUnplaced, entityFilter, sortKey, sortDirection, qualityThreshold]);
+  }), [
+    searchTerm,
+    subcategoryFilter,
+    boxFilter,
+    agenticStatusFilter,
+    showUnplaced,
+    entityFilter,
+    sortKey,
+    sortDirection,
+    qualityThreshold
+  ]);
 
   useEffect(() => {
     latestFiltersRef.current = currentFilters;
@@ -235,6 +249,9 @@ export default function ItemListPage() {
       const query = new URLSearchParams();
       if (effectiveFilters.searchTerm.trim()) {
         query.set('search', effectiveFilters.searchTerm.trim());
+      }
+      if (effectiveFilters.subcategoryFilter.trim()) {
+        query.set('subcategory', effectiveFilters.subcategoryFilter.trim());
       }
       if (effectiveFilters.boxFilter.trim()) {
         query.set('box', effectiveFilters.boxFilter.trim());
@@ -508,7 +525,7 @@ export default function ItemListPage() {
         </div>
 
         <div className='filter-bar-row filter-bar-row--filters'>
-          {/* <div className='row'>
+          <div className='row'>
             <label className="filter-control">
               <span>Unterkategorie</span>
               <input
@@ -520,7 +537,7 @@ export default function ItemListPage() {
               />
             </label>
           </div>
-          <div className='row'>
+          {/* <div className='row'>
             <label className="filter-control">
               <span>Bestand</span>
               <select

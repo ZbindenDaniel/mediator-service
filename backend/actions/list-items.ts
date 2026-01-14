@@ -4,11 +4,13 @@ import { defineHttpAction } from './index';
 
 // TODO(filters-api): Share filter parsing with other listing endpoints once navigation keeps filters in sync.
 // TODO(item-entity-filter): Revisit reference union performance once catalogue browsing expands beyond the item list.
+// TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
 
 type ItemEntityFilter = 'all' | 'instances' | 'references';
 
 type ItemListFilterParams = {
   searchTerm: string;
+  subcategoryFilter: string;
   boxFilter: string;
   agenticStatusFilter: AgenticRunStatus | 'any';
   showUnplaced: boolean;
@@ -17,6 +19,7 @@ type ItemListFilterParams = {
 
 const DEFAULT_FILTERS: ItemListFilterParams = {
   searchTerm: '',
+  subcategoryFilter: '',
   boxFilter: '',
   agenticStatusFilter: 'any',
   showUnplaced: false,
@@ -29,6 +32,11 @@ function parseItemListFilters(req: IncomingMessage): ItemListFilterParams {
     const searchParams = url.searchParams;
 
     const searchTerm = (searchParams.get('search') || searchParams.get('searchTerm') || '').trim();
+    const rawSubcategory = searchParams.get('subcategory') || searchParams.get('subcategoryFilter');
+    if (rawSubcategory !== null && rawSubcategory.trim() === '') {
+      console.warn('Ignoring empty subcategory filter value');
+    }
+    const subcategoryFilter = (rawSubcategory || '').trim();
     const boxFilter = (searchParams.get('box') || searchParams.get('boxFilter') || '').trim();
     const requestedAgentic = (searchParams.get('agenticStatus') || '').trim();
     const agenticStatusFilter =
@@ -44,6 +52,7 @@ function parseItemListFilters(req: IncomingMessage): ItemListFilterParams {
 
     return {
       searchTerm,
+      subcategoryFilter,
       boxFilter,
       agenticStatusFilter,
       showUnplaced,
@@ -69,10 +78,14 @@ const action = defineHttpAction({
     try {
       const filters = parseItemListFilters(_req);
       const searchTerm = filters.searchTerm ? `%${filters.searchTerm.toLowerCase()}%` : null;
+      const subcategoryFilter = filters.subcategoryFilter
+        ? `%${filters.subcategoryFilter.toLowerCase()}%`
+        : null;
       const boxFilter = filters.boxFilter ? `%${filters.boxFilter.toLowerCase()}%` : null;
       const agenticStatus = filters.agenticStatusFilter === 'any' ? null : filters.agenticStatusFilter;
       const bindings = {
         searchTerm,
+        subcategoryFilter,
         boxFilter,
         agenticStatus,
         unplacedOnly: filters.showUnplaced ? 1 : 0

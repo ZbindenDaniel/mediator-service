@@ -136,6 +136,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Added a UI action in item detail to close in-progress agentic runs and unblock queued approvals.
+- Re-enabled the Unterkategorie filter on the item list, persisted subcategory selections, and added backend query support to avoid client-only filtering for large lists.
 - Mapped Langtext Qualität labels back into the numeric Quality field during CSV/form imports while cleaning the Langtext payloads.
 - Split item list box vs. shelf normalization so Behälter and Lagerort links only render with their respective IDs.
 - Removed the default-location relocation button and API option so item moves always target an explicit box selection.
@@ -175,6 +177,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Wired the recent activities term filter helper into the action context with fallback logging.
 - Normalized printer status responses with ok/reason data and surfaced printer misconfiguration hints in the overview UI.
 - Derived shelf display labels in the box list using shelf location metadata for clearer shelf rows.
+- Added a manual agentic review close endpoint to approve items without existing agentic runs and log the closure reason.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)

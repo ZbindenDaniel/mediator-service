@@ -2,9 +2,11 @@ import type { AgenticRunStatus } from 'models';
 import { AGENTIC_RUN_STATUSES } from 'models';
 import { normalizeQuality, QUALITY_LABELS, QUALITY_MIN } from 'models/quality';
 import { describeAgenticStatus } from './agenticStatusLabels';
+import { logger as defaultLogger, logError } from '../utils/logger';
 
 // TODO(item-entity-filter): Consider centralizing filter type constants for cross-view reuse once repository navigation shares state.
 // TODO(filter-normalization): Extract shared filter parsing helpers so list pages stay aligned when new fields arrive.
+// TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
 export type ItemListSortKey =
   | 'artikelbeschreibung'
   | 'artikelnummer'
@@ -17,6 +19,7 @@ export type ItemListSortKey =
 
 export type ItemListFilters = {
   searchTerm: string;
+  subcategoryFilter: string;
   boxFilter: string;
   agenticStatusFilter: AgenticRunStatus | 'any';
   showUnplaced: boolean;
@@ -48,6 +51,7 @@ const SORT_KEYS: ItemListSortKey[] = [
 
 const DEFAULT_FILTERS: ItemListFilters = {
   searchTerm: '',
+  subcategoryFilter: '',
   boxFilter: '',
   agenticStatusFilter: 'any',
   showUnplaced: false,
@@ -67,6 +71,7 @@ export function hasNonDefaultFilters(
 ): boolean {
   return (
     filters.searchTerm !== defaults.searchTerm
+    || filters.subcategoryFilter !== defaults.subcategoryFilter
     || filters.boxFilter !== defaults.boxFilter
     || filters.agenticStatusFilter !== defaults.agenticStatusFilter
     || filters.showUnplaced !== defaults.showUnplaced
@@ -84,6 +89,9 @@ export function getActiveFilterDescriptions(
   const active: string[] = [];
   if (filters.searchTerm.trim()) {
     active.push(`Suche: ${filters.searchTerm.trim()}`);
+  }
+  if (filters.subcategoryFilter.trim()) {
+    active.push(`Unterkategorie: ${filters.subcategoryFilter.trim()}`);
   }
   if (filters.boxFilter.trim()) {
     active.push(`Behälter: ${filters.boxFilter.trim()}`);
@@ -119,7 +127,7 @@ export function getActiveFilterDescriptions(
 
 export function loadItemListFilters(
   defaults: ItemListFilters = DEFAULT_FILTERS,
-  logger: Pick<Console, 'warn' | 'error'> = console
+  logger: Pick<Console, 'warn' | 'error'> = defaultLogger
 ): ItemListFilters | null {
   try {
     const raw = localStorage.getItem(ITEM_LIST_FILTERS_STORAGE_KEY);
@@ -135,6 +143,12 @@ export function loadItemListFilters(
 
     if (typeof parsed.searchTerm === 'string') {
       merged.searchTerm = parsed.searchTerm;
+    }
+
+    if (typeof parsed.subcategoryFilter === 'string') {
+      merged.subcategoryFilter = parsed.subcategoryFilter;
+    } else if (parsed.subcategoryFilter !== undefined) {
+      logger.warn?.('Ignoring invalid stored subcategory filter', parsed.subcategoryFilter);
     }
 
     if (typeof parsed.boxFilter === 'string') {
@@ -179,26 +193,34 @@ export function loadItemListFilters(
 
     return merged;
   } catch (err) {
-    logger.error?.('Failed to load stored item list filters', err);
+    logError('Failed to load stored item list filters', err);
     return null;
   }
 }
 
 export function persistItemListFilters(
   filters: ItemListFilters,
-  logger: Pick<Console, 'warn' | 'error'> = console
+  logger: Pick<Console, 'warn' | 'error'> = defaultLogger
 ): void {
   try {
     localStorage.setItem(ITEM_LIST_FILTERS_STORAGE_KEY, JSON.stringify(filters));
   } catch (err) {
-    logger.error?.('Failed to persist item list filters', err);
+    try {
+      logger.error?.('Failed to persist item list filters', err);
+    } catch (logFailure) {
+      logError('Failed to persist item list filters', err, { logFailure });
+    }
   }
 }
 
-export function clearItemListFilters(logger: Pick<Console, 'warn' | 'error'> = console): void {
+export function clearItemListFilters(logger: Pick<Console, 'warn' | 'error'> = defaultLogger): void {
   try {
     localStorage.removeItem(ITEM_LIST_FILTERS_STORAGE_KEY);
   } catch (err) {
-    logger.error?.('Failed to clear stored item list filters', err);
+    try {
+      logger.error?.('Failed to clear stored item list filters', err);
+    } catch (logFailure) {
+      logError('Failed to clear stored item list filters', err, { logFailure });
+    }
   }
 }
