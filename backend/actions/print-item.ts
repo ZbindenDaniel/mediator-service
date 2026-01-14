@@ -9,7 +9,8 @@ import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../lib/labelHtml';
 import { resolvePrinterQueue } from '../print';
 import type { PrintFileResult } from '../print';
-import { buildItemCategoryLookups } from 'frontend/src/lib/categoryLookup';
+// TODO(agent): Confirm shared category lookup relocation covers all backend label consumers.
+import { buildItemCategoryLookups } from '../../models/item-category-lookups';
 
 // TODO(agent): Align item print payloads with upcoming label size templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
