@@ -2,6 +2,7 @@
 // TODO(agent): Keep importer box persistence in sync with schema changes (PhotoPath, future metadata).
 // TODO(agent): Monitor Grafikname multi-image normalization so downstream exporters can drop legacy fallbacks.
 // TODO(agent): Evaluate ZIP-sourced merge rules for boxes and media once parallel uploads are supported by partners.
+// TODO(agent): Align CSV alias handling for ItemUUID and quantity headers with export columns.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
@@ -103,6 +104,8 @@ const PARTNER_FIELD_ALIASES: readonly PartnerFieldAlias[] = Object.freeze([
   { source: 'cvar_categories_A2', target: 'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)' },
   { source: 'cvar_categories_B1', target: 'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)' },
   { source: 'cvar_categories_B2', target: 'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)' },
+  { source: 'ItemUUID', target: 'itemUUID' },
+  { source: 'Auf Lager', target: 'Auf_Lager' },
 ]);
 
 function hydratePartnerFieldAliases(row: Record<string, string>, rowNumber: number): void {
@@ -1070,55 +1073,75 @@ export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: nu
     const records = parseCsvSync(content, { columns: true, skip_empty_lines: true }) as Array<Record<string, unknown>>;
     let count = 0;
 
+    if (records.length === 0) {
+      console.info('[importer] boxes.csv contained zero rows');
+    }
+
     for (const [index, record] of records.entries()) {
-      const boxId = normalizeBoxField(record.BoxID ?? (record as Record<string, unknown>)?.boxid ?? null);
-      if (!boxId) {
-        console.warn('[importer] Skipping boxes.csv row without BoxID', { rowNumber: index + 1 });
-        continue;
-      }
-      if (boxId.startsWith('S-')) {
-        let isValidShelfId = false;
-        try {
-          isValidShelfId = isValidShelfBoxId(boxId, { rowNumber: index + 1 });
-        } catch (validationError) {
-          console.error('[importer] Shelf BoxID validation failed unexpectedly', {
-            rowNumber: index + 1,
-            boxId,
-            error: validationError,
-          });
-        }
-        if (!isValidShelfId) {
-          console.warn('[importer] Skipping boxes.csv row with invalid shelf BoxID', {
-            rowNumber: index + 1,
-            boxId,
-          });
+      const rowNumber = index + 1;
+      try {
+        const boxId = normalizeBoxField(record.BoxID ?? (record as Record<string, unknown>)?.boxid ?? null);
+        if (!boxId) {
+          console.warn('[importer] Skipping boxes.csv row without BoxID', { rowNumber });
           continue;
         }
+        if (boxId.startsWith('S-')) {
+          let isValidShelfId = false;
+          try {
+            isValidShelfId = isValidShelfBoxId(boxId, { rowNumber });
+          } catch (validationError) {
+            console.error('[importer] Shelf BoxID validation failed unexpectedly', {
+              rowNumber,
+              boxId,
+              error: validationError,
+            });
+          }
+          if (!isValidShelfId) {
+            console.warn('[importer] Skipping boxes.csv row with invalid shelf BoxID', {
+              rowNumber,
+              boxId,
+            });
+            continue;
+          }
+        }
+
+        const locationId = normalizeBoxField(record.LocationId ?? record.Location ?? record.Standort);
+        const label = normalizeBoxField(record.Label ?? record.StandortLabel);
+        const createdAt = normalizeBoxField(record.CreatedAt);
+        const notes = normalizeBoxField(record.Notes);
+        const photoPath = normalizeBoxField(record.PhotoPath);
+        const placedBy = normalizeBoxField(record.PlacedBy);
+        const placedAt = normalizeBoxField(record.PlacedAt);
+        const updatedAt = normalizeBoxField(record.UpdatedAt) || now;
+
+        const box: Box = {
+          BoxID: boxId,
+          LocationId: locationId || null,
+          Label: label || null,
+          CreatedAt: createdAt || null,
+          Notes: notes || null,
+          PhotoPath: photoPath || null,
+          PlacedBy: placedBy || null,
+          PlacedAt: placedAt || null,
+          UpdatedAt: updatedAt,
+        };
+
+        try {
+          upsertBox.run(box);
+          count++;
+        } catch (upsertError) {
+          console.error('[importer] Failed to upsert box from boxes.csv row', {
+            rowNumber,
+            boxId,
+            error: upsertError,
+          });
+        }
+      } catch (rowError) {
+        console.error('[importer] Failed to normalize boxes.csv row', {
+          rowNumber,
+          error: rowError,
+        });
       }
-
-      const locationId = normalizeBoxField(record.LocationId ?? record.Location ?? record.Standort);
-      const label = normalizeBoxField(record.Label ?? record.StandortLabel);
-      const createdAt = normalizeBoxField(record.CreatedAt);
-      const notes = normalizeBoxField(record.Notes);
-      const photoPath = normalizeBoxField(record.PhotoPath);
-      const placedBy = normalizeBoxField(record.PlacedBy);
-      const placedAt = normalizeBoxField(record.PlacedAt);
-      const updatedAt = normalizeBoxField(record.UpdatedAt) || now;
-
-      const box: Box = {
-        BoxID: boxId,
-        LocationId: locationId || null,
-        Label: label || null,
-        CreatedAt: createdAt || null,
-        Notes: notes || null,
-        PhotoPath: photoPath || null,
-        PlacedBy: placedBy || null,
-        PlacedAt: placedAt || null,
-        UpdatedAt: updatedAt,
-      };
-
-      upsertBox.run(box);
-      count++;
     }
 
     return { count };
