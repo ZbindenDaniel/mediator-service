@@ -5,7 +5,7 @@ import path from 'path';
 // TODO(agent): Confirm shelf detail queries cover LocationId/index performance expectations before expanding usage.
 // TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
 // TODO(agent): Audit ImageNames persistence once asset synchronization tracks discrete files.
-// TODO(agent): Fold location bootstrap seeding into the formal migration path once Postgres becomes the primary store.
+// TODO(agent): Document CSV-based shelf seeding expectations once import tooling is formalized.
 // TODO(quality-migration): Confirm Quality defaults remain accurate once upstream ERP integration defines quality grades.
 // TODO(agent): Reconfirm recent activities search filtering once term usage is finalized.
 import { DB_PATH } from './config';
@@ -29,8 +29,7 @@ import {
   EventLogLevel,
   EVENT_LOG_LEVELS,
   parseEventLogLevelAllowList,
-  resolveEventLogLevel,
-  itemCategories
+  resolveEventLogLevel
 } from '../models';
 import { normalizeQuality, QUALITY_DEFAULT } from '../models/quality';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
@@ -228,41 +227,6 @@ function ensureBoxPhotoPathColumn(database: Database.Database = db): void {
 }
 
 ensureBoxPhotoPathColumn();
-
-function seedCategoryLocations(database: Database.Database = db): void {
-  try {
-    const now = new Date().toISOString();
-    const entries = itemCategories.flatMap((category) =>
-      category.subcategories.map((subcategory) => ({
-        LocationId: `S-${String(subcategory.code).padStart(4, '0')}-0001`,
-        Label: `Regal ${subcategory.label}`,
-        CreatedAt: now,
-        UpdatedAt: now
-      }))
-    );
-
-    const insertLocation = database.prepare(`
-      INSERT OR IGNORE INTO boxes (BoxID, LocationId, Label, CreatedAt, UpdatedAt)
-      VALUES (@LocationId, @LocationId, @Label, @CreatedAt, @UpdatedAt)
-    `);
-
-    const seedLocations = database.transaction((records: typeof entries) => {
-      let inserted = 0;
-      for (const record of records) {
-        const result = insertLocation.run(record);
-        inserted += typeof result.changes === 'number' ? result.changes : 0;
-      }
-      return inserted;
-    });
-
-    const insertedCount = seedLocations(entries);
-    console.info('[db] Category location bootstrap complete', { insertedCount });
-  } catch (err) {
-    console.error('[db] Failed to seed category locations', err);
-  }
-}
-
-// seedCategoryLocations();
 
 // TODO(agent): Allow runtime refresh of event allow lists without requiring a process restart.
 
