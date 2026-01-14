@@ -1,9 +1,11 @@
 import { renderLabelTemplate, type LabelHtmlTemplate } from './labelTemplateLoader';
 
 // TODO(agent): Keep injected label payloads minimal and aligned with printer-specific templates.
+// TODO(agent): Confirm shelf label payload fields before adding more shelf metadata to QR payloads.
 
 export type LabelTemplate = LabelHtmlTemplate;
 const ACTIVE_TEMPLATE: LabelTemplate = '62x100';
+const SHELF_TEMPLATE: LabelTemplate = 'shelf-a4';
 
 let QRCode: any;
 try {
@@ -43,25 +45,26 @@ async function makeQrDataUrl(payload: Record<string, unknown>, logger: Console):
   }
 }
 
-async function render62x100Label(
+async function renderLabel(
+  template: LabelTemplate,
   payload: Record<string, unknown>,
   outPath: string,
   logger: Console
 ): Promise<string> {
-  const qrPayload = { ...payload, template: ACTIVE_TEMPLATE };
+  const qrPayload = { ...payload, template };
   const qrDataUri = await makeQrDataUrl(qrPayload, logger);
 
   try {
     await renderLabelTemplate({
-      template: ACTIVE_TEMPLATE,
+      template,
       payload: { ...qrPayload, qrPayload, qrDataUri },
       outPath,
       logger
     });
-    logger.info('[label-html] Label HTML saved', { outPath, template: ACTIVE_TEMPLATE, type: payload.type });
+    logger.info('[label-html] Label HTML saved', { outPath, template, type: payload.type });
     return outPath;
   } catch (err) {
-    logger.error('[label-html] Failed to render label template', { outPath, template: ACTIVE_TEMPLATE, error: err });
+    logger.error('[label-html] Failed to render label template', { outPath, template, error: err });
     throw err;
   }
 }
@@ -85,7 +88,7 @@ export interface BoxLabelOptions {
 
 export async function htmlForBox({ boxData, outPath, logger = console }: BoxLabelOptions): Promise<string> {
   const labelText = resolveBoxLabelText(boxData);
-  return render62x100Label({ ...boxData, labelText, type: 'box' }, outPath, logger);
+  return renderLabel(ACTIVE_TEMPLATE, { ...boxData, labelText, type: 'box' }, outPath, logger);
 }
 
 export interface ItemLabelPayload {
@@ -109,5 +112,26 @@ export interface ItemLabelOptions {
 
 export async function htmlForItem({ itemData, outPath, logger = console }: ItemLabelOptions): Promise<string> {
   const labelText = resolveItemLabelText(itemData);
-  return render62x100Label({ ...itemData, labelText, type: 'item' }, outPath, logger);
+  return renderLabel(ACTIVE_TEMPLATE, { ...itemData, labelText, type: 'item' }, outPath, logger);
+}
+
+export interface ShelfLabelPayload {
+  type: 'shelf';
+  id: string;
+  shelfId?: string | null;
+  labelText?: string | null;
+  category: string | null;
+  categoryLabel?: string | null;
+  location?: string | null;
+  floor?: string | null;
+}
+
+export interface ShelfLabelOptions {
+  shelfData: ShelfLabelPayload;
+  outPath: string;
+  logger?: Console;
+}
+
+export async function htmlForShelf({ shelfData, outPath, logger = console }: ShelfLabelOptions): Promise<string> {
+  return renderLabel(SHELF_TEMPLATE, { ...shelfData, type: 'shelf' }, outPath, logger);
 }

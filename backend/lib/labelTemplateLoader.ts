@@ -1,11 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 
-export type LabelHtmlTemplate = '62x100';
+// TODO(agent): Revisit shelf template registration if additional label sizes are introduced.
+export type LabelHtmlTemplate = '62x100' | 'shelf-a4';
 
 // TODO(agent): Align template root discovery with server PUBLIC_DIR detection to avoid missing runtime assets.
 const TEMPLATE_FILES: Record<LabelHtmlTemplate, string> = {
-  '62x100': '62x100.html'
+  '62x100': '62x100.html',
+  'shelf-a4': 'shelf-a4.html'
 };
 
 // TODO(agent): Add ENV override for template roots when backend runs outside repo root.
