@@ -8,6 +8,7 @@ const action: Action = {
   view: (entity: Entity) => {
     const id = encodeURIComponent(entity.id);
     const statusId = `printBoxMsg-${id}`;
+    // TODO(agent): Align legacy print label UI with actor + labelType payload requirements.
     // TODO(agent): Keep print-label endpoints in sync with print-box/item route regex.
     const endpoint =
       entity.type === 'Box'
@@ -25,6 +26,7 @@ const action: Action = {
       <script>
         const endpoint = '${endpoint}';
         const entityType = '${entity.type}';
+        const labelType = entityType === 'Box' ? 'box' : entityType === 'Item' ? 'item' : entityType === 'Shelf' ? 'shelf' : '';
 
         async function printBoxLabel(boxId, statusId) {
           const el = document.getElementById(statusId);
@@ -41,19 +43,35 @@ const action: Action = {
               el.textContent = 'Fehler: Unbekannter Typ.';
               return;
             }
-            const actor = (localStorage.getItem('username') || '').trim();
-            if (!actor) {
-              console.warn('Print label blocked: missing actor', { entityType, boxId });
-              el.textContent = 'Fehler: Kein Benutzername gesetzt.';
+            if (!labelType) {
+              console.warn('Print label called without labelType', { entityType, boxId });
+              el.textContent = 'Fehler: Ungültiger Typ.';
               return;
             }
-            const labelType = entityType === 'Box' ? 'box' : 'item';
-            const r = await fetch(endpoint, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ actor, labelType })
-            });
-            const j = await r.json().catch(()=>({}));
+            const actor = resolveActor();
+            if (!actor) {
+              console.warn('Print label called without actor', { boxId, labelType });
+              el.textContent = 'Fehler: Benutzername fehlt.';
+              return;
+            }
+            let r;
+            try {
+              r = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actor, labelType })
+              });
+            } catch (fetchErr) {
+              console.error('Print label request failed', { boxId, labelType, fetchErr });
+              el.textContent = 'Fehler: Netzwerkproblem.';
+              return;
+            }
+            let j = {};
+            try {
+              j = await r.json();
+            } catch (parseErr) {
+              console.error('Failed to parse print label response', { boxId, labelType, parseErr });
+            }
             if (r.ok && j.sent) {
               el.textContent = 'Gesendet an Drucker.';
             } else if (r.ok && j.previewUrl) {
@@ -76,9 +94,30 @@ const action: Action = {
             } else {
               el.textContent = 'Fehler: ' + (j.error || j.reason || 'unbekannt');
             }
-          } catch (e: any) {
-            el.textContent = 'Fehler: ' + e.message;
+          } catch (e) {
+            console.error('Print label request failed unexpectedly', { boxId, labelType, e });
+            el.textContent = 'Fehler: ' + (e && e.message ? e.message : 'unbekannt');
           }
+        }
+
+        function resolveActor() {
+          try {
+            const stored = localStorage.getItem('username') || '';
+            const trimmed = stored.trim();
+            if (trimmed) return trimmed;
+          } catch (storageErr) {
+            console.warn('Failed to read actor from localStorage', storageErr);
+          }
+
+          const prompted = window.prompt('Benutzername');
+          const trimmedPrompt = (prompted || '').trim();
+          if (!trimmedPrompt) return '';
+          try {
+            localStorage.setItem('username', trimmedPrompt);
+          } catch (storageErr) {
+            console.warn('Failed to persist actor to localStorage', storageErr);
+          }
+          return trimmedPrompt;
         }
 
         // TODO: move sanitizePreviewUrl to a shared helper if other actions need preview sanitization
