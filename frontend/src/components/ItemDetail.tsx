@@ -1968,10 +1968,9 @@ export default function ItemDetail({ itemId }: Props) {
               onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             />
 
-            <RelocateItemCard 
-              itemId={item.ItemUUID} 
-              onRelocated={() => load({ showSpinner: false })} 
-              itemdefautlLocationId={`S-${String(item.Unterkategorien_A ?? 0).padStart(4, '0')}-0001`} 
+            <RelocateItemCard
+              itemId={item.ItemUUID}
+              onRelocated={() => load({ showSpinner: false })}
             />
 
             <PrintLabelButton itemId={item.ItemUUID} />
