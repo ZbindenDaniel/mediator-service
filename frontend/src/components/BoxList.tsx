@@ -1,6 +1,7 @@
 import React, { ChangeEvent, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Box } from '../../../models/box';
+import { shelfLocations } from '../data/shelfLocations';
 import { formatDate } from '../lib/format';
 import BoxTag from './BoxTag';
 
@@ -29,6 +30,58 @@ function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
 
   const interactiveSelector = 'button, input, select, textarea, label, a';
   return Boolean(target.closest(interactiveSelector));
+}
+
+function getShelfDisplayLabel(box: Box): string | null {
+  const shelfId = box.BoxID?.startsWith('S-')
+    ? box.BoxID
+    : box.LocationId?.startsWith('S-')
+      ? box.LocationId
+      : null;
+
+  if (!shelfId) {
+    return null;
+  }
+
+  try {
+    const segments = shelfId.split('-');
+    if (segments.length < 3) {
+      console.warn('Invalid shelf ID format while deriving box list label', { shelfId, segments });
+      return box.Label?.trim() || shelfId;
+    }
+
+    const locationSegment = segments[1];
+    const floorSegment = segments[2];
+    const locationEntry = shelfLocations.find((location) => location.id === locationSegment);
+
+    if (!locationEntry) {
+      console.warn('Missing shelf location label for box list shelf display', { shelfId, locationSegment });
+    } else if (!locationEntry.floors.includes(floorSegment)) {
+      console.warn('Shelf floor does not match configured floors', {
+        shelfId,
+        locationSegment,
+        floorSegment,
+        floors: locationEntry.floors,
+      });
+    }
+
+    const locationLabel = locationEntry?.label?.trim()
+      || locationSegment
+      || box.Label?.trim()
+      || shelfId;
+
+    if (!locationEntry?.label) {
+      console.warn('Shelf location label missing for box list shelf display', {
+        shelfId,
+        locationSegment,
+      });
+    }
+
+    return `${locationLabel} · Etage ${floorSegment}`;
+  } catch (err) {
+    console.warn('Failed to derive shelf display label for box list', { shelfId, err });
+    return box.Label?.trim() || shelfId;
+  }
 }
 
 export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, onSortChange }: Props) {
@@ -108,6 +161,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
               const rowLabel = box.Label?.trim()
                 ? `Details für Box ${box.BoxID} in ${box.Label} öffnen`
                 : `Details für Box ${box.BoxID} öffnen`;
+              const shelfLabel = getShelfDisplayLabel(box);
 
               return (
                 <tr
@@ -136,7 +190,10 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                 >
                   <td className="col-box-id">{box.BoxID}</td>
                   <td className="col-location">
-                    <BoxTag locationKey={box.LocationId} labelOverride={box.Label} />
+                    <BoxTag
+                      locationKey={box.LocationId}
+                      labelOverride={shelfLabel ?? box.Label}
+                    />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>
                 </tr>

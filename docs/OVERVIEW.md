@@ -174,6 +174,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Clarified relocate-box shelf dropdown labels by splitting shelf IDs into location, floor, and shelf number segments.
 - Wired the recent activities term filter helper into the action context with fallback logging.
 - Normalized printer status responses with ok/reason data and surfaced printer misconfiguration hints in the overview UI.
+- Derived shelf display labels in the box list using shelf location metadata for clearer shelf rows.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
