@@ -3,9 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import type { EventLog } from '../../../models';
 import { RecentEventsList } from './RecentEventsCard';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
+import { logger } from '../utils/logger';
 
 const DEFAULT_LIMIT = 50;
 // TODO(agent): Include activities search term in feed request once the API confirms term filtering.
+// TODO(agent): Revisit activities search helper text once box/shelf search guidance is validated.
+const BOX_SHELF_PATTERN = /^[BS]-/i;
 
 export default function RecentActivitiesPage() {
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -44,6 +47,13 @@ export default function RecentActivitiesPage() {
         const termFromUrl = params.get('term') ?? '';
         const trimmed = (termFromUrl || searchTerm).trim();
         const termParam = trimmed ? `&term=${encodeURIComponent(trimmed)}` : '';
+        if (trimmed && BOX_SHELF_PATTERN.test(trimmed)) {
+          try {
+            logger.info('RecentActivitiesPage: box or shelf search term detected', { term: trimmed });
+          } catch (logError) {
+            console.error('RecentActivitiesPage: Failed to log box/shelf search term', logError);
+          }
+        }
         console.info('RecentActivitiesPage: fetching activities', {
           limit: DEFAULT_LIMIT,
           term: trimmed || undefined,
@@ -87,8 +97,8 @@ export default function RecentActivitiesPage() {
         <input
           value={searchTerm}
           onChange={event => setSearchTerm(event.target.value)}
-          placeholder="Artikelnummer oder UUID"
-          aria-label="Aktivitäten durchsuchen nach Artikelnummer oder UUID"
+          placeholder="Artikelnummer, UUID, Box-ID oder Regal-ID"
+          aria-label="Aktivitäten durchsuchen nach Artikelnummer, UUID, Box- oder Regal-ID"
           onKeyDown={event => {
             if (event.key === 'Enter') {
               handleSearchSubmit();
