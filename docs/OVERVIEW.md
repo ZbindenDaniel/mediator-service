@@ -167,6 +167,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Simplified box location tags in the UI to show normalized locations and optional labels without color mapping.
 - Added a dedicated 29x90 item label template and routed item print jobs to it for the new item label format.
 - Filtered the Behälter list view to exclude shelf records so shelves no longer appear as boxes.
+- Filtered shelf box detail payloads to hide shelf records from the Behälter card while logging filtered counts.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
