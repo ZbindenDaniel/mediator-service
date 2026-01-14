@@ -136,6 +136,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Added Artikel_Nummer to the import-item success payload and aligned the item creation dialog with response-backed metadata while logging missing response fields.
 - Centralized item category lookup builders in shared models so backend and frontend reuse the same map logic.
 - Enriched the item creation success dialog with Artikelnummer context and a direct label print action for faster follow-up.
 - Added a UI action in item detail to close in-progress agentic runs and unblock queued approvals.

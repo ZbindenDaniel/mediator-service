@@ -1074,7 +1074,54 @@ const action = defineHttpAction({
         });
       }
 
-      sendJson(res, 200, { ok: true, item: { ItemUUID, BoxID }, agenticTriggerDispatched });
+      // TODO(agent): Re-audit import response payload fields during next contract alignment review.
+      let responseArtikelNummer: string | null = data.Artikel_Nummer || null;
+      let responseBoxId: string | null = BoxID;
+      try {
+        const persistedItem = ctx.getItem?.get
+          ? ((ctx.getItem.get(ItemUUID) as { Artikel_Nummer?: string | null; BoxID?: string | null } | undefined) ??
+              null)
+          : null;
+        if (persistedItem) {
+          if (persistedItem.Artikel_Nummer) {
+            responseArtikelNummer = persistedItem.Artikel_Nummer;
+          }
+          if (typeof persistedItem.BoxID !== 'undefined') {
+            responseBoxId = persistedItem.BoxID ?? responseBoxId;
+          }
+          if (
+            persistedItem.Artikel_Nummer &&
+            data.Artikel_Nummer &&
+            persistedItem.Artikel_Nummer !== data.Artikel_Nummer
+          ) {
+            console.warn('[import-item] Persisted Artikel_Nummer differs from normalized payload after import', {
+              ItemUUID,
+              persisted: persistedItem.Artikel_Nummer,
+              normalized: data.Artikel_Nummer
+            });
+          }
+        } else {
+          console.warn('[import-item] Unable to load persisted item after import for response payload', { ItemUUID });
+        }
+      } catch (responseItemError) {
+        console.error('[import-item] Failed to read persisted item for response payload', {
+          ItemUUID,
+          error: responseItemError
+        });
+      }
+
+      if (!responseArtikelNummer) {
+        console.warn('[import-item] Missing Artikel_Nummer for import response payload', {
+          ItemUUID,
+          BoxID: responseBoxId
+        });
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        item: { ItemUUID, BoxID: responseBoxId, Artikel_Nummer: responseArtikelNummer },
+        agenticTriggerDispatched
+      });
     } catch (err) {
       console.error('Import item failed', err);
       sendJson(res, 500, { error: (err as Error).message });
