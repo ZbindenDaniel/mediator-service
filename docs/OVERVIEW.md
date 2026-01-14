@@ -136,6 +136,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Centralized item category lookup builders in shared models so backend and frontend reuse the same map logic.
 - Added a UI action in item detail to close in-progress agentic runs and unblock queued approvals.
 - Re-enabled the Unterkategorie filter on the item list, persisted subcategory selections, and added backend query support to avoid client-only filtering for large lists.
 - Mapped Langtext Qualität labels back into the numeric Quality field during CSV/form imports while cleaning the Langtext payloads.
