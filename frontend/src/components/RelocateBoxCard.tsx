@@ -6,6 +6,7 @@ import { dialogService } from './dialog';
 // TODO(agent): Extend relocation picker to support searching/filtering when location lists grow larger.
 // TODO(agent): Confirm relocation flows fully rely on LocationId payloads once legacy Location fields are deprecated.
 // TODO(agent): Validate relocation shelf filter behavior when boxes contain multiple categories.
+// TODO(agent): Consider sorting shelf options by parsed location/floor/shelf once labels are expanded.
 
 interface Props {
   boxId: string;
@@ -19,6 +20,25 @@ export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Pro
   const [status, setStatus] = useState('');
   const [locationOptions, setLocationOptions] = useState<Array<{ id: string; label: string; sourceBoxId: string }>>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+
+  function formatShelfLabel(locationId: string, fallbackLabel: string) {
+    const segments = locationId
+      .split('-')
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    if (segments.length < 5 || segments[0] !== LOCATION_BOX_TYPE) {
+      logger.warn('[relocate-box] Unexpected shelf id format for label', { locationId });
+      return fallbackLabel;
+    }
+    const location = segments[1];
+    const floor = segments[2];
+    const shelfNumber = segments[4];
+    if (!location || !floor || !shelfNumber) {
+      logger.warn('[relocate-box] Missing shelf id segments for label', { locationId });
+      return fallbackLabel;
+    }
+    return `Standort ${location} · Etage ${floor} · Regal ${shelfNumber}`;
+  }
 
   const locationLookup = useMemo(() => {
     return new Map(locationOptions.map((option) => [option.id, option]));
@@ -73,7 +93,8 @@ export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Pro
               if (!locationId) {
                 return null;
               }
-              const label = typeof box?.Label === 'string' && box.Label.trim() ? box.Label.trim() : locationId;
+              const fallbackLabel = typeof box?.Label === 'string' && box.Label.trim() ? box.Label.trim() : locationId;
+              const label = formatShelfLabel(locationId, fallbackLabel);
               return { id: locationId, label, sourceBoxId: fallbackId || locationId };
             })
             .filter((option): option is { id: string; label: string; sourceBoxId: string } => Boolean(option));
