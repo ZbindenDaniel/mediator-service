@@ -137,6 +137,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Recent Highlights
 - Re-enabled the Unterkategorie filter on the item list, persisted subcategory selections, and added backend query support to avoid client-only filtering for large lists.
+- Mapped Langtext Qualität labels back into the numeric Quality field during CSV/form imports while cleaning the Langtext payloads.
 - Split item list box vs. shelf normalization so Behälter and Lagerort links only render with their respective IDs.
 - Removed the default-location relocation button and API option so item moves always target an explicit box selection.
 - Updated shelf creation to resolve category labels from taxonomy lookups with fallback logging, and removed legacy category seeding now that CSV imports will own this workflow.
@@ -174,6 +175,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Clarified relocate-box shelf dropdown labels by splitting shelf IDs into location, floor, and shelf number segments.
 - Wired the recent activities term filter helper into the action context with fallback logging.
 - Normalized printer status responses with ok/reason data and surfaced printer misconfiguration hints in the overview UI.
+- Added a manual agentic review close endpoint to approve items without existing agentic runs and log the closure reason.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)

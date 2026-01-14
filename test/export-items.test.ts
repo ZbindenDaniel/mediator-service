@@ -240,7 +240,7 @@ describe('export-items action', () => {
       Artikel_Nummer: 'ROUNDTRIP-001',
       Artikelbeschreibung: 'Roundtrip description survives export/import cycles.',
       Kurzbeschreibung: 'Short detail',
-      Langtext: 'Detailed Langtext block',
+      Langtext: { Details: 'Detailed Langtext block' },
       Hersteller: 'Roundtrip Manufacturing',
       Grafikname: 'roundtrip.png',
       BoxID: null,
@@ -248,6 +248,7 @@ describe('export-items action', () => {
       UpdatedAt: now,
       Datum_erfasst: now,
       Auf_Lager: 7,
+      Quality: 4,
       Verkaufspreis: 199.95,
       Länge_mm: 123,
       Breite_mm: 45,
@@ -303,13 +304,14 @@ describe('export-items action', () => {
     expect(roundtripped.Artikel_Nummer).toBe(seedItem.Artikel_Nummer);
     expect(roundtripped.Artikelbeschreibung).toBe(seedItem.Artikelbeschreibung);
     expect(roundtripped.Kurzbeschreibung).toBe(seedItem.Kurzbeschreibung);
-    expect(roundtripped.Langtext).toBe(seedItem.Langtext);
+    expect(roundtripped.Langtext).toEqual({ Details: 'Detailed Langtext block' });
     expect(roundtripped.Hersteller).toBe(seedItem.Hersteller);
     expect(roundtripped.Länge_mm).toBe(seedItem.Länge_mm);
     expect(roundtripped.Breite_mm).toBe(seedItem.Breite_mm);
     expect(roundtripped.Höhe_mm).toBe(seedItem.Höhe_mm);
     expect(roundtripped.Gewicht_kg).toBe(seedItem.Gewicht_kg);
     expect(roundtripped.Verkaufspreis).toBe(seedItem.Verkaufspreis);
+    expect(roundtripped.Quality).toBe(seedItem.Quality);
     expect(roundtripped.Hauptkategorien_A).toBe(seedItem.Hauptkategorien_A);
     expect(roundtripped.Unterkategorien_A).toBe(seedItem.Unterkategorien_A);
     expect(roundtripped.Hauptkategorien_B).toBe(seedItem.Hauptkategorien_B);
