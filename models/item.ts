@@ -36,7 +36,7 @@ export interface ItemRef {
   Grafikname?: string;
   ImageNames?: string | null;
   Artikelbeschreibung?: string;
-  Verkaufspreis?: number;
+  Verkaufspreis?: number | null;
   Kurzbeschreibung?: string;
   Langtext?: string | LangtextPayload;
   Hersteller?: string;

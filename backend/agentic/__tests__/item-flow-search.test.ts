@@ -52,7 +52,7 @@
 //     const target = {
 //       itemUUid: 'item-456',
 //       Artikelbeschreibung: 'Widget Deluxe',
-//       Marktpreis: 199.99,
+//       Verkaufspreis: 199.99,
 //       Kurzbeschreibung: 'Premium widget for labs',
 //       Langtext: 'Extended description',
 //       Hersteller: 'Acme Industries',
@@ -98,7 +98,7 @@
 //     const targetJson = JSON.stringify({
 //       itemUUid: 'item-789',
 //       Artikelbeschreibung: 'Sensor Basic',
-//       Marktpreis: 89.99,
+//       Verkaufspreis: 89.99,
 //       Kurzbeschreibung: '',
 //       Langtext: '',
 //       Hersteller: 'Beta GmbH',

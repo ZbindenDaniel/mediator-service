@@ -108,7 +108,7 @@ export const TargetSchema = z
   .object({
     itemUUid: z.string(),
     Artikelbeschreibung: z.string(),
-    Marktpreis: localizedNumber,
+    Verkaufspreis: localizedNumber,
     Kurzbeschreibung: z.string(),
     Langtext: LangtextFieldSchema,
     Hersteller: z.string(),

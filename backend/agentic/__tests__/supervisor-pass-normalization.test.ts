@@ -31,7 +31,7 @@
 //   test('treats quoted PASS supervisor response as success', async () => {
 //     const extractionPayload = {
 //       Artikelbeschreibung: 'Widget 3000',
-//       Marktpreis: 199,
+//       Verkaufspreis: 199,
 //       Kurzbeschreibung: 'Compact widget',
 //       Langtext: 'A compact widget suitable for small spaces.',
 //       Hersteller: 'Acme',
@@ -63,7 +63,7 @@
 //       searchInvoker: jest.fn(),
 //       target: {
 //         Artikelbeschreibung: '',
-//         Marktpreis: null,
+//         Verkaufspreis: null,
 //         Kurzbeschreibung: '',
 //         Langtext: '',
 //         Hersteller: '',

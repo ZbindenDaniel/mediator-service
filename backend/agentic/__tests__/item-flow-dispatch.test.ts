@@ -22,7 +22,7 @@
 //   finalData: {
 //     itemUUid: 'item-123',
 //     Artikelbeschreibung: 'Example item',
-//     Marktpreis: null,
+//     Verkaufspreis: null,
 //     Kurzbeschreibung: 'Kurzbeschreibung',
 //     Langtext: 'Langtext',
 //     Hersteller: 'Hersteller',

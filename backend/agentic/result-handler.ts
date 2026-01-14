@@ -311,9 +311,17 @@ export function handleAgenticResult(
       const shouldPersistItemUpdate = status !== AGENTIC_RUN_STATUS_REJECTED;
       if (shouldPersistItemUpdate) {
         const merged: Record<string, any> = { ...existingItem };
+        let mappedLegacyPrice = false;
         if (agenticPayload && typeof agenticPayload === 'object') {
           for (const [key, value] of Object.entries(agenticPayload)) {
             if (value !== undefined) {
+              if (key === 'Marktpreis') {
+                if (merged.Verkaufspreis === undefined) {
+                  merged.Verkaufspreis = value;
+                  mappedLegacyPrice = true;
+                }
+                continue;
+              }
               merged[key] = value;
             }
           }
@@ -321,6 +329,9 @@ export function handleAgenticResult(
 
         merged.ItemUUID = itemUUID;
         merged.UpdatedAt = now;
+        if (mappedLegacyPrice) {
+          logger?.info?.({ msg: 'mapped legacy Marktpreis to Verkaufspreis', itemId: itemUUID });
+        }
 
         const mergedDatum = toIsoString(merged.Datum_erfasst);
         const itemPayload: Item = {

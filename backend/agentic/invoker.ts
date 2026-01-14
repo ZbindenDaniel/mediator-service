@@ -61,7 +61,7 @@ function buildTargetFromRow(
   return {
     itemUUid: normalizeString(row.ItemUUID),
     Artikelbeschreibung: normalizeString(row.Artikelbeschreibung),
-    Marktpreis: normalizeNullableNumber(row.Verkaufspreis),
+    Verkaufspreis: normalizeNullableNumber(row.Verkaufspreis),
     Kurzbeschreibung: normalizeString(row.Kurzbeschreibung),
     Langtext: row.Langtext ?? {},
     Hersteller: normalizeString(row.Hersteller),
@@ -75,7 +75,7 @@ function buildTargetFromRow(
 const TARGET_FIELD_KEYS: Array<keyof AgenticTarget> = [
   'itemUUid',
   'Artikelbeschreibung',
-  'Marktpreis',
+  'Verkaufspreis',
   'Kurzbeschreibung',
   'Langtext',
   'Hersteller',

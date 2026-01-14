@@ -4,6 +4,7 @@ import { FlowError } from './errors';
 import type { ItemFlowLogger } from './item-flow';
 
 // TODO(agent): Revisit prompt loading cache strategy once planner usage stabilizes.
+// TODO(agent): Validate pricing rule prompt composition once pricing telemetry is available.
 const PROMPTS_DIR = path.resolve(__dirname, '../prompts');
 const FORMAT_PATH = path.join(PROMPTS_DIR, 'item-format.json');
 const EXTRACT_PROMPT_PATH = path.join(PROMPTS_DIR, 'extract.md');
@@ -11,6 +12,8 @@ const SUPERVISOR_PROMPT_PATH = path.join(PROMPTS_DIR, 'supervisor.md');
 const SHOPWARE_PROMPT_PATH = path.join(PROMPTS_DIR, 'shopware-verify.md');
 const CATEGORIZER_PROMPT_PATH = path.join(PROMPTS_DIR, 'categorizer.md');
 const JSON_CORRECTION_PROMPT_PATH = path.join(PROMPTS_DIR, 'json-correction.md');
+const PRICING_PROMPT_PATH = path.join(PROMPTS_DIR, 'pricing.md');
+const PRICING_RULES_PATH = path.join(PROMPTS_DIR, 'pricing-rules.md');
 const SEARCH_PLANNER_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-planner.md');
 const SEARCH_SOURCES_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-sources.md');
 const CHAT_PROMPT_PATH = path.join(PROMPTS_DIR, 'chat.md');
@@ -248,6 +251,7 @@ export interface LoadPromptsResult {
   extract: string;
   supervisor: string;
   categorizer: string;
+  pricing: string;
   jsonCorrection: string;
   searchPlanner: string;
   shopware?: string | null;
@@ -260,14 +264,18 @@ export interface LoadChatPromptOptions {
 export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromptsOptions): Promise<LoadPromptsResult> {
   try {
     // TODO(agent): Keep curated search source injection aligned with prompt updates.
-    const [format, extract, supervisor, categorizer, searchPlannerTemplate, searchSources] = await Promise.all([
+    const [format, extract, supervisor, categorizer, pricing, pricingRules, searchPlannerTemplate, searchSources] = await Promise.all([
       readPromptFile(FORMAT_PATH, { itemId, prompt: 'format', logger }),
       readPromptFile(EXTRACT_PROMPT_PATH, { itemId, prompt: 'extract', logger }),
       readPromptFile(SUPERVISOR_PROMPT_PATH, { itemId, prompt: 'supervisor', logger }),
       readPromptFile(CATEGORIZER_PROMPT_PATH, { itemId, prompt: 'categorizer', logger }),
+      readPromptFile(PRICING_PROMPT_PATH, { itemId, prompt: 'pricing', logger }),
+      readPromptFile(PRICING_RULES_PATH, { itemId, prompt: 'pricing-rules', logger }),
       readPromptFile(SEARCH_PLANNER_PROMPT_PATH, { itemId, prompt: 'search-planner', logger }),
       readPromptFile(SEARCH_SOURCES_PROMPT_PATH, { itemId, prompt: 'search-sources', logger })
     ]);
+
+    const composedPricing = `${pricing.trim()}\n\n<pricing_rules>\n${pricingRules.trim()}\n</pricing_rules>\n`;
 
     const searchPlanner = `${searchPlannerTemplate.trim()}\n\n<sources>\n${searchSources.trim()}\n</sources>\n`;
 
@@ -304,10 +312,11 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       itemId,
       includeShopware: Boolean(includeShopware),
       hasJsonCorrection: Boolean(jsonCorrection),
+      pricingRulesLength: pricingRules.length,
       hasShopware: shopware != null
     });
 
-    return { format, extract, supervisor, categorizer, jsonCorrection, searchPlanner, shopware };
+    return { format, extract, supervisor, categorizer, pricing: composedPricing, jsonCorrection, searchPlanner, shopware };
   } catch (err) {
     if (err instanceof FlowError) {
       throw err;
@@ -355,6 +364,8 @@ export {
   SUPERVISOR_PROMPT_PATH,
   SHOPWARE_PROMPT_PATH,
   CATEGORIZER_PROMPT_PATH,
+  PRICING_PROMPT_PATH,
+  PRICING_RULES_PATH,
   JSON_CORRECTION_PROMPT_PATH,
   SEARCH_PLANNER_PROMPT_PATH,
   CHAT_PROMPT_PATH

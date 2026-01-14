@@ -27,7 +27,7 @@
 
 //   const extractionPayload = {
 //     Artikelbeschreibung: 'Example description',
-//     Marktpreis: 199,
+//     Verkaufspreis: 199,
 //     Kurzbeschreibung: 'Short text',
 //     Langtext: 'Long form text',
 //     Hersteller: 'Acme',
@@ -74,7 +74,7 @@
 //   });
 
 //   test('runExtractionAttempts parses output when think tag is malformed', async () => {
-//     const malformedResponse = `<think>analysis incomplete</think {"Artikelbeschreibung":"Example description","Marktpreis":199,"Kurzbeschreibung":"Short text","Langtext":"Long form text","Hersteller":"Acme","Länge_mm":10,"Breite_mm":20,"Höhe_mm":30,"Gewicht_kg":2.5,"itemUUid":"item-123"}`;
+//     const malformedResponse = `<think>analysis incomplete</think {"Artikelbeschreibung":"Example description","Verkaufspreis":199,"Kurzbeschreibung":"Short text","Langtext":"Long form text","Hersteller":"Acme","Länge_mm":10,"Breite_mm":20,"Höhe_mm":30,"Gewicht_kg":2.5,"itemUUid":"item-123"}`;
 //     const llm = new StubChatModel([
 //       { content: malformedResponse },
 //       { content: 'PASS: ok' }
@@ -103,7 +103,7 @@
 //     normalizedTarget: {
 //       itemUUid: 'item-123',
 //       Artikelbeschreibung: 'Existing item',
-//       Marktpreis: 150,
+//       Verkaufspreis: 150,
 //       Kurzbeschreibung: 'Short existing',
 //       Langtext: 'Existing long form',
 //       Hersteller: 'Acme',
@@ -120,7 +120,7 @@
 //       isMatch: true,
 //       confidence: 0.9,
 //       matchedProductId: 'prod-1',
-//       target: { Artikelbeschreibung: 'Updated description', Marktpreis: 175 }
+//       target: { Artikelbeschreibung: 'Updated description', Verkaufspreis: 175 }
 //     };
 //     const llm: ChatModel = {
 //       async invoke() {
@@ -134,11 +134,11 @@
 //     });
 
 //     expect(result).not.toBeNull();
-//     expect(result?.finalData).toMatchObject({ Artikelbeschreibung: 'Updated description', Marktpreis: 175 });
+//     expect(result?.finalData).toMatchObject({ Artikelbeschreibung: 'Updated description', Verkaufspreis: 175 });
 //   });
 
 //   test('resolveShopwareMatch parses decision when think tag is malformed', async () => {
-//     const decision = `<think>analysis incomplete</think {"isMatch":true,"confidence":0.75,"matchedProductId":"prod-1","target":{"Artikelbeschreibung":"Recovered","Marktpreis":160}}`;
+//     const decision = `<think>analysis incomplete</think {"isMatch":true,"confidence":0.75,"matchedProductId":"prod-1","target":{"Artikelbeschreibung":"Recovered","Verkaufspreis":160}}`;
 //     const llm: ChatModel = {
 //       async invoke() {
 //         return { content: decision };
@@ -151,6 +151,6 @@
 //     });
 
 //     expect(result).not.toBeNull();
-//     expect(result?.finalData).toMatchObject({ Artikelbeschreibung: 'Recovered', Marktpreis: 160 });
+//     expect(result?.finalData).toMatchObject({ Artikelbeschreibung: 'Recovered', Verkaufspreis: 160 });
 //   });
 // });

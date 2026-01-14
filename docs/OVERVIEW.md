@@ -137,6 +137,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Recent Highlights
 - Switched ERP sync imports to a curl-based multipart upload that matches the ERP payload fields and timeout semantics.
+- Added a minimal pricing stage in the agentic item flow with a dedicated pricing rules prompt to align Verkaufspreis handling across prompts and schemas.
 - Added a shelf creation form in the box list UI backed by shared shelf location metadata for consistent ID generation.
 - Added a hidden admin shelf creation route with stronger validation and logging around shelf location selections.
 - Added shelf creation payload handling with prefix-based sequencing for shelf IDs.
