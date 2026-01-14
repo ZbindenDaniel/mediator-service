@@ -164,6 +164,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Introduced default shelf location mapping configuration for subcategory-backed location IDs, logging missing mappings to protect data quality.
 - Added shelf BoxID format validation for boxes.csv ingestion to warn and skip malformed shelf IDs.
 - Simplified box location tags in the UI to show normalized locations and optional labels without color mapping.
+- Filtered the Behälter list view to exclude shelf records so shelves no longer appear as boxes.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
