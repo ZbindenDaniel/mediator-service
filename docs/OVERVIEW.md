@@ -137,6 +137,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Recent Highlights
 - Split item list box vs. shelf normalization so Behälter and Lagerort links only render with their respective IDs.
+- Removed the default-location relocation button and API option so item moves always target an explicit box selection.
 - Updated shelf creation to resolve category labels from taxonomy lookups with fallback logging, and removed legacy category seeding now that CSV imports will own this workflow.
 - Added shelf box detail payloads that surface contained boxes and render them in the UI detail view alongside items.
 - Switched ERP sync imports to a curl-based multipart upload that matches the ERP payload fields and timeout semantics.
@@ -167,6 +168,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Simplified box location tags in the UI to show normalized locations and optional labels without color mapping.
 - Added a dedicated 29x90 item label template and routed item print jobs to it for the new item label format.
 - Filtered the Behälter list view to exclude shelf records so shelves no longer appear as boxes.
+- Filtered shelf box detail payloads to hide shelf records from the Behälter card while logging filtered counts.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)

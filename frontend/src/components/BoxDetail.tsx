@@ -227,7 +227,6 @@ export default function BoxDetail({ boxId }: Props) {
           setEvents([]);
           setContainedBoxes([]);
           setNote('');
-          setLabel('');
           setPhotoPreview('');
           setPhotoUpload(null);
           setPhotoRemoved(false);
@@ -622,7 +621,7 @@ export default function BoxDetail({ boxId }: Props) {
                         <Link to={`/boxes/${encodeURIComponent(containedBox.BoxID)}`} className="linkcard">
                           <div className="mono">{containedBox.BoxID}</div>
                           <div>
-                            <BoxColorTag
+                            <BoxTag
                               locationKey={containedBox.LocationId}
                               labelOverride={containedBox.Label}
                             />

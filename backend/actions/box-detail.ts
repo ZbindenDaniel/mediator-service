@@ -60,6 +60,7 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: 'box detail unavailable' });
       }
 
+      // TODO(agent): Centralize shelf-contained box filtering rules once shelf/box queries are shared.
       let containedBoxes: any[] | undefined;
       if (isShelf) {
         const boxesByLocationHelper = ctx.boxesByLocation;
@@ -68,7 +69,27 @@ const action = defineHttpAction({
           containedBoxes = [];
         } else {
           try {
-            containedBoxes = boxesByLocationHelper.all(normalizedId);
+            const rawContained = boxesByLocationHelper.all(normalizedId);
+            const filtered = Array.isArray(rawContained)
+              ? rawContained.filter((contained: { BoxID?: string | null }) => {
+                  const containedId = typeof contained?.BoxID === 'string' ? contained.BoxID.trim() : '';
+                  if (!containedId) {
+                    return false;
+                  }
+                  if (containedId.toUpperCase().startsWith('S-')) {
+                    return false;
+                  }
+                  return containedId !== normalizedId;
+                })
+              : [];
+            if (filtered.length !== (rawContained?.length ?? 0)) {
+              console.info('box-detail filtered shelf-contained boxes', {
+                ...logContext,
+                total: rawContained?.length ?? 0,
+                remaining: filtered.length
+              });
+            }
+            containedBoxes = filtered;
           } catch (error) {
             console.error('box-detail failed to load contained boxes', { ...logContext, error });
             return sendJson(res, 500, { error: 'box detail unavailable' });
