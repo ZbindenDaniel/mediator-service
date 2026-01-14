@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+// TODO(agent): Confirm shelf detail queries cover LocationId/index performance expectations before expanding usage.
 // TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
 // TODO(agent): Audit ImageNames persistence once asset synchronization tracks discrete files.
 // TODO(agent): Fold location bootstrap seeding into the formal migration path once Postgres becomes the primary store.
@@ -905,6 +906,7 @@ let getMaxArtikelNummerStatement: Database.Statement;
 let getItemStatement: Database.Statement;
 let findByMaterialStatement: Database.Statement;
 let itemsByBoxStatement: Database.Statement;
+let boxesByLocationStatement: Database.Statement;
 let getAdjacentItemIdsStatement: Database.Statement;
 try {
   upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
@@ -965,6 +967,9 @@ ${ITEM_JOIN_WITH_BOX}
 WHERE i.BoxID = ?
 ORDER BY i.ItemUUID
 `);
+  boxesByLocationStatement = db.prepare(`
+    SELECT * FROM boxes WHERE LocationId = ? ORDER BY BoxID
+  `);
 } catch (err) {
   console.error('Failed to prepare item persistence statements', err);
   throw err;
@@ -1319,6 +1324,7 @@ export const getItemReference = wrapLangtextAwareStatement(
 );
 export const findByMaterial = wrapLangtextAwareStatement(findByMaterialStatement, 'db:findByMaterial');
 export const itemsByBox = wrapLangtextAwareStatement(itemsByBoxStatement, 'db:itemsByBox');
+export const boxesByLocation = boxesByLocationStatement;
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
 // TODO(agent): Revisit list box queries once typed/location filters are stabilized for UI consumers.
 const listBoxesStatement = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
