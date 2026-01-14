@@ -6,6 +6,7 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 
 // TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
 // TODO(agent): Extract review-time side effects (like price defaults) into a dedicated helper to simplify reuse.
+// TODO(agentic-review-close): Add focused tests for the manual agentic review close endpoint.
 
 export function applyPriceFallbackAfterReview(
   itemId: string,
@@ -89,18 +90,22 @@ const action = defineHttpAction({
   appliesTo: (entity) => entity.type === 'Item',
   matches: (path, method) => {
     if (method === 'GET') return /^\/api\/items\/[^/]+\/agentic$/.test(path);
-    if (method === 'POST') return /^\/api\/items\/[^/]+\/agentic\/review$/.test(path);
+    if (method === 'POST') return /^\/api\/items\/[^/]+\/agentic\/(review|close)$/.test(path);
     return false;
   },
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     const url = req.url || '';
-    const match = url.match(/^\/api\/items\/([^/]+)\/agentic(?:\/review)?$/);
+    const match = url.match(/^\/api\/items\/([^/]+)\/agentic(?:\/(review|close))?$/);
     const itemId = match ? decodeURIComponent(match[1]) : '';
+    const action = match && match[2] ? match[2] : null;
     if (!itemId) {
       return sendJson(res, 400, { error: 'Invalid item id' });
     }
 
     if (req.method === 'GET') {
+      if (action) {
+        return sendJson(res, 405, { error: 'Method not allowed' });
+      }
       try {
         const result = getAgenticStatus(itemId, {
           db: ctx.db,
@@ -128,13 +133,14 @@ const action = defineHttpAction({
     }
 
     try {
-      const run = ctx.getAgenticRun.get(itemId);
-      if (!run) {
-        return sendJson(res, 404, { error: 'Agentic run not found' });
+      let raw = '';
+      try {
+        for await (const chunk of req) raw += chunk;
+      } catch (err) {
+        console.error('Failed to read agentic review request body', err);
+        return sendJson(res, 400, { error: 'Invalid request body' });
       }
 
-      let raw = '';
-      for await (const chunk of req) raw += chunk;
       let data: any = {};
       try {
         data = raw ? JSON.parse(raw) : {};
@@ -144,8 +150,13 @@ const action = defineHttpAction({
       }
 
       const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
-      const decision = typeof data.decision === 'string' ? data.decision.trim().toLowerCase() : '';
       const notes = typeof data.notes === 'string' ? data.notes.trim() : '';
+      const decision =
+        action === 'close'
+          ? 'approved'
+          : typeof data.decision === 'string'
+            ? data.decision.trim().toLowerCase()
+            : '';
 
       if (!actor) {
         return sendJson(res, 400, { error: 'actor is required' });
@@ -158,18 +169,64 @@ const action = defineHttpAction({
       const status = decision === 'approved' ? AGENTIC_RUN_STATUS_APPROVED : AGENTIC_RUN_STATUS_REJECTED;
 
       try {
-        const result = ctx.updateAgenticReview.run({
-          ItemUUID: itemId,
-          ReviewState: decision,
-          ReviewedBy: actor,
-          LastModified: reviewedAt,
-          Status: status,
-          LastReviewDecision: decision,
-          LastReviewNotes: notes || null
-        });
-        if (!result || result.changes === 0) {
-          console.error('Agentic review update had no effect for', itemId);
-          return sendJson(res, 500, { error: 'Failed to update review state' });
+        if (action === 'close') {
+          let run: any;
+          try {
+            run = ctx.getAgenticRun.get(itemId);
+          } catch (err) {
+            console.error('Failed to load agentic run for close request', err);
+            return sendJson(res, 500, { error: 'Failed to load agentic run' });
+          }
+
+          if (!run) {
+            const upsertResult = ctx.upsertAgenticRun.run({
+              ItemUUID: itemId,
+              SearchQuery: null,
+              Status: status,
+              LastModified: reviewedAt,
+              ReviewState: decision,
+              ReviewedBy: actor,
+              LastReviewDecision: decision,
+              LastReviewNotes: notes || null
+            });
+            if (!upsertResult || upsertResult.changes === 0) {
+              console.error('Agentic close upsert had no effect for', itemId);
+              return sendJson(res, 500, { error: 'Failed to update review state' });
+            }
+          } else {
+            const result = ctx.updateAgenticReview.run({
+              ItemUUID: itemId,
+              ReviewState: decision,
+              ReviewedBy: actor,
+              LastModified: reviewedAt,
+              Status: status,
+              LastReviewDecision: decision,
+              LastReviewNotes: notes || null
+            });
+            if (!result || result.changes === 0) {
+              console.error('Agentic review update had no effect for', itemId);
+              return sendJson(res, 500, { error: 'Failed to update review state' });
+            }
+          }
+        } else {
+          const run = ctx.getAgenticRun.get(itemId);
+          if (!run) {
+            return sendJson(res, 404, { error: 'Agentic run not found' });
+          }
+
+          const result = ctx.updateAgenticReview.run({
+            ItemUUID: itemId,
+            ReviewState: decision,
+            ReviewedBy: actor,
+            LastModified: reviewedAt,
+            Status: status,
+            LastReviewDecision: decision,
+            LastReviewNotes: notes || null
+          });
+          if (!result || result.changes === 0) {
+            console.error('Agentic review update had no effect for', itemId);
+            return sendJson(res, 500, { error: 'Failed to update review state' });
+          }
         }
 
         if (decision === 'rejected') {
@@ -201,7 +258,9 @@ const action = defineHttpAction({
         EntityType: 'Item',
         EntityId: itemId,
         Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
-        Meta: JSON.stringify({ decision, notes })
+        Meta: JSON.stringify(
+          action === 'close' ? { decision, reason: 'manual-close', notes } : { decision, notes }
+        )
       });
 
       if (decision === 'approved') {
