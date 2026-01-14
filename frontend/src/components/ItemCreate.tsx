@@ -19,7 +19,6 @@ import LoadingPage from './LoadingPage';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
 import { ITEM_FORM_DEFAULT_EINHEIT, extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
-import PrintLabelButton from './PrintLabelButton';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 
