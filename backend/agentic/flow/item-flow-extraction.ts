@@ -7,6 +7,7 @@ import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
 import { AgentOutputSchema, TargetSchema } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
+import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
 import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
 
@@ -38,6 +39,7 @@ export interface RunExtractionOptions {
   targetFormat: string;
   supervisorPrompt: string;
   categorizerPrompt: string;
+  pricingPrompt: string;
   searchInvoker: SearchInvoker;
   target: AgenticTarget;
   reviewNotes?: string | null;
@@ -175,6 +177,7 @@ export async function runExtractionAttempts({
   targetFormat,
   supervisorPrompt,
   categorizerPrompt,
+  pricingPrompt,
   searchInvoker,
   target,
   reviewNotes,
@@ -210,6 +213,7 @@ export async function runExtractionAttempts({
   const searchesPerRequestLimit = Number.isFinite(numericSearchLimit) && numericSearchLimit > 0
     ? Math.floor(numericSearchLimit)
     : 1;
+  // TODO(agent): Cache pricing stage output per attempt to avoid redundant LLM calls during retries.
   // TODO(agent): Review search request limit telemetry after env overrides roll out.
   try {
     logger?.info?.({
@@ -744,13 +748,61 @@ export async function runExtractionAttempts({
       throw new FlowError('CATEGORIZER_FAILED', 'Categorizer stage failed', 500, { cause: err });
     }
 
+    let pricedValidated = enrichedValidated;
+    const hasPrice = isUsablePrice(enrichedValidated.data.Verkaufspreis);
+    if (hasPrice) {
+      logger?.info?.({ msg: 'pricing stage skipped - price already present', attempt, itemId });
+    } else {
+      let searchSummary: string | null = null;
+      try {
+        const aggregated = buildAggregatedSearchText();
+        if (aggregated.trim()) {
+          searchSummary = aggregated;
+        }
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to prepare pricing search summary', attempt, itemId });
+      }
+
+      try {
+        const pricingResult = await runPricingStage({
+          llm,
+          logger,
+          itemId,
+          pricingPrompt,
+          candidate: enrichedValidated.data,
+          searchSummary,
+          reviewNotes: sanitizedReviewerNotes,
+          transcriptWriter
+        });
+
+        if (pricingResult?.Verkaufspreis != null) {
+          const mergedCandidate = { ...enrichedValidated.data, Verkaufspreis: pricingResult.Verkaufspreis };
+          const mergedParse = AgentOutputSchema.safeParse(mergedCandidate);
+          if (!mergedParse.success) {
+            logger?.error?.({
+              msg: 'pricing merge failed schema validation',
+              attempt,
+              itemId,
+              issues: mergedParse.error.issues
+            });
+          } else {
+            pricedValidated = { success: true as const, data: mergedParse.data };
+          }
+        } else {
+          logger?.info?.({ msg: 'pricing stage yielded no price update', attempt, itemId });
+        }
+      } catch (err) {
+        logger?.error?.({ err, msg: 'pricing stage failed', attempt, itemId });
+      }
+    }
+
     logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
     let supervisorUserContent = '';
     try {
-      supervisorUserContent = JSON.stringify(enrichedValidated.data);
+      supervisorUserContent = JSON.stringify(pricedValidated.data);
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to serialize supervisor payload', attempt, itemId });
-      supervisorUserContent = String(enrichedValidated.data);
+      supervisorUserContent = String(pricedValidated.data);
     }
     const supervisorMessages = [
       { role: 'system', content: supervisorPrompt },
@@ -769,7 +821,7 @@ export async function runExtractionAttempts({
     }).trim();
 
     const supervisorTranscriptPayload: TranscriptSectionPayload = {
-      request: enrichedValidated.data,
+      request: pricedValidated.data,
       messages: supervisorMessages,
       response: supervision
     };
@@ -819,7 +871,7 @@ export async function runExtractionAttempts({
     });
     const pass = normalizedSupervision.toLowerCase().includes('pass');
 
-    lastValidated = enrichedValidated;
+    lastValidated = pricedValidated;
     if (pass) {
       success = true;
       break;
