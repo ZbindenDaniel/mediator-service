@@ -136,6 +136,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Removed the default-location relocation button and API option so item moves always target an explicit box selection.
 - Updated shelf creation to resolve category labels from taxonomy lookups with fallback logging, and removed legacy category seeding now that CSV imports will own this workflow.
 - Added shelf box detail payloads that surface contained boxes and render them in the UI detail view alongside items.
 - Switched ERP sync imports to a curl-based multipart upload that matches the ERP payload fields and timeout semantics.

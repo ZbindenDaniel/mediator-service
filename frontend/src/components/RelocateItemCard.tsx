@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { GoLinkExternal, GoMoveToEnd, GoPackageDependents } from 'react-icons/go';
+import { GoLinkExternal } from 'react-icons/go';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { dialogService } from './dialog';
@@ -9,15 +9,14 @@ import { dialogService } from './dialog';
 interface Props {
   itemId: string;
   onRelocated?: () => void | Promise<void>;
-  itemdefautlLocationId: string | null; // based on the items category
 }
 
 interface RelocateOptions {
   destinationOverride?: string;
-  useDefaultLocation?: boolean;
 }
 
-export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocationId = null }: Props) {
+// TODO(agent): Confirm backend analytics don't require the default-location relocation flow.
+export default function RelocateItemCard({ itemId, onRelocated }: Props) {
   const [boxId, setBoxId] = useState('');
   const [status, setStatus] = useState('');
   const [boxLink, setBoxLink] = useState('');
@@ -27,9 +26,6 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
   async function performRelocate(actor: string, destinationBoxId?: string, options?: RelocateOptions) {
     try {
       const payload: Record<string, unknown> = { actor };
-      if (options?.useDefaultLocation) {
-        payload.useDefaultLocation = true;
-      }
       if (destinationBoxId) {
         payload.toBoxId = destinationBoxId;
       }
@@ -47,7 +43,6 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
         console.info('Relocate item succeeded', {
           itemId,
           toBoxId: resolvedDestinationId || destinationBoxId,
-          useDefaultLocation: options?.useDefaultLocation === true,
           status: response.status,
           response: data,
           selectedSuggestion
@@ -74,7 +69,6 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
         console.warn('Relocate item failed', {
           itemId,
           toBoxId: resolvedDestinationId || destinationBoxId,
-          useDefaultLocation: options?.useDefaultLocation === true,
           status: response.status,
           error: data.error ?? data
         });
@@ -83,7 +77,6 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
       console.error('Relocate item request failed', {
         itemId,
         toBoxId: destinationBoxId,
-        useDefaultLocation: options?.useDefaultLocation === true,
         error
       });
       setStatus('Verschieben fehlgeschlagen');
@@ -99,14 +92,14 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
     }
 
     const destinationBoxId = (options?.destinationOverride ?? boxId).trim();
-    if (!destinationBoxId && !options?.useDefaultLocation) {
+    if (!destinationBoxId) {
       setStatus('Bitte einen Zielbehälter auswählen.');
       setBoxLink('');
       console.warn('Relocate item aborted: missing destination box id', { itemId });
       return;
     }
 
-    if (!options?.destinationOverride && !options?.useDefaultLocation) {
+    if (!options?.destinationOverride) {
       setBoxId(destinationBoxId);
     }
 
@@ -248,19 +241,6 @@ export default function RelocateItemCard({ itemId, onRelocated, itemdefautlLocat
             >
               {/* <GoMoveToEnd aria-hidden="true" /> */}
               <span>Verschieben</span>
-            </button>
-            <button
-              type="button"
-              className="icon-button"
-              disabled={isSubmitting || !itemdefautlLocationId}
-              onClick={(e) => {
-              void handleRelocateSubmit(e as unknown as React.FormEvent<HTMLFormElement>, { useDefaultLocation: true });
-              }}
-              title="Artikel in standard Ort verschieben"
-            >
-              {/* <GoMoveToEnd aria-hidden="true" /> */}
-              <span>zu standard Ort verschieben →  </span>
-              <span className='muted'> {itemdefautlLocationId}</span>
             </button>
             <button
               type="button"
