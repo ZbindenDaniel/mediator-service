@@ -2373,7 +2373,12 @@ export const getMaxShelfIndex = db.prepare(
   `
 );
 export const getMaxBoxId = db.prepare(
-  `SELECT BoxID FROM boxes ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC LIMIT 1`
+  // TODO(agent): Revisit box ID ordering to account for date segments if ID sequencing changes.
+  `SELECT BoxID
+   FROM boxes
+   WHERE BoxID GLOB 'B-??????-????'
+   ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC
+   LIMIT 1`
 );
 export const getMaxItemId = db.prepare(
   `SELECT ItemUUID

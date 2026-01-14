@@ -263,32 +263,63 @@ const action = defineHttpAction({
       const dd = String(nowDate.getDate()).padStart(2, '0');
       const mm = String(nowDate.getMonth() + 1).padStart(2, '0');
       const yy = String(nowDate.getFullYear()).slice(-2);
-      const idNum = seq + 1;
-      const id = `B-${dd}${mm}${yy}-${idNum.toString().padStart(4, '0')}`;
       const now = nowDate.toISOString();
-      const txn = ctx.db.transaction((boxId: string, a: string) => {
-        ctx.upsertBox.run({
-          BoxID: boxId,
-          // TODO(agent): Capture an initial Label once box creation collects placement context.
-          LocationId: null,
-          Label: null,
-          CreatedAt: now,
-          Notes: null,
-          PhotoPath: null,
-          PlacedBy: a,
-          PlacedAt: null,
-          UpdatedAt: now
-        });
-        ctx.logEvent({
-          Actor: a,
-          EntityType: 'Box',
-          EntityId: boxId,
-          Event: 'Created',
-          Meta: null
-        });
-        console.log('Created box', boxId);
+      const prefix = `B-${dd}${mm}${yy}-`;
+      // TODO(agent): Revisit box ID collision retry caps once contention telemetry is available.
+      const maxAttempts = 25;
+      const txn = ctx.db.transaction((payload: { actor: string; now: string; prefix: string; startSeq: number }) => {
+        let attempts = 0;
+        let nextSeq = payload.startSeq;
+        let candidate = '';
+        try {
+          while (attempts < maxAttempts) {
+            candidate = `${payload.prefix}${String(nextSeq).padStart(4, '0')}`;
+            const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
+            if (existing?.BoxID) {
+              console.warn('[create-box] Box ID collision detected, retrying', {
+                actor: payload.actor,
+                candidate,
+                attempt: attempts + 1
+              });
+              attempts += 1;
+              nextSeq += 1;
+              continue;
+            }
+
+            ctx.upsertBox.run({
+              BoxID: candidate,
+              // TODO(agent): Capture an initial Label once box creation collects placement context.
+              LocationId: null,
+              Label: null,
+              CreatedAt: payload.now,
+              Notes: null,
+              PhotoPath: null,
+              PlacedBy: payload.actor,
+              PlacedAt: null,
+              UpdatedAt: payload.now
+            });
+            ctx.logEvent({
+              Actor: payload.actor,
+              EntityType: 'Box',
+              EntityId: candidate,
+              Event: 'Created',
+              Meta: null
+            });
+            console.log('Created box', candidate);
+            return candidate;
+          }
+
+          throw new Error('Failed to allocate box ID');
+        } catch (error) {
+          console.error('[create-box] Box ID allocation failed', {
+            actor: payload.actor,
+            attemptedId: candidate || null,
+            error
+          });
+          throw error;
+        }
       });
-      txn(id, actor);
+      const id = txn({ actor, now, prefix, startSeq: seq + 1 });
       sendJson(res, 200, { ok: true, id });
     } catch (err) {
       console.error('[create-box] Create box failed', err);
