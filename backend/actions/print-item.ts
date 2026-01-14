@@ -7,12 +7,14 @@ import { defineHttpAction } from './index';
 // TODO(agent): Monitor ignored template query logs while the 29x90 item label remains fixed.
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../lib/labelHtml';
+import { resolvePrinterQueue } from '../print';
 import type { PrintFileResult } from '../print';
 import { buildItemCategoryLookups } from 'frontend/src/lib/categoryLookup';
 
 // TODO(agent): Align item print payloads with upcoming label size templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
 // TODO(agent): Remove legacy template query fallbacks once all clients request 29x90 directly.
+// TODO(print-queues): Route item labels to per-label printer queues when configured.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -150,11 +152,16 @@ const action = defineHttpAction({
       }
 
       let printResult: PrintFileResult = { sent: false, reason: 'print_not_attempted' };
+      const queueResolution = resolvePrinterQueue('item');
+      if (queueResolution.source === 'missing') {
+        console.warn('[print-item] Printer queue missing for item labels', { itemId: item.ItemUUID });
+      }
       try {
         printResult = await ctx.printFile({
           filePath: htmlPath,
           jobName: `Item ${item.ItemUUID}`,
-          renderMode: 'html-to-pdf'
+          renderMode: 'html-to-pdf',
+          printerQueue: queueResolution.queue
         });
       } catch (err) {
         console.error('Item label print invocation failed', { itemId: item.ItemUUID, error: err });

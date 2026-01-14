@@ -83,8 +83,21 @@ if (rawDatabaseUrl && rawDbPathEnv) {
 
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
+// TODO(print-queues): Confirm per-label printer queue overrides once label routing settles for all templates.
 const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || '').trim();
 export const PRINTER_QUEUE = resolvedQueue;
+export const PRINTER_QUEUE_BOX = (process.env.PRINTER_QUEUE_BOX || '').trim();
+export const PRINTER_QUEUE_ITEM = (process.env.PRINTER_QUEUE_ITEM || '').trim();
+export const PRINTER_QUEUE_SHELF = (process.env.PRINTER_QUEUE_SHELF || '').trim();
+if (!PRINTER_QUEUE_BOX) {
+  console.warn('[config] PRINTER_QUEUE_BOX not set; box labels will fall back to PRINTER_QUEUE.');
+}
+if (!PRINTER_QUEUE_ITEM) {
+  console.warn('[config] PRINTER_QUEUE_ITEM not set; item labels will fall back to PRINTER_QUEUE.');
+}
+if (!PRINTER_QUEUE_SHELF) {
+  console.warn('[config] PRINTER_QUEUE_SHELF not set; shelf labels will fall back to PRINTER_QUEUE.');
+}
 export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
 const parsedPrintTimeout = Number.parseInt(process.env.PRINT_TIMEOUT_MS || '', 10);

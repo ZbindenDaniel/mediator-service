@@ -10,6 +10,7 @@ import {
   itemCategories
 } from '../../models';
 import type { BoxLabelPayload, ShelfLabelPayload } from '../lib/labelHtml';
+import { resolvePrinterQueue } from '../print';
 import type { PrintFileResult } from '../print';
 
 // TODO(agent): Surface label size enforcement in UI once additional templates exist.
@@ -17,6 +18,7 @@ import type { PrintFileResult } from '../print';
 // TODO(agent): Track rejected template query attempts while only 62x100 is permitted.
 // TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
 // TODO(agent): Confirm shelf category mapping once shelf ID schema changes are confirmed.
+// TODO(print-queues): Route box vs shelf labels to per-label printer queues when configured.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -232,11 +234,19 @@ const action = defineHttpAction({
       }
 
       let printResult: PrintFileResult = { sent: false, reason: 'print_not_attempted' };
+      const queueResolution = resolvePrinterQueue(isShelf ? 'shelf' : 'box');
+      if (queueResolution.source === 'missing') {
+        console.warn('[print-box] Printer queue missing for label type', {
+          boxId: box.BoxID,
+          labelType: isShelf ? 'shelf' : 'box'
+        });
+      }
       try {
         printResult = await ctx.printFile({
           filePath: htmlPath,
           jobName: `Box ${box.BoxID}`,
-          renderMode: 'html-to-pdf'
+          renderMode: 'html-to-pdf',
+          printerQueue: queueResolution.queue
         });
       } catch (err) {
         console.error('Box label print invocation failed', { boxId: box.BoxID, error: err });

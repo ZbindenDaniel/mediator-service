@@ -3,6 +3,9 @@ import path from 'path';
 import { spawn } from 'child_process';
 import {
   PRINTER_QUEUE,
+  PRINTER_QUEUE_BOX,
+  PRINTER_QUEUE_ITEM,
+  PRINTER_QUEUE_SHELF,
   LP_COMMAND,
   LPSTAT_COMMAND,
   PRINT_TIMEOUT_MS
@@ -26,6 +29,46 @@ export interface PrintFileResult {
   code?: number | null;
   signal?: NodeJS.Signals | null;
   artifactPath?: string;
+}
+
+export type PrintLabelType = 'box' | 'item' | 'shelf';
+export type PrinterQueueSource = 'label' | 'default' | 'missing';
+
+export interface PrinterQueueResolution {
+  queue: string;
+  source: PrinterQueueSource;
+}
+
+export function resolvePrinterQueue(
+  labelType: PrintLabelType,
+  logger: Pick<Console, 'warn'> = console
+): PrinterQueueResolution {
+  let queue = '';
+  switch (labelType) {
+    case 'box':
+      queue = PRINTER_QUEUE_BOX;
+      break;
+    case 'item':
+      queue = PRINTER_QUEUE_ITEM;
+      break;
+    case 'shelf':
+      queue = PRINTER_QUEUE_SHELF;
+      break;
+    default:
+      queue = '';
+  }
+
+  if (queue) {
+    return { queue, source: 'label' };
+  }
+
+  if (PRINTER_QUEUE) {
+    logger.warn(`[print] ${labelType} queue not configured; falling back to PRINTER_QUEUE.`);
+    return { queue: PRINTER_QUEUE, source: 'default' };
+  }
+
+  logger.warn(`[print] ${labelType} queue not configured and PRINTER_QUEUE is empty.`);
+  return { queue: '', source: 'missing' };
 }
 
 function validateFilePath(filePath: string): { ok: boolean; reason?: string } {
