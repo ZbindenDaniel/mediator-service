@@ -58,7 +58,7 @@ export default function ImportCard() {
             message: (
               <div>
                 <p>
-                  Die Datei enthält {data.itemCount ?? 0} Artikel und {data.boxCount ?? 0} Behälter.
+                  Die Datei enthält {data.itemCount ?? 0} Artikel in {data.boxCount ?? 0} Behältern.
                 </p>
                 <p>Zusätzliche Box-Stammdaten: {data.boxesFileCount ?? 0} Einträge.</p>
                 {data.message && <p>{data.message}</p>}
