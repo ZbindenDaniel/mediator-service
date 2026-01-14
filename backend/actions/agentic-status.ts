@@ -7,6 +7,7 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 // TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
 // TODO(agent): Extract review-time side effects (like price defaults) into a dedicated helper to simplify reuse.
 // TODO(agentic-review-close): Add focused tests for the manual agentic review close endpoint.
+// TODO(agentic-close-not-started): Validate close flow for not-started runs after import/export restores.
 
 export function applyPriceFallbackAfterReview(
   itemId: string,
