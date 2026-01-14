@@ -12,6 +12,7 @@ import { resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agent
 // TODO(agent): Verify recent activities term helper wiring in the action context.
 // TODO(agent): Audit Langtext response serialization once structured payload adoption completes.
 // TODO(agent): Revisit inbox watcher patterns once ZIP uploads introduce mixed payload sequencing.
+// TODO(print-queues): Route queued label jobs to per-label printer queues once configuration is standardized.
 import {
   HTTP_PORT,
   INBOX_DIR,
@@ -85,7 +86,7 @@ import {
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
-import { printFile, testPrinterConnection } from './print';
+import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
 import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
@@ -282,11 +283,19 @@ async function runPrintWorker(): Promise<void> {
     }
 
     // TODO(agent): Measure render latency for label printing to keep template compatibility visible in dashboards.
+    const queueResolution = resolvePrinterQueue('item');
+    if (queueResolution.source === 'missing') {
+      console.warn('[print-worker] Printer queue missing for item label jobs', {
+        itemId: item.ItemUUID,
+        jobId: job.Id
+      });
+    }
     try {
       const result = await printFile({
         filePath: outPath,
         jobName: `Item ${item.ItemUUID}`,
-        renderMode: 'html-to-pdf'
+        renderMode: 'html-to-pdf',
+        printerQueue: queueResolution.queue
       });
       if (!result.sent) {
         console.error('Print worker failed to dispatch HTML label', {

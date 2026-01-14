@@ -149,6 +149,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Removed box detail label editing from the note workflow so note-only updates preserve stored labels.
 - Added shelf creation payload handling with prefix-based sequencing for shelf IDs.
 - Added an A4 shelf label print template to prepare for shelf-specific print endpoints.
+- Expanded activities search matching to include box/shelf identifiers and clarified the search hint copy.
 - Wired the A4 shelf label print template into the box print action with shelf category resolution for QR payloads.
 - Made agentic search plan and per-request query limits configurable via env settings for the item flow pipeline.
 - Added CSV import alias coverage for ItemUUID/Auf Lager headers and hardened boxes-only ingestion logging.
@@ -171,6 +172,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Filtered shelf box detail payloads to hide shelf records from the Behälter card while logging filtered counts.
 - Clarified relocate-box shelf dropdown labels by splitting shelf IDs into location, floor, and shelf number segments.
 - Wired the recent activities term filter helper into the action context with fallback logging.
+- Normalized printer status responses with ok/reason data and surfaced printer misconfiguration hints in the overview UI.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
