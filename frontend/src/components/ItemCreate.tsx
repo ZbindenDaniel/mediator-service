@@ -987,9 +987,24 @@ export default function ItemCreate() {
       let shouldNavigateToCreatedItem = Boolean(createdItem?.ItemUUID);
       try {
         // TODO(agent): Revisit success dialog layout after richer metadata and label actions land.
+        // TODO(agent): Confirm success dialog metadata stays aligned with backend import response fields.
         let dialogMessage: React.ReactNode = successMessage;
         try {
-          const artikelNummerRaw = createdItem?.Artikel_Nummer;
+          let artikelNummerRaw = createdItem?.Artikel_Nummer;
+          try {
+            if (!artikelNummerRaw) {
+              console.warn('Missing Artikel_Nummer in create response; falling back to submitted data.', {
+                itemId: createdItem?.ItemUUID,
+                artikelNummerRaw: createdItem?.Artikel_Nummer
+              });
+              artikelNummerRaw = submissionData.Artikel_Nummer;
+            }
+          } catch (artikelNummerParseError) {
+            console.error('Failed to resolve Artikel_Nummer for success dialog', {
+              error: artikelNummerParseError,
+              itemId: createdItem?.ItemUUID
+            });
+          }
           const itemIdRaw = createdItem?.ItemUUID;
           const artikelNummer =
             typeof artikelNummerRaw === 'string' && artikelNummerRaw.trim() ? artikelNummerRaw.trim() : '';
