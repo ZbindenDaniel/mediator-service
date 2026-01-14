@@ -15,6 +15,7 @@ import LoadingPage from './LoadingPage';
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
 // TODO(agent): Revisit relocation category selection when boxes contain mixed item subcategories.
+// TODO(agent): Confirm note-only box updates preserve stored labels after label input removal.
 
 interface Props {
   boxId: string;
@@ -63,7 +64,6 @@ export default function BoxDetail({ boxId }: Props) {
   type NoteFeedback = { type: 'info' | 'success' | 'error'; message: string } | null;
 
   const [note, setNote] = useState('');
-  const [label, setLabel] = useState('');
   const [noteFeedback, setNoteFeedback] = useState<NoteFeedback>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [photoPreview, setPhotoPreview] = useState('');
@@ -216,7 +216,6 @@ export default function BoxDetail({ boxId }: Props) {
         const data = await res.json();
         setBox(data.box);
         setNote(data.box?.Notes || '');
-        setLabel(data.box?.Label || '');
         setNoteFeedback(null);
         const nextPhotoPath = typeof data.box?.PhotoPath === 'string' ? data.box.PhotoPath.trim() : '';
         setPhotoPreview(nextPhotoPath);
@@ -231,7 +230,6 @@ export default function BoxDetail({ boxId }: Props) {
         setItems([]);
         setEvents([]);
         setNote('');
-        setLabel('');
         setPhotoPreview('');
         setPhotoUpload(null);
         setPhotoRemoved(false);
@@ -243,7 +241,6 @@ export default function BoxDetail({ boxId }: Props) {
       setPhotoPreview('');
       setPhotoUpload(null);
       setPhotoRemoved(false);
-      setLabel('');
     } finally {
       if (showSpinner) {
         setIsLoading(false);
@@ -447,7 +444,7 @@ export default function BoxDetail({ boxId }: Props) {
                       setIsSavingNote(true);
                       setNoteFeedback({ type: 'info', message: 'Speichern…' });
                       console.info('Saving box note', { boxId: box.BoxID });
-                      const payload: Record<string, unknown> = { notes: note, actor, Label: label };
+                      const payload: Record<string, unknown> = { notes: note, actor };
                       if (typeof box.LocationId === 'string' && box.LocationId.trim()) {
                         payload.LocationId = box.LocationId.trim();
                       }
@@ -469,7 +466,7 @@ export default function BoxDetail({ boxId }: Props) {
                       }
                       if (res.ok) {
                         const nextPhotoPath = typeof responseBody?.photoPath === 'string' ? responseBody.photoPath.trim() : '';
-                        setBox(b => b ? { ...b, Notes: note, Label: label, PhotoPath: nextPhotoPath || null } : b);
+                        setBox(b => b ? { ...b, Notes: note, PhotoPath: nextPhotoPath || null } : b);
                         setPhotoPreview(nextPhotoPath);
                         setPhotoUpload(null);
                         setPhotoRemoved(false);
@@ -537,24 +534,6 @@ export default function BoxDetail({ boxId }: Props) {
                             onChange={handlePhotoFileChange}
                           />
                         </div>
-                      </div>
-
-
-                      <div className='row'>
-                        <label htmlFor="box-label">Label</label>
-                        <input
-                          id="box-label"
-                          name="box-label"
-                          type="text"
-                          value={label}
-                          onChange={e => {
-                            setLabel(e.target.value);
-                            if (noteFeedback && noteFeedback.type !== 'info') {
-                              setNoteFeedback(null);
-                            }
-                          }}
-                        />
-                        <p className="muted">Anzeigename für den Standort.</p>
                       </div>
 
                       <div className='row'>
