@@ -6,7 +6,8 @@ import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { logger } from '../utils/logger';
 
 const DEFAULT_LIMIT = 50;
-// TODO(agent): Include activities search term in feed request once the API confirms term filtering.
+// TODO(agent): Clean up duplicate search term parsing between URL state and local input.
+// TODO(agent): Monitor activities term filtering now that the feed request includes term data.
 // TODO(agent): Revisit activities search helper text once box/shelf search guidance is validated.
 const BOX_SHELF_PATTERN = /^[BS]-/i;
 
