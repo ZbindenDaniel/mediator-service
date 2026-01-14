@@ -19,6 +19,13 @@ export const QUALITY_LABELS: Record<number, string> = {
   5: 'Neuwertig'
 };
 
+const QUALITY_LABEL_LOOKUP: Readonly<Record<string, number>> = Object.freeze(
+  Object.entries(QUALITY_LABELS).reduce<Record<string, number>>((acc, [rawValue, label]) => {
+    acc[label.toLowerCase()] = Number.parseInt(rawValue, 10);
+    return acc;
+  }, {})
+);
+
 export function normalizeQuality(
   value: unknown,
   logger: Pick<Console, 'warn' | 'error'> = console
@@ -47,6 +54,40 @@ export function normalizeQuality(
     logger.error?.('[quality] Failed to normalize quality value', error);
   }
   return QUALITY_DEFAULT;
+}
+
+export function resolveQualityFromLabel(
+  value: unknown,
+  logger: Pick<Console, 'warn' | 'error'> = console
+): number | null {
+  try {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return normalizeQuality(value, logger);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const parsed = Number.parseInt(trimmed, 10);
+      if (!Number.isNaN(parsed)) {
+        return normalizeQuality(parsed, logger);
+      }
+      const mapped = QUALITY_LABEL_LOOKUP[trimmed.toLowerCase()];
+      if (typeof mapped === 'number') {
+        return normalizeQuality(mapped, logger);
+      }
+      logger.warn?.('[quality] Unrecognized quality label', { value: trimmed });
+      return null;
+    }
+    if (value === null || value === undefined) {
+      return null;
+    }
+    logger.warn?.('[quality] Unexpected quality label type', { type: typeof value });
+  } catch (error) {
+    logger.error?.('[quality] Failed to resolve quality label', error);
+  }
+  return null;
 }
 
 function clampQuality(value: number): number {
