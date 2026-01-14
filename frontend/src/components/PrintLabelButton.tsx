@@ -12,6 +12,7 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
   const [status, setStatus] = useState('');
   const [preview, setPreview] = useState('');
 
+  // TODO(agent): Review spacing and status copy when embedding this button in success dialogs.
   // TODO(agent): Align print label payloads with backend actor + labelType expectations.
   async function handleClick() {
     try {
