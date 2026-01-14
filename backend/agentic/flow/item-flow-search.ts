@@ -6,6 +6,7 @@ import { RateLimitError } from '../tools/tavily-client';
 import type { SearchSource } from '../utils/source-formatter';
 import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
+import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { ChatModel } from './item-flow-extraction';
 import type { AgenticTarget } from './item-flow-schemas';
@@ -56,7 +57,6 @@ export type SearchPlan = {
   metadata: SearchInvokerMetadata;
 };
 
-const MAX_SEARCH_PLANS = 3;
 const TRACKED_SCHEMA_FIELDS = [
   'Artikelbeschreibung',
   'Marktpreis',
@@ -404,6 +404,19 @@ export async function collectSearchContexts({
   missingSchemaFields: providedMissingFields,
   reviewerSkip
 }: CollectSearchContextOptions): Promise<CollectSearchContextsResult> {
+  const resolvedMaxPlans = Number.isFinite(searchLimits.maxPlans) && searchLimits.maxPlans > 0
+    ? Math.floor(searchLimits.maxPlans)
+    : 1;
+  try {
+    logger?.info?.({
+      msg: 'resolved search plan limit',
+      itemId,
+      maxPlans: resolvedMaxPlans,
+      configuredMaxPlans: searchLimits.maxPlans
+    });
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to log resolved search plan limit', itemId });
+  }
   const resolvedTarget = resolveTarget(target ?? null, logger, itemId);
   const searchContexts: SearchContext[] = [];
   const seenSourceKeys = new Set<string>();
@@ -505,16 +518,16 @@ export async function collectSearchContexts({
   }
 
   searchPlans = dedupeSearchPlans(searchPlans);
-  const limitedPlans = searchPlans.slice(0, MAX_SEARCH_PLANS);
+  const limitedPlans = searchPlans.slice(0, resolvedMaxPlans);
 
-  if (searchPlans.length > MAX_SEARCH_PLANS) {
+  if (searchPlans.length > resolvedMaxPlans) {
     try {
       logger?.warn?.({
         msg: 'search plan limit applied',
         itemId,
         requestedPlans: searchPlans.length,
-        limit: MAX_SEARCH_PLANS,
-        truncatedPlans: searchPlans.slice(MAX_SEARCH_PLANS).map((plan) => plan.query)
+        limit: resolvedMaxPlans,
+        truncatedPlans: searchPlans.slice(resolvedMaxPlans).map((plan) => plan.query)
       });
     } catch (err) {
       logger?.error?.({ err, msg: 'failed to log search plan truncation', itemId });
