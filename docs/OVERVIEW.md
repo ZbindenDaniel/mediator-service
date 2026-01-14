@@ -1,6 +1,5 @@
 # Project Overview
-<!-- TODO(agent): Update Langtext migration status after observing backend helper telemetry. -->
-<!-- TODO(agent): Re-run `npm install --package-lock-only` after each dependency change to keep CI lockfile checks green. -->
+Dependency changes should refresh the lockfile via `npm install --package-lock-only` so CI lockfile checks remain green.
 
 The mediator service coordinates warehouse inventory workflows by pairing a TypeScript/Node.js backend with a React frontend for managing boxes, items, and print assets. This document provides a planning-oriented snapshot of priorities, risks, and recent progress.
 
@@ -107,25 +106,23 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
   HTTP proxy fallback.
 - Continue validating the migrated `backend/agentic/` modules (flows, tools, prompts) with focused tests and linting once the
   invoker is fully integrated.
-- Finalise the Langtext-as-JSON rollout by auditing `models/item.ts` and `backend/agentic/flow/item-flow-schemas.ts` so importer and schema workstreams stay synchronized with the new UI key/value editor.
+- Continue the Langtext-as-JSON rollout by auditing `models/item.ts` and `backend/agentic/flow/item-flow-schemas.ts` so importer and schema workstreams stay synchronized with the new UI key/value editor, then deprecate the legacy string fallback once `[langtext]` logs show low fallback usage.
 - Stand up the Compose-backed Postgres instance locally (`docker compose up`) during every integration cycle so migrations are exercised continuously and connection regressions surface early.
 
 ## Langtext Migration Notes
-- Backend persistence, importer, and search flows now route `Langtext` values through `backend/lib/langtext.ts`, emitting
-  structured `[langtext]` logs whenever JSON parsing fails or fallbacks are applied. Monitor these logs to determine when it is
-  safe to deprecate the legacy string-only path.
-- Agentic schemas accept object payloads and print/search endpoints stringify structured metadata on demand; once telemetry
-  shows minimal fallback usage we can schedule removal of the string coercion branches and update the frontend editors.
-- `/api/items` and `/api/export/items` now surface parsed `Langtext` payloads directly from the database proxies while the CSV
-  export code stringifies object payloads with shared helpers, aligning backend contracts with the frontend key/value editor.
+- `models/item.ts` still allows `Langtext` as either a string or a `{ [key: string]: string }` payload, so callers must treat
+  the field as a mixed type until the legacy string path is retired.
+- Backend persistence, importer, and export flows route `Langtext` values through `backend/lib/langtext.ts`, which logs
+  `[langtext]` warnings when JSON parsing fails or non-object data is encountered and falls back to string handling.
+- Import actions warn when form-supplied Langtext values are rejected and fall back to reference defaults, keeping ingest
+  resilient while migration telemetry is collected.
 
 ## Risks & Dependencies
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.
 - Refer to [BUGS.md](BUGS.md) for additional tracked defects.
 
 ## Postgres rollout notes
-
-<!-- TODO(agent): Replace these notes once we promote managed database guidance. -->
+- These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
 
 - Compose defines the mediator/Postgres network so `DATABASE_URL` and the individual `PG*` variables can follow the `mediator`/`postgres` defaults without leaking secrets.
 - After provisioning, run the migration and verification scripts to confirm every table matches the shared interfaces under `models/` and `backend/src/models/`; unresolved diffs risk runtime serialization errors.
