@@ -2421,6 +2421,7 @@ ORDER BY i.ItemUUID
 
 export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
 
+// TODO(subcategory-filter): Confirm whether Unterkategorien_B should be included in subcategory filters.
 const listItemsWithFiltersStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
@@ -2435,6 +2436,11 @@ LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
     OR LOWER(COALESCE(i.Artikel_Nummer, '')) LIKE @searchTerm
     OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
   )
+AND (
+  @subcategoryFilter IS NULL
+  OR @subcategoryFilter = ''
+  OR LOWER(COALESCE(CAST(r.Unterkategorien_A AS TEXT), '')) LIKE @subcategoryFilter
+)
 AND (
   @boxFilter IS NULL
   OR @boxFilter = ''
@@ -2505,6 +2511,11 @@ AND (
   OR LOWER(COALESCE(r.Artikelbeschreibung, '')) LIKE @searchTerm
   OR LOWER(COALESCE(r.Artikel_Nummer, '')) LIKE @searchTerm
   OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
+)
+AND (
+  @subcategoryFilter IS NULL
+  OR @subcategoryFilter = ''
+  OR LOWER(COALESCE(CAST(r.Unterkategorien_A AS TEXT), '')) LIKE @subcategoryFilter
 )
 AND (
   @boxFilter IS NULL
