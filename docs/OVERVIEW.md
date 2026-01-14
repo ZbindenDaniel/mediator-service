@@ -137,10 +137,13 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Recent Highlights
 - Hardened box ID sequencing to filter B-prefixed IDs and retry on collisions with warning logs.
+- Added Artikel_Nummer to the import-item success payload and aligned the item creation dialog with response-backed metadata while logging missing response fields.
 - Centralized item category lookup builders in shared models so backend and frontend reuse the same map logic.
+- Updated unified print label actions to use shared category lookups with backend-safe imports and contextual error logging.
 - Enriched the item creation success dialog with Artikelnummer context and a direct label print action for faster follow-up.
 - Added a UI action in item detail to close in-progress agentic runs and unblock queued approvals.
 - Re-enabled the Unterkategorie filter on the item list, persisted subcategory selections, and added backend query support to avoid client-only filtering for large lists.
+- Swapped the Unterkategorie filter input for taxonomy-backed select options and logged missing subcategory selections to keep filters resilient.
 - Mapped Langtext Qualität labels back into the numeric Quality field during CSV/form imports while cleaning the Langtext payloads.
 - Split item list box vs. shelf normalization so Behälter and Lagerort links only render with their respective IDs.
 - Removed the default-location relocation button and API option so item moves always target an explicit box selection.
