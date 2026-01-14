@@ -148,6 +148,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added an A4 shelf label print template to prepare for shelf-specific print endpoints.
 - Wired the A4 shelf label print template into the box print action with shelf category resolution for QR payloads.
 - Made agentic search plan and per-request query limits configurable via env settings for the item flow pipeline.
+- Added CSV import alias coverage for ItemUUID/Auf Lager headers and hardened boxes-only ingestion logging.
 - Added a bulk “Sync to ERP” action button on the item list to trigger `/api/sync/erp` with selected IDs.
 - Added camera capture support in item forms so photos can be captured directly into data URLs.
 - Persisted item list filter preferences with a header reset indicator to keep search context between visits.

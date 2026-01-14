@@ -21,6 +21,7 @@ import {
 
 // TODO(agent): Harden ZIP payload validation to reject archives with unexpected executable content.
 // TODO(agent): Revisit staging and extraction thresholds once upload telemetry is available.
+// TODO(agent): Document boxes-only archive handling once importer alias fixes ship.
 
 const STAGING_TIMEOUT_MS = 30_000;
 const ENTRY_TIMEOUT_MS = 45_000;
@@ -242,6 +243,14 @@ const action = defineHttpAction({
         try {
           const { count } = await ingestBoxesCsv(boxesBuffer);
           uploadContext.boxesProcessed = count;
+          if (!itemsBuffer) {
+            console.info('[csv-import] Completed boxes-only archive ingestion', {
+              boxesProcessed: count,
+            });
+            if (!uploadContext.message) {
+              uploadContext.message = `Processed boxes.csv with ${count} row${count === 1 ? '' : 's'}.`;
+            }
+          }
         } catch (boxesError) {
           console.error('[csv-import] Failed to ingest boxes.csv from archive', boxesError);
         }
@@ -292,7 +301,7 @@ const action = defineHttpAction({
         }
       }
 
-      if (!itemsBuffer && uploadContext.boxesProcessed === 0 && uploadContext.mediaFiles === 0) {
+      if (!itemsBuffer && !boxesBuffer && uploadContext.mediaFiles === 0) {
         return sendJson(res, 400, { error: 'The ZIP archive did not include items.csv, boxes.csv, or media assets.' });
       }
 

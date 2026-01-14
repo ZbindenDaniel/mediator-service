@@ -18,6 +18,7 @@ import { collectMediaAssets, isAllowedMediaAsset } from './save-item';
 // TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
 // TODO(agent): Normalize category fields to canonical labels once lookup utilities support code-to-name mapping.
 // TODO(agent): Confirm Artikel-Nummer zero-padding requirements remain at six digits for ERP exports.
+// TODO(agent): Verify export/import header alias parity when adding metadata columns.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
