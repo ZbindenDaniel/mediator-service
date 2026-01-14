@@ -2338,6 +2338,7 @@ export const listRecentActivities = db.prepare(`
     AND ${topicFilterExpression('e')}
   ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
+// TODO(agent): Validate activities term search coverage for box/shelf IDs once event UX copy is finalized.
 export const listRecentActivitiesByTerm = db.prepare(`
   SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
          r.Artikelbeschreibung AS Artikelbeschreibung,
@@ -2350,6 +2351,7 @@ export const listRecentActivitiesByTerm = db.prepare(`
     AND (
       e.EntityId LIKE @term
       OR COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) LIKE @term
+      OR i.BoxID LIKE @term
     )
   ORDER BY e.CreatedAt DESC
   LIMIT @limit`);
