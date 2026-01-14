@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 // TODO(agent): Replace legacy Langtext print fallback once structured payload rendering lands.
 // TODO(agent): Document HTML print artifacts so support can trace failures quickly.
-// TODO(agent): Monitor ignored template query logs while the 62x100 default remains fixed.
+// TODO(agent): Monitor ignored template query logs while the 29x90 item label remains fixed.
 import type { Item } from '../../models';
 import type { ItemLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult } from '../print';
@@ -12,7 +12,7 @@ import { buildItemCategoryLookups } from 'frontend/src/lib/categoryLookup';
 
 // TODO(agent): Align item print payloads with upcoming label size templates.
 // TODO(agent): Promote template selection to UI once multiple label sizes ship.
-// TODO(agent): Remove legacy template query fallbacks once all clients request 62x100 directly.
+// TODO(agent): Remove legacy template query fallbacks once all clients request 29x90 directly.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -33,13 +33,28 @@ function logUnexpectedTemplateQuery(req: IncomingMessage): void {
   try {
     const url = new URL(req.url ?? '', 'http://localhost');
     const raw = url.searchParams.get('template');
-    if (raw && raw !== '62x100') {
+    if (raw && raw !== '29x90') {
       console.warn('[label] Unexpected label template requested for item print', { template: raw });
     }
     if (raw) console.warn('Unexpected label template requested for item print', raw);
   } catch (err) {
     console.error('Failed to inspect label template from item print query', err);
   }
+}
+
+function resolveCategoryLabel(rawCategory: unknown): string {
+  if (rawCategory === null || rawCategory === undefined || rawCategory === '') return '';
+  try {
+    const lookup = buildItemCategoryLookups();
+    const categoryCode = typeof rawCategory === 'number' ? rawCategory : Number(rawCategory);
+    if (Number.isFinite(categoryCode)) {
+      const entry = lookup.unter.get(categoryCode);
+      if (entry?.label) return entry.label;
+    }
+  } catch (err) {
+    console.error('Failed to resolve category label for item print', err);
+  }
+  return String(rawCategory);
 }
 
 const action = defineHttpAction({
@@ -89,18 +104,13 @@ const action = defineHttpAction({
         if (Number.isFinite(parsed)) parsedQuantity = parsed;
       }
 
-      // const lookUps = buildItemCategoryLookups()
-      // let category = '-';
-      // if(item.Unterkategorien_A){
-      //   category = lookUps?.unter?.get(item.Unterkategorien_A)?.label ?? '?';
-      // }
-  
       const toIsoString = (value: unknown): string | null => {
         if (!value) return null;
         const date = value instanceof Date ? value : new Date(value as string);
         return Number.isNaN(date.getTime()) ? null : date.toISOString();
       };
 
+      const categoryLabel = resolveCategoryLabel(item.Unterkategorien_A);
       const itemData: ItemLabelPayload = {
         type: 'item',
         id: item.ItemUUID,
@@ -108,7 +118,7 @@ const action = defineHttpAction({
         materialNumber: item.Artikel_Nummer?.trim() || null,
         boxId: item.BoxID || null,
         location: item.Location?.trim() || null,
-        category: item.Unterkategorien_A?.toString() ?? '',
+        category: categoryLabel,
         quantity: Number.isFinite(parsedQuantity) ? parsedQuantity : null,
         addedAt: toIsoString(item.Datum_erfasst || item.UpdatedAt),
         updatedAt: toIsoString(item.UpdatedAt)
@@ -189,7 +199,3 @@ const action = defineHttpAction({
 });
 
 export default action;
-function resolveUnterkategorieLabel(Unterkategorien_A: number | undefined) {
-  throw new Error('Function not implemented.');
-}
-

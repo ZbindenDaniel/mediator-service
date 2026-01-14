@@ -4,7 +4,9 @@ import { renderLabelTemplate, type LabelHtmlTemplate } from './labelTemplateLoad
 // TODO(agent): Confirm shelf label payload fields before adding more shelf metadata to QR payloads.
 
 export type LabelTemplate = LabelHtmlTemplate;
-const ACTIVE_TEMPLATE: LabelTemplate = '62x100';
+// TODO(agent): Validate item label layout before rolling to all printers.
+const BOX_TEMPLATE: LabelTemplate = '62x100';
+const ITEM_TEMPLATE: LabelTemplate = '29x90';
 const SHELF_TEMPLATE: LabelTemplate = 'shelf-a4';
 
 let QRCode: any;
@@ -88,7 +90,7 @@ export interface BoxLabelOptions {
 
 export async function htmlForBox({ boxData, outPath, logger = console }: BoxLabelOptions): Promise<string> {
   const labelText = resolveBoxLabelText(boxData);
-  return renderLabel(ACTIVE_TEMPLATE, { ...boxData, labelText, type: 'box' }, outPath, logger);
+  return renderLabel(BOX_TEMPLATE, { ...boxData, labelText, type: 'box' }, outPath, logger);
 }
 
 export interface ItemLabelPayload {
@@ -112,7 +114,7 @@ export interface ItemLabelOptions {
 
 export async function htmlForItem({ itemData, outPath, logger = console }: ItemLabelOptions): Promise<string> {
   const labelText = resolveItemLabelText(itemData);
-  return renderLabel(ACTIVE_TEMPLATE, { ...itemData, labelText, type: 'item' }, outPath, logger);
+  return renderLabel(ITEM_TEMPLATE, { ...itemData, labelText, type: 'item' }, outPath, logger);
 }
 
 export interface ShelfLabelPayload {
