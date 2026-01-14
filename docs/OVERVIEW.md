@@ -187,6 +187,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Updated the 62x100 box label template to render a bold box ID with a large QR code for box-specific printing.
 - Unified label printing behind `/api/print/:labelType/:id` while keeping thin box/item wrappers for migration.
 - Added a frontend auto-print toggle for item creation flows, with shared label request handling and configuration logging.
+- Refined the item list filter bar layout to render side-by-side controls with better alignment across responsive breakpoints.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)

@@ -535,6 +535,7 @@ export default function ItemListPage() {
     // <div className="container item">
     <div className="list-container item">
       <h2>Alle Artikel</h2>
+      {/* TODO(filter-bar-layout): Confirm filter bar alignment across breakpoints after flex layout update. */}
       <div className="filter-bar">
         <div className='filter-bar-row filter-bar-row--search'>
           <div className='row'>

@@ -1206,18 +1206,28 @@ button:focus {
     }
 }
 
+// TODO(filter-bar-layout): Revisit filter bar spacing once filter count grows further.
 .filter-bar {
     margin-bottom: 10px;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px;
 }
 
 .filter-bar-row {
     display: flex;
+    flex: 1 1 360px;
     flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 280px;
+}
+
+.filter-bar-row .row {
+    flex: 1 1 220px;
+    width: auto;
+    padding: 0;
 }
 
 .filter-bar-row--search input[type="search"] {
@@ -1232,13 +1242,19 @@ button:focus {
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    width: 40%;
+    width: 100%;
 }
 
 .filter-control {
     flex-direction: column;
     align-items: flex-start;
     font-size: 0.9rem;
+}
+
+.sort-control,
+.sort-direction-control {
+    flex-direction: column;
+    align-items: flex-start;
 }
 
 .filter-control input,
@@ -1249,9 +1265,15 @@ button:focus {
     border-radius: 6px;
     border: 1px solid var(--line);
     min-width: 190px;
+    width: 100%;
 }
 
-.filter-control__input {
+.sort-control__input {
+    width: 100%;
+}
+
+.filter-control__input,
+.sort-control__input {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1260,11 +1282,13 @@ button:focus {
     border-radius: 6px;
 }
 
-.filter-control__input input {
+.filter-control__input input,
+.sort-control__input input {
     border: none;
     outline: none;
     background: transparent;
     min-width: 140px;
+    width: 100%;
 }
 
 .filter-bar .search-control svg {
