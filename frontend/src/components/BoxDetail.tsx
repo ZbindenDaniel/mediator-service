@@ -8,10 +8,11 @@ import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
-import BoxColorTag from './BoxColorTag';
+import BoxTag from './BoxTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
 
+// TODO(agent): Verify the BoxTag rendering still aligns with the detailed box metadata layout.
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
 // TODO(agent): Revisit relocation category selection when boxes contain mixed item subcategories.
@@ -399,7 +400,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <tbody>
                   <tr>
                     <th>Standort</th>
-                    <td><BoxColorTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
+                    <td><BoxTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
                   </tr>
                   <tr>
                     <th>Platziert am</th>

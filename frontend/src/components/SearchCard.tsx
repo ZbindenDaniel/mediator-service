@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
-import BoxColorTag from './BoxColorTag';
 import { Link } from 'react-router-dom';
+import BoxTag from './BoxTag';
+
+// TODO(agent): Double-check that the simplified BoxTag output matches the search results layout expectations.
 
 type SearchResult =
   | { type: 'box'; id: string; locationId?: string | null; label?: string | null }
@@ -59,7 +61,7 @@ export default function SearchCard() {
                 Behälter: {res.id}
               </div>
               <div className="muted">
-                <BoxColorTag locationKey={res.locationId} labelOverride={res.label} />
+                <BoxTag locationKey={res.locationId} labelOverride={res.label} />
               </div>
              </Link>
             </div>

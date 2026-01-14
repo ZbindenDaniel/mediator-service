@@ -2,7 +2,9 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import type { Box } from '../../../models';
 import { formatDate } from '../lib/format';
-import BoxColorTag from './BoxColorTag';
+import BoxTag from './BoxTag';
+
+// TODO(agent): Confirm recent boxes still surface location labels clearly without color data.
 
 interface Props {
   boxes: Box[];
@@ -46,7 +48,7 @@ export default function RecentBoxesCard({ boxes }: Props) {
               <Link className="linkcard" to={`/boxes/${encodeURIComponent(b.BoxID)}`}>
                 <div className="card">
                   <div className="mono">{b.BoxID}</div>
-                  <div><b>Standort: <BoxColorTag locationKey={b.LocationId} labelOverride={b.Label} /></b></div>
+                  <div><b>Standort: <BoxTag locationKey={b.LocationId} labelOverride={b.Label} /></b></div>
                   <div className="muted">Aktualisiert: {b.UpdatedAt ? formatDate(b.UpdatedAt) : ''}</div>
                 </div>
               </Link>

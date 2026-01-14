@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { AgenticRunStatus, Item } from '../../../models';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
-import BoxColorTag from './BoxColorTag';
+import BoxTag from './BoxTag';
 import QualityBadge from './QualityBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 
+// TODO(agent): Confirm item list location tags remain legible without the color metadata.
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
 // TODO(agentic): Expand item list columns and responsive styling for enriched item metadata.
 // TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
@@ -159,7 +160,7 @@ export default function ItemList({
                   </Link>
                 </td>
                 <td className="col-location">
-                  <BoxColorTag locationKey={locationKey} />
+                  <BoxTag locationKey={locationKey} />
                 </td>
                 <td className="col-agentic optional-column">{agenticLabel}</td>
                 <td className="col-stock optional-column">{stockValue ?? '—'}</td>

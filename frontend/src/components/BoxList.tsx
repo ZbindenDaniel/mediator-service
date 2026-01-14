@@ -1,8 +1,10 @@
 import React, { ChangeEvent, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Box } from '../../../models/box';
-import BoxColorTag from './BoxColorTag';
 import { formatDate } from '../lib/format';
+import BoxTag from './BoxTag';
+
+// TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 
 export type BoxSortKey = 'BoxID' | 'Label' | 'UpdatedAt';
 
@@ -134,7 +136,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                 >
                   <td className="col-box-id">{box.BoxID}</td>
                   <td className="col-location">
-                    <BoxColorTag locationKey={box.LocationId} labelOverride={box.Label} />
+                    <BoxTag locationKey={box.LocationId} labelOverride={box.Label} />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>
                 </tr>
