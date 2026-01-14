@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
-import type { Box, Item, EventLog } from '../../../models';
+import type { Box, Item, EventLog, BoxDetailResponse } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -12,6 +12,7 @@ import BoxColorTag from './BoxColorTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
 
+// TODO(agent): Confirm shelf box lists align with relocation rules before expanding shelf detail UI.
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
 // TODO(agent): Revisit relocation category selection when boxes contain mixed item subcategories.
@@ -60,6 +61,7 @@ export default function BoxDetail({ boxId }: Props) {
   const [box, setBox] = useState<Box | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
+  const [containedBoxes, setContainedBoxes] = useState<Box[]>([]);
   type NoteFeedback = { type: 'info' | 'success' | 'error'; message: string } | null;
 
   const [note, setNote] = useState('');
@@ -213,7 +215,23 @@ export default function BoxDetail({ boxId }: Props) {
     try {
       const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}`);
       if (res.ok) {
-        const data = await res.json();
+        let data: BoxDetailResponse;
+        try {
+          data = await res.json();
+        } catch (parseError) {
+          console.error('Failed to parse box detail response', { boxId, error: parseError });
+          setLoadError('Behälter konnte nicht geladen werden.');
+          setBox(null);
+          setItems([]);
+          setEvents([]);
+          setContainedBoxes([]);
+          setNote('');
+          setLabel('');
+          setPhotoPreview('');
+          setPhotoUpload(null);
+          setPhotoRemoved(false);
+          return;
+        }
         setBox(data.box);
         setNote(data.box?.Notes || '');
         setLabel(data.box?.Label || '');
@@ -224,12 +242,24 @@ export default function BoxDetail({ boxId }: Props) {
         setPhotoRemoved(false);
         setItems(data.items || []);
         setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
+        if (Array.isArray(data.containedBoxes)) {
+          setContainedBoxes(data.containedBoxes);
+        } else if (Array.isArray((data as any).boxes)) {
+          console.warn('Box detail response used legacy boxes field', { boxId });
+          setContainedBoxes((data as any).boxes);
+        } else {
+          if (data.containedBoxes !== undefined) {
+            console.warn('Box detail containedBoxes was not an array', { boxId });
+          }
+          setContainedBoxes([]);
+        }
         setLoadError(null);
       } else {
         console.error('Failed to fetch box', res.status);
         setBox(null);
         setItems([]);
         setEvents([]);
+        setContainedBoxes([]);
         setNote('');
         setLabel('');
         setPhotoPreview('');
@@ -240,6 +270,7 @@ export default function BoxDetail({ boxId }: Props) {
     } catch (err) {
       console.error('Failed to fetch box', err);
       setLoadError('Behälter konnte nicht geladen werden.');
+      setContainedBoxes([]);
       setPhotoPreview('');
       setPhotoUpload(null);
       setPhotoRemoved(false);
@@ -352,6 +383,18 @@ export default function BoxDetail({ boxId }: Props) {
 
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
+
+  const isShelf = useMemo(() => {
+    if (!box?.BoxID) {
+      return false;
+    }
+    try {
+      return box.BoxID.trim().toUpperCase().startsWith('S-');
+    } catch (error) {
+      console.error('Failed to evaluate shelf box id', error);
+      return false;
+    }
+  }, [box?.BoxID]);
 
   const isBoxRelocatable = useMemo(() => {
     if (!box?.BoxID) {
@@ -588,6 +631,31 @@ export default function BoxDetail({ boxId }: Props) {
                   </form>
                 </div>
               </>) : null}
+
+            {isShelf ? (
+              <div className="card">
+                <h3>Behälter</h3>
+                <div className="item-cards">
+                  {containedBoxes.length ? (
+                    containedBoxes.map((containedBox) => (
+                      <div key={containedBox.BoxID} className="card item-card">
+                        <Link to={`/boxes/${encodeURIComponent(containedBox.BoxID)}`} className="linkcard">
+                          <div className="mono">{containedBox.BoxID}</div>
+                          <div>
+                            <BoxColorTag
+                              locationKey={containedBox.LocationId}
+                              labelOverride={containedBox.Label}
+                            />
+                          </div>
+                        </Link>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted">Keine Behälter in diesem Regal.</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             <div className="card">
               <h3>Artikel</h3>
