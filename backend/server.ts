@@ -41,6 +41,7 @@ import {
   persistItemWithinTransaction,
   findByMaterial,
   itemsByBox,
+  boxesByLocation,
   getBox,
   getItemReference,
   listBoxes,
@@ -321,6 +322,7 @@ type ActionContext = {
   persistItemWithinTransaction: typeof persistItemWithinTransaction;
   findByMaterial: typeof findByMaterial;
   itemsByBox: typeof itemsByBox;
+  boxesByLocation: typeof boxesByLocation;
   getBox: typeof getBox;
   getItemReference: typeof getItemReference;
   listBoxes: typeof listBoxes;
@@ -556,6 +558,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           persistItemWithinTransaction,
           findByMaterial,
           itemsByBox,
+          boxesByLocation,
           getBox,
           getItemReference,
           listBoxes,

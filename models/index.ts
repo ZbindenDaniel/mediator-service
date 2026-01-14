@@ -1,4 +1,5 @@
 export * from './box';
+export * from './box-detail';
 export * from './create-box';
 export * from './item';
 export type { Item, ItemRef, ItemInstance } from './item';
