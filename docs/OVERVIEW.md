@@ -180,6 +180,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Derived shelf display labels in the box list using shelf location metadata for clearer shelf rows.
 - Added a manual agentic review close endpoint to approve items without existing agentic runs and log the closure reason.
 - Updated the 62x100 box label template to render a bold box ID with a large QR code for box-specific printing.
+- Unified label printing behind `/api/print/:labelType/:id` while keeping thin box/item wrappers for migration.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
