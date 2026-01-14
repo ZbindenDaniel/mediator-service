@@ -22,9 +22,15 @@ interface OverviewData {
   recentEvents: EventLog[];
 }
 
+interface PrinterStatusResponse {
+  ok?: boolean;
+  reason?: string;
+}
+
 export default function LandingPage() {
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [printerOk, setPrinterOk] = useState<boolean | null>(null);
+  const [printerReason, setPrinterReason] = useState<string | null>(null);
   const [health, setHealth] = useState('prüfe…');
   const [previewEvents, setPreviewEvents] = useState<EventLog[]>([]);
   const [isOverviewLoading, setIsOverviewLoading] = useState(true);
@@ -58,12 +64,19 @@ export default function LandingPage() {
     (async () => {
       try {
         const r = await fetch('/api/printer/status');
-        const j = await r.json();
-        setPrinterOk(r.ok && j.ok);
-        console.log('Checked printer status');
+        const j = (await r.json()) as PrinterStatusResponse;
+        const resolvedOk = r.ok && j.ok === true;
+        setPrinterOk(resolvedOk);
+        setPrinterReason(resolvedOk ? null : j?.reason ?? null);
+        if (!resolvedOk) {
+          console.warn('Printer status unhealthy', { reason: j?.reason });
+        } else {
+          console.log('Checked printer status');
+        }
       } catch (err) {
         console.error('Printer status fetch failed', err);
         setPrinterOk(false);
+        setPrinterReason(null);
       } finally {
         setIsOverviewLoading(false);
       }
@@ -118,7 +131,12 @@ export default function LandingPage() {
           </Link>
         </div>
               */}
-        <StatsCard counts={overview?.counts} printerOk={printerOk} health={health} />
+        <StatsCard
+          counts={overview?.counts}
+          printerOk={printerOk}
+          printerReason={printerReason}
+          health={health}
+        />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <RecentEventsCard events={previewEvents}></RecentEventsCard>
         <ImportCard />

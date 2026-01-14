@@ -13,11 +13,14 @@ const action = defineHttpAction({
   matches: (path, method) => path === '/api/printer/status' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const ok = await ctx.testPrinterConnection();
-      sendJson(res, 200, { ok });
+      const status = await ctx.testPrinterConnection();
+      if (!status?.ok) {
+        console.warn('Printer status not ok', { reason: status?.reason });
+      }
+      sendJson(res, 200, { ok: status?.ok === true, reason: status?.reason });
     } catch (err) {
       console.error('Printer status failed', err);
-      sendJson(res, 500, { ok: false, error: (err as Error).message });
+      sendJson(res, 500, { ok: false, reason: (err as Error).message });
     }
   },
   view: () => '<div class="card"><p class="muted">Printer status API</p></div>'

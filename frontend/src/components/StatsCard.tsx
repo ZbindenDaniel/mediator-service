@@ -9,10 +9,11 @@ interface Counts {
 interface Props {
   counts?: Counts;
   printerOk: boolean | null;
+  printerReason?: string | null;
   health: string;
 }
 
-export default function StatsCard({ counts, printerOk, health }: Props) {
+export default function StatsCard({ counts, printerOk, printerReason, health }: Props) {
   return (
     <div className="card">
       <h2>Statistiken</h2>
@@ -36,6 +37,11 @@ export default function StatsCard({ counts, printerOk, health }: Props) {
             background: printerOk == null ? '#999' : printerOk ? '#1cbc2c' : '#d22'
           }}
         ></span>
+        {printerReason ? (
+          <span className="muted" style={{ marginLeft: 8 }}>
+            {printerReason}
+          </span>
+        ) : null}
       </div>
       <div className="muted status-info">Ki: 
          <span
