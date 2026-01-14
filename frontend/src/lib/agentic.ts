@@ -1,4 +1,6 @@
 import type { AgenticRun } from '../../../models';
+import { logError, logger } from '../utils/logger';
+// TODO(agentic-close): Confirm close endpoint payload once backend wiring lands.
 
 // TODO(agentic-failure-reason): Surface backend failure reasons to UI consumers.
 
@@ -343,5 +345,68 @@ export async function persistAgenticRunDeletion({
     const message = `Agentic delete request threw during ${context}`;
     console.error(message, err);
     return { ok: false, status: 0, agentic: null, message, reason: 'network-error' };
+  }
+}
+
+export interface PersistAgenticRunCloseOptions {
+  itemId: string | null | undefined;
+  actor?: string | null;
+  notes?: string | null;
+  context: string;
+}
+
+export interface PersistAgenticRunCloseResult {
+  ok: boolean;
+  status: number;
+  agentic: AgenticRun | null;
+  message?: string;
+}
+
+export async function persistAgenticRunClose({
+  itemId,
+  actor,
+  notes,
+  context
+}: PersistAgenticRunCloseOptions): Promise<PersistAgenticRunCloseResult> {
+  const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
+  if (!trimmedItemId) {
+    const message = `Agentic close skipped (${context}): missing ItemUUID`;
+    logger.warn?.(message);
+    return { ok: false, status: 400, agentic: null, message };
+  }
+
+  const sanitizedActor = actor && actor.trim() ? actor.trim() : 'system';
+  const sanitizedNotes = notes && notes.trim() ? notes.trim() : null;
+
+  try {
+    const response = await fetch(`/api/items/${encodeURIComponent(trimmedItemId)}/agentic/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actor: sanitizedActor, notes: sanitizedNotes })
+    });
+
+    if (!response.ok) {
+      const isNotFound = response.status === 404;
+      const message = isNotFound
+        ? `Agentic close skipped during ${context}: run not found`
+        : `Agentic close failed during ${context}`;
+      const loggerFn = isNotFound ? logger.warn : logger.error;
+      loggerFn?.(message, { status: response.status });
+      return { ok: false, status: response.status, agentic: null, message };
+    }
+
+    const data = await response
+      .json()
+      .catch((err) => {
+        logError('Failed to parse persisted agentic close response', err);
+        return null;
+      });
+
+    const agenticRun: AgenticRun | null = data?.agentic ?? null;
+    return { ok: true, status: response.status, agentic: agenticRun };
+  } catch (err) {
+    const message = `Agentic close request threw during ${context}`;
+    logError(message, err);
+    return { ok: false, status: 0, agentic: null, message };
   }
 }
