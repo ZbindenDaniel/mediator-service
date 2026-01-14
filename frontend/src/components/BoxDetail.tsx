@@ -14,6 +14,7 @@ import LoadingPage from './LoadingPage';
 
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
+// TODO(agent): Revisit relocation category selection when boxes contain mixed item subcategories.
 
 interface Props {
   boxId: string;
@@ -21,6 +22,38 @@ interface Props {
 
 function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
+}
+
+function normalizeCategorySegment(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.trunc(value)).padStart(4, '0');
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isNaN(parsed)) {
+      return String(parsed).padStart(4, '0');
+    }
+  }
+
+  return null;
+}
+
+function resolveRelocationCategory(items: Item[]): string | null {
+  for (const item of items) {
+    const category =
+      normalizeCategorySegment(item.Unterkategorien_A) ??
+      normalizeCategorySegment(item.Unterkategorien_B);
+    if (category) {
+      return category;
+    }
+  }
+
+  return null;
 }
 
 export default function BoxDetail({ boxId }: Props) {
@@ -44,6 +77,7 @@ export default function BoxDetail({ boxId }: Props) {
   const navigate = useNavigate();
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
+  const relocationCategory = useMemo(() => resolveRelocationCategory(items), [items]);
 
   async function handleDeleteBox() {
     if (!box) return;
@@ -386,7 +420,11 @@ export default function BoxDetail({ boxId }: Props) {
 
             {isBoxRelocatable ? (
               <>
-                <RelocateBoxCard boxId={box.BoxID} onMoved={() => { void load({ showSpinner: false }); }} />
+                <RelocateBoxCard
+                  boxId={box.BoxID}
+                  categorySegment={relocationCategory}
+                  onMoved={() => { void load({ showSpinner: false }); }}
+                />
 
                 <div className="card">
                   <h3>Notizen</h3>

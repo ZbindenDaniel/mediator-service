@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ensureUser } from '../lib/user';
+import { logger, logError } from '../utils/logger';
 import { dialogService } from './dialog';
 
 // TODO(agent): Extend relocation picker to support searching/filtering when location lists grow larger.
 // TODO(agent): Confirm relocation flows fully rely on LocationId payloads once legacy Location fields are deprecated.
+// TODO(agent): Validate relocation shelf filter behavior when boxes contain multiple categories.
 
 interface Props {
   boxId: string;
+  categorySegment?: string | null;
   onMoved?: () => void;
 }
 
-export default function RelocateBoxCard({ boxId, onMoved }: Props) {
+export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Props) {
   const LOCATION_BOX_TYPE = 'S';
   const [selectedLocation, setSelectedLocation] = useState('');
   const [status, setStatus] = useState('');
@@ -26,37 +29,83 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
 
     async function loadLocations() {
       setIsLoadingLocations(true);
+      const normalizedCategory = categorySegment?.trim() ?? '';
+      if (!normalizedCategory) {
+        logger.warn('[relocate-box] Missing category filter for shelf lookup', { boxId });
+      }
+      const searchParams = new URLSearchParams();
+      searchParams.set('type', LOCATION_BOX_TYPE);
+      if (normalizedCategory) {
+        searchParams.set('category', normalizedCategory);
+      }
+      const requestUrl = `/api/boxes?${searchParams.toString()}`;
+      let responseStatus: number | undefined;
       try {
-        const response = await fetch(`/api/boxes?type=${encodeURIComponent(LOCATION_BOX_TYPE)}`);
+        const response = await fetch(requestUrl);
+        responseStatus = response.status;
         const data = await response.json().catch((parseError) => {
-          console.error('Standorte konnten nicht geladen werden (Parsing)', parseError);
+          logError('Standorte konnten nicht geladen werden (Parsing)', parseError, {
+            boxId,
+            category: normalizedCategory || null,
+            status: responseStatus
+          });
           return {} as { boxes?: Array<{ BoxID?: string; Label?: string | null; LocationId?: string | null }> };
         });
 
         if (!response.ok) {
-          console.error('Standorte konnten nicht geladen werden', { status: response.status, payload: data });
+          logger.error('[relocate-box] Standorte konnten nicht geladen werden', {
+            status: responseStatus,
+            boxId,
+            category: normalizedCategory || null,
+            payload: data
+          });
           return;
         }
 
         const boxes = Array.isArray(data.boxes) ? data.boxes : [];
-        const nextOptions = boxes
-          .map((box) => {
-            const fallbackId = typeof box?.BoxID === 'string' ? box.BoxID.trim() : '';
-            const locationId = typeof box?.LocationId === 'string' && box.LocationId.trim() ? box.LocationId.trim() : fallbackId;
-            if (!locationId) {
-              return null;
-            }
-            const label = typeof box?.Label === 'string' && box.Label.trim() ? box.Label.trim() : locationId;
-            return { id: locationId, label, sourceBoxId: fallbackId || locationId };
-          })
-          .filter((option): option is { id: string; label: string; sourceBoxId: string } => Boolean(option));
+        let nextOptions: Array<{ id: string; label: string; sourceBoxId: string }> = [];
+        try {
+          nextOptions = boxes
+            .map((box) => {
+              const fallbackId = typeof box?.BoxID === 'string' ? box.BoxID.trim() : '';
+              const locationId =
+                typeof box?.LocationId === 'string' && box.LocationId.trim() ? box.LocationId.trim() : fallbackId;
+              if (!locationId) {
+                return null;
+              }
+              const label = typeof box?.Label === 'string' && box.Label.trim() ? box.Label.trim() : locationId;
+              return { id: locationId, label, sourceBoxId: fallbackId || locationId };
+            })
+            .filter((option): option is { id: string; label: string; sourceBoxId: string } => Boolean(option));
+        } catch (error) {
+          logError('Failed to filter relocation locations', error, {
+            boxId,
+            category: normalizedCategory || null,
+            status: responseStatus
+          });
+          return;
+        }
 
         if (isMounted) {
           setLocationOptions(nextOptions);
-          console.info('Loaded relocation locations', { count: nextOptions.length });
+          logger.info('Loaded relocation locations', {
+            count: nextOptions.length,
+            category: normalizedCategory || null
+          });
+          if (normalizedCategory && nextOptions.length === 0) {
+            logger.warn('[relocate-box] No shelf locations returned for category filter', {
+              boxId,
+              category: normalizedCategory,
+              status: responseStatus
+            });
+          }
         }
       } catch (error) {
-        console.error('Standorte konnten nicht geladen werden', error);
+        logError('Standorte konnten nicht geladen werden', error, {
+          boxId,
+          category: normalizedCategory || null,
+          status: responseStatus
+        });
       } finally {
         if (isMounted) {
           setIsLoadingLocations(false);
@@ -69,7 +118,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [boxId, categorySegment]);
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
@@ -77,21 +126,21 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
     const locationOption = locationLookup.get(locationId);
 
     if (!locationOption) {
-      console.warn('Invalid location selection for relocation', { boxId, locationId });
+      logger.warn('Invalid location selection for relocation', { boxId, locationId });
       setStatus('Bitte einen Standort wählen');
       return;
     }
 
     const actor = await ensureUser();
     if (!actor) {
-      console.info('Relocate box aborted: missing username.');
+      logger.info('Relocate box aborted: missing username.');
       try {
         await dialogService.alert({
           title: 'Aktion nicht möglich',
           message: 'Bitte zuerst oben den Benutzer setzen.'
         });
       } catch (error) {
-        console.error('Failed to display missing user alert for box relocation', error);
+        logError('Failed to display missing user alert for box relocation', error, { boxId });
       }
       return;
     }
@@ -109,9 +158,14 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
       } else {
         setStatus('Fehler: ' + (data.error || res.status));
       }
-      console.log('relocate box', { status: res.status, locationId: locationOption.id, sourceBoxId: locationOption.sourceBoxId });
+      logger.info('relocate box', {
+        status: res.status,
+        locationId: locationOption.id,
+        sourceBoxId: locationOption.sourceBoxId,
+        boxId
+      });
     } catch (err) {
-      console.error('Relocate box failed', err);
+      logError('Relocate box failed', err, { boxId });
       setStatus('Verschieben fehlgeschlagen');
     }
   }
