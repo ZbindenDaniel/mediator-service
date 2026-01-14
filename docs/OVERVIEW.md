@@ -136,6 +136,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
 ## Recent Highlights
+- Mapped Langtext Qualität labels back into the numeric Quality field during CSV/form imports while cleaning the Langtext payloads.
 - Split item list box vs. shelf normalization so Behälter and Lagerort links only render with their respective IDs.
 - Removed the default-location relocation button and API option so item moves always target an explicit box selection.
 - Updated shelf creation to resolve category labels from taxonomy lookups with fallback logging, and removed legacy category seeding now that CSV imports will own this workflow.

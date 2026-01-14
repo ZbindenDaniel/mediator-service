@@ -17,6 +17,7 @@ import {
 } from './db';
 import { IMPORTER_FORCE_ZERO_STOCK } from './config';
 import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
+import { normalizeQuality, resolveQualityFromLabel } from '../models/quality';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
 import { formatItemIdDateSegment } from './lib/itemIds';
@@ -882,7 +883,38 @@ export async function ingestCsvFile(
           artikelNummer: artikelNummer || null
         });
       }
-      const langtext = parsedLangtext ?? '';
+      let resolvedQuality: number | undefined;
+      let langtext = parsedLangtext ?? '';
+      if (parsedLangtext && typeof parsedLangtext === 'object' && !Array.isArray(parsedLangtext)) {
+        const langtextPayload = { ...(parsedLangtext as Record<string, string>) };
+        const qualityLabel = langtextPayload.Qualität ?? langtextPayload.Qualitaet;
+        if (qualityLabel !== undefined) {
+          try {
+            const resolvedFromLabel = resolveQualityFromLabel(qualityLabel, console);
+            if (resolvedFromLabel !== null) {
+              resolvedQuality = normalizeQuality(resolvedFromLabel, console);
+            } else {
+              console.warn('[importer] Unable to resolve Qualität label from Langtext payload', {
+                rowNumber,
+                artikelNummer: artikelNummer || null,
+                itemUUID: csvItemUUID || null,
+                qualityLabel
+              });
+            }
+          } catch (qualityError) {
+            console.error('[importer] Failed to map Qualität label from Langtext payload', {
+              rowNumber,
+              artikelNummer: artikelNummer || null,
+              itemUUID: csvItemUUID || null,
+              qualityLabel,
+              error: qualityError
+            });
+          }
+          delete langtextPayload.Qualität;
+          delete langtextPayload.Qualitaet;
+        }
+        langtext = langtextPayload;
+      }
       const hersteller = final['Hersteller'] || '';
       const hkA = parseIntegerField(
         final['Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)'],
@@ -942,6 +974,7 @@ export async function ingestCsvFile(
               Verkaufspreis: verkaufspreis,
               Kurzbeschreibung: kurzbeschreibung,
               Langtext: langtext,
+              Quality: resolvedQuality,
               Hersteller: hersteller,
               Länge_mm: lengthMm,
               Breite_mm: widthMm,
@@ -1007,6 +1040,7 @@ export async function ingestCsvFile(
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
+        Quality: resolvedQuality,
         Hersteller: hersteller,
         Länge_mm: lengthMm,
         Breite_mm: widthMm,

@@ -26,6 +26,7 @@ export interface ItemInstance {
   Datum_erfasst?: Date;
   Auf_Lager?: number;
   ShopwareVariantId?: string | null;
+  // Importers normalize Langtext "Qualität" labels into this numeric grade.
   Quality?: number | null;
 }
 
@@ -54,6 +55,7 @@ export interface ItemRef {
   Einheit?: ItemEinheit;
   EntityType?: string;
   ShopwareProductId?: string | null;
+  // Importers normalize Langtext "Qualität" labels into this numeric grade.
   Quality?: number | null;
 }
 
