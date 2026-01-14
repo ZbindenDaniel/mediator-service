@@ -12,7 +12,7 @@ import {
 import type { BoxLabelPayload, ItemLabelPayload, ShelfLabelPayload } from '../lib/labelHtml';
 import type { PrintFileResult, PrintLabelType } from '../print';
 import { resolvePrinterQueue } from '../print';
-import { buildItemCategoryLookups } from 'frontend/src/lib/categoryLookup';
+import { buildItemCategoryLookups } from '../../models/item-category-lookups';
 
 const LABEL_TEMPLATES: Record<PrintLabelType, string> = {
   box: '62x100',
@@ -123,7 +123,11 @@ function resolveShelfCategoryLabel(shelfId: string): { label: string | null; sou
   return { label: rawSegment, source: 'segment_fallback', segment: rawSegment };
 }
 
-function resolveCategoryLabel(rawCategory: unknown): string {
+// TODO(print-unified): consider caching item category lookups if this becomes a hot path.
+function resolveCategoryLabel(
+  rawCategory: unknown,
+  context: { labelType: PrintLabelType; itemId: string }
+): string {
   if (rawCategory === null || rawCategory === undefined || rawCategory === '') return '';
   try {
     const lookup = buildItemCategoryLookups();
@@ -133,7 +137,10 @@ function resolveCategoryLabel(rawCategory: unknown): string {
       if (entry?.label) return entry.label;
     }
   } catch (err) {
-    console.error('Failed to resolve category label for item print', err);
+    console.error('Failed to resolve category label for item print', {
+      ...context,
+      error: err
+    });
   }
   return String(rawCategory);
 }
@@ -180,7 +187,10 @@ function buildItemLabelPayload(item: Item): ItemLabelPayload {
     if (Number.isFinite(parsed)) parsedQuantity = parsed;
   }
 
-  const categoryLabel = resolveCategoryLabel(item.Unterkategorien_A);
+  const categoryLabel = resolveCategoryLabel(item.Unterkategorien_A, {
+    labelType: 'item',
+    itemId: item.ItemUUID
+  });
   return {
     type: 'item',
     id: item.ItemUUID,
