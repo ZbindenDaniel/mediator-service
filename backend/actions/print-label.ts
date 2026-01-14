@@ -41,7 +41,18 @@ const action: Action = {
               el.textContent = 'Fehler: Unbekannter Typ.';
               return;
             }
-            const r = await fetch(endpoint, { method: 'POST' });
+            const actor = (localStorage.getItem('username') || '').trim();
+            if (!actor) {
+              console.warn('Print label blocked: missing actor', { entityType, boxId });
+              el.textContent = 'Fehler: Kein Benutzername gesetzt.';
+              return;
+            }
+            const labelType = entityType === 'Box' ? 'box' : 'item';
+            const r = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actor, labelType })
+            });
             const j = await r.json().catch(()=>({}));
             if (r.ok && j.sent) {
               el.textContent = 'Gesendet an Drucker.';

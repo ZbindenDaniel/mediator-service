@@ -20,13 +20,13 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         setStatus('Kein Benutzername gesetzt.');
         return;
       }
-      const url = boxId
-        ? `/api/print/box/${encodeURIComponent(boxId)}`
-        : `/api/print/item/${encodeURIComponent(itemId || '')}`;
+      const labelType = boxId ? 'box' : 'item';
+      const entityId = boxId ?? itemId ?? '';
+      const url = `/api/print/${labelType}/${encodeURIComponent(entityId)}`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor })
+        body: JSON.stringify({ actor, labelType })
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
