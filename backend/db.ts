@@ -262,7 +262,7 @@ function seedCategoryLocations(database: Database.Database = db): void {
   }
 }
 
-seedCategoryLocations();
+// seedCategoryLocations();
 
 // TODO(agent): Allow runtime refresh of event allow lists without requiring a process restart.
 

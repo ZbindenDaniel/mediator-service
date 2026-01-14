@@ -25,3 +25,4 @@ data/mediator.db
 data/mediator.db-shm
 data/mediator.db-wal
 dist_tmp/*
+dist_old/*

@@ -397,11 +397,13 @@ function parseIntegerField(
   const fallback = determineFallbackValue(options, treatBlankAsUndefined);
 
   if (rawValue === null || rawValue === undefined) {
+    console.warn('CSV ingestion: integer field is null or undefined', { field: fieldName });
     return fallback;
   }
 
   const trimmed = String(rawValue).trim();
   if (!trimmed) {
+    console.warn('CSV ingestion: integer field is blank', { field: fieldName });
     return fallback;
   }
 
