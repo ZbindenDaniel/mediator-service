@@ -5,6 +5,7 @@
   <meta charset="utf-8" />
   <title>Etikett 62x100</title>
   <!-- TODO(agent): Keep 62x100 layout aligned with backend PDF sizing. -->
+  <!-- TODO(agent): Confirm box label branding once warehouse ops finalize box-specific print specs. -->
   <!-- TODO(agentic-printing): Capture printer margin telemetry to keep single-page sizing reliable across devices. -->
   <!-- TODO(agentic-printing): Verify inline payload injection stays in sync with backend QR generation. -->
   <style>
@@ -32,10 +33,22 @@
       box-sizing: border-box;
       width: 62mm;
       height: 100mm;
-      padding: 4mm;
+      padding: 2mm;
       background: #fff;
       display: flex;
       flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6mm;
+    }
+
+    .box-id {
+      width: 100%;
+      text-align: center;
+      font-size: 18pt;
+      font-weight: 700;
+      letter-spacing: 0.4pt;
+      color: #111827;
     }
 
     .qr {
@@ -48,21 +61,12 @@
 
     .qr img,
     .qr canvas {
-      width: 60mm;
-      height: 60mm;
-      max-width: 60mm;
-      max-height: 60mm;
+      width: 58mm;
+      height: 58mm;
+      max-width: 58mm;
+      max-height: 58mm;
       aspect-ratio: 1 / 1;
       image-rendering: pixelated;
-    }
-
-    .caption {
-      width: 100%;
-      text-align: left;
-      font-size: 8pt;
-      color: #111827;
-      white-space: pre-line;
-      padding-bottom: 7px;
     }
 
     .error {
@@ -98,12 +102,7 @@
 
 <body>
   <div class="label" id="label" hidden>
-    <div>
-      <div class="caption"><span>UUID: </span><b id="artikelId">1 </b></div>
-      <div class="caption"><span>A-Nr: </span><b id="artikelNummer">2 </b></div>
-      <div class="caption"><span id="artikelbeschreibung"></span></div>
-      <div class="caption"><span>K: </span><b id="category"> </b></div>	
-    </div>
+    <div class="box-id" id="boxId">BOX-000</div>
     <div class="qr">
       <img id="qrImage" alt="QR-Code" href="testQR.png" />
       <canvas id="qrCanvas" hidden></canvas>
@@ -117,10 +116,7 @@
       const qrImage = document.getElementById('qrImage');
       const qrCanvas = document.getElementById('qrCanvas');
 
-      const idEl = document.getElementById('artikelId');
-      const artikelnummerEl = document.getElementById('artikelNummer');
-      const artikelBeschrEl = document.getElementById('artikelbeschreibung');
-      const categoryEl = document.getElementById('category');
+      const boxIdEl = document.getElementById('boxId');
 
       const errorEl = document.getElementById('error');
 
@@ -164,10 +160,13 @@
           return;
         }
         try {
-          if (artikelnummerEl && payload.materialNumber) artikelnummerEl.textContent = `${payload.materialNumber}`;
-          if (idEl && payload.id) idEl.textContent = `${payload.id}`;
-          if (artikelBeschrEl && payload.labelText) artikelBeschrEl.textContent = `${payload.labelText}`;
-          if (categoryEl && payload.category) categoryEl.textContent = `${payload.category}`;
+          const boxId = payload.id || payload.labelText || payload.boxId;
+          if (boxIdEl && boxId) {
+            boxIdEl.textContent = `${boxId}`;
+          } else if (boxIdEl) {
+            boxIdEl.textContent = 'BOX-UNKNOWN';
+            console.warn('Box label payload missing box id', payload);
+          }
           if (labelEl) labelEl.hidden = false;
 
           const hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
