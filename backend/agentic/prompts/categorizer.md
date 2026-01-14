@@ -20,9 +20,9 @@
 Input:
 
 ```
-  "item": {
-    "Artikelbeschreibung": "Corsair Hydro Series H60 (CWCH60)",
-    "Marktpreis": 0,
+    "item": {
+      "Artikelbeschreibung": "Corsair Hydro Series H60 (CWCH60)",
+    "Verkaufspreis": 0,
     "Kurzbeschreibung": "Der Corsair Hydro Series H60 (CWCH60) ist eine hochleistungsfähige All-in-One-Wasserkühlungslösung für CPU-Kühler. Mit einem Mikro-Kanal-Kühlkörper und einer kompakten 120 mm Radiatorgröße bietet er eine effiziente Kühlung für verschiedene CPU-Sockel, ideal für Gamer und PC-Enthusiasten.",
     "Langtext": {
       "Modell": "CWCH60",

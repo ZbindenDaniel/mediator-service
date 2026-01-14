@@ -59,7 +59,7 @@ export type SearchPlan = {
 
 const TRACKED_SCHEMA_FIELDS = [
   'Artikelbeschreibung',
-  'Marktpreis',
+  'Verkaufspreis',
   'Kurzbeschreibung',
   'Langtext',
   'Hersteller',

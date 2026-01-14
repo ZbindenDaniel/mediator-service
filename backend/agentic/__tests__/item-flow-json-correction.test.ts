@@ -7,7 +7,7 @@ import { runExtractionAttempts } from '../flow/item-flow-extraction';
 const buildTarget = (): AgenticTarget => ({
   itemUUid: 'item-1',
   Artikelbeschreibung: 'Widget',
-  Marktpreis: null,
+  Verkaufspreis: null,
   Kurzbeschreibung: 'Short description',
   Langtext: { Veröffentlicht: '', Stromversorgung: '' },
   Hersteller: 'Acme',
@@ -25,12 +25,12 @@ describe('runExtractionAttempts JSON correction', () => {
   it('repairs invalid extractor JSON without altering payload fields', async () => {
     const target = buildTarget();
     const invalidExtraction =
-      '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Marktpreis":null,"Kurzbeschreibung":"Short description",' +
+      '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":null,"Kurzbeschreibung":"Short description",' +
       '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
       '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,' +
       '"Unterkategorien_B":null this is incomplete';
     const correctedExtraction =
-      '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Marktpreis":null,"Kurzbeschreibung":"Short description",' +
+      '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":null,"Kurzbeschreibung":"Short description",' +
       '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
       '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,' +
       '"Unterkategorien_B":null}';

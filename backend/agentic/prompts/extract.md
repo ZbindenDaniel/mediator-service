@@ -15,7 +15,7 @@
     - Artikelbeschreibung: Use the product name exactly as stated in the sources. Often times an incomplete or misleading name comes in. It is your responsibility to correct it to a meaningfull product name.
     - Kurzbeschreibung: Supply a single concise paragraph summarising the item; embed bullet points only when they clarify the summary.
     - Langtext: **Must** be a JSON object containing only hardware specs. Use descriptive keys (e.g., "RAM", "DPI", "Stromversorgung", "Erscheinungsjahr") mapped to string values or arrays of strings.
-    - Marktpreis, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg, Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B: Extract numeric values when the source provides them; otherwise leave the schema defaults untouched.
+    - Verkaufspreis, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg, Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B: Extract numeric values when the source provides them; otherwise leave the schema defaults untouched.
     - Hersteller: Copy directly from the source material or keep the supplied value when no evidence is available.
     - reviewNotes: Do not alter reviewer-provided content; treat it as guidance for your extraction.
   - Search policy:
