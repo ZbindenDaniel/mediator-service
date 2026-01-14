@@ -63,6 +63,7 @@ describe('runExtractionAttempts JSON correction', () => {
       targetFormat: '{}',
       supervisorPrompt: 'supervisor',
       categorizerPrompt: 'categorizer',
+      pricingPrompt: 'pricing',
       searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
       target,
       reviewNotes: null,

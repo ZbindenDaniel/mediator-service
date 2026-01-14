@@ -14,7 +14,6 @@ import {
   type SearchInvokerMetadata
 } from './item-flow-search';
 import { runExtractionAttempts, type ChatModel, type ExtractionLogger } from './item-flow-extraction';
-import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import { searchShopwareRaw, isShopwareConfigured, type ShopwareSearchResult } from '../tools/shopware';
 import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
@@ -281,6 +280,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     const extractionResult = await runExtractionAttempts({
       llm: deps.llm,
       logger,
+      // TODO(agent): Revisit whether pricing summary reuse is needed once supervisor feedback loops expand.
       itemId,
       maxAttempts: input.maxAttempts && input.maxAttempts > 0 ? Math.min(input.maxAttempts, 3) : 3,
       searchContexts,
@@ -292,6 +292,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       targetFormat: format,
       supervisorPrompt: supervisor,
       categorizerPrompt: categorizer,
+      pricingPrompt: pricing,
       searchInvoker,
       target,
       reviewNotes: reviewerNotes,
@@ -302,42 +303,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
-    let finalData: AgenticTarget = { ...target, ...extractionResult.data, itemUUid: itemId };
-    // TODO(agent): Capture pricing-stage telemetry once pricing prompts are fully validated.
-    const hasPrice = isUsablePrice(finalData.Verkaufspreis);
-
-    if (hasPrice) {
-      logger.info?.({ msg: 'pricing stage skipped - price already present', itemId, Verkaufspreis: finalData.Verkaufspreis });
-    } else {
-      checkCancellation();
-      let searchSummary: string | null = null;
-      try {
-        const aggregated = buildAggregatedSearchText();
-        if (aggregated.trim()) {
-          searchSummary = aggregated;
-        }
-      } catch (err) {
-        logger.warn?.({ err, msg: 'failed to prepare pricing search summary', itemId });
-      }
-
-      const pricingResult = await runPricingStage({
-        llm: deps.llm,
-        logger,
-        itemId,
-        pricingPrompt: pricing,
-        candidate: finalData,
-        searchSummary,
-        reviewNotes: reviewerNotes,
-        transcriptWriter
-      });
-      checkCancellation();
-
-      if (pricingResult?.Verkaufspreis != null) {
-        finalData = { ...finalData, Verkaufspreis: pricingResult.Verkaufspreis };
-      } else {
-        logger.info?.({ msg: 'pricing stage yielded no price update', itemId });
-      }
-    }
+    const finalData: AgenticTarget = { ...target, ...extractionResult.data, itemUUid: itemId };
 
     const payload = buildCallbackPayload({
       itemId,
