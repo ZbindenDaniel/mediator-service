@@ -7,6 +7,7 @@ import { MEDIA_DIR } from '../lib/media';
 
 const BOX_MEDIA_PREFIX = '/media/';
 const BOX_MEDIA_FOLDER = 'boxes';
+// TODO(agent): Confirm label preservation remains intact for note-only updates after label input removal.
 
 function sanitizeBoxMediaSegment(segment: string): string {
   return segment.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -130,7 +131,11 @@ const action = defineHttpAction({
           ? (box as any).StandortLabel.trim()
           : null;
       const resolvedLabel = effectiveLocationId ? resolveStandortLabel(effectiveLocationId) : null;
-      const nextLabel = hasLabelField ? labelFromInput : (resolvedLabel ?? fallbackLabel ?? null);
+      const nextLabel = hasLabelField
+        ? labelFromInput
+        : hasLocation
+          ? (resolvedLabel ?? fallbackLabel ?? null)
+          : (fallbackLabel ?? null);
 
       if (hasLocation && !nextLabel) {
         console.warn('[move-box] Missing label mapping for location', { boxId: id, locationId: locationRaw });
@@ -231,4 +236,3 @@ const action = defineHttpAction({
 });
 
 export default action;
-

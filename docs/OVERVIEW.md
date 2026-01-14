@@ -146,6 +146,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added a hidden admin shelf creation route with stronger validation and logging around shelf location selections.
 - Updated shelf creation to require subcategory selection so shelf IDs carry numeric category codes.
 - Filtered relocation shelf dropdowns by category-aware shelf IDs so box relocations surface relevant shelves faster.
+- Removed box detail label editing from the note workflow so note-only updates preserve stored labels.
 - Added shelf creation payload handling with prefix-based sequencing for shelf IDs.
 - Added an A4 shelf label print template to prepare for shelf-specific print endpoints.
 - Wired the A4 shelf label print template into the box print action with shelf category resolution for QR payloads.
