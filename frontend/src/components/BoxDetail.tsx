@@ -8,10 +8,11 @@ import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
-import BoxColorTag from './BoxColorTag';
+import BoxTag from './BoxTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
 
+// TODO(agent): Verify the BoxTag rendering still aligns with the detailed box metadata layout.
 // TODO(agent): Confirm shelf box lists align with relocation rules before expanding shelf detail UI.
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
@@ -439,7 +440,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <tbody>
                   <tr>
                     <th>Standort</th>
-                    <td><BoxColorTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
+                    <td><BoxTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
                   </tr>
                   <tr>
                     <th>Platziert am</th>
