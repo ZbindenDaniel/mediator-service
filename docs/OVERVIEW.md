@@ -137,6 +137,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Recent Highlights
 - Centralized item category lookup builders in shared models so backend and frontend reuse the same map logic.
+- Enriched the item creation success dialog with Artikelnummer context and a direct label print action for faster follow-up.
 - Added a UI action in item detail to close in-progress agentic runs and unblock queued approvals.
 - Re-enabled the Unterkategorie filter on the item list, persisted subcategory selections, and added backend query support to avoid client-only filtering for large lists.
 - Mapped Langtext Qualität labels back into the numeric Quality field during CSV/form imports while cleaning the Langtext payloads.
@@ -179,6 +180,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Normalized printer status responses with ok/reason data and surfaced printer misconfiguration hints in the overview UI.
 - Derived shelf display labels in the box list using shelf location metadata for clearer shelf rows.
 - Added a manual agentic review close endpoint to approve items without existing agentic runs and log the closure reason.
+- Updated the 62x100 box label template to render a bold box ID with a large QR code for box-specific printing.
 - Unified label printing behind `/api/print/:labelType/:id` while keeping thin box/item wrappers for migration.
 - Added a frontend auto-print toggle for item creation flows, with shared label request handling and configuration logging.
 

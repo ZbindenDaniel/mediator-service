@@ -13,6 +13,7 @@ import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
 import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
+import PrintLabelButton from './PrintLabelButton';
 import { useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
@@ -985,6 +986,48 @@ export default function ItemCreate() {
 
       let shouldNavigateToCreatedItem = Boolean(createdItem?.ItemUUID);
       try {
+        // TODO(agent): Revisit success dialog layout after richer metadata and label actions land.
+        let dialogMessage: React.ReactNode = successMessage;
+        try {
+          const artikelNummerRaw = createdItem?.Artikel_Nummer;
+          const itemIdRaw = createdItem?.ItemUUID;
+          const artikelNummer =
+            typeof artikelNummerRaw === 'string' && artikelNummerRaw.trim() ? artikelNummerRaw.trim() : '';
+          const itemId = typeof itemIdRaw === 'string' && itemIdRaw.trim() ? itemIdRaw.trim() : '';
+
+          if (!artikelNummer) {
+            console.warn('Missing Artikel_Nummer for created item success dialog', {
+              itemId: itemIdRaw,
+              artikelNummerRaw
+            });
+          }
+
+          if (!itemId) {
+            console.warn('Missing ItemUUID for created item success dialog', { itemId: itemIdRaw });
+          }
+
+          dialogMessage = (
+            <div className="stack">
+              <div>{successMessage}</div>
+              <div>Artikelnummer: {artikelNummer || 'Unbekannt'}</div>
+              <div>
+                {itemId ? (
+                  <PrintLabelButton itemId={itemId} />
+                ) : (
+                  <span>Label drucken nicht verfügbar.</span>
+                )}
+              </div>
+            </div>
+          );
+        } catch (messageError) {
+          console.error('Failed to build item creation success dialog message', {
+            error: messageError,
+            itemId: createdItem?.ItemUUID,
+            artikelNummer: createdItem?.Artikel_Nummer
+          });
+          dialogMessage = successMessage;
+        }
+
         const goToCreatedItem = await dialog.confirm({
           title: 'Artikel erstellt',
           message: dialogMessage,
