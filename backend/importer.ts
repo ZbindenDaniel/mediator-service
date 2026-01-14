@@ -1086,7 +1086,7 @@ function normalizeBoxField(value: unknown): string {
   }
 }
 
-const SHELF_BOX_ID_PATTERN = /^S-\d{4}-\d-\d{4}-\d$/;
+const SHELF_BOX_ID_PATTERN = /^S-\w{4}-\d-\d{4}-\d{4}/;
 
 function isValidShelfBoxId(value: string, context: { rowNumber: number }): boolean {
   try {
