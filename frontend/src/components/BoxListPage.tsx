@@ -10,6 +10,7 @@ export default function BoxListPage() {
   const [searchText, setSearchText] = useState('');
   const [sortKey, setSortKey] = useState<BoxSortKey>('BoxID');
   // TODO: Evaluate server-side pagination when the number of boxes grows.
+  // TODO(agent): Keep box list type filters aligned with shelf/box ID prefixes.
   // TODO(agent): Confirm shelf creation entry point placement once box list UX is reviewed.
 
   useEffect(() => {
@@ -17,7 +18,7 @@ export default function BoxListPage() {
 
     async function load(): Promise<void> {
       try {
-        const response = await fetch('/api/boxes');
+        const response = await fetch('/api/boxes?type=B');
         if (!response.ok) {
           console.error('load boxes failed', response.status);
           if (isMounted) {
