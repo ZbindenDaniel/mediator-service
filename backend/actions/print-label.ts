@@ -8,6 +8,13 @@ const action: Action = {
   view: (entity: Entity) => {
     const id = encodeURIComponent(entity.id);
     const statusId = `printBoxMsg-${id}`;
+    // TODO(agent): Keep print-label endpoints in sync with print-box/item route regex.
+    const endpoint =
+      entity.type === 'Box'
+        ? `/api/print/box/${id}`
+        : entity.type === 'Item'
+          ? `/api/print/item/${id}`
+          : '';
 
     return `
       <div class="card" style="cursor:pointer" onclick="printBoxLabel('${id}', '${statusId}')">
@@ -16,12 +23,25 @@ const action: Action = {
       </div>
 
       <script>
+        const endpoint = '${endpoint}';
+        const entityType = '${entity.type}';
+
         async function printBoxLabel(boxId, statusId) {
           const el = document.getElementById(statusId);
           if (!el) return;
           el.textContent = 'Drucke…';
           try {
-            const r = await fetch('/api/print/box/' + boxId, { method: 'POST' });
+            if (!boxId) {
+              console.warn('Print label called without an entity id', { entityType });
+              el.textContent = 'Fehler: Ungültige ID.';
+              return;
+            }
+            if (!endpoint) {
+              console.warn('Print label called with unexpected entity type', { entityType, boxId });
+              el.textContent = 'Fehler: Unbekannter Typ.';
+              return;
+            }
+            const r = await fetch(endpoint, { method: 'POST' });
             const j = await r.json().catch(()=>({}));
             if (r.ok && j.sent) {
               el.textContent = 'Gesendet an Drucker.';
