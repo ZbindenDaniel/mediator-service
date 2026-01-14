@@ -19,6 +19,9 @@ import LoadingPage from './LoadingPage';
 import type { ItemFormData, LockedFieldConfig } from './forms/itemFormShared';
 import { ITEM_FORM_DEFAULT_EINHEIT, extractReferenceFields } from './forms/itemFormShared';
 import type { SimilarItem } from './forms/useSimilarItems';
+import PrintLabelButton from './PrintLabelButton';
+import { requestPrintLabel } from '../utils/printLabelRequest';
+import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 
 type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
@@ -935,10 +938,51 @@ export default function ItemCreate() {
         }
       }
 
+      // TODO(agent): Validate auto-print behavior against production printers once enabled.
+      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && createdItem?.ItemUUID) {
+        try {
+          const printActor = (await ensureUser()).trim();
+          if (!printActor) {
+            console.warn('Auto-print skipped: no actor resolved for item label', {
+              itemId: createdItem.ItemUUID,
+              autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG
+            });
+          } else {
+            const printResult = await requestPrintLabel({
+              itemId: createdItem.ItemUUID,
+              actor: printActor
+            });
+            if (!printResult.ok) {
+              console.error('Auto-print item label failed', {
+                itemId: createdItem.ItemUUID,
+                autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG,
+                status: printResult.status,
+                error: printResult.data.error || printResult.data.reason
+              });
+            }
+          }
+        } catch (autoPrintError) {
+          console.error('Auto-print item label failed unexpectedly', {
+            itemId: createdItem?.ItemUUID,
+            autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG,
+            error: autoPrintError
+          });
+        }
+      }
+
       const successMessage =
         normalizedBoxId && createdItem?.BoxID
           ? `Artikel wurde erfasst und dem Behälter ${createdItem.BoxID} zugeordnet.`
           : 'Artikel wurde erfasst und ist noch keinem Behälter zugeordnet. Bitte platzieren!';
+
+      const dialogMessage = !AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && createdItem?.ItemUUID ? (
+        <>
+          <p>{successMessage}</p>
+          <PrintLabelButton itemId={createdItem.ItemUUID} />
+        </>
+      ) : (
+        successMessage
+      );
 
       let shouldNavigateToCreatedItem = Boolean(createdItem?.ItemUUID);
       try {
