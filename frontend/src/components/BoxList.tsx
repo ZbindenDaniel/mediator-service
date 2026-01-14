@@ -97,7 +97,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
       <table className="box-list">
         <thead>
           <tr className="box-list-header">
-            <th className="col-box-id">Box</th>
+            <th className="col-box-id">Behälter</th>
             <th className="col-location">Standort</th>
             <th className="col-updated">Aktualisiert</th>
           </tr>

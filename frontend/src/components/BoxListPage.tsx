@@ -18,7 +18,7 @@ export default function BoxListPage() {
 
     async function load(): Promise<void> {
       try {
-        const response = await fetch('/api/boxes?type=B');
+        const response = await fetch('/api/boxes');
         if (!response.ok) {
           console.error('load boxes failed', response.status);
           if (isMounted) {
