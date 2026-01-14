@@ -1035,7 +1035,9 @@ export function ItemDetailsFields({
 
       <div className="row">
         <label>
-          Qualität
+          <span>Qualität:</span>
+          {/* <QualityBadge compact labelPrefix="Qualität" value={qualitySummary.value} /> */}
+          <span key={`quality-label-${qualitySummary.value}`}>{QUALITY_LABELS[qualitySummary.value] ?? qualitySummary.value}</span>
         </label>
         <div className="combined-input">
           <input
@@ -1048,14 +1050,13 @@ export function ItemDetailsFields({
             aria-valuetext={`${qualitySummary.label} (${qualitySummary.value})`}
           />
         </div>
-        <div className="quality-slider__labels">
+        {/* <div className="quality-slider__labels">
           {[1, 2, 3, 4, 5].map((level) => (
             <span key={`quality-label-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
           ))}
-        </div>
-        <div className="muted">
-          <QualityBadge compact labelPrefix="Qualität" value={qualitySummary.value} />
-        </div>
+        </div> */}
+        {/* <div className="muted">
+        </div> */}
       </div>
 
       <div className="row">
