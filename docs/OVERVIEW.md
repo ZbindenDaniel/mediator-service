@@ -19,12 +19,12 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
   missing attributes for human review before acceptance.
 - **Imports & ERP Bridge** – CSV uploads seeded from an external ERP initialize the catalogue. Future integrations (e.g.,
   Shopware) will build on the same ingestion path.
-- **Printing & QR Labels** – Boxes and larger standalone items receive QR codes and human-readable stickers. The printing stack
-  generates label PDFs from the canonical `frontend/public/print/62x100.html` template, stores previews, and dispatches jobs to
-  CUPS-compatible printers. Shelf labels use the A4 template (`frontend/public/print/shelf-a4.html`) with QR payloads that include
-  the shelf ID plus a category label resolved from the shelf ID segment (`S-<location>-<floor>-<category>-<index>`). Category
-  segments are matched against canonical item category labels (see `models/item-categories.ts`), with numeric segments falling back
-  to category code lookups.
+- **Printing & QR Labels** – Boxes and items receive QR codes and human-readable stickers. The printing stack generates label PDFs
+  from the canonical `frontend/public/print/62x100.html` (boxes) and `frontend/public/print/29x90.html` (items) templates, stores
+  previews, and dispatches jobs to CUPS-compatible printers. Shelf labels use the A4 template
+  (`frontend/public/print/shelf-a4.html`) with QR payloads that include the shelf ID plus a category label resolved from the shelf
+  ID segment (`S-<location>-<floor>-<category>-<index>`). Category segments are matched against canonical item category labels (see
+  `models/item-categories.ts`), with numeric segments falling back to category code lookups.
 
 ## Architectural Patterns in Practice
 - **Action architecture** – The backend dynamically loads `backend/actions/*` modules that wrap database calls in
@@ -163,6 +163,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Introduced default shelf location mapping configuration for subcategory-backed location IDs, logging missing mappings to protect data quality.
 - Added shelf BoxID format validation for boxes.csv ingestion to warn and skip malformed shelf IDs.
 - Simplified box location tags in the UI to show normalized locations and optional labels without color mapping.
+- Added a dedicated 29x90 item label template and routed item print jobs to it for the new item label format.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)

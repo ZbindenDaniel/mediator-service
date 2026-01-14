@@ -468,14 +468,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
     // TODO(agent): Remove legacy print page redirects once clients stop requesting retired templates.
     if (url.pathname.startsWith('/print/') && req.method === 'GET') {
-      const canonicalTemplate = '/print/62x100.html';
-      const legacyPrintPaths = new Set(['/print/item-label.html', '/print/box-label.html', '/print/23x23.html']);
-      if (legacyPrintPaths.has(url.pathname)) {
+      const legacyRedirects = new Map<string, string>([
+        ['/print/item-label.html', '/print/29x90.html'],
+        ['/print/box-label.html', '/print/62x100.html'],
+        ['/print/23x23.html', '/print/62x100.html']
+      ]);
+      const redirect = legacyRedirects.get(url.pathname);
+      if (redirect) {
         console.warn('[print] Legacy print page requested; redirecting to canonical template', {
           requested: url.pathname,
-          redirect: canonicalTemplate
+          redirect
         });
-        res.writeHead(302, { Location: canonicalTemplate });
+        res.writeHead(302, { Location: redirect });
         return res.end();
       }
 
