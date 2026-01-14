@@ -4,14 +4,6 @@ import { handleUnifiedPrintRequest } from './print-unified';
 // TODO(agent): Replace legacy Langtext print fallback once structured payload rendering lands.
 // TODO(agent): Document HTML print artifacts so support can trace failures quickly.
 // TODO(agent): Monitor ignored template query logs while the 29x90 item label remains fixed.
-import type { Item } from '../../models';
-import type { ItemLabelPayload } from '../lib/labelHtml';
-import { resolvePrinterQueue } from '../print';
-import type { PrintFileResult } from '../print';
-// TODO(agent): Confirm shared category lookup relocation covers all backend label consumers.
-import { buildItemCategoryLookups } from '../../models/item-category-lookups';
-
-// TODO(unify-print): Remove print-item wrapper once /api/print/:labelType/:id is fully adopted.
 
 const action = defineHttpAction({
   key: 'print-item',

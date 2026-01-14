@@ -138,7 +138,7 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
   }
 
   const absolute = artifactPath;
-  const args = ['-d', effectiveQueue];
+  const args = ['-d', effectiveQueue, '-h', '192.168.10.202:631'];
   if (jobName && jobName.trim()) {
     args.push('-t', jobName.trim());
   }

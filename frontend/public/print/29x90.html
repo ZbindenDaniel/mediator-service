@@ -39,16 +39,16 @@
     .text {
       width: 60mm;
       height: 29mm;
-      padding: 1mm 1.5mm;
+      padding: 3mm;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 1mm;
+      gap: 1.5mm;
     }
 
     .line {
-      font-size: 6.5pt;
+      font-size: 10pt;
       line-height: 1.1;
       color: #111827;
       white-space: nowrap;
@@ -112,9 +112,9 @@
 <body>
   <div class="label" id="label" hidden>
     <div class="text">
+      <div class="line"><span id="artikelbeschreibung"></span></div>
       <div class="line"><span>UUID: </span><strong id="artikelId"></strong></div>
       <div class="line"><span>A-Nr: </span><strong id="artikelNummer"></strong></div>
-      <div class="line"><span id="artikelbeschreibung"></span></div>
       <div class="line"><span>K: </span><strong id="category"></strong></div>
     </div>
     <div class="qr">

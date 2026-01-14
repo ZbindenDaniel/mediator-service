@@ -65,7 +65,10 @@ module.exports = {
   DB_PATH: process.env.DB_PATH || "./data/mediator.sqlite",
   INBOX_DIR: process.env.INBOX_DIR || "./data/inbox",
   ARCHIVE_DIR: process.env.ARCHIVE_DIR || "./data/archive",
-  PRINTER_QUEUE: (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || "").trim(),
+  PRINTER_QUEUE: (process.env.PRINTER_QUEUE || "").trim(),
+  PRINTER_QUEUE_BOX: process.env.PRINTER_QUEUE_BOX || "",
+  PRINTER_QUEUE_ITEM: process.env.PRINTER_QUEUE_ITEM || "",
+  PRINTER_QUEUE_SHELF: process.env.PRINTER_QUEUE_SHELF || "",
   LP_COMMAND: (process.env.LP_COMMAND || 'lp').trim() || 'lp',
   LPSTAT_COMMAND: (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat',
   PRINT_TIMEOUT_MS: (() => {
