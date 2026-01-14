@@ -171,6 +171,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Filtered the Behälter list view to exclude shelf records so shelves no longer appear as boxes.
 - Filtered shelf box detail payloads to hide shelf records from the Behälter card while logging filtered counts.
 - Clarified relocate-box shelf dropdown labels by splitting shelf IDs into location, floor, and shelf number segments.
+- Wired the recent activities term filter helper into the action context with fallback logging.
 - Normalized printer status responses with ok/reason data and surfaced printer misconfiguration hints in the overview UI.
 
 ## Reference Links
