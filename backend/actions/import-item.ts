@@ -19,6 +19,7 @@ import { MEDIA_DIR } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
 import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
+import { normalizeQuality, resolveQualityFromLabel } from '../../models/quality';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -206,7 +207,34 @@ function normalizeItemReferenceRow(row: unknown): ItemRef | null {
       artikelNummer
     });
     if (parsedLangtext !== null) {
-      normalized.Langtext = parsedLangtext;
+      let cleanedLangtext: ItemRef['Langtext'] = parsedLangtext;
+      if (parsedLangtext && typeof parsedLangtext === 'object' && !Array.isArray(parsedLangtext)) {
+        const langtextPayload = { ...(parsedLangtext as Record<string, string>) };
+        const qualityLabel = langtextPayload.Qualität ?? langtextPayload.Qualitaet;
+        if (qualityLabel !== undefined) {
+          try {
+            const resolvedQuality = resolveQualityFromLabel(qualityLabel, console);
+            if (resolvedQuality !== null) {
+              normalized.Quality = normalizeQuality(resolvedQuality, console);
+            } else {
+              console.warn('[import-item] Unable to resolve Qualität label in reference Langtext payload', {
+                artikelNummer,
+                qualityLabel
+              });
+            }
+          } catch (qualityError) {
+            console.error('[import-item] Failed to resolve Qualität label in reference Langtext payload', {
+              artikelNummer,
+              qualityLabel,
+              error: qualityError
+            });
+          }
+          delete langtextPayload.Qualität;
+          delete langtextPayload.Qualitaet;
+        }
+        cleanedLangtext = langtextPayload;
+      }
+      normalized.Langtext = cleanedLangtext;
     }
   }
   if (typeof record.Hersteller === 'string') normalized.Hersteller = record.Hersteller;
@@ -593,7 +621,36 @@ const action = defineHttpAction({
       if (referenceDefaults && Object.prototype.hasOwnProperty.call(referenceDefaults, 'Langtext')) {
         fallbackLangtext = referenceDefaults.Langtext ?? '';
       }
-      const langtext = parsedLangtextInput ?? fallbackLangtext;
+      let langtext = (parsedLangtextInput ?? fallbackLangtext) as ItemRef['Langtext'];
+      let qualityFromLangtext: number | undefined;
+      if (langtext && typeof langtext === 'object' && !Array.isArray(langtext)) {
+        const langtextPayload = { ...(langtext as Record<string, string>) };
+        const qualityLabel = langtextPayload.Qualität ?? langtextPayload.Qualitaet;
+        if (qualityLabel !== undefined) {
+          try {
+            const resolvedQuality = resolveQualityFromLabel(qualityLabel, console);
+            if (resolvedQuality !== null) {
+              qualityFromLangtext = normalizeQuality(resolvedQuality, console);
+            } else {
+              console.warn('[import-item] Unable to resolve Qualität label from form Langtext payload', {
+                Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+                ItemUUID,
+                qualityLabel
+              });
+            }
+          } catch (qualityError) {
+            console.error('[import-item] Failed to resolve Qualität label from form Langtext payload', {
+              Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+              ItemUUID,
+              qualityLabel,
+              error: qualityError
+            });
+          }
+          delete langtextPayload.Qualität;
+          delete langtextPayload.Qualitaet;
+        }
+        langtext = langtextPayload;
+      }
       const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
 
       let verkaufspreis = referenceDefaults?.Verkaufspreis ?? 0;
@@ -743,6 +800,7 @@ const action = defineHttpAction({
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
+        Quality: qualityFromLangtext,
         Hersteller: hersteller,
         Länge_mm: laenge,
         Breite_mm: breite,
