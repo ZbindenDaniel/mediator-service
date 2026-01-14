@@ -5,11 +5,13 @@ import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import BoxTag from './BoxTag';
 import QualityBadge from './QualityBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
+import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Confirm item list location tags remain legible without the color metadata.
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
 // TODO(agentic): Expand item list columns and responsive styling for enriched item metadata.
 // TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
+// TODO(agent): Keep BoxID (Behälter) and Location (Lagerort) normalization separate in this table.
 
 interface Props {
   items: Item[];
@@ -96,11 +98,31 @@ export default function ItemList({
         </thead>
         <tbody>
           {safeItems.map(it => {
-            const locationKey = it.Location?.trim() || it.BoxID?.trim() || undefined;
-            const boxLabel = it.BoxID?.trim() || '?';
-            const boxLinkTarget = it.BoxID
-              ? `/boxes/${encodeURIComponent(it.BoxID)}`
-              : '/boxes';
+            let boxId: string | undefined;
+            let shelfId: string | undefined;
+
+            try {
+              if (typeof it.BoxID === 'string') {
+                boxId = it.BoxID.trim() || undefined;
+              } else if (it.BoxID !== null && it.BoxID !== undefined) {
+                logger.warn('Unexpected item BoxID type', { itemId: it.ItemUUID, boxId: it.BoxID });
+              }
+            } catch (error) {
+              logError('Failed to normalize item BoxID', error, { itemId: it.ItemUUID, boxId: it.BoxID });
+            }
+
+            try {
+              if (typeof it.Location === 'string') {
+                shelfId = it.Location.trim() || undefined;
+              } else if (it.Location !== null && it.Location !== undefined) {
+                logger.warn('Unexpected item Location type', { itemId: it.ItemUUID, location: it.Location });
+              }
+            } catch (error) {
+              logError('Failed to normalize item Location', error, { itemId: it.ItemUUID, location: it.Location });
+            }
+
+            const boxLinkTarget = boxId ? `/boxes/${encodeURIComponent(boxId)}` : null;
+            const shelfLinkTarget = shelfId ? `/boxes/${encodeURIComponent(shelfId)}` : null;
             const isSelected = selectedItemIds.has(it.ItemUUID);
             const checkboxLabel = it.Artikelbeschreibung?.trim()
               ? `Artikel ${it.Artikelbeschreibung} auswählen`
@@ -155,12 +177,22 @@ export default function ItemList({
                 <td className="col-number">{it.Artikel_Nummer?.trim() || '—'}</td>
                 <td className="col-desc">{it.Artikelbeschreibung}</td>
                 <td className="col-box">
-                  <Link to={boxLinkTarget}>
-                    {boxLabel}
-                  </Link>
+                  {boxId && boxLinkTarget ? (
+                    <Link to={boxLinkTarget}>
+                      {boxId}
+                    </Link>
+                  ) : (
+                    <span>—</span>
+                  )}
                 </td>
                 <td className="col-location">
-                  <BoxTag locationKey={locationKey} />
+                  {shelfId && shelfLinkTarget ? (
+                    <Link to={shelfLinkTarget}>
+                      <BoxTag locationKey={shelfId} />
+                    </Link>
+                  ) : (
+                    <span>—</span>
+                  )}
                 </td>
                 <td className="col-agentic optional-column">{agenticLabel}</td>
                 <td className="col-stock optional-column">{stockValue ?? '—'}</td>
