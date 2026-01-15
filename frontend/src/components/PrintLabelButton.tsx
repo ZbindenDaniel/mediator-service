@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ensureUser } from '../lib/user';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 
 interface Props {
   boxId?: string;
   itemId?: string;
+  onPrintStart?: (context: { boxId?: string; itemId?: string }) => void;
 }
 
-export default function PrintLabelButton({ boxId, itemId }: Props) {
+export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props) {
   const [status, setStatus] = useState('');
   const [preview, setPreview] = useState('');
 
   // TODO(agent): Review spacing and status copy when embedding this button in success dialogs.
   // TODO(agent): Align print label payloads with backend actor + labelType expectations.
-  async function handleClick() {
+  // TODO(agent): Confirm button styling matches previous linkcard navigation affordance.
+  async function handleClick(event?: React.MouseEvent<HTMLElement>) {
     try {
+      event?.preventDefault();
       setStatus('drucken...');
       const actor = (await ensureUser()).trim();
       if (!actor) {
@@ -24,6 +26,7 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
         return;
       }
 
+      onPrintStart?.({ boxId, itemId });
       const result = await requestPrintLabel({ boxId, itemId, actor });
       if (!result.labelType || !result.entityId) {
         setStatus('Fehler: Ungültige ID.');
@@ -51,9 +54,9 @@ export default function PrintLabelButton({ boxId, itemId }: Props) {
   return (
     <div>
       <div className="card linkcard">
-        <Link className="linkcard" onClick={handleClick} to={''}>
+        <button className="linkcard" type="button" onClick={handleClick}>
           <h3>Label drucken</h3>
-        </Link>
+        </button>
         {status && <div>{status}{preview && (
           <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
         )}</div>}
