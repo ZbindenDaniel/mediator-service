@@ -21,6 +21,7 @@ import { ITEM_FORM_DEFAULT_EINHEIT, extractReferenceFields } from './forms/itemF
 import type { SimilarItem } from './forms/useSimilarItems';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
+import { logger } from '../utils/logger';
 
 type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
@@ -974,10 +975,16 @@ export default function ItemCreate() {
           ? `Artikel wurde erfasst und dem Behälter ${createdItem.BoxID} zugeordnet.`
           : 'Artikel wurde erfasst und ist noch keinem Behälter zugeordnet. Bitte platzieren!';
 
+      // TODO(agent): Confirm modal print logging remains consistent after dialog copy updates.
       const dialogMessage = !AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && createdItem?.ItemUUID ? (
         <>
           <p>{successMessage}</p>
-          <PrintLabelButton itemId={createdItem.ItemUUID} />
+          <PrintLabelButton
+            itemId={createdItem.ItemUUID}
+            onPrintStart={({ itemId }) => {
+              logger.info?.('Item create modal print requested', { itemId });
+            }}
+          />
         </>
       ) : (
         successMessage
@@ -1026,7 +1033,12 @@ export default function ItemCreate() {
               <div>Artikelnummer: {artikelNummer || 'Unbekannt'}</div>
               <div>
                 {itemId ? (
-                  <PrintLabelButton itemId={itemId} />
+                  <PrintLabelButton
+                    itemId={itemId}
+                    onPrintStart={({ itemId: modalItemId }) => {
+                      logger.info?.('Item create modal print requested', { itemId: modalItemId });
+                    }}
+                  />
                 ) : (
                   <span>Label drucken nicht verfügbar.</span>
                 )}
