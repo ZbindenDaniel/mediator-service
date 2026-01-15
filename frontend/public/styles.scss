@@ -27,6 +27,7 @@ $activity-color: #804db4;
     /* borders */
     --acc: #747372;
     /* accent */
+    --nav: khaki;
 
     font-family: "Share Tech Mono", monospace !important;
     font-weight: 400;
@@ -95,6 +96,8 @@ textarea {
 .header {
     // position: sticky;
     top: 0;
+    position: fixed;
+    width: 100%;
     background: var(--head);
     border-bottom: 1px solid var(--line);
     z-index: 10;
@@ -118,6 +121,7 @@ textarea {
 
 #header-back-button {
     font-size: 24px;
+    padding: 4px;
     font-weight: bolder;
     text-decoration: none;
     display: inline-flex;
@@ -164,6 +168,7 @@ textarea {
     font-weight: bolder;
     text-decoration: none;
     border: 1px solid var(--line);
+    background-color: var(--nav);
     border-radius: 50%;
     width: 36px;
     height: 36px;
@@ -183,11 +188,12 @@ textarea {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    padding: 8px;
     width: 36px;
     height: 36px;
     border-radius: 50%;
     border: 1px solid var(--line);
-    background: transparent;
+    background-color: var(--nav);
     color: var(--fg);
     cursor: pointer;
 }
@@ -263,6 +269,7 @@ div {
     min-height: 100vh;
     padding: var(--pad);
     margin: 0 auto;
+    margin-top: 74px;
     border-left: solid 3px;
 
     &.overview {
@@ -290,6 +297,7 @@ div {
     border-left: solid 3px;
     min-height: 100vh;
     padding: 6px;
+    margin-top: 74px;
 
     &.item {
         border-color: $item-color
@@ -1179,7 +1187,7 @@ button:focus {
         min-width: 100px;
         text-align: center;
     }
-    
+
 
     .item-list .col-subcategory {
         min-width: 140px;
@@ -1258,7 +1266,7 @@ button:focus {
 
 @media (min-width: 992px) {
     .filter-grid {
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

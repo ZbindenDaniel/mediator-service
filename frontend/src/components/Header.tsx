@@ -118,12 +118,12 @@ export default function Header() {
   return (
     <header className="header">
       <div className="left">
+        <button id="header-back-button" type="button" onClick={() => window.history.back()} aria-label="Zurück">
+          <GoArrowLeft aria-hidden="true" />
+        </button>
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
         <nav className="header-nav" aria-label="Hauptnavigation">
           {/* TODO(navigation): Re-evaluate header icon spacing if more nav items are added. */}
-          <button id="header-back-button" type="button" onClick={() => window.history.back()} aria-label="Zurück">
-            <GoArrowLeft aria-hidden="true" />
-          </button>
           <Link
             to="/items/new"
             aria-label="Artikel erfassen"

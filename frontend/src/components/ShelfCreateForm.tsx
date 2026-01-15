@@ -390,97 +390,100 @@ export default function ShelfCreateForm() {
   }
 
   return (
-    <div className="card shelf-create-card">
-      <h3>Regal erstellen</h3>
-      <form onSubmit={handleSubmit}>
-        <div className="row" style={{ flexWrap: 'wrap', gap: '12px' }}>
-          <label>
-            Standort
-            <select
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-              required
-              disabled={isSubmitting}
-            >
-              <option value="" disabled>
-                Standort wählen
-              </option>
-              {shelfLocations.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label}
+
+    <div className='container'>
+      <div className="card shelf-create-card">
+        <h3>Regal erstellen</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="row" style={{ flexWrap: 'wrap', gap: '12px' }}>
+            <label>
+              Standort
+              <select
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                required
+                disabled={isSubmitting}
+              >
+                <option value="" disabled>
+                  Standort wählen
                 </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Ebene
-            <select
-              value={floor}
-              onChange={(event) => setFloor(event.target.value)}
-              required
-              disabled={!location || floorOptions.length === 0 || isSubmitting}
-            >
-              <option value="" disabled>
-                Ebene wählen
-              </option>
-              {floorOptions.map((floorOption) => (
-                <option key={floorOption} value={floorOption}>
-                  {floorOption}
+                {shelfLocations.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Ebene
+              <select
+                value={floor}
+                onChange={(event) => setFloor(event.target.value)}
+                required
+                disabled={!location || floorOptions.length === 0 || isSubmitting}
+              >
+                <option value="" disabled>
+                  Ebene wählen
                 </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Kategorie
-            <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              required
-              disabled={isSubmitting}
-            >
-              <option value="" disabled>
-                Kategorie wählen
-              </option>
-              {categoryOptions.map((categoryOption) => (
-                <option key={categoryOption.code} value={categoryOption.code}>
-                  {categoryOption.label}
+                {floorOptions.map((floorOption) => (
+                  <option key={floorOption} value={floorOption}>
+                    {floorOption}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Kategorie
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                required
+                disabled={isSubmitting}
+              >
+                <option value="" disabled>
+                  Kategorie wählen
                 </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Unterkategorie
-            <select
-              value={subcategory}
-              onChange={(event) => setSubcategory(event.target.value)}
-              required
-              disabled={!category || subcategoryOptions.length === 0 || isSubmitting}
-            >
-              <option value="" disabled>
-                Unterkategorie wählen
-              </option>
-              {subcategoryOptions.map((subcategoryOption) => (
-                <option key={subcategoryOption.code} value={subcategoryOption.code}>
-                  {subcategoryOption.label}
+                {categoryOptions.map((categoryOption) => (
+                  <option key={categoryOption.code} value={categoryOption.code}>
+                    {categoryOption.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Unterkategorie
+              <select
+                value={subcategory}
+                onChange={(event) => setSubcategory(event.target.value)}
+                required
+                disabled={!category || subcategoryOptions.length === 0 || isSubmitting}
+              >
+                <option value="" disabled>
+                  Unterkategorie wählen
                 </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="row">
-          <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Erstelle...' : 'Regal anlegen'}
-          </button>
-        </div>
-        <div className="row">
-          {status && <div>{status}</div>}
-          {mintedId && (
-            <div>
-              Regal-ID: <Link to={`/boxes/${encodeURIComponent(mintedId)}`}>{mintedId}</Link>
-            </div>
-          )}
-        </div>
-      </form>
+                {subcategoryOptions.map((subcategoryOption) => (
+                  <option key={subcategoryOption.code} value={subcategoryOption.code}>
+                    {subcategoryOption.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="row">
+            <button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Erstelle...' : 'Regal anlegen'}
+            </button>
+          </div>
+          <div className="row">
+            {status && <div>{status}</div>}
+            {mintedId && (
+              <div>
+                Regal-ID: <Link to={`/boxes/${encodeURIComponent(mintedId)}`}>{mintedId}</Link>
+              </div>
+            )}
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
