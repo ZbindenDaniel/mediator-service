@@ -535,94 +535,96 @@ export default function ItemListPage() {
     // <div className="container item">
     <div className="list-container item">
       <h2>Alle Artikel</h2>
-      {/* TODO(filter-bar-layout): Confirm filter bar alignment across breakpoints after flex layout update. */}
+      {/* TODO(filter-panel-layout): Confirm filter panel sizing in CSS after grid wrapper update. */}
       <div className="filter-bar">
-        <div className='filter-bar-row filter-bar-row--search'>
-          <div className='row'>
-            <label className="search-control">
-              <GoSearch />
-            </label>
-            <input
-              aria-label="Artikel suchen"
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Beschreibung, Nummer oder UUID"
-              type="search"
-              value={searchTerm}
-            />
-          </div>
-          <div className='row'>
-
-            <label className="sort-control">
-              <span>Sortieren nach</span>
-              <select
-                aria-label="Sortierkriterium wählen"
-                onChange={(event) => setSortKey(event.target.value as ItemListSortKey)}
-                value={sortKey}
-              >
-                <option value="artikelbeschreibung">Artikel</option>
-                <option value="artikelnummer">Artikelnummer</option>
-                <option value="box">Behälter</option>
-                <option value="agenticStatus">Agentic-Status</option>
-                <option value="quality">Qualität</option>
-                <option value="uuid">UUID</option>
-                <option value="stock">Bestand</option>
-                <option value="subcategory">Unterkategorie</option>
-              </select>
-            </label>
-          </div>
-
-          <div className='row'>
-
-            <label className="sort-direction-control">
-              <span>Reihenfolge</span>
-              <select
-                aria-label="Sortierreihenfolge"
-                onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
-                value={sortDirection}
-              >
-                <option value="asc">Aufsteigend</option>
-                <option value="desc">Absteigend</option>
-              </select>
-            </label>
-          </div>
-          
-          <div className='row'>
-
-            <label className="sort-control sort-control--box">
-              <span>Behälter</span>
-              <div className="sort-control__input">
-                <GoContainer aria-hidden="true" />
+        <div className="filter-grid row">
+          <div className="filter-panel filter-panel--primary col-12 col-lg-6">
+            <div className="filter-grid">
+              <div className="filter-grid__item">
+                <label className="search-control" htmlFor="item-list-search">
+                  <GoSearch />
+                </label>
                 <input
-                  aria-label="Behälter filtern"
-                  onChange={(event) => setBoxFilter(event.target.value)}
-                  placeholder="Box-ID oder Standort"
+                  aria-label="Artikel suchen"
+                  id="item-list-search"
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Beschreibung, Nummer oder UUID"
                   type="search"
-                  value={boxFilter}
+                  value={searchTerm}
                 />
               </div>
-            </label>
-          </div>
-        </div>
+              <div className="filter-grid__item">
+                <label className="sort-control">
+                  <span>Sortieren nach</span>
+                  <select
+                    aria-label="Sortierkriterium wählen"
+                    onChange={(event) => setSortKey(event.target.value as ItemListSortKey)}
+                    value={sortKey}
+                  >
+                    <option value="artikelbeschreibung">Artikel</option>
+                    <option value="artikelnummer">Artikelnummer</option>
+                    <option value="box">Behälter</option>
+                    <option value="agenticStatus">Agentic-Status</option>
+                    <option value="quality">Qualität</option>
+                    <option value="uuid">UUID</option>
+                    <option value="stock">Bestand</option>
+                    <option value="subcategory">Unterkategorie</option>
+                  </select>
+                </label>
+              </div>
 
-        <div className='filter-bar-row filter-bar-row--filters'>
-          <div className='row'>
-            <label className="filter-control">
-              <span>Unterkategorie</span>
-              <select
-                aria-label="Unterkategorie filtern"
-                onChange={(event) => setSubcategoryFilter(event.target.value)}
-                value={subcategoryFilter}
-              >
-                <option value="">Alle</option>
-                {subcategorySelectOptions.map((option) => (
-                  <option key={`${option.categoryLabel}-${option.value}`} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="filter-grid__item">
+                <label className="sort-direction-control">
+                  <span>Reihenfolge</span>
+                  <select
+                    aria-label="Sortierreihenfolge"
+                    onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
+                    value={sortDirection}
+                  >
+                    <option value="asc">Aufsteigend</option>
+                    <option value="desc">Absteigend</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="filter-grid__item">
+                <label className="sort-control sort-control--box">
+                  <span>Behälter</span>
+                  <div className="sort-control__input">
+                    <GoContainer aria-hidden="true" />
+                    <input
+                      aria-label="Behälter filtern"
+                      onChange={(event) => setBoxFilter(event.target.value)}
+                      placeholder="Box-ID oder Standort"
+                      type="search"
+                      value={boxFilter}
+                    />
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
-          {/* <div className='row'>
+
+          <div className="filter-panel filter-panel--secondary col-12 col-lg-6">
+            <div className="filter-grid">
+              <div className="filter-grid__item">
+                <label className="filter-control">
+                  <span>Unterkategorie</span>
+                  <select
+                    aria-label="Unterkategorie filtern"
+                    onChange={(event) => setSubcategoryFilter(event.target.value)}
+                    value={subcategoryFilter}
+                  >
+                    <option value="">Alle</option>
+                    {subcategorySelectOptions.map((option) => (
+                      <option key={`${option.categoryLabel}-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {/* <div className='row'>
             <label className="filter-control">
               <span>Bestand</span>
               <select
@@ -636,67 +638,69 @@ export default function ItemListPage() {
               </select>
             </label>
           </div> */}
-          <div className='row'>
-            <label className="filter-control">
-              <span>Agentic-Status</span>
-              <select
-                aria-label="Agentic-Status filtern"
-                onChange={(event) => handleAgenticStatusFilterChange(event.target.value)}
-                value={agenticStatusFilter}
-              >
-                {agenticStatusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
+              <div className="filter-grid__item">
+                <label className="filter-control">
+                  <span>Agentic-Status</span>
+                  <select
+                    aria-label="Agentic-Status filtern"
+                    onChange={(event) => handleAgenticStatusFilterChange(event.target.value)}
+                    value={agenticStatusFilter}
+                  >
+                    {agenticStatusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
-          <div className='row'>
-            <label className="filter-control">
-              <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
-              <input
-                type="range"
-                min={QUALITY_MIN}
-                max={5}
-                step={1}
-                value={qualityThreshold}
-                onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console))}
-                aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
-              />
-              {/* <div className="quality-slider__labels">
+              <div className="filter-grid__item">
+                <label className="filter-control">
+                  <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
+                  <input
+                    type="range"
+                    min={QUALITY_MIN}
+                    max={5}
+                    step={1}
+                    value={qualityThreshold}
+                    onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console))}
+                    aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
+                  />
+                  {/* <div className="quality-slider__labels">
                 {[1, 2, 3, 4, 5].map((level) => (
                   <span key={`filter-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
                 ))}
               </div> */}
-            </label>
-          </div>
-          
-          <div className='row'>
-            <label className="filter-control">
-              <span>Typ</span>
-              <select
-                aria-label="Instanzen oder Referenzen anzeigen"
-                onChange={(event) => setEntityFilter(event.target.value as ItemListFilters['entityFilter'])}
-                value={entityFilter}
-              >
-                <option value="all">Alle</option>
-                <option value="instances">Instanzen</option>
-                <option value="references">Referenzen</option>
-              </select>
-            </label>
-          </div>
-          
-          <div className='row'>
-            <label className="unplaced-filter" htmlFor="unplaced">
-              <span>unplatziert</span>
-              <input
-                checked={showUnplaced}
-                id="unplaced"
-                name='unplaced'
-                onChange={(event) => setShowUnplaced(event.target.checked)}
-                type="checkbox"
-              />
-            </label>
+                </label>
+              </div>
+
+              <div className="filter-grid__item">
+                <label className="filter-control">
+                  <span>Typ</span>
+                  <select
+                    aria-label="Instanzen oder Referenzen anzeigen"
+                    onChange={(event) => setEntityFilter(event.target.value as ItemListFilters['entityFilter'])}
+                    value={entityFilter}
+                  >
+                    <option value="all">Alle</option>
+                    <option value="instances">Instanzen</option>
+                    <option value="references">Referenzen</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="filter-grid__item">
+                <label className="unplaced-filter" htmlFor="unplaced">
+                  <span>unplatziert</span>
+                  <input
+                    checked={showUnplaced}
+                    id="unplaced"
+                    name="unplaced"
+                    onChange={(event) => setShowUnplaced(event.target.checked)}
+                    type="checkbox"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </div>
