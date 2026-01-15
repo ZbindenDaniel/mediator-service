@@ -7,6 +7,7 @@ import { filterVisibleEvents } from '../utils/eventLogTopics';
 
 // TODO(agent): Surface active topic filters in the UI to avoid confusing operators.
 // TODO(agent): Follow up on filtering the activities feed by query once backend support lands.
+// TODO(navigation): Validate header navigation coverage before reintroducing card-level links.
 
 interface ResolvedEventLink {
   path: string;
@@ -134,9 +135,6 @@ export default function RecentEventsCard({ events }: Props) {
     <div className="card">
       <div className="card-header">
         <h2 id="activity">Letzte Aktivitäten</h2>
-        <Link to="/activities" id="all-events" aria-label="Alle Aktivitäten anzeigen">
-          Alle
-        </Link>
       </div>
       <div className="row">
         <input

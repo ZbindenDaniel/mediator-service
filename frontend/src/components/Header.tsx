@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
 import {
@@ -11,7 +12,7 @@ import {
   ItemListFilterChangeDetail,
   loadItemListFilters
 } from '../lib/itemListFiltersStorage';
-import { GoArrowLeft, GoFilter } from 'react-icons/go';
+import { GoArchive, GoArrowLeft, GoFilter, GoListUnordered, GoPlus, GoPulse } from 'react-icons/go';
 
 // TODO(filter-indicator): Surface stored filter state changes in the header and allow quick reset.
 export default function Header() {
@@ -117,10 +118,41 @@ export default function Header() {
   return (
     <header className="header">
       <div className="left">
-        <nav>
-            <button id='header-back-button' type="button" onClick={() => window.history.back()}><GoArrowLeft /></button>
-        </nav>
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
+        <nav className="header-nav" aria-label="Hauptnavigation">
+          {/* TODO(navigation): Re-evaluate header icon spacing if more nav items are added. */}
+          <button id="header-back-button" type="button" onClick={() => window.history.back()} aria-label="Zurück">
+            <GoArrowLeft aria-hidden="true" />
+          </button>
+          <Link
+            to="/items/new"
+            aria-label="Artikel erfassen"
+            title="Artikel erfassen"
+          >
+            <GoPlus aria-hidden="true" />
+          </Link>
+          <Link
+            to="/items"
+            aria-label="Artikelliste"
+            title="Artikelliste"
+          >
+            <GoListUnordered aria-hidden="true" />
+          </Link>
+          <Link
+            to="/boxes"
+            aria-label="Behälterliste"
+            title="Behälterliste"
+          >
+            <GoArchive aria-hidden="true" />
+          </Link>
+          <Link
+            to="/activities"
+            aria-label="Aktivitäten"
+            title="Aktivitäten"
+          >
+            <GoPulse aria-hidden="true" />
+          </Link>
+        </nav>
       </div>
       <div className="right">
         {hasStoredFilters ? (

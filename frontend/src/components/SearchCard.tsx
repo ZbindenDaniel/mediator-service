@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import BoxTag from './BoxTag';
 
 // TODO(agent): Double-check that the simplified BoxTag output matches the search results layout expectations.
+// TODO(navigation): Review header navigation labels before adding new search shortcuts here.
 
 type SearchResult =
   | { type: 'box'; id: string; locationId?: string | null; label?: string | null }
@@ -39,9 +40,6 @@ export default function SearchCard() {
     <div className="card" id="find">
       <div className="card-header">
         <h2>Artikel finden</h2>
-        <Link to="/items" id="all-items" aria-label="Alle Artikel anzeigen">
-          Alle
-        </Link>
       </div>
       <div className="row">
         <input
