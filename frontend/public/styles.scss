@@ -397,6 +397,11 @@ div {
     flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 8px;
+    
+    a{
+        text-decoration: none;
+        color: inherit;
+    }
 }
 
 .card {
@@ -405,6 +410,7 @@ div {
     border-radius: var(--radius);
     padding: calc(var(--pad) + 2px);
     margin-bottom: 8px;
+
 }
 
 .event-card {
@@ -681,6 +687,13 @@ div {
 
 #BoxID {
     width: 100%;
+}
+
+#create-item{
+    a {
+        text-decoration: none;
+        color: inherit;
+    }
 }
 
 .combined-input {
@@ -1322,7 +1335,6 @@ button:focus {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px;
     border: 1px solid var(--line);
     border-radius: 6px;
     width: 100%;

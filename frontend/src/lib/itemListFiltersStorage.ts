@@ -100,7 +100,7 @@ export function getActiveFilterDescriptions(
     const statusLabel = filters.agenticStatusFilter === 'any'
       ? 'Alle Agentic-Status'
       : describeAgenticStatus(filters.agenticStatusFilter);
-    active.push(`Agentic: ${statusLabel}`);
+    active.push(`Ki: ${statusLabel}`);
   }
   if (filters.qualityThreshold > defaults.qualityThreshold) {
     const label = QUALITY_LABELS[filters.qualityThreshold] ?? `mind. ${filters.qualityThreshold}`;

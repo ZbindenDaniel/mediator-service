@@ -519,18 +519,22 @@ export default function ItemListPage() {
           <div className="filter-panel filter-panel--primary col-12 col-lg-6">
             <div className="filter-grid">
               <div className="filter-grid__item">
-                <label className="search-control" htmlFor="item-list-search">
-                  <GoSearch />
+                <label className="sort-control sort-control--box">
+                  <span>Artikelname</span>
+                  <div className="sort-control__input">
+                    <GoSearch aria-hidden="true" />
+                    <input
+                      aria-label="Artikel suchen"
+                      id="item-list-search"
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Beschreibung, Nummer oder UUID"
+                      type="search"
+                      value={searchTerm}
+                    />
+                  </div>
                 </label>
-                <input
-                  aria-label="Artikel suchen"
-                  id="item-list-search"
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Beschreibung, Nummer oder UUID"
-                  type="search"
-                  value={searchTerm}
-                />
               </div>
+
               <div className="filter-grid__item">
                 <label className="sort-control">
                   <span>Sortieren nach</span>
@@ -565,7 +569,7 @@ export default function ItemListPage() {
                 </label>
               </div>
 
-              <div className="filter-grid__item">
+              {/* <div className="filter-grid__item">
                 <label className="sort-control sort-control--box">
                   <span>Behälter</span>
                   <div className="sort-control__input">
@@ -579,7 +583,7 @@ export default function ItemListPage() {
                     />
                   </div>
                 </label>
-              </div>
+              </div> */}
             </div>
           </div>
 
