@@ -12,6 +12,8 @@ const PricingResponseSchema = z
   })
   .passthrough();
 
+const PRICING_TIMEOUT_MS = 15000;
+
 // TODO(agent): Revisit price normalization once locale-specific pricing data is available.
 function normalizePriceValue(value: unknown): number | null {
   if (value == null || value === '') {
@@ -102,13 +104,39 @@ export async function runPricingStage({
 
   let pricingRes;
   let pricingMessages: Array<{ role: string; content: string }> = [];
+  const timeoutMs = PRICING_TIMEOUT_MS;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
   try {
     pricingMessages = [
       { role: 'system', content: pricingPrompt },
       { role: 'user', content: userPayload }
     ];
-    pricingRes = await llm.invoke(pricingMessages);
+    const timeoutPromise = new Promise<null>((resolve) => {
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        logger?.warn?.({ msg: 'pricing stage timed out', itemId, timeoutMs });
+        resolve(null);
+      }, timeoutMs);
+    });
+    const invokePromise = llm.invoke(pricingMessages).catch((err) => {
+      if (!timedOut) {
+        logger?.error?.({ err, msg: 'pricing llm invocation failed', itemId });
+      }
+      return null;
+    });
+    const raceResult = await Promise.race([invokePromise, timeoutPromise]);
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    if (!raceResult) {
+      return null;
+    }
+    pricingRes = raceResult;
   } catch (err) {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
     logger?.error?.({ err, msg: 'pricing llm invocation failed', itemId });
     return null;
   }
