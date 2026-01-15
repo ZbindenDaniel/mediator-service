@@ -120,29 +120,21 @@ textarea {
     font-size: 24px;
     font-weight: bolder;
     text-decoration: none;
-    display: contents;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 50%;
-    padding: 4px 12px;
+    width: 36px;
+    height: 36px;
     background: transparent;
     color: var(--fg);
     cursor: pointer;
+    border: 1px solid transparent;
 }
 
 #homelink {
     text-decoration: none;
     color: var(--fg);
-}
-
-#all-items {
-    color: $item-color;
-}
-
-#all-boxes {
-    color: $box-color;
-}
-
-#all-events {
-    color: $activity-color;
 }
 
 .events {
@@ -159,15 +151,32 @@ textarea {
     font-weight: bold;
 }
 
-.header nav a {
+.header-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+// TODO(navigation): Revisit header icon sizing if additional controls are added.
+.header-nav a {
     color: var(--fg);
-    margin-right: 1rem;
     font-size: 22px;
     font-weight: bolder;
     text-decoration: none;
-    border: 1px solid --muted;
+    border: 1px solid var(--line);
     border-radius: 50%;
-    padding: 5px 8px;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-nav a:hover,
+.header-nav a:focus-visible,
+#header-back-button:hover,
+#header-back-button:focus-visible {
+    background: #0000000d;
 }
 
 .header-filter-indicator {

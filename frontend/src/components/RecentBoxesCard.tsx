@@ -5,6 +5,7 @@ import { formatDate } from '../lib/format';
 import BoxTag from './BoxTag';
 
 // TODO(agent): Confirm recent boxes still surface location labels clearly without color data.
+// TODO(navigation): Keep header nav links aligned with cards as entry points evolve.
 
 interface Props {
   boxes: Box[];
@@ -38,8 +39,6 @@ export default function RecentBoxesCard({ boxes }: Props) {
       <div
         className="card-header">
         <h2 id="boxes">Letzte Behälter</h2>
-        <Link id="all-boxes" to="/boxes">Alle
-        </Link>
       </div>
       <div id="boxesOut" className="list">
         {sortedBoxes.length ? (
