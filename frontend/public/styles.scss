@@ -1221,6 +1221,7 @@ button:focus {
 }
 
 // TODO(filter-bar-layout): Revisit filter bar spacing once filter count grows further.
+// TODO(filter-panel-grid): Validate filter panel grid spacing after the new layout lands in UI.
 .filter-bar {
     margin-bottom: 10px;
     display: flex;
@@ -1238,6 +1239,28 @@ button:focus {
     min-width: 280px;
 }
 
+.filter-panel {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.02);
+    flex: 1 1 360px;
+    min-width: 280px;
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 12px;
+    width: 100%;
+}
+
+@media (min-width: 992px) {
+    .filter-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+}
+
 .filter-bar-row .row {
     flex: 1 1 220px;
     width: auto;
@@ -1253,29 +1276,32 @@ button:focus {
 .sort-direction-control,
 .filter-control {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: flex-start;
     gap: 6px;
     width: 100%;
 }
 
-.filter-control,
-.sort-control,
-.sort-direction-control {
+.filter-control label,
+.sort-control label,
+.sort-direction-control label {
+    display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    gap: 6px;
+    width: 100%;
 }
 
 .filter-control input,
 .filter-control select,
+.filter-control input[type="range"],
 .sort-control input,
 .sort-control select,
 .sort-direction-control select {
     padding: 6px;
     border-radius: 6px;
     border: 1px solid var(--line);
-    min-width: 190px;
     width: 100%;
+    min-height: 36px;
 }
 
 .sort-control__input {
@@ -1290,6 +1316,8 @@ button:focus {
     padding: 6px;
     border: 1px solid var(--line);
     border-radius: 6px;
+    width: 100%;
+    min-height: 36px;
 }
 
 .filter-control__input input,
@@ -1297,7 +1325,6 @@ button:focus {
     border: none;
     outline: none;
     background: transparent;
-    min-width: 140px;
     width: 100%;
 }
 
