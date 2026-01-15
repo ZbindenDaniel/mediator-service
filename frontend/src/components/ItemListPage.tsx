@@ -10,6 +10,7 @@ import { itemCategories } from '../data/itemCategories';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import {
   clearItemListFilters,
+  buildItemListQueryParams,
   getActiveFilterDescriptions,
   getDefaultItemListFilters,
   hasNonDefaultFilters,
@@ -255,30 +256,7 @@ export default function ItemListPage() {
     }
     try {
       setError(null);
-      const query = new URLSearchParams();
-      if (effectiveFilters.searchTerm.trim()) {
-        query.set('search', effectiveFilters.searchTerm.trim());
-      }
-      if (effectiveFilters.subcategoryFilter.trim()) {
-        query.set('subcategory', effectiveFilters.subcategoryFilter.trim());
-      }
-      if (effectiveFilters.boxFilter.trim()) {
-        query.set('box', effectiveFilters.boxFilter.trim());
-      }
-      if (effectiveFilters.agenticStatusFilter !== 'any') {
-        query.set('agenticStatus', effectiveFilters.agenticStatusFilter);
-      }
-      if (effectiveFilters.showUnplaced) {
-        query.set('showUnplaced', 'true');
-      }
-      if (effectiveFilters.entityFilter !== 'all') {
-        query.set('entityFilter', effectiveFilters.entityFilter);
-      }
-      query.set('sortKey', effectiveFilters.sortKey);
-      query.set('sortDirection', effectiveFilters.sortDirection);
-      if (effectiveFilters.qualityThreshold > QUALITY_MIN) {
-        query.set('qualityAtLeast', effectiveFilters.qualityThreshold.toString());
-      }
+      const query = buildItemListQueryParams(effectiveFilters);
       const response = await fetch(`/api/items?${query.toString()}`);
       if (!response.ok) {
         console.error('load items failed', response.status);

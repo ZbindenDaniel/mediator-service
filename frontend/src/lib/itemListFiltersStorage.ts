@@ -125,6 +125,38 @@ export function getActiveFilterDescriptions(
   return active;
 }
 
+export function buildItemListQueryParams(filters: ItemListFilters): URLSearchParams {
+  const query = new URLSearchParams();
+  try {
+    if (filters.searchTerm.trim()) {
+      query.set('search', filters.searchTerm.trim());
+    }
+    if (filters.subcategoryFilter.trim()) {
+      query.set('subcategory', filters.subcategoryFilter.trim());
+    }
+    if (filters.boxFilter.trim()) {
+      query.set('box', filters.boxFilter.trim());
+    }
+    if (filters.agenticStatusFilter !== 'any') {
+      query.set('agenticStatus', filters.agenticStatusFilter);
+    }
+    if (filters.showUnplaced) {
+      query.set('showUnplaced', 'true');
+    }
+    if (filters.entityFilter !== 'all') {
+      query.set('entityFilter', filters.entityFilter);
+    }
+    query.set('sortKey', filters.sortKey);
+    query.set('sortDirection', filters.sortDirection);
+    if (filters.qualityThreshold > QUALITY_MIN) {
+      query.set('qualityAtLeast', filters.qualityThreshold.toString());
+    }
+  } catch (error) {
+    logError('Failed to build item list query params', error, { filters });
+  }
+  return query;
+}
+
 export function loadItemListFilters(
   defaults: ItemListFilters = DEFAULT_FILTERS,
   logger: Pick<Console, 'warn' | 'error'> = defaultLogger

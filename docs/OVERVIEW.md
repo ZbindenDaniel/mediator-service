@@ -144,6 +144,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Updated unified print label actions to use shared category lookups with backend-safe imports and contextual error logging.
 - Enriched the item creation success dialog with Artikelnummer context and a direct label print action for faster follow-up.
 - Added a UI action in item detail to close in-progress agentic runs and unblock queued approvals.
+- Updated item detail neighbor navigation to respect saved list filters when resolving adjacent items.
 - Re-enabled the Unterkategorie filter on the item list, persisted subcategory selections, and added backend query support to avoid client-only filtering for large lists.
 - Swapped the Unterkategorie filter input for taxonomy-backed select options and logged missing subcategory selections to keep filters resilient.
 - Mapped Langtext Qualität labels back into the numeric Quality field during CSV/form imports while cleaning the Langtext payloads.

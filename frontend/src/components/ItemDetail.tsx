@@ -37,6 +37,13 @@ import {
   triggerAgenticRun
 } from '../lib/agentic';
 import { parseLangtext } from '../lib/langtext';
+import {
+  buildItemListQueryParams,
+  getDefaultItemListFilters,
+  loadItemListFilters
+} from '../lib/itemListFiltersStorage';
+import { logger, logError } from '../utils/logger';
+import { filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
 
@@ -64,6 +71,7 @@ export interface AgenticStatusDisplay {
 }
 
 const DEFAULT_DETAIL_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 
 function resolveDetailEinheit(value: unknown): ItemEinheit {
   try {
@@ -704,7 +712,7 @@ export default function ItemDetail({ itemId }: Props) {
     nextId: null
   });
   const [neighborsLoading, setNeighborsLoading] = useState(false);
-  const [neighborSource, setNeighborSource] = useState<'query' | 'fetch' | null>(null);
+  const [neighborSource, setNeighborSource] = useState<'query' | 'fetch' | 'storage' | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
@@ -717,6 +725,7 @@ export default function ItemDetail({ itemId }: Props) {
   const { unter: unterCategoryLookup } = categoryLookups;
 
   const neighborContext = useMemo(() => {
+    // TODO(filter-aware-navigation): Validate filter-aware neighbor resolution against list pagination once it lands.
     // TODO(navigation-context): Move adjacent navigation derivation into a shared list-aware provider once pagination is available.
     const normalized = {
       previousId: null as string | null,
@@ -766,40 +775,82 @@ export default function ItemDetail({ itemId }: Props) {
 
     const fetchNeighbors = async () => {
       setNeighborsLoading(true);
+      const storedFilters = neighborContext.source !== 'query'
+        ? loadItemListFilters(ITEM_LIST_DEFAULT_FILTERS, logger)
+        : null;
+      const effectiveFilters = storedFilters ?? ITEM_LIST_DEFAULT_FILTERS;
+      const resolvedSource = storedFilters ? 'storage' : 'fetch';
+
       try {
-        console.info('ItemDetail: Fetching adjacent items', { itemId, source: neighborContext.source });
+        logger.info?.('ItemDetail: Fetching adjacent items', {
+          itemId,
+          source: neighborContext.source ?? resolvedSource
+        });
       } catch (logError) {
         console.error('ItemDetail: Failed to log adjacent fetch start', logError);
       }
+
       try {
-        const res = await fetch(`/api/items/${encodeURIComponent(itemId)}/adjacent`);
-        if (!res.ok) {
+        const query = buildItemListQueryParams(effectiveFilters);
+        const response = await fetch(`/api/items?${query.toString()}`);
+        if (!response.ok) {
           if (!cancelled) {
-            console.error('ItemDetail: Failed to fetch adjacent items', res.status);
+            console.error('ItemDetail: Failed to fetch filtered items', response.status);
+          }
+          try {
+            const problem = await response.json();
+            if (!cancelled) {
+              console.error('ItemDetail: Filtered items fetch returned error payload', problem);
+            }
+          } catch (jsonErr) {
+            if (!cancelled) {
+              console.error('ItemDetail: Failed to parse filtered items error response', jsonErr);
+            }
           }
           return;
         }
 
-        const data = await res.json();
+        const data = await response.json();
         if (cancelled) {
           return;
         }
 
-        const fetchedPrevious = typeof data.previousId === 'string' && data.previousId.trim()
-          ? data.previousId.trim()
-          : null;
-        const fetchedNext = typeof data.nextId === 'string' && data.nextId.trim()
-          ? data.nextId.trim()
-          : null;
+        const items: Item[] = Array.isArray(data.items) ? data.items : [];
+        const filtered = filterAndSortItems({
+          items,
+          showUnplaced: effectiveFilters.showUnplaced,
+          normalizedSearch: effectiveFilters.searchTerm.trim().toLowerCase(),
+          normalizedSubcategoryFilter: effectiveFilters.subcategoryFilter.trim().toLowerCase(),
+          normalizedBoxFilter: effectiveFilters.boxFilter.trim().toLowerCase(),
+          stockFilter: 'any',
+          normalizedAgenticFilter: effectiveFilters.agenticStatusFilter === 'any'
+            ? null
+            : effectiveFilters.agenticStatusFilter,
+          sortKey: effectiveFilters.sortKey,
+          sortDirection: effectiveFilters.sortDirection,
+          qualityThreshold: effectiveFilters.qualityThreshold
+        });
+
+        const currentIndex = filtered.findIndex((entry) => entry.ItemUUID === itemId);
+        if (currentIndex === -1) {
+          logger.warn?.('ItemDetail: Current item missing from filtered list', {
+            itemId,
+            total: filtered.length,
+            source: resolvedSource
+          });
+        }
+
+        const fetchedPrevious = currentIndex > 0 ? filtered[currentIndex - 1]?.ItemUUID ?? null : null;
+        const fetchedNext = currentIndex >= 0 ? filtered[currentIndex + 1]?.ItemUUID ?? null : null;
 
         setNeighborIds({
           previousId: neighborContext.previousId ?? fetchedPrevious,
           nextId: neighborContext.nextId ?? fetchedNext
         });
-        setNeighborSource(neighborContext.source ?? 'fetch');
+        setNeighborSource(neighborContext.source ?? resolvedSource);
       } catch (error) {
         if (!cancelled) {
-          console.error('ItemDetail: Failed to load adjacent items', error);
+          logError('ItemDetail: Failed to load filtered adjacent items', error, { itemId });
         }
       } finally {
         if (!cancelled) {
