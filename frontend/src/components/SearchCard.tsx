@@ -39,13 +39,16 @@ export default function SearchCard() {
   return (
     <div className="card" id="find">
       <div className="card-header">
-        <h2>Artikel finden</h2>
+        <h2>Finden</h2>
+        <Link to="/items" id="all-items" aria-label="Alle Artikel anzeigen">
+          Alle
+        </Link>
       </div>
       <div className="row">
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="z.B. Lenovo x230, B-151025, Brother"
+          placeholder="z.B. Lenovo x230, B-151025, Brother, 07045"
           onKeyDown={e => { if (e.key === 'Enter') runFind(); }}
         />
         <button className="btn" onClick={runFind}>Suchen</button>

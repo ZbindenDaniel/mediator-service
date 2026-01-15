@@ -1160,6 +1160,11 @@ button:focus {
     display: none;
 }
 
+.col-quality {
+    text-align: center;
+    min-width: 90px;
+}
+
 @media (min-width: 960px) {
     .item-list .optional-column {
         display: table-cell;
@@ -1254,12 +1259,7 @@ button:focus {
     width: 100%;
 }
 
-.filter-control {
-    flex-direction: column;
-    align-items: flex-start;
-    font-size: 0.9rem;
-}
-
+.filter-control,
 .sort-control,
 .sort-direction-control {
     flex-direction: column;
@@ -1268,6 +1268,7 @@ button:focus {
 
 .filter-control input,
 .filter-control select,
+.sort-control input,
 .sort-control select,
 .sort-direction-control select {
     padding: 6px;

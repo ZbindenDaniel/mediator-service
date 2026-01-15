@@ -650,6 +650,7 @@ export default function ItemListPage() {
               </select>
             </label>
           </div>
+
           <div className='row'>
             <label className="filter-control">
               <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
@@ -669,6 +670,7 @@ export default function ItemListPage() {
               </div> */}
             </label>
           </div>
+          
           <div className='row'>
             <label className="filter-control">
               <span>Typ</span>
@@ -683,6 +685,7 @@ export default function ItemListPage() {
               </select>
             </label>
           </div>
+          
           <div className='row'>
             <label className="unplaced-filter" htmlFor="unplaced">
               <span>unplatziert</span>
