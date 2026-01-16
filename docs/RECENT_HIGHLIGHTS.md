@@ -30,8 +30,8 @@
 - Images persist across item edits with `{Artikelnummer}-{imgNumber}` naming, and item models no longer carry picture fields.
 - Restored agentic search-query storage using the streamlined `backend/db.ts` schema and the new `upsertAgenticRun` helper.
 - Updated the item creation workflow to trigger agentic runs asynchronously via `frontend/src/components/ItemCreate.tsx` while `backend/actions/import-item.ts` handles persistence and image writes.
-## Additional Highlights (from the former overview list)
-
+- Updated item creation imports to split Stk quantities into per-instance rows while keeping Menge (Mix) quantities on a single item, with added logging for chosen modes and created counts.
+- Added legacy CSV schema detection, normalized Stück quantities into per-item instances, and renamed the Mix unit to Menge for grouped inventory tracking.
 - Replaced the print label action with a non-navigating control and added modal logging around item label printing.
 - Added compact header icon navigation for create/items/boxes/activities and removed redundant card-level links now covered by the header.
 - Hardened box ID sequencing to filter B-prefixed IDs and retry on collisions with warning logs.
@@ -72,7 +72,7 @@
 - Introduced activities search entry points on the recent events card and activities page for quicker refinement.
 - Added optional search-term filtering for the recent activities feed based on entity or article identifiers.
 - Wired the activities search term into the activities page API request so filtering updates with the URL state.
-- Tracked the closure of larger tasks directly in the recent highlights log.
+- Update the closing of larger tasks in [RECENT_HIGHLIGHTS]()
 - Introduced topic-based event log allowlists across backend and frontend feeds, defaulting to full visibility unless configured.
 - Introduced default shelf location mapping configuration for subcategory-backed location IDs, logging missing mappings to protect data quality.
 - Added shelf BoxID format validation for boxes.csv ingestion to warn and skip malformed shelf IDs.
@@ -91,4 +91,7 @@
 - Refined the item list filter bar layout to render side-by-side controls with better alignment across responsive breakpoints.
 - Wrapped the item list filter controls into primary and secondary panels with consistent grid wrappers for cleaner alignment.
 - Added grid-based filter panel styling to keep filter controls aligned within responsive boxes.
+- Updated stock mutation endpoints to create/delete Stück item instances while keeping Menge bulk quantity adjustments with richer logging.
 - Enabled manual agentic run closes even when runs are marked as not started after import/export cycles.
+- Blocked item editing while agentic runs are active in the item detail and edit flows.
+
