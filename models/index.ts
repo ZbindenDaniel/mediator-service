@@ -2,7 +2,7 @@ export * from './box';
 export * from './box-detail';
 export * from './create-box';
 export * from './item';
-export type { Item, ItemRef, ItemInstance } from './item';
+export type { GroupedItemSummary, Item, ItemRef, ItemInstance } from './item';
 export * from './label-job';
 export * from './event-log';
 export * from './entity';

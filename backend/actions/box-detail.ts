@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { groupItemsForResponse } from '../lib/itemGrouping';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf box detail payload naming with frontend expectations before adding more nested data.
+// TODO(grouped-items): Remove legacy flat items response once frontend consumes groupedItems.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -46,6 +48,7 @@ const action = defineHttpAction({
         console.error('box-detail failed to load items', { ...logContext, error });
         return sendJson(res, 500, { error: 'box detail unavailable' });
       }
+      const groupedItems = groupItemsForResponse(items, { logger: console });
 
       const eventsHelper = ctx.listEventsForBox;
       if (!eventsHelper || typeof eventsHelper.all !== 'function') {
@@ -97,7 +100,7 @@ const action = defineHttpAction({
         }
       }
 
-      sendJson(res, 200, { box, items, events, containedBoxes });
+      sendJson(res, 200, { box, items, groupedItems, events, containedBoxes });
     } catch (err) {
       console.error('Box detail failed', err);
       sendJson(res, 500, { error: (err as Error).message });
