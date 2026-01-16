@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
+- Added item detail instance summaries to surface per-reference inventory visibility in the detail view payload/UI.
 - Grouped item list and box detail rows in the frontend to surface counts while keeping list filtering and sorting aligned with grouped summaries.
 
 ## Documentation Map

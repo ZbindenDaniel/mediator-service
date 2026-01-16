@@ -3,6 +3,7 @@ export * from './box-detail';
 export * from './create-box';
 export * from './item';
 export type { GroupedItemSummary, Item, ItemRef, ItemInstance } from './item';
+export * from './item-detail';
 export * from './label-job';
 export * from './event-log';
 export * from './entity';

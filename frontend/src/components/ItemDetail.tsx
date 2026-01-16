@@ -3,10 +3,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
+// TODO(agent): Confirm instance inventory ordering requirements once detail UI feedback arrives.
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
 // TODO(agentic-close): Confirm close action copy and endpoint payload once backend wiring lands.
 // TODO(agentic-edit-lock): Confirm messaging for edit restrictions while agentic runs are active.
-import type { Item, EventLog, AgenticRun } from '../../../models';
+import type { Item, EventLog, AgenticRun, ItemDetailResponse, ItemInstanceSummary } from '../../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
@@ -706,6 +707,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
   const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
+  const [instances, setInstances] = useState<ItemInstanceSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -1119,6 +1121,20 @@ export default function ItemDetail({ itemId }: Props) {
     return rows;
   }, [events, item, langtextRows, resolveUnterkategorieLabel]);
 
+  const instanceRows = useMemo(() => {
+    return instances.map((instance) => {
+      const qualityLabel =
+        typeof instance.Quality === 'number' ? describeQuality(instance.Quality).label : null;
+      return {
+        id: instance.ItemUUID,
+        quality: qualityLabel,
+        location: instance.Location ?? null,
+        updatedAt: instance.UpdatedAt ? formatDateTime(instance.UpdatedAt) : null,
+        createdAt: instance.Datum_erfasst ? formatDateTime(instance.Datum_erfasst) : null
+      };
+    });
+  }, [instances]);
+
   const latestAgenticReviewNote = useMemo(() => {
     let latestNote: string | null = null;
     let latestTimestamp = -Infinity;
@@ -1228,6 +1244,54 @@ export default function ItemDetail({ itemId }: Props) {
     agenticRows.push(['Kommentar', latestAgenticReviewNote]);
   }
 
+  const normalizeInstanceList = useCallback(
+    (payload: ItemDetailResponse['instances'] | unknown): ItemInstanceSummary[] => {
+      try {
+        if (!Array.isArray(payload)) {
+          logger.warn?.('ItemDetail: Instances payload missing or invalid', {
+            itemId,
+            payloadType: typeof payload
+          });
+          return [];
+        }
+
+        const normalized: ItemInstanceSummary[] = [];
+        payload.forEach((entry, index) => {
+          const itemUUID = typeof (entry as ItemInstanceSummary)?.ItemUUID === 'string'
+            ? (entry as ItemInstanceSummary).ItemUUID.trim()
+            : '';
+          if (!itemUUID) {
+            logger.warn?.('ItemDetail: Instance entry missing ItemUUID', { itemId, index });
+            return;
+          }
+
+          const qualityRaw = (entry as ItemInstanceSummary)?.Quality;
+          const parsedQuality =
+            typeof qualityRaw === 'number'
+              ? qualityRaw
+              : typeof qualityRaw === 'string'
+                ? Number(qualityRaw)
+                : null;
+
+          normalized.push({
+            ItemUUID: itemUUID,
+            Quality: Number.isNaN(parsedQuality ?? NaN) ? null : parsedQuality,
+            Location: (entry as ItemInstanceSummary)?.Location ?? null,
+            BoxID: (entry as ItemInstanceSummary)?.BoxID ?? null,
+            UpdatedAt: (entry as ItemInstanceSummary)?.UpdatedAt ?? null,
+            Datum_erfasst: (entry as ItemInstanceSummary)?.Datum_erfasst ?? null
+          });
+        });
+
+        return normalized;
+      } catch (error) {
+        logError('ItemDetail: Failed to normalize instance list payload', error, { itemId });
+        return [];
+      }
+    },
+    [itemId]
+  );
+
   const load = useCallback(async ({ showSpinner = false }: { showSpinner?: boolean } = {}) => {
     if (showSpinner) {
       setIsLoading(true);
@@ -1237,7 +1301,7 @@ export default function ItemDetail({ itemId }: Props) {
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as ItemDetailResponse;
         setItem(data.item);
         setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
         setAgentic(data.agentic ?? null);
@@ -1245,6 +1309,7 @@ export default function ItemDetail({ itemId }: Props) {
           ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
           : [];
         setMediaAssets(media);
+        setInstances(normalizeInstanceList(data.instances));
         setAgenticError(null);
         setAgenticReviewIntent(null);
         setLoadError(null);
@@ -1255,6 +1320,7 @@ export default function ItemDetail({ itemId }: Props) {
         setAgentic(null);
         setAgenticError('Ki-Status konnte nicht geladen werden.');
         setMediaAssets([]);
+        setInstances([]);
         setAgenticReviewIntent(null);
         setLoadError(res.status === 404 ? 'Artikel wurde nicht gefunden.' : 'Artikel konnte nicht geladen werden.');
       }
@@ -1265,6 +1331,7 @@ export default function ItemDetail({ itemId }: Props) {
       setAgentic(null);
       setAgenticError('Ki-Status konnte nicht geladen werden.');
       setMediaAssets([]);
+      setInstances([]);
       setAgenticReviewIntent(null);
       setLoadError('Artikel konnte nicht geladen werden.');
     } finally {
@@ -2084,6 +2151,51 @@ export default function ItemDetail({ itemId }: Props) {
                     })}
                   </tbody>
                 </table>
+              </div>
+              <div className="row">
+                <div className="item-detail__instances">
+                  <h3>Instanzen</h3>
+                  {instanceRows.length > 0 ? (
+                    <table className="details">
+                      <thead>
+                        <tr>
+                          <th>UUID</th>
+                          <th>Qualität</th>
+                          <th>Standort</th>
+                          <th>Aktualisiert</th>
+                          <th>Erfasst</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {instanceRows.map((row) => {
+                          const qualityCell = normalizeDetailValue(row.quality);
+                          const locationCell = normalizeDetailValue(row.location);
+                          const updatedCell = normalizeDetailValue(row.updatedAt);
+                          const createdCell = normalizeDetailValue(row.createdAt);
+                          return (
+                            <tr key={row.id}>
+                              <td>{row.id}</td>
+                              <td className={qualityCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {qualityCell.content}
+                              </td>
+                              <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {locationCell.content}
+                              </td>
+                              <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {updatedCell.content}
+                              </td>
+                              <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {createdCell.content}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="muted">Keine Instanzen vorhanden.</p>
+                  )}
+                </div>
               </div>
               <div className='row'>
                 <button type="button" className="btn" onClick={handleEdit}>Bearbeiten</button>
