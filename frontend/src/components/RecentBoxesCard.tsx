@@ -38,7 +38,9 @@ export default function RecentBoxesCard({ boxes }: Props) {
     <div className="card">
       <div
         className="card-header">
-        <h2 id="boxes">Letzte Behälter</h2>
+        <a href="/boxes">
+          <h2 id="boxes">Letzte Behälter</h2>
+        </a>
       </div>
       <div id="boxesOut" className="list">
         {sortedBoxes.length ? (

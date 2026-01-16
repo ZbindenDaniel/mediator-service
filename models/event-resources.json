@@ -7,7 +7,7 @@
   { "key": "Moved", "label": "Verschoben", "level": "important", "topic": "logistics" },
   { "key": "Removed", "label": "Entnommen", "level": "important", "topic": "logistics" },
   { "key": "Deleted", "label": "Gelöscht", "level": "important", "topic": "data" },
-  { "key": "Exported", "label": "Exportiert", "level": "info", "topic": "importExport" },
+  { "key": "Exported", "label": "Exportiert", "level": "info", "topic": "data" },
   { "key": "Note", "label": "Notiz", "level": "info", "topic": "data" },
   { "key": "QrScanned", "label": "QR-Code gescannt", "level": "info", "topic": "general" },
   { "key": "PrintSent", "label": "Etikett gedruckt", "level": "info", "topic": "printing" },

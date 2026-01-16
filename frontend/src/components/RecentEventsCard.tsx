@@ -134,7 +134,9 @@ export default function RecentEventsCard({ events }: Props) {
   return (
     <div className="card">
       <div className="card-header">
-        <h2 id="activity">Letzte Aktivitäten</h2>
+        <a href="/activities">
+          <h2 id="activity">Letzte Aktivitäten</h2>
+        </a>
       </div>
       <div className="row">
         <input

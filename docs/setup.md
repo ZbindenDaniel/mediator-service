@@ -26,6 +26,14 @@ the print job need to renderPDFs from the html templates. This need to happen he
 3. If you swap in an external Postgres instance, update the `.env` variables (`DATABASE_URL`, `PGHOST`, etc.) accordingly and document the change so teammates inherit the correct connection string.
 4. When running the mediator against the host-installed Ollama daemon, ensure Docker has access to the host gateway. The Compose stack now resolves `host.docker.internal` automatically; confirm the daemon listens on `http://127.0.0.1:11434` (default) so the container can reach `http://host.docker.internal:11434` without extra port publishing.
 
+## Postgres rollout notes
+
+- These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
+- Compose defines the mediator/Postgres network so `DATABASE_URL` and the individual `PG*` variables can follow the `mediator`/`postgres` defaults without leaking secrets.
+- After provisioning, run the migration and verification scripts to confirm every table matches the shared interfaces under `models/` and `backend/src/models/`; unresolved diffs risk runtime serialization errors.
+- Startup logs surface `DATABASE_URL` warnings and connection retries—treat them as blockers and resolve before layering on new features.
+- Healthcheck status from `docker compose ps` (or the container logs) is the quickest indicator of why local development cannot reach Postgres.
+
 > **Tip:** Variables can also be injected directly via your process manager or deployment platform if you prefer not to use a `.env` file.
 
 ## Location bootstrap seeding

@@ -4,11 +4,12 @@ import React from 'react';
 export default function CreateItemCard() {
   return (
     <div className="card" id="create-item">
-      {/* TODO(navigation): Revisit copy if header navigation labels are updated. */}
+      <a href="/items/new">
       <div>
         <h2>Erfassen</h2>
         <p className="muted">Neuen Artikel erfassen und später platzieren</p>
       </div>
+      </a>
     </div>
   );
 }

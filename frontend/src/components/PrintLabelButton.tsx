@@ -54,9 +54,9 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
   return (
     <div>
       <div className="card linkcard">
-        <button className="linkcard" type="button" onClick={handleClick}>
+        <a onClick={handleClick}>
           <h3>Label drucken</h3>
-        </button>
+        </a>
         {status && <div>{status}{preview && (
           <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
         )}</div>}
