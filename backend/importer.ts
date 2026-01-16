@@ -5,6 +5,7 @@
 // TODO(agent): Align CSV alias handling for ItemUUID and quantity headers with export columns.
 // TODO(agent): Revisit legacy schema detection logging once CSV partner inventory coverage expands.
 // TODO(agent): Recheck legacy quantity normalization rules once more category-based guidance is available.
+// TODO(agent): Capture legacy column mapping metrics alongside ingest summaries once schema mapping stabilizes.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';

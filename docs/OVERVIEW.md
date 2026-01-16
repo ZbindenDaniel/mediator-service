@@ -33,6 +33,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Shifted ItemUUID minting to the Artikelnummer-based `I.<Artikelnummer>-####` format while keeping legacy date-based identifiers parseable for imports and reconciliation.
 - Adjusted item creation auto-printing to respect instance vs. bulk label policies and log partial print failures for follow-up.
 - Logged legacy CSV schema detection during validation, added category-aware bulk quantity normalization for legacy imports, and skipped empty/failed rows with explicit telemetry.
+- Added structured logging around Produkt schema legacy column mappings to improve import observability without widening data model scope.
 
 ## Documentation Map
 
