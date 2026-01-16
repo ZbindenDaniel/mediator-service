@@ -86,7 +86,9 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     const groupCategory = group.summary.Category
       ?? (typeof representative?.Unterkategorien_A === 'number'
         ? String(representative.Unterkategorien_A).padStart(4, '0')
-        : representative?.Unterkategorien_A != null ? representative.Unterkategorien_A : '')
+        : typeof representative?.Unterkategorien_A === 'string'
+          ? representative.Unterkategorien_A
+          : null)
       ?? '';
     const matchesSubcategory = normalizedSubcategoryFilter
       ? groupCategory.toLowerCase().includes(normalizedSubcategoryFilter)
@@ -102,7 +104,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
         : stockFilter === 'outofstock'
           ? stockValue <= 0
           : true;
-    const agenticStatus = (representative?.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus;
+    const agenticStatus = group.agenticStatusSummary ?? AGENTIC_RUN_STATUS_NOT_STARTED;
     const matchesAgenticStatus = normalizedAgenticFilter
       ? agenticStatus === normalizedAgenticFilter
       : true;
@@ -129,8 +131,8 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
         const idx = AGENTIC_RUN_STATUSES.indexOf(resolved);
         return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
       };
-      const aStatusOrder = statusOrder(a.representative?.AgenticStatus as AgenticRunStatus | null | undefined);
-      const bStatusOrder = statusOrder(b.representative?.AgenticStatus as AgenticRunStatus | null | undefined);
+      const aStatusOrder = statusOrder(a.agenticStatusSummary);
+      const bStatusOrder = statusOrder(b.agenticStatusSummary);
       if (aStatusOrder === bStatusOrder) {
         return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
       }
@@ -606,7 +608,7 @@ export default function ItemListPage() {
                     <option value="artikelbeschreibung">Artikel</option>
                     <option value="artikelnummer">Artikelnummer</option>
                     <option value="box">Behälter</option>
-                    <option value="agenticStatus">Agentic-Status</option>
+                    <option value="agenticStatus">Ki-Status</option>
                     <option value="quality">Qualität</option>
                     <option value="uuid">UUID</option>
                     <option value="stock">Bestand</option>
@@ -682,9 +684,9 @@ export default function ItemListPage() {
           </div> */}
               <div className="filter-grid__item">
                 <label className="filter-control">
-                  <span>Agentic-Status</span>
+                  <span>Ki-Status</span>
                   <select
-                    aria-label="Agentic-Status filtern"
+                    aria-label="Ki-Status filtern"
                     onChange={(event) => handleAgenticStatusFilterChange(event.target.value)}
                     value={agenticStatusFilter}
                   >

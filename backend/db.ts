@@ -862,6 +862,7 @@ function ensureItemQualityColumns(database: Database.Database = db): void {
 }
 
 ensureItemQualityColumns(db);
+ensureAgenticRunSchema(db);
 
 let upsertItemReferenceStatement: Database.Statement;
 let upsertItemInstanceStatement: Database.Statement;
@@ -914,9 +915,14 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
 WHERE i.ItemUUID = ?
 `);
+  // TODO(agentic-instance-status): Keep agentic run joins aligned with ItemUUID-only semantics.
   findByMaterialStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
+  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
+])}
 ${ITEM_JOIN_WITH_BOX}
+LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
 WHERE i.Artikel_Nummer = ?
 ORDER BY i.UpdatedAt DESC
 `);
@@ -1260,7 +1266,6 @@ function ensureAgenticRequestLogColumns(database: Database.Database = db): void 
 }
 
 ensureAgenticRequestLogSchema(db);
-ensureAgenticRunSchema(db);
 
 export { db };
 

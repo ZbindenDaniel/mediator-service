@@ -11,7 +11,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 type AgenticQueueMode = 'all' | 'instancesOnly' | 'missing';
 
 type QueueCandidate = {
-  identifier: string;
   itemUUID: string | null;
   artikelNummer: string | null;
   referenceOnly: boolean;
@@ -93,18 +92,16 @@ const action = defineHttpAction({
           if (rawArtikelNummer) {
             artikelCovered.add(rawArtikelNummer);
           }
-          const identifier = rawItemUUID || rawArtikelNummer;
-          if (!identifier) {
-            console.warn('[agentic-bulk-queue] Skipping instance without ItemUUID or Artikel_Nummer', { record });
+          if (!rawItemUUID) {
+            console.warn('[agentic-bulk-queue] Skipping instance without ItemUUID', { record });
             continue;
           }
-          if (seenIdentifiers.has(identifier)) {
-            console.info('[agentic-bulk-queue] Skipping duplicate instance candidate', { identifier });
+          if (seenIdentifiers.has(rawItemUUID)) {
+            console.info('[agentic-bulk-queue] Skipping duplicate instance candidate', { itemUUID: rawItemUUID });
             continue;
           }
-          seenIdentifiers.add(identifier);
+          seenIdentifiers.add(rawItemUUID);
           candidateList.push({
-            identifier,
             itemUUID: rawItemUUID || null,
             artikelNummer: rawArtikelNummer || null,
             referenceOnly: false
@@ -114,6 +111,7 @@ const action = defineHttpAction({
         }
       }
 
+      // TODO(agentic-instance-id): Revisit reference-only queue support if instance-less agentic runs return.
       for (const reference of references) {
         try {
           const rawArtikelNummer = typeof reference?.Artikel_Nummer === 'string' ? reference.Artikel_Nummer.trim() : '';
@@ -129,7 +127,6 @@ const action = defineHttpAction({
           }
           seenIdentifiers.add(rawArtikelNummer);
           candidateList.push({
-            identifier: rawArtikelNummer,
             itemUUID: null,
             artikelNummer: rawArtikelNummer,
             referenceOnly: true
@@ -160,10 +157,14 @@ const action = defineHttpAction({
         let skipped = 0;
 
         for (const record of records) {
-          const identifier = record?.identifier?.trim();
+          const identifier = record?.itemUUID?.trim();
           if (!identifier) {
             skipped += 1;
-            console.warn('[agentic-bulk-queue] Skipping candidate without valid identifier', { record });
+            console.warn('[agentic-bulk-queue] Skipping candidate without ItemUUID', {
+              itemUUID: record?.itemUUID ?? null,
+              artikelNummer: record?.artikelNummer ?? null,
+              referenceOnly: record?.referenceOnly ?? false
+            });
             continue;
           }
 
@@ -219,7 +220,7 @@ const action = defineHttpAction({
             ctx.logEvent({
               Actor: options.actor,
               EntityType: 'Item',
-              EntityId: record.itemUUID ?? identifier,
+              EntityId: identifier,
               Event: 'AgenticSearchQueued',
               Meta: JSON.stringify({
                 mode: options.mode,

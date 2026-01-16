@@ -1,5 +1,17 @@
-import type { GroupedItemSummary, Item } from '../../../models';
-import { ItemEinheit, normalizeItemEinheit } from '../../../models';
+import type { AgenticRunStatus, GroupedItemSummary, Item } from '../../../models';
+import {
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_CANCELLED,
+  AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_REJECTED,
+  AGENTIC_RUN_STATUS_REVIEW,
+  AGENTIC_RUN_STATUS_RUNNING,
+  AGENTIC_RUN_STATUSES,
+  ItemEinheit,
+  normalizeItemEinheit
+} from '../../../models';
 import { logError, logger } from '../utils/logger';
 
 export interface GroupedItemDisplay {
@@ -8,6 +20,7 @@ export interface GroupedItemDisplay {
   items: Item[];
   representative: Item | null;
   totalStock: number;
+  agenticStatusSummary: AgenticRunStatus;
 }
 
 type GroupItemsOptions = {
@@ -108,6 +121,35 @@ function resolveEinheit(value: unknown, logContext: string, itemId: string | nul
   }
 }
 
+// TODO(agentic-status-grouping): Revisit aggregation ordering once agentic reviewer workflows expand.
+const AGENTIC_STATUS_PRIORITY: AgenticRunStatus[] = [
+  AGENTIC_RUN_STATUS_RUNNING,
+  AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_REVIEW,
+  AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_REJECTED,
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_CANCELLED,
+  AGENTIC_RUN_STATUS_NOT_STARTED
+];
+
+const AGENTIC_STATUS_PRIORITY_ORDER = new Map<AgenticRunStatus, number>(
+  AGENTIC_STATUS_PRIORITY.map((status, index) => [status, index])
+);
+
+function resolveAgenticStatus(value: unknown): AgenticRunStatus {
+  if (typeof value === 'string' && AGENTIC_RUN_STATUSES.includes(value as AgenticRunStatus)) {
+    return value as AgenticRunStatus;
+  }
+  return AGENTIC_RUN_STATUS_NOT_STARTED;
+}
+
+function mergeAgenticStatusSummary(current: AgenticRunStatus, next: AgenticRunStatus): AgenticRunStatus {
+  const currentRank = AGENTIC_STATUS_PRIORITY_ORDER.get(current) ?? Number.MAX_SAFE_INTEGER;
+  const nextRank = AGENTIC_STATUS_PRIORITY_ORDER.get(next) ?? Number.MAX_SAFE_INTEGER;
+  return nextRank < currentRank ? next : current;
+}
+
 function resolveItemQuantity(
   item: Item,
   logContext: string
@@ -166,10 +208,12 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
 
         const existing = grouped.get(key);
         const quantityData = resolveItemQuantity(item, logContext);
+        const itemAgenticStatus = resolveAgenticStatus(item.AgenticStatus);
         if (existing) {
           existing.summary.count += 1;
           existing.items.push(item);
           existing.totalStock += quantityData.quantity;
+          existing.agenticStatusSummary = mergeAgenticStatusSummary(existing.agenticStatusSummary, itemAgenticStatus);
           if (!existing.summary.representativeItemId && item.ItemUUID) {
             existing.summary.representativeItemId = item.ItemUUID;
           }
@@ -192,7 +236,8 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
           },
           items: [item],
           representative: item,
-          totalStock: quantityData.quantity
+          totalStock: quantityData.quantity,
+          agenticStatusSummary: itemAgenticStatus
         });
       } catch (error) {
         logError(`[${logContext}] Failed to group item`, error, {

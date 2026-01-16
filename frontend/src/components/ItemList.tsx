@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { AgenticRunStatus } from '../../../models';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import BoxTag from './BoxTag';
 import QualityBadge from './QualityBadge';
@@ -91,7 +90,7 @@ export default function ItemList({
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
-            <th className="col-agentic optional-column">Agentic</th>
+            <th className="col-agentic optional-column">Ki</th>
             <th className="col-stock optional-column">Anzahl</th>
             <th className="col-quality optional-column">Qualität</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
@@ -154,7 +153,7 @@ export default function ItemList({
               ?? (typeof representative?.Unterkategorien_A === 'number'
                 ? String(representative.Unterkategorien_A)
                 : (typeof representative?.Unterkategorien_A === 'string' ? representative.Unterkategorien_A : null));
-            const agenticStatus = (representative?.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus | null;
+            const agenticStatus = group.agenticStatusSummary ?? AGENTIC_RUN_STATUS_NOT_STARTED;
             const agenticLabel = describeAgenticStatus(agenticStatus);
             const qualityValue = typeof group.summary.Quality === 'number'
               ? group.summary.Quality

@@ -210,7 +210,13 @@ const action = defineHttpAction({
             }
           }
         } else {
-          const run = ctx.getAgenticRun.get(itemId);
+          let run: any;
+          try {
+            run = ctx.getAgenticRun.get(itemId);
+          } catch (err) {
+            console.error('Failed to load agentic run for review request', err);
+            return sendJson(res, 500, { error: 'Failed to load agentic run' });
+          }
           if (!run) {
             return sendJson(res, 404, { error: 'Agentic run not found' });
           }

@@ -2,6 +2,8 @@ import type { AgenticRunStatus } from 'models';
 import { AGENTIC_RUN_STATUSES } from 'models';
 import { normalizeQuality, QUALITY_LABELS, QUALITY_MIN } from 'models/quality';
 import { describeAgenticStatus } from './agenticStatusLabels';
+
+// TODO(ki-labels): Centralize KI terminology once a shared i18n layer is available.
 import { logger as defaultLogger, logError } from '../utils/logger';
 
 // TODO(item-entity-filter): Consider centralizing filter type constants for cross-view reuse once repository navigation shares state.
@@ -98,7 +100,7 @@ export function getActiveFilterDescriptions(
   }
   if (filters.agenticStatusFilter !== defaults.agenticStatusFilter) {
     const statusLabel = filters.agenticStatusFilter === 'any'
-      ? 'Alle Agentic-Status'
+      ? 'Alle Ki-Status'
       : describeAgenticStatus(filters.agenticStatusFilter);
     active.push(`Ki: ${statusLabel}`);
   }
