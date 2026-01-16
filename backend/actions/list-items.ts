@@ -1,10 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { AGENTIC_RUN_STATUSES, type AgenticRunStatus } from '../../models/agentic-statuses';
+import { groupItemsForResponse } from '../lib/itemGrouping';
 import { defineHttpAction } from './index';
 
 // TODO(filters-api): Share filter parsing with other listing endpoints once navigation keeps filters in sync.
 // TODO(item-entity-filter): Revisit reference union performance once catalogue browsing expands beyond the item list.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
+// TODO(grouped-items): Remove legacy flat items response once frontend consumes groupedItems.
 
 type ItemEntityFilter = 'all' | 'instances' | 'references';
 
@@ -96,15 +98,17 @@ const action = defineHttpAction({
       const referenceItems =
         filters.entityFilter === 'instances' ? [] : ctx.listItemReferencesWithFilters.all(bindings);
       const items = [...instanceItems, ...referenceItems];
+      const groupedItems = groupItemsForResponse(instanceItems, { logger: console });
 
       console.log('list-items', {
         count: items.length,
+        groupedCount: groupedItems.length,
         filters: {
           ...filters,
           agenticStatusFilter: agenticStatus || 'any'
         }
       });
-      sendJson(res, 200, { items });
+      sendJson(res, 200, { items, groupedItems });
     } catch (err) {
       console.error('List items failed', err);
       sendJson(res, 500, { error: (err as Error).message });

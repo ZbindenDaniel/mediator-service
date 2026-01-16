@@ -23,6 +23,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - CSV import/export, QR scanning, and print label flows are available and continue to receive incremental polish.
 - Shopware support currently covers read-only product search plus a queued sync pipeline awaiting a real dispatch client.
 - The legacy agentic runtime has been ported into the mediator under `backend/agentic/`; ongoing work focuses on stability and integration follow-through.
+- In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
 

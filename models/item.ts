@@ -92,3 +92,13 @@ export type Item = ItemInstance & Partial<ItemRef> & {
   AgenticStatus?: AgenticRunStatus | null;
   AgenticReviewState?: string | null;
 };
+
+export interface GroupedItemSummary {
+  Artikel_Nummer: string | null;
+  Quality: number | null;
+  BoxID: string | null;
+  Location: string | null;
+  Category?: string | null;
+  count: number;
+  representativeItemId: string | null;
+}
