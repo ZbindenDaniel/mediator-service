@@ -168,7 +168,9 @@ export default function ItemListPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // TODO(item-list-search): Stage search input until we explicitly commit the filter on Enter.
   const [searchTerm, setSearchTerm] = useState(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
+  const [searchInput, setSearchInput] = useState(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
   const [sortKey, setSortKey] = useState<ItemListSortKey>(ITEM_LIST_DEFAULT_FILTERS.sortKey);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -186,6 +188,7 @@ export default function ItemListPage() {
     const storedFilters = loadItemListFilters(ITEM_LIST_DEFAULT_FILTERS);
     if (storedFilters) {
       setSearchTerm(storedFilters.searchTerm);
+      setSearchInput(storedFilters.searchTerm);
       setSubcategoryFilter(storedFilters.subcategoryFilter);
       setBoxFilter(storedFilters.boxFilter);
       setAgenticStatusFilter(storedFilters.agenticStatusFilter);
@@ -203,6 +206,7 @@ export default function ItemListPage() {
   useEffect(() => {
     const handleFilterReset = () => {
       setSearchTerm(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
+      setSearchInput(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
       setSubcategoryFilter(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
       setBoxFilter(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
       setAgenticStatusFilter(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
@@ -245,6 +249,28 @@ export default function ItemListPage() {
   useEffect(() => {
     latestFiltersRef.current = currentFilters;
   }, [currentFilters]);
+
+  const handleSearchInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(event.target.value);
+  }, []);
+
+  const handleSearchInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    event.preventDefault();
+    const nextValue = event.currentTarget.value;
+    try {
+      setSearchTerm(nextValue);
+      logger.info?.('Applied item list search filter', {
+        length: nextValue.trim().length
+      });
+    } catch (error) {
+      logError('Failed to apply item list search filter', error, {
+        value: nextValue
+      });
+    }
+  }, []);
 
   const loadItems = useCallback(async ({ silent = false, filters }: { silent?: boolean; filters?: ItemListFilters } = {}) => {
     const effectiveFilters = filters || latestFiltersRef.current;
@@ -523,14 +549,15 @@ export default function ItemListPage() {
                   <span>Artikelname</span>
                   <div className="sort-control__input">
                     <GoSearch aria-hidden="true" />
-                    <input
-                      aria-label="Artikel suchen"
-                      id="item-list-search"
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Beschreibung, Nummer oder UUID"
-                      type="search"
-                      value={searchTerm}
-                    />
+                                   <input
+                  aria-label="Artikel suchen"
+                  id="item-list-search"
+                  onChange={handleSearchInputChange}
+                  onKeyDown={handleSearchInputKeyDown}
+                  placeholder="Beschreibung, Nummer oder UUID"
+                  type="search"
+                  value={searchInput}
+                />
                   </div>
                 </label>
               </div>
