@@ -120,6 +120,9 @@ const categoryLabelFallbackWarnings = new Set<string>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
+const GROUPED_ITEM_UUID_SEPARATOR = '|';
+
+// TODO(export-items-grouping): Align grouped ItemUUID delimiters with reconciliation tooling if partner CSV rules change.
 
 function formatArtikelnummerForExport(value: unknown, itemUUID: string | null): unknown {
   if (value === null || value === undefined) {
@@ -291,6 +294,137 @@ function normalizeCategoryValueForExport(field: string, rawValue: unknown): unkn
   return numericValue;
 }
 
+function normalizeExportGroupingValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase();
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : '';
+  }
+  return String(value);
+}
+
+function resolveExportGroupingLocation(row: Record<string, unknown>): string {
+  const location = typeof row.Location === 'string' ? row.Location : null;
+  const locationId = typeof row.LocationId === 'string' ? row.LocationId : null;
+  return normalizeExportGroupingValue(location ?? locationId);
+}
+
+function buildExportGroupingKey(row: Record<string, unknown>, index: number): string {
+  const artikelNummer = normalizeExportGroupingValue(row.Artikel_Nummer);
+  const itemUUID = normalizeExportGroupingValue(row.ItemUUID);
+  const quality = normalizeExportGroupingValue(row.Quality);
+  const boxId = normalizeExportGroupingValue(row.BoxID);
+  const location = resolveExportGroupingLocation(row);
+  const identifier = artikelNummer || itemUUID || `row-${index}`;
+  return [identifier, quality || 'unknown', boxId, location].join('::');
+}
+
+function coerceNumericValue(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function resolveLatestTimestamp(primary: unknown, candidate: unknown): unknown {
+  const primaryValue = typeof primary === 'string' ? Date.parse(primary) : NaN;
+  const candidateValue = typeof candidate === 'string' ? Date.parse(candidate) : NaN;
+  if (!Number.isNaN(primaryValue) && !Number.isNaN(candidateValue)) {
+    return candidateValue > primaryValue ? candidate : primary;
+  }
+  return primary ?? candidate;
+}
+
+function resolveFallbackValue(primary: unknown, fallback: unknown): unknown {
+  if (primary !== null && primary !== undefined && primary !== '') {
+    return primary;
+  }
+  if (fallback !== null && fallback !== undefined && fallback !== '') {
+    return fallback;
+  }
+  return primary ?? fallback;
+}
+
+function groupExportRows(
+  rows: Record<string, unknown>[],
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): {
+  groupedRows: Record<string, unknown>[];
+  inputCount: number;
+  mergedCount: number;
+  legacyIdentifierGroups: number;
+} {
+  const grouped = new Map<
+    string,
+    { row: Record<string, unknown>; itemUUIDs: Set<string> }
+  >();
+  let mergedCount = 0;
+
+  rows.forEach((row, index) => {
+    const key = buildExportGroupingKey(row, index);
+    const itemUUID = typeof row.ItemUUID === 'string' ? row.ItemUUID.trim() : '';
+    const existing = grouped.get(key);
+    if (!existing) {
+      const itemUUIDs = new Set<string>();
+      if (itemUUID) {
+        itemUUIDs.add(itemUUID);
+      }
+      grouped.set(key, { row: { ...row }, itemUUIDs });
+      return;
+    }
+
+    mergedCount += 1;
+    if (itemUUID) {
+      existing.itemUUIDs.add(itemUUID);
+    }
+
+    const existingOnHand = coerceNumericValue(existing.row.Auf_Lager);
+    const incomingOnHand = coerceNumericValue(row.Auf_Lager);
+    if (existingOnHand !== null && incomingOnHand !== null) {
+      existing.row.Auf_Lager = existingOnHand + incomingOnHand;
+    } else if (existingOnHand === null && incomingOnHand !== null) {
+      existing.row.Auf_Lager = incomingOnHand;
+    }
+
+    existing.row.UpdatedAt = resolveLatestTimestamp(existing.row.UpdatedAt, row.UpdatedAt);
+    existing.row.BoxID = resolveFallbackValue(existing.row.BoxID, row.BoxID);
+    existing.row.Location = resolveFallbackValue(existing.row.Location, row.Location ?? row.LocationId);
+    existing.row.Label = resolveFallbackValue(existing.row.Label, row.Label);
+  });
+
+  let legacyIdentifierGroups = 0;
+  const groupedRows = Array.from(grouped.values()).map((entry) => {
+    if (entry.itemUUIDs.size > 1) {
+      legacyIdentifierGroups += 1;
+      entry.row.ItemUUID = Array.from(entry.itemUUIDs).join(GROUPED_ITEM_UUID_SEPARATOR);
+    } else if (entry.itemUUIDs.size === 1 && !entry.row.ItemUUID) {
+      entry.row.ItemUUID = Array.from(entry.itemUUIDs)[0];
+    }
+    return entry.row;
+  });
+
+  try {
+    logger.info?.('[export-items] Grouped export rows for CSV generation', {
+      inputCount: rows.length,
+      groupedCount: groupedRows.length,
+      mergedCount,
+      legacyIdentifierGroups
+    });
+  } catch (logError) {
+    logger.error?.('[export-items] Failed to log export grouping summary', logError);
+  }
+
+  return { groupedRows, inputCount: rows.length, mergedCount, legacyIdentifierGroups };
+}
+
 function toCsvValue(val: any): string {
   if (val === null || val === undefined) return '';
   const s = String(val);
@@ -335,8 +469,6 @@ function logMissingMetadataValue(
 // TODO(agent): Revisit CSV media derivation when asset manifests are queryable via API.
 function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
   const field = fieldMap[column];
-
-  
   if (!field) {
     if (!missingFieldWarnings.has(column)) {
       missingFieldWarnings.add(column);
@@ -647,7 +779,15 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
   };
 
   try {
-    const { csv } = serializeItemsToCsv(options.items);
+    let groupedRows = options.items;
+    try {
+      groupedRows = groupExportRows(options.items, logger).groupedRows;
+    } catch (groupingError) {
+      logger.error?.('[export-items] Failed to group export rows; using raw rows instead.', groupingError);
+      groupedRows = options.items;
+    }
+
+    const { csv } = serializeItemsToCsv(groupedRows);
     const boxesCsv = serializeBoxes(options.boxes ?? []);
     const itemsPath = path.join(tempDir, 'items.csv');
     const boxesPath = path.join(tempDir, 'boxes.csv');
