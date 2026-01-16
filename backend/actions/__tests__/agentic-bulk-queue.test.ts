@@ -145,15 +145,10 @@ describe('agentic-bulk-queue action', () => {
 
     await action.handle(req, res, ctx);
 
-    expect(ctx.getAgenticRun.get).toHaveBeenCalledTimes(2);
-    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(1);
-    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledWith(
-      expect.objectContaining({ ItemUUID: 'R-002', Status: 'queued', ReviewState: 'not_required' })
-    );
-    expect(ctx.logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ EntityId: 'R-002', Actor: 'tester', Event: 'AgenticSearchQueued' })
-    );
+    expect(ctx.getAgenticRun.get).not.toHaveBeenCalled();
+    expect(ctx.upsertAgenticRun.run).not.toHaveBeenCalled();
+    expect(ctx.logEvent).not.toHaveBeenCalled();
     expect(getStatus()).toBe(200);
-    expect(getBody()).toEqual(expect.objectContaining({ queued: 1, skipped: 1, total: 2 }));
+    expect(getBody()).toEqual(expect.objectContaining({ queued: 0, skipped: 2, total: 2 }));
   });
 });

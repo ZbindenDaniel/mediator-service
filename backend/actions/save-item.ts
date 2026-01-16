@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
-import type { Item, ItemInstanceSummary } from '../../models';
+import type { AgenticRun, Item, ItemInstanceSummary } from '../../models';
 import { normalizeQuality, QUALITY_DEFAULT } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { MEDIA_DIR } from '../lib/media';
@@ -446,7 +446,13 @@ const action = defineHttpAction({
         if (!item) return sendJson(res, 404, { error: 'Not found' });
         const box = ctx.getBox.get(item.BoxID);
         const events = ctx.listEventsForItem.all(itemId);
-        const agentic = ctx.getAgenticRun ? ctx.getAgenticRun.get(itemId) : null;
+        let agentic: AgenticRun | null = null;
+        try {
+          agentic = ctx.getAgenticRun ? ((ctx.getAgenticRun.get(itemId) as AgenticRun | undefined) ?? null) : null;
+        } catch (error) {
+          console.error('[save-item] Failed to load agentic run for item detail', { itemId, error });
+          agentic = null;
+        }
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
         const sanitizedItem = {
@@ -470,8 +476,10 @@ const action = defineHttpAction({
                   });
                   continue;
                 }
+                // TODO(agentic-instance-status): Keep instance list agentic statuses aligned with ItemUUID-based runs.
                 normalizedInstances.push({
                   ItemUUID: itemUUID,
+                  AgenticStatus: instance.AgenticStatus ?? null,
                   Quality: resolveItemQualityValue(instance.Quality, 'fetchInstance'),
                   Location: instance.Location ?? null,
                   BoxID: instance.BoxID ?? null,

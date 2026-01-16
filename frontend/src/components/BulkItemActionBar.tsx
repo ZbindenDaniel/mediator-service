@@ -321,7 +321,7 @@ export default function BulkItemActionBar({
     let confirmed = false;
     try {
       confirmed = await dialogService.confirm({
-        title: 'Agentic starten',
+        title: 'Ki starten',
         message: (
           <div className="bulk-item-action-bar__confirm-content">
             <p>Sollen KI Läufe für die Auswahl gestartet werden?</p>
@@ -420,14 +420,14 @@ export default function BulkItemActionBar({
       if (failures.length) {
         setFeedback({
           type: 'error',
-          message: `Agentic-Start fehlgeschlagen: ${failures.slice(0, 3).join('; ')}`
+          message: `Ki-Start fehlgeschlagen: ${failures.slice(0, 3).join('; ')}`
         });
         return;
       }
 
       setFeedback({
         type: 'info',
-        message: `Agentische Läufe für ${successCount} Artikel gestartet.`
+        message: `Ki-Läufe für ${successCount} Artikel gestartet.`
       });
     } finally {
       setIsProcessing(false);

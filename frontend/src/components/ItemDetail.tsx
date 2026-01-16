@@ -19,6 +19,7 @@ import {
   AGENTIC_RUN_STATUS_REJECTED,
   AGENTIC_RUN_STATUS_REVIEW,
   AGENTIC_RUN_STATUS_RUNNING,
+  AGENTIC_RUN_STATUSES,
   AGENTIC_RUN_TERMINAL_STATUSES,
   ItemEinheit,
   isItemEinheit,
@@ -28,6 +29,7 @@ import { describeQuality, QUALITY_DEFAULT } from '../../../models/quality';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
+import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
@@ -834,7 +836,7 @@ export default function ItemDetail({ itemId }: Props) {
           qualityThreshold: effectiveFilters.qualityThreshold
         });
 
-        const currentIndex = filtered.findIndex((entry) => entry.ItemUUID === itemId);
+        const currentIndex = filtered.findIndex((entry) => entry.summary.representativeItemId === itemId);
         if (currentIndex === -1) {
           logger.warn?.('ItemDetail: Current item missing from filtered list', {
             itemId,
@@ -843,8 +845,8 @@ export default function ItemDetail({ itemId }: Props) {
           });
         }
 
-        const fetchedPrevious = currentIndex > 0 ? filtered[currentIndex - 1]?.ItemUUID ?? null : null;
-        const fetchedNext = currentIndex >= 0 ? filtered[currentIndex + 1]?.ItemUUID ?? null : null;
+        const fetchedPrevious = currentIndex > 0 ? filtered[currentIndex - 1]?.summary.representativeItemId ?? null : null;
+        const fetchedNext = currentIndex >= 0 ? filtered[currentIndex + 1]?.summary.representativeItemId ?? null : null;
 
         setNeighborIds({
           previousId: neighborContext.previousId ?? fetchedPrevious,
@@ -1125,9 +1127,11 @@ export default function ItemDetail({ itemId }: Props) {
     return instances.map((instance) => {
       const qualityLabel =
         typeof instance.Quality === 'number' ? describeQuality(instance.Quality).label : null;
+      const agenticStatus = instance.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED;
       return {
         id: instance.ItemUUID,
         quality: qualityLabel,
+        agenticStatus: describeAgenticStatus(agenticStatus),
         location: instance.Location ?? null,
         updatedAt: instance.UpdatedAt ? formatDateTime(instance.UpdatedAt) : null,
         createdAt: instance.Datum_erfasst ? formatDateTime(instance.Datum_erfasst) : null
@@ -1272,9 +1276,16 @@ export default function ItemDetail({ itemId }: Props) {
               : typeof qualityRaw === 'string'
                 ? Number(qualityRaw)
                 : null;
+          const rawAgenticStatus = (entry as ItemInstanceSummary)?.AgenticStatus;
+          const parsedAgenticStatus =
+            typeof rawAgenticStatus === 'string'
+            && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
+              ? rawAgenticStatus
+              : null;
 
           normalized.push({
             ItemUUID: itemUUID,
+            AgenticStatus: parsedAgenticStatus,
             Quality: Number.isNaN(parsedQuality ?? NaN) ? null : parsedQuality,
             Location: (entry as ItemInstanceSummary)?.Location ?? null,
             BoxID: (entry as ItemInstanceSummary)?.BoxID ?? null,
@@ -2161,6 +2172,7 @@ export default function ItemDetail({ itemId }: Props) {
                         <tr>
                           <th>UUID</th>
                           <th>Qualität</th>
+                          <th>Ki</th>
                           <th>Standort</th>
                           <th>Aktualisiert</th>
                           <th>Erfasst</th>
@@ -2169,6 +2181,7 @@ export default function ItemDetail({ itemId }: Props) {
                       <tbody>
                         {instanceRows.map((row) => {
                           const qualityCell = normalizeDetailValue(row.quality);
+                          const agenticCell = normalizeDetailValue(row.agenticStatus);
                           const locationCell = normalizeDetailValue(row.location);
                           const updatedCell = normalizeDetailValue(row.updatedAt);
                           const createdCell = normalizeDetailValue(row.createdAt);
@@ -2177,6 +2190,9 @@ export default function ItemDetail({ itemId }: Props) {
                               <td>{row.id}</td>
                               <td className={qualityCell.isPlaceholder ? 'is-placeholder' : undefined}>
                                 {qualityCell.content}
+                              </td>
+                              <td className={agenticCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {agenticCell.content}
                               </td>
                               <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
                                 {locationCell.content}

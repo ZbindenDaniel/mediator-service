@@ -29,14 +29,14 @@ describe('item list quality filtering and sorting', () => {
 
     const result = filterAndSortItems(options);
 
-    expect(result.map((item) => item.ItemUUID)).toEqual(['C', 'B']);
+    expect(result.map((item) => item.summary.representativeItemId)).toEqual(['C', 'B']);
   });
 
   test('sorts by quality when requested', () => {
     const asc = filterAndSortItems(buildBaseOptions({ items }));
     const desc = filterAndSortItems(buildBaseOptions({ items, sortDirection: 'desc' }));
 
-    expect(asc.map((item) => item.ItemUUID)).toEqual(['A', 'C', 'B']);
-    expect(desc.map((item) => item.ItemUUID)).toEqual(['B', 'C', 'A']);
+    expect(asc.map((item) => item.summary.representativeItemId)).toEqual(['A', 'C', 'B']);
+    expect(desc.map((item) => item.summary.representativeItemId)).toEqual(['B', 'C', 'A']);
   });
 });

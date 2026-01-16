@@ -1,11 +1,13 @@
 // TODO(agent): Confirm instance timestamp expectations once API consumers validate date formatting.
 import type { AgenticRun } from './agentic-run';
+import type { AgenticRunStatus } from './agentic-statuses';
 import type { Box } from './box';
 import type { EventLog } from './event-log';
 import type { Item } from './item';
 
 export interface ItemInstanceSummary {
   ItemUUID: string;
+  AgenticStatus?: AgenticRunStatus | null;
   Quality?: number | null;
   Location?: string | null;
   BoxID?: string | null;

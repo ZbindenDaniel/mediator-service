@@ -12,10 +12,10 @@ const AGENTIC_FAILURE_REASON_DESCRIPTIONS: Record<string, string> = {
   'missing-search-query': 'Suchbegriff fehlt',
   'missing-item-id': 'ItemUUID fehlt',
   'missing-artikelbeschreibung': 'Artikelbeschreibung fehlt',
-  'agentic-start-failed': 'Agentischer Start fehlgeschlagen',
+  'agentic-start-failed': 'KI-Start fehlgeschlagen',
   'request-id-required': 'Anfrage-ID erforderlich',
-  'request-log-load-failed': 'Agentic-Anfragelog konnte nicht geladen werden',
-  'response-not-ok': 'Unerwartete Antwort vom Agentic-Dienst',
+  'request-log-load-failed': 'KI-Anfragelog konnte nicht geladen werden',
+  'response-not-ok': 'Unerwartete Antwort vom KI-Dienst',
   'network-error': 'Netzwerkfehler',
 };
 
@@ -134,14 +134,14 @@ export async function triggerAgenticRun({
         : '';
 
   if (!artikelbeschreibungCandidate) {
-    const message = `Agentic trigger skipped (${context}): missing Artikelbeschreibung`;
+    const message = `KI-Auslösung übersprungen (${context}): fehlende Artikelbeschreibung`;
     console.warn(message);
     return { outcome: 'skipped', reason: 'missing-artikelbeschreibung', message };
   }
 
   const itemId = itemIdCandidate;
   if (!itemId) {
-    const message = `Agentic trigger skipped (${context}): missing ItemUUID`;
+    const message = `KI-Auslösung übersprungen (${context}): fehlende ItemUUID`;
     console.warn(message);
     return { outcome: 'skipped', reason: 'missing-item-id', message };
   }
@@ -179,14 +179,14 @@ export async function triggerAgenticRun({
         } catch (textErr) {
           errorDetails = { message: 'Failed to read response body', cause: textErr };
         }
-        console.warn(`Agentic trigger failed during ${context}: non-JSON error payload`, jsonErr);
+        console.warn(`KI-Auslösung fehlgeschlagen (${context}): non-JSON error payload`, jsonErr);
       }
-      console.error(`Agentic trigger failed during ${context}`, response.status, errorDetails);
+      console.error(`KI-Auslösung fehlgeschlagen (${context})`, response.status, errorDetails);
       const failureReason = describeAgenticFailureReason(
         extractAgenticFailureReason(errorDetails) ?? 'response-not-ok'
       );
       const message = formatAgenticFailureMessage(
-        `Agentic trigger failed during ${context}`,
+        `KI-Auslösung fehlgeschlagen (${context})`,
         failureReason
       );
       return {
@@ -202,7 +202,7 @@ export async function triggerAgenticRun({
     try {
       parsedBody = await response.json();
     } catch (parseErr) {
-      console.warn(`Agentic trigger (${context}) succeeded but response body was not JSON`, parseErr);
+      console.warn(`KI-Auslösung (${context}) erfolgreich, Antwort nicht als JSON`, parseErr);
     }
     const agenticRun: AgenticRun | null = parsedBody?.agentic ?? null;
 
@@ -210,7 +210,7 @@ export async function triggerAgenticRun({
   } catch (err) {
     const failureReason = describeAgenticFailureReason('network-error');
     const message = formatAgenticFailureMessage(
-      `Agentic trigger invocation failed during ${context}`,
+      `KI-Auslösung fehlgeschlagen (${context})`,
       failureReason
     );
     console.error(message, err);
@@ -238,7 +238,7 @@ export async function persistAgenticRunCancellation({
 }: PersistAgenticRunCancellationOptions): Promise<PersistAgenticRunCancellationResult> {
   const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmedItemId) {
-    const message = `Agentic cancel skipped (${context}): missing ItemUUID`;
+    const message = `KI-Abbruch übersprungen (${context}): fehlende ItemUUID`;
     console.warn(message);
     return { ok: false, status: 400, agentic: null, message };
   }
@@ -255,8 +255,8 @@ export async function persistAgenticRunCancellation({
     if (!response.ok) {
       const isNotFound = response.status === 404;
       const message = isNotFound
-        ? `Agentic cancel skipped during ${context}: run not found`
-        : `Agentic cancel failed during ${context}`;
+        ? `KI-Abbruch übersprungen (${context}): Lauf nicht gefunden`
+        : `KI-Abbruch fehlgeschlagen (${context})`;
       const logger = isNotFound ? console.warn : console.error;
       logger(message, response.status);
       return { ok: false, status: response.status, agentic: null, message };
@@ -272,7 +272,7 @@ export async function persistAgenticRunCancellation({
     const agenticRun: AgenticRun | null = data?.agentic ?? null;
     return { ok: true, status: response.status, agentic: agenticRun };
   } catch (err) {
-    const message = `Agentic cancel request threw during ${context}`;
+    const message = `KI-Abbruch fehlgeschlagen (${context})`;
     console.error(message, err);
     return { ok: false, status: 0, agentic: null, message };
   }
@@ -301,7 +301,7 @@ export async function persistAgenticRunDeletion({
 }: PersistAgenticRunDeletionOptions): Promise<PersistAgenticRunDeletionResult> {
   const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmedItemId) {
-    const message = `Agentic delete skipped (${context}): missing ItemUUID`;
+    const message = `KI-Löschung übersprungen (${context}): fehlende ItemUUID`;
     console.warn(message);
     return { ok: false, status: 400, agentic: null, message, reason: 'missing-item-id' };
   }
@@ -319,8 +319,8 @@ export async function persistAgenticRunDeletion({
     if (!response.ok) {
       const isNotFound = response.status === 404;
       const message = isNotFound
-        ? `Agentic delete skipped during ${context}: run not found`
-        : `Agentic delete failed during ${context}`;
+        ? `KI-Löschung übersprungen (${context}): Lauf nicht gefunden`
+        : `KI-Löschung fehlgeschlagen (${context})`;
       const logger = isNotFound ? console.warn : console.error;
       logger(message, response.status);
       return {
@@ -342,7 +342,7 @@ export async function persistAgenticRunDeletion({
     const agenticRun: AgenticRun | null = data?.agentic ?? null;
     return { ok: true, status: response.status, agentic: agenticRun };
   } catch (err) {
-    const message = `Agentic delete request threw during ${context}`;
+    const message = `KI-Löschung fehlgeschlagen (${context})`;
     console.error(message, err);
     return { ok: false, status: 0, agentic: null, message, reason: 'network-error' };
   }
@@ -370,7 +370,7 @@ export async function persistAgenticRunClose({
 }: PersistAgenticRunCloseOptions): Promise<PersistAgenticRunCloseResult> {
   const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmedItemId) {
-    const message = `Agentic close skipped (${context}): missing ItemUUID`;
+    const message = `KI-Abschluss übersprungen (${context}): fehlende ItemUUID`;
     logger.warn?.(message);
     return { ok: false, status: 400, agentic: null, message };
   }
@@ -388,8 +388,8 @@ export async function persistAgenticRunClose({
     if (!response.ok) {
       const isNotFound = response.status === 404;
       const message = isNotFound
-        ? `Agentic close skipped during ${context}: run not found`
-        : `Agentic close failed during ${context}`;
+        ? `KI-Abschluss übersprungen (${context}): Lauf nicht gefunden`
+        : `KI-Abschluss fehlgeschlagen (${context})`;
       const loggerFn = isNotFound ? logger.warn : logger.error;
       loggerFn?.(message, { status: response.status });
       return { ok: false, status: response.status, agentic: null, message };
@@ -405,7 +405,7 @@ export async function persistAgenticRunClose({
     const agenticRun: AgenticRun | null = data?.agentic ?? null;
     return { ok: true, status: response.status, agentic: agenticRun };
   } catch (err) {
-    const message = `Agentic close request threw during ${context}`;
+    const message = `KI-Abschluss fehlgeschlagen (${context})`;
     logError(message, err);
     return { ok: false, status: 0, agentic: null, message };
   }
