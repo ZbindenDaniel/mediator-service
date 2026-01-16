@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
 
+// TODO(agent): Validate Artikel_Nummer requirements for instance creation during add-item flows.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -36,6 +37,30 @@ const action = defineHttpAction({
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const currentQty = resolveCurrentQuantity(item.Auf_Lager);
       const isBulk = isBulkEinheit(item.Einheit);
+      let newItemUUID: string | null = null;
+      if (!isBulk) {
+        try {
+          const attempts = 5;
+          for (let index = 0; index < attempts; index += 1) {
+            const candidate = await ctx.generateItemUUID(item.Artikel_Nummer ?? null);
+            if (!ctx.getItem.get(candidate)) {
+              newItemUUID = candidate;
+              break;
+            }
+          }
+          if (!newItemUUID) {
+            throw new Error('Failed to mint unique ItemUUID for add-item');
+          }
+        } catch (mintErr) {
+          console.error('[add-item] Failed to mint ItemUUID for instance creation', {
+            actor: actor,
+            itemId: uuid,
+            artikelNummer: item.Artikel_Nummer ?? null,
+            error: mintErr
+          });
+          return sendJson(res, 500, { error: 'Failed to mint ItemUUID for instance creation' });
+        }
+      }
       const txn = ctx.db.transaction((u: string, a: string) => {
         if (isBulk) {
           try {
@@ -84,26 +109,8 @@ const action = defineHttpAction({
           return { updated, createdItemId: null };
         }
 
-        let newItemUUID = '';
-        try {
-          const attempts = 5;
-          for (let index = 0; index < attempts; index += 1) {
-            const candidate = ctx.generateItemUUID();
-            if (!ctx.getItem.get(candidate)) {
-              newItemUUID = candidate;
-              break;
-            }
-          }
-          if (!newItemUUID) {
-            throw new Error('Failed to mint unique ItemUUID for add-item');
-          }
-        } catch (mintErr) {
-          console.error('[add-item] Failed to mint ItemUUID for instance creation', {
-            actor: a,
-            itemId: u,
-            error: mintErr
-          });
-          throw mintErr;
+        if (!newItemUUID) {
+          throw new Error('Missing ItemUUID for instance creation');
         }
 
         const now = new Date();

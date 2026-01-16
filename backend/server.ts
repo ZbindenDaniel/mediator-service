@@ -560,9 +560,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (action) {
       try {
         console.log('Handling action', action.key);
-        const generateItemId = () =>
-          generateSequentialItemUUID({
-            getMaxItemId: () => getMaxItemId.get() as { ItemUUID: string } | undefined,
+        // TODO(agent): Formalize ItemUUID generator typing once action contexts are consolidated.
+        const generateItemId = async (artikelNummer: string | null | undefined) =>
+          generateSequentialItemUUID(artikelNummer, {
+            getMaxItemId: ({ pattern, sequenceStartIndex }) =>
+              getMaxItemId.get({ pattern, sequenceStartIndex }) as { ItemUUID: string } | undefined,
             now: () => new Date()
           });
         await action.handle?.(req, res, {
