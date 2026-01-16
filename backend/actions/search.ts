@@ -34,6 +34,25 @@ function computeTokenScore(tokens: string[], candidateTokens: string[]): number 
 
 const DEFAULT_SEARCH_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
+// TODO(agent): Consider centralizing Auf_Lager parsing once search response normalization is shared across actions.
+function parseAufLagerValue(value: unknown, context: string): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      console.error('[search] Failed to parse Auf_Lager value', { context, value, error });
+      return 0;
+    }
+  }
+  return 0;
+}
+
 function normalizeSearchEinheit(value: unknown, context: string): ItemEinheit {
   try {
     const normalized = normalizeItemEinheit(value);
@@ -500,6 +519,14 @@ const action = defineHttpAction({
             ...item,
             Einheit: normalizeSearchEinheit(item.Einheit, `item-${index}`)
           };
+          const parsedAufLager = parseAufLagerValue(item.Auf_Lager, `item-${index}`);
+          if (sanitizedItem.Einheit !== ItemEinheit.Menge && parsedAufLager > 1) {
+            console.warn('[search] Instance item has Auf_Lager > 1', {
+              itemId: sanitizedItem.ItemUUID ?? null,
+              artikelNumber: sanitizedItem.Artikel_Nummer ?? null,
+              aufLager: parsedAufLager
+            });
+          }
           return { item: sanitizedItem, score: scoreItem(normalized, tokens, sanitizedItem) };
         })
         .sort((a: { score: number }, b: { score: number }) => b.score - a.score);

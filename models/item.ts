@@ -48,10 +48,10 @@ export interface ItemInstance {
   Location?: string | null;
   UpdatedAt: Date;
   Datum_erfasst?: Date;
-  // For Einheit Stk this is expected to be 1 per instance; for Einheit Menge it stores bulk quantity.
+  // For Einheit Stk this should be 1 per instance; grouped UI summaries rely on instance counts instead of Auf_Lager.
   // TODO(agent): Keep Auf_Lager semantics aligned with import/create flows as unit handling evolves.
   // For Einheit=Menge (Mix), Auf_Lager stores the total bulk quantity.
-  // For Einheit=Stk, each persisted instance uses Auf_Lager=1.
+  // For Einheit=Stk, each persisted instance uses Auf_Lager=1 and quantity displays should use grouped counts.
   Auf_Lager?: number;
   ShopwareVariantId?: string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade.

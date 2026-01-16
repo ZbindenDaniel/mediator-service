@@ -1,4 +1,5 @@
 import type { GroupedItemSummary, Item } from '../../../models';
+import { ItemEinheit, normalizeItemEinheit } from '../../../models';
 import { logError, logger } from '../utils/logger';
 
 export interface GroupedItemDisplay {
@@ -13,6 +14,7 @@ type GroupItemsOptions = {
   logContext?: string;
 };
 
+// TODO(agent): Revisit grouped quantity semantics if mixed Einheit payloads appear in a single grouping bucket.
 function normalizeString(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -26,9 +28,15 @@ function normalizeQuality(value: unknown): number | null {
     return value;
   }
   if (typeof value === 'string' && value.trim()) {
-    const parsed = Number.parseFloat(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
+    try {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      logError('[item-grouping] Failed to parse quality value', error, {
+        value
+      });
     }
   }
   return null;
@@ -43,9 +51,15 @@ function normalizeCategorySegment(value: unknown): string | null {
     if (!trimmed) {
       return null;
     }
-    const parsed = Number.parseInt(trimmed, 10);
-    if (!Number.isNaN(parsed)) {
-      return String(parsed).padStart(4, '0');
+    try {
+      const parsed = Number.parseInt(trimmed, 10);
+      if (!Number.isNaN(parsed)) {
+        return String(parsed).padStart(4, '0');
+      }
+    } catch (error) {
+      logError('[item-grouping] Failed to parse category segment', error, {
+        value: trimmed
+      });
     }
   }
   return null;
@@ -64,7 +78,52 @@ function resolveLocation(item: Item): { boxId: string | null; location: string |
 }
 
 function resolveStock(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      logError('[item-grouping] Failed to parse stock value', error, {
+        value
+      });
+    }
+  }
+  return 0;
+}
+
+function resolveEinheit(value: unknown, logContext: string, itemId: string | null): ItemEinheit | null {
+  try {
+    return normalizeItemEinheit(value);
+  } catch (error) {
+    logError(`[${logContext}] Failed to normalize Einheit`, error, {
+      itemId,
+      value
+    });
+    return null;
+  }
+}
+
+function resolveItemQuantity(
+  item: Item,
+  logContext: string
+): { quantity: number; isBulk: boolean; parsedAufLager: number } {
+  const einheit = resolveEinheit(item.Einheit, logContext, item.ItemUUID ?? null);
+  const isBulk = einheit === ItemEinheit.Menge;
+  const parsedAufLager = resolveStock(item.Auf_Lager);
+  if (!isBulk && parsedAufLager > 1) {
+    logger.warn?.(`[${logContext}] Instance item has Auf_Lager > 1`, {
+      itemId: item.ItemUUID ?? null,
+      artikelNumber: item.Artikel_Nummer ?? null,
+      einheit: einheit ?? null,
+      aufLager: parsedAufLager
+    });
+  }
+  return { quantity: isBulk ? parsedAufLager : 1, isBulk, parsedAufLager };
 }
 
 export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions = {}): GroupedItemDisplay[] {
@@ -106,10 +165,11 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         }
 
         const existing = grouped.get(key);
+        const quantityData = resolveItemQuantity(item, logContext);
         if (existing) {
           existing.summary.count += 1;
           existing.items.push(item);
-          existing.totalStock += resolveStock(item.Auf_Lager);
+          existing.totalStock += quantityData.quantity;
           if (!existing.summary.representativeItemId && item.ItemUUID) {
             existing.summary.representativeItemId = item.ItemUUID;
           }
@@ -132,7 +192,7 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
           },
           items: [item],
           representative: item,
-          totalStock: resolveStock(item.Auf_Lager)
+          totalStock: quantityData.quantity
         });
       } catch (error) {
         logError(`[${logContext}] Failed to group item`, error, {
