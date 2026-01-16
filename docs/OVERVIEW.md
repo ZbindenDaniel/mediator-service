@@ -31,6 +31,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added item detail instance summaries to surface per-reference inventory visibility in the detail view payload/UI.
 - Grouped item list and box detail rows in the frontend to surface counts while keeping list filtering and sorting aligned with grouped summaries.
 - Shifted ItemUUID minting to the Artikelnummer-based `I.<Artikelnummer>-####` format while keeping legacy date-based identifiers parseable for imports and reconciliation.
+- Adjusted item creation auto-printing to respect instance vs. bulk label policies and log partial print failures for follow-up.
 
 ## Documentation Map
 

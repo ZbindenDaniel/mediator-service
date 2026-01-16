@@ -4,7 +4,8 @@ import type { Item, ItemRef } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_RUNNING,
-  isItemEinheit
+  isItemEinheit,
+  ItemEinheit
 } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
@@ -399,6 +400,50 @@ export function buildCreationParams(
   });
 
   return params;
+}
+
+// TODO(agent): Confirm auto-print target resolution once bulk label handling is validated with operations.
+function resolveAutoPrintEinheit(value: unknown): ItemEinheit {
+  if (isItemEinheit(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (isItemEinheit(trimmed)) {
+      return trimmed;
+    }
+  }
+  return ITEM_FORM_DEFAULT_EINHEIT;
+}
+
+function resolveAutoPrintTargets(options: {
+  createdItem?: Item;
+  responseItems: Array<{ ItemUUID?: string | null }>;
+  einheit: ItemEinheit;
+}): { mode: 'bulk' | 'instance'; itemIds: string[] } {
+  const itemIds = new Set<string>();
+
+  for (const entry of options.responseItems) {
+    const raw = typeof entry?.ItemUUID === 'string' ? entry.ItemUUID.trim() : '';
+    if (raw) {
+      itemIds.add(raw);
+    }
+  }
+
+  const fallbackId = typeof options.createdItem?.ItemUUID === 'string' ? options.createdItem.ItemUUID.trim() : '';
+  if (fallbackId) {
+    itemIds.add(fallbackId);
+  }
+
+  if (options.einheit === ItemEinheit.Menge) {
+    if (fallbackId) {
+      return { mode: 'bulk', itemIds: [fallbackId] };
+    }
+    const firstId = itemIds.values().next().value;
+    return { mode: 'bulk', itemIds: firstId ? [firstId] : [] };
+  }
+
+  return { mode: 'instance', itemIds: Array.from(itemIds) };
 }
 
 export default function ItemCreate() {
@@ -907,6 +952,7 @@ export default function ItemCreate() {
 
       const body = await response.json();
       const createdItem: Item | undefined = body?.item;
+      const responseItems: Array<{ ItemUUID?: string | null }> = Array.isArray(body?.items) ? body.items : [];
       const searchText = (createdItem?.Artikelbeschreibung || submissionData.Artikelbeschreibung || '')
         .toString()
         .trim();
@@ -939,26 +985,66 @@ export default function ItemCreate() {
       }
 
       // TODO(agent): Validate auto-print behavior against production printers once enabled.
-      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && createdItem?.ItemUUID) {
+      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled) {
+        const einheit = resolveAutoPrintEinheit(submissionData.Einheit);
+        const autoPrintTargets = resolveAutoPrintTargets({
+          createdItem,
+          responseItems,
+          einheit
+        });
         try {
           const printActor = (await ensureUser()).trim();
           if (!printActor) {
             console.warn('Auto-print skipped: no actor resolved for item label', {
-              itemId: createdItem.ItemUUID,
+              itemId: createdItem?.ItemUUID,
               autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG
             });
           } else {
-            const printResult = await requestPrintLabel({
-              itemId: createdItem.ItemUUID,
-              actor: printActor
-            });
-            if (!printResult.ok) {
-              console.error('Auto-print item label failed', {
-                itemId: createdItem.ItemUUID,
+            if (!autoPrintTargets.itemIds.length) {
+              console.warn('Auto-print skipped: no item ids resolved for print targets', {
                 autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG,
-                status: printResult.status,
-                error: printResult.data.error || printResult.data.reason
+                mode: autoPrintTargets.mode,
+                einheit,
+                createdItemId: createdItem?.ItemUUID
               });
+            } else {
+              const failures: Array<{ itemId: string; status?: number; error?: unknown }> = [];
+              for (const itemId of autoPrintTargets.itemIds) {
+                try {
+                  const printResult = await requestPrintLabel({
+                    itemId,
+                    actor: printActor
+                  });
+                  if (!printResult.ok) {
+                    failures.push({
+                      itemId,
+                      status: printResult.status,
+                      error: printResult.data.error || printResult.data.reason
+                    });
+                    console.error('Auto-print item label failed', {
+                      itemId,
+                      autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG,
+                      status: printResult.status,
+                      error: printResult.data.error || printResult.data.reason
+                    });
+                  }
+                } catch (printError) {
+                  failures.push({ itemId, error: printError });
+                  console.error('Auto-print item label failed unexpectedly', {
+                    itemId,
+                    autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG,
+                    error: printError
+                  });
+                }
+              }
+              if (failures.length > 0) {
+                console.warn('Auto-print completed with partial failures', {
+                  autoPrintConfig: AUTO_PRINT_ITEM_LABEL_CONFIG,
+                  failures,
+                  mode: autoPrintTargets.mode,
+                  attempted: autoPrintTargets.itemIds.length
+                });
+              }
             }
           }
         } catch (autoPrintError) {
