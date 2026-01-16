@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { BulkRemoveResult } from '../db';
+import { generateShopwareCorrelationId } from '../db';
+import { ItemEinheit } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -26,6 +28,10 @@ function asQuantity(value: unknown): number {
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+function isBulkEinheit(value: unknown): boolean {
+  return value === ItemEinheit.Menge;
 }
 
 const action = defineHttpAction({
@@ -61,21 +67,33 @@ const action = defineHttpAction({
 
       const missing: string[] = [];
       const insufficient: Array<{ itemId: string; quantity: number }> = [];
-      const validItemIds: string[] = [];
+      const bulkItemIds: string[] = [];
+      const instanceItems: Array<{ itemId: string; boxId: string | null; quantity: number }> = [];
+
       for (const id of itemIds) {
         const item = ctx.getItem.get(id);
         if (!item) {
           missing.push(id);
           continue;
         }
-        const quantity = asQuantity(item.Auf_Lager);
-        if (quantity <= 0) {
-          insufficient.push({ itemId: id, quantity });
+        if (isBulkEinheit(item.Einheit)) {
+          const quantity = asQuantity(item.Auf_Lager);
+          if (quantity <= 0) {
+            insufficient.push({ itemId: id, quantity });
+          } else {
+            bulkItemIds.push(id);
+          }
         } else {
-          validItemIds.push(id);
+          const instanceQuantity = asQuantity(item.Auf_Lager) || 1;
+          instanceItems.push({
+            itemId: id,
+            boxId: item.BoxID ?? null,
+            quantity: instanceQuantity
+          });
         }
       }
 
+      const validItemIds = [...bulkItemIds, ...instanceItems.map((entry) => entry.itemId)];
       if (!validItemIds.length) {
         if (missing.length) {
           return sendJson(res, 404, { error: 'no items found', itemIds: missing });
@@ -91,11 +109,82 @@ const action = defineHttpAction({
       }
 
       let results: BulkRemoveResult[] = [];
-      try {
-        results = ctx.bulkRemoveItemStock(validItemIds, actor);
-      } catch (dbErr) {
-        console.error('[bulk-delete-items] Database transaction failed', dbErr);
-        return sendJson(res, 500, { error: (dbErr as Error).message });
+      if (instanceItems.length) {
+        try {
+          const runInstanceDeletes = ctx.db.transaction(
+            (items: Array<{ itemId: string; boxId: string | null; quantity: number }>): BulkRemoveResult[] => {
+              const deleted: BulkRemoveResult[] = [];
+              for (const entry of items) {
+                try {
+                  ctx.deleteItem.run(entry.itemId);
+                } catch (deleteErr) {
+                  console.error('[bulk-delete-items] Failed to delete item instance', {
+                    actor,
+                    itemId: entry.itemId,
+                    quantityBefore: entry.quantity,
+                    error: deleteErr
+                  });
+                  throw deleteErr;
+                }
+                ctx.logEvent({
+                  Actor: actor,
+                  EntityType: 'Item',
+                  EntityId: entry.itemId,
+                  Event: 'Removed',
+                  Meta: JSON.stringify({
+                    fromBox: entry.boxId,
+                    before: entry.quantity,
+                    after: 0,
+                    clearedBox: true
+                  })
+                });
+                try {
+                  const correlationId = generateShopwareCorrelationId('bulk-delete-instance', entry.itemId);
+                  const payload = JSON.stringify({
+                    actor,
+                    quantityBefore: entry.quantity,
+                    quantityAfter: 0,
+                    boxId: entry.boxId,
+                    itemUUID: entry.itemId,
+                    trigger: 'bulk-delete-items'
+                  });
+                  ctx.enqueueShopwareSyncJob({
+                    CorrelationId: correlationId,
+                    JobType: 'item-delete',
+                    Payload: payload
+                  });
+                } catch (queueErr) {
+                  console.error('[bulk-delete-items] Failed to enqueue Shopware sync job for instance delete', {
+                    actor,
+                    itemId: entry.itemId,
+                    error: queueErr
+                  });
+                }
+                deleted.push({
+                  itemId: entry.itemId,
+                  fromBoxId: entry.boxId,
+                  before: entry.quantity,
+                  after: 0,
+                  clearedBox: true
+                });
+              }
+              return deleted;
+            }
+          );
+          results = results.concat(runInstanceDeletes(instanceItems));
+        } catch (dbErr) {
+          console.error('[bulk-delete-items] Instance deletion transaction failed', dbErr);
+          return sendJson(res, 500, { error: (dbErr as Error).message });
+        }
+      }
+
+      if (bulkItemIds.length) {
+        try {
+          results = results.concat(ctx.bulkRemoveItemStock(bulkItemIds, actor));
+        } catch (dbErr) {
+          console.error('[bulk-delete-items] Bulk stock removal transaction failed', dbErr);
+          return sendJson(res, 500, { error: (dbErr as Error).message });
+        }
       }
 
       console.log('[bulk-delete-items] Removed stock for items', { count: results.length });
@@ -118,4 +207,3 @@ const action = defineHttpAction({
 });
 
 export default action;
-

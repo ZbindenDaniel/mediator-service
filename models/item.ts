@@ -48,6 +48,7 @@ export interface ItemInstance {
   Location?: string | null;
   UpdatedAt: Date;
   Datum_erfasst?: Date;
+  // For Einheit Stk this is expected to be 1 per instance; for Einheit Menge it stores bulk quantity.
   Auf_Lager?: number;
   ShopwareVariantId?: string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade.
