@@ -15,6 +15,7 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
   // TODO(agent): Review spacing and status copy when embedding this button in success dialogs.
   // TODO(agent): Align print label payloads with backend actor + labelType expectations.
   // TODO(agent): Confirm button styling matches previous linkcard navigation affordance.
+  // TODO(agent): Surface label type and entity metadata in status output for troubleshooting.
   async function handleClick(event?: React.MouseEvent<HTMLElement>) {
     try {
       event?.preventDefault();
@@ -43,6 +44,12 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
           setStatus('Vorschau bereit');
         }
       } else {
+        console.error('Print request returned non-OK status', {
+          status: result.status,
+          labelType: result.labelType,
+          entityId: result.entityId,
+          error: result.data?.error || result.data?.reason
+        });
         setStatus('Error: ' + (result.data.error || result.data.reason || result.status));
       }
     } catch (err) {

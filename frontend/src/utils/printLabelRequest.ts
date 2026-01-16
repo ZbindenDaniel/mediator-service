@@ -1,18 +1,10 @@
+import type { PrintLabelRequestBody, PrintLabelResponsePayload, PrintLabelType } from '../../../models';
 import { logError, logger } from './logger';
-
-export type PrintLabelType = 'box' | 'item' | 'shelf';
-
-export interface PrintLabelRequestPayload {
-  previewUrl?: string;
-  sent?: boolean;
-  reason?: string;
-  error?: string;
-}
 
 export interface PrintLabelRequestResult {
   ok: boolean;
   status: number;
-  data: PrintLabelRequestPayload;
+  data: PrintLabelResponsePayload;
   labelType: PrintLabelType | null;
   entityId: string | null;
 }
@@ -75,11 +67,12 @@ export async function requestPrintLabel({
   const url = `/api/print/${labelType}/${encodeURIComponent(entityId)}`;
 
   let response: Response;
+  const payload: PrintLabelRequestBody = { actor: trimmedActor, labelType };
   try {
     response = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor: trimmedActor, labelType })
+      body: JSON.stringify(payload)
     });
   } catch (err) {
     logError('Print request failed', err, { labelType, entityId });
@@ -92,7 +85,7 @@ export async function requestPrintLabel({
     };
   }
 
-  let data: PrintLabelRequestPayload = {};
+  let data: PrintLabelResponsePayload = {};
   try {
     data = await response.json();
   } catch (err) {

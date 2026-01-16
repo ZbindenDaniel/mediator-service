@@ -191,6 +191,7 @@ function buildItemLabelPayload(item: Item): ItemLabelPayload {
     labelType: 'item',
     itemId: item.ItemUUID
   });
+  // TODO(agent): Consider passing Einheit metadata into label payloads for bulk/instance diagnostics.
   return {
     type: 'item',
     id: item.ItemUUID,
