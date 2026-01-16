@@ -27,7 +27,9 @@ import { resolveCategoryLabelToCode, CategoryFieldType } from './lib/categoryLab
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
-const ITEM_ID_PREFIX = 'I-';
+// TODO(agent): Seed Artikelnummer-based ItemUUID sequences from the database for high-concurrency imports.
+const ITEM_ID_PREFIX = 'I.';
+const LEGACY_ITEM_ID_PREFIX = 'I-';
 const BOX_ID_PREFIX = 'B-';
 const ID_SEQUENCE_WIDTH = 4;
 const ARTIKEL_NUMMER_WIDTH = 5;
@@ -699,6 +701,25 @@ function mintSequentialIdentifier(
   return `${prefix}${segment}-${sequenceSegment}`;
 }
 
+function mintArtikelItemIdentifier(
+  prefix: string,
+  artikelNummer: string,
+  sequences: Map<string, number>
+): string {
+  const normalizedArtikelNummer = artikelNummer.trim();
+  if (!normalizedArtikelNummer) {
+    throw new Error('Missing Artikel_Nummer for ItemUUID minting');
+  }
+  if (normalizedArtikelNummer.includes('-')) {
+    throw new Error('Invalid Artikel_Nummer for ItemUUID minting');
+  }
+  const previous = sequences.get(normalizedArtikelNummer) ?? 0;
+  const next = previous + 1;
+  sequences.set(normalizedArtikelNummer, next);
+  const sequenceSegment = String(next).padStart(ID_SEQUENCE_WIDTH, '0');
+  return `${prefix}${normalizedArtikelNummer}-${sequenceSegment}`;
+}
+
 // TODO(agent): Replace sequential Artikel_Nummer minting with DB-backed counters when ingestion concurrency grows.
 type ArtikelNummerMintState = {
   baseValue: number;
@@ -870,6 +891,7 @@ export async function ingestCsvFile(
     const zeroStockRequested = options.zeroStock ?? IMPORTER_FORCE_ZERO_STOCK;
     let count = 0;
     const boxesTouched = new Set<string>();
+    const itemSequenceByArtikelNummer = new Map<string, number>();
     const itemSequenceByDate = new Map<string, number>();
     const boxSequenceByDate = new Map<string, number>();
     const mintedBoxByOriginal = new Map<string, string>();
@@ -1190,13 +1212,29 @@ export async function ingestCsvFile(
       }
 
       if (!baseItemUUID) {
-        baseItemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
-        console.log('[importer] Minted ItemUUID for CSV row', {
-          rowNumber,
-          artikelNummer: artikelNummer || null,
-          itemUUID: baseItemUUID,
-        });
-        final.itemUUID = baseItemUUID;
+        try {
+          if (!artikelNummer) {
+            console.warn('[importer] Falling back to legacy ItemUUID minting due to missing Artikel_Nummer', {
+              rowNumber,
+            });
+            baseItemUUID = mintSequentialIdentifier(LEGACY_ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
+          } else {
+            baseItemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummer, itemSequenceByArtikelNummer);
+          }
+          console.log('[importer] Minted ItemUUID for CSV row', {
+            rowNumber,
+            artikelNummer: artikelNummer || null,
+            itemUUID: baseItemUUID,
+          });
+          final.itemUUID = baseItemUUID;
+        } catch (error) {
+          console.error('[importer] Failed to mint ItemUUID for CSV row', {
+            rowNumber,
+            artikelNummer: artikelNummer || null,
+            error,
+          });
+          throw error;
+        }
       } else if (final.itemUUID !== baseItemUUID) {
         final.itemUUID = baseItemUUID;
       }
@@ -1212,13 +1250,31 @@ export async function ingestCsvFile(
       for (let instanceIndex = 0; instanceIndex < instancePlan.instanceCount; instanceIndex += 1) {
         let itemUUID = baseItemUUID;
         if (instanceIndex > 0) {
-          itemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
-          console.log('[importer] Minted ItemUUID for split item instance', {
-            rowNumber,
-            artikelNummer: artikelNummer || null,
-            itemUUID,
-            instanceIndex: instanceIndex + 1,
-          });
+          try {
+            if (!artikelNummer) {
+              console.warn('[importer] Falling back to legacy ItemUUID minting due to missing Artikel_Nummer', {
+                rowNumber,
+                instanceIndex: instanceIndex + 1,
+              });
+              itemUUID = mintSequentialIdentifier(LEGACY_ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
+            } else {
+              itemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummer, itemSequenceByArtikelNummer);
+            }
+            console.log('[importer] Minted ItemUUID for split item instance', {
+              rowNumber,
+              artikelNummer: artikelNummer || null,
+              itemUUID,
+              instanceIndex: instanceIndex + 1,
+            });
+          } catch (error) {
+            console.error('[importer] Failed to mint ItemUUID for split item instance', {
+              rowNumber,
+              artikelNummer: artikelNummer || null,
+              instanceIndex: instanceIndex + 1,
+              error,
+            });
+            throw error;
+          }
         }
 
         const item: Item = {

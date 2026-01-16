@@ -2380,11 +2380,12 @@ export const getMaxBoxId = db.prepare(
    ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC
    LIMIT 1`
 );
+// TODO(agent): Revisit ItemUUID sequence width parsing if Artikelnummer-based IDs evolve.
 export const getMaxItemId = db.prepare(
   `SELECT ItemUUID
    FROM items
-   WHERE ItemUUID GLOB 'I-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9]'
-   ORDER BY substr(ItemUUID, 3, 6) DESC, CAST(substr(ItemUUID, 10, 4) AS INTEGER) DESC
+   WHERE ItemUUID LIKE @pattern
+   ORDER BY CAST(substr(ItemUUID, @sequenceStartIndex, 4) AS INTEGER) DESC
    LIMIT 1`
 );
 export const getMaxArtikelNummer = getMaxArtikelNummerStatement;

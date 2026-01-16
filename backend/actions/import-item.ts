@@ -14,7 +14,7 @@ import type { AgenticRunStatus } from '../../models';
 import { defineHttpAction } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
-import { generateItemUUID, parseSequentialItemUUID } from '../lib/itemIds';
+import { parseSequentialItemUUID } from '../lib/itemIds';
 import { MEDIA_DIR } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
@@ -27,24 +27,37 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 // TODO(agent): Capture the provisional ItemUUID sequence snapshot to avoid reusing stale maxima during regeneration.
 // TODO(agent): Normalize getItem.get to a consistent sync/async contract to simplify uniqueness checks.
 // TODO(agent): Confirm legacy Einheit normalization coverage for import-item once CSV-derived payloads are audited.
+// TODO(agent): Document ItemUUID parser expectations for Artikelnummer-based formats when adding new import clients.
 async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string> {
   const maxAttempts = 3;
   let attempt = 0;
   let itemUUID = candidate;
 
-  const resolveSequentialContext = (current: string): { prefix: string; dateSegment: string; sequence: number } | null => {
-    const parsed = parseSequentialItemUUID(current);
+  const resolveSequentialContext = (
+    current: string
+  ): { prefix: string; identifier: string; sequence: number; kind: 'artikelnummer' | 'date' } | null => {
+    let parsed: ReturnType<typeof parseSequentialItemUUID> | null = null;
+    try {
+      parsed = parseSequentialItemUUID(current);
+    } catch (error) {
+      console.error('[import-item] Failed to parse ItemUUID during collision handling', {
+        candidate: current,
+        error
+      });
+    }
     if (!parsed) {
       return null;
     }
 
-    const suffixWidth = parsed.dateSegment.length + 1 + String(parsed.sequence).padStart(4, '0').length;
+    const identifier = parsed.kind === 'artikelnummer' ? parsed.artikelNummer : parsed.dateSegment;
+    const suffixWidth = identifier.length + 1 + String(parsed.sequence).padStart(4, '0').length;
     const prefixLength = current.length - suffixWidth;
     const prefix = prefixLength > 0 ? current.slice(0, prefixLength) : '';
     return {
       prefix,
-      dateSegment: parsed.dateSegment,
-      sequence: parsed.sequence
+      identifier,
+      sequence: parsed.sequence,
+      kind: parsed.kind
     };
   };
 
@@ -54,8 +67,8 @@ async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string
       return null;
     }
 
-    const sequenceStartIndex = context.prefix.length + context.dateSegment.length + 2;
-    const pattern = `${context.prefix}${context.dateSegment}-%`;
+    const sequenceStartIndex = context.prefix.length + context.identifier.length + 2;
+    const pattern = `${context.prefix}${context.identifier}-%`;
 
     try {
       const statement = ctx.db.prepare(
@@ -66,12 +79,17 @@ async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string
          LIMIT 1`
       );
       const row = statement.get(pattern, sequenceStartIndex) as { ItemUUID?: string } | undefined;
-      const latestSequence = row?.ItemUUID
-        ? parseSequentialItemUUID(row.ItemUUID, context.prefix)?.sequence ?? null
-        : null;
+      const parsed = row?.ItemUUID ? parseSequentialItemUUID(row.ItemUUID, context.prefix) : null;
+      if (row?.ItemUUID && !parsed) {
+        console.warn('[import-item] Unable to parse ItemUUID from collision query result', {
+          candidate: current,
+          ItemUUID: row.ItemUUID
+        });
+      }
+      const latestSequence = parsed ? parsed.sequence : null;
       const nextSequence = Math.max(latestSequence ?? 0, context.sequence) + 1;
       const nextSequenceSegment = String(nextSequence).padStart(4, '0');
-      return `${context.prefix}${context.dateSegment}-${nextSequenceSegment}`;
+      return `${context.prefix}${context.identifier}-${nextSequenceSegment}`;
     } catch (dbSequenceError) {
       console.error('[import-item] Failed to resolve next ItemUUID sequence from database', {
         candidate: current,
@@ -120,17 +138,19 @@ async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string
         continue;
       }
 
-      const regenerated = await ctx.generateItemUUID();
-      if (regenerated && regenerated !== itemUUID) {
-        itemUUID = regenerated;
-        continue;
+      const regeneratingContext = resolveSequentialContext(itemUUID);
+      if (regeneratingContext?.kind === 'artikelnummer') {
+        const regenerated = await ctx.generateItemUUID(regeneratingContext.identifier);
+        if (regenerated && regenerated !== itemUUID) {
+          itemUUID = regenerated;
+          continue;
+        }
       }
 
-      const sequentialContext = resolveSequentialContext(itemUUID);
-      if (sequentialContext) {
-        const nextSequence = sequentialContext.sequence + 1;
+      if (regeneratingContext) {
+        const nextSequence = regeneratingContext.sequence + 1;
         const nextSequenceSegment = String(nextSequence).padStart(4, '0');
-        const sequentialCandidate = `${sequentialContext.prefix}${sequentialContext.dateSegment}-${nextSequenceSegment}`;
+        const sequentialCandidate = `${regeneratingContext.prefix}${regeneratingContext.identifier}-${nextSequenceSegment}`;
         console.info('[import-item] Incrementing ItemUUID sequence locally to avoid repeated collisions', {
           attempt,
           previousItemUUID: itemUUID,
@@ -411,7 +431,7 @@ const action = defineHttpAction({
 
         let mintedUUID: string;
         try {
-          mintedUUID = await ctx.generateItemUUID();
+          mintedUUID = await ctx.generateItemUUID(artikelNummerCandidate);
         } catch (error) {
           console.error('[import-item] Failed to mint ItemUUID for new item import', {
             Artikel_Nummer: artikelNummerCandidate || undefined,
@@ -502,7 +522,7 @@ const action = defineHttpAction({
 
             let mintedUUID: string;
             try {
-              mintedUUID = await ctx.generateItemUUID();
+              mintedUUID = await ctx.generateItemUUID(normalizedReference.Artikel_Nummer);
             } catch (error) {
               console.error('[import-item] Failed to mint ItemUUID for creation-by-reference branch', {
                 Artikel_Nummer: normalizedReference.Artikel_Nummer,
@@ -946,7 +966,7 @@ const action = defineHttpAction({
             throw new Error('Missing generateItemUUID dependency for instance creation');
           }
           for (let index = 1; index < creationPlan.instanceCount; index += 1) {
-            const candidate = await ctx.generateItemUUID();
+            const candidate = await ctx.generateItemUUID(resolvedArtikelNummer || incomingArtikelNummer || null);
             if (!candidate) {
               throw new Error('Failed to mint ItemUUID for instance creation');
             }
