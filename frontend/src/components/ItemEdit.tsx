@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AGENTIC_RUN_ACTIVE_STATUSES, normalizeAgenticRunStatus } from '../../../models';
 import type { Item } from '../../../models';
+// TODO(agentic-edit-lock): Add a read-only fallback view when edits are blocked by active agentic runs.
 import ItemForm from './ItemForm';
 import { ensureUser } from '../lib/user';
 import ItemMediaGallery from './ItemMediaGallery';
 import { useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
+import { logger } from '../utils/logger';
 
 interface Props {
   itemId: string;
@@ -86,7 +89,33 @@ export default function ItemEdit({ itemId }: Props) {
         const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
         if (res.ok) {
           const data = await res.json();
-          setItem(data.item);
+          const nextItem = data?.item ?? null;
+          if (!nextItem) {
+            console.error('Failed to load item: empty payload', { itemId });
+            setMediaAssets([]);
+            return;
+          }
+          const agenticStatus = typeof nextItem.AgenticStatus === 'string'
+            ? normalizeAgenticRunStatus(nextItem.AgenticStatus)
+            : null;
+          const agenticActive = agenticStatus ? AGENTIC_RUN_ACTIVE_STATUSES.has(agenticStatus) : false;
+          if (agenticActive) {
+            logger.info?.('Blocking item edit because agentic run is active', {
+              itemId,
+              status: agenticStatus
+            });
+            try {
+              await dialog.alert({
+                title: 'Bearbeiten nicht möglich',
+                message: 'Während eines laufenden KI-Laufs kann der Artikel nicht bearbeitet werden.'
+              });
+            } catch (error) {
+              console.error('Failed to display agentic edit block alert', error);
+            }
+            navigate(`/items/${encodeURIComponent(itemId)}`);
+            return;
+          }
+          setItem(nextItem);
           const media = Array.isArray(data.media)
             ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
             : [];

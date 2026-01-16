@@ -444,17 +444,26 @@ export default function BulkItemActionBar({
 
     let confirmed = false;
     try {
-      confirmed = await dialogService.confirm({
-        title: 'ERP Sync',
+      dialogService.alert({
+        title: 'Kivitendo Sync',
         message: (
           <div className="bulk-item-action-bar__confirm-content">
-            <p>Sollen die ausgewählten Artikel an das ERP synchronisiert werden?</p>
+            <p>Diese Funktion ist zur Zeit nicht verfügbar!</p>
             <p>{selectionLabel}</p>
           </div>
         ),
-        confirmLabel: 'Sync starten',
-        cancelLabel: 'Abbrechen'
       });
+      // confirmed = await dialogService.confirm({
+      //   title: 'Kivitendo Sync',
+      //   message: (
+      //     <div className="bulk-item-action-bar__confirm-content">
+      //       <p>Sollen die ausgewählten Artikel an das ERP synchronisiert werden?</p>
+      //       <p>{selectionLabel}</p>
+      //     </div>
+      //   ),
+      //   confirmLabel: 'Sync starten',
+      //   cancelLabel: 'Abbrechen'
+      // });
       console.info('Bulk ERP sync confirmation resolved', {
         confirmed,
         selectionCount: selectedCount
@@ -647,28 +656,8 @@ export default function BulkItemActionBar({
           inputClassName="bulk-item-action-bar__target-input"
         />
       </div>
+
       <div className="bulk-item-action-bar__buttons row">
-        <button
-          className="bulk-item-action-bar__button"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => {
-            void handleBulkAgenticStart();
-          }}
-          type="button"
-        >
-          <span>Agentisch starten</span>
-        </button>
-        <button
-          className="bulk-item-action-bar__button"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => {
-            void handleBulkSyncToErp();
-          }}
-          type="button"
-        >
-          <GoSync aria-hidden="true" />
-          <span>Sync to ERP</span>
-        </button>
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--primary"
           disabled={isProcessing || !hasSelection}
@@ -680,6 +669,7 @@ export default function BulkItemActionBar({
           <GoMoveToEnd aria-hidden="true" />
           <span>Verschieben</span>
         </button>
+
         <button
           className="bulk-item-action-bar__button"
           disabled={isProcessing || !hasSelection}
@@ -691,6 +681,30 @@ export default function BulkItemActionBar({
           <GoPackageDependents aria-hidden="true" />
           <span>In neuen Behälter verschieben</span>
         </button>
+
+        <button
+          className="bulk-item-action-bar__button"
+          disabled={isProcessing || !hasSelection}
+          onClick={() => {
+            void handleBulkAgenticStart();
+          }}
+          type="button"
+        >
+          <span>Ki starten</span>
+        </button>
+
+        <button
+          className="bulk-item-action-bar__button"
+          disabled={isProcessing || !hasSelection}
+          onClick={() => {
+            void handleBulkSyncToErp();
+          }}
+          type="button"
+        >
+          <GoSync aria-hidden="true" />
+          <span>Sync to ERP</span>
+        </button>
+
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--danger"
           disabled={isProcessing || !hasSelection}

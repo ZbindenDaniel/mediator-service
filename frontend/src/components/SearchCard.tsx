@@ -40,9 +40,6 @@ export default function SearchCard() {
     <div className="card" id="find">
       <div className="card-header">
         <h2>Finden</h2>
-        <Link to="/items" id="all-items" aria-label="Alle Artikel anzeigen">
-          Alle
-        </Link>
       </div>
       <div className="row">
         <input

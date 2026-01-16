@@ -5,6 +5,7 @@ import RelocateItemCard from './RelocateItemCard';
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
 // TODO(agentic-close): Confirm close action copy and endpoint payload once backend wiring lands.
+// TODO(agentic-edit-lock): Confirm messaging for edit restrictions while agentic runs are active.
 import type { Item, EventLog, AgenticRun } from '../../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
@@ -1951,6 +1952,28 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
 
+  async function handleEdit() {
+    if (!item) {
+      return;
+    }
+    if (agenticIsInProgress) {
+      logger.info?.('Blocking item edit because agentic run is active', {
+        itemId: item.ItemUUID,
+        status: agentic?.Status ?? null
+      });
+      try {
+        await dialogService.alert({
+          title: 'Bearbeiten nicht möglich',
+          message: 'Während eines laufenden KI-Laufs kann der Artikel nicht bearbeitet werden.'
+        });
+      } catch (error) {
+        console.error('Failed to display agentic edit block alert', error);
+      }
+      return;
+    }
+    navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
+  }
+
   async function handleDelete() {
     if (!item) return;
     let confirmed = false;
@@ -2063,7 +2086,7 @@ export default function ItemDetail({ itemId }: Props) {
                 </table>
               </div>
               <div className='row'>
-                <button type="button" className="btn" onClick={() => navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`)}>Bearbeiten</button>
+                <button type="button" className="btn" onClick={handleEdit}>Bearbeiten</button>
                 <button type="button" className="btn" onClick={async () => {
                   let confirmed = false;
                   const actor = await ensureUser();

@@ -1,139 +1,37 @@
 # Project Overview
-Dependency changes should refresh the lockfile via `npm install --package-lock-only` so CI lockfile checks remain green.
 
-The mediator service coordinates warehouse inventory workflows by pairing a TypeScript/Node.js backend with a React frontend for managing boxes, items, and print assets. This document provides a planning-oriented snapshot of priorities, risks, and recent progress.
+The mediator service coordinates warehouse inventory workflows by pairing a TypeScript/Node.js backend with a React frontend for managing boxes, items, and print assets. This overview gives a high-level snapshot of the system, plus references for architecture, planning, issues, and recent changes.
 
 ## Mission & Scope
+
 - Provide API endpoints and background workers to manage boxes, items, QR scans, and CSV imports.
 - Deliver a responsive React UI that surfaces search, detail, and import tooling for logistics teams.
 - Maintain printable label templates and legacy scripts required for production operations.
 
-## Domain Concepts
-- **Items & ItemRefs** – Catalog entries describing IT equipment (e.g., laptops, monitors). `ItemRef` captures canonical
-  metadata while individual `itemInstances` track stock, storage status, and historical changes.
-- **Boxes (Behälter)** – Physical containers that hold one or more items. Boxes are colour-coded by warehouse section so staff
-  can quickly find them even in a chaotic layout.
-- **Locations & Sections** – Warehouse zones identified by colour/label that group boxes for faster retrieval. Box records link
-  to these locations.
-- **Agentic Runs** – AI-assisted enrichment flows that start from partial item data, perform targeted web searches, and propose
-  missing attributes for human review before acceptance.
-- **Imports & ERP Bridge** – CSV uploads seeded from an external ERP initialize the catalogue. Future integrations (e.g.,
-  Shopware) will build on the same ingestion path.
-- **Printing & QR Labels** – Boxes and items receive QR codes and human-readable stickers. The printing stack generates label PDFs
-  from the canonical `frontend/public/print/62x100.html` (boxes) and `frontend/public/print/29x90.html` (items) templates, stores
-  previews, and dispatches jobs to CUPS-compatible printers. Shelf labels use the A4 template
-  (`frontend/public/print/shelf-a4.html`) with QR payloads that include the shelf ID plus a category label resolved from the shelf
-  ID segment (`S-<location>-<floor>-<category>-<index>`). Category segments are matched against canonical item category labels (see
-  `models/item-categories.ts`), with numeric segments falling back to category code lookups.
+## Project Parts
 
-## Architectural Patterns in Practice
-- **Action architecture** – The backend dynamically loads `backend/actions/*` modules that wrap database calls in
-  transactions, emit audit events, and centralize logging. Each action focuses on a discrete workflow (inventory movement,
-  imports, printing, agentic lifecycle updates).
-- **Shared models** – TypeScript interfaces in `models/` are consumed by backend and frontend builds to keep API contracts
-  aligned. Both tiers import these definitions directly.
-- **React composition** – The frontend organises screens under `frontend/src/components/`, leaning on shared layout,
-  asynchronous loading states, and `react-router-dom` routes to keep behaviours consistent.
-- **Observability expectations** – Logging helpers in `backend/src/lib/logger.ts` and `frontend/src/utils/logger.ts` surface
-  structured context during API calls, agentic runs, and UI events. Error paths capture stack traces or actionable messages.
-- **Printing pipeline** – Frontend `public/print` templates pair with backend print actions so the same markup can be rendered
-  locally or streamed to printers without duplicating layout logic.
+- **Backend services (`backend/`)** – API endpoints, background workflows, and integrations.
+- **Frontend UI (`frontend/`)** – React screens for inventory operations, search, and printing.
+- **Shared models (`models/`)** – TypeScript contracts shared across tiers.
+- **Printing assets (`frontend/public/print/`)** – Label templates rendered by frontend and backend.
+- **Data & media (`data/`, `media/`)** – CSV imports/exports, QR assets, and item imagery.
+- **Agentic flows (`backend/agentic/`)** – AI-assisted enrichment pipeline with human review.
 
-## Current Status
+## Current Status (Broad)
+
 - Backend and frontend share aligned TypeScript models and rely on dynamic action loading for API routes.
-- CSV import/export, QR scanning, and print label flows are available but still receive incremental polish.
-- Legacy JavaScript scripts remain for compatibility; modernization continues incrementally.
+- CSV import/export, QR scanning, and print label flows are available and continue to receive incremental polish.
 - Shopware support currently covers read-only product search plus a queued sync pipeline awaiting a real dispatch client.
-- The legacy ai-flow runtime has been ported into the mediator under `backend/agentic/`; follow-up work focuses on stabilising the
-  in-process orchestrator and cleaning up the final integration tasks outlined in [SERVICE_FUSION](SERVICE_FUSION.md).
+- The legacy agentic runtime has been ported into the mediator under `backend/agentic/`; ongoing work focuses on stability and integration follow-through.
 
-## Import/Export Archive Format
-- `/api/export/items` now streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring the backend's
-  `MEDIA_DIR`. The CSV payloads retain the partner column ordering and reuse existing metadata lookups (e.g., `collectMediaAssets`)
-  so downstream clients receive the same image resolution hints as before.
-- `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are
-  tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv`
-  updates continue to use duplicate detection and zero-stock flags.
-- `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the
-  frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before
-  ingestion.
+## Documentation Map
 
-## ERP Sync Bridge
-- `POST /api/sync/erp` accepts `{ actor, itemIds? }` and reuses the export serializer to assemble `items.csv` plus `boxes.csv`,
-  producing a ZIP archive when media uploads are enabled. Item filters narrow the export set without changing column ordering
-  or Langtext serialization.
-- Environment variables:
-  - `ERP_IMPORT_URL` (required): ERP endpoint used by the action's `curl` invocation.
-  - `ERP_IMPORT_USERNAME` / `ERP_IMPORT_PASSWORD`: optional basic-auth credentials.
-  - `ERP_IMPORT_CLIENT_ID`: optional ERP client identifier forwarded to the import endpoint.
-  - `ERP_IMPORT_FORM_FIELD`: multipart field name for the staged file (defaults to `file`).
-  - `ERP_IMPORT_INCLUDE_MEDIA`: toggles ZIP output with media/ folder linkage instead of a CSV-only upload.
-  - `ERP_IMPORT_TIMEOUT_MS`: max execution time for the `curl` request in milliseconds.
-- Payload mapping (mirrors the ERP's example import script):
-  ```bash
-  curl \
-    -X 'POST' \
-    -H 'Content-Type:multipart/form-data' \
-    --silent --insecure \
-    -F 'action=CsvImport/import' \
-    -F 'action_import=1' \
-    -F 'escape_char=quote' \
-    -F 'profile.type=parts' \
-    -F 'quote_char=quote' \
-    -F 'sep_char=semicolon' \
-    -F 'settings.apply_buchungsgruppe=all' \
-    -F 'settings.article_number_policy=update_prices' \
-    -F 'settings.charset=CP850' \
-    -F 'settings.default_buchungsgruppe=395' \
-    -F 'settings.duplicates=no_check' \
-    -F 'settings.numberformat=1.000,00' \
-    -F 'settings.part_type=part' \
-    -F 'settings.sellprice_adjustment=0' \
-    -F 'settings.sellprice_adjustment_type=percent' \
-    -F 'settings.sellprice_places=2' \
-    -F 'settings.shoparticle_if_missing=0' \
-    -F "${ERP_IMPORT_FORM_FIELD}=@<export path>;type=${ERP_IMPORT_INCLUDE_MEDIA ? 'application/zip' : 'text/csv'}" \
-    -F "login=${ERP_IMPORT_USERNAME}" \
-    -F "password=${ERP_IMPORT_PASSWORD}" \
-    -F "client_id=${ERP_IMPORT_CLIENT_ID}" \
-    -F "actor=<actor>" \
-    "${ERP_IMPORT_URL}"
-  ```
-  When media is enabled the action uploads the staged ZIP (`items.csv`, `boxes.csv`, optional `media/`) under the same field while the CSV-only path keeps `text/csv` as the content type.
-
-## Next Steps
-- Finish wiring the new `AgenticModelInvoker` through backend services so queue workers and actions invoke models without the
-  HTTP proxy fallback.
-- Continue validating the migrated `backend/agentic/` modules (flows, tools, prompts) with focused tests and linting once the
-  invoker is fully integrated.
-- Continue the Langtext-as-JSON rollout by auditing `models/item.ts` and `backend/agentic/flow/item-flow-schemas.ts` so importer and schema workstreams stay synchronized with the new UI key/value editor, then deprecate the legacy string fallback once `[langtext]` logs show low fallback usage.
-- Stand up the Compose-backed Postgres instance locally (`docker compose up`) during every integration cycle so migrations are exercised continuously and connection regressions surface early.
-
-## Langtext Migration Notes
-- `models/item.ts` still allows `Langtext` as either a string or a `{ [key: string]: string }` payload, so callers must treat
-  the field as a mixed type until the legacy string path is retired.
-- Backend persistence, importer, and export flows route `Langtext` values through `backend/lib/langtext.ts`, which logs
-  `[langtext]` warnings when JSON parsing fails or non-object data is encountered and falls back to string handling.
-- Import actions warn when form-supplied Langtext values are rejected and fall back to reference defaults, keeping ingest
-  resilient while migration telemetry is collected.
-
-## Risks & Dependencies
-- Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.
-- Refer to [BUGS.md](BUGS.md) for additional tracked defects.
-
-## Postgres rollout notes
-- These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
-
-- Compose defines the mediator/Postgres network so `DATABASE_URL` and the individual `PG*` variables can follow the `mediator`/`postgres` defaults without leaking secrets.
-- After provisioning, run the migration and verification scripts to confirm every table matches the shared interfaces under `models/` and `backend/src/models/`; unresolved diffs risk runtime serialization errors.
-- Startup logs surface `DATABASE_URL` warnings and connection retries—treat them as blockers and resolve before layering on new features.
-- Healthcheck status from `docker compose ps` (or the container logs) is the quickest indicator of why local development cannot reach Postgres.
-
-## Upcoming Opportunities
-- Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
-- Capture dispatched CUPS job identifiers in logs so support staff can correlate queue issues with individual label requests.
-- Enforce size limits and validate content for uploaded CSV files prior to writing them to disk.
-- Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
+- **Architecture & data flow** → [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
+- **Current plans & next steps** → [`docs/PLANS.md`](PLANS.md)
+- **Known issues & bugs** → [`docs/BUGS.md`](BUGS.md)
+- **Recent changes** → [`docs/RECENT_HIGHLIGHTS.md`](RECENT_HIGHLIGHTS.md)
+- **Setup & operations** → [`docs/setup.md`](setup.md)
+- **Category taxonomy data** → [`docs/data_struct.md`](data_struct.md)
 
 ## Recent Highlights
 - Replaced the print label action with a non-navigating control and added modal logging around item label printing.
@@ -196,8 +94,6 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Wrapped the item list filter controls into primary and secondary panels with consistent grid wrappers for cleaner alignment.
 - Added grid-based filter panel styling to keep filter controls aligned within responsive boxes.
 - Enabled manual agentic run closes even when runs are marked as not started after import/export cycles.
+- Blocked item editing while agentic runs are active in the item detail and edit flows.
 
-## Reference Links
-- [Architecture Outline](ARCHITECTURE.md)
-- [Component Responsibilities](../AGENTS.md)
-- [Open Bugs](BUGS.md)
+See [`docs/RECENT_HIGHLIGHTS.md`](RECENT_HIGHLIGHTS.md) for the latest changes and release notes.
