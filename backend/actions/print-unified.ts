@@ -3,6 +3,7 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { Box, Item } from '../../models';
+import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import {
   canonicalizeCategoryLabel,
   getCategoryLabelFromCode,
@@ -104,14 +105,18 @@ function resolveShelfCategoryLabel(shelfId: string): { label: string | null; sou
 
   const rawSegment = segments.category;
   if (/^\d+$/.test(rawSegment)) {
-    const numeric = Number.parseInt(rawSegment, 10);
-    const fromSubcategory = Number.isFinite(numeric) ? getSubcategoryLabelFromCode(numeric) : undefined;
-    if (fromSubcategory) {
-      return { label: fromSubcategory, source: 'subcategory_code_lookup', segment: rawSegment };
-    }
-    const fromCategory = Number.isFinite(numeric) ? getCategoryLabelFromCode(numeric) : undefined;
-    if (fromCategory) {
-      return { label: fromCategory, source: 'category_code_lookup', segment: rawSegment };
+    try {
+      const numeric = Number.parseInt(rawSegment, 10);
+      const fromSubcategory = Number.isFinite(numeric) ? getSubcategoryLabelFromCode(numeric) : undefined;
+      if (fromSubcategory) {
+        return { label: fromSubcategory, source: 'subcategory_code_lookup', segment: rawSegment };
+      }
+      const fromCategory = Number.isFinite(numeric) ? getCategoryLabelFromCode(numeric) : undefined;
+      if (fromCategory) {
+        return { label: fromCategory, source: 'category_code_lookup', segment: rawSegment };
+      }
+    } catch (error) {
+      console.error('[print-unified] Failed to parse shelf category segment', { shelfId, error });
     }
   }
 
@@ -145,16 +150,50 @@ function resolveCategoryLabel(
   return String(rawCategory);
 }
 
-function computeTotalQuantity(items: Item[]): number {
-  return items.reduce((sum, item) => {
-    const raw = (item as Item)?.Auf_Lager as unknown;
-    if (typeof raw === 'number' && Number.isFinite(raw)) return sum + raw;
-    if (typeof raw === 'string') {
-      const parsed = Number.parseFloat(raw);
-      if (Number.isFinite(parsed)) return sum + parsed;
+// TODO(agent): Evaluate whether item label quantities should omit counts for instance items in future label templates.
+function resolveEinheit(value: unknown, itemId: string): ItemEinheit | null {
+  try {
+    return normalizeItemEinheit(value);
+  } catch (error) {
+    console.error('[print-unified] Failed to normalize Einheit', { itemId, error });
+    return null;
+  }
+}
+
+function parseAufLagerValue(value: unknown, itemId: string): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      console.error('[print-unified] Failed to parse Auf_Lager', { itemId, value, error });
+      return 0;
     }
-    return sum;
-  }, 0);
+  }
+  return 0;
+}
+
+function resolveItemQuantity(item: Item): number {
+  const itemId = item.ItemUUID;
+  const einheit = resolveEinheit(item.Einheit, itemId);
+  const parsedAufLager = parseAufLagerValue(item.Auf_Lager, itemId);
+  if (einheit !== ItemEinheit.Menge && parsedAufLager > 1) {
+    console.warn('[print-unified] Instance item has Auf_Lager > 1', {
+      itemId,
+      artikelNumber: item.Artikel_Nummer ?? null,
+      aufLager: parsedAufLager
+    });
+  }
+  return einheit === ItemEinheit.Menge ? parsedAufLager : 1;
+}
+
+function computeTotalQuantity(items: Item[]): number {
+  return items.reduce((sum, item) => sum + resolveItemQuantity(item), 0);
 }
 
 function toIsoString(value: unknown): string | null {
@@ -178,14 +217,7 @@ function buildBoxLabelPayload(box: Box, items: Item[]): BoxLabelPayload {
 }
 
 function buildItemLabelPayload(item: Item): ItemLabelPayload {
-  const quantityRaw = item.Auf_Lager as unknown;
-  let parsedQuantity = 0;
-  if (typeof quantityRaw === 'number' && Number.isFinite(quantityRaw)) {
-    parsedQuantity = quantityRaw;
-  } else if (typeof quantityRaw === 'string') {
-    const parsed = Number.parseFloat(quantityRaw);
-    if (Number.isFinite(parsed)) parsedQuantity = parsed;
-  }
+  const parsedQuantity = resolveItemQuantity(item);
 
   const categoryLabel = resolveCategoryLabel(item.Unterkategorien_A, {
     labelType: 'item',

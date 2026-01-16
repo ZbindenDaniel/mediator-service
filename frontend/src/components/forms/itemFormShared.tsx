@@ -743,6 +743,7 @@ export function ItemDetailsFields({
         return;
       }
 
+      // TODO(agent): Revisit quantity input behavior once instance/bulk entry UX is finalized.
       try {
         const { value } = event.target;
 
@@ -1181,7 +1182,15 @@ export function ItemDetailsFields({
         <input
           type="number"
           value={form.Länge_mm ?? 0}
-          onChange={(e) => onUpdate('Länge_mm', parseInt(e.target.value, 10) || 0)}
+          onChange={(e) => {
+            try {
+              const parsed = Number.parseInt(e.target.value, 10);
+              onUpdate('Länge_mm', Number.isNaN(parsed) ? 0 : parsed);
+            } catch (error) {
+              console.error('Failed to parse Länge_mm', error);
+              onUpdate('Länge_mm', 0);
+            }
+          }}
         />
       </div>
       <div className="row">
@@ -1191,7 +1200,15 @@ export function ItemDetailsFields({
         <input
           type="number"
           value={form.Breite_mm ?? 0}
-          onChange={(e) => onUpdate('Breite_mm', parseInt(e.target.value, 10) || 0)}
+          onChange={(e) => {
+            try {
+              const parsed = Number.parseInt(e.target.value, 10);
+              onUpdate('Breite_mm', Number.isNaN(parsed) ? 0 : parsed);
+            } catch (error) {
+              console.error('Failed to parse Breite_mm', error);
+              onUpdate('Breite_mm', 0);
+            }
+          }}
         />
       </div>
       <div className="row">
@@ -1201,7 +1218,15 @@ export function ItemDetailsFields({
         <input
           type="number"
           value={form.Höhe_mm ?? 0}
-          onChange={(e) => onUpdate('Höhe_mm', parseInt(e.target.value, 10) || 0)}
+          onChange={(e) => {
+            try {
+              const parsed = Number.parseInt(e.target.value, 10);
+              onUpdate('Höhe_mm', Number.isNaN(parsed) ? 0 : parsed);
+            } catch (error) {
+              console.error('Failed to parse Höhe_mm', error);
+              onUpdate('Höhe_mm', 0);
+            }
+          }}
         />
       </div>
       <div className="row">
@@ -1212,7 +1237,15 @@ export function ItemDetailsFields({
           type="number"
           step="0.01"
           value={form.Gewicht_kg ?? 0}
-          onChange={(e) => onUpdate('Gewicht_kg', parseFloat(e.target.value) || 0)}
+          onChange={(e) => {
+            try {
+              const parsed = Number.parseFloat(e.target.value);
+              onUpdate('Gewicht_kg', Number.isNaN(parsed) ? 0 : parsed);
+            } catch (error) {
+              console.error('Failed to parse Gewicht_kg', error);
+              onUpdate('Gewicht_kg', 0);
+            }
+          }}
         />
       </div>
 
@@ -1224,7 +1257,15 @@ export function ItemDetailsFields({
           type="number"
           step="0.01"
           value={form.Verkaufspreis ?? 0}
-          onChange={(e) => onUpdate('Verkaufspreis', parseFloat(e.target.value) || 0)}
+          onChange={(e) => {
+            try {
+              const parsed = Number.parseFloat(e.target.value);
+              onUpdate('Verkaufspreis', Number.isNaN(parsed) ? 0 : parsed);
+            } catch (error) {
+              console.error('Failed to parse Verkaufspreis', error);
+              onUpdate('Verkaufspreis', 0);
+            }
+          }}
         />
       </div>
 

@@ -34,6 +34,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Adjusted item creation auto-printing to respect instance vs. bulk label policies and log partial print failures for follow-up.
 - Logged legacy CSV schema detection during validation, added category-aware bulk quantity normalization for legacy imports, and skipped empty/failed rows with explicit telemetry.
 - Added structured logging around Produkt schema legacy column mappings to improve import observability without widening data model scope.
+- Updated instance item grouping and print quantity logic to use grouped counts while keeping `Auf_Lager` numeric for bulk items, with warnings for anomalous instance stock values.
 
 ## Documentation Map
 

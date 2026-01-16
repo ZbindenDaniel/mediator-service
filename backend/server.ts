@@ -33,6 +33,7 @@ import {
 import type { ShopwareConfig } from './config';
 import { ingestCsvFile, type IngestCsvFileOptions } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
+import { ItemEinheit, normalizeItemEinheit } from '../models';
 import {
   db,
   getItem,
@@ -222,6 +223,34 @@ chokidar
   .on('add', (p: string) => p.endsWith('.csv') && handleCsv(p))
   .on('change', (p: string) => p.endsWith('.csv') && handleCsv(p));
 
+// TODO(agent): Consolidate item quantity parsing helpers across print flows once shared utilities exist.
+function resolveEinheit(value: unknown, itemId: string): ItemEinheit | null {
+  try {
+    return normalizeItemEinheit(value);
+  } catch (error) {
+    console.error('[print-worker] Failed to normalize Einheit', { itemId, error });
+    return null;
+  }
+}
+
+function parseAufLagerValue(value: unknown, itemId: string): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      console.error('[print-worker] Failed to parse Auf_Lager', { itemId, value, error });
+      return 0;
+    }
+  }
+  return 0;
+}
+
 async function runPrintWorker(): Promise<void> {
   const job = nextLabelJob.get() as LabelJob | undefined;
   if (!job) return;
@@ -232,15 +261,16 @@ async function runPrintWorker(): Promise<void> {
       updateLabelJobStatus.run('Error', 'item not found', job.Id);
       return;
     }
-    const quantityRaw = item.Auf_Lager as unknown;
-    let parsedQuantity = 0;
-    if (typeof quantityRaw === 'number' && Number.isFinite(quantityRaw)) {
-      parsedQuantity = quantityRaw;
-    } else if (typeof quantityRaw === 'string') {
-      const parsed = Number.parseFloat(quantityRaw);
-      if (Number.isFinite(parsed)) parsedQuantity = parsed;
+    const einheit = resolveEinheit(item.Einheit, item.ItemUUID);
+    const parsedAufLager = parseAufLagerValue(item.Auf_Lager, item.ItemUUID);
+    if (einheit !== ItemEinheit.Menge && parsedAufLager > 1) {
+      console.warn('[print-worker] Instance item has Auf_Lager > 1', {
+        itemId: item.ItemUUID,
+        artikelNumber: item.Artikel_Nummer ?? null,
+        aufLager: parsedAufLager
+      });
     }
-
+    const parsedQuantity = einheit === ItemEinheit.Menge ? parsedAufLager : 1;
 
     const toIsoString = (value: unknown): string | null => {
       if (!value) return null;

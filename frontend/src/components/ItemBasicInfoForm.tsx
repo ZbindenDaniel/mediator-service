@@ -43,10 +43,19 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
 
           <div className="row">
             <label>Anzahl*</label>
+            {/* TODO(agent): Align basic info quantity defaults with instance-vs-bulk handling guidance. */}
             <input
               type="number"
               value={form.Auf_Lager ?? 1}
-              onChange={(event) => update('Auf_Lager', parseInt(event.target.value, 10) || 0)}
+              onChange={(event) => {
+                try {
+                  const parsed = Number.parseInt(event.target.value, 10);
+                  update('Auf_Lager', Number.isNaN(parsed) ? 0 : parsed);
+                } catch (error) {
+                  console.error('Failed to parse Auf_Lager in basic info form', error);
+                  update('Auf_Lager', 0);
+                }
+              }}
               required
             />
           </div>
@@ -81,4 +90,3 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
     </div>
   );
 }
-
