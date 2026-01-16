@@ -3,6 +3,7 @@
 // TODO(agent): Monitor Grafikname multi-image normalization so downstream exporters can drop legacy fallbacks.
 // TODO(agent): Evaluate ZIP-sourced merge rules for boxes and media once parallel uploads are supported by partners.
 // TODO(agent): Align CSV alias handling for ItemUUID and quantity headers with export columns.
+// TODO(agent): Revisit legacy schema detection logging once CSV partner inventory coverage expands.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
@@ -16,7 +17,7 @@ import {
   getMaxArtikelNummer
 } from './db';
 import { IMPORTER_FORCE_ZERO_STOCK } from './config';
-import { Box, Item, ItemEinheit, isItemEinheit } from '../models';
+import { Box, Item, ItemEinheit, normalizeItemEinheit } from '../models';
 import { normalizeQuality, resolveQualityFromLabel } from '../models/quality';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
@@ -109,6 +110,106 @@ const PARTNER_FIELD_ALIASES: readonly PartnerFieldAlias[] = Object.freeze([
   { source: 'Auf Lager', target: 'Auf_Lager' },
 ]);
 
+const LEGACY_SCHEMA_HEADERS = new Set([
+  'Produkt-Nr.',
+  'Menge',
+  'Artikel-Bezeichnung',
+  'Beschreibung aus Kurz-Produktbeschreibung',
+  'Behältnis-Nr.',
+  'Lager-Behältnis',
+  'Lagerraum'
+]);
+
+const LEGACY_SCHEMA_VERSION_HEADERS = new Set(['schemaVersion', 'SchemaVersion', 'exportVersion', 'ExportVersion']);
+
+const KNOWN_ITEM_COLUMNS = new Set<string>([
+  'Artikel-Nummer',
+  'Artikelbeschreibung',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Artikeltyp',
+  'Einheit',
+  'Auf_Lager',
+  'Qty',
+  'onhand',
+  'Onhand',
+  'OnHand',
+  'Grafikname(n)',
+  'Grafikname',
+  'ImageNames',
+  'BoxID',
+  'LocationId',
+  'Standort',
+  'Location',
+  'Label',
+  'CreatedAt',
+  'Notes',
+  'PhotoPath',
+  'PlacedBy',
+  'PlacedAt',
+  'UpdatedAt',
+  'Datum erfasst',
+  'Datum_erfasst',
+  'EntryDate',
+  'entrydate',
+  'entry_date',
+  'idate',
+  'itime',
+  'mtime',
+  'insertdate',
+  'insertdateset',
+  'Länge(mm)',
+  'Breite(mm)',
+  'Höhe(mm)',
+  'Gewicht(kg)',
+  'Verkaufspreis',
+  'Veröffentlicht_Status',
+  'Shopartikel',
+  'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+  'Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
+  'Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+  'Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)',
+  'itemUUID',
+  'partnumber',
+  'image_names',
+  'description',
+  'notes',
+  'longdescription',
+  'manufacturer',
+  'type_and_classific',
+  'length_mm',
+  'width_mm',
+  'height_mm',
+  'weight_kg',
+  'sellprice',
+  'published_status',
+  'shoparticle',
+  'unit',
+  'cvar_categories_A1',
+  'cvar_categories_A2',
+  'cvar_categories_B1',
+  'cvar_categories_B2',
+  'ItemUUID',
+  'Auf Lager',
+  'Produkt-Nr.',
+  'Menge',
+  'Artikel-Bezeichnung',
+  'Beschreibung aus Kurz-Produktbeschreibung',
+  'Behältnis-Nr.',
+  'Lager-Behältnis',
+  'Lagerraum',
+  'id',
+  'weight',
+  'image',
+  'shop',
+  'bin_id',
+  'schemaVersion',
+  'SchemaVersion',
+  'exportVersion',
+  'ExportVersion',
+]);
+
 function hydratePartnerFieldAliases(row: Record<string, string>, rowNumber: number): void {
   for (const alias of PARTNER_FIELD_ALIASES) {
     try {
@@ -191,6 +292,31 @@ function resolveQuantityFieldValue(
   return { value: undefined, source: null };
 }
 
+function detectLegacySchema(headers: string[]): { detected: boolean; matches: string[]; versionFlag: string | null } {
+  try {
+    const matches = headers.filter((header) => LEGACY_SCHEMA_HEADERS.has(header));
+    const versionFlag = headers.find((header) => LEGACY_SCHEMA_VERSION_HEADERS.has(header)) ?? null;
+    return { detected: matches.length > 0 || Boolean(versionFlag), matches, versionFlag };
+  } catch (error) {
+    console.error('[importer] Failed to detect legacy schema headers', { error });
+    return { detected: false, matches: [], versionFlag: null };
+  }
+}
+
+function logUnknownColumns(headers: string[]): void {
+  if (!headers.length) {
+    return;
+  }
+  try {
+    const unknownColumns = headers.filter((header) => !KNOWN_ITEM_COLUMNS.has(header));
+    if (unknownColumns.length > 0) {
+      console.warn('[importer] Detected unknown CSV columns', { unknownColumns });
+    }
+  } catch (error) {
+    console.error('[importer] Failed to log unknown CSV columns', { error });
+  }
+}
+
 // TODO(agent): Consolidate Langtext CSV sanitization with downstream formatting helpers once exporters provide valid JSON.
 function sanitizeLangtextCsvValue(
   value: unknown,
@@ -252,8 +378,9 @@ function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
     candidate = String(value).trim();
   }
   try {
-    if (isItemEinheit(candidate)) {
-      return candidate;
+    const normalized = normalizeItemEinheit(candidate);
+    if (normalized) {
+      return normalized;
     }
   } catch (error) {
     console.error('[importer] Failed to verify Einheit from CSV row, defaulting to Stk', {
@@ -270,6 +397,30 @@ function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
     defaultValue: DEFAULT_EINHEIT
   });
   return DEFAULT_EINHEIT;
+}
+
+function resolveInstancePlan(
+  aufLager: number,
+  einheit: ItemEinheit,
+  context: { rowNumber: number; artikelNummer: string }
+): { instanceCount: number; quantityPerItem: number } {
+  try {
+    if (!Number.isFinite(aufLager) || aufLager <= 0) {
+      return { instanceCount: 0, quantityPerItem: 0 };
+    }
+    if (einheit !== ItemEinheit.Menge) {
+      return { instanceCount: Math.max(1, Math.trunc(aufLager)), quantityPerItem: 1 };
+    }
+    return { instanceCount: 1, quantityPerItem: Math.trunc(aufLager) };
+  } catch (error) {
+    console.error('[importer] Failed to normalize legacy quantity values', {
+      ...context,
+      aufLager,
+      einheit,
+      error,
+    });
+    return { instanceCount: 0, quantityPerItem: 0 };
+  }
 }
 
 export function parseImageNames(
@@ -707,6 +858,15 @@ export async function ingestCsvFile(
     const nowDate = new Date();
     const now = nowDate.toISOString();
     const records = await readCsv(absPath);
+    const headerKeys = records.length > 0 ? Object.keys(records[0]) : [];
+    logUnknownColumns(headerKeys);
+    const legacySchema = detectLegacySchema(headerKeys);
+    if (legacySchema.detected) {
+      console.info('[importer] Detected legacy CSV schema headers', {
+        matchedHeaders: legacySchema.matches,
+        versionFlag: legacySchema.versionFlag,
+      });
+    }
     const zeroStockRequested = options.zeroStock ?? IMPORTER_FORCE_ZERO_STOCK;
     let count = 0;
     const boxesTouched = new Set<string>();
@@ -953,12 +1113,14 @@ export async function ingestCsvFile(
       const resolvedQuantity = resolveQuantityFieldValue(final, rowNumber);
       const aufLager =
         parseIntegerField(resolvedQuantity.value, 'Auf_Lager', { defaultValue: 0 }) ?? 0;
+      const instancePlan = resolveInstancePlan(aufLager, einheit, { rowNumber, artikelNummer });
 
-      if (aufLager <= 0) {
+      if (instancePlan.instanceCount <= 0 || instancePlan.quantityPerItem <= 0) {
         console.info('CSV ingestion: skipping item persistence due to non-positive quantity', {
           rowNumber,
           artikelNummer,
           aufLager,
+          einheit,
         });
 
         if (!artikelNummer) {
@@ -1001,12 +1163,22 @@ export async function ingestCsvFile(
 
         continue;
       }
-      let itemUUID = csvItemUUID;
+
+      if (einheit !== ItemEinheit.Menge && instancePlan.instanceCount > 1) {
+        console.info('[importer] Splitting legacy quantity into item instances', {
+          rowNumber,
+          artikelNummer,
+          aufLager,
+          instanceCount: instancePlan.instanceCount,
+          einheit,
+        });
+      }
+      let baseItemUUID = csvItemUUID;
       if (artikelNummer) {
         try {
           const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;
           if (existing?.ItemUUID) {
-            itemUUID = existing.ItemUUID;
+            baseItemUUID = existing.ItemUUID;
           }
         } catch (error) {
           console.error('[importer] Failed to lookup existing item by Artikel_Nummer', {
@@ -1016,55 +1188,78 @@ export async function ingestCsvFile(
           });
         }
       }
-      if (!itemUUID) {
-        itemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
+
+      if (!baseItemUUID) {
+        baseItemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
         console.log('[importer] Minted ItemUUID for CSV row', {
           rowNumber,
           artikelNummer: artikelNummer || null,
-          itemUUID,
+          itemUUID: baseItemUUID,
         });
-        final.itemUUID = itemUUID;
-      } else if (final.itemUUID !== itemUUID) {
-        final.itemUUID = itemUUID;
+        final.itemUUID = baseItemUUID;
+      } else if (final.itemUUID !== baseItemUUID) {
+        final.itemUUID = baseItemUUID;
       }
-      const item: Item = {
-        ItemUUID: itemUUID,
-        BoxID: normalizedBoxId,
-        // Location: location, // TODO: !!! Location field ingestion pending
-        UpdatedAt: nowDate,
-        Datum_erfasst: parseDatumErfasst(final['Datum erfasst']),
-        Artikel_Nummer: artikelNummer,
-        Grafikname: grafikname,
-        Artikelbeschreibung: artikelbeschreibung,
-        Auf_Lager: aufLager,
-        Verkaufspreis: verkaufspreis,
-        Kurzbeschreibung: kurzbeschreibung,
-        Langtext: langtext,
-        Quality: resolvedQuality,
-        Hersteller: hersteller,
-        Länge_mm: lengthMm,
-        Breite_mm: widthMm,
-        Höhe_mm: heightMm,
-        Gewicht_kg: weightKg,
-        Hauptkategorien_A: hkA,
-        Unterkategorien_A: ukA,
-        Hauptkategorien_B: hkB,
-        Unterkategorien_B: ukB,
-        Veröffentlicht_Status: publishedStatus,
-        Shopartikel: shopartikel,
-        Artikeltyp: final['Artikeltyp'] || '',
-        Einheit: einheit,
-        ImageNames: serializedImageNames,
-      };
-      persistItem({
-        ...item,
-        UpdatedAt: nowDate
-      });
 
-      if (normalizedBoxId) {
-        boxesTouched.add(normalizedBoxId);
+      if (instancePlan.instanceCount > 1 && baseItemUUID) {
+        console.info('[importer] Using primary ItemUUID for split quantity', {
+          rowNumber,
+          artikelNummer,
+          itemUUID: baseItemUUID,
+        });
       }
-      count++;
+
+      for (let instanceIndex = 0; instanceIndex < instancePlan.instanceCount; instanceIndex += 1) {
+        let itemUUID = baseItemUUID;
+        if (instanceIndex > 0) {
+          itemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
+          console.log('[importer] Minted ItemUUID for split item instance', {
+            rowNumber,
+            artikelNummer: artikelNummer || null,
+            itemUUID,
+            instanceIndex: instanceIndex + 1,
+          });
+        }
+
+        const item: Item = {
+          ItemUUID: itemUUID,
+          BoxID: normalizedBoxId,
+          // Location: location, // TODO: !!! Location field ingestion pending
+          UpdatedAt: nowDate,
+          Datum_erfasst: parseDatumErfasst(final['Datum erfasst']),
+          Artikel_Nummer: artikelNummer,
+          Grafikname: grafikname,
+          Artikelbeschreibung: artikelbeschreibung,
+          Auf_Lager: instancePlan.quantityPerItem,
+          Verkaufspreis: verkaufspreis,
+          Kurzbeschreibung: kurzbeschreibung,
+          Langtext: langtext,
+          Quality: resolvedQuality,
+          Hersteller: hersteller,
+          Länge_mm: lengthMm,
+          Breite_mm: widthMm,
+          Höhe_mm: heightMm,
+          Gewicht_kg: weightKg,
+          Hauptkategorien_A: hkA,
+          Unterkategorien_A: ukA,
+          Hauptkategorien_B: hkB,
+          Unterkategorien_B: ukB,
+          Veröffentlicht_Status: publishedStatus,
+          Shopartikel: shopartikel,
+          Artikeltyp: final['Artikeltyp'] || '',
+          Einheit: einheit,
+          ImageNames: serializedImageNames,
+        };
+        persistItem({
+          ...item,
+          UpdatedAt: nowDate
+        });
+
+        if (normalizedBoxId) {
+          boxesTouched.add(normalizedBoxId);
+        }
+        count++;
+      }
     }
 
     return { count, boxes: Array.from(boxesTouched) };

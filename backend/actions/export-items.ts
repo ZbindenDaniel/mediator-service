@@ -5,7 +5,7 @@ import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
-import { ItemEinheit, isItemEinheit } from '../../models';
+import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import type { LangtextPayload } from '../../models';
 import { describeQuality } from '../../models/quality';
 import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
@@ -563,19 +563,14 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     return value;
   }
   try {
-    if (isItemEinheit(value)) {
-      return value;
+    const normalized = normalizeItemEinheit(value);
+    if (normalized) {
+      return normalized;
     }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (isItemEinheit(trimmed)) {
-        return trimmed;
-      }
-      if (trimmed.length > 0) {
-        console.warn('[export-items] Invalid Einheit value encountered during export, falling back to default.', {
-          provided: trimmed
-        });
-      }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      console.warn('[export-items] Invalid Einheit value encountered during export, falling back to default.', {
+        provided: value
+      });
     } else if (value !== null && value !== undefined) {
       console.warn('[export-items] Unexpected Einheit type encountered during export, falling back to default.', {
         providedType: typeof value

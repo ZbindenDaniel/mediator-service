@@ -1,20 +1,44 @@
 // TODO(agent): Track Langtext payload migration and remove legacy fallback types when safe.
 // TODO(agent): Remove ImageNames serialization once assets migrate to dedicated tables.
 // TODO(agentic-status-model): Consider splitting agentic metadata into a dedicated view model to avoid bloating Item shape.
+// TODO(agent): Confirm Einheit alias coverage after Mix -> Menge rename once legacy payloads are audited.
 // TODO(quality-metadata): Align Quality field naming with ERP schema once upstream attributes are finalised.
 import type { AgenticRunStatus } from './agentic-statuses';
 export enum ItemEinheit {
   Stk = 'Stk',
-  Mix = 'Mix'
+  Menge = 'Menge'
 }
 
-export const ITEM_EINHEIT_VALUES = Object.freeze([ItemEinheit.Stk, ItemEinheit.Mix] as const);
+export const ITEM_EINHEIT_VALUES = Object.freeze([ItemEinheit.Stk, ItemEinheit.Menge] as const);
+
+const LEGACY_EINHEIT_ALIASES = new Map<string, ItemEinheit>([
+  ['stk', ItemEinheit.Stk],
+  ['stück', ItemEinheit.Stk],
+  ['stueck', ItemEinheit.Stk],
+  ['menge', ItemEinheit.Menge],
+  ['mix', ItemEinheit.Menge],
+]);
 
 export function isItemEinheit(value: unknown): value is ItemEinheit {
   if (typeof value !== 'string') {
     return false;
   }
   return (ITEM_EINHEIT_VALUES as readonly string[]).includes(value);
+}
+
+export function normalizeItemEinheit(value: unknown): ItemEinheit | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (isItemEinheit(trimmed)) {
+    return trimmed;
+  }
+  const normalizedKey = trimmed.toLowerCase();
+  return LEGACY_EINHEIT_ALIASES.get(normalizedKey) ?? null;
 }
 
 export interface ItemInstance {

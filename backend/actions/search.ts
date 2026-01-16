@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
-import { ItemEinheit, isItemEinheit } from '../../models';
+import { ItemEinheit, normalizeItemEinheit } from '../../models';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -36,20 +36,15 @@ const DEFAULT_SEARCH_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
 function normalizeSearchEinheit(value: unknown, context: string): ItemEinheit {
   try {
-    if (isItemEinheit(value)) {
-      return value;
+    const normalized = normalizeItemEinheit(value);
+    if (normalized) {
+      return normalized;
     }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (isItemEinheit(trimmed)) {
-        return trimmed;
-      }
-      if (trimmed.length > 0) {
-        console.warn('[search] Invalid Einheit encountered while preparing response; falling back to default.', {
-          context,
-          provided: trimmed
-        });
-      }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      console.warn('[search] Invalid Einheit encountered while preparing response; falling back to default.', {
+        context,
+        provided: value
+      });
     } else if (value !== null && value !== undefined) {
       console.warn('[search] Unexpected Einheit type encountered while preparing response; falling back to default.', {
         context,

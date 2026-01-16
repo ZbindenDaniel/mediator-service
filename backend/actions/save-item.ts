@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
-import { ItemEinheit, isItemEinheit } from '../../models';
+import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import type { Item } from '../../models';
 import { normalizeQuality, QUALITY_DEFAULT } from '../../models/quality';
 import { defineHttpAction } from './index';
@@ -405,20 +405,15 @@ function resolveShopartikelFlag(value: unknown, quality: number): number {
 
 function resolveItemEinheitValue(value: unknown, context: string): ItemEinheit {
   try {
-    if (isItemEinheit(value)) {
-      return value;
+    const normalized = normalizeItemEinheit(value);
+    if (normalized) {
+      return normalized;
     }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (isItemEinheit(trimmed)) {
-        return trimmed;
-      }
-      if (trimmed.length > 0) {
-        console.warn('[save-item] Invalid Einheit encountered; falling back to default.', {
-          context,
-          provided: trimmed
-        });
-      }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      console.warn('[save-item] Invalid Einheit encountered; falling back to default.', {
+        context,
+        provided: value
+      });
     } else if (value !== null && value !== undefined) {
       console.warn('[save-item] Unexpected Einheit type encountered; falling back to default.', {
         context,

@@ -7,8 +7,8 @@ import {
   AGENTIC_RUN_STATUS_QUEUED,
   ItemEinheit,
   ItemRef,
-  resolveAgenticRunStatus,
-  isItemEinheit
+  normalizeItemEinheit,
+  resolveAgenticRunStatus
 } from '../../models';
 import type { AgenticRunStatus } from '../../models';
 import { defineHttpAction } from './index';
@@ -26,6 +26,7 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 // TODO(agent): Consolidate ItemUUID collision handling into a shared allocator helper for reuse across actions.
 // TODO(agent): Capture the provisional ItemUUID sequence snapshot to avoid reusing stale maxima during regeneration.
 // TODO(agent): Normalize getItem.get to a consistent sync/async contract to simplify uniqueness checks.
+// TODO(agent): Confirm legacy Einheit normalization coverage for import-item once CSV-derived payloads are audited.
 async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string> {
   const maxAttempts = 3;
   let attempt = 0;
@@ -161,8 +162,9 @@ function coalesceEinheit(value: string | null): ItemEinheit {
   const raw = value ?? '';
   const trimmed = raw.trim();
   try {
-    if (isItemEinheit(trimmed)) {
-      return trimmed;
+    const normalized = normalizeItemEinheit(trimmed);
+    if (normalized) {
+      return normalized;
     }
   } catch (error) {
     console.error('[import-item] Failed to evaluate Einheit payload, defaulting to Stk', {
@@ -177,6 +179,42 @@ function coalesceEinheit(value: string | null): ItemEinheit {
     defaultValue: DEFAULT_EINHEIT
   });
   return DEFAULT_EINHEIT;
+}
+
+function resolveRequestedQuantity(
+  rawValue: string | null,
+  einheit: ItemEinheit,
+  context: { ItemUUID: string; artikelNummer: string | null }
+): number {
+  let quantity = 1;
+  try {
+    if (rawValue) {
+      const parsed = Number.parseInt(rawValue.trim(), 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        quantity = parsed;
+      } else {
+        console.warn('[import-item] Invalid Auf_Lager value provided; defaulting to 1', {
+          ...context,
+          provided: rawValue
+        });
+      }
+    }
+    if (einheit !== ItemEinheit.Menge && quantity > 1) {
+      console.info('[import-item] Normalized quantity to 1 for non-Menge Einheit', {
+        ...context,
+        provided: quantity,
+        einheit
+      });
+      quantity = 1;
+    }
+  } catch (error) {
+    console.error('[import-item] Failed to normalize Auf_Lager value; defaulting to 1', {
+      ...context,
+      error
+    });
+    quantity = 1;
+  }
+  return quantity;
 }
 
 function normalizeItemReferenceRow(row: unknown): ItemRef | null {
@@ -261,8 +299,11 @@ function normalizeItemReferenceRow(row: unknown): ItemRef | null {
     normalized.Shopartikel = record.Shopartikel;
   }
   if (typeof record.Artikeltyp === 'string') normalized.Artikeltyp = record.Artikeltyp;
-  if (typeof record.Einheit === 'string' && isItemEinheit(record.Einheit)) {
-    normalized.Einheit = record.Einheit;
+  if (typeof record.Einheit === 'string') {
+    const normalizedEinheit = normalizeItemEinheit(record.Einheit);
+    if (normalizedEinheit) {
+      normalized.Einheit = normalizedEinheit;
+    }
   }
   if (typeof record.EntityType === 'string') normalized.EntityType = record.EntityType;
 
@@ -787,6 +828,11 @@ const action = defineHttpAction({
         datumErfasst = new Date(nowDate.getTime());
       }
 
+      const normalizedQuantity = resolveRequestedQuantity(p.get('Auf_Lager'), einheit, {
+        ItemUUID,
+        artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null
+      });
+
       const data = {
         BoxID,
         ItemUUID,
@@ -796,7 +842,7 @@ const action = defineHttpAction({
         Artikel_Nummer: resolvedArtikelNummer,
         Grafikname: firstImage || referenceDefaults?.Grafikname || '',
         Artikelbeschreibung: artikelbeschreibung,
-        Auf_Lager: parseInt((p.get('Auf_Lager') || '1').trim(), 10) || 1,
+        Auf_Lager: normalizedQuantity,
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
