@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
-import type { Item } from '../../models';
+import type { Item, ItemInstanceSummary } from '../../models';
 import { normalizeQuality, QUALITY_DEFAULT } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { MEDIA_DIR } from '../lib/media';
@@ -11,6 +11,7 @@ import { generateShopwareCorrelationId } from '../db';
 const MEDIA_PREFIX = '/media/';
 // TODO(agent): Centralize media asset validation to avoid shipping document artifacts alongside images.
 // TODO(agent): Revisit allowed media extensions when new asset types need exporting.
+// TODO(agent): Align item instance summary fields with detail UI once instance list usage expands.
 const ALLOWED_MEDIA_EXTENSIONS = new Set<string>([
   '.bmp',
   '.gif',
@@ -453,6 +454,51 @@ const action = defineHttpAction({
           Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse'),
           Quality: resolveItemQualityValue(item.Quality, 'fetchResponse')
         };
+        let instances: ItemInstanceSummary[] = [];
+        try {
+          if (item.Artikel_Nummer && ctx.findByMaterial?.all) {
+            const rawInstances = ctx.findByMaterial.all(item.Artikel_Nummer) as Item[] | undefined;
+            if (Array.isArray(rawInstances)) {
+              const normalizedInstances: ItemInstanceSummary[] = [];
+              for (const instance of rawInstances) {
+                const itemUUID =
+                  typeof instance?.ItemUUID === 'string' ? instance.ItemUUID.trim() : '';
+                if (!itemUUID) {
+                  console.warn('[save-item] Missing ItemUUID in instance list', {
+                    itemId,
+                    artikelNummer: item.Artikel_Nummer
+                  });
+                  continue;
+                }
+                normalizedInstances.push({
+                  ItemUUID: itemUUID,
+                  Quality: resolveItemQualityValue(instance.Quality, 'fetchInstance'),
+                  Location: instance.Location ?? null,
+                  BoxID: instance.BoxID ?? null,
+                  UpdatedAt: instance.UpdatedAt ? String(instance.UpdatedAt) : null,
+                  Datum_erfasst: instance.Datum_erfasst ? String(instance.Datum_erfasst) : null
+                });
+              }
+              instances = normalizedInstances;
+            } else {
+              console.warn('[save-item] Instance list is not an array', {
+                itemId,
+                artikelNummer: item.Artikel_Nummer
+              });
+            }
+          } else if (item.Artikel_Nummer) {
+            console.warn('[save-item] Missing findByMaterial helper for instance list', {
+              itemId,
+              artikelNummer: item.Artikel_Nummer
+            });
+          }
+        } catch (error) {
+          console.error('[save-item] Failed to resolve instance list for item detail', {
+            itemId,
+            artikelNummer: item.Artikel_Nummer ?? null,
+            error
+          });
+        }
         const normalisedCategories = {
           Hauptkategorien_A: normaliseCategoryValue(itemId, 'Hauptkategorien_A', sanitizedItem.Hauptkategorien_A),
           Unterkategorien_A: normaliseCategoryValue(itemId, 'Unterkategorien_A', sanitizedItem.Unterkategorien_A),
@@ -471,7 +517,7 @@ const action = defineHttpAction({
           normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
             ? { ...itemWithCategories, Grafikname: normalisedGrafikname }
             : itemWithCategories;
-        return sendJson(res, 200, { item: responseItem, box, events, agentic, media });
+        return sendJson(res, 200, { item: responseItem, box, events, agentic, media, instances });
       } catch (err) {
         console.error('Fetch item failed', err);
         return sendJson(res, 500, { error: (err as Error).message });
