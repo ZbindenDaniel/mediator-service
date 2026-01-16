@@ -4,6 +4,7 @@
 // TODO(agent): Evaluate ZIP-sourced merge rules for boxes and media once parallel uploads are supported by partners.
 // TODO(agent): Align CSV alias handling for ItemUUID and quantity headers with export columns.
 // TODO(agent): Revisit legacy schema detection logging once CSV partner inventory coverage expands.
+// TODO(agent): Recheck legacy quantity normalization rules once more category-based guidance is available.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
@@ -123,6 +124,7 @@ const LEGACY_SCHEMA_HEADERS = new Set([
 ]);
 
 const LEGACY_SCHEMA_VERSION_HEADERS = new Set(['schemaVersion', 'SchemaVersion', 'exportVersion', 'ExportVersion']);
+const LEGACY_BULK_CATEGORY_PREFIXES = Object.freeze([110]);
 
 const KNOWN_ITEM_COLUMNS = new Set<string>([
   'Artikel-Nummer',
@@ -294,7 +296,11 @@ function resolveQuantityFieldValue(
   return { value: undefined, source: null };
 }
 
-function detectLegacySchema(headers: string[]): { detected: boolean; matches: string[]; versionFlag: string | null } {
+export function detectLegacySchema(headers: string[]): {
+  detected: boolean;
+  matches: string[];
+  versionFlag: string | null;
+} {
   try {
     const matches = headers.filter((header) => LEGACY_SCHEMA_HEADERS.has(header));
     const versionFlag = headers.find((header) => LEGACY_SCHEMA_VERSION_HEADERS.has(header)) ?? null;
@@ -305,7 +311,7 @@ function detectLegacySchema(headers: string[]): { detected: boolean; matches: st
   }
 }
 
-function logUnknownColumns(headers: string[]): void {
+export function logUnknownColumns(headers: string[]): void {
   if (!headers.length) {
     return;
   }
@@ -404,14 +410,45 @@ function resolveCsvEinheit(value: unknown, rowNumber: number): ItemEinheit {
 function resolveInstancePlan(
   aufLager: number,
   einheit: ItemEinheit,
-  context: { rowNumber: number; artikelNummer: string }
+  context: {
+    rowNumber: number;
+    artikelNummer: string;
+    legacySchemaDetected: boolean;
+    hasExplicitEinheit: boolean;
+    categoryCodes: number[];
+  }
 ): { instanceCount: number; quantityPerItem: number } {
   try {
     if (!Number.isFinite(aufLager) || aufLager <= 0) {
       return { instanceCount: 0, quantityPerItem: 0 };
     }
-    if (einheit !== ItemEinheit.Menge) {
+    const bulkCategoryHit = context.categoryCodes.some((code) => {
+      if (!Number.isFinite(code)) {
+        return false;
+      }
+      return LEGACY_BULK_CATEGORY_PREFIXES.some((prefix) =>
+        code === prefix || (code >= prefix * 10 && code < (prefix + 1) * 10)
+      );
+    });
+    const shouldUseBulkQuantity =
+      einheit === ItemEinheit.Menge || (context.legacySchemaDetected && !context.hasExplicitEinheit && bulkCategoryHit);
+
+    if (!shouldUseBulkQuantity) {
       return { instanceCount: Math.max(1, Math.trunc(aufLager)), quantityPerItem: 1 };
+    }
+    if (bulkCategoryHit && context.legacySchemaDetected && !context.hasExplicitEinheit) {
+      try {
+        console.info('[importer] Applied legacy category bulk quantity rule', {
+          ...context,
+          aufLager,
+          einheit,
+        });
+      } catch (loggingError) {
+        console.error('[importer] Failed to log legacy category bulk quantity rule', {
+          ...context,
+          loggingError,
+        });
+      }
     }
     return { instanceCount: 1, quantityPerItem: Math.trunc(aufLager) };
   } catch (error) {
@@ -901,7 +938,21 @@ export async function ingestCsvFile(
     for (const [index, r] of records.entries()) {
       const rowNumber = index + 1;
       const row = normalize(r);
-      const final = applyOps(row, runState);
+      if (Object.values(row).every((value) => !value)) {
+        console.info('[importer] Skipping empty CSV row', { rowNumber });
+        continue;
+      }
+
+      let final: Record<string, string>;
+      try {
+        final = applyOps(row, runState);
+      } catch (opError) {
+        console.error('[importer] Skipping CSV row due to legacy mapping failure', {
+          rowNumber,
+          error: opError,
+        });
+        continue;
+      }
       hydratePartnerFieldAliases(final, rowNumber);
       const imageNameEntries = parseImageNames(final['Grafikname(n)'], { rowNumber });
       const serializedImageNames = imageNameEntries.length > 0 ? imageNameEntries.join('|') : null;
@@ -1121,7 +1172,10 @@ export async function ingestCsvFile(
       const publishedStatus = ['yes', 'ja', 'true', '1'].includes((final['Veröffentlicht_Status'] || '').toLowerCase());
       const shopartikel =
         parseIntegerField(final['Shopartikel'], 'Shopartikel', { defaultValue: 0 }) ?? 0;
-      const einheit = resolveCsvEinheit(final['Einheit'], rowNumber);
+      const einheitRaw = final['Einheit'];
+      const einheit = resolveCsvEinheit(einheitRaw, rowNumber);
+      const hasExplicitEinheit =
+        typeof einheitRaw === 'string' ? einheitRaw.trim().length > 0 : String(einheitRaw ?? '').trim().length > 0;
       const lengthMm =
         parseIntegerField(final['Länge(mm)'], 'Länge(mm)', { defaultValue: 0 }) ?? 0;
       const widthMm =
@@ -1135,7 +1189,14 @@ export async function ingestCsvFile(
       const resolvedQuantity = resolveQuantityFieldValue(final, rowNumber);
       const aufLager =
         parseIntegerField(resolvedQuantity.value, 'Auf_Lager', { defaultValue: 0 }) ?? 0;
-      const instancePlan = resolveInstancePlan(aufLager, einheit, { rowNumber, artikelNummer });
+      const categoryCodes = [hkA, ukA, hkB, ukB].filter((code): code is number => typeof code === 'number');
+      const instancePlan = resolveInstancePlan(aufLager, einheit, {
+        rowNumber,
+        artikelNummer,
+        legacySchemaDetected: legacySchema.detected,
+        hasExplicitEinheit,
+        categoryCodes,
+      });
 
       if (instancePlan.instanceCount <= 0 || instancePlan.quantityPerItem <= 0) {
         console.info('CSV ingestion: skipping item persistence due to non-positive quantity', {
