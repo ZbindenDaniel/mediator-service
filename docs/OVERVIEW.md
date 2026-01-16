@@ -196,6 +196,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Wrapped the item list filter controls into primary and secondary panels with consistent grid wrappers for cleaner alignment.
 - Added grid-based filter panel styling to keep filter controls aligned within responsive boxes.
 - Enabled manual agentic run closes even when runs are marked as not started after import/export cycles.
+- Blocked item editing while agentic runs are active in the item detail and edit flows.
 
 ## Reference Links
 - [Architecture Outline](ARCHITECTURE.md)
