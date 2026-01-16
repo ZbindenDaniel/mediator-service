@@ -34,6 +34,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - **Category taxonomy data** → [`docs/data_struct.md`](data_struct.md)
 
 ## Recent Highlights
+- Updated item creation imports to split Stk quantities into per-instance rows while keeping Menge (Mix) quantities on a single item, with added logging for chosen modes and created counts.
 - Added legacy CSV schema detection, normalized Stück quantities into per-item instances, and renamed the Mix unit to Menge for grouped inventory tracking.
 - Replaced the print label action with a non-navigating control and added modal logging around item label printing.
 - Added compact header icon navigation for create/items/boxes/activities and removed redundant card-level links now covered by the header.
