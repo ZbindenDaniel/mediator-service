@@ -834,7 +834,7 @@ export default function ItemDetail({ itemId }: Props) {
           qualityThreshold: effectiveFilters.qualityThreshold
         });
 
-        const currentIndex = filtered.findIndex((entry) => entry.ItemUUID === itemId);
+        const currentIndex = filtered.findIndex((entry) => entry.key === itemId);
         if (currentIndex === -1) {
           logger.warn?.('ItemDetail: Current item missing from filtered list', {
             itemId,
@@ -843,8 +843,8 @@ export default function ItemDetail({ itemId }: Props) {
           });
         }
 
-        const fetchedPrevious = currentIndex > 0 ? filtered[currentIndex - 1]?.ItemUUID ?? null : null;
-        const fetchedNext = currentIndex >= 0 ? filtered[currentIndex + 1]?.ItemUUID ?? null : null;
+        const fetchedPrevious = currentIndex > 0 ? filtered[currentIndex - 1]?.key ?? null : null;
+        const fetchedNext = currentIndex >= 0 ? filtered[currentIndex + 1]?.key ?? null : null;
 
         setNeighborIds({
           previousId: neighborContext.previousId ?? fetchedPrevious,

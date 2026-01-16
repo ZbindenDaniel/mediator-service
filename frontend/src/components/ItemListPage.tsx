@@ -86,7 +86,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     const groupCategory = group.summary.Category
       ?? (typeof representative?.Unterkategorien_A === 'number'
         ? String(representative.Unterkategorien_A).padStart(4, '0')
-        : representative?.Unterkategorien_A?.toString())
+        : representative?.Unterkategorien_A != null ? representative.Unterkategorien_A : '')
       ?? '';
     const matchesSubcategory = normalizedSubcategoryFilter
       ? groupCategory.toLowerCase().includes(normalizedSubcategoryFilter)
