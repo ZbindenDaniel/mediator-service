@@ -28,6 +28,7 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 // TODO(agent): Normalize getItem.get to a consistent sync/async contract to simplify uniqueness checks.
 // TODO(agent): Confirm legacy Einheit normalization coverage for import-item once CSV-derived payloads are audited.
 // TODO(agent): Document ItemUUID parser expectations for Artikelnummer-based formats when adding new import clients.
+// TODO(agent): Align legacy quantity normalization rules between import-item and CSV ingestion flows.
 async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string> {
   const maxAttempts = 3;
   let attempt = 0;

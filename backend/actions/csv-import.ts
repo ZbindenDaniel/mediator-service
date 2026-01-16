@@ -22,6 +22,7 @@ import {
 // TODO(agent): Harden ZIP payload validation to reject archives with unexpected executable content.
 // TODO(agent): Revisit staging and extraction thresholds once upload telemetry is available.
 // TODO(agent): Document boxes-only archive handling once importer alias fixes ship.
+// TODO(agent): Surface legacy schema detection telemetry in the CSV import handler once headers are inspected.
 
 const STAGING_TIMEOUT_MS = 30_000;
 const ENTRY_TIMEOUT_MS = 45_000;

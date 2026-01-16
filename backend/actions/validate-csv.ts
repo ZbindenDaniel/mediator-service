@@ -5,10 +5,12 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { parse } from 'csv-parse/sync';
 import { spawnSync } from 'child_process';
 import { defineHttpAction } from './index';
+import { detectLegacySchema, logUnknownColumns } from '../importer';
 import { isSafeArchiveEntry, listZipEntries, normalizeArchiveFilename, readZipEntry } from '../utils/csv-utils';
 
 // TODO(agent): Extend validation telemetry to surface ZIP extraction anomalies for upstream partners.
 // TODO(agent): Consider caching unzip availability checks if ZIP validation traffic spikes.
+// TODO(agent): Revisit legacy schema validation once CSV importers enforce stricter header requirements.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -184,6 +186,16 @@ const action = defineHttpAction({
       const boxCount = boxes.size;
       const boxesFileCount = boxesRecords.length;
       const combinedErrors = [...errors, ...boxFileErrors];
+
+      const headerKeys = records.length > 0 ? Object.keys(records[0]) : [];
+      logUnknownColumns(headerKeys);
+      const legacySchema = detectLegacySchema(headerKeys);
+      if (legacySchema.detected) {
+        console.info('[validate-csv] Detected legacy CSV schema headers', {
+          matchedHeaders: legacySchema.matches,
+          versionFlag: legacySchema.versionFlag,
+        });
+      }
 
       if (combinedErrors.length) {
         console.error('CSV validation found errors', combinedErrors);
