@@ -4,6 +4,7 @@
 // TODO(agent): Evaluate ZIP-sourced merge rules for boxes and media once parallel uploads are supported by partners.
 // TODO(agent): Align CSV alias handling for ItemUUID and quantity headers with export columns.
 // TODO(agent): Revisit legacy schema detection logging once CSV partner inventory coverage expands.
+// TODO(agent): Capture legacy column mapping metrics alongside ingest summaries once schema mapping stabilizes.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';

@@ -1,5 +1,7 @@
 import { Op, OpContext } from './types';
 
+// TODO(agent): Log mapped Produkt schema fields with row identity once row-number context is threaded into ops.
+
 // TODO: Extend Produkt schema detection when additional export variants appear.
 const PRODUKT_SCHEMA_KEYS = [
   'Produkt-Nr.',
@@ -10,6 +12,14 @@ const PRODUKT_SCHEMA_KEYS = [
   'Lager-Behältnis',
   'Lagerraum'
 ];
+
+const PRODUKT_SCHEMA_MAPPINGS = [
+  { source: 'Produkt-Nr.', target: 'Artikel-Nummer' },
+  { source: 'Menge', target: 'Auf_Lager', isQuantity: true },
+  { source: 'Artikel-Bezeichnung', target: 'Artikelbeschreibung' },
+  { source: 'Beschreibung aus Kurz-Produktbeschreibung', target: 'Langtext' },
+  { source: 'Behältnis-Nr.', target: 'BoxID' },
+] as const;
 
 const NOTES_STATE_KEY = 'detect-produkt-schema:notesByContainer';
 
@@ -57,31 +67,45 @@ export const apply: Op['apply'] = (row, ctx) => {
 
     ctx.log('[detect-produkt-schema] detected Produkt schema row', row);
     const mappedRow: Record<string, string> = { ...row };
+    const mappingUpdates: Record<string, string> = {};
+    const mappedColumns: Array<{
+      source: string;
+      target: string;
+      value: string;
+      isQuantity?: boolean;
+    }> = [];
 
-    const produktNummer = normalizeSegment(row['Produkt-Nr.']);
-    if (produktNummer) {
-      mappedRow['Artikel-Nummer'] = produktNummer;
+    try {
+      for (const mapping of PRODUKT_SCHEMA_MAPPINGS) {
+        const rawValue = normalizeSegment(row[mapping.source]);
+        if (!rawValue) {
+          continue;
+        }
+        mappingUpdates[mapping.target] = rawValue;
+        mappedColumns.push({ ...mapping, value: rawValue });
+      }
+
+      Object.assign(mappedRow, mappingUpdates);
+    } catch (mappingError) {
+      console.error('[detect-produkt-schema] failed to map Produkt schema columns', mappingError);
+      return { ok: true, row };
     }
 
-    const menge = normalizeSegment(row['Menge']);
-    if (menge) {
-      mappedRow['Auf_Lager'] = menge;
+    if (mappedColumns.length > 0) {
+      ctx.log('[detect-produkt-schema] mapped legacy columns to current fields', {
+        mappedColumns: mappedColumns.map(({ source, target }) => ({ source, target })),
+      });
+      const quantityMapping = mappedColumns.find((entry) => entry.isQuantity);
+      if (quantityMapping) {
+        ctx.log('[detect-produkt-schema] mapped legacy quantity for instance/bulk handling', {
+          source: quantityMapping.source,
+          target: quantityMapping.target,
+          value: quantityMapping.value,
+        });
+      }
     }
 
-    const artikelBezeichnung = normalizeSegment(row['Artikel-Bezeichnung']);
-    if (artikelBezeichnung) {
-      mappedRow['Artikelbeschreibung'] = artikelBezeichnung;
-    }
-
-    const kurzBeschreibung = normalizeSegment(row['Beschreibung aus Kurz-Produktbeschreibung']);
-    if (kurzBeschreibung) {
-      mappedRow['Langtext'] = kurzBeschreibung;
-    }
-
-    const containerId = normalizeSegment(row['Behältnis-Nr.']);
-    if (containerId) {
-      mappedRow['BoxID'] = containerId;
-    }
+    const containerId = mappingUpdates.BoxID ?? normalizeSegment(row['Behältnis-Nr.']);
 
     const noteSegments: string[] = [];
     const existingNotes = normalizeSegment(row['Notes']);
@@ -119,10 +143,9 @@ export const apply: Op['apply'] = (row, ctx) => {
     }
 
     if (!mappedRow.itemUUID) {
-      if (mappedRow['Artikel-Nummer']) {
-        mappedRow.itemUUID = `080925-${mappedRow['Artikel-Nummer']}`;
-      } else if (produktNummer) {
-        mappedRow.itemUUID = `080925-${produktNummer}`;
+      const artikelNummer = mappedRow['Artikel-Nummer'] || mappingUpdates['Artikel-Nummer'];
+      if (artikelNummer) {
+        mappedRow.itemUUID = `080925-${artikelNummer}`;
       }
     }
 
