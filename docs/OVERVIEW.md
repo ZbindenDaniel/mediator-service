@@ -1,9 +1,9 @@
 # Project Overview
-Dependency changes should refresh the lockfile via `npm install --package-lock-only` so CI lockfile checks remain green.
 
 The mediator service coordinates warehouse inventory workflows by pairing a TypeScript/Node.js backend with a React frontend for managing boxes, items, and print assets. This document provides a planning-oriented snapshot of priorities, risks, and recent progress.
 
 ## Mission & Scope
+
 - Provide API endpoints and background workers to manage boxes, items, QR scans, and CSV imports.
 - Deliver a responsive React UI that surfaces search, detail, and import tooling for logistics teams.
 - Maintain printable label templates and legacy scripts required for production operations.
@@ -11,20 +11,12 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Domain Concepts
 - **Items & ItemRefs** – Catalog entries describing IT equipment (e.g., laptops, monitors). `ItemRef` captures canonical
   metadata while individual `itemInstances` track stock, storage status, and historical changes.
-- **Boxes (Behälter)** – Physical containers that hold one or more items. Boxes are colour-coded by warehouse section so staff
-  can quickly find them even in a chaotic layout.
-- **Locations & Sections** – Warehouse zones identified by colour/label that group boxes for faster retrieval. Box records link
-  to these locations.
-- **Agentic Runs** – AI-assisted enrichment flows that start from partial item data, perform targeted web searches, and propose
-  missing attributes for human review before acceptance.
-- **Imports & ERP Bridge** – CSV uploads seeded from an external ERP initialize the catalogue. Future integrations (e.g.,
-  Shopware) will build on the same ingestion path.
-- **Printing & QR Labels** – Boxes and items receive QR codes and human-readable stickers. The printing stack generates label PDFs
-  from the canonical `frontend/public/print/62x100.html` (boxes) and `frontend/public/print/29x90.html` (items) templates, stores
-  previews, and dispatches jobs to CUPS-compatible printers. Shelf labels use the A4 template
-  (`frontend/public/print/shelf-a4.html`) with QR payloads that include the shelf ID plus a category label resolved from the shelf
-  ID segment (`S-<location>-<floor>-<category>-<index>`). Category segments are matched against canonical item category labels (see
-  `models/item-categories.ts`), with numeric segments falling back to category code lookups.
+- **Boxes (Behälter)** – Physical containers that hold one or more items. Boxes might be placed into shelfs so workers can quickly find them even in a chaotic layout.
+- **Locations & Sections** – Warehouse zones contain shelfs which are a special form ox boxes
+- **Agentic Runs** – AI-assisted enrichment flows that start from partial item data, perform targeted web searches, and propose missing attributes for human review before acceptance.
+- **Imports & ERP Bridge** – CSV uploads seeded from an external ERP initialize the catalogue. Future integrations will build on the same ingestion path.
+- **Printing & QR Labels** – Boxes and items receive QR codes and human-readable stickers. The printing stack generates label PDFs from the canonical `frontend/public/print/62x100.html` (boxes) and `frontend/public/print/29x90.html` (items) templates, stores previews, and dispatches jobs to CUPS-compatible printers. Shelf labels use the A4 template
+  (`frontend/public/print/shelf-a4.html`) with QR payloads that include the shelf ID plus a category label resolved from the shelf ID segment (`S-<location>-<floor>-<category>-<index>`). Category segments are matched against canonical item category labels (see `models/item-categories.ts`), with numeric segments falling back to category code lookups.
 
 ## Architectural Patterns in Practice
 - **Action architecture** – The backend dynamically loads `backend/actions/*` modules that wrap database calls in
@@ -48,71 +40,19 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
   in-process orchestrator and cleaning up the final integration tasks outlined in [SERVICE_FUSION](SERVICE_FUSION.md).
 
 ## Import/Export Archive Format
-- `/api/export/items` now streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring the backend's
-  `MEDIA_DIR`. The CSV payloads retain the partner column ordering and reuse existing metadata lookups (e.g., `collectMediaAssets`)
-  so downstream clients receive the same image resolution hints as before.
-- `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are
-  tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv`
-  updates continue to use duplicate detection and zero-stock flags.
-- `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the
-  frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before
+- `/api/export/items` now streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring the backend's `MEDIA_DIR`. The CSV payloads retain the partner column ordering and reuse existing metadata lookups (e.g., `collectMediaAssets`) so downstream clients receive the same image resolution hints as before.
+- `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv` updates continue to use duplicate detection and zero-stock flags.
+- `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before
   ingestion.
 
-## ERP Sync Bridge
-- `POST /api/sync/erp` accepts `{ actor, itemIds? }` and reuses the export serializer to assemble `items.csv` plus `boxes.csv`,
-  producing a ZIP archive when media uploads are enabled. Item filters narrow the export set without changing column ordering
-  or Langtext serialization.
-- Environment variables:
-  - `ERP_IMPORT_URL` (required): ERP endpoint used by the action's `curl` invocation.
-  - `ERP_IMPORT_USERNAME` / `ERP_IMPORT_PASSWORD`: optional basic-auth credentials.
-  - `ERP_IMPORT_CLIENT_ID`: optional ERP client identifier forwarded to the import endpoint.
-  - `ERP_IMPORT_FORM_FIELD`: multipart field name for the staged file (defaults to `file`).
-  - `ERP_IMPORT_INCLUDE_MEDIA`: toggles ZIP output with media/ folder linkage instead of a CSV-only upload.
-  - `ERP_IMPORT_TIMEOUT_MS`: max execution time for the `curl` request in milliseconds.
-- Payload mapping (mirrors the ERP's example import script):
-  ```bash
-  curl \
-    -X 'POST' \
-    -H 'Content-Type:multipart/form-data' \
-    --silent --insecure \
-    -F 'action=CsvImport/import' \
-    -F 'action_import=1' \
-    -F 'escape_char=quote' \
-    -F 'profile.type=parts' \
-    -F 'quote_char=quote' \
-    -F 'sep_char=semicolon' \
-    -F 'settings.apply_buchungsgruppe=all' \
-    -F 'settings.article_number_policy=update_prices' \
-    -F 'settings.charset=CP850' \
-    -F 'settings.default_buchungsgruppe=395' \
-    -F 'settings.duplicates=no_check' \
-    -F 'settings.numberformat=1.000,00' \
-    -F 'settings.part_type=part' \
-    -F 'settings.sellprice_adjustment=0' \
-    -F 'settings.sellprice_adjustment_type=percent' \
-    -F 'settings.sellprice_places=2' \
-    -F 'settings.shoparticle_if_missing=0' \
-    -F "${ERP_IMPORT_FORM_FIELD}=@<export path>;type=${ERP_IMPORT_INCLUDE_MEDIA ? 'application/zip' : 'text/csv'}" \
-    -F "login=${ERP_IMPORT_USERNAME}" \
-    -F "password=${ERP_IMPORT_PASSWORD}" \
-    -F "client_id=${ERP_IMPORT_CLIENT_ID}" \
-    -F "actor=<actor>" \
-    "${ERP_IMPORT_URL}"
-  ```
-  When media is enabled the action uploads the staged ZIP (`items.csv`, `boxes.csv`, optional `media/`) under the same field while the CSV-only path keeps `text/csv` as the content type.
-
 ## Next Steps
-- Finish wiring the new `AgenticModelInvoker` through backend services so queue workers and actions invoke models without the
-  HTTP proxy fallback.
-- Continue validating the migrated `backend/agentic/` modules (flows, tools, prompts) with focused tests and linting once the
-  invoker is fully integrated.
-- Continue the Langtext-as-JSON rollout by auditing `models/item.ts` and `backend/agentic/flow/item-flow-schemas.ts` so importer and schema workstreams stay synchronized with the new UI key/value editor, then deprecate the legacy string fallback once `[langtext]` logs show low fallback usage.
-- Stand up the Compose-backed Postgres instance locally (`docker compose up`) during every integration cycle so migrations are exercised continuously and connection regressions surface early.
 
-## Multi-step Plan: Item Instance = 1
+### Multi-step Plan: Item Instance = 1
+
 Goal: treat item instances as a single canonical record so inventory, exports, and agentic flows converge on the same source of truth while keeping UI workflows simple. Reason: reduce duplicate state, minimize incidental data divergence, and keep changes minimal by adapting existing structures instead of adding new ones.
 
 Checklist (re-check and update this planning doc before starting each subsequent task in the sequence):
+
 - [ ] **Grouping rules** – define the grouping logic for `itemInstances` to normalize to instance `1`, document expected inputs/outputs, and note any data structure updates only where necessary. Reason: ensure consistent grouping across ingestion, UI, and print flows without expanding schemas.
 - [ ] **Export updates** – update CSV/ZIP export mapping to emit instance `1` data and confirm partner column ordering remains stable; verify any data structure fields used by export. Reason: keep external integrations aligned while minimizing downstream churn.
 - [ ] **Agentic ref changes** – adjust agentic reference lookups to resolve instance `1` and log fallbacks; validate that any model/schema changes in `models/` and `backend/src/models/` stay in sync. Reason: keep agentic enrichment and approvals anchored to the canonical record.
@@ -125,8 +65,7 @@ TODO: capture the current-system export format details and confirm how legacy im
 Non-goals (unless explicitly requested): no large-scale refactors and no new data structures beyond what is required to support instance `1` grouping or legacy import compatibility.
 
 ## Langtext Migration Notes
-- `models/item.ts` still allows `Langtext` as either a string or a `{ [key: string]: string }` payload, so callers must treat
-  the field as a mixed type until the legacy string path is retired.
+- `models/item.ts` still allows `Langtext` as either a string or a `{ [key: string]: string }` payload, so callers must treat the field as a mixed type until the legacy string path is retired.
 - Backend persistence, importer, and export flows route `Langtext` values through `backend/lib/langtext.ts`, which logs
   `[langtext]` warnings when JSON parsing fails or non-object data is encountered and falls back to string handling.
 - Import actions warn when form-supplied Langtext values are rejected and fall back to reference defaults, keeping ingest
@@ -138,7 +77,6 @@ Non-goals (unless explicitly requested): no large-scale refactors and no new dat
 
 ## Postgres rollout notes
 - These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
-
 - Compose defines the mediator/Postgres network so `DATABASE_URL` and the individual `PG*` variables can follow the `mediator`/`postgres` defaults without leaking secrets.
 - After provisioning, run the migration and verification scripts to confirm every table matches the shared interfaces under `models/` and `backend/src/models/`; unresolved diffs risk runtime serialization errors.
 - Startup logs surface `DATABASE_URL` warnings and connection retries—treat them as blockers and resolve before layering on new features.
