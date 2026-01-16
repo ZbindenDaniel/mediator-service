@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { AgenticRunStatus, Item } from '../../../models';
+import type { AgenticRunStatus } from '../../../models';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import BoxTag from './BoxTag';
 import QualityBadge from './QualityBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
+import type { GroupedItemDisplay } from '../lib/itemGrouping';
 import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Confirm item list location tags remain legible without the color metadata.
@@ -12,11 +13,12 @@ import { logError, logger } from '../utils/logger';
 // TODO(agentic): Expand item list columns and responsive styling for enriched item metadata.
 // TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
 // TODO(agent): Keep BoxID (Behälter) and Location (Lagerort) normalization separate in this table.
+// TODO(grouped-item-table): Validate grouped row actions once bulk operations are updated.
 
 interface Props {
-  items: Item[];
+  items: GroupedItemDisplay[];
   selectedItemIds: Set<string>;
-  onToggleItem: (itemId: string, nextValue: boolean) => void;
+  onToggleItem: (itemIds: string[], nextValue: boolean) => void;
   onToggleAll: (nextValue: boolean) => void;
   allVisibleSelected: boolean;
   someVisibleSelected: boolean;
@@ -85,64 +87,83 @@ export default function ItemList({
                 type="checkbox"
               />
             </th>
-            <th className="col-uuid optional-column">UUID</th>
             <th className="col-number">A-Nr</th>
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
             <th className="col-agentic optional-column">Agentic</th>
-            <th className="col-stock optional-column">Auf Lager</th>
+            <th className="col-stock optional-column">Anzahl</th>
             <th className="col-quality optional-column">Qualität</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
           </tr>
         </thead>
         <tbody>
-          {safeItems.map(it => {
+          {safeItems.map(group => {
+            const representative = group.representative;
+            const groupItemIds = group.items
+              .map((item) => item.ItemUUID)
+              .filter((itemId): itemId is string => Boolean(itemId));
             let boxId: string | undefined;
             let shelfId: string | undefined;
 
             try {
-              if (typeof it.BoxID === 'string') {
-                boxId = it.BoxID.trim() || undefined;
-              } else if (it.BoxID !== null && it.BoxID !== undefined) {
-                logger.warn('Unexpected item BoxID type', { itemId: it.ItemUUID, boxId: it.BoxID });
+              if (typeof group.summary.BoxID === 'string') {
+                boxId = group.summary.BoxID.trim() || undefined;
+              } else if (typeof representative?.BoxID === 'string') {
+                boxId = representative.BoxID.trim() || undefined;
+              } else if (group.summary.BoxID !== null && group.summary.BoxID !== undefined) {
+                logger.warn('Unexpected item BoxID type', {
+                  itemId: group.summary.representativeItemId,
+                  boxId: group.summary.BoxID
+                });
               }
             } catch (error) {
-              logError('Failed to normalize item BoxID', error, { itemId: it.ItemUUID, boxId: it.BoxID });
+              logError('Failed to normalize item BoxID', error, {
+                itemId: group.summary.representativeItemId,
+                boxId: group.summary.BoxID ?? representative?.BoxID
+              });
             }
 
             try {
-              if (typeof it.Location === 'string') {
-                shelfId = it.Location.trim() || undefined;
-              } else if (it.Location !== null && it.Location !== undefined) {
-                logger.warn('Unexpected item Location type', { itemId: it.ItemUUID, location: it.Location });
+              if (typeof group.summary.Location === 'string') {
+                shelfId = group.summary.Location.trim() || undefined;
+              } else if (typeof representative?.Location === 'string') {
+                shelfId = representative.Location.trim() || undefined;
+              } else if (group.summary.Location !== null && group.summary.Location !== undefined) {
+                logger.warn('Unexpected item Location type', {
+                  itemId: group.summary.representativeItemId,
+                  location: group.summary.Location
+                });
               }
             } catch (error) {
-              logError('Failed to normalize item Location', error, { itemId: it.ItemUUID, location: it.Location });
+              logError('Failed to normalize item Location', error, {
+                itemId: group.summary.representativeItemId,
+                location: group.summary.Location ?? representative?.Location
+              });
             }
 
             const boxLinkTarget = boxId ? `/boxes/${encodeURIComponent(boxId)}` : null;
             const shelfLinkTarget = shelfId ? `/boxes/${encodeURIComponent(shelfId)}` : null;
-            const isSelected = selectedItemIds.has(it.ItemUUID);
-            const checkboxLabel = it.Artikelbeschreibung?.trim()
-              ? `Artikel ${it.Artikelbeschreibung} auswählen`
-              : `Artikel ${it.ItemUUID} auswählen`;
-            const rowLabel = it.Artikelbeschreibung?.trim()
-              ? `Details für ${it.Artikelbeschreibung} öffnen`
-              : `Details für Artikel ${it.ItemUUID} öffnen`;
-            const stockValue = typeof it.Auf_Lager === 'number' ? it.Auf_Lager : null;
-            const subcategoryValue =
-              typeof it.Unterkategorien_A === 'number'
-                ? it.Unterkategorien_A
-                : (typeof it.Unterkategorien_A === 'string' ? it.Unterkategorien_A : null);
-            const agenticStatus = (it.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus | null;
+            const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => selectedItemIds.has(itemId));
+            const isPartiallySelected = groupItemIds.some((itemId) => selectedItemIds.has(itemId)) && !isSelected;
+            const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
+            const checkboxLabel = `Artikelgruppe ${representativeLabel} auswählen`;
+            const rowLabel = `Details für ${representativeLabel} öffnen`;
+            const countValue = group.summary.count;
+            const subcategoryValue = group.summary.Category
+              ?? (typeof representative?.Unterkategorien_A === 'number'
+                ? String(representative.Unterkategorien_A)
+                : (typeof representative?.Unterkategorien_A === 'string' ? representative.Unterkategorien_A : null));
+            const agenticStatus = (representative?.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus | null;
             const agenticLabel = describeAgenticStatus(agenticStatus);
-            const qualityValue = typeof it.Quality === 'number' ? it.Quality : null;
+            const qualityValue = typeof group.summary.Quality === 'number'
+              ? group.summary.Quality
+              : (typeof representative?.Quality === 'number' ? representative.Quality : null);
 
             return (
               <tr
-                key={it.ItemUUID}
-                data-item-uuid={it.ItemUUID}
+                key={group.key}
+                data-item-uuid={group.summary.representativeItemId ?? ''}
                 className="item-list-row"
                 role="button"
                 tabIndex={0}
@@ -152,7 +173,11 @@ export default function ItemList({
                     return;
                   }
                   event.preventDefault();
-                  navigateToItemDetail(it.ItemUUID, 'click');
+                  if (group.summary.representativeItemId) {
+                    navigateToItemDetail(group.summary.representativeItemId, 'click');
+                  } else {
+                    logger.warn('Missing representative item id for grouped row', { groupKey: group.key });
+                  }
                 }}
                 onKeyDown={(event) => {
                   if (shouldIgnoreInteractiveTarget(event.target)) {
@@ -160,22 +185,33 @@ export default function ItemList({
                   }
                   if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
                     event.preventDefault();
-                    navigateToItemDetail(it.ItemUUID, 'keyboard');
+                    if (group.summary.representativeItemId) {
+                      navigateToItemDetail(group.summary.representativeItemId, 'keyboard');
+                    } else {
+                      logger.warn('Missing representative item id for grouped row', {
+                        groupKey: group.key,
+                        source: 'keyboard'
+                      });
+                    }
                   }
                 }}
               >
-                <td className="col-id" style={{ display: 'none' }}>{it.ItemUUID}</td>
+                <td className="col-id" style={{ display: 'none' }}>{group.summary.representativeItemId}</td>
                 <td className="col-select">
                   <input
                     aria-label={checkboxLabel}
                     checked={isSelected}
-                    onChange={(event) => onToggleItem(it.ItemUUID, event.target.checked)}
+                    onChange={(event) => onToggleItem(groupItemIds, event.target.checked)}
+                    ref={(input) => {
+                      if (input) {
+                        input.indeterminate = isPartiallySelected;
+                      }
+                    }}
                     type="checkbox"
                   />
                 </td>
-                <td className="col-uuid optional-column">{it.ItemUUID}</td>
-                <td className="col-number">{it.Artikel_Nummer?.trim() || '—'}</td>
-                <td className="col-desc">{it.Artikelbeschreibung}</td>
+                <td className="col-number">{group.summary.Artikel_Nummer?.trim() || representative?.Artikel_Nummer?.trim() || '—'}</td>
+                <td className="col-desc">{representative?.Artikelbeschreibung ?? '—'}</td>
                 <td className="col-box">
                   {boxId && boxLinkTarget ? (
                     <Link to={boxLinkTarget}>
@@ -195,7 +231,7 @@ export default function ItemList({
                   )}
                 </td>
                 <td className="col-agentic optional-column">{agenticLabel}</td>
-                <td className="col-stock optional-column">{stockValue ?? '—'}</td>
+                <td className="col-stock optional-column">{countValue}</td>
                 <td className="col-quality optional-column">
                   <QualityBadge compact value={qualityValue} />
                 </td>

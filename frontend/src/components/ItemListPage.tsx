@@ -22,6 +22,7 @@ import {
   loadItemListFilters,
   persistItemListFilters
 } from '../lib/itemListFiltersStorage';
+import { groupItemsForDisplay, GroupedItemDisplay } from '../lib/itemGrouping';
 import { logError, logger } from '../utils/logger';
 import BulkItemActionBar from './BulkItemActionBar';
 import ItemList from './ItemList';
@@ -33,6 +34,7 @@ import LoadingPage from './LoadingPage';
 // TODO(item-entity-filter): Confirm UX for reference-only rows when enriching the item repository view.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
 // TODO(subcategory-select): Validate the subcategory filter options against updated taxonomy definitions.
+// TODO(grouped-item-list): Confirm grouping keys and filter behavior once backend grouped payloads are live.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 const resolveItemQuality = (value: unknown) => normalizeQuality(value ?? QUALITY_DEFAULT, console);
@@ -56,7 +58,7 @@ interface SubcategoryOption {
   categoryLabel: string;
 }
 
-export function filterAndSortItems(options: ItemListComputationOptions): Item[] {
+export function filterAndSortItems(options: ItemListComputationOptions): GroupedItemDisplay[] {
   const {
     items,
     showUnplaced,
@@ -71,33 +73,41 @@ export function filterAndSortItems(options: ItemListComputationOptions): Item[] 
   } = options;
 
   const baseItems = showUnplaced ? items.filter((it) => !it.BoxID) : items;
-  const searched = baseItems.filter((item) => {
-    const description = item.Artikelbeschreibung?.toLowerCase() ?? '';
-    const number = item.Artikel_Nummer?.toLowerCase() ?? '';
-    const uuid = item.ItemUUID.toLowerCase();
+  const groupedItems = groupItemsForDisplay(baseItems, { logContext: 'item-list-grouping' });
+  const searched = groupedItems.filter((group) => {
+    const representative = group.representative;
+    const description = representative?.Artikelbeschreibung?.toLowerCase() ?? '';
+    const number = group.summary.Artikel_Nummer?.toLowerCase()
+      ?? representative?.Artikel_Nummer?.toLowerCase()
+      ?? '';
     const matchesSearch = normalizedSearch
-      ? description.includes(normalizedSearch)
-      || number.includes(normalizedSearch)
-      || uuid.includes(normalizedSearch)
+      ? description.includes(normalizedSearch) || number.includes(normalizedSearch)
       : true;
+    const groupCategory = group.summary.Category
+      ?? (typeof representative?.Unterkategorien_A === 'number'
+        ? String(representative.Unterkategorien_A).padStart(4, '0')
+        : representative?.Unterkategorien_A?.toString())
+      ?? '';
     const matchesSubcategory = normalizedSubcategoryFilter
-      ? (item.Unterkategorien_A?.toString().toLowerCase() ?? '').includes(normalizedSubcategoryFilter)
+      ? groupCategory.toLowerCase().includes(normalizedSubcategoryFilter)
       : true;
+    const boxCandidate = group.summary.BoxID ?? group.summary.Location ?? representative?.BoxID ?? representative?.Location ?? '';
     const matchesBox = normalizedBoxFilter
-      ? (item.BoxID?.toLowerCase() ?? '').includes(normalizedBoxFilter)
+      ? boxCandidate.toLowerCase().includes(normalizedBoxFilter)
       : true;
-    const stockValue = typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0;
+    const stockValue = group.totalStock;
     const matchesStock =
       stockFilter === 'instock'
         ? stockValue > 0
         : stockFilter === 'outofstock'
           ? stockValue <= 0
           : true;
-    const agenticStatus = (item.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus;
+    const agenticStatus = (representative?.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED) as AgenticRunStatus;
     const matchesAgenticStatus = normalizedAgenticFilter
       ? agenticStatus === normalizedAgenticFilter
       : true;
-    const matchesQuality = resolveItemQuality(item.Quality) >= qualityThreshold;
+    const groupQuality = group.summary.Quality ?? representative?.Quality;
+    const matchesQuality = resolveItemQuality(groupQuality) >= qualityThreshold;
 
     return matchesSearch && matchesSubcategory && matchesBox && matchesStock && matchesAgenticStatus && matchesQuality;
   });
@@ -105,10 +115,10 @@ export function filterAndSortItems(options: ItemListComputationOptions): Item[] 
   const sorted = [...searched].sort((a, b) => {
     const direction = sortDirection === 'asc' ? 1 : -1;
     if (sortKey === 'stock') {
-      const aStock = typeof a.Auf_Lager === 'number' ? a.Auf_Lager : -Infinity;
-      const bStock = typeof b.Auf_Lager === 'number' ? b.Auf_Lager : -Infinity;
+      const aStock = Number.isFinite(a.totalStock) ? a.totalStock : -Infinity;
+      const bStock = Number.isFinite(b.totalStock) ? b.totalStock : -Infinity;
       if (aStock === bStock) {
-        return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
       }
       return (aStock - bStock) * direction;
     }
@@ -119,42 +129,50 @@ export function filterAndSortItems(options: ItemListComputationOptions): Item[] 
         const idx = AGENTIC_RUN_STATUSES.indexOf(resolved);
         return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
       };
-      const aStatusOrder = statusOrder(a.AgenticStatus as AgenticRunStatus | null | undefined);
-      const bStatusOrder = statusOrder(b.AgenticStatus as AgenticRunStatus | null | undefined);
+      const aStatusOrder = statusOrder(a.representative?.AgenticStatus as AgenticRunStatus | null | undefined);
+      const bStatusOrder = statusOrder(b.representative?.AgenticStatus as AgenticRunStatus | null | undefined);
       if (aStatusOrder === bStatusOrder) {
-        return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
       }
       return (aStatusOrder - bStatusOrder) * direction;
     }
 
     if (sortKey === 'quality') {
-      const aQuality = resolveItemQuality(a.Quality);
-      const bQuality = resolveItemQuality(b.Quality);
+      const aQuality = resolveItemQuality(a.summary.Quality ?? a.representative?.Quality);
+      const bQuality = resolveItemQuality(b.summary.Quality ?? b.representative?.Quality);
       if (aQuality === bQuality) {
-        return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
       }
       return (aQuality - bQuality) * direction;
     }
 
-    const valueFor = (item: Item) => {
+    const valueFor = (group: GroupedItemDisplay) => {
       switch (sortKey) {
         case 'artikelnummer':
-          return item.Artikel_Nummer?.trim().toLowerCase() ?? '';
+          return group.summary.Artikel_Nummer?.trim().toLowerCase()
+            ?? group.representative?.Artikel_Nummer?.trim().toLowerCase()
+            ?? '';
         case 'box':
-          return item.BoxID?.trim().toLowerCase() ?? '';
+          return group.summary.BoxID?.trim().toLowerCase()
+            ?? group.summary.Location?.trim().toLowerCase()
+            ?? group.representative?.BoxID?.trim().toLowerCase()
+            ?? group.representative?.Location?.trim().toLowerCase()
+            ?? '';
         case 'uuid':
-          return item.ItemUUID?.trim().toLowerCase() ?? '';
+          return group.summary.representativeItemId?.trim().toLowerCase() ?? '';
         case 'subcategory':
-          return item.Unterkategorien_A?.toString().toLowerCase() ?? '';
+          return group.summary.Category?.toLowerCase()
+            ?? group.representative?.Unterkategorien_A?.toString().toLowerCase()
+            ?? '';
         case 'artikelbeschreibung':
         default:
-          return item.Artikelbeschreibung?.trim().toLowerCase() ?? '';
+          return group.representative?.Artikelbeschreibung?.trim().toLowerCase() ?? '';
       }
     };
     const aVal = valueFor(a);
     const bVal = valueFor(b);
     if (aVal === bVal) {
-      return a.ItemUUID.localeCompare(b.ItemUUID) * direction;
+      return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
     }
     return aVal.localeCompare(bVal) * direction;
   });
@@ -465,7 +483,17 @@ export default function ItemListPage() {
     ]
   );
 
-  const visibleIds = useMemo(() => filtered.map((item) => item.ItemUUID), [filtered]);
+  const visibleIds = useMemo(() => {
+    const ids = new Set<string>();
+    filtered.forEach((group) => {
+      group.items.forEach((item) => {
+        if (item.ItemUUID) {
+          ids.add(item.ItemUUID);
+        }
+      });
+    });
+    return Array.from(ids);
+  }, [filtered]);
   const agenticStatusOptions = useMemo(() => [
     { value: 'any', label: 'Alle' as const } as const,
     ...AGENTIC_RUN_STATUSES.map((status) => ({
@@ -480,14 +508,19 @@ export default function ItemListPage() {
     visibleIds.some((id) => selectedIds.has(id))
   ), [selectedIds, visibleIds]);
 
-  const handleToggleItem = useCallback((itemId: string, nextValue: boolean) => {
+  const handleToggleItem = useCallback((itemIds: string[], nextValue: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (nextValue) {
-        next.add(itemId);
-      } else {
-        next.delete(itemId);
-      }
+      itemIds.forEach((itemId) => {
+        if (!itemId) {
+          return;
+        }
+        if (nextValue) {
+          next.add(itemId);
+        } else {
+          next.delete(itemId);
+        }
+      });
       return next;
     });
   }, []);
@@ -549,15 +582,15 @@ export default function ItemListPage() {
                   <span>Artikelname</span>
                   <div className="sort-control__input">
                     <GoSearch aria-hidden="true" />
-                                   <input
-                  aria-label="Artikel suchen"
-                  id="item-list-search"
-                  onChange={handleSearchInputChange}
-                  onKeyDown={handleSearchInputKeyDown}
-                  placeholder="Beschreibung, Nummer oder UUID"
-                  type="search"
-                  value={searchInput}
-                />
+                    <input
+                      aria-label="Artikel suchen"
+                      id="item-list-search"
+                      onChange={handleSearchInputChange}
+                      onKeyDown={handleSearchInputKeyDown}
+                      placeholder="Beschreibung oder Nummer"
+                      type="search"
+                      value={searchInput}
+                    />
                   </div>
                 </label>
               </div>
