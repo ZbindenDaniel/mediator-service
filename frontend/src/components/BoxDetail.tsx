@@ -5,12 +5,14 @@ import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
 import type { Box, Item, EventLog, BoxDetailResponse } from '../../../models';
 import { formatDateTime } from '../lib/format';
+import { groupItemsForDisplay } from '../lib/itemGrouping';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import BoxTag from './BoxTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
+import QualityBadge from './QualityBadge';
 
 // TODO(agent): Verify the BoxTag rendering still aligns with the detailed box metadata layout.
 // TODO(agent): Confirm shelf box lists align with relocation rules before expanding shelf detail UI.
@@ -18,6 +20,7 @@ import LoadingPage from './LoadingPage';
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
 // TODO(agent): Revisit relocation category selection when boxes contain mixed item subcategories.
 // TODO(agent): Confirm note-only box updates preserve stored labels after label input removal.
+// TODO(grouped-box-items): Align grouped box item display with forthcoming backend grouped payloads.
 
 interface Props {
   boxId: string;
@@ -81,6 +84,7 @@ export default function BoxDetail({ boxId }: Props) {
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
   const relocationCategory = useMemo(() => resolveRelocationCategory(items), [items]);
+  const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
 
   async function handleDeleteBox() {
     if (!box) return;
@@ -640,25 +644,78 @@ export default function BoxDetail({ boxId }: Props) {
               <h3>Artikel</h3>
               <div className=''>
                 <div className='row'>
-                  <div className="item-cards">
-                    {items.map((it) => (
-                      <div key={it.ItemUUID} className="card item-card">
-                        <Link to={`/items/${encodeURIComponent(it.ItemUUID)}`} className="linkcard">
-                          <div className="mono">{it.BoxID || ''}</div>
-                          <div className="mono">{it.Artikel_Nummer || it.ItemUUID}</div>
-                          <div>{it.Artikelbeschreibung}</div>
-                          <div className="muted">Anzahl: {it.Auf_Lager}</div>
-                        </Link>
-                        <div className='row'>
-                          <button type="button" className="btn" onClick={() => removeItem(it.ItemUUID)}>Entnehmen</button>
-                        </div>
-                        {removalStatus[it.ItemUUID] && (
-                          <div className='row'>
-                            <span className="muted">{removalStatus[it.ItemUUID]}</span>
-                          </div>
+                  <div className="item-list-wrapper">
+                    <table className="item-list">
+                      <thead>
+                        <tr className="item-list-header">
+                          <th className="col-number">A-Nr</th>
+                          <th className="col-desc">Artikel</th>
+                          <th className="col-stock optional-column">Anzahl</th>
+                          <th className="col-quality optional-column">Qualität</th>
+                          <th className="col-subcategory optional-column">Unterkategorie A</th>
+                          <th className="col-actions">Aktionen</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {groupedItems.length ? (
+                          groupedItems.map((group) => {
+                            const representative = group.representative;
+                            const representativeId = group.summary.representativeItemId;
+                            const subcategoryValue = group.summary.Category
+                              ?? (typeof representative?.Unterkategorien_A === 'number'
+                                ? String(representative.Unterkategorien_A)
+                                : (typeof representative?.Unterkategorien_A === 'string'
+                                  ? representative.Unterkategorien_A
+                                  : null));
+                            const qualityValue = typeof group.summary.Quality === 'number'
+                              ? group.summary.Quality
+                              : (typeof representative?.Quality === 'number' ? representative.Quality : null);
+                            const removalMessage = representativeId ? removalStatus[representativeId] : null;
+
+                            return (
+                              <tr key={group.key}>
+                                <td className="col-number">
+                                  {group.summary.Artikel_Nummer || representative?.Artikel_Nummer || '—'}
+                                </td>
+                                <td className="col-desc">
+                                  {representative?.Artikelbeschreibung ?? '—'}
+                                </td>
+                                <td className="col-stock optional-column">{group.summary.count}</td>
+                                <td className="col-quality optional-column">
+                                  <QualityBadge compact value={qualityValue} />
+                                </td>
+                                <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
+                                <td className="col-actions">
+                                  {representativeId ? (
+                                    <>
+                                      <Link to={`/items/${encodeURIComponent(representativeId)}`} className="btn">
+                                        Details
+                                      </Link>
+                                      <button
+                                        type="button"
+                                        className="btn"
+                                        onClick={() => removeItem(representativeId)}
+                                      >
+                                        Entnehmen
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="muted">Keine Aktion verfügbar</span>
+                                  )}
+                                  {removalMessage ? (
+                                    <div className="muted">{removalMessage}</div>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td className="muted" colSpan={6}>Keine Artikel in diesem Behälter.</td>
+                          </tr>
                         )}
-                      </div>
-                    ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
