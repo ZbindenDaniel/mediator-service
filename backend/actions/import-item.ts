@@ -183,7 +183,6 @@ function coalesceEinheit(value: string | null): ItemEinheit {
 
 function resolveRequestedQuantity(
   rawValue: string | null,
-  einheit: ItemEinheit,
   context: { ItemUUID: string; artikelNummer: string | null }
 ): number {
   let quantity = 1;
@@ -199,14 +198,6 @@ function resolveRequestedQuantity(
         });
       }
     }
-    if (einheit !== ItemEinheit.Menge && quantity > 1) {
-      console.info('[import-item] Normalized quantity to 1 for non-Menge Einheit', {
-        ...context,
-        provided: quantity,
-        einheit
-      });
-      quantity = 1;
-    }
   } catch (error) {
     console.error('[import-item] Failed to normalize Auf_Lager value; defaulting to 1', {
       ...context,
@@ -215,6 +206,28 @@ function resolveRequestedQuantity(
     quantity = 1;
   }
   return quantity;
+}
+
+type ItemCreationMode = 'bulk' | 'instance';
+
+// TODO(agent): Align add/remove item quantity adjustments with instance-based creation for Einheit Stk.
+function resolveItemCreationPlan(options: {
+  requestedQuantity: number;
+  einheit: ItemEinheit;
+  isUpdateRequest: boolean;
+}): { mode: ItemCreationMode; instanceCount: number; quantityPerItem: number } {
+  const normalizedQuantity = Math.max(options.requestedQuantity, 1);
+  if (options.isUpdateRequest) {
+    if (options.einheit === ItemEinheit.Menge) {
+      return { mode: 'bulk', instanceCount: 1, quantityPerItem: normalizedQuantity };
+    }
+    return { mode: 'instance', instanceCount: 1, quantityPerItem: 1 };
+  }
+
+  if (options.einheit === ItemEinheit.Menge) {
+    return { mode: 'bulk', instanceCount: 1, quantityPerItem: normalizedQuantity };
+  }
+  return { mode: 'instance', instanceCount: normalizedQuantity, quantityPerItem: 1 };
 }
 
 function normalizeItemReferenceRow(row: unknown): ItemRef | null {
@@ -828,21 +841,34 @@ const action = defineHttpAction({
         datumErfasst = new Date(nowDate.getTime());
       }
 
-      const normalizedQuantity = resolveRequestedQuantity(p.get('Auf_Lager'), einheit, {
+      const requestedQuantity = resolveRequestedQuantity(p.get('Auf_Lager'), {
         ItemUUID,
         artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null
+      });
+      const creationPlan = resolveItemCreationPlan({
+        requestedQuantity,
+        einheit,
+        isUpdateRequest
+      });
+      console.info('[import-item] Resolved item creation mode for import', {
+        ItemUUID,
+        mode: creationPlan.mode,
+        requestedQuantity,
+        instanceCount: creationPlan.instanceCount,
+        quantityPerItem: creationPlan.quantityPerItem,
+        einheit,
+        isUpdateRequest
       });
 
       const data = {
         BoxID,
-        ItemUUID,
         Location: normalizedLocation,
         UpdatedAt: nowDate,
         Datum_erfasst: datumErfasst,
         Artikel_Nummer: resolvedArtikelNummer,
         Grafikname: firstImage || referenceDefaults?.Grafikname || '',
         Artikelbeschreibung: artikelbeschreibung,
-        Auf_Lager: normalizedQuantity,
+        Auf_Lager: creationPlan.quantityPerItem,
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
@@ -912,10 +938,36 @@ const action = defineHttpAction({
         boxLabelToPersist = null;
       }
 
+      let itemUUIDs: string[] = [];
+      try {
+        itemUUIDs = [ItemUUID];
+        if (creationPlan.instanceCount > 1) {
+          if (!ctx || typeof ctx.generateItemUUID !== 'function') {
+            throw new Error('Missing generateItemUUID dependency for instance creation');
+          }
+          for (let index = 1; index < creationPlan.instanceCount; index += 1) {
+            const candidate = await ctx.generateItemUUID();
+            if (!candidate) {
+              throw new Error('Failed to mint ItemUUID for instance creation');
+            }
+            const unique = await ensureUniqueItemUUID(candidate, ctx);
+            itemUUIDs.push(unique);
+          }
+        }
+      } catch (instanceError) {
+        console.error('[import-item] Failed to resolve ItemUUIDs for item creation', {
+          ItemUUID,
+          requestedQuantity,
+          instanceCount: creationPlan.instanceCount,
+          error: instanceError
+        });
+        return sendJson(res, 500, { error: 'Failed to mint ItemUUIDs for item import' });
+      }
+
       const txn = ctx.db.transaction(
         (
           boxId: string | null,
-          itemData: any,
+          itemDataList: Array<{ ItemUUID: string } & Record<string, unknown>>,
           a: string,
           search: string,
           status: string,
@@ -938,100 +990,114 @@ const action = defineHttpAction({
             });
           } else {
             console.info('[import-item] Skipping box upsert because the item is unplaced', {
-              ItemUUID: itemData.ItemUUID,
+              ItemUUID: itemDataList[0]?.ItemUUID,
               Actor: a
             });
           }
-          ctx.persistItemWithinTransaction(itemData);
-
-          let previousAgenticRun: { Status?: string | null } | null = null;
-          if (!manuallySkipped) {
-            try {
-              previousAgenticRun = ctx.getAgenticRun?.get
-                ? ((ctx.getAgenticRun.get(itemData.ItemUUID) as { Status?: string | null } | undefined) ?? null)
-                : null;
-            } catch (agenticLookupErr) {
-              console.error('[import-item] Failed to load existing agentic run before upsert', agenticLookupErr);
-            }
-          }
-
-          const agenticRun = {
-            ItemUUID: itemData.ItemUUID,
-            SearchQuery: search || null,
-            Status: status,
-            LastModified: now,
-            ReviewState: 'not_required',
-            ReviewedBy: null,
-            LastReviewDecision: null,
-            LastReviewNotes: null
-          };
-
           try {
-            ctx.upsertAgenticRun.run(agenticRun);
-          } catch (agenticPersistErr) {
-            console.error('[import-item] Failed to upsert agentic run during import transaction', agenticPersistErr);
-            throw agenticPersistErr;
-          }
-          let itemExists: { ItemUUID: string } | undefined;
-          if (!isUpdateRequest) {
-            try {
-              itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
-            } catch (lookupErr) {
-              console.error('[import-item] Failed to check existing item state during event logging', lookupErr);
-            }
-          }
-          const eventType = isUpdateRequest || itemExists ? 'Updated' : 'Created';
-          ctx.logEvent({
-            Actor: a,
-            EntityType: 'Item',
-            EntityId: itemData.ItemUUID,
-            Event: eventType,
-            Meta: JSON.stringify({ BoxID: boxId })
-          });
-          if (manuallySkipped) {
-            console.info('[import-item] Agentic run persisted as notStarted due to manual submission', {
-              ItemUUID: itemData.ItemUUID,
-              Actor: a,
-              agenticManualFallback
-            });
-          } else {
-            const agenticEventMeta = {
-              SearchQuery: search,
-              Status: status,
-              QueuedLocally: true,
-              RemoteTriggerDispatched: Boolean(agenticEnabled)
-            };
-            const previousStatus = (previousAgenticRun?.Status || '').toLowerCase();
-            const shouldEmitAgenticQueuedEvent =
-              !previousAgenticRun || previousStatus !== AGENTIC_RUN_STATUS_QUEUED;
+            for (const itemData of itemDataList) {
+              ctx.persistItemWithinTransaction(itemData);
 
-            if (shouldEmitAgenticQueuedEvent) {
+              let previousAgenticRun: { Status?: string | null } | null = null;
+              if (!manuallySkipped) {
+                try {
+                  previousAgenticRun = ctx.getAgenticRun?.get
+                    ? ((ctx.getAgenticRun.get(itemData.ItemUUID) as { Status?: string | null } | undefined) ?? null)
+                    : null;
+                } catch (agenticLookupErr) {
+                  console.error('[import-item] Failed to load existing agentic run before upsert', agenticLookupErr);
+                }
+              }
+
+              const agenticRun = {
+                ItemUUID: itemData.ItemUUID,
+                SearchQuery: search || null,
+                Status: status,
+                LastModified: now,
+                ReviewState: 'not_required',
+                ReviewedBy: null,
+                LastReviewDecision: null,
+                LastReviewNotes: null
+              };
+
+              try {
+                ctx.upsertAgenticRun.run(agenticRun);
+              } catch (agenticPersistErr) {
+                console.error('[import-item] Failed to upsert agentic run during import transaction', agenticPersistErr);
+                throw agenticPersistErr;
+              }
+              let itemExists: { ItemUUID: string } | undefined;
+              if (!isUpdateRequest) {
+                try {
+                  itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
+                } catch (lookupErr) {
+                  console.error('[import-item] Failed to check existing item state during event logging', lookupErr);
+                }
+              }
+              const eventType = isUpdateRequest || itemExists ? 'Updated' : 'Created';
               ctx.logEvent({
                 Actor: a,
                 EntityType: 'Item',
                 EntityId: itemData.ItemUUID,
-                Event: 'AgenticSearchQueued',
-                Meta: JSON.stringify(agenticEventMeta)
+                Event: eventType,
+                Meta: JSON.stringify({ BoxID: boxId })
               });
-            } else {
-              console.info('[import-item] Skipping AgenticSearchQueued log for already queued run', {
-                ItemUUID: itemData.ItemUUID,
-                Actor: a
-              });
+              if (manuallySkipped) {
+                console.info('[import-item] Agentic run persisted as notStarted due to manual submission', {
+                  ItemUUID: itemData.ItemUUID,
+                  Actor: a,
+                  agenticManualFallback
+                });
+              } else {
+                const agenticEventMeta = {
+                  SearchQuery: search,
+                  Status: status,
+                  QueuedLocally: true,
+                  RemoteTriggerDispatched: Boolean(agenticEnabled)
+                };
+                const previousStatus = (previousAgenticRun?.Status || '').toLowerCase();
+                const shouldEmitAgenticQueuedEvent =
+                  !previousAgenticRun || previousStatus !== AGENTIC_RUN_STATUS_QUEUED;
+
+                if (shouldEmitAgenticQueuedEvent) {
+                  ctx.logEvent({
+                    Actor: a,
+                    EntityType: 'Item',
+                    EntityId: itemData.ItemUUID,
+                    Event: 'AgenticSearchQueued',
+                    Meta: JSON.stringify(agenticEventMeta)
+                  });
+                } else {
+                  console.info('[import-item] Skipping AgenticSearchQueued log for already queued run', {
+                    ItemUUID: itemData.ItemUUID,
+                    Actor: a
+                  });
+                }
+                if (!agenticEnabled) {
+                  console.info('[import-item] Agentic service disabled; queued agentic run locally without remote trigger', {
+                    ItemUUID: itemData.ItemUUID,
+                    Actor: a,
+                    SearchQuery: search
+                  });
+                }
+              }
             }
-            if (!agenticEnabled) {
-              console.info('[import-item] Agentic service disabled; queued agentic run locally without remote trigger', {
-                ItemUUID: itemData.ItemUUID,
-                Actor: a,
-                SearchQuery: search
-              });
-            }
+          } catch (persistError) {
+            console.error('[import-item] Failed to persist item instances during import transaction', {
+              error: persistError
+            });
+            throw persistError;
           }
         }
       );
+      const itemDataList = itemUUIDs.map((uuid) => ({
+        ...data,
+        ItemUUID: uuid,
+        Auf_Lager: creationPlan.quantityPerItem
+      }));
       txn(
         BoxID,
-        { ...data, ItemUUID },
+        itemDataList,
         actor,
         agenticSearchQuery,
         agenticStatus,
@@ -1041,91 +1107,101 @@ const action = defineHttpAction({
         agenticRunManuallySkipped
       );
 
+      console.info('[import-item] Persisted item instances for import', {
+        mode: creationPlan.mode,
+        requestedQuantity,
+        createdCount: itemUUIDs.length,
+        ItemUUID: itemUUIDs[0]
+      });
+
       let agenticTriggerDispatched = false;
 
-      try {
-        const persistedAgenticRun = ctx.getAgenticRun?.get
-          ? ((ctx.getAgenticRun.get(ItemUUID) as { ItemUUID?: string; SearchQuery?: string | null } | undefined) ?? null)
-          : null;
-        if (!persistedAgenticRun) {
-          console.warn('[import-item] Agentic run missing immediately after import transaction', {
-            ItemUUID,
-            actor,
-            agenticStatus
-          });
-        } else if (!persistedAgenticRun.SearchQuery && agenticSearchQuery) {
-          console.info('[import-item] Agentic run persisted without search query; confirming ingestion state', {
-            ItemUUID,
-            actor
-          });
+      for (const itemId of itemUUIDs) {
+        try {
+          const persistedAgenticRun = ctx.getAgenticRun?.get
+            ? ((ctx.getAgenticRun.get(itemId) as { ItemUUID?: string; SearchQuery?: string | null } | undefined) ?? null)
+            : null;
+          if (!persistedAgenticRun) {
+            console.warn('[import-item] Agentic run missing immediately after import transaction', {
+              ItemUUID: itemId,
+              actor,
+              agenticStatus
+            });
+          } else if (!persistedAgenticRun.SearchQuery && agenticSearchQuery) {
+            console.info('[import-item] Agentic run persisted without search query; confirming ingestion state', {
+              ItemUUID: itemId,
+              actor
+            });
+          }
+        } catch (agenticPostPersistErr) {
+          console.error('[import-item] Failed to verify agentic run presence after import', agenticPostPersistErr);
         }
-      } catch (agenticPostPersistErr) {
-        console.error('[import-item] Failed to verify agentic run presence after import', agenticPostPersistErr);
-      }
 
-      if (ctx.agenticServiceEnabled && !agenticRunManuallySkipped) {
-        const triggerPayload = {
-          itemId: ItemUUID,
-          artikelbeschreibung: agenticSearchQuery || data.Artikelbeschreibung || ''
-        };
+        if (ctx.agenticServiceEnabled && !agenticRunManuallySkipped) {
+          const triggerPayload = {
+            itemId,
+            artikelbeschreibung: agenticSearchQuery || data.Artikelbeschreibung || ''
+          };
 
-        if (!triggerPayload.artikelbeschreibung) {
-          console.warn('[import-item] Agentic trigger skipped due to missing Artikelbeschreibung', {
-            ItemUUID,
+          if (!triggerPayload.artikelbeschreibung) {
+            console.warn('[import-item] Agentic trigger skipped due to missing Artikelbeschreibung', {
+              ItemUUID: itemId,
+              actor
+            });
+          } else {
+            try {
+              agenticTriggerDispatched = true;
+              void forwardAgenticTrigger(triggerPayload, {
+                context: 'import-item',
+                logger: console,
+                service: {
+                  db: ctx.db,
+                  getAgenticRun: ctx.getAgenticRun,
+                  upsertAgenticRun: ctx.upsertAgenticRun,
+                  updateAgenticRunStatus: ctx.updateAgenticRunStatus,
+                  logEvent: ctx.logEvent,
+                  logger: console,
+                  now: () => new Date(),
+                  invokeModel: ctx.agenticInvokeModel
+                }
+              })
+                .then((result) => {
+                  if (!result.ok) {
+                    console.error('[import-item] Agentic trigger response indicated failure', {
+                      ItemUUID: itemId,
+                      status: result.status,
+                      details: result.body ?? result.rawBody
+                    });
+                  }
+                })
+                .catch((agenticErr) => {
+                  console.error('[import-item] Failed to trigger agentic run after import', agenticErr);
+                });
+            } catch (dispatchErr) {
+              console.error('[import-item] Failed to schedule agentic trigger dispatch', dispatchErr);
+            }
+          }
+        } else if (ctx.agenticServiceEnabled && agenticRunManuallySkipped) {
+          console.info('[import-item] Agentic trigger skipped due to manual submission status', {
+            ItemUUID: itemId,
             actor
           });
         } else {
-          try {
-            agenticTriggerDispatched = true;
-            void forwardAgenticTrigger(triggerPayload, {
-              context: 'import-item',
-              logger: console,
-              service: {
-                db: ctx.db,
-                getAgenticRun: ctx.getAgenticRun,
-                upsertAgenticRun: ctx.upsertAgenticRun,
-                updateAgenticRunStatus: ctx.updateAgenticRunStatus,
-                logEvent: ctx.logEvent,
-                logger: console,
-                now: () => new Date(),
-                invokeModel: ctx.agenticInvokeModel
-              }
-            })
-              .then((result) => {
-                if (!result.ok) {
-                  console.error('[import-item] Agentic trigger response indicated failure', {
-                    ItemUUID,
-                    status: result.status,
-                    details: result.body ?? result.rawBody
-                  });
-                }
-              })
-              .catch((agenticErr) => {
-                console.error('[import-item] Failed to trigger agentic run after import', agenticErr);
-              });
-          } catch (dispatchErr) {
-            console.error('[import-item] Failed to schedule agentic trigger dispatch', dispatchErr);
-          }
+          console.info('[import-item] Agentic service disabled; queued agentic run locally and skipped remote trigger dispatch', {
+            ItemUUID: itemId,
+            actor,
+            agenticSearchQuery
+          });
         }
-      } else if (ctx.agenticServiceEnabled && agenticRunManuallySkipped) {
-        console.info('[import-item] Agentic trigger skipped due to manual submission status', {
-          ItemUUID,
-          actor
-        });
-      } else {
-        console.info('[import-item] Agentic service disabled; queued agentic run locally and skipped remote trigger dispatch', {
-          ItemUUID,
-          actor,
-          agenticSearchQuery
-        });
       }
 
       // TODO(agent): Re-audit import response payload fields during next contract alignment review.
       let responseArtikelNummer: string | null = data.Artikel_Nummer || null;
       let responseBoxId: string | null = BoxID;
       try {
+        const primaryItemUUID = itemUUIDs[0];
         const persistedItem = ctx.getItem?.get
-          ? ((ctx.getItem.get(ItemUUID) as { Artikel_Nummer?: string | null; BoxID?: string | null } | undefined) ??
+          ? ((ctx.getItem.get(primaryItemUUID) as { Artikel_Nummer?: string | null; BoxID?: string | null } | undefined) ??
               null)
           : null;
         if (persistedItem) {
@@ -1141,17 +1217,19 @@ const action = defineHttpAction({
             persistedItem.Artikel_Nummer !== data.Artikel_Nummer
           ) {
             console.warn('[import-item] Persisted Artikel_Nummer differs from normalized payload after import', {
-              ItemUUID,
+              ItemUUID: primaryItemUUID,
               persisted: persistedItem.Artikel_Nummer,
               normalized: data.Artikel_Nummer
             });
           }
         } else {
-          console.warn('[import-item] Unable to load persisted item after import for response payload', { ItemUUID });
+          console.warn('[import-item] Unable to load persisted item after import for response payload', {
+            ItemUUID: primaryItemUUID
+          });
         }
       } catch (responseItemError) {
         console.error('[import-item] Failed to read persisted item for response payload', {
-          ItemUUID,
+          ItemUUID: itemUUIDs[0],
           error: responseItemError
         });
       }
@@ -1163,9 +1241,16 @@ const action = defineHttpAction({
         });
       }
 
+      const responseItems = itemUUIDs.map((uuid) => ({
+        ItemUUID: uuid,
+        BoxID: responseBoxId,
+        Artikel_Nummer: responseArtikelNummer
+      }));
       sendJson(res, 200, {
         ok: true,
-        item: { ItemUUID, BoxID: responseBoxId, Artikel_Nummer: responseArtikelNummer },
+        item: responseItems[0],
+        items: responseItems,
+        createdCount: responseItems.length,
         agenticTriggerDispatched
       });
     } catch (err) {
