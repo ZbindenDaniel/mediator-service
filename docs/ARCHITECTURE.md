@@ -92,3 +92,15 @@ Design:owner@mediator and target the Q4 documentation refresh.
 - CSV import/export interacts with file system and database storage.
 - QR scanning leverages camera APIs within the browser and logs scans server-side.
 - Printing flows generate HTML templates consumed by external label printers.
+
+## Import/Export Archive Format
+
+- `/api/export/items` streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring the backend's `MEDIA_DIR`. The CSV payloads retain the partner column ordering and reuse existing metadata lookups (e.g., `collectMediaAssets`) so downstream clients receive the same image resolution hints as before.
+- `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv` updates continue to use duplicate detection and zero-stock flags.
+- `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before ingestion.
+
+## Langtext Migration Notes
+
+- `models/item.ts` still allows `Langtext` as either a string or a `{ [key: string]: string }` payload, so callers must treat the field as a mixed type until the legacy string path is retired.
+- Backend persistence, importer, and export flows route `Langtext` values through `backend/lib/langtext.ts`, which logs `[langtext]` warnings when JSON parsing fails or non-object data is encountered and falls back to string handling.
+- Import actions warn when form-supplied Langtext values are rejected and fall back to reference defaults, keeping ingest resilient while migration telemetry is collected.
