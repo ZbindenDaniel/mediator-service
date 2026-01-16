@@ -24,6 +24,10 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Shopware support currently covers read-only product search plus a queued sync pipeline awaiting a real dispatch client.
 - The legacy agentic runtime has been ported into the mediator under `backend/agentic/`; ongoing work focuses on stability and integration follow-through.
 
+## Progress Updates
+
+- Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
+
 ## Documentation Map
 
 - **Architecture & data flow** → [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)
