@@ -34,6 +34,10 @@ Checklist (re-check and update this planning doc before starting each subsequent
 
 Non-goals (unless explicitly requested): no new fields, no changes to instance data structures, and no broad refactors outside the edit flow.
 
+TODO(reference-only-edit): Reconfirm ItemReferenceEdit stays aligned with ItemRef whenever item reference schemas shift.
+
+Recent alignment: the item edit UI now hides Quality/Auf_Lager inputs while the save flow persists reference-only payloads (item_refs), keeping instance fields untouched as intended by this plan.
+
 ## Upcoming Opportunities
 
 - Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
