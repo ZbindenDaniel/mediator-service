@@ -14,6 +14,7 @@ import { logError, logger } from '../utils/logger';
 // TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
 // TODO(agent): Keep BoxID (Behälter) and Location (Lagerort) normalization separate in this table.
 // TODO(grouped-item-table): Validate grouped row actions once bulk operations are updated.
+// TODO(bulk-display): Confirm quantity display for Einheit=Menge items in list rows once backend payloads sync.
 
 interface Props {
   items: GroupedItemDisplay[];

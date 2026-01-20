@@ -40,6 +40,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added structured logging around Produkt schema legacy column mappings to improve import observability without widening data model scope.
 - Updated instance item grouping and print quantity logic to use grouped counts while keeping `Auf_Lager` numeric for bulk items, with warnings for anomalous instance stock values.
 - Isolated bulk Einheit=Menge items in grouped UI lists while surfacing Auf_Lager display quantities alongside instance counts for Stück items.
+- Split bulk Einheit=Menge items into unique grouped rows keyed by ItemUUID and updated list displays to show `Auf_Lager`-based quantities alongside instance counts.
 - Keyed agentic run bulk queueing and instance detail status summaries off ItemUUIDs, with aggregated agentic status now surfaced in grouped list views.
 - Added instance-scoped search limits for add-item workflows to return more item rows while logging truncation for debugging.
 - Enabled deep search defaults for Kurzbeschreibung/Langtext matching while keeping the flag available for API callers.
@@ -52,6 +53,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added item detail API payloads to return explicit reference data alongside instance lists to keep item metadata separated.
 - Added Einheit selection to the item creation basic info step so new items start with a default unit that flows into creation payloads.
 - Shared shelf label formatting between box and item lists so shelf locations show location, floor, and shelf IDs consistently.
+- Normalized item creation quantity handling to keep Auf_Lager flowing through match selection and guard against missing payloads while clarifying bulk-vs-instance behavior in the UI.
 
 ## Documentation Map
 

@@ -31,6 +31,7 @@ type GroupItemsOptions = {
 
 // TODO(instance-1-grouping): Revisit ItemUUID parsing once prefix rules are finalized.
 // TODO(agent): Revisit grouped quantity semantics if mixed Einheit payloads appear in a single grouping bucket.
+// TODO(bulk-grouping): Validate bulk ItemUUID-based grouping once backend grouped payloads are aligned.
 function normalizeString(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -190,6 +191,27 @@ function resolveItemQuantity(
   return { quantity: isBulk ? parsedAufLager : 1, isBulk, parsedAufLager };
 }
 
+function resolveBulkGroupingToken(item: Item, logContext: string, index: number): string {
+  try {
+    const itemUUID = normalizeString(item.ItemUUID);
+    if (itemUUID) {
+      return itemUUID;
+    }
+    logger.warn?.(`[${logContext}] Bulk item missing ItemUUID for grouping`, {
+      index,
+      artikelNumber: item.Artikel_Nummer ?? null,
+      boxId: item.BoxID ?? null,
+      location: item.Location ?? null
+    });
+  } catch (error) {
+    logError(`[${logContext}] Failed to normalize bulk grouping token`, error, {
+      index,
+      itemId: item.ItemUUID ?? null
+    });
+  }
+  return `bulk-missing-${index}`;
+}
+
 export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions = {}): GroupedItemDisplay[] {
   const grouped = new Map<string, GroupedItemDisplay>();
   const safeItems = Array.isArray(items) ? items : [];
@@ -203,6 +225,7 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         const { boxId, location } = resolveLocation(item);
         const category = resolveCategory(item);
         const quantityData = resolveItemQuantity(item, logContext);
+        const bulkGroupingToken = quantityData.isBulk ? resolveBulkGroupingToken(item, logContext, index) : null;
         const missingKeys = !artikelNumber || quality === null || (!boxId && !location);
 
         if (missingKeys) {
@@ -233,9 +256,11 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
             });
           }
           keySegments.push(item.ItemUUID ?? `bulk-missing-${index}`);
+        if (bulkGroupingToken) {
+          keySegments.push(bulkGroupingToken);
         }
         let key = keySegments.join('|');
-        if (missingKeys && item.ItemUUID) {
+        if (missingKeys && item.ItemUUID && !bulkGroupingToken) {
           key = `${key}|${item.ItemUUID}`;
         }
 
