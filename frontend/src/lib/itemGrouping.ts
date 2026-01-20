@@ -20,6 +20,8 @@ export interface GroupedItemDisplay {
   items: Item[];
   representative: Item | null;
   totalStock: number;
+  displayCount: number;
+  isBulk: boolean;
   agenticStatusSummary: AgenticRunStatus;
 }
 
@@ -194,12 +196,13 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
   const logContext = options.logContext ?? 'item-grouping';
 
   try {
-    for (const item of safeItems) {
+    for (const [index, item] of safeItems.entries()) {
       try {
         const artikelNumber = normalizeString(item.Artikel_Nummer);
         const quality = normalizeQuality(item.Quality);
         const { boxId, location } = resolveLocation(item);
         const category = resolveCategory(item);
+        const quantityData = resolveItemQuantity(item, logContext);
         const missingKeys = !artikelNumber || quality === null || (!boxId && !location);
 
         if (missingKeys) {
@@ -221,19 +224,38 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         if (category) {
           keySegments.push(category);
         }
+        if (quantityData.isBulk) {
+          if (!item.ItemUUID) {
+            logger.warn?.(`[${logContext}] Bulk item missing ItemUUID; isolating grouping key`, {
+              artikelNumber,
+              boxId,
+              location
+            });
+          }
+          keySegments.push(item.ItemUUID ?? `bulk-missing-${index}`);
+        }
         let key = keySegments.join('|');
         if (missingKeys && item.ItemUUID) {
           key = `${key}|${item.ItemUUID}`;
         }
 
         const existing = grouped.get(key);
-        const quantityData = resolveItemQuantity(item, logContext);
         const itemAgenticStatus = resolveAgenticStatus(item.AgenticStatus);
         const canonicalInstance = isCanonicalInstance(item.ItemUUID ?? null);
         if (existing) {
           existing.summary.count += 1;
           existing.items.push(item);
           existing.totalStock += quantityData.quantity;
+          if (existing.isBulk !== quantityData.isBulk) {
+            logger.warn?.(`[${logContext}] Mixed Einheit grouping detected`, {
+              groupKey: key,
+              itemId: item.ItemUUID ?? null,
+              artikelNumber,
+              existingIsBulk: existing.isBulk,
+              nextIsBulk: quantityData.isBulk
+            });
+          }
+          existing.displayCount = existing.isBulk ? existing.totalStock : existing.summary.count;
           existing.agenticStatusSummary = mergeAgenticStatusSummary(existing.agenticStatusSummary, itemAgenticStatus);
           if (item.ItemUUID && (canonicalInstance || !existing.summary.representativeItemId)) {
             existing.summary.representativeItemId = item.ItemUUID;
@@ -258,6 +280,8 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
           items: [item],
           representative: item,
           totalStock: quantityData.quantity,
+          displayCount: quantityData.isBulk ? quantityData.quantity : 1,
+          isBulk: quantityData.isBulk,
           agenticStatusSummary: itemAgenticStatus
         });
       } catch (error) {
