@@ -14,6 +14,7 @@ import { logError, logger } from '../utils/logger';
 // TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
 // TODO(agent): Keep BoxID (Behälter) and Location (Lagerort) normalization separate in this table.
 // TODO(grouped-item-table): Validate grouped row actions once bulk operations are updated.
+// TODO(bulk-display): Confirm quantity display for Einheit=Menge items in list rows once backend payloads sync.
 
 interface Props {
   items: GroupedItemDisplay[];
@@ -150,7 +151,7 @@ export default function ItemList({
             const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
             const checkboxLabel = `Artikelgruppe ${representativeLabel} auswählen`;
             const rowLabel = `Details für ${representativeLabel} öffnen`;
-            const countValue = group.summary.count;
+            const countValue = group.totalStock;
             const subcategoryValue = group.summary.Category
               ?? (typeof representative?.Unterkategorien_A === 'number'
                 ? String(representative.Unterkategorien_A)
