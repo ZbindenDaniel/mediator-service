@@ -1512,11 +1512,11 @@ export default function ItemDetail({ itemId }: Props) {
     ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
     : false;
   // TODO(agentic-close-not-started): Confirm manual close remains available for not-started runs after import/export sync.
+  // TODO(agentic-close-running): Reconfirm close affordance rules once running-state copy is finalized.
   const agenticCanClose = Boolean(
     agenticHasRun &&
       normalizedAgenticStatus &&
-      (!AGENTIC_RUN_TERMINAL_STATUSES.has(normalizedAgenticStatus) ||
-        normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED)
+      normalizedAgenticStatus !== AGENTIC_RUN_STATUS_RUNNING
   );
   const agenticCanDelete = Boolean(
     agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
