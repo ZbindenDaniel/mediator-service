@@ -2,10 +2,11 @@ import React, { ChangeEvent, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Box } from '../../../models/box';
 import { formatDate } from '../lib/format';
-import { getShelfDisplayLabel } from '../lib/shelfLabel';
+import { formatShelfLabel } from '../lib/shelfLabel';
 import BoxTag from './BoxTag';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
+// TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
 
 export type BoxSortKey = 'BoxID' | 'Label' | 'UpdatedAt';
 
@@ -115,7 +116,8 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                 : box.LocationId?.startsWith('S-')
                   ? box.LocationId
                   : null;
-              const shelfLabel = getShelfDisplayLabel(shelfId, box.Label);
+              const shelfLabel = formatShelfLabel(shelfId);
+              const locationLabel = shelfLabel ?? box.Label?.trim() ?? null;
 
               return (
                 <tr
@@ -146,7 +148,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                   <td className="col-location">
                     <BoxTag
                       locationKey={box.LocationId}
-                      labelOverride={shelfLabel ?? box.Label}
+                      labelOverride={locationLabel}
                     />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>

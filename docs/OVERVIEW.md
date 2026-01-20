@@ -55,6 +55,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Added item detail API payloads to return explicit reference data alongside instance lists to keep item metadata separated.
 - Added Einheit selection to the item creation basic info step so new items start with a default unit that flows into creation payloads.
 - Shared shelf label formatting between box and item lists so shelf locations show location, floor, and shelf IDs consistently.
+- Centralized shelf label formatting in the frontend to standardize Lagerort labels across box and item lists with safe parsing and logging.
 - Normalized item creation quantity handling to keep Auf_Lager flowing through match selection and guard against missing payloads while clarifying bulk-vs-instance behavior in the UI.
 - Aligned agentic close availability to allow closing in any non-running state while keeping running runs locked to prevent accidental termination.
 - Aligned relocation create-and-move flow with auto-print item label behavior to match creation-time printing expectations.

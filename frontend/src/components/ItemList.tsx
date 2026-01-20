@@ -5,7 +5,7 @@ import BoxTag from './BoxTag';
 import QualityBadge from './QualityBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import type { GroupedItemDisplay } from '../lib/itemGrouping';
-import { getShelfDisplayLabel } from '../lib/shelfLabel';
+import { formatShelfLabel } from '../lib/shelfLabel';
 import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Confirm item list location tags remain legible without the color metadata.
@@ -13,6 +13,7 @@ import { logError, logger } from '../utils/logger';
 // TODO(agentic): Expand item list columns and responsive styling for enriched item metadata.
 // TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
 // TODO(agent): Keep BoxID (Behälter) and Location (Lagerort) normalization separate in this table.
+// TODO(agent): Validate shelf label formatting in the item list Lagerort column.
 // TODO(grouped-item-table): Validate grouped row actions once bulk operations are updated.
 // TODO(bulk-display): Confirm quantity display for Einheit=Menge items in list rows once backend payloads sync.
 
@@ -145,7 +146,7 @@ export default function ItemList({
 
             const boxLinkTarget = boxId ? `/boxes/${encodeURIComponent(boxId)}` : null;
             const shelfLinkTarget = shelfId ? `/boxes/${encodeURIComponent(shelfId)}` : null;
-            const shelfLabel = getShelfDisplayLabel(shelfId);
+            const shelfLabel = formatShelfLabel(shelfId);
             const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => selectedItemIds.has(itemId));
             const isPartiallySelected = groupItemIds.some((itemId) => selectedItemIds.has(itemId)) && !isSelected;
             const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
