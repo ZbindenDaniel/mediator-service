@@ -685,7 +685,9 @@ export default function BoxDetail({ boxId }: Props) {
                                 <td className="col-desc">
                                   {representative?.Artikelbeschreibung ?? '—'}
                                 </td>
-                                <td className="col-stock optional-column">{countValue}</td>
+                                <td className="col-stock optional-column">
+                                  {Number.isFinite(group.displayCount) ? group.displayCount : group.summary.count}
+                                </td>
                                 <td className="col-quality optional-column">
                                   <QualityBadge compact value={qualityValue} />
                                 </td>

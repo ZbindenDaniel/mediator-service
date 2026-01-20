@@ -20,6 +20,8 @@ export interface GroupedItemDisplay {
   items: Item[];
   representative: Item | null;
   totalStock: number;
+  displayCount: number;
+  isBulk: boolean;
   agenticStatusSummary: AgenticRunStatus;
 }
 
@@ -245,6 +247,15 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         if (category) {
           keySegments.push(category);
         }
+        if (quantityData.isBulk) {
+          if (!item.ItemUUID) {
+            logger.warn?.(`[${logContext}] Bulk item missing ItemUUID; isolating grouping key`, {
+              artikelNumber,
+              boxId,
+              location
+            });
+          }
+          keySegments.push(item.ItemUUID ?? `bulk-missing-${index}`);
         if (bulkGroupingToken) {
           keySegments.push(bulkGroupingToken);
         }
@@ -260,6 +271,16 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
           existing.summary.count += 1;
           existing.items.push(item);
           existing.totalStock += quantityData.quantity;
+          if (existing.isBulk !== quantityData.isBulk) {
+            logger.warn?.(`[${logContext}] Mixed Einheit grouping detected`, {
+              groupKey: key,
+              itemId: item.ItemUUID ?? null,
+              artikelNumber,
+              existingIsBulk: existing.isBulk,
+              nextIsBulk: quantityData.isBulk
+            });
+          }
+          existing.displayCount = existing.isBulk ? existing.totalStock : existing.summary.count;
           existing.agenticStatusSummary = mergeAgenticStatusSummary(existing.agenticStatusSummary, itemAgenticStatus);
           if (item.ItemUUID && (canonicalInstance || !existing.summary.representativeItemId)) {
             existing.summary.representativeItemId = item.ItemUUID;
@@ -284,6 +305,8 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
           items: [item],
           representative: item,
           totalStock: quantityData.quantity,
+          displayCount: quantityData.isBulk ? quantityData.quantity : 1,
+          isBulk: quantityData.isBulk,
           agenticStatusSummary: itemAgenticStatus
         });
       } catch (error) {

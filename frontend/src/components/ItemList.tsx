@@ -151,7 +151,9 @@ export default function ItemList({
             const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
             const checkboxLabel = `Artikelgruppe ${representativeLabel} auswählen`;
             const rowLabel = `Details für ${representativeLabel} öffnen`;
-            const countValue = group.totalStock;
+            const countValue = Number.isFinite(group.displayCount)
+              ? group.displayCount
+              : group.summary.count;
             const subcategoryValue = group.summary.Category
               ?? (typeof representative?.Unterkategorien_A === 'number'
                 ? String(representative.Unterkategorien_A)
