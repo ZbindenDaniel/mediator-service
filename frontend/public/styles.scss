@@ -344,6 +344,28 @@ div {
     }
 }
 
+.search-results {
+    display: grid;
+    gap: 6px;
+}
+
+.search-results-row {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr) 180px;
+    gap: 12px;
+    align-items: center;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--line);
+
+    a {
+        color: inherit;
+    }
+}
+
+.search-results-row:last-child {
+    border-bottom: 0;
+}
+
 .stack {
     display: grid;
     gap: 12px;

@@ -51,37 +51,38 @@ export default function SearchCard() {
         />
         <button className="btn" onClick={runFind}>Suchen</button>
       </div>
-      <div className="list" style={{ marginTop: '10px' }}>
+      <div className="list search-results" style={{ marginTop: '10px' }}>
         {results.map((res, idx) =>
           res.type === 'box' ? (
-            <div className="card linkcard" key={`b-${idx}`}>
-             <Link className="linkcard" to={`/boxes/${encodeURIComponent(res.id)}`}>
-              <div>
-                Behälter: {res.id}
+            <div className="search-results-row" key={`b-${idx}`}>
+              <div className="mono">
+                <Link to={`/boxes/${encodeURIComponent(res.id)}`}>Behälter: {res.id}</Link>
               </div>
               <div className="muted">
                 <BoxTag locationKey={res.locationId} labelOverride={res.label} />
               </div>
-             </Link>
+              <div />
             </div>
           ) : (
-            <div className="card linkcard" key={res.item.ItemUUID}>
-              <Link className="linkcard" to={`/items/${encodeURIComponent(res.item.ItemUUID)}`}>
+            <div className="search-results-row" key={res.item.ItemUUID}>
               <div>
-                <span className="pill mono">
-                  {(res.item.ItemUUID || '').slice(-6).toUpperCase()}
-                </span>
+                <Link to={`/items/${encodeURIComponent(res.item.ItemUUID)}`}>
+                  <span className="pill mono">
+                    {(res.item.ItemUUID || '').slice(-6).toUpperCase()}
+                  </span>
+                </Link>
               </div>
-              </Link>
               <div className="muted">{res.item.Artikelbeschreibung || ''}</div>
-              {res.item.BoxID && (
-                <div>
-                  Behälter:{' '}
-                  <a href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>
-                    {res.item.BoxID}
-                  </a>
-                </div>
-              )}
+              <div>
+                {res.item.BoxID && (
+                  <>
+                    Behälter:{' '}
+                    <a href={`/boxes/${encodeURIComponent(res.item.BoxID)}`}>
+                      {res.item.BoxID}
+                    </a>
+                  </>
+                )}
+              </div>
             </div>
           )
         )}
