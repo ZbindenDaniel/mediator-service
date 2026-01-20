@@ -410,7 +410,6 @@ div {
     border-radius: var(--radius);
     padding: calc(var(--pad) + 2px);
     margin-bottom: 8px;
-
 }
 
 .event-card {
@@ -734,7 +733,8 @@ button a {
 }
 
 button:hover {
-    background: #eef1f5
+    background: #eef1f5;
+    animation: whobble .5s ease-out forwards;
 }
 
 .btn-primary {
@@ -912,6 +912,7 @@ button:focus {
 .suggestion-option.active {
     border-color: var(--acc);
     box-shadow: 0 0 0 1px var(--acc);
+    animation: whobble .5s ease-out forwards;
 }
 
 .box-search {
@@ -1133,7 +1134,35 @@ button:focus {
 }
 
 .linkcard:hover .card {
-    border-color: var(--acc)
+    border-color: var(--acc);
+    animation: whobble .5s ease-out forwards;
+}
+
+@keyframes whobble {
+    0% {
+        transform: translateX(0);
+    }
+    15% {
+        transform: translateX(-8px);
+    }
+    30% {
+        transform: translateX(8px);
+    }
+    45% {
+        transform: translateX(-5px);
+    }
+    60% {
+        transform: translateX(3px);
+    }
+    75% {
+        transform: translateX(-2px);
+    }
+    90% {
+        transform: translateX(1px);
+    }
+    100% {
+        transform: translateX(0);
+    }
 }
 
 .nav {
