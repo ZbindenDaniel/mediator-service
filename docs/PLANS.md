@@ -8,7 +8,7 @@ Goal: treat item instances as a single canonical record so inventory, exports, a
 
 Checklist (re-check and update this planning doc before starting each subsequent task in the sequence):
 
-- [ ] **Grouping rules** – define the grouping logic for `itemInstances` to normalize to instance `1`, document expected inputs/outputs, and note any data structure updates only where necessary. Reason: ensure consistent grouping across ingestion, UI, and print flows without expanding schemas.
+- [x] **Grouping rules** – normalized grouping to prefer ItemUUID sequence `1` as the representative instance (fallbacks log when no canonical record is present) while keeping group keys unchanged. Reason: ensure consistent grouping across ingestion, UI, and print flows without expanding schemas.
 - [ ] **Export updates** – update CSV/ZIP export mapping to emit instance `1` data and confirm partner column ordering remains stable; verify any data structure fields used by export. Reason: keep external integrations aligned while minimizing downstream churn.
 - [ ] **Agentic ref changes** – adjust agentic reference lookups to resolve instance `1` and log fallbacks; validate that any model/schema changes in `models/` and `backend/src/models/` stay in sync. Reason: keep agentic enrichment and approvals anchored to the canonical record.
 - [ ] **Printing rules** – align label/print payloads with instance `1` identifiers and ensure existing templates stay unchanged unless required. Reason: preserve print layout stability while avoiding duplicate labels.

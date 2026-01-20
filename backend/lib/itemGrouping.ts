@@ -1,3 +1,5 @@
+import { parseSequentialItemUUID } from './itemIds';
+
 export type GroupedItemSummary = {
   Artikel_Nummer: string | null;
   Quality: number | null;
@@ -18,8 +20,9 @@ type GroupableItem = {
   Unterkategorien_B?: number | string | null;
 };
 
+// TODO(instance-1-grouping): Revisit ItemUUID parsing rules if the prefix format changes again.
 type GroupItemsOptions = {
-  logger?: Pick<Console, 'warn' | 'error'>;
+  logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 };
 
 function normalizeString(value: unknown): string | null {
@@ -72,6 +75,14 @@ function resolveLocation(item: GroupableItem): { boxId: string | null; location:
   return { boxId: null, location: normalizeString(item.Location) };
 }
 
+function isCanonicalInstance(itemUUID: string | null | undefined): boolean {
+  if (!itemUUID) {
+    return false;
+  }
+  const parsed = parseSequentialItemUUID(itemUUID, null);
+  return parsed?.sequence === 1;
+}
+
 export function groupItemsForResponse(
   items: GroupableItem[],
   options: GroupItemsOptions = {}
@@ -112,9 +123,10 @@ export function groupItemsForResponse(
       }
 
       const existing = grouped.get(key);
+      const isCanonical = isCanonicalInstance(item.ItemUUID ?? null);
       if (existing) {
         existing.count += 1;
-        if (!existing.representativeItemId && item.ItemUUID) {
+        if (item.ItemUUID && (isCanonical || !existing.representativeItemId)) {
           existing.representativeItemId = item.ItemUUID;
         }
         continue;
@@ -133,6 +145,18 @@ export function groupItemsForResponse(
       logger.warn?.('[item-grouping] Failed to group item', {
         itemId: item.ItemUUID ?? null,
         error
+      });
+    }
+  }
+
+  for (const entry of grouped.values()) {
+    if (entry.representativeItemId && !isCanonicalInstance(entry.representativeItemId)) {
+      logger.info?.('[item-grouping] Falling back to non-canonical representative', {
+        representativeItemId: entry.representativeItemId,
+        artikelNumber: entry.Artikel_Nummer ?? null,
+        quality: entry.Quality ?? null,
+        boxId: entry.BoxID ?? null,
+        location: entry.Location ?? null
       });
     }
   }
