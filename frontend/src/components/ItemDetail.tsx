@@ -23,6 +23,7 @@ import {
   AGENTIC_RUN_TERMINAL_STATUSES,
   ItemEinheit,
   isItemEinheit,
+  normalizeItemEinheit,
   normalizeAgenticRunStatus
 } from '../../../models';
 import { describeQuality, QUALITY_DEFAULT } from '../../../models/quality';
@@ -77,6 +78,7 @@ export interface AgenticStatusDisplay {
 const DEFAULT_DETAIL_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 
+// TODO(agent): Validate the reference vs. instance row grouping once product owners review the split detail cards.
 function resolveDetailEinheit(value: unknown): ItemEinheit {
   try {
     if (isItemEinheit(value)) {
@@ -101,6 +103,27 @@ function resolveDetailEinheit(value: unknown): ItemEinheit {
     console.error('ItemDetail: Failed to resolve Einheit value, using default.', error);
   }
   return DEFAULT_DETAIL_EINHEIT;
+}
+
+// TODO(agent): Confirm quantity row hiding behavior stays aligned with bulk item expectations.
+function resolveQuantityEinheit(value: unknown, itemId: string): ItemEinheit | null {
+  try {
+    const normalized = normalizeItemEinheit(value);
+    if (!normalized) {
+      logger.warn?.('ItemDetail: Einheit missing or invalid; hiding quantity row.', {
+        itemId,
+        provided: value
+      });
+      return null;
+    }
+    return normalized;
+  } catch (error) {
+    logError('ItemDetail: Failed to normalize Einheit for quantity row', error, {
+      itemId,
+      provided: value
+    });
+    return null;
+  }
 }
 
 export interface AgenticStatusCardProps {
@@ -1084,16 +1107,23 @@ export default function ItemDetail({ itemId }: Props) {
 
     const rows: [string, React.ReactNode][] = [
       // ['Erstellt von', creator],
+      ['ItemUUID', item.ItemUUID ?? null],
       ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],
       ['Artikelnummer', item.Artikel_Nummer ?? null],
-      ['Anzahl', item.Auf_Lager ?? null],
       [
         'Behälter',
         item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
       ],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
-      ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)]
+      ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)],
+      ['Qualität', qualitySummary.label],
+      ['Ki Status', agenticStatusDisplay(agentic).label]
     ];
+
+    const quantityEinheit = resolveQuantityEinheit(item.Einheit, item.ItemUUID);
+    if (quantityEinheit === ItemEinheit.Menge) {
+      rows.push(['Menge', item.Auf_Lager ?? null]);
+    }
 
     const unterkategorieB = resolveUnterkategorieLabel(item.Unterkategorien_B);
     if (unterkategorieB !== null) {
@@ -1121,7 +1151,38 @@ export default function ItemDetail({ itemId }: Props) {
     );
 
     return rows;
-  }, [events, item, langtextRows, resolveUnterkategorieLabel]);
+  }, [agentic, events, item, langtextRows, qualitySummary.label, resolveUnterkategorieLabel]);
+
+  const { referenceDetailRows, instanceDetailRows } = useMemo(() => {
+    const referenceRows: [string, React.ReactNode][] = [];
+    const instanceRows: [string, React.ReactNode][] = [];
+    try {
+      const instanceKeys = new Set([
+        'ItemUUID',
+        'Behälter',
+        'Qualität',
+        'Ki Status',
+        'Erfasst am',
+        'Aktualisiert am'
+      ]);
+      for (const row of detailRows) {
+        if (instanceKeys.has(row[0])) {
+          instanceRows.push(row);
+        } else {
+          referenceRows.push(row);
+        }
+      }
+    } catch (error) {
+      logError('ItemDetail: Failed to partition detail rows', error, {
+        rowCount: detailRows.length
+      });
+      return {
+        referenceDetailRows: detailRows,
+        instanceDetailRows: []
+      };
+    }
+    return { referenceDetailRows: referenceRows, instanceDetailRows: instanceRows };
+  }, [detailRows]);
 
   const instanceRows = useMemo(() => {
     return instances.map((instance) => {
@@ -2132,7 +2193,7 @@ export default function ItemDetail({ itemId }: Props) {
                   →
                 </button>
               </div>
-              
+
               <h2 className="item-detail__title">
                 Artikel <span className="muted">({item.ItemUUID})</span>
                 <span style={{ marginLeft: '8px' }}>
@@ -2146,73 +2207,6 @@ export default function ItemDetail({ itemId }: Props) {
                   mediaAssets={mediaAssets}
                 />
               </section>
-              <div className='row'>
-                <table className="details">
-                  <tbody>
-                    {detailRows.map(([k, v], idx) => {
-                      const cell = normalizeDetailValue(v);
-                      return (
-                        <tr key={`${k}-${idx}`} className="responsive-row">
-                          <th className="responsive-th">{k}</th>
-                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                            {cell.content}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="row">
-                <div className="item-detail__instances">
-                  <h3>Instanzen</h3>
-                  {instanceRows.length > 0 ? (
-                    <table className="details">
-                      <thead>
-                        <tr>
-                          <th>UUID</th>
-                          <th>Qualität</th>
-                          <th>Ki</th>
-                          <th>Standort</th>
-                          <th>Aktualisiert</th>
-                          <th>Erfasst</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {instanceRows.map((row) => {
-                          const qualityCell = normalizeDetailValue(row.quality);
-                          const agenticCell = normalizeDetailValue(row.agenticStatus);
-                          const locationCell = normalizeDetailValue(row.location);
-                          const updatedCell = normalizeDetailValue(row.updatedAt);
-                          const createdCell = normalizeDetailValue(row.createdAt);
-                          return (
-                            <tr key={row.id}>
-                              <td>{row.id}</td>
-                              <td className={qualityCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {qualityCell.content}
-                              </td>
-                              <td className={agenticCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {agenticCell.content}
-                              </td>
-                              <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {locationCell.content}
-                              </td>
-                              <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {updatedCell.content}
-                              </td>
-                              <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {createdCell.content}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p className="muted">Keine Instanzen vorhanden.</p>
-                  )}
-                </div>
-              </div>
               <div className='row'>
                 <button type="button" className="btn" onClick={handleEdit}>Bearbeiten</button>
                 <button type="button" className="btn" onClick={async () => {
@@ -2262,6 +2256,101 @@ export default function ItemDetail({ itemId }: Props) {
                 </button>
                 <button type="button" className="btn danger" onClick={handleDelete}>Löschen</button>
               </div>
+            </div>
+
+            <div className="card">
+              <h3>Referenz</h3>
+              {referenceDetailRows.length > 0 ? (
+                <table className="details">
+                  <tbody>
+                    {referenceDetailRows.map(([k, v], idx) => {
+                      const cell = normalizeDetailValue(v);
+                      return (
+                        <tr key={`${k}-${idx}`} className="responsive-row">
+                          <th className="responsive-th">{k}</th>
+                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                            {cell.content}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="muted">Keine Referenzdaten vorhanden.</p>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>Instanz</h3>
+              {instanceDetailRows.length > 0 ? (
+                <table className="details">
+                  <tbody>
+                    {instanceDetailRows.map(([k, v], idx) => {
+                      const cell = normalizeDetailValue(v);
+                      return (
+                        <tr key={`${k}-${idx}`} className="responsive-row">
+                          <th className="responsive-th">{k}</th>
+                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                            {cell.content}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="muted">Keine Instanzdaten vorhanden.</p>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>Weitere Instanzen</h3>
+              {instanceRows.length > 0 ? (
+                <table className="details">
+                  <thead>
+                    <tr>
+                      <th>UUID</th>
+                      <th>Qualität</th>
+                      <th>Ki</th>
+                      <th>Standort</th>
+                      <th>Aktualisiert</th>
+                      <th>Erfasst</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {instanceRows.map((row) => {
+                      const qualityCell = normalizeDetailValue(row.quality);
+                      const agenticCell = normalizeDetailValue(row.agenticStatus);
+                      const locationCell = normalizeDetailValue(row.location);
+                      const updatedCell = normalizeDetailValue(row.updatedAt);
+                      const createdCell = normalizeDetailValue(row.createdAt);
+                      return (
+                        <tr key={row.id}>
+                          <td>{row.id}</td>
+                          <td className={qualityCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                            {qualityCell.content}
+                          </td>
+                          <td className={agenticCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                            {agenticCell.content}
+                          </td>
+                          <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                            {locationCell.content}
+                          </td>
+                          <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                            {updatedCell.content}
+                          </td>
+                          <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                            {createdCell.content}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="muted">Keine Instanzen vorhanden.</p>
+              )}
             </div>
 
             <AgenticStatusCard
