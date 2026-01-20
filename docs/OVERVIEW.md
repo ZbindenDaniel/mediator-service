@@ -47,6 +47,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Refined add-item dialog result rows with a compact layout to keep search actions visible while tightening spacing.
 - Made item detail instance rows navigable to instance-specific detail pages while preserving reload behavior for the current instance.
 - Added item detail API payloads to return explicit reference data alongside instance lists to keep item metadata separated.
+- Shared shelf label formatting between box and item lists so shelf locations show location, floor, and shelf IDs consistently.
 
 ## Documentation Map
 

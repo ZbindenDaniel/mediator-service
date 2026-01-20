@@ -5,6 +5,7 @@ import BoxTag from './BoxTag';
 import QualityBadge from './QualityBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import type { GroupedItemDisplay } from '../lib/itemGrouping';
+import { getShelfDisplayLabel } from '../lib/shelfLabel';
 import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Confirm item list location tags remain legible without the color metadata.
@@ -143,6 +144,7 @@ export default function ItemList({
 
             const boxLinkTarget = boxId ? `/boxes/${encodeURIComponent(boxId)}` : null;
             const shelfLinkTarget = shelfId ? `/boxes/${encodeURIComponent(shelfId)}` : null;
+            const shelfLabel = getShelfDisplayLabel(shelfId);
             const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => selectedItemIds.has(itemId));
             const isPartiallySelected = groupItemIds.some((itemId) => selectedItemIds.has(itemId)) && !isSelected;
             const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
@@ -223,7 +225,7 @@ export default function ItemList({
                 <td className="col-location">
                   {shelfId && shelfLinkTarget ? (
                     <Link to={shelfLinkTarget}>
-                      <BoxTag locationKey={shelfId} />
+                      <BoxTag locationKey={shelfId} labelOverride={shelfLabel} />
                     </Link>
                   ) : (
                     <span>—</span>
