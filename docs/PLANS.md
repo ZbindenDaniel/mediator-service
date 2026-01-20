@@ -40,6 +40,7 @@ Recent alignment: the item edit UI now hides Quality/Auf_Lager inputs while the 
 
 ## Upcoming Opportunities
 
+- Shift Overview/ItemDetail/BoxDetail to a grid layout to improve wide-screen readability while keeping mobile stacked; plan minimal CSS updates limited to `.grid` base columns/gaps and `.landing-grid` breakpoint columns, with an optional `.grid-span-2` card utility when a panel should span both columns.
 - Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
 - Capture dispatched CUPS job identifiers in logs so support staff can correlate queue issues with individual label requests.
 - Enforce size limits and validate content for uploaded CSV files prior to writing them to disk.
