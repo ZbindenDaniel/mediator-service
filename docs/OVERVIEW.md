@@ -65,6 +65,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Made box detail item rows open the representative item on click/keyboard while removing the redundant details action.
 - Adjusted grouped list and box detail quantity display to use bulk Auf_Lager values for Menge items while logging parse failures.
 - Fixed ItemUUID parsing to handle Artikelnummer-based identifiers even when legacy prefixes overlap, preventing creation-by-reference collisions.
+- Refined landing page grid styles to keep single-column defaults and expand to responsive multi-column layouts at larger breakpoints.
 
 ## Documentation Map
 
