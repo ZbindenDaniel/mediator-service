@@ -59,6 +59,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Aligned agentic close availability to allow closing in any non-running state while keeping running runs locked to prevent accidental termination.
 - Aligned relocation create-and-move flow with auto-print item label behavior to match creation-time printing expectations.
 - Made box detail item rows open the representative item on click/keyboard while removing the redundant details action.
+- Adjusted grouped list and box detail quantity display to use bulk Auf_Lager values for Menge items while logging parse failures.
 
 ## Documentation Map
 

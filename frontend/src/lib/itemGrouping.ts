@@ -32,6 +32,7 @@ type GroupItemsOptions = {
 // TODO(instance-1-grouping): Revisit ItemUUID parsing once prefix rules are finalized.
 // TODO(agent): Revisit grouped quantity semantics if mixed Einheit payloads appear in a single grouping bucket.
 // TODO(bulk-grouping): Validate bulk ItemUUID-based grouping once backend grouped payloads are aligned.
+// TODO(bulk-quantity-display): Confirm bulk grouping keys and displayCount stay aligned with backend payload updates.
 function normalizeString(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -99,23 +100,38 @@ function resolveStock(value: unknown): number {
     return value;
   }
   if (typeof value === 'string' && value.trim()) {
+    const trimmed = value.trim();
     try {
-      const parsed = Number.parseFloat(value);
+      const parsed = Number.parseFloat(trimmed);
       if (Number.isFinite(parsed)) {
         return parsed;
       }
+      logger.warn?.('[item-grouping] Unable to parse stock quantity', {
+        value: trimmed
+      });
     } catch (error) {
       logError('[item-grouping] Failed to parse stock value', error, {
-        value
+        value: trimmed
       });
     }
+    return 0;
+  }
+  if (value !== null && value !== undefined) {
+    logger.warn?.('[item-grouping] Unexpected stock value type', { value });
   }
   return 0;
 }
 
 function resolveEinheit(value: unknown, logContext: string, itemId: string | null): ItemEinheit | null {
   try {
-    return normalizeItemEinheit(value);
+    const normalized = normalizeItemEinheit(value);
+    if (!normalized && value !== null && value !== undefined && value !== '') {
+      logger.warn?.(`[${logContext}] Unable to normalize Einheit value`, {
+        itemId,
+        value
+      });
+    }
+    return normalized;
   } catch (error) {
     logError(`[${logContext}] Failed to normalize Einheit`, error, {
       itemId,
@@ -255,9 +271,9 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
               location
             });
           }
-          keySegments.push(item.ItemUUID ?? `bulk-missing-${index}`);
-        if (bulkGroupingToken) {
-          keySegments.push(bulkGroupingToken);
+          if (bulkGroupingToken) {
+            keySegments.push(bulkGroupingToken);
+          }
         }
         let key = keySegments.join('|');
         if (missingKeys && item.ItemUUID && !bulkGroupingToken) {

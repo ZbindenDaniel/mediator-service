@@ -15,6 +15,7 @@ import { logError, logger } from '../utils/logger';
 // TODO(agent): Keep BoxID (Behälter) and Location (Lagerort) normalization separate in this table.
 // TODO(grouped-item-table): Validate grouped row actions once bulk operations are updated.
 // TODO(bulk-display): Confirm quantity display for Einheit=Menge items in list rows once backend payloads sync.
+// TODO(bulk-display): Recheck displayCount fallback for Menge rows once grouped payloads are standardized.
 
 interface Props {
   items: GroupedItemDisplay[];
@@ -32,6 +33,31 @@ function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
 
   const interactiveSelector = 'button, input, select, textarea, label, a';
   return Boolean(target.closest(interactiveSelector));
+}
+
+function resolveDisplayCount(group: GroupedItemDisplay): number {
+  try {
+    if (typeof group.displayCount === 'number' && Number.isFinite(group.displayCount)) {
+      return group.displayCount;
+    }
+    const fallback = group.isBulk && Number.isFinite(group.totalStock) ? group.totalStock : group.summary.count;
+    logger.warn?.('Invalid grouped displayCount; falling back to summary count', {
+      groupKey: group.key,
+      displayCount: group.displayCount,
+      totalStock: group.totalStock,
+      isBulk: group.isBulk,
+      fallback
+    });
+    return fallback;
+  } catch (error) {
+    logError('Failed to resolve grouped display count', error, {
+      groupKey: group.key,
+      displayCount: group.displayCount,
+      totalStock: group.totalStock,
+      isBulk: group.isBulk
+    });
+    return group.summary.count;
+  }
 }
 
 export default function ItemList({
@@ -151,9 +177,7 @@ export default function ItemList({
             const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
             const checkboxLabel = `Artikelgruppe ${representativeLabel} auswählen`;
             const rowLabel = `Details für ${representativeLabel} öffnen`;
-            const countValue = Number.isFinite(group.displayCount)
-              ? group.displayCount
-              : group.summary.count;
+            const countValue = resolveDisplayCount(group);
             const subcategoryValue = group.summary.Category
               ?? (typeof representative?.Unterkategorien_A === 'number'
                 ? String(representative.Unterkategorien_A)
