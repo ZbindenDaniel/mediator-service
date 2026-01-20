@@ -25,6 +25,7 @@ import QualityBadge from './QualityBadge';
 // TODO(grouped-box-items): Align grouped box item display with forthcoming backend grouped payloads.
 // TODO(bulk-display): Recheck Einheit=Menge quantity display once box detail payloads are refined.
 // TODO(agent): Add shared focus styling for clickable table rows once global table styles support it.
+// TODO(bulk-display): Validate displayCount fallback logic for Menge rows after backend grouping changes.
 
 interface Props {
   boxId: string;
@@ -64,6 +65,31 @@ function resolveRelocationCategory(items: Item[]): string | null {
   }
 
   return null;
+}
+
+function resolveDisplayCount(group: ReturnType<typeof groupItemsForDisplay>[number]): number {
+  try {
+    if (typeof group.displayCount === 'number' && Number.isFinite(group.displayCount)) {
+      return group.displayCount;
+    }
+    const fallback = group.isBulk && Number.isFinite(group.totalStock) ? group.totalStock : group.summary.count;
+    logger.warn?.('Invalid grouped displayCount in box detail row', {
+      groupKey: group.key,
+      displayCount: group.displayCount,
+      totalStock: group.totalStock,
+      isBulk: group.isBulk,
+      fallback
+    });
+    return fallback;
+  } catch (error) {
+    logError('Failed to resolve grouped display count in box detail row', error, {
+      groupKey: group.key,
+      displayCount: group.displayCount,
+      totalStock: group.totalStock,
+      isBulk: group.isBulk
+    });
+    return group.summary.count;
+  }
 }
 
 export default function BoxDetail({ boxId }: Props) {
@@ -715,7 +741,7 @@ export default function BoxDetail({ boxId }: Props) {
                                   {representative?.Artikelbeschreibung ?? '—'}
                                 </td>
                                 <td className="col-stock optional-column">
-                                  {Number.isFinite(group.displayCount) ? group.displayCount : group.summary.count}
+                                  {resolveDisplayCount(group)}
                                 </td>
                                 <td className="col-quality optional-column">
                                   <QualityBadge compact value={qualityValue} />
