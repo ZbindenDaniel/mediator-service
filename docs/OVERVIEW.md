@@ -78,6 +78,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
 - Updated mobile container sizing to prevent overflow by constraining widths to the viewport.
 - Reinforced non-bulk import creation to log requested quantities, mint each instance safely, and report final instance counts for multi-quantity imports.
+- Ensured item creation responses surface multi-instance ItemUUID lists with safe UI parsing and navigation-target logging for bulk creates.
 
 ## Documentation Map
 

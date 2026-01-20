@@ -977,15 +977,57 @@ export default function ItemCreate() {
         throw new Error(`Failed to create item. Status: ${response.status}`);
       }
 
-      const body = await response.json();
-      const createdItem: Item | undefined = body?.item;
-      const responseItems: Array<{ ItemUUID?: string | null }> = Array.isArray(body?.items) ? body.items : [];
+      // TODO(item-create): Revalidate multi-instance response parsing once item creation API evolves.
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch (parseError) {
+        console.error('Failed to parse item creation response payload', parseError);
+      }
+
+      let createdItem: Item | undefined;
+      let responseItems: Array<{ ItemUUID?: string | null }> = [];
+      let createdCount: number | null = null;
+      let backendDispatched = false;
+      try {
+        if (body && typeof body === 'object') {
+          const payload = body as {
+            item?: Item;
+            items?: Array<{ ItemUUID?: string | null }>;
+            createdCount?: number;
+            agenticTriggerDispatched?: boolean;
+          };
+          createdItem = payload.item;
+          if (Array.isArray(payload.items)) {
+            responseItems = payload.items;
+          }
+          if (typeof payload.createdCount === 'number') {
+            createdCount = payload.createdCount;
+          }
+          backendDispatched = payload.agenticTriggerDispatched === true;
+        }
+      } catch (payloadError) {
+        console.error('Failed to read item creation response payload', {
+          error: payloadError,
+          body
+        });
+      }
       const searchText = (createdItem?.Artikelbeschreibung || submissionData.Artikelbeschreibung || '')
         .toString()
         .trim();
-      const backendDispatched = body?.agenticTriggerDispatched === true;
       if (backendDispatched) {
         console.info('Skipping client-side agentic trigger because backend already dispatched.', { context });
+      }
+
+      if (responseItems.length > 1 || (createdCount ?? 0) > 1) {
+        const itemIds = responseItems
+          .map((item) => (typeof item?.ItemUUID === 'string' ? item.ItemUUID.trim() : ''))
+          .filter(Boolean);
+        console.info('Multiple item instances created via import response', {
+          createdCount: createdCount ?? responseItems.length,
+          itemIds,
+          navigationTarget: createdItem?.ItemUUID ?? null
+        });
       }
 
       if (isManualSubmission) {
@@ -1192,7 +1234,10 @@ export default function ItemCreate() {
       }
       // TODO: Replace imperative navigation with centralized success handling once notification system lands.
       if (shouldNavigateToCreatedItem && createdItem?.ItemUUID) {
-        console.log('Navigating to created item detail', { itemId: createdItem.ItemUUID });
+        console.log('Navigating to created item detail', {
+          itemId: createdItem.ItemUUID,
+          createdCount: createdCount ?? responseItems.length
+        });
         navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}`);
       }
     } catch (err) {
