@@ -1,7 +1,7 @@
 // TODO(agent): Revisit Artikelnummer validation rules once upstream partner formatting is finalized.
-// ItemUUIDs now use the Artikelnummer-based format: I.<Artikelnummer>-####. Legacy date-based IDs use I-<ddmmyy>-####.
+// TODO(agent): Confirm whether date-based ItemUUID parsing is still required once migrations complete.
+// ItemUUIDs use the Artikelnummer-based format: I-<Artikelnummer>-####.
 const ITEM_ID_PREFIX = 'I-';
-const LEGACY_ITEM_ID_PREFIX = 'I-';
 const ITEM_ID_SEQUENCE_WIDTH = 4;
 
 type MaybePromise<T> = T | Promise<T>;
@@ -40,7 +40,7 @@ export function parseSequentialItemUUID(
     if (typeof prefix === 'string') {
       return [prefix];
     }
-    return [ITEM_ID_PREFIX, LEGACY_ITEM_ID_PREFIX];
+    return [ITEM_ID_PREFIX];
   })();
 
   for (const candidatePrefix of prefixCandidates) {
@@ -49,18 +49,6 @@ export function parseSequentialItemUUID(
     }
 
     const remainder = candidatePrefix ? value.slice(candidatePrefix.length) : value;
-    if (candidatePrefix === LEGACY_ITEM_ID_PREFIX) {
-      const match = remainder.match(/^(\d{6})-(\d{4})$/);
-      if (!match) {
-        continue;
-      }
-      const sequence = Number.parseInt(match[2], 10);
-      if (!Number.isFinite(sequence)) {
-        continue;
-      }
-      return { kind: 'date', prefix: candidatePrefix, dateSegment: match[1], sequence };
-    }
-
     const artikelMatch = remainder.match(/^([^-]+)-(\d{4})$/);
     if (artikelMatch) {
       const sequence = Number.parseInt(artikelMatch[2], 10);
@@ -126,7 +114,7 @@ export async function generateItemUUID(
       });
       const candidate = result?.ItemUUID;
       if (typeof candidate === 'string') {
-        const parsed = parseSequentialItemUUID(candidate, [prefix, LEGACY_ITEM_ID_PREFIX]);
+        const parsed = parseSequentialItemUUID(candidate, [prefix]);
         if (parsed?.kind === 'artikelnummer' && parsed.artikelNummer === normalizedArtikelNummer) {
           previousSequence = parsed.sequence;
         } else if (!parsed) {
@@ -154,7 +142,6 @@ export async function generateItemUUID(
 
 export const __TESTING__ = {
   ITEM_ID_PREFIX,
-  LEGACY_ITEM_ID_PREFIX,
   ITEM_ID_SEQUENCE_WIDTH,
   formatItemIdDateSegment,
   parseSequentialItemUUID
