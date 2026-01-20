@@ -19,6 +19,7 @@ const LEGACY_EINHEIT_ALIASES = new Map<string, ItemEinheit>([
   ['mix', ItemEinheit.Menge],
 ]);
 
+// TODO(agent): Ensure callers normalize user-input Einheit values before using this strict guard.
 export function isItemEinheit(value: unknown): value is ItemEinheit {
   if (typeof value !== 'string') {
     return false;
