@@ -23,6 +23,7 @@ import {
   AGENTIC_RUN_TERMINAL_STATUSES,
   ItemEinheit,
   isItemEinheit,
+  normalizeItemEinheit,
   normalizeAgenticRunStatus
 } from '../../../models';
 import { describeQuality, QUALITY_DEFAULT } from '../../../models/quality';
@@ -102,6 +103,27 @@ function resolveDetailEinheit(value: unknown): ItemEinheit {
     console.error('ItemDetail: Failed to resolve Einheit value, using default.', error);
   }
   return DEFAULT_DETAIL_EINHEIT;
+}
+
+// TODO(agent): Confirm quantity row hiding behavior stays aligned with bulk item expectations.
+function resolveQuantityEinheit(value: unknown, itemId: string): ItemEinheit | null {
+  try {
+    const normalized = normalizeItemEinheit(value);
+    if (!normalized) {
+      logger.warn?.('ItemDetail: Einheit missing or invalid; hiding quantity row.', {
+        itemId,
+        provided: value
+      });
+      return null;
+    }
+    return normalized;
+  } catch (error) {
+    logError('ItemDetail: Failed to normalize Einheit for quantity row', error, {
+      itemId,
+      provided: value
+    });
+    return null;
+  }
 }
 
 export interface AgenticStatusCardProps {
@@ -1088,7 +1110,6 @@ export default function ItemDetail({ itemId }: Props) {
       ['ItemUUID', item.ItemUUID ?? null],
       ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],
       ['Artikelnummer', item.Artikel_Nummer ?? null],
-      ['Anzahl', item.Auf_Lager ?? null],
       [
         'Behälter',
         item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
@@ -1098,6 +1119,11 @@ export default function ItemDetail({ itemId }: Props) {
       ['Qualität', qualitySummary.label],
       ['Ki Status', agenticStatusDisplay(agentic).label]
     ];
+
+    const quantityEinheit = resolveQuantityEinheit(item.Einheit, item.ItemUUID);
+    if (quantityEinheit === ItemEinheit.Menge) {
+      rows.push(['Menge', item.Auf_Lager ?? null]);
+    }
 
     const unterkategorieB = resolveUnterkategorieLabel(item.Unterkategorien_B);
     if (unterkategorieB !== null) {
