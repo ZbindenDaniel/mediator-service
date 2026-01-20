@@ -2153,7 +2153,7 @@ export default function ItemDetail({ itemId }: Props) {
       <div className="grid landing-grid">
         {item ? (
           <>
-            <div className="card">
+            <div className="card grid-span-row-2">
               <div className='top-row'>
                 <button
                   type="button"

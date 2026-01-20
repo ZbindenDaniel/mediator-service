@@ -513,7 +513,7 @@ export default function BoxDetail({ boxId }: Props) {
                   onMoved={() => { void load({ showSpinner: false }); }}
                 />
 
-                <div className="card">
+                <div className="card grid-span-row-2">
                   <h3>Notizen</h3>
                   <form onSubmit={async (e) => {
                     e.preventDefault();

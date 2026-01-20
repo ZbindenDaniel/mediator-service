@@ -138,7 +138,9 @@ export default function LandingPage() {
           health={health}
         />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
-        <RecentEventsCard events={previewEvents}></RecentEventsCard>
+        <div className="grid-span-2">
+          <RecentEventsCard events={previewEvents}></RecentEventsCard>
+        </div>
         <ImportCard />
       </div>
     </div>
