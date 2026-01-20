@@ -1199,6 +1199,7 @@ export default function ItemCreate() {
       console.warn('Skipping match selection submit; creation already running.');
       return;
     }
+    // TODO(item-create): Confirm match selection payload maintains Einheit/Quality/Auf_Lager defaults across reference flows.
     // TODO: Capture metrics on match-selection agentic submissions to validate flow effectiveness.
     try {
       const referenceFields = extractReferenceFields(item);
@@ -1232,6 +1233,16 @@ export default function ItemCreate() {
         }
       });
 
+      const basicEinheit = isItemEinheit(basicInfo.Einheit) ? basicInfo.Einheit : undefined;
+      const referenceEinheit = isItemEinheit(referenceFields.Einheit) ? referenceFields.Einheit : undefined;
+      const preferredEinheit = isItemEinheit(preferredReferenceFields.Einheit)
+        ? preferredReferenceFields.Einheit
+        : undefined;
+      const resolvedEinheit = basicEinheit ?? preferredEinheit ?? referenceEinheit ?? ITEM_FORM_DEFAULT_EINHEIT;
+      const resolvedQuality = Object.prototype.hasOwnProperty.call(basicInfo, 'Quality')
+        ? basicInfo.Quality
+        : referenceFields.Quality;
+
       const clone: Partial<ItemFormData> = {
         ...basicInfo,
         ...preferredReferenceFields,
@@ -1241,7 +1252,9 @@ export default function ItemCreate() {
           preferredReferenceFields.Artikel_Nummer ?? basicInfo.Artikel_Nummer ?? referenceFields.Artikel_Nummer,
         Kurzbeschreibung:
           preferredReferenceFields.Kurzbeschreibung ?? basicInfo.Kurzbeschreibung ?? referenceFields.Kurzbeschreibung,
-        Auf_Lager: basicInfo.Auf_Lager
+        Auf_Lager: basicInfo.Auf_Lager,
+        Quality: resolvedQuality,
+        Einheit: resolvedEinheit
       };
 
       if (typeof clone.Artikelbeschreibung === 'string') {
@@ -1255,6 +1268,11 @@ export default function ItemCreate() {
         exemplarItemUUID: item.exemplarItemUUID,
         resolvedDescription: clone.Artikelbeschreibung,
         useAgenticFlow: shouldUseAgenticForm
+      });
+      logger.info('Match selection payload includes quality/unit fields', {
+        Auf_Lager: clone.Auf_Lager,
+        Quality: clone.Quality,
+        Einheit: clone.Einheit
       });
 
       console.info('Submitting duplicate selection via legacy item creation flow.');

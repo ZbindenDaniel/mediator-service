@@ -591,6 +591,7 @@ const action = defineHttpAction({
       }
       const resolvedArtikelNummer = branch.artikelNummer ?? '';
       const referenceDefaults = branch.referenceOverride;
+      const isCreationByReference = Boolean(branch.skipReferencePersistence);
       const persistenceMetadata: Record<string, unknown> = {};
       if (branch.skipReferencePersistence) {
         persistenceMetadata.__skipReferencePersistence = true;
@@ -633,6 +634,24 @@ const action = defineHttpAction({
       const artikelbeschreibungInput = (p.get('Artikelbeschreibung') || '').trim();
       const kurzbeschreibungInput = (p.get('Kurzbeschreibung') || '').trim();
       const langtextInput = (p.get('Langtext') || '').trim();
+      let qualityParam: string | null = null;
+      // TODO(import-item): Ensure creation-by-reference payloads always include explicit quantity/quality fields.
+      try {
+        const rawQualityParam = p.get('Quality');
+        qualityParam = typeof rawQualityParam === 'string' ? rawQualityParam.trim() : null;
+        if (!qualityParam && isCreationByReference) {
+          console.warn('[import-item] Missing Quality value in creation-by-reference payload', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null
+          });
+        }
+      } catch (qualityReadError) {
+        console.error('[import-item] Failed to read Quality from request payload', {
+          ItemUUID,
+          Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+          error: qualityReadError
+        });
+      }
       const herstellerInput = (p.get('Hersteller') || '').trim();
       const verkaufspreisRaw = (p.get('Verkaufspreis') || '').replace(',', '.').trim();
       const gewichtRaw = (p.get('Gewicht_kg') || '').replace(',', '.').trim();
@@ -725,6 +744,19 @@ const action = defineHttpAction({
           delete langtextPayload.Qualitaet;
         }
         langtext = langtextPayload;
+      }
+      let qualityFromPayload: number | undefined;
+      if (qualityParam) {
+        try {
+          qualityFromPayload = normalizeQuality(qualityParam, console);
+        } catch (qualityError) {
+          console.error('[import-item] Failed to normalize Quality from request payload', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+            provided: qualityParam,
+            error: qualityError
+          });
+        }
       }
       const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
 
@@ -862,7 +894,24 @@ const action = defineHttpAction({
         datumErfasst = new Date(nowDate.getTime());
       }
 
-      const requestedQuantity = resolveRequestedQuantity(p.get('Auf_Lager'), {
+      let requestedQuantityRaw: string | null = null;
+      try {
+        requestedQuantityRaw = p.get('Auf_Lager');
+        if (!requestedQuantityRaw && isCreationByReference) {
+          console.warn('[import-item] Missing Auf_Lager value in creation-by-reference payload', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null
+          });
+        }
+      } catch (quantityReadError) {
+        console.error('[import-item] Failed to read Auf_Lager from request payload', {
+          ItemUUID,
+          Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+          error: quantityReadError
+        });
+      }
+
+      const requestedQuantity = resolveRequestedQuantity(requestedQuantityRaw, {
         ItemUUID,
         artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null
       });
@@ -893,7 +942,7 @@ const action = defineHttpAction({
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
-        Quality: qualityFromLangtext,
+        Quality: qualityFromPayload ?? qualityFromLangtext,
         Hersteller: hersteller,
         Länge_mm: laenge,
         Breite_mm: breite,
