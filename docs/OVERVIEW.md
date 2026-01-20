@@ -34,7 +34,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Updated the recent activities list to label entity IDs more clearly and surface item Artikelbezeichnung details for faster scanning.
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
 - Omitted ItemUUID columns from grouped CSV exports and blanked grouped ItemUUID values to avoid inconsistent instance references in backup/ERP feeds.
-- Added explicit export modes so backup exports keep instance-level ItemUUIDs while ERP exports stay grouped and omit ItemUUIDs.
+- Added explicit export modes so backup exports keep instance-level ItemUUIDs while ERP exports stay grouped and intentionally leave ItemUUIDs blank because grouped rows are not instance-specific.
+TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemUUID blanking and instanzscharf backup behavior.
 - Normalized grouped item summaries to prefer instance sequence `1` (parsed from the trailing `-####` ItemUUID suffix, e.g. `-0001`) as the representative record while logging fallbacks when no canonical instance exists; this is a canonical display update, not an export/agentic/printing change.
 - Isolated item reference updates in the save-item edit flow so instance fields stay untouched during metadata edits.
 - Implemented reference-only edit payloads to keep item edit flows scoped to `item_refs` while logging and guarding against instance-field updates.
