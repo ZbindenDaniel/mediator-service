@@ -4,6 +4,8 @@ import { GoLinkExternal } from 'react-icons/go';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { dialogService } from './dialog';
+import { requestPrintLabel } from '../utils/printLabelRequest';
+import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 // TODO(agent): Remove hardcoded relocation defaults once backend exposes canonical location metadata endpoints.
 
 interface Props {
@@ -62,6 +64,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
             });
           }
         }
+        return true;
       } else {
         const errorMessage = 'Fehler: ' + (data.error || response.status);
         setStatus(errorMessage);
@@ -72,6 +75,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
           status: response.status,
           error: data.error ?? data
         });
+        return false;
       }
     } catch (error) {
       console.error('Relocate item request failed', {
@@ -81,6 +85,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
       });
       setStatus('Verschieben fehlgeschlagen');
       setBoxLink('');
+      return false;
     }
   }
 
@@ -167,6 +172,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     return undefined;
   }
 
+  // TODO(agent): Confirm relocation auto-print behavior matches item creation auto-print policy.
   async function handleCreateBoxAndRelocate() {
     if (isSubmitting) {
       return;
@@ -196,7 +202,31 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
 
       setBoxId(newBoxId);
       setSelectedSuggestion({ BoxID: newBoxId });
-      await performRelocate(actor, newBoxId);
+      const didRelocate = await performRelocate(actor, newBoxId);
+      if (!didRelocate) {
+        console.warn('Create box and relocate stopped: relocation failed', {
+          itemId,
+          toBoxId: newBoxId
+        });
+        return;
+      }
+      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled) {
+        try {
+          const printResult = await requestPrintLabel({ itemId, actor });
+          if (!printResult.ok) {
+            console.error('Auto-print item label failed after relocation', {
+              itemId,
+              status: printResult.status,
+              error: printResult.data.error || printResult.data.reason
+            });
+          }
+        } catch (printError) {
+          console.error('Auto-print item label failed unexpectedly after relocation', {
+            itemId,
+            error: printError
+          });
+        }
+      }
       console.info('Create box and relocate flow completed', {
         itemId,
         toBoxId: newBoxId

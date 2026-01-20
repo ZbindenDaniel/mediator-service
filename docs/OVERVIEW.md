@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Added a post-import success dialog reload in the ZIP import UI to refresh visible data while logging failures to display the dialog or reload.
 - Updated the recent activities list to label entity IDs more clearly and surface item Artikelbezeichnung details for faster scanning.
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
 - Normalized grouped item summaries to prefer instance sequence `1` as the representative record while logging fallbacks when no canonical instance exists.
@@ -47,6 +48,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Hid quantity details for non-bulk items in the detail view while logging invalid Einheit values to avoid confusion around instance counts.
 - Swapped the recent activities card to a semantic table layout with reusable list styling for easier scanning.
 - Split item detail metadata into reference/instance cards and surfaced additional instance metadata alongside a separate instances table card.
+- Moved item detail actions so edit sits with reference data, instance withdrawal sits with instance data, and deletion is no longer exposed in the UI.
 - Reworked search results to render as a compact list layout that aligns core item and box fields in a single row.
 - Refined add-item dialog result rows with a compact layout to keep search actions visible while tightening spacing.
 - Made item detail instance rows navigable to instance-specific detail pages while preserving reload behavior for the current instance.
@@ -55,6 +57,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Shared shelf label formatting between box and item lists so shelf locations show location, floor, and shelf IDs consistently.
 - Normalized item creation quantity handling to keep Auf_Lager flowing through match selection and guard against missing payloads while clarifying bulk-vs-instance behavior in the UI.
 - Aligned agentic close availability to allow closing in any non-running state while keeping running runs locked to prevent accidental termination.
+- Aligned relocation create-and-move flow with auto-print item label behavior to match creation-time printing expectations.
+- Made box detail item rows open the representative item on click/keyboard while removing the redundant details action.
 
 ## Documentation Map
 
