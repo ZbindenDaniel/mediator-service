@@ -55,6 +55,7 @@ export interface ItemInstance {
   Auf_Lager?: number;
   ShopwareVariantId?: string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade.
+  // TODO(item-create): Keep creation payload expectations for Quality/Auf_Lager aligned across frontend and import flows.
   Quality?: number | null;
 }
 

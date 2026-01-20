@@ -1,5 +1,6 @@
 # Recent Highlights
 
+- Preserved Einheit/Quality/Auf_Lager values during match-selection item creation and logged creation-by-reference payload fields for observability.
 - Added a Langtext JSON editor and detail viewer so key/value metadata renders clearly in the UI while falling back to the legacy text renderer when parsing fails.
  
 - Moved the detailed activities feed to `/activities` while limiting the landing page card to the latest three events with a shortcut link.
@@ -94,4 +95,3 @@
 - Updated stock mutation endpoints to create/delete Stück item instances while keeping Menge bulk quantity adjustments with richer logging.
 - Enabled manual agentic run closes even when runs are marked as not started after import/export cycles.
 - Blocked item editing while agentic runs are active in the item detail and edit flows.
-
