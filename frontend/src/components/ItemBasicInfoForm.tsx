@@ -46,20 +46,33 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
           <div className="row">
             <label>Anzahl*</label>
             {/* TODO(agent): Align basic info quantity defaults with instance-vs-bulk handling guidance. */}
+            {/* TODO(agent): Add validation messaging once Einheit-specific copy is finalized. */}
             <input
               type="number"
               value={form.Auf_Lager ?? 1}
               onChange={(event) => {
                 try {
                   const parsed = Number.parseInt(event.target.value, 10);
-                  update('Auf_Lager', Number.isNaN(parsed) ? 0 : parsed);
+                  if (Number.isNaN(parsed) || parsed <= 0) {
+                    console.warn('Invalid Auf_Lager value in basic info form; defaulting to 1.', {
+                      rawValue: event.target.value
+                    });
+                    update('Auf_Lager', 1);
+                    return;
+                  }
+                  update('Auf_Lager', parsed);
                 } catch (error) {
                   console.error('Failed to parse Auf_Lager in basic info form', error);
-                  update('Auf_Lager', 0);
+                  update('Auf_Lager', 1);
                 }
               }}
               required
             />
+            <div className="muted">
+              {form.Einheit === ITEM_FORM_DEFAULT_EINHEIT || form.Einheit === 'Stk'
+                ? 'Bei Einheit Stk werden einzelne Instanzen angelegt.'
+                : 'Bei Einheit Menge wird die Anzahl als Gesamtmenge gespeichert.'}
+            </div>
           </div>
 
           {/* TODO(agent): Confirm Einheit defaults and labels with the inventory team before the next release. */}
