@@ -10,8 +10,32 @@ import { useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import { logger } from '../utils/logger';
 
+// TODO(edit-quality-stock): Revisit whether admins should regain edit access to Quality/Auf_Lager once roles are defined.
+
 interface Props {
   itemId: string;
+}
+
+function stripInstanceFieldsForEdit(itemId: string, data: Partial<Item>) {
+  const removedFields: string[] = [];
+  if (Object.prototype.hasOwnProperty.call(data, 'Quality')) {
+    removedFields.push('Quality');
+  }
+  if (Object.prototype.hasOwnProperty.call(data, 'Auf_Lager')) {
+    removedFields.push('Auf_Lager');
+  }
+  if (removedFields.length > 0) {
+    try {
+      logger.warn?.('Item edit payload contained instance fields; stripping before submit', {
+        itemId,
+        removedFields
+      });
+    } catch (error) {
+      console.error('Failed to log stripped edit fields', error);
+    }
+  }
+  const { Quality: _quality, Auf_Lager: _aufLager, ...rest } = data;
+  return rest;
 }
 
 export default function ItemEdit({ itemId }: Props) {
@@ -137,6 +161,7 @@ export default function ItemEdit({ itemId }: Props) {
       console.warn('Item update already in progress; ignoring duplicate submit.');
       return;
     }
+    const sanitizedData = stripInstanceFieldsForEdit(itemId, data ?? {});
     const actor = await ensureUser();
     if (!actor) {
       console.info('Item edit aborted: missing username.');
@@ -154,12 +179,12 @@ export default function ItemEdit({ itemId }: Props) {
       setSaving(true);
       console.log('Submitting item update', {
         itemId,
-        changedFields: Object.keys(data || {})
+        changedFields: Object.keys(sanitizedData || {})
       });
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, actor })
+        body: JSON.stringify({ ...sanitizedData, actor })
       });
       if (res.ok) {
         const payload = await res
@@ -225,6 +250,7 @@ export default function ItemEdit({ itemId }: Props) {
         submitLabel="Speichern"
         headerContent={gallery}
         initialPhotos={initialPhotos}
+        lockedFields={{ Auf_Lager: 'hidden', Quality: 'hidden' }}
       />
     </>
   );
