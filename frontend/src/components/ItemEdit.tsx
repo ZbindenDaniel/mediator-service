@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AGENTIC_RUN_ACTIVE_STATUSES, normalizeAgenticRunStatus } from '../../../models';
-import type { Item } from '../../../models';
+import type { ItemReferenceEdit } from '../../../models';
 // TODO(agentic-edit-lock): Add a read-only fallback view when edits are blocked by active agentic runs.
+// TODO(reference-only-edit): Ensure item edit continues to submit reference-only payloads.
 import ItemForm from './ItemForm';
 import { ensureUser } from '../lib/user';
 import ItemMediaGallery from './ItemMediaGallery';
 import { useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import { logger } from '../utils/logger';
+import { extractReferenceFields, ItemFormPayload } from './forms/itemFormShared';
 
 // TODO(edit-quality-stock): Revisit whether admins should regain edit access to Quality/Auf_Lager once roles are defined.
 
@@ -16,14 +18,18 @@ interface Props {
   itemId: string;
 }
 
-function stripInstanceFieldsForEdit(itemId: string, data: Partial<Item>) {
-  const removedFields: string[] = [];
-  if (Object.prototype.hasOwnProperty.call(data, 'Quality')) {
-    removedFields.push('Quality');
-  }
-  if (Object.prototype.hasOwnProperty.call(data, 'Auf_Lager')) {
-    removedFields.push('Auf_Lager');
-  }
+function stripInstanceFieldsForEdit(itemId: string, data: Partial<ItemFormPayload>) {
+  const instanceFields = [
+    'BoxID',
+    'Location',
+    'UpdatedAt',
+    'Datum_erfasst',
+    'Auf_Lager',
+    'Quality',
+    'ShopwareVariantId',
+    'ItemUUID'
+  ] as const;
+  const removedFields = instanceFields.filter((field) => Object.prototype.hasOwnProperty.call(data, field));
   if (removedFields.length > 0) {
     try {
       logger.warn?.('Item edit payload contained instance fields; stripping before submit', {
@@ -34,12 +40,11 @@ function stripInstanceFieldsForEdit(itemId: string, data: Partial<Item>) {
       console.error('Failed to log stripped edit fields', error);
     }
   }
-  const { Quality: _quality, Auf_Lager: _aufLager, ...rest } = data;
-  return rest;
+  return extractReferenceFields(data);
 }
 
 export default function ItemEdit({ itemId }: Props) {
-  const [item, setItem] = useState<Item | null>(null);
+  const [item, setItem] = useState<ItemReferenceEdit | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
@@ -90,14 +95,14 @@ export default function ItemEdit({ itemId }: Props) {
         const [primary] = ordered;
         const result = [primary, ...secondary];
         console.log('Derived initial photo ordering for item edit', {
-          itemId: item?.ItemUUID,
+          itemId,
           photoCount: result.length
         });
         return result;
       }
 
       console.log('Derived initial photo ordering for item edit without primary asset', {
-        itemId: item?.ItemUUID,
+        itemId,
         photoCount: secondary.length
       });
       return secondary;
@@ -105,7 +110,7 @@ export default function ItemEdit({ itemId }: Props) {
       console.error('Failed to derive initial photo list for item edit form', error);
       return [];
     }
-  }, [item?.Grafikname, mediaAssets]);
+  }, [item?.Grafikname, itemId, mediaAssets]);
 
   useEffect(() => {
     async function load() {
@@ -139,7 +144,15 @@ export default function ItemEdit({ itemId }: Props) {
             navigate(`/items/${encodeURIComponent(itemId)}`);
             return;
           }
-          setItem(nextItem);
+          const referenceFields = extractReferenceFields(nextItem);
+          const artikelNummer = typeof nextItem.Artikel_Nummer === 'string' ? nextItem.Artikel_Nummer.trim() : '';
+          if (!artikelNummer) {
+            console.error('Item edit missing Artikel_Nummer; cannot build reference payload', { itemId });
+          }
+          setItem({
+            ...referenceFields,
+            Artikel_Nummer: artikelNummer || referenceFields.Artikel_Nummer || ''
+          });
           const media = Array.isArray(data.media)
             ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
             : [];
@@ -156,12 +169,18 @@ export default function ItemEdit({ itemId }: Props) {
     load();
   }, [itemId]);
 
-  async function handleSubmit(data: Partial<Item>) {
+  async function handleSubmit(data: Partial<ItemFormPayload>) {
     if (saving) {
       console.warn('Item update already in progress; ignoring duplicate submit.');
       return;
     }
-    const sanitizedData = stripInstanceFieldsForEdit(itemId, data ?? {});
+    let sanitizedData: Partial<ItemReferenceEdit> = {};
+    try {
+      sanitizedData = stripInstanceFieldsForEdit(itemId, data ?? {});
+    } catch (error) {
+      console.error('Failed to sanitize item edit payload', error);
+      return;
+    }
     const actor = await ensureUser();
     if (!actor) {
       console.info('Item edit aborted: missing username.');
@@ -237,7 +256,7 @@ export default function ItemEdit({ itemId }: Props) {
   const gallery = (
     <section className="item-media-section">
       <h3>Medien</h3>
-      <ItemMediaGallery itemId={item.ItemUUID} grafikname={item.Grafikname} mediaAssets={mediaAssets} />
+      <ItemMediaGallery itemId={itemId} grafikname={item.Grafikname} mediaAssets={mediaAssets} />
     </section>
   );
 
@@ -250,7 +269,9 @@ export default function ItemEdit({ itemId }: Props) {
         submitLabel="Speichern"
         headerContent={gallery}
         initialPhotos={initialPhotos}
-        lockedFields={{ Auf_Lager: 'hidden', Quality: 'hidden' }}
+        lockedFields={{ Auf_Lager: 'hidden', Quality: 'hidden', BoxID: 'hidden' }}
+        hidePhotoInputs
+        formMode="reference"
       />
     </>
   );

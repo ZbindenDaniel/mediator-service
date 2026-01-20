@@ -19,6 +19,21 @@ TODO: capture the current-system export format details and confirm how legacy im
 
 Non-goals (unless explicitly requested): no large-scale refactors and no new data structures beyond what is required to support instance `1` grouping or legacy import compatibility.
 
+## Multi-step Plan: Reference-only Item Edit Payload
+
+Goal: keep item edit flows reference-only (no instance fields) so updates remain scoped to `item_refs` and avoid accidental instance mutations. Reason: reduce data divergence, preserve existing schema contracts, and keep the edit payload minimal by reusing current reference fields instead of adding new structures.
+
+Checklist (re-check and update this planning doc before starting each subsequent task in the sequence):
+
+- [x] **Confirm reference field map** – review `models/item.ts` and verify reference-only fields still map to `item_refs` without renaming; document any mapping considerations. Reason: avoid schema drift while keeping changes minimal.
+- [x] **Add TODO markers** – add TODO comments in `models/item.ts`, `frontend/src/components/ItemEdit.tsx`, `frontend/src/components/forms/itemFormShared.tsx`, and `backend/actions/save-item.ts` to flag the upcoming reference-only adjustments. Reason: keep implementation scoped and coordinated across tiers.
+- [x] **Frontend state + form scope** – update `ItemEdit` state and shared form helpers to accept the reference-only payload and render only reference fields using existing components. Reason: reduce code additions while ensuring the UI stays aligned with the reference schema.
+- [x] **Submit payload guard + logging** – adjust submit logic to send reference fields only and log a warning when instance fields are detected; wrap any risky conversion or payload shaping in try/catch when meaningful. Reason: preserve observability and prevent instance data drift.
+- [x] **Backend guard** – add a backend guard in `backend/actions/save-item.ts` to log and ignore instance fields that appear in edit payloads, ensuring persistence remains reference-only. Reason: enforce reference-only updates server-side without schema changes.
+- [x] **Docs + cleanup** – update `docs/OVERVIEW.md` progress updates and refresh any TODOs adjacent to the touched files once the change is complete. Reason: keep documentation aligned and avoid stale TODOs.
+
+Non-goals (unless explicitly requested): no new fields, no changes to instance data structures, and no broad refactors outside the edit flow.
+
 ## Upcoming Opportunities
 
 - Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
