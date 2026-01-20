@@ -12,6 +12,7 @@ import { metaDataKeys } from '../../data/metaDataKeys';
 
 // TODO(edit-quality-stock): Confirm whether Quality/Auf_Lager should stay hidden on edits once access roles are defined.
 // TODO(reference-only-edit): Keep reference-only form mode aligned with ItemReferenceEdit fields.
+// TODO(einheit-immutability): Keep Einheit locked on edit forms while backend enforces immutability.
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -516,6 +517,9 @@ export function ItemDetailsFields({
 
   const placementHidden = isReferenceMode || isFieldLocked(lockedFields, 'BoxID', 'hidden');
   const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
+
+  const einheitHidden = isFieldLocked(lockedFields, 'Einheit', 'hidden');
+  const einheitReadonly = isFieldLocked(lockedFields, 'Einheit', 'readonly');
 
   // TODO(langtext-observability): Revisit Langtext rendering once parser mode stabilizes across
   // sanitized payloads and legacy fallbacks.
@@ -1409,38 +1413,43 @@ export function ItemDetailsFields({
 
       <hr></hr>
 
-      <div className="row">
-        <label>
-          Einheit
-        </label>
-        <select
-          value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
-          onChange={(event) => {
-            try {
-              const value = event.target.value;
-              if (isItemEinheit(value)) {
-                onUpdate('Einheit', value);
-                return;
+      {einheitHidden ? (
+        <input type="hidden" value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT} readOnly />
+      ) : (
+        <div className="row">
+          <label>
+            Einheit
+          </label>
+          <select
+            value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
+            onChange={(event) => {
+              try {
+                const value = event.target.value;
+                if (isItemEinheit(value)) {
+                  onUpdate('Einheit', value);
+                  return;
+                }
+                const trimmed = value.trim();
+                if (isItemEinheit(trimmed)) {
+                  onUpdate('Einheit', trimmed);
+                  return;
+                }
+                console.warn('[itemForm] Invalid Einheit selection, reverting to default', { value });
+              } catch (error) {
+                console.error('[itemForm] Failed to process Einheit selection', error);
               }
-              const trimmed = value.trim();
-              if (isItemEinheit(trimmed)) {
-                onUpdate('Einheit', trimmed);
-                return;
-              }
-              console.warn('[itemForm] Invalid Einheit selection, reverting to default', { value });
-            } catch (error) {
-              console.error('[itemForm] Failed to process Einheit selection', error);
-            }
-            onUpdate('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
-          }}
-        >
-          {ITEM_EINHEIT_VALUES.map((value) => (
-            <option key={`einheit-option-${value}`} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </div>
+              onUpdate('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
+            }}
+            disabled={einheitReadonly}
+          >
+            {ITEM_EINHEIT_VALUES.map((value) => (
+              <option key={`einheit-option-${value}`} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
     </>
   );

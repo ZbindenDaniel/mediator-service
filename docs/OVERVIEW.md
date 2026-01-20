@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Locked Einheit from edit flows in the UI and backend so existing item units remain immutable during reference updates.
 - Added a post-import success dialog reload in the ZIP import UI to refresh visible data while logging failures to display the dialog or reload.
 - Updated the recent activities list to label entity IDs more clearly and surface item Artikelbezeichnung details for faster scanning.
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.

@@ -14,6 +14,7 @@ const MEDIA_PREFIX = '/media/';
 // TODO(agent): Revisit allowed media extensions when new asset types need exporting.
 // TODO(agent): Align item instance summary fields with detail UI once instance list usage expands.
 // TODO(reference-only-edit): Keep edit payload guards aligned with instance/reference field boundaries.
+// TODO(einheit-immutability): Keep Einheit immutable in edit payloads while legacy clients update.
 const ALLOWED_MEDIA_EXTENSIONS = new Set<string>([
   '.bmp',
   '.gif',
@@ -679,7 +680,14 @@ const action = defineHttpAction({
       ignoredPayloadFields.forEach((field) => {
         delete referencePayload[field];
       });
-      const incomingEinheit = (referencePayload as Partial<ItemRef>).Einheit;
+      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Einheit')) {
+        console.info('[save-item] Ignoring Einheit update in edit payload', {
+          itemId,
+          provided: (referencePayload as Partial<ItemRef>).Einheit ?? null,
+          existing: existing.Einheit ?? null
+        });
+        delete referencePayload.Einheit;
+      }
       const incomingQuality = (referencePayload as Partial<ItemRef>).Quality;
       const incomingShopartikel = (referencePayload as Partial<ItemRef>).Shopartikel;
       const incomingArtikelNummer =
@@ -701,7 +709,10 @@ const action = defineHttpAction({
       } catch (error) {
         console.error('[save-item] Failed to load existing item reference', { itemId, artikelNummer, error });
       }
-      const referenceBase: ItemRef = existingReference ?? { Artikel_Nummer: artikelNummer };
+      const referenceBase: ItemRef = existingReference ?? {
+        Artikel_Nummer: artikelNummer,
+        Einheit: existing.Einheit ?? undefined
+      };
       const referenceUpdates: Partial<ItemRef> = {};
       const referenceFieldKeys: Array<keyof ItemRef> = [
         'Grafikname',
@@ -738,9 +749,6 @@ const action = defineHttpAction({
           : resolveItemQualityValue(referenceBase.Quality ?? QUALITY_DEFAULT, 'existingReference');
       if (Object.prototype.hasOwnProperty.call(referencePayload, 'Quality')) {
         referenceUpdates.Quality = resolvedQuality;
-      }
-      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Einheit')) {
-        referenceUpdates.Einheit = resolveItemEinheitValue(incomingEinheit, 'updatePayload');
       }
       if (Object.prototype.hasOwnProperty.call(referencePayload, 'Shopartikel')) {
         referenceUpdates.Shopartikel = resolveShopartikelFlag(incomingShopartikel, resolvedQuality);
