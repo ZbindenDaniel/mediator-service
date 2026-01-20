@@ -43,6 +43,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Split item detail metadata into reference/instance cards and surfaced additional instance metadata alongside a separate instances table card.
 - Refined add-item dialog result rows with a compact layout to keep search actions visible while tightening spacing.
 - Made item detail instance rows navigable to instance-specific detail pages while preserving reload behavior for the current instance.
+- Added item detail API payloads to return explicit reference data alongside instance lists to keep item metadata separated.
 
 ## Documentation Map
 
