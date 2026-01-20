@@ -1,9 +1,11 @@
 // TODO(agent): Review Langtext search tokenization once structured payload telemetry is available.
+// TODO(deep-search): Confirm default deep search behavior once product guidance is finalized.
 import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
+import { parseLangtext } from '../lib/langtext';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -105,6 +107,30 @@ function normalizeSearchEinheit(value: unknown, context: string): ItemEinheit {
   return DEFAULT_SEARCH_EINHEIT;
 }
 
+function normalizeLangtextValue(value: unknown, context: string): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  try {
+    const parsed = parseLangtext(value, { logger: console, context });
+    if (!parsed) {
+      return '';
+    }
+    if (typeof parsed === 'string') {
+      return parsed;
+    }
+    try {
+      return JSON.stringify(parsed);
+    } catch (error) {
+      console.error('[search] Failed to stringify Langtext payload', { context, error });
+      return '';
+    }
+  } catch (error) {
+    console.error('[search] Failed to normalize Langtext payload', { context, error });
+    return '';
+  }
+}
+
 function computeSimilarityScore(term: string, tokens: string[], candidate: unknown): number {
   const normalizedCandidate = normalize(candidate);
   if (!normalizedCandidate) return 0;
@@ -134,8 +160,28 @@ function computeSimilarityScore(term: string, tokens: string[], candidate: unkno
   return Math.max(baseScore, softRecall);
 }
 
+function parseDeepSearchParam(value: string | null): boolean {
+  if (!value) {
+    return true;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n', 'off'].includes(normalized)) {
+    return false;
+  }
+  console.warn('[search] Invalid deep search parameter; defaulting to false.', {
+    provided: value
+  });
+  return false;
+}
+
 function scoreItem(term: string, tokens: string[], item: any): number {
-  const langtextCandidate = {};
+  const langtextCandidate = normalizeLangtextValue(item?.Langtext, `item-score-${item?.ItemUUID ?? 'unknown'}`);
   const fields = [
     item?.Artikelbeschreibung,
     item?.Kurzbeschreibung,
@@ -238,8 +284,10 @@ const action = defineHttpAction({
 
       const scopeParam = url.searchParams.get("scope");
       const dedupeParam = url.searchParams.get("dedupe");
+      const deepSearchParam = url.searchParams.get("deepSearch") || url.searchParams.get("DeepSearch");
       const normalizedScope = scopeParam ? scopeParam.trim().toLowerCase() : null;
       const normalizedDedupe = dedupeParam ? dedupeParam.trim().toLowerCase() : null;
+      const deepSearch = parseDeepSearchParam(deepSearchParam);
       const wantsInstances =
         normalizedScope === "instances" ||
         normalizedScope === "instance" ||
@@ -253,6 +301,11 @@ const action = defineHttpAction({
           normalizedDedupe === "yes");
 
       const itemLimit = parseSearchLimit(url.searchParams.get("limit"), "items", DEFAULT_ITEM_LIMIT);
+      console.info('[search] Deep search', {
+        term: trimmed,
+        deepSearch,
+        source: deepSearchParam ? 'param' : 'default'
+      });
 
       if (wantsRefs) {
         const like5 = (t: string) => {
@@ -401,9 +454,9 @@ const action = defineHttpAction({
         return;
       }
 
-      const like4 = (t: string) => {
+      const likeItem = (t: string) => {
         const p = `%${t}%`;
-        return [p, p, p, p] as const;
+        return deepSearch ? [p, p, p, p, p, p] as const : [p, p, p, p] as const;
       };
       const likeBox = (t: string) => {
         const p = `%${t}%`;
@@ -417,6 +470,7 @@ const action = defineHttpAction({
       lower(i.ItemUUID)            LIKE ?
       OR lower(i.Artikel_Nummer)   LIKE ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
+      ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?\n      OR lower(COALESCE(r.Langtext, '')) LIKE ?" : ''}
       OR lower(i.BoxID)            LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
@@ -427,6 +481,7 @@ const action = defineHttpAction({
       lower(i.ItemUUID)            = ?
       OR lower(i.Artikel_Nummer)   = ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
+      ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) = ?\n      OR lower(COALESCE(r.Langtext, '')) = ?" : ''}
       OR lower(i.BoxID)            = ?
     ) THEN 1 ELSE 0 END
   `;
@@ -476,15 +531,19 @@ const action = defineHttpAction({
     LIMIT ?
   `;
 
+      const itemExactParams = deepSearch
+        ? [normalized, normalized, normalized, normalized, normalized, normalized]
+        : [normalized, normalized, normalized, normalized];
+
       const itemParams = [
         // token_hits params
-        ...tokens.flatMap(like4),
-        // exact_match params (equality, 4 fields)
-        normalized, normalized, normalized, normalized,
+        ...tokens.flatMap(likeItem),
+        // exact_match params (equality fields)
+        ...itemExactParams,
         // sql_score CASE exact_match params (repeat the equality)
-        normalized, normalized, normalized, normalized,
+        ...itemExactParams,
         // sql_score token_hits terms again (used in ELSE)
-        ...tokens.flatMap(like4),
+        ...tokens.flatMap(likeItem),
         // divisor = tokens.length
         tokens.length,
         // WHERE threshold

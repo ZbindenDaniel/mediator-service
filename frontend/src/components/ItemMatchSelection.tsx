@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { SimilarItemsPanel } from './forms/SimilarItemsPanel';
 import type { SimilarItem } from './forms/useSimilarItems';
+// TODO(deep-search): Coordinate deep search toggle copy for duplicate checking workflows.
 
 interface ItemMatchSelectionProps {
   searchTerm: string;
@@ -115,4 +116,3 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
     </div>
   );
 }
-
