@@ -9,7 +9,8 @@ import type { ConfirmDialogOptions } from '../dialog';
 import { dialogService } from '../dialog';
 import { parseLangtext, stringifyLangtextEntries } from '../../lib/langtext';
 import { metaDataKeys } from '../../data/metaDataKeys';
-import QualityBadge from '../QualityBadge';
+
+// TODO(edit-quality-stock): Confirm whether Quality/Auf_Lager should stay hidden on edits once access roles are defined.
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -464,6 +465,9 @@ export function ItemDetailsFields({
   const quantityHidden = isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
   const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
 
+  const qualityHidden = isFieldLocked(lockedFields, 'Quality', 'hidden');
+  const qualityReadonly = isFieldLocked(lockedFields, 'Quality', 'readonly');
+
   const placementHidden = isFieldLocked(lockedFields, 'BoxID', 'hidden');
   const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
 
@@ -900,13 +904,17 @@ export function ItemDetailsFields({
   );
 
   const handleQualityChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    if (qualityReadonly) {
+      console.info('Quality change ignored because the field is readonly');
+      return;
+    }
     try {
       const nextValue = normalizeQuality(event.target.value, console);
       onUpdate('Quality', nextValue as ItemFormData['Quality']);
     } catch (error) {
       console.error('Failed to update quality value in item form', error);
     }
-  }, [onUpdate]);
+  }, [onUpdate, qualityReadonly]);
 
   useEffect(() => {
     if (typeof form.Hauptkategorien_A === 'number' && !categoryLookup.has(form.Hauptkategorien_A)) {
@@ -1034,31 +1042,34 @@ export function ItemDetailsFields({
         </div>
       )}
 
-      <div className="row">
-        <label>
-          <span>Qualität:</span>
-          {/* <QualityBadge compact labelPrefix="Qualität" value={qualitySummary.value} /> */}
-          <span key={`quality-label-${qualitySummary.value}`}>{QUALITY_LABELS[qualitySummary.value] ?? qualitySummary.value}</span>
-        </label>
-        <div className="combined-input">
-          <input
-            type="range"
-            min={1}
-            max={5}
-            step={1}
-            value={qualitySummary.value}
-            onChange={handleQualityChange}
-            aria-valuetext={`${qualitySummary.label} (${qualitySummary.value})`}
-          />
+      {!qualityHidden && (
+        <div className="row">
+          <label>
+            <span>Qualität:</span>
+            {/* <QualityBadge compact labelPrefix="Qualität" value={qualitySummary.value} /> */}
+            <span key={`quality-label-${qualitySummary.value}`}>{QUALITY_LABELS[qualitySummary.value] ?? qualitySummary.value}</span>
+          </label>
+          <div className="combined-input">
+            <input
+              type="range"
+              min={1}
+              max={5}
+              step={1}
+              value={qualitySummary.value}
+              onChange={handleQualityChange}
+              aria-valuetext={`${qualitySummary.label} (${qualitySummary.value})`}
+              disabled={qualityReadonly}
+            />
+          </div>
+          {/* <div className="quality-slider__labels">
+            {[1, 2, 3, 4, 5].map((level) => (
+              <span key={`quality-label-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
+            ))}
+          </div> */}
+          {/* <div className="muted">
+          </div> */}
         </div>
-        {/* <div className="quality-slider__labels">
-          {[1, 2, 3, 4, 5].map((level) => (
-            <span key={`quality-label-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
-          ))}
-        </div> */}
-        {/* <div className="muted">
-        </div> */}
-      </div>
+      )}
 
       <div className="row">
         <label>
