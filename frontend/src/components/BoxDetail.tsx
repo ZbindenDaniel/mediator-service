@@ -10,6 +10,7 @@ import { groupItemsForDisplay } from '../lib/itemGrouping';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
+import { logger, logError } from '../utils/logger';
 import BoxTag from './BoxTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
@@ -23,6 +24,7 @@ import QualityBadge from './QualityBadge';
 // TODO(agent): Confirm note-only box updates preserve stored labels after label input removal.
 // TODO(grouped-box-items): Align grouped box item display with forthcoming backend grouped payloads.
 // TODO(bulk-display): Recheck Einheit=Menge quantity display once box detail payloads are refined.
+// TODO(agent): Add shared focus styling for clickable table rows once global table styles support it.
 
 interface Props {
   boxId: string;
@@ -87,6 +89,19 @@ export default function BoxDetail({ boxId }: Props) {
   const photoDialogTitleId = useId();
   const relocationCategory = useMemo(() => resolveRelocationCategory(items), [items]);
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
+  const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
+    if (!itemId) {
+      logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
+      return;
+    }
+
+    try {
+      logger.info('Navigating to item detail from box detail row', { boxId, itemId, source });
+      navigate(`/items/${encodeURIComponent(itemId)}`);
+    } catch (error) {
+      logError('Failed to navigate to item detail from box detail row', error, { boxId, itemId, source });
+    }
+  }, [boxId, navigate]);
 
   async function handleDeleteBox() {
     if (!box) return;
@@ -675,12 +690,26 @@ export default function BoxDetail({ boxId }: Props) {
                               : (typeof representative?.Quality === 'number' ? representative.Quality : null);
                             const agenticLabel = describeAgenticStatus(group.agenticStatusSummary);
                             const removalMessage = representativeId ? removalStatus[representativeId] : null;
-                            const countValue = group.totalStock;
+                            const itemNumber = group.summary.Artikel_Nummer || representative?.Artikel_Nummer;
+                            const itemNumberLabel = itemNumber ?? 'Artikel';
+                            const rowLabel = representativeId ? `Artikel ${itemNumberLabel} öffnen` : undefined;
 
                             return (
-                              <tr key={group.key}>
+                              <tr
+                                key={group.key}
+                                tabIndex={representativeId ? 0 : -1}
+                                role={representativeId ? 'link' : undefined}
+                                aria-label={rowLabel}
+                                onClick={representativeId ? () => handleRowNavigate(representativeId, 'click') : undefined}
+                                onKeyDown={representativeId ? (event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    handleRowNavigate(representativeId, 'keyboard');
+                                  }
+                                } : undefined}
+                              >
                                 <td className="col-number">
-                                  {group.summary.Artikel_Nummer || representative?.Artikel_Nummer || '—'}
+                                  {itemNumber ?? '—'}
                                 </td>
                                 <td className="col-desc">
                                   {representative?.Artikelbeschreibung ?? '—'}
@@ -696,13 +725,14 @@ export default function BoxDetail({ boxId }: Props) {
                                 <td className="col-actions">
                                   {representativeId ? (
                                     <>
-                                      <Link to={`/items/${encodeURIComponent(representativeId)}`} className="btn">
-                                        Details
-                                      </Link>
                                       <button
                                         type="button"
                                         className="btn"
-                                        onClick={() => removeItem(representativeId)}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          removeItem(representativeId);
+                                        }}
+                                        aria-label={`Artikel ${itemNumberLabel} entnehmen`}
                                       >
                                         Entnehmen
                                       </button>
