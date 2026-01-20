@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import LoadingPage from './LoadingPage';
 import { useDialog } from './dialog';
+import { logger, logError } from '../utils/logger';
 
 // TODO: Extract the blocking overlay + messaging pattern into a shared hook when import flows expand.
 // TODO: Extract the import result summary dialog builder into a shared helper once other importers are added.
@@ -168,13 +169,25 @@ export default function ImportCard() {
         );
 
         setProcessing(null);
+        let dialogDisplayed = false;
         try {
           await dialog.alert({
             title: 'Import abgeschlossen',
             message
           });
+          dialogDisplayed = true;
         } catch (alertError) {
-          console.error('Failed to display upload success dialog', alertError);
+          logError('Failed to display upload success dialog', alertError);
+        }
+
+        // TODO(agent): Replace hard reload with a scoped data refresh once import state hooks exist.
+        if (dialogDisplayed) {
+          logger.info('Reloading page after successful import dialog');
+          try {
+            window.location.reload();
+          } catch (reloadError) {
+            logError('Failed to reload page after import', reloadError);
+          }
         }
 
         setFile(null);
