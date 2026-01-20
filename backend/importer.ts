@@ -1,4 +1,5 @@
 // TODO(agent): Verify Langtext helper logging during CSV ingestion before enforcing structured payloads.
+// TODO(agent): Reconfirm ItemUUID prefix expectations with current CSV partner guidance.
 // TODO(agent): Keep importer box persistence in sync with schema changes (PhotoPath, future metadata).
 // TODO(agent): Monitor Grafikname multi-image normalization so downstream exporters can drop legacy fallbacks.
 // TODO(agent): Evaluate ZIP-sourced merge rules for boxes and media once parallel uploads are supported by partners.
@@ -30,8 +31,7 @@ import { resolveCategoryLabelToCode, CategoryFieldType } from './lib/categoryLab
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
 // TODO(agent): Seed Artikelnummer-based ItemUUID sequences from the database for high-concurrency imports.
-const ITEM_ID_PREFIX = 'I.';
-const LEGACY_ITEM_ID_PREFIX = 'I-';
+const ITEM_ID_PREFIX = 'I-';
 const BOX_ID_PREFIX = 'B-';
 const ID_SEQUENCE_WIDTH = 4;
 const ARTIKEL_NUMMER_WIDTH = 5;
@@ -1276,10 +1276,10 @@ export async function ingestCsvFile(
       if (!baseItemUUID) {
         try {
           if (!artikelNummer) {
-            console.warn('[importer] Falling back to legacy ItemUUID minting due to missing Artikel_Nummer', {
+            console.warn('[importer] Falling back to date-based ItemUUID minting due to missing Artikel_Nummer', {
               rowNumber,
             });
-            baseItemUUID = mintSequentialIdentifier(LEGACY_ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
+            baseItemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
           } else {
             baseItemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummer, itemSequenceByArtikelNummer);
           }
@@ -1314,11 +1314,11 @@ export async function ingestCsvFile(
         if (instanceIndex > 0) {
           try {
             if (!artikelNummer) {
-              console.warn('[importer] Falling back to legacy ItemUUID minting due to missing Artikel_Nummer', {
+              console.warn('[importer] Falling back to date-based ItemUUID minting due to missing Artikel_Nummer', {
                 rowNumber,
                 instanceIndex: instanceIndex + 1,
               });
-              itemUUID = mintSequentialIdentifier(LEGACY_ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
+              itemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
             } else {
               itemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummer, itemSequenceByArtikelNummer);
             }

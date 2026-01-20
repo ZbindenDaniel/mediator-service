@@ -35,8 +35,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Isolated item reference updates in the save-item edit flow so instance fields stay untouched during metadata edits.
 - Implemented reference-only edit payloads to keep item edit flows scoped to `item_refs` while logging and guarding against instance-field updates.
 - Added item detail instance summaries to surface per-reference inventory visibility in the detail view payload/UI.
-- Grouped item list and box detail rows in the frontend to surface counts while keeping list filtering and sorting aligned with grouped summaries; this reflects the canonical UI grouping only and does not cover export, agentic, or printing flows.
-- Shifted ItemUUID minting to the Artikelnummer-based `I.<Artikelnummer>-####` format while keeping legacy date-based identifiers parseable for imports and reconciliation.
+- Grouped item list and box detail rows in the frontend to surface counts while keeping list filtering and sorting aligned with grouped summaries.
+- Shifted ItemUUID minting to the Artikelnummer-based `I-<Artikelnummer>-####` format.
 - Adjusted item creation auto-printing to respect instance vs. bulk label policies and log partial print failures for follow-up.
 - Logged legacy CSV schema detection during validation, added category-aware bulk quantity normalization for legacy imports, and skipped empty/failed rows with explicit telemetry.
 - Added structured logging around Produkt schema legacy column mappings to improve import observability without widening data model scope.
@@ -62,6 +62,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Aligned relocation create-and-move flow with auto-print item label behavior to match creation-time printing expectations.
 - Made box detail item rows open the representative item on click/keyboard while removing the redundant details action.
 - Adjusted grouped list and box detail quantity display to use bulk Auf_Lager values for Menge items while logging parse failures.
+- Fixed ItemUUID parsing to handle Artikelnummer-based identifiers even when legacy prefixes overlap, preventing creation-by-reference collisions.
 
 ## Documentation Map
 
