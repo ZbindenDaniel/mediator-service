@@ -124,6 +124,10 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
 // TODO(export-items-grouping): Confirm whether grouped exports should omit the ItemUUID column entirely once consumers allow it.
 // TODO(export-items-grouping): Validate export consumers accept ItemUUID column removal when grouping merges rows.
+// TODO(export-items-mode): Confirm default export mode expectations with ERP/backup consumers.
+
+type ExportMode = 'backup' | 'erp';
+const EXPORT_MODES = new Set<ExportMode>(['backup', 'erp']);
 
 function formatArtikelnummerForExport(value: unknown, itemUUID: string | null): unknown {
   if (value === null || value === undefined) {
@@ -191,6 +195,7 @@ export interface ItemsExportArtifact {
 export interface StageItemsExportOptions {
   archiveBaseName?: string;
   boxes: Record<string, unknown>[];
+  exportMode: ExportMode;
   includeMedia: boolean;
   items: Record<string, unknown>[];
   logger?: Pick<Console, 'error' | 'info' | 'warn'>;
@@ -438,6 +443,35 @@ function groupExportRows(
   }
 
   return { groupedRows, inputCount: rows.length, mergedCount, clearedGroupedItemUUIDs };
+}
+
+function parseExportMode(
+  rawMode: string | null,
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): { mode: ExportMode; source: 'default' | 'explicit' } {
+  const defaultMode: ExportMode = 'backup';
+  if (!rawMode) {
+    return { mode: defaultMode, source: 'default' };
+  }
+
+  const trimmed = rawMode.trim();
+  if (!trimmed) {
+    return { mode: defaultMode, source: 'default' };
+  }
+
+  try {
+    const normalized = trimmed.toLowerCase();
+    if (!EXPORT_MODES.has(normalized as ExportMode)) {
+      throw new Error(`Unsupported export mode: ${rawMode}`);
+    }
+    return { mode: normalized as ExportMode, source: 'explicit' };
+  } catch (error) {
+    logger.error?.('[export-items] Failed to parse export mode; expected backup or erp.', {
+      rawMode,
+      error
+    });
+    throw error;
+  }
 }
 
 function toCsvValue(val: any): string {
@@ -786,6 +820,7 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
   const logger = options.logger ?? console;
   const mediaDir = options.mediaDir ?? MEDIA_DIR;
   const archiveBaseName = options.archiveBaseName || 'items-export';
+  const exportMode = options.exportMode;
 
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), `${archiveBaseName}-`));
   const cleanup = async (): Promise<void> => {
@@ -797,26 +832,43 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
   };
 
   try {
+    let groupingActive = false;
+    try {
+      if (!EXPORT_MODES.has(exportMode)) {
+        throw new Error(`Unsupported export mode: ${exportMode}`);
+      }
+      groupingActive = exportMode === 'erp';
+    } catch (modeError) {
+      logger.error?.('[export-items] Failed to resolve export grouping mode; defaulting to ungrouped export.', {
+        exportMode,
+        error: modeError
+      });
+      groupingActive = false;
+    }
+
     let groupedRows = options.items;
     let mergedCount = 0;
     let clearedGroupedItemUUIDs = 0;
-    try {
-      const groupingResult = groupExportRows(options.items, logger);
-      groupedRows = groupingResult.groupedRows;
-      mergedCount = groupingResult.mergedCount;
-      clearedGroupedItemUUIDs = groupingResult.clearedGroupedItemUUIDs;
-    } catch (groupingError) {
-      logger.error?.('[export-items] Failed to group export rows; using raw rows instead.', groupingError);
-      groupedRows = options.items;
+    if (groupingActive) {
+      try {
+        const groupingResult = groupExportRows(options.items, logger);
+        groupedRows = groupingResult.groupedRows;
+        mergedCount = groupingResult.mergedCount;
+        clearedGroupedItemUUIDs = groupingResult.clearedGroupedItemUUIDs;
+      } catch (groupingError) {
+        logger.error?.('[export-items] Failed to group export rows; using raw rows instead.', groupingError);
+        groupedRows = options.items;
+      }
     }
 
     let exportColumns = columns;
-    if (mergedCount > 0) {
+    if (groupingActive) {
       exportColumns = columns.filter((column) => column !== 'itemUUID');
       try {
         logger.info?.('[export-items] Omitting ItemUUID column for grouped export output.', {
           mergedCount,
-          clearedGroupedItemUUIDs
+          clearedGroupedItemUUIDs,
+          exportMode
         });
       } catch (logError) {
         logger.error?.('[export-items] Failed to log grouped export column adjustment.', logError);
@@ -880,6 +932,27 @@ const action = defineHttpAction({
       const url = new URL(req.url || '', PUBLIC_ORIGIN);
       const actor = (url.searchParams.get('actor') || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
+      let exportMode: ExportMode;
+      let modeSource: 'default' | 'explicit';
+      try {
+        ({ mode: exportMode, source: modeSource } = parseExportMode(url.searchParams.get('mode'), console));
+      } catch (modeError) {
+        console.error('[export-items] Invalid export mode provided.', {
+          mode: url.searchParams.get('mode'),
+          error: modeError
+        });
+        return sendJson(res, 400, { error: 'mode must be backup or erp' });
+      }
+      const groupingActive = exportMode === 'erp';
+      try {
+        console.info('[export-items] Export mode resolved.', {
+          mode: exportMode,
+          modeSource,
+          groupingActive
+        });
+      } catch (logError) {
+        console.error('[export-items] Failed to log export mode selection.', logError);
+      }
       const createdAfter = url.searchParams.get('createdAfter');
       const updatedAfter = url.searchParams.get('updatedAfter');
       const items = ctx.listItemsForExport.all({
@@ -902,6 +975,7 @@ const action = defineHttpAction({
       const stagedExport = await stageItemsExport({
         archiveBaseName: `items-export-${Date.now()}`,
         boxes: Array.isArray(boxes) ? boxes : [],
+        exportMode,
         includeMedia: true,
         items,
         logger: console,
