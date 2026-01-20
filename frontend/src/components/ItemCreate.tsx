@@ -402,6 +402,28 @@ export function buildCreationParams(
   return params;
 }
 
+// TODO(agent): Consolidate Auf_Lager normalization across item creation flows once server-side validation is unified.
+function resolveAufLagerInput({
+  value,
+  fallback,
+  context
+}: {
+  value: unknown;
+  fallback?: number;
+  context: string;
+}): number {
+  const candidate = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+  if (Number.isFinite(candidate) && candidate > 0) {
+    return candidate;
+  }
+  if (fallback !== undefined && Number.isFinite(fallback) && fallback > 0) {
+    console.warn('Invalid Auf_Lager input; falling back to prior value.', { context, value, fallback });
+    return fallback;
+  }
+  console.warn('Invalid Auf_Lager input; defaulting to 1.', { context, value });
+  return 1;
+}
+
 // TODO(agent): Confirm auto-print target resolution once bulk label handling is validated with operations.
 function resolveAutoPrintEinheit(value: unknown): ItemEinheit {
   if (isItemEinheit(value)) {
@@ -897,6 +919,11 @@ export default function ItemCreate() {
     const submissionData: Partial<ItemFormData> = {
       ...data
     };
+    submissionData.Auf_Lager = resolveAufLagerInput({
+      value: submissionData.Auf_Lager,
+      fallback: typeof basicInfo.Auf_Lager === 'number' ? basicInfo.Auf_Lager : undefined,
+      context
+    });
 
     const matchSelectionContext = context === 'match-selection';
     let isManualSubmission = !shouldUseAgenticForm || context === 'manual-edit';
@@ -1242,6 +1269,10 @@ export default function ItemCreate() {
       const resolvedQuality = Object.prototype.hasOwnProperty.call(basicInfo, 'Quality')
         ? basicInfo.Quality
         : referenceFields.Quality;
+      const resolvedAufLager = resolveAufLagerInput({
+        value: basicInfo.Auf_Lager,
+        context: 'match-selection'
+      });
 
       const clone: Partial<ItemFormData> = {
         ...basicInfo,
@@ -1252,7 +1283,7 @@ export default function ItemCreate() {
           preferredReferenceFields.Artikel_Nummer ?? basicInfo.Artikel_Nummer ?? referenceFields.Artikel_Nummer,
         Kurzbeschreibung:
           preferredReferenceFields.Kurzbeschreibung ?? basicInfo.Kurzbeschreibung ?? referenceFields.Kurzbeschreibung,
-        Auf_Lager: basicInfo.Auf_Lager,
+        Auf_Lager: resolvedAufLager,
         Quality: resolvedQuality,
         Einheit: resolvedEinheit
       };

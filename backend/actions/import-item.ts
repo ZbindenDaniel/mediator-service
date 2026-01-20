@@ -206,8 +206,14 @@ function resolveRequestedQuantity(
   rawValue: string | null,
   context: { ItemUUID: string; artikelNummer: string | null }
 ): number {
+  // TODO(agent): Enrich quantity normalization telemetry with request-scoped metadata once import tracing lands.
   let quantity = 1;
   try {
+    if (rawValue === null) {
+      console.warn('[import-item] Auf_Lager missing from payload; defaulting to 1', {
+        ...context
+      });
+    }
     if (rawValue) {
       const parsed = Number.parseInt(rawValue.trim(), 10);
       if (Number.isFinite(parsed) && parsed > 0) {
