@@ -683,7 +683,7 @@ export default function BoxDetail({ boxId }: Props) {
               </div>
             ) : null}
 
-            <div className="card">
+            <div className="card grid-span-2">
               <h3>Artikel</h3>
               <div className=''>
                 <div className='row'>
@@ -810,7 +810,7 @@ export default function BoxDetail({ boxId }: Props) {
               </div>
             </div>
 
-            <div className="card">
+            <div className="card grid-span-2">
               <h3>Aktivitäten</h3>
               <ul className="events">
                 {displayedEvents.map((ev) => (

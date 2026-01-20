@@ -1714,6 +1714,10 @@ button:focus {
     .landing-grid {
         grid-template-columns: 1.2fr .8fr
     }
+
+    .grid-span-2 {
+        grid-column: span 2;
+    }
 }
 
 /* Reduce effects if motion sensitive */
