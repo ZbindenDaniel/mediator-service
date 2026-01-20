@@ -1,7 +1,8 @@
 // TODO(quality-wizard): Revisit quality slider placement after validating onboarding feedback.
 import React, { useEffect, useMemo } from 'react';
 import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS } from '../../../models/quality';
-import { ItemFormData, useItemFormState } from './forms/itemFormShared';
+import { ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../models';
+import { ItemFormData, ITEM_FORM_DEFAULT_EINHEIT, useItemFormState } from './forms/itemFormShared';
 import QualityBadge from './QualityBadge';
 
 interface ItemBasicInfoFormProps {
@@ -59,6 +60,40 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
               }}
               required
             />
+          </div>
+
+          {/* TODO(agent): Confirm Einheit defaults and labels with the inventory team before the next release. */}
+          <div className="row">
+            <label>Einheit*</label>
+            <select
+              value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
+              onChange={(event) => {
+                try {
+                  const candidate = event.target.value;
+                  if (isItemEinheit(candidate)) {
+                    update('Einheit', candidate);
+                    return;
+                  }
+                  const trimmed = candidate.trim();
+                  if (isItemEinheit(trimmed)) {
+                    update('Einheit', trimmed);
+                    return;
+                  }
+                  console.warn('Invalid Einheit selection in basic info form, using default', { candidate });
+                  update('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
+                } catch (error) {
+                  console.error('Failed to update Einheit in basic info form', error);
+                  update('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
+                }
+              }}
+              required
+            >
+              {ITEM_EINHEIT_VALUES.map((value) => (
+                <option key={`einheit-${value}`} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="row">
