@@ -33,6 +33,32 @@ function computeTokenScore(tokens: string[], candidateTokens: string[]): number 
 }
 
 const DEFAULT_SEARCH_EINHEIT: ItemEinheit = ItemEinheit.Stk;
+const DEFAULT_ITEM_LIMIT = 5;
+
+function parseSearchLimit(value: string | null, context: string, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+  try {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+    console.warn('[search] Invalid limit parameter; using default.', {
+      context,
+      provided: value,
+      fallback
+    });
+  } catch (error) {
+    console.error('[search] Failed to parse limit parameter; using default.', {
+      context,
+      provided: value,
+      fallback,
+      error
+    });
+  }
+  return fallback;
+}
 
 // TODO(agent): Consider centralizing Auf_Lager parsing once search response normalization is shared across actions.
 function parseAufLagerValue(value: unknown, context: string): number {
@@ -214,12 +240,19 @@ const action = defineHttpAction({
       const dedupeParam = url.searchParams.get("dedupe");
       const normalizedScope = scopeParam ? scopeParam.trim().toLowerCase() : null;
       const normalizedDedupe = dedupeParam ? dedupeParam.trim().toLowerCase() : null;
+      const wantsInstances =
+        normalizedScope === "instances" ||
+        normalizedScope === "instance" ||
+        normalizedScope === "items";
       const wantsRefs =
-        normalizedScope === "refs" ||
-        normalizedScope === "references" ||
-        normalizedDedupe === "true" ||
-        normalizedDedupe === "1" ||
-        normalizedDedupe === "yes";
+        !wantsInstances &&
+        (normalizedScope === "refs" ||
+          normalizedScope === "references" ||
+          normalizedDedupe === "true" ||
+          normalizedDedupe === "1" ||
+          normalizedDedupe === "yes");
+
+      const itemLimit = parseSearchLimit(url.searchParams.get("limit"), "items", DEFAULT_ITEM_LIMIT);
 
       if (wantsRefs) {
         const like5 = (t: string) => {
@@ -440,7 +473,7 @@ const action = defineHttpAction({
     )
     WHERE token_hits >= ?
     ORDER BY exact_match DESC, sql_score DESC
-    LIMIT 5
+    LIMIT ?
   `;
 
       const itemParams = [
@@ -456,9 +489,18 @@ const action = defineHttpAction({
         tokens.length,
         // WHERE threshold
         minTokenHits,
+        // LIMIT
+        itemLimit
       ];
 
       const rawItems = ctx.db.prepare(itemSql).all(...itemParams);
+      if (rawItems.length >= itemLimit) {
+        console.info('[search] Item results reached limit; results may be truncated.', {
+          term: trimmed,
+          limit: itemLimit,
+          returned: rawItems.length
+        });
+      }
 
       // ---------------- BOXES ----------------
       const boxTokenPresenceTerms = tokens.map(() => `

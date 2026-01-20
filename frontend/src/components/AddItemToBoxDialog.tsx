@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Item } from '../../../models';
 import { ensureUser } from '../lib/user';
+import { logger } from '../utils/logger';
 import { dialogService } from './dialog';
 import { DialogButtons, DialogContent, DialogOverlay } from './dialog/presentational';
 import { GoSearch } from 'react-icons/go';
@@ -70,6 +71,8 @@ export async function confirmItemRelocationIfNecessary(item: Item, targetBoxId: 
 }
 
 export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
+  const searchLimit = 50;
+  const searchScope = 'instances';
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Item[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -147,8 +150,13 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
     }
     setHasSearched(true);
     try {
-      console.log('Searching items for', term);
-      const r = await fetch('/api/search?term=' + encodeURIComponent(term));
+      logger.info('AddItemToBoxDialog: running search', { term, limit: searchLimit, scope: searchScope });
+      const params = new URLSearchParams({
+        term,
+        limit: String(searchLimit),
+        scope: searchScope
+      });
+      const r = await fetch(`/api/search?${params.toString()}`);
       if (!r.ok) {
         console.error('search failed', r.status);
         return;
