@@ -74,7 +74,7 @@
 - Introduced activities search entry points on the recent events card and activities page for quicker refinement.
 - Added optional search-term filtering for the recent activities feed based on entity or article identifiers.
 - Wired the activities search term into the activities page API request so filtering updates with the URL state.
-- Update the closing of larger tasks in [RECENT_HIGHLIGHTS]()
+- Clarified the recent highlights log by replacing the empty placeholder link with a concrete documentation note referencing `docs/RECENT_HIGHLIGHTS.md`.
 - Introduced topic-based event log allowlists across backend and frontend feeds, defaulting to full visibility unless configured.
 - Introduced default shelf location mapping configuration for subcategory-backed location IDs, logging missing mappings to protect data quality.
 - Added shelf BoxID format validation for boxes.csv ingestion to warn and skip malformed shelf IDs.
