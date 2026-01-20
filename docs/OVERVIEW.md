@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Updated the recent activities list to label entity IDs more clearly and surface item Artikelbezeichnung details for faster scanning.
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
 - Isolated item reference updates in the save-item edit flow so instance fields stay untouched during metadata edits.
 - Added item detail instance summaries to surface per-reference inventory visibility in the detail view payload/UI.
