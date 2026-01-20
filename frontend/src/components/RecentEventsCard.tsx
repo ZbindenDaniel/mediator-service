@@ -8,6 +8,7 @@ import { filterVisibleEvents } from '../utils/eventLogTopics';
 // TODO(agent): Surface active topic filters in the UI to avoid confusing operators.
 // TODO(agent): Follow up on filtering the activities feed by query once backend support lands.
 // TODO(navigation): Validate header navigation coverage before reintroducing card-level links.
+// TODO(agent): Confirm Artikelbezeichnung data coverage for activity rows without item references.
 // TODO(labeling): Reconfirm the activities table header labels against product terminology.
 
 interface ResolvedEventLink {
@@ -84,6 +85,7 @@ export function RecentEventsList({ events }: Props) {
               <tr>
                 <th scope="col">Typ</th>
                 <th scope="col">ID</th>
+                <th scope="col">Artikelbezeichnung</th>
                 <th scope="col">Akteur</th>
                 <th scope="col">Aktion</th>
                 <th scope="col">Datum</th>
@@ -99,6 +101,7 @@ export function RecentEventsList({ events }: Props) {
                 const ariaLabel = `${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`;
                 const typeLabel = e.EntityType === 'Box' ? 'Behälter' : e.EntityType === 'Item' ? 'Artikel' : e.EntityType;
                 const entityId = e.EntityId ?? '—';
+                const artikelbezeichnung = e.Artikelbeschreibung ?? '—';
 
                 return (
                   <tr key={e.Id}>
@@ -110,6 +113,11 @@ export function RecentEventsList({ events }: Props) {
                     <td>
                       <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
                         {entityId}
+                      </Link>
+                    </td>
+                    <td>
+                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
+                        {artikelbezeichnung}
                       </Link>
                     </td>
                     <td>
