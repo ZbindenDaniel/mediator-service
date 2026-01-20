@@ -77,35 +77,61 @@ export function RecentEventsList({ events }: Props) {
   return (
     <div id="eventsOut" className="list">
       {allowedEvents.length ? (
-        allowedEvents.map((e) => {
-          const { path, ariaSuffix } = resolveEventLink(e);
-          const formattedDate = formatDate(e.CreatedAt);
-          const label = eventLabel(e.Event);
-          const actorText = e.Actor ? `${e.Actor}: ` : '[?] ';
-          const ariaActor = e.Actor ? `${e.Actor}: ` : 'Unbekannt: ';
-          const ariaLabel = `${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`;
+        <div className="item-list-wrapper">
+          <table className="item-list activities-table" aria-label="Letzte Aktivitäten">
+            <thead>
+              <tr>
+                <th scope="col">Typ</th>
+                <th scope="col">Entity ID</th>
+                <th scope="col">Akteur</th>
+                <th scope="col">Aktion</th>
+                <th scope="col">Datum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allowedEvents.map((e) => {
+                const { path, ariaSuffix } = resolveEventLink(e);
+                const formattedDate = formatDate(e.CreatedAt);
+                const label = eventLabel(e.Event);
+                const actorText = e.Actor ?? '[?]';
+                const ariaActor = e.Actor ? `${e.Actor}: ` : 'Unbekannt: ';
+                const ariaLabel = `${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`;
+                const typeLabel = e.EntityType === 'Box' ? 'Behälter' : e.EntityType === 'Item' ? 'Artikel' : e.EntityType;
+                const entityId = e.EntityId ?? '—';
 
-          return (
-            <React.Fragment key={e.Id}>
-              <Link className="linkcard" to={path} tabIndex={0} aria-label={ariaLabel}>
-                <div className="card event-card">
-                  <div>
-                    <span className={`pill ${e.EntityType}`}>{e.EntityType == 'Box' ? 'Behälter  ' : 'Artikel  '}</span>
-                    <br />
-                  </div>
-                  <div className="muted">{e.EntityId}</div>
-                  <div className="muted">{formattedDate} </div>
-                  <div className="event-row">
-                    <span>
-                      {actorText}
-                      {label}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            </React.Fragment>
-          );
-        })
+                return (
+                  <tr key={e.Id}>
+                    <td>
+                      <Link className="linkcard" to={path} tabIndex={0} aria-label={ariaLabel}>
+                        <span className={`pill ${e.EntityType}`}>{typeLabel}</span>
+                      </Link>
+                    </td>
+                    <td>
+                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
+                        {entityId}
+                      </Link>
+                    </td>
+                    <td>
+                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
+                        {actorText}
+                      </Link>
+                    </td>
+                    <td>
+                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
+                        {label}
+                      </Link>
+                    </td>
+                    <td>
+                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
+                        {formattedDate}
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <div className="muted">Keine aktuellen Aktivitäten.</div>
       )}

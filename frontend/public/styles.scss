@@ -1206,6 +1206,12 @@ button:focus {
     text-align: left;
 }
 
+.activities-table th,
+.activities-table td {
+    padding: 6px 8px;
+    font-size: 0.85rem;
+}
+
 .item-list .optional-column {
     display: none;
 }
