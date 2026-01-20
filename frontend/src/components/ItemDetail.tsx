@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
+// TODO(agent): Validate instance navigation UX once instance detail reload behavior is reviewed.
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 // TODO(agent): Confirm instance inventory ordering requirements once detail UI feedback arrives.
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
@@ -1413,6 +1414,35 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [itemId]);
 
+  const handleInstanceNavigation = useCallback(
+    async (targetItemId: string | null) => {
+      if (!targetItemId) {
+        logError('ItemDetail: Missing ItemUUID for instance navigation', undefined, { itemId });
+        return;
+      }
+      if (targetItemId === itemId) {
+        try {
+          await load({ showSpinner: true });
+        } catch (error) {
+          logError('ItemDetail: Failed to reload current instance detail', error, {
+            itemId,
+            targetItemId
+          });
+        }
+        return;
+      }
+      try {
+        navigate(`/items/${encodeURIComponent(targetItemId)}`);
+      } catch (error) {
+        logError('ItemDetail: Failed to navigate to instance detail', error, {
+          itemId,
+          targetItemId
+        });
+      }
+    },
+    [itemId, load, navigate]
+  );
+
   const refreshAgenticStatus = useCallback(
     async (targetItemId: string): Promise<AgenticRun | null> => {
       try {
@@ -2325,9 +2355,34 @@ export default function ItemDetail({ itemId }: Props) {
                       const locationCell = normalizeDetailValue(row.location);
                       const updatedCell = normalizeDetailValue(row.updatedAt);
                       const createdCell = normalizeDetailValue(row.createdAt);
+                      const navigationLabel = `Instanz ${row.id} öffnen`;
+                      const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          void handleInstanceNavigation(row.id);
+                        }
+                      };
                       return (
-                        <tr key={row.id}>
-                          <td>{row.id}</td>
+                        <tr
+                          key={row.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => void handleInstanceNavigation(row.id)}
+                          onKeyDown={handleRowKeyDown}
+                          aria-label={navigationLabel}
+                        >
+                          <td>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleInstanceNavigation(row.id);
+                              }}
+                              aria-label={navigationLabel}
+                            >
+                              {row.id}
+                            </button>
+                          </td>
                           <td className={qualityCell.isPlaceholder ? 'is-placeholder' : undefined}>
                             {qualityCell.content}
                           </td>
