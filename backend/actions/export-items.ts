@@ -84,7 +84,9 @@ const metadataColumns = columnDescriptors
   .map((descriptor) => descriptor.key as ExportColumn);
 
 const columns = columnDescriptors.map((descriptor) => descriptor.key) as readonly ExportColumn[];
-const columnHeaders = columnDescriptors.map((descriptor) => descriptor.header) as readonly string[];
+const columnHeaderMap = new Map<ExportColumn, string>(
+  columnDescriptors.map((descriptor) => [descriptor.key, descriptor.header])
+);
 
 const boxColumns = [
   'BoxID',
@@ -120,9 +122,8 @@ const categoryLabelFallbackWarnings = new Set<string>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
-const GROUPED_ITEM_UUID_SEPARATOR = '|';
-
-// TODO(export-items-grouping): Align grouped ItemUUID delimiters with reconciliation tooling if partner CSV rules change.
+// TODO(export-items-grouping): Confirm whether grouped exports should omit the ItemUUID column entirely once consumers allow it.
+// TODO(export-items-grouping): Validate export consumers accept ItemUUID column removal when grouping merges rows.
 
 function formatArtikelnummerForExport(value: unknown, itemUUID: string | null): unknown {
   if (value === null || value === undefined) {
@@ -360,7 +361,7 @@ function groupExportRows(
   groupedRows: Record<string, unknown>[];
   inputCount: number;
   mergedCount: number;
-  legacyIdentifierGroups: number;
+  clearedGroupedItemUUIDs: number;
 } {
   const grouped = new Map<
     string,
@@ -400,13 +401,27 @@ function groupExportRows(
     existing.row.Label = resolveFallbackValue(existing.row.Label, row.Label);
   });
 
-  let legacyIdentifierGroups = 0;
+  let clearedGroupedItemUUIDs = 0;
   const groupedRows = Array.from(grouped.values()).map((entry) => {
-    if (entry.itemUUIDs.size > 1) {
-      legacyIdentifierGroups += 1;
-      entry.row.ItemUUID = Array.from(entry.itemUUIDs).join(GROUPED_ITEM_UUID_SEPARATOR);
-    } else if (entry.itemUUIDs.size === 1 && !entry.row.ItemUUID) {
-      entry.row.ItemUUID = Array.from(entry.itemUUIDs)[0];
+    try {
+      if (entry.itemUUIDs.size > 1) {
+        clearedGroupedItemUUIDs += 1;
+        entry.row.ItemUUID = '';
+        logger.warn?.('[export-items] Clearing ItemUUID for grouped export row to avoid inconsistent instance references.', {
+          artikelNummer: entry.row.Artikel_Nummer ?? null,
+          boxId: entry.row.BoxID ?? null,
+          location: entry.row.Location ?? entry.row.LocationId ?? null,
+          itemUUIDCount: entry.itemUUIDs.size,
+          itemUUIDs: Array.from(entry.itemUUIDs)
+        });
+      } else if (entry.itemUUIDs.size === 1 && !entry.row.ItemUUID) {
+        entry.row.ItemUUID = Array.from(entry.itemUUIDs)[0];
+      }
+    } catch (normalizationError) {
+      logger.error?.('[export-items] Failed to normalize grouped ItemUUID values for export.', {
+        artikelNummer: entry.row.Artikel_Nummer ?? null,
+        error: normalizationError
+      });
     }
     return entry.row;
   });
@@ -416,13 +431,13 @@ function groupExportRows(
       inputCount: rows.length,
       groupedCount: groupedRows.length,
       mergedCount,
-      legacyIdentifierGroups
+      clearedGroupedItemUUIDs
     });
   } catch (logError) {
     logger.error?.('[export-items] Failed to log export grouping summary', logError);
   }
 
-  return { groupedRows, inputCount: rows.length, mergedCount, legacyIdentifierGroups };
+  return { groupedRows, inputCount: rows.length, mergedCount, clearedGroupedItemUUIDs };
 }
 
 function toCsvValue(val: any): string {
@@ -714,10 +729,13 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
   return DEFAULT_EINHEIT;
 }
 
-export function serializeItemsToCsv(rows: Record<string, unknown>[]): { csv: string; columns: readonly ExportColumn[] } {
-  const header = columnHeaders.join(',');
+export function serializeItemsToCsv(
+  rows: Record<string, unknown>[],
+  exportColumns: readonly ExportColumn[] = columns
+): { csv: string; columns: readonly ExportColumn[] } {
+  const header = exportColumns.map((column) => columnHeaderMap.get(column) ?? column).join(',');
   const lines = rows.map((row: any) =>
-    columns
+    exportColumns
       .map((column: ExportColumn) => {
         const resolvedValue = resolveExportValue(column, row);
         return toCsvValue(resolvedValue);
@@ -726,7 +744,7 @@ export function serializeItemsToCsv(rows: Record<string, unknown>[]): { csv: str
   );
   return {
     csv: [header, ...lines].join('\n'),
-    columns
+    columns: exportColumns
   };
 }
 
@@ -780,14 +798,32 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
 
   try {
     let groupedRows = options.items;
+    let mergedCount = 0;
+    let clearedGroupedItemUUIDs = 0;
     try {
-      groupedRows = groupExportRows(options.items, logger).groupedRows;
+      const groupingResult = groupExportRows(options.items, logger);
+      groupedRows = groupingResult.groupedRows;
+      mergedCount = groupingResult.mergedCount;
+      clearedGroupedItemUUIDs = groupingResult.clearedGroupedItemUUIDs;
     } catch (groupingError) {
       logger.error?.('[export-items] Failed to group export rows; using raw rows instead.', groupingError);
       groupedRows = options.items;
     }
 
-    const { csv } = serializeItemsToCsv(groupedRows);
+    let exportColumns = columns;
+    if (mergedCount > 0) {
+      exportColumns = columns.filter((column) => column !== 'itemUUID');
+      try {
+        logger.info?.('[export-items] Omitting ItemUUID column for grouped export output.', {
+          mergedCount,
+          clearedGroupedItemUUIDs
+        });
+      } catch (logError) {
+        logger.error?.('[export-items] Failed to log grouped export column adjustment.', logError);
+      }
+    }
+
+    const { csv } = serializeItemsToCsv(groupedRows, exportColumns);
     const boxesCsv = serializeBoxes(options.boxes ?? []);
     const itemsPath = path.join(tempDir, 'items.csv');
     const boxesPath = path.join(tempDir, 'boxes.csv');
