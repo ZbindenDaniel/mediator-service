@@ -1709,6 +1709,10 @@ button:focus {
 }
 
 /* Responsive upgrades for desktop landing */
+.landing-grid {
+    grid-template-columns: 1fr;
+}
+
 @media (min-width: 720px) {
     .landing-grid {
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr))
