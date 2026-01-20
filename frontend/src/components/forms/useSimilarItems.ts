@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ItemRef } from '../../../../models';
+// TODO(deep-search): Confirm when similar-item searches should omit deep search for performance.
 
 type SimilarItem = ItemRef & {
   exemplarItemUUID?: string | null;

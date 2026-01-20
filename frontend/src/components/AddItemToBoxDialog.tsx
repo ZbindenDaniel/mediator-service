@@ -7,6 +7,7 @@ import { DialogButtons, DialogContent, DialogOverlay } from './dialog/presentati
 import { GoSearch } from 'react-icons/go';
 
 // TODO: Evaluate migrating this dialog into the shared dialog queue for automated focus management.
+// TODO(deep-search): Add an opt-in toggle so users can choose deep search in this dialog.
 
 interface Props {
   boxId: string;
@@ -150,7 +151,11 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
     }
     setHasSearched(true);
     try {
-      logger.info('AddItemToBoxDialog: running search', { term, limit: searchLimit, scope: searchScope });
+      logger.info('AddItemToBoxDialog: running search', {
+        term,
+        limit: searchLimit,
+        scope: searchScope
+      });
       const params = new URLSearchParams({
         term,
         limit: String(searchLimit),

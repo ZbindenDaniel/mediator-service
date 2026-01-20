@@ -1,5 +1,6 @@
 // TODO(agent): Confirm instance timestamp expectations once API consumers validate date formatting.
 // TODO(agent): Revalidate item detail response fields after UI card splits to avoid missing instance metadata.
+// TODO(agent): Verify ItemDetailResponse instances always return ItemUUID and timestamps in production payloads.
 import type { AgenticRun } from './agentic-run';
 import type { AgenticRunStatus } from './agentic-statuses';
 import type { Box } from './box';
@@ -12,8 +13,8 @@ export interface ItemInstanceSummary {
   Quality?: number | null;
   Location?: string | null;
   BoxID?: string | null;
-  UpdatedAt?: string | null;
-  Datum_erfasst?: string | null;
+  UpdatedAt: string | null;
+  Datum_erfasst: string | null;
 }
 
 export interface ItemDetailResponse {

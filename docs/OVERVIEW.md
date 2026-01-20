@@ -37,9 +37,12 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Updated instance item grouping and print quantity logic to use grouped counts while keeping `Auf_Lager` numeric for bulk items, with warnings for anomalous instance stock values.
 - Keyed agentic run bulk queueing and instance detail status summaries off ItemUUIDs, with aggregated agentic status now surfaced in grouped list views.
 - Added instance-scoped search limits for add-item workflows to return more item rows while logging truncation for debugging.
+- Enabled deep search defaults for Kurzbeschreibung/Langtext matching while keeping the flag available for API callers.
+- Hid quantity details for non-bulk items in the detail view while logging invalid Einheit values to avoid confusion around instance counts.
 - Swapped the recent activities card to a semantic table layout with reusable list styling for easier scanning.
 - Split item detail metadata into reference/instance cards and surfaced additional instance metadata alongside a separate instances table card.
 - Refined add-item dialog result rows with a compact layout to keep search actions visible while tightening spacing.
+- Made item detail instance rows navigable to instance-specific detail pages while preserving reload behavior for the current instance.
 
 ## Documentation Map
 

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
+// TODO(agent): Validate instance navigation UX once instance detail reload behavior is reviewed.
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 // TODO(agent): Confirm instance inventory ordering requirements once detail UI feedback arrives.
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
@@ -23,6 +24,7 @@ import {
   AGENTIC_RUN_TERMINAL_STATUSES,
   ItemEinheit,
   isItemEinheit,
+  normalizeItemEinheit,
   normalizeAgenticRunStatus
 } from '../../../models';
 import { describeQuality, QUALITY_DEFAULT } from '../../../models/quality';
@@ -102,6 +104,27 @@ function resolveDetailEinheit(value: unknown): ItemEinheit {
     console.error('ItemDetail: Failed to resolve Einheit value, using default.', error);
   }
   return DEFAULT_DETAIL_EINHEIT;
+}
+
+// TODO(agent): Confirm quantity row hiding behavior stays aligned with bulk item expectations.
+function resolveQuantityEinheit(value: unknown, itemId: string): ItemEinheit | null {
+  try {
+    const normalized = normalizeItemEinheit(value);
+    if (!normalized) {
+      logger.warn?.('ItemDetail: Einheit missing or invalid; hiding quantity row.', {
+        itemId,
+        provided: value
+      });
+      return null;
+    }
+    return normalized;
+  } catch (error) {
+    logError('ItemDetail: Failed to normalize Einheit for quantity row', error, {
+      itemId,
+      provided: value
+    });
+    return null;
+  }
 }
 
 export interface AgenticStatusCardProps {
@@ -1088,7 +1111,6 @@ export default function ItemDetail({ itemId }: Props) {
       ['ItemUUID', item.ItemUUID ?? null],
       ['Artikelbeschreibung', item.Artikelbeschreibung ?? null],
       ['Artikelnummer', item.Artikel_Nummer ?? null],
-      ['Anzahl', item.Auf_Lager ?? null],
       [
         'Behälter',
         item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
@@ -1098,6 +1120,11 @@ export default function ItemDetail({ itemId }: Props) {
       ['Qualität', qualitySummary.label],
       ['Ki Status', agenticStatusDisplay(agentic).label]
     ];
+
+    const quantityEinheit = resolveQuantityEinheit(item.Einheit, item.ItemUUID);
+    if (quantityEinheit === ItemEinheit.Menge) {
+      rows.push(['Menge', item.Auf_Lager ?? null]);
+    }
 
     const unterkategorieB = resolveUnterkategorieLabel(item.Unterkategorien_B);
     if (unterkategorieB !== null) {
@@ -1386,6 +1413,35 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
   }, [itemId]);
+
+  const handleInstanceNavigation = useCallback(
+    async (targetItemId: string | null) => {
+      if (!targetItemId) {
+        logError('ItemDetail: Missing ItemUUID for instance navigation', undefined, { itemId });
+        return;
+      }
+      if (targetItemId === itemId) {
+        try {
+          await load({ showSpinner: true });
+        } catch (error) {
+          logError('ItemDetail: Failed to reload current instance detail', error, {
+            itemId,
+            targetItemId
+          });
+        }
+        return;
+      }
+      try {
+        navigate(`/items/${encodeURIComponent(targetItemId)}`);
+      } catch (error) {
+        logError('ItemDetail: Failed to navigate to instance detail', error, {
+          itemId,
+          targetItemId
+        });
+      }
+    },
+    [itemId, load, navigate]
+  );
 
   const refreshAgenticStatus = useCallback(
     async (targetItemId: string): Promise<AgenticRun | null> => {
@@ -2299,9 +2355,34 @@ export default function ItemDetail({ itemId }: Props) {
                       const locationCell = normalizeDetailValue(row.location);
                       const updatedCell = normalizeDetailValue(row.updatedAt);
                       const createdCell = normalizeDetailValue(row.createdAt);
+                      const navigationLabel = `Instanz ${row.id} öffnen`;
+                      const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          void handleInstanceNavigation(row.id);
+                        }
+                      };
                       return (
-                        <tr key={row.id}>
-                          <td>{row.id}</td>
+                        <tr
+                          key={row.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => void handleInstanceNavigation(row.id)}
+                          onKeyDown={handleRowKeyDown}
+                          aria-label={navigationLabel}
+                        >
+                          <td>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleInstanceNavigation(row.id);
+                              }}
+                              aria-label={navigationLabel}
+                            >
+                              {row.id}
+                            </button>
+                          </td>
                           <td className={qualityCell.isPlaceholder ? 'is-placeholder' : undefined}>
                             {qualityCell.content}
                           </td>
