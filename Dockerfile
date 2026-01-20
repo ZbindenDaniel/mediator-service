@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
+############################
 # Builder stage
+############################
 FROM node:20-bullseye AS builder
 
 WORKDIR /app
@@ -13,11 +15,13 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+
+############################
 # Runtime stage
+############################
 FROM node:20-bullseye-slim AS runtime
 
 # Install system dependencies required at runtime
-# TODO(agent): Revisit runtime dependency footprint after adding CSV archive helpers.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3 \
@@ -38,9 +42,10 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+# Copy env file
 COPY .env /app/.env
 
-# Copy package manifests and install production dependencies
+# Install production dependencies
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
@@ -48,8 +53,15 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/public ./dist/frontend/public
 
-# Ensure required directories exist
-RUN mkdir -p dist/backend/data dist/backend/media dist/frontend/public
+# Ensure required directories exist AND fix ownership
+RUN mkdir -p \
+        dist/backend/data \
+        dist/backend/media \
+        dist/frontend/public \
+    && chown -R 33:33 /app
+
+# Switch to non-root user (www-data)
+USER 33:33
 
 EXPOSE 8080 8443
 

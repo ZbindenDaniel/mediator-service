@@ -100,6 +100,7 @@ export default function RecentActivitiesPage() {
           onChange={event => setSearchTerm(event.target.value)}
           placeholder="Artikelnummer, UUID, Box-ID oder Regal-ID"
           aria-label="Aktivitäten durchsuchen nach Artikelnummer, UUID, Box- oder Regal-ID"
+          autoFocus
           onKeyDown={event => {
             if (event.key === 'Enter') {
               handleSearchSubmit();

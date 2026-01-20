@@ -48,6 +48,7 @@ export default function SearchCard() {
           onChange={e => setQuery(e.target.value)}
           placeholder="z.B. Lenovo x230, B-151025, Brother, 07045"
           onKeyDown={e => { if (e.key === 'Enter') runFind(); }}
+          autoFocus
         />
         <button className="btn" onClick={runFind}>Suchen</button>
       </div>

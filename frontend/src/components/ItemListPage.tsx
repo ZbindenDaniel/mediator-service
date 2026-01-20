@@ -592,6 +592,7 @@ export default function ItemListPage() {
                       placeholder="Beschreibung oder Nummer"
                       type="search"
                       value={searchInput}
+                      autoFocus
                     />
                   </div>
                 </label>

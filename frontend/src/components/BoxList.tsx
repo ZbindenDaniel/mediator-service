@@ -134,6 +134,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
             placeholder="Box oder Standort finden"
             value={searchValue}
             onChange={handleSearchChange}
+            autoFocus
           />
         </label>
         <label className="toolbar-field" htmlFor="box-sort">

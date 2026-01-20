@@ -38,6 +38,7 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
               value={form.Artikelbeschreibung || ''}
               onChange={(event) => update('Artikelbeschreibung', event.target.value)}
               required
+              autoFocus
             />
           </div>
 
