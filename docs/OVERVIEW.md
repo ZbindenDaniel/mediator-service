@@ -74,6 +74,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Reaffirmed landing page grid columns with a mobile-first single-column default and stepped breakpoints for medium and large screens.
 - Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
 - Updated mobile container sizing to prevent overflow by constraining widths to the viewport.
+- Reinforced non-bulk import creation to log requested quantities, mint each instance safely, and report final instance counts for multi-quantity imports.
 
 ## Documentation Map
 
