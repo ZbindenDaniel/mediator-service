@@ -28,13 +28,15 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 
 - Balanced wide-screen landing grids by letting item/box detail tables and activity lists span both columns for readability.
+- Added grid span utilities and applied select layout spans on landing, item, and box detail cards for clearer wide/tall layouts.
 - Clarified the recent highlights log by replacing an empty placeholder link with a concrete documentation note for easier tracking.
 - Locked Einheit from edit flows in the UI and backend so existing item units remain immutable during reference updates.
 - Added a post-import success dialog reload in the ZIP import UI to refresh visible data while logging failures to display the dialog or reload.
 - Updated the recent activities list to label entity IDs more clearly and surface item Artikelbezeichnung details for faster scanning.
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
 - Omitted ItemUUID columns from grouped CSV exports and blanked grouped ItemUUID values to avoid inconsistent instance references in backup/ERP feeds.
-- Added explicit export modes so backup exports keep instance-level ItemUUIDs while ERP exports stay grouped and omit ItemUUIDs.
+- Added explicit export modes so backup exports keep instance-level ItemUUIDs while ERP exports stay grouped and intentionally leave ItemUUIDs blank because grouped rows are not instance-specific.
+TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemUUID blanking and instanzscharf backup behavior.
 - Normalized grouped item summaries to prefer instance sequence `1` (parsed from the trailing `-####` ItemUUID suffix, e.g. `-0001`) as the representative record while logging fallbacks when no canonical instance exists; this is a canonical display update, not an export/agentic/printing change.
 - Isolated item reference updates in the save-item edit flow so instance fields stay untouched during metadata edits.
 - Implemented reference-only edit payloads to keep item edit flows scoped to `item_refs` while logging and guarding against instance-field updates.
@@ -70,6 +72,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Refined landing page grid styles to keep single-column defaults and expand to responsive multi-column layouts at larger breakpoints.
 - Removed the duplicated reference card from the item detail view to keep reference data displayed once.
 - Reaffirmed landing page grid columns with a mobile-first single-column default and stepped breakpoints for medium and large screens.
+- Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
+- Updated mobile container sizing to prevent overflow by constraining widths to the viewport.
 
 ## Documentation Map
 
