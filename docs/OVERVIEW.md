@@ -71,6 +71,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Fixed ItemUUID parsing to handle Artikelnummer-based identifiers even when legacy prefixes overlap, preventing creation-by-reference collisions.
 - Refined landing page grid styles to keep single-column defaults and expand to responsive multi-column layouts at larger breakpoints.
 - Removed the duplicated reference card from the item detail view to keep reference data displayed once.
+- Reaffirmed landing page grid columns with a mobile-first single-column default and stepped breakpoints for medium and large screens.
 - Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
 - Updated mobile container sizing to prevent overflow by constraining widths to the viewport.
 
