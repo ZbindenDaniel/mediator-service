@@ -4,6 +4,7 @@ import { AGENTIC_RUN_ACTIVE_STATUSES, normalizeAgenticRunStatus } from '../../..
 import type { ItemReferenceEdit } from '../../../models';
 // TODO(agentic-edit-lock): Add a read-only fallback view when edits are blocked by active agentic runs.
 // TODO(reference-only-edit): Ensure item edit continues to submit reference-only payloads.
+// TODO(einheit-immutability): Keep Einheit immutable for existing item edits to avoid reference drift.
 import ItemForm from './ItemForm';
 import { ensureUser } from '../lib/user';
 import ItemMediaGallery from './ItemMediaGallery';
@@ -19,6 +20,7 @@ interface Props {
 }
 
 function stripInstanceFieldsForEdit(itemId: string, data: Partial<ItemFormPayload>) {
+  const cleaned = { ...data };
   const instanceFields = [
     'BoxID',
     'Location',
@@ -29,6 +31,7 @@ function stripInstanceFieldsForEdit(itemId: string, data: Partial<ItemFormPayloa
     'ShopwareVariantId',
     'ItemUUID'
   ] as const;
+  const immutableReferenceFields = ['Einheit'] as const;
   const removedFields = instanceFields.filter((field) => Object.prototype.hasOwnProperty.call(data, field));
   if (removedFields.length > 0) {
     try {
@@ -40,7 +43,23 @@ function stripInstanceFieldsForEdit(itemId: string, data: Partial<ItemFormPayloa
       console.error('Failed to log stripped edit fields', error);
     }
   }
-  return extractReferenceFields(data);
+  const removedReferenceFields = immutableReferenceFields.filter((field) =>
+    Object.prototype.hasOwnProperty.call(data, field)
+  );
+  if (removedReferenceFields.length > 0) {
+    try {
+      logger.warn?.('Item edit payload contained immutable reference fields; stripping before submit', {
+        itemId,
+        removedFields: removedReferenceFields
+      });
+    } catch (error) {
+      console.error('Failed to log stripped immutable edit fields', error);
+    }
+  }
+  removedReferenceFields.forEach((field) => {
+    delete (cleaned as Partial<ItemFormPayload>)[field];
+  });
+  return extractReferenceFields(cleaned);
 }
 
 export default function ItemEdit({ itemId }: Props) {
@@ -269,7 +288,7 @@ export default function ItemEdit({ itemId }: Props) {
         submitLabel="Speichern"
         headerContent={gallery}
         initialPhotos={initialPhotos}
-        lockedFields={{ Auf_Lager: 'hidden', Quality: 'hidden', BoxID: 'hidden' }}
+        lockedFields={{ Auf_Lager: 'hidden', Quality: 'hidden', BoxID: 'hidden', Einheit: 'hidden' }}
         hidePhotoInputs
         formMode="reference"
       />
