@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ItemDetailsFields,
   ItemFormData,
+  ItemFormMode,
+  ItemFormPayload,
   LockedFieldConfig,
   PhotoFieldKey,
   PHOTO_INPUT_FIELDS,
@@ -10,18 +12,19 @@ import {
 } from './forms/itemFormShared';
 import PhotoCaptureModal from './PhotoCaptureModal';
 
-interface Props {
-  item: Partial<ItemFormData>;
-  onSubmit: (data: Partial<ItemFormData>) => Promise<void>;
+type ItemFormProps<T extends ItemFormPayload = ItemFormData> = {
+  item: Partial<T>;
+  onSubmit: (data: Partial<T>) => Promise<void>;
   submitLabel: string;
   isNew?: boolean;
   headerContent?: React.ReactNode;
   lockedFields?: LockedFieldConfig;
   hidePhotoInputs?: boolean;
   initialPhotos?: readonly string[];
-}
+  formMode?: ItemFormMode;
+};
 
-export default function ItemForm({
+export default function ItemForm<T extends ItemFormPayload = ItemFormData>({
   item,
   onSubmit,
   submitLabel,
@@ -29,11 +32,13 @@ export default function ItemForm({
   headerContent,
   lockedFields,
   hidePhotoInputs,
-  initialPhotos
-}: Props) {
+  initialPhotos,
+  formMode = 'full'
+}: ItemFormProps<T>) {
   const { form, update, mergeForm, generateMaterialNumber, changeStock, seedPhotos, seededPhotos, clearPhoto } = useItemFormState({
-    initialItem: item,
-    initialPhotos
+    initialItem: item as Partial<ItemFormPayload>,
+    initialPhotos,
+    formMode
   });
   const [activePhotoField, setActivePhotoField] = useState<PhotoFieldKey | null>(null);
   const isCameraAvailable = useMemo(
@@ -61,7 +66,7 @@ export default function ItemForm({
     e.preventDefault();
     try {
       console.log('Submitting item form', form);
-      await onSubmit(form);
+      await onSubmit(form as Partial<T>);
     } catch (err) {
       console.error('Item form submit failed', err);
     }
@@ -114,7 +119,7 @@ export default function ItemForm({
         return;
       }
       try {
-        update(activePhotoField, dataUrl as ItemFormData[typeof activePhotoField]);
+        update(activePhotoField, dataUrl as ItemFormPayload[typeof activePhotoField]);
       } catch (error) {
         console.error('Failed to apply captured photo to item form', { error, field: activePhotoField });
       }
@@ -179,6 +184,7 @@ export default function ItemForm({
             onGenerateMaterialNumber={generateMaterialNumber}
             onChangeStock={changeStock}
             lockedFields={lockedFields}
+            formMode={formMode}
           />
 
           {!hidePhotoInputs ? (

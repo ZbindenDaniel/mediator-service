@@ -27,6 +27,7 @@ type GroupItemsOptions = {
   logContext?: string;
 };
 
+// TODO(instance-1-grouping): Revisit ItemUUID parsing once prefix rules are finalized.
 // TODO(agent): Revisit grouped quantity semantics if mixed Einheit payloads appear in a single grouping bucket.
 function normalizeString(value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -121,6 +122,25 @@ function resolveEinheit(value: unknown, logContext: string, itemId: string | nul
   }
 }
 
+function resolveInstanceSequence(itemUUID: string | null | undefined): number | null {
+  if (typeof itemUUID !== 'string') {
+    return null;
+  }
+  const match = itemUUID.match(/-(\d{4})$/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+function isCanonicalInstance(itemUUID: string | null | undefined): boolean {
+  return resolveInstanceSequence(itemUUID) === 1;
+}
+
 // TODO(agentic-status-grouping): Revisit aggregation ordering once agentic reviewer workflows expand.
 const AGENTIC_STATUS_PRIORITY: AgenticRunStatus[] = [
   AGENTIC_RUN_STATUS_RUNNING,
@@ -209,15 +229,16 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         const existing = grouped.get(key);
         const quantityData = resolveItemQuantity(item, logContext);
         const itemAgenticStatus = resolveAgenticStatus(item.AgenticStatus);
+        const canonicalInstance = isCanonicalInstance(item.ItemUUID ?? null);
         if (existing) {
           existing.summary.count += 1;
           existing.items.push(item);
           existing.totalStock += quantityData.quantity;
           existing.agenticStatusSummary = mergeAgenticStatusSummary(existing.agenticStatusSummary, itemAgenticStatus);
-          if (!existing.summary.representativeItemId && item.ItemUUID) {
+          if (item.ItemUUID && (canonicalInstance || !existing.summary.representativeItemId)) {
             existing.summary.representativeItemId = item.ItemUUID;
           }
-          if (!existing.representative) {
+          if (canonicalInstance || !existing.representative) {
             existing.representative = item;
           }
           continue;
@@ -250,6 +271,18 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
       itemCount: safeItems.length
     });
     return [];
+  }
+
+  for (const group of grouped.values()) {
+    if (group.summary.representativeItemId && !isCanonicalInstance(group.summary.representativeItemId)) {
+      logger.info?.(`[${logContext}] Falling back to non-canonical representative`, {
+        representativeItemId: group.summary.representativeItemId,
+        artikelNumber: group.summary.Artikel_Nummer ?? null,
+        quality: group.summary.Quality ?? null,
+        boxId: group.summary.BoxID ?? null,
+        location: group.summary.Location ?? null
+      });
+    }
   }
 
   return Array.from(grouped.values());
