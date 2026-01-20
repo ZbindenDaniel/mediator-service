@@ -1685,7 +1685,8 @@ button:focus {
 /* Mobile scan pages: slightly larger base */
 .mobile .container {
     padding: 16px;
-    width: 100;
+    width: 100vw;
+    max-width: 100vw;
 }
 
 .mobile h1 {
