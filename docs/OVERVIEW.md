@@ -75,6 +75,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Restored mobile flex stacking for shared grid layouts while keeping landing grids in multi-column mode only at larger breakpoints.
 - Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
 - Updated mobile container sizing to prevent overflow by constraining widths to the viewport.
+- Reinforced non-bulk import creation to log requested quantities, mint each instance safely, and report final instance counts for multi-quantity imports.
 
 ## Documentation Map
 

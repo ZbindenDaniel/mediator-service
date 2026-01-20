@@ -238,6 +238,7 @@ function resolveRequestedQuantity(
 type ItemCreationMode = 'bulk' | 'instance';
 
 // TODO(agent): Align add/remove item quantity adjustments with instance-based creation for Einheit Stk.
+// TODO(agent): Verify non-bulk instance count handling for update requests during import-item adjustments.
 function resolveItemCreationPlan(options: {
   requestedQuantity: number;
   einheit: ItemEinheit;
@@ -909,6 +910,12 @@ const action = defineHttpAction({
             Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null
           });
         }
+        if (!requestedQuantityRaw && isUpdateRequest) {
+          console.warn('[import-item] Missing Auf_Lager value in update request payload; defaulting to 1', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null
+          });
+        }
       } catch (quantityReadError) {
         console.error('[import-item] Failed to read Auf_Lager from request payload', {
           ItemUUID,
@@ -926,6 +933,13 @@ const action = defineHttpAction({
         einheit,
         isUpdateRequest
       });
+      if (isUpdateRequest && creationPlan.mode === 'instance' && requestedQuantity > 1) {
+        console.warn('[import-item] Update request requested multiple instances; defaulting to a single instance', {
+          ItemUUID,
+          requestedQuantity,
+          einheit
+        });
+      }
       console.info('[import-item] Resolved item creation mode for import', {
         ItemUUID,
         mode: creationPlan.mode,
@@ -1036,12 +1050,39 @@ const action = defineHttpAction({
             throw new Error('Missing generateItemUUID dependency for instance creation');
           }
           for (let index = 1; index < creationPlan.instanceCount; index += 1) {
-            const candidate = await ctx.generateItemUUID(resolvedArtikelNummer || incomingArtikelNummer || null);
-            if (!candidate) {
+            let candidate: string;
+            try {
+              candidate = await ctx.generateItemUUID(resolvedArtikelNummer || incomingArtikelNummer || null);
+            } catch (mintError) {
+              console.error('[import-item] Failed to mint ItemUUID for additional instance', {
+                ItemUUID,
+                index,
+                requestedQuantity,
+                error: mintError
+              });
               throw new Error('Failed to mint ItemUUID for instance creation');
             }
-            const unique = await ensureUniqueItemUUID(candidate, ctx);
-            itemUUIDs.push(unique);
+            if (!candidate) {
+              console.error('[import-item] Missing ItemUUID candidate for additional instance', {
+                ItemUUID,
+                index,
+                requestedQuantity
+              });
+              throw new Error('Failed to mint ItemUUID for instance creation');
+            }
+            try {
+              const unique = await ensureUniqueItemUUID(candidate, ctx);
+              itemUUIDs.push(unique);
+            } catch (uniqueError) {
+              console.error('[import-item] Failed to ensure unique ItemUUID for additional instance', {
+                ItemUUID,
+                candidate,
+                index,
+                requestedQuantity,
+                error: uniqueError
+              });
+              throw new Error('Failed to mint ItemUUID for instance creation');
+            }
           }
         }
       } catch (instanceError) {
@@ -1052,6 +1093,22 @@ const action = defineHttpAction({
           error: instanceError
         });
         return sendJson(res, 500, { error: 'Failed to mint ItemUUIDs for item import' });
+      }
+      const finalInstanceCount = itemUUIDs.length;
+      if (creationPlan.mode === 'instance' && !isUpdateRequest && finalInstanceCount !== requestedQuantity) {
+        console.warn('[import-item] Final instance count did not match requested quantity for non-bulk import', {
+          ItemUUID,
+          requestedQuantity,
+          finalInstanceCount
+        });
+      }
+      if (finalInstanceCount > 1 || requestedQuantity > 1) {
+        console.info('[import-item] Final instance count resolved for import', {
+          ItemUUID,
+          requestedQuantity,
+          finalInstanceCount,
+          mode: creationPlan.mode
+        });
       }
 
       const shouldSeedAgenticRun = !isUpdateRequest && !hadExistingInstanceForArtikel;
