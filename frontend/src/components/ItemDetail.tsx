@@ -2121,6 +2121,7 @@ export default function ItemDetail({ itemId }: Props) {
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
 
+  // TODO(agent): Confirm action placement after UX feedback on reference/instance sections.
   async function handleEdit() {
     if (!item) {
       return;
@@ -2141,56 +2142,6 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
     navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
-  }
-
-  async function handleDelete() {
-    if (!item) return;
-    let confirmed = false;
-    const actor = await ensureUser();
-    if (!actor) {
-      try {
-        await dialogService.alert({
-          title: 'Aktion nicht möglich',
-          message: 'Bitte zuerst oben den Benutzer setzen.'
-        });
-      } catch (error) {
-        console.error('Failed to display agentic cancel user alert', error);
-      }
-      return;
-    }
-    try {
-      confirmed = await dialogService.confirm({
-        title: 'Artikel löschen',
-        message: 'Item wirklich löschen?',
-        confirmLabel: 'Löschen',
-        cancelLabel: 'Abbrechen'
-      });
-    } catch (error) {
-      console.error('Failed to confirm item deletion', error);
-      return;
-    }
-
-    if (!confirmed) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor, confirm: true })
-      });
-      if (res.ok) {
-        if (item.BoxID) {
-          navigate(`/boxes/${encodeURIComponent(String(item.BoxID))}`);
-        } else {
-          navigate('/');
-        }
-      } else {
-        console.error('Failed to delete item', res.status);
-      }
-    } catch (err) {
-      console.error('Failed to delete item', err);
-    }
   }
 
   return (
@@ -2237,8 +2188,37 @@ export default function ItemDetail({ itemId }: Props) {
                   mediaAssets={mediaAssets}
                 />
               </section>
-              <div className='row'>
+            </div>
+
+            <div className="card">
+              <h3>Referenz</h3>
+              <div className="row">
                 <button type="button" className="btn" onClick={handleEdit}>Bearbeiten</button>
+              </div>
+              {referenceDetailRows.length > 0 ? (
+                <table className="details">
+                  <tbody>
+                    {referenceDetailRows.map(([k, v], idx) => {
+                      const cell = normalizeDetailValue(v);
+                      return (
+                        <tr key={`${k}-${idx}`} className="responsive-row">
+                          <th className="responsive-th">{k}</th>
+                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                            {cell.content}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="muted">Keine Referenzdaten vorhanden.</p>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>Instanz</h3>
+              <div className="row">
                 <button type="button" className="btn" onClick={async () => {
                   let confirmed = false;
                   const actor = await ensureUser();
@@ -2284,35 +2264,7 @@ export default function ItemDetail({ itemId }: Props) {
                 >
                   Entnehmen
                 </button>
-                <button type="button" className="btn danger" onClick={handleDelete}>Löschen</button>
               </div>
-            </div>
-
-            <div className="card">
-              <h3>Referenz</h3>
-              {referenceDetailRows.length > 0 ? (
-                <table className="details">
-                  <tbody>
-                    {referenceDetailRows.map(([k, v], idx) => {
-                      const cell = normalizeDetailValue(v);
-                      return (
-                        <tr key={`${k}-${idx}`} className="responsive-row">
-                          <th className="responsive-th">{k}</th>
-                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                            {cell.content}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="muted">Keine Referenzdaten vorhanden.</p>
-              )}
-            </div>
-
-            <div className="card">
-              <h3>Instanz</h3>
               {instanceDetailRows.length > 0 ? (
                 <table className="details">
                   <tbody>
