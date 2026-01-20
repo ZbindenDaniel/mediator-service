@@ -47,6 +47,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Hid quantity details for non-bulk items in the detail view while logging invalid Einheit values to avoid confusion around instance counts.
 - Swapped the recent activities card to a semantic table layout with reusable list styling for easier scanning.
 - Split item detail metadata into reference/instance cards and surfaced additional instance metadata alongside a separate instances table card.
+- Moved item detail actions so edit sits with reference data, instance withdrawal sits with instance data, and deletion is no longer exposed in the UI.
 - Reworked search results to render as a compact list layout that aligns core item and box fields in a single row.
 - Refined add-item dialog result rows with a compact layout to keep search actions visible while tightening spacing.
 - Made item detail instance rows navigable to instance-specific detail pages while preserving reload behavior for the current instance.
