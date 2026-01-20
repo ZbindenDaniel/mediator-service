@@ -419,8 +419,8 @@ div {
     flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 8px;
-    
-    a{
+
+    a {
         text-decoration: none;
         color: inherit;
     }
@@ -722,7 +722,7 @@ div {
     width: 100%;
 }
 
-#create-item{
+#create-item {
     a {
         text-decoration: none;
         color: inherit;
@@ -747,6 +747,10 @@ button {
     border-radius: var(--radius);
     padding: 12px 14px;
     // min-height: 44px;
+}
+
+input[type="checkbox"] {
+    scale: 1.8;
 }
 
 .status-info {
@@ -1170,30 +1174,38 @@ button:focus {
 .linkcard:hover .card {
     border-color: var(--acc);
     animation: whobble .5s ease-out forwards;
+    cursor: pointer;
 }
 
 @keyframes whobble {
     0% {
         transform: translateX(0);
     }
+
     15% {
-        transform: translateX(-8px);
+        transform: translateX(-4px);
     }
+
     30% {
-        transform: translateX(8px);
+        transform: translateX(4px);
     }
+
     45% {
-        transform: translateX(-5px);
-    }
-    60% {
-        transform: translateX(3px);
-    }
-    75% {
         transform: translateX(-2px);
     }
+
+    60% {
+        transform: translateX(2px);
+    }
+
+    75% {
+        transform: translateX(-1px);
+    }
+
     90% {
         transform: translateX(1px);
     }
+
     100% {
         transform: translateX(0);
     }
@@ -1808,35 +1820,35 @@ button:focus {
 }
 
 .quality-badge {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  border: 1px solid rgba(37, 36, 36);
-  border-radius: 50%;
-  width: 25px;
-  height: 25px;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid rgba(37, 36, 36);
+    border-radius: 50%;
+    width: 25px;
+    height: 25px;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
 }
 
 .quality-badge--compact {
-  padding: 2px 6px;
-  font-size: 10px;
+    padding: 2px 6px;
+    font-size: 10px;
 }
 
 .quality-slider__labels {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-  margin-top: 6px;
-  font-size: 12px;
-  color: #444;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #444;
 }
 
 .quality-slider__labels span {
-  text-align: center;
+    text-align: center;
 }
