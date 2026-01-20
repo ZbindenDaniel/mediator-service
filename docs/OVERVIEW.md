@@ -69,6 +69,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Fixed ItemUUID parsing to handle Artikelnummer-based identifiers even when legacy prefixes overlap, preventing creation-by-reference collisions.
 - Refined landing page grid styles to keep single-column defaults and expand to responsive multi-column layouts at larger breakpoints.
 - Removed the duplicated reference card from the item detail view to keep reference data displayed once.
+- Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
 
 ## Documentation Map
 

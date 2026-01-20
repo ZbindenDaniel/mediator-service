@@ -34,6 +34,12 @@ $activity-color: #804db4;
     font-style: normal;
 }
 
+@media (min-width: 1200px) {
+    :root {
+        --maxw: 1280px;
+    }
+}
+
 // @media (prefers-color-scheme: dark) {
 //     :root {
 //         --fg: #e8eaed;
