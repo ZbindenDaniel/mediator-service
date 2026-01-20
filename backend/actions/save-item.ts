@@ -2,13 +2,14 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
-import type { AgenticRun, Item, ItemInstanceSummary } from '../../models';
+import type { AgenticRun, Item, ItemInstanceSummary, ItemRef } from '../../models';
 import { normalizeQuality, QUALITY_DEFAULT } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { MEDIA_DIR } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
 
 const MEDIA_PREFIX = '/media/';
+// TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
 // TODO(agent): Centralize media asset validation to avoid shipping document artifacts alongside images.
 // TODO(agent): Revisit allowed media extensions when new asset types need exporting.
 // TODO(agent): Align item instance summary fields with detail UI once instance list usage expands.
@@ -507,6 +508,27 @@ const action = defineHttpAction({
             error
           });
         }
+        let reference: ItemRef | null = null;
+        let artikelNummer = '';
+        try {
+          artikelNummer = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
+          if (!artikelNummer) {
+            console.warn('[save-item] Missing Artikel_Nummer for reference lookup', { itemId });
+          } else if (!ctx.getItemReference?.get) {
+            console.warn('[save-item] Missing getItemReference helper for reference lookup', { itemId, artikelNummer });
+          } else {
+            reference = (ctx.getItemReference.get(artikelNummer) as ItemRef | undefined) ?? null;
+            if (!reference) {
+              console.warn('[save-item] Missing reference for Artikel_Nummer', { itemId, artikelNummer });
+            }
+          }
+        } catch (error) {
+          console.error('[save-item] Failed to resolve item reference for detail payload', {
+            itemId,
+            artikelNummer: artikelNummer || null,
+            error
+          });
+        }
         const normalisedCategories = {
           Hauptkategorien_A: normaliseCategoryValue(itemId, 'Hauptkategorien_A', sanitizedItem.Hauptkategorien_A),
           Unterkategorien_A: normaliseCategoryValue(itemId, 'Unterkategorien_A', sanitizedItem.Unterkategorien_A),
@@ -525,7 +547,7 @@ const action = defineHttpAction({
           normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
             ? { ...itemWithCategories, Grafikname: normalisedGrafikname }
             : itemWithCategories;
-        return sendJson(res, 200, { item: responseItem, box, events, agentic, media, instances });
+        return sendJson(res, 200, { item: responseItem, reference, box, events, agentic, media, instances });
       } catch (err) {
         console.error('Fetch item failed', err);
         return sendJson(res, 500, { error: (err as Error).message });
