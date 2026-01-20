@@ -8,6 +8,7 @@ import { filterVisibleEvents } from '../utils/eventLogTopics';
 // TODO(agent): Surface active topic filters in the UI to avoid confusing operators.
 // TODO(agent): Follow up on filtering the activities feed by query once backend support lands.
 // TODO(navigation): Validate header navigation coverage before reintroducing card-level links.
+// TODO(labeling): Reconfirm the activities table header labels against product terminology.
 
 interface ResolvedEventLink {
   path: string;
@@ -82,7 +83,7 @@ export function RecentEventsList({ events }: Props) {
             <thead>
               <tr>
                 <th scope="col">Typ</th>
-                <th scope="col">Entity ID</th>
+                <th scope="col">ID</th>
                 <th scope="col">Akteur</th>
                 <th scope="col">Aktion</th>
                 <th scope="col">Datum</th>
