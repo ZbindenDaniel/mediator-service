@@ -22,6 +22,7 @@ import QualityBadge from './QualityBadge';
 // TODO(agent): Revisit relocation category selection when boxes contain mixed item subcategories.
 // TODO(agent): Confirm note-only box updates preserve stored labels after label input removal.
 // TODO(grouped-box-items): Align grouped box item display with forthcoming backend grouped payloads.
+// TODO(bulk-display): Recheck Einheit=Menge quantity display once box detail payloads are refined.
 
 interface Props {
   boxId: string;
@@ -674,6 +675,7 @@ export default function BoxDetail({ boxId }: Props) {
                               : (typeof representative?.Quality === 'number' ? representative.Quality : null);
                             const agenticLabel = describeAgenticStatus(group.agenticStatusSummary);
                             const removalMessage = representativeId ? removalStatus[representativeId] : null;
+                            const countValue = group.totalStock;
 
                             return (
                               <tr key={group.key}>
@@ -683,7 +685,7 @@ export default function BoxDetail({ boxId }: Props) {
                                 <td className="col-desc">
                                   {representative?.Artikelbeschreibung ?? '—'}
                                 </td>
-                                <td className="col-stock optional-column">{group.summary.count}</td>
+                                <td className="col-stock optional-column">{countValue}</td>
                                 <td className="col-quality optional-column">
                                   <QualityBadge compact value={qualityValue} />
                                 </td>
