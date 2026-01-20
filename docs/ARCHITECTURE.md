@@ -95,7 +95,7 @@ Design:owner@mediator and target the Q4 documentation refresh.
 
 ## Import/Export Archive Format
 
-- `/api/export/items` streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring the backend's `MEDIA_DIR`. The CSV payloads retain the partner column ordering and reuse existing metadata lookups (e.g., `collectMediaAssets`) so downstream clients receive the same image resolution hints as before.
+- `/api/export/items` streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring the backend's `MEDIA_DIR`. The CSV payloads retain the partner column ordering and reuse existing metadata lookups (e.g., `collectMediaAssets`) so downstream clients receive the same image resolution hints as before. Use `mode=backup` for instance-level exports that retain `ItemUUID`, or `mode=erp` for grouped exports that omit `ItemUUID`.
 - `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv` updates continue to use duplicate detection and zero-stock flags.
 - `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before ingestion.
 

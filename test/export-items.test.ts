@@ -6,6 +6,7 @@ import { ItemEinheit } from '../models';
 import { MEDIA_DIR } from '../backend/lib/media';
 
 // TODO(agent): Expand exporter/importer parity coverage as storage metadata requirements grow.
+// TODO(export-items-mode): Add coverage for default mode behavior once export mode negotiation evolves.
 const TEST_DB_FILE = path.join(__dirname, 'export-items.test.sqlite');
 const ROUNDTRIP_CSV_FILE = path.join(__dirname, 'export-items-roundtrip.csv');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
@@ -226,6 +227,72 @@ describe('export-items action', () => {
     expect(rowColumns[headerIndex.Location]).toBe(placement.LocationId);
     expect(rowColumns[headerIndex.Label]).toBe(placement.Label);
     expect(rowColumns[headerIndex.UpdatedAt]).toBe(now.toISOString());
+  });
+
+  test('mode=erp groups rows and omits ItemUUID column', async () => {
+    const now = new Date('2024-07-02T10:00:00.000Z');
+    const placement = {
+      BoxID: 'B-ERP-001',
+      LocationId: 'LOC-ERP-01',
+      Label: 'LOC-ERP-01'
+    };
+
+    upsertBox.run({
+      BoxID: placement.BoxID,
+      LocationId: placement.LocationId,
+      Label: placement.Label,
+      CreatedAt: now.toISOString(),
+      Notes: '',
+      PhotoPath: null,
+      PlacedBy: 'tester',
+      PlacedAt: now.toISOString(),
+      UpdatedAt: now.toISOString()
+    });
+
+    persistItemWithinTransaction({
+      ItemUUID: 'I-ERP-001',
+      Artikel_Nummer: 'ERP-01',
+      BoxID: placement.BoxID,
+      Location: placement.LocationId,
+      UpdatedAt: now,
+      Datum_erfasst: now,
+      Auf_Lager: 1,
+      Quality: 2,
+      Langtext: ''
+    });
+
+    persistItemWithinTransaction({
+      ItemUUID: 'I-ERP-002',
+      Artikel_Nummer: 'ERP-01',
+      BoxID: placement.BoxID,
+      Location: placement.LocationId,
+      UpdatedAt: now,
+      Datum_erfasst: now,
+      Auf_Lager: 2,
+      Quality: 2,
+      Langtext: ''
+    });
+
+    const response = await runAction(
+      exportItems,
+      mockRequest('/api/export/items?actor=tester&mode=erp'),
+      { db, listItemsForExport, logEvent }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers['Content-Type']).toContain('text/csv');
+
+    const csvPayload = (response.body as Buffer).toString('utf8');
+    const parsedRows = parseCsv(csvPayload, { skip_empty_lines: true });
+    expect(parsedRows.length).toBe(2);
+
+    const headerColumns = parsedRows[0].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
+    expect(headerColumns).not.toContain('ItemUUID');
+
+    const dataColumns = parsedRows[1].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
+    const onHandIndex = headerColumns.indexOf('Auf Lager');
+    expect(onHandIndex).toBeGreaterThan(-1);
+    expect(Number(dataColumns[onHandIndex])).toBe(3);
   });
 
   // TODO(agent): Broaden round-trip assertions to cover Langtext payload objects once exporters emit structured content.
