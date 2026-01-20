@@ -561,7 +561,6 @@ const action = defineHttpAction({
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const existing = ctx.getItem.get(itemId) || {};
-      const isNewItem = !existing.ItemUUID;
       let grafik = existing.Grafikname || '';
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
@@ -657,72 +656,102 @@ const action = defineHttpAction({
           });
         }
       }
-      const {
-        picture1,
-        picture2,
-        picture3,
-        BoxID: incomingBoxId,
-        Einheit: incomingEinheit,
-        Datum_erfasst: incomingDatumErfasst,
-        Quality: incomingQuality,
-        Shopartikel: incomingShopartikel,
-        ...rest
-      } = data;
-      const selectedBoxId = incomingBoxId !== undefined ? incomingBoxId : existing.BoxID;
-      let normalizedBoxId: string | null = null;
-      if (selectedBoxId !== undefined && selectedBoxId !== null) {
-        const trimmedBoxId = String(selectedBoxId).trim();
-        if (trimmedBoxId) {
-          normalizedBoxId = trimmedBoxId;
-        } else {
-          console.info('Normalised blank BoxID to null', {
-            itemId,
-            previousBoxId: existing.BoxID,
-            receivedBoxId: incomingBoxId
-          });
-        }
-      }
-      const resolvedEinheit =
-        incomingEinheit !== undefined
-          ? resolveItemEinheitValue(incomingEinheit, 'updatePayload')
-          : resolveItemEinheitValue(existing.Einheit, 'existingRecord');
-      const resolvedQuality = resolveItemQualityValue(
-        incomingQuality ?? existing.Quality ?? QUALITY_DEFAULT,
-        'updatePayload'
+      const incomingEinheit = data.Einheit;
+      const incomingQuality = data.Quality;
+      const incomingShopartikel = data.Shopartikel;
+      const ignoredInstanceFields = [
+        'BoxID',
+        'Location',
+        'UpdatedAt',
+        'Datum_erfasst',
+        'Auf_Lager',
+        'ShopwareVariantId',
+        'ItemUUID'
+      ];
+      const ignoredPayloadFields = ignoredInstanceFields.filter((field) =>
+        Object.prototype.hasOwnProperty.call(data, field)
       );
-      const hasShopartikelOverride = Object.prototype.hasOwnProperty.call(data, 'Shopartikel');
-      const resolvedShopartikel = hasShopartikelOverride
-        ? resolveShopartikelFlag(incomingShopartikel, resolvedQuality)
-        : resolveShopartikelFlag(undefined, resolvedQuality);
-      const now = new Date();
-      let datumErfasst: Date | string | null | undefined = existing.Datum_erfasst ?? incomingDatumErfasst;
-      if (datumErfasst === undefined || datumErfasst === null || datumErfasst === '') {
-        if (isNewItem) {
-          datumErfasst = now;
-          console.info('[save-item] Defaulted Datum_erfasst for new item', { itemId });
-        } else {
-          datumErfasst = existing.Datum_erfasst ?? null;
-        }
+      if (ignoredPayloadFields.length > 0) {
+        console.info('[save-item] Ignored instance-only fields in edit payload', {
+          itemId,
+          fields: ignoredPayloadFields
+        });
       }
-      // TODO(item-dates): Allow UpdatedAt to remain null for new items when database defaults permit it.
-      const item: Item = {
-        ...existing,
-        ...rest,
-        Grafikname: normalisedGrafikname ?? undefined,
-        ItemUUID: itemId,
-        BoxID: normalizedBoxId,
-        Datum_erfasst: datumErfasst ?? undefined,
-        UpdatedAt: isNewItem ? now : new Date(),
-        Einheit: resolvedEinheit,
-        Quality: resolvedQuality,
-        Shopartikel: resolvedShopartikel
+      const incomingArtikelNummer = typeof data.Artikel_Nummer === 'string' ? data.Artikel_Nummer.trim() : '';
+      const fallbackArtikelNummer =
+        typeof existing.Artikel_Nummer === 'string' ? existing.Artikel_Nummer.trim() : '';
+      const artikelNummer = incomingArtikelNummer || fallbackArtikelNummer;
+      if (!artikelNummer) {
+        console.error('[save-item] Missing Artikel_Nummer for reference update', { itemId });
+        return sendJson(res, 400, { error: 'Artikel_Nummer is required for reference update' });
+      }
+      let existingReference: ItemRef | null = null;
+      try {
+        if (ctx.getItemReference?.get) {
+          existingReference = (ctx.getItemReference.get(artikelNummer) as ItemRef | undefined) ?? null;
+        } else {
+          console.warn('[save-item] Missing getItemReference helper for reference update', { itemId, artikelNummer });
+        }
+      } catch (error) {
+        console.error('[save-item] Failed to load existing item reference', { itemId, artikelNummer, error });
+      }
+      const referenceBase: ItemRef = existingReference ?? { Artikel_Nummer: artikelNummer };
+      const referenceUpdates: Partial<ItemRef> = {};
+      const referenceFieldKeys: Array<keyof ItemRef> = [
+        'Grafikname',
+        'ImageNames',
+        'Artikelbeschreibung',
+        'Verkaufspreis',
+        'Kurzbeschreibung',
+        'Langtext',
+        'Hersteller',
+        'Länge_mm',
+        'Breite_mm',
+        'Höhe_mm',
+        'Gewicht_kg',
+        'Hauptkategorien_A',
+        'Unterkategorien_A',
+        'Hauptkategorien_B',
+        'Unterkategorien_B',
+        'Veröffentlicht_Status',
+        'Shopartikel',
+        'Artikeltyp',
+        'Einheit',
+        'EntityType',
+        'ShopwareProductId',
+        'Quality'
+      ];
+      referenceFieldKeys.forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+          (referenceUpdates as Record<string, unknown>)[key] = (data as Record<string, unknown>)[key];
+        }
+      });
+      const resolvedQuality =
+        incomingQuality !== undefined
+          ? resolveItemQualityValue(incomingQuality, 'updatePayload')
+          : resolveItemQualityValue(referenceBase.Quality ?? QUALITY_DEFAULT, 'existingReference');
+      if (Object.prototype.hasOwnProperty.call(data, 'Quality')) {
+        referenceUpdates.Quality = resolvedQuality;
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'Einheit')) {
+        referenceUpdates.Einheit = resolveItemEinheitValue(incomingEinheit, 'updatePayload');
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'Shopartikel')) {
+        referenceUpdates.Shopartikel = resolveShopartikelFlag(incomingShopartikel, resolvedQuality);
+      }
+      const resolvedGrafikname = normalisedGrafikname ?? undefined;
+      referenceUpdates.Grafikname = resolvedGrafikname;
+      const reference: ItemRef = {
+        ...referenceBase,
+        ...referenceUpdates,
+        Artikel_Nummer: artikelNummer
       };
-      const txn = ctx.db.transaction((it: Item, a: string) => {
-        ctx.persistItemWithinTransaction(it);
+      const txn = ctx.db.transaction((ref: ItemRef, a: string) => {
+        ctx.persistItemReference(ref);
         ctx.logEvent({
           Actor: a,
           EntityType: 'Item',
-          EntityId: it.ItemUUID,
+          EntityId: itemId,
           Event: 'Updated',
           Meta: null
         });
@@ -730,10 +759,10 @@ const action = defineHttpAction({
           const correlationId = generateShopwareCorrelationId('save-item', itemId);
           const payload = JSON.stringify({
             actor: a,
-            artikelNummer: it.Artikel_Nummer ?? null,
-            boxId: it.BoxID ?? null,
-            location: it.Location ?? null,
-            itemUUID: it.ItemUUID,
+            artikelNummer: ref.Artikel_Nummer ?? null,
+            boxId: existing.BoxID ?? null,
+            location: existing.Location ?? null,
+            itemUUID: itemId,
             trigger: 'save-item'
           });
           ctx.enqueueShopwareSyncJob({
@@ -743,13 +772,18 @@ const action = defineHttpAction({
           });
         } catch (queueErr) {
           console.error('[save-item] Failed to enqueue Shopware sync job', {
-            itemId: it.ItemUUID,
+            itemId,
             error: queueErr
           });
         }
       });
-      txn(item, actor);
-      const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
+      try {
+        txn(reference, actor);
+      } catch (error) {
+        console.error('[save-item] Failed to persist item reference update', { itemId, artikelNummer, error });
+        return sendJson(res, 500, { error: 'Failed to persist item reference' });
+      }
+      const media = collectMediaAssets(itemId, normalisedGrafikname, reference.Artikel_Nummer);
       sendJson(res, 200, { ok: true, media });
     } catch (err) {
       console.error('Save item failed', err);

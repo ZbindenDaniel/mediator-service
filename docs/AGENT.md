@@ -37,3 +37,13 @@ These planning responses should be explicit enough that another developer can im
 - Emphasise JSON-only output, locked field preservation, and the limited `__searchQueries` allowance when revising extraction instructions.
 - Tie device guidance directly to schema keys (`Langtext`, `Kurzbeschreibung`, `Artikelbeschreibung`) so downstream validators stay consistent and the prompt remains concise.
 - Do not expose system-only identifiers like `itemUUid` in prompts; the item flow injects them automatically.
+
+## Planned Work Log
+
+### Isolate item reference updates in save-item (completed)
+**Goal & motivation:** Ensure edit requests for `/api/items/:id` only persist `ItemRef` data so instance fields (location, quantities, timestamps) are not accidentally overwritten, improving data integrity and auditability. This keeps edits scoped to reference metadata while preserving instance state.
+
+**Implementation summary (minimal diff):**
+1. Switched the PUT handler in `backend/actions/save-item.ts` to build a reference-only payload from `ItemRef` keys and persist to `item_refs` without touching instance fields.
+2. Added logging for ignored instance-only fields and reference persistence failures, with try/catch protection around the transaction.
+3. Verified `models/item.ts` did not require new fields and kept the reference builder limited to existing keys.
