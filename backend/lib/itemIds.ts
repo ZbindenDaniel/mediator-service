@@ -1,7 +1,6 @@
 // TODO(agent): Revisit Artikelnummer validation rules once upstream partner formatting is finalized.
 // ItemUUIDs now use the Artikelnummer-based format: I.<Artikelnummer>-####. Legacy date-based IDs use I-<ddmmyy>-####.
-const ITEM_ID_PREFIX = 'I.';
-const LEGACY_ITEM_ID_PREFIX = 'I-';
+const ITEM_ID_PREFIX = 'I-';
 const ITEM_ID_SEQUENCE_WIDTH = 4;
 
 type MaybePromise<T> = T | Promise<T>;
