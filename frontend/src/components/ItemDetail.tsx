@@ -2313,7 +2313,7 @@ export default function ItemDetail({ itemId }: Props) {
               )}
             </div>
 
-            <div className="card">
+            <div className="card grid-span-2">
               <h3>Vorrat</h3>
               {instanceRows.length > 0 ? (
                 <table className="details">
@@ -2419,7 +2419,7 @@ export default function ItemDetail({ itemId }: Props) {
 
             <PrintLabelButton itemId={item.ItemUUID} />
 
-            <div className="card">
+            <div className="card grid-span-2">
               <h3>Aktivitäten</h3>
               <ul className="events">
                 {displayedEvents.map((ev) => (
