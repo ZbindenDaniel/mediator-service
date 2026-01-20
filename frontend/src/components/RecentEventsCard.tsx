@@ -9,6 +9,7 @@ import { filterVisibleEvents } from '../utils/eventLogTopics';
 // TODO(agent): Follow up on filtering the activities feed by query once backend support lands.
 // TODO(navigation): Validate header navigation coverage before reintroducing card-level links.
 // TODO(agent): Confirm Artikelbezeichnung data coverage for activity rows without item references.
+// TODO(labeling): Reconfirm the activities table header labels against product terminology.
 
 interface ResolvedEventLink {
   path: string;

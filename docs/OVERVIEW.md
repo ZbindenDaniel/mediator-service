@@ -29,7 +29,9 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 - Updated the recent activities list to label entity IDs more clearly and surface item Artikelbezeichnung details for faster scanning.
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
+- Normalized grouped item summaries to prefer instance sequence `1` as the representative record while logging fallbacks when no canonical instance exists.
 - Isolated item reference updates in the save-item edit flow so instance fields stay untouched during metadata edits.
+- Implemented reference-only edit payloads to keep item edit flows scoped to `item_refs` while logging and guarding against instance-field updates.
 - Added item detail instance summaries to surface per-reference inventory visibility in the detail view payload/UI.
 - Grouped item list and box detail rows in the frontend to surface counts while keeping list filtering and sorting aligned with grouped summaries.
 - Shifted ItemUUID minting to the Artikelnummer-based `I.<Artikelnummer>-####` format while keeping legacy date-based identifiers parseable for imports and reconciliation.
@@ -47,6 +49,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Refined add-item dialog result rows with a compact layout to keep search actions visible while tightening spacing.
 - Made item detail instance rows navigable to instance-specific detail pages while preserving reload behavior for the current instance.
 - Added item detail API payloads to return explicit reference data alongside instance lists to keep item metadata separated.
+- Shared shelf label formatting between box and item lists so shelf locations show location, floor, and shelf IDs consistently.
 
 ## Documentation Map
 
