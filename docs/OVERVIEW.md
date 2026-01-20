@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Added a post-import success dialog reload in the ZIP import UI to refresh visible data while logging failures to display the dialog or reload.
 - Updated the recent activities list to label entity IDs more clearly and surface item Artikelbezeichnung details for faster scanning.
 - Updated export generation to group item rows by Artikelnummer, quality, and box/location for more predictable CSV payloads, while keeping legacy identifiers minimal for reconciliation.
 - Normalized grouped item summaries to prefer instance sequence `1` as the representative record while logging fallbacks when no canonical instance exists.
