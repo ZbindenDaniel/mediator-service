@@ -13,6 +13,7 @@ const MEDIA_PREFIX = '/media/';
 // TODO(agent): Centralize media asset validation to avoid shipping document artifacts alongside images.
 // TODO(agent): Revisit allowed media extensions when new asset types need exporting.
 // TODO(agent): Align item instance summary fields with detail UI once instance list usage expands.
+// TODO(reference-only-edit): Keep edit payload guards aligned with instance/reference field boundaries.
 const ALLOWED_MEDIA_EXTENSIONS = new Set<string>([
   '.bmp',
   '.gif',
@@ -656,9 +657,6 @@ const action = defineHttpAction({
           });
         }
       }
-      const incomingEinheit = data.Einheit;
-      const incomingQuality = data.Quality;
-      const incomingShopartikel = data.Shopartikel;
       const ignoredInstanceFields = [
         'BoxID',
         'Location',
@@ -677,7 +675,15 @@ const action = defineHttpAction({
           fields: ignoredPayloadFields
         });
       }
-      const incomingArtikelNummer = typeof data.Artikel_Nummer === 'string' ? data.Artikel_Nummer.trim() : '';
+      const referencePayload = { ...data } as Record<string, unknown>;
+      ignoredPayloadFields.forEach((field) => {
+        delete referencePayload[field];
+      });
+      const incomingEinheit = (referencePayload as Partial<ItemRef>).Einheit;
+      const incomingQuality = (referencePayload as Partial<ItemRef>).Quality;
+      const incomingShopartikel = (referencePayload as Partial<ItemRef>).Shopartikel;
+      const incomingArtikelNummer =
+        typeof referencePayload.Artikel_Nummer === 'string' ? referencePayload.Artikel_Nummer.trim() : '';
       const fallbackArtikelNummer =
         typeof existing.Artikel_Nummer === 'string' ? existing.Artikel_Nummer.trim() : '';
       const artikelNummer = incomingArtikelNummer || fallbackArtikelNummer;
@@ -722,21 +728,21 @@ const action = defineHttpAction({
         'Quality'
       ];
       referenceFieldKeys.forEach((key) => {
-        if (Object.prototype.hasOwnProperty.call(data, key)) {
-          (referenceUpdates as Record<string, unknown>)[key] = (data as Record<string, unknown>)[key];
+        if (Object.prototype.hasOwnProperty.call(referencePayload, key)) {
+          (referenceUpdates as Record<string, unknown>)[key] = referencePayload[key];
         }
       });
       const resolvedQuality =
         incomingQuality !== undefined
           ? resolveItemQualityValue(incomingQuality, 'updatePayload')
           : resolveItemQualityValue(referenceBase.Quality ?? QUALITY_DEFAULT, 'existingReference');
-      if (Object.prototype.hasOwnProperty.call(data, 'Quality')) {
+      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Quality')) {
         referenceUpdates.Quality = resolvedQuality;
       }
-      if (Object.prototype.hasOwnProperty.call(data, 'Einheit')) {
+      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Einheit')) {
         referenceUpdates.Einheit = resolveItemEinheitValue(incomingEinheit, 'updatePayload');
       }
-      if (Object.prototype.hasOwnProperty.call(data, 'Shopartikel')) {
+      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Shopartikel')) {
         referenceUpdates.Shopartikel = resolveShopartikelFlag(incomingShopartikel, resolvedQuality);
       }
       const resolvedGrafikname = normalisedGrafikname ?? undefined;

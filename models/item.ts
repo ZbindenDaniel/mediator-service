@@ -3,6 +3,7 @@
 // TODO(agentic-status-model): Consider splitting agentic metadata into a dedicated view model to avoid bloating Item shape.
 // TODO(agent): Confirm Einheit alias coverage after Mix -> Menge rename once legacy payloads are audited.
 // TODO(quality-metadata): Align Quality field naming with ERP schema once upstream attributes are finalised.
+// TODO(reference-only-edit): Revalidate reference-only edit payload expectations against item_refs when schemas shift.
 import type { AgenticRunStatus } from './agentic-statuses';
 export enum ItemEinheit {
   Stk = 'Stk',
@@ -88,6 +89,8 @@ export interface ItemRef {
   // Importers normalize Langtext "Qualität" labels into this numeric grade.
   Quality?: number | null;
 }
+
+export type ItemReferenceEdit = ItemRef;
 
 // TODO(agent): Verify Item metadata typing whenever export/import parity requirements evolve.
 export type Item = ItemInstance & Partial<ItemRef> & {

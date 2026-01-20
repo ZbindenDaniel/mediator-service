@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { AgenticRunStatus, Item, ItemRef } from '../../../../models';
+import type { AgenticRunStatus, Item, ItemRef, ItemReferenceEdit } from '../../../../models';
 import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../../models';
 import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS } from '../../../../models/quality';
 import { ensureUser, getUser } from '../../lib/user';
@@ -11,6 +11,7 @@ import { parseLangtext, stringifyLangtextEntries } from '../../lib/langtext';
 import { metaDataKeys } from '../../data/metaDataKeys';
 
 // TODO(edit-quality-stock): Confirm whether Quality/Auf_Lager should stay hidden on edits once access roles are defined.
+// TODO(reference-only-edit): Keep reference-only form mode aligned with ItemReferenceEdit fields.
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -73,6 +74,16 @@ export interface ItemFormData extends Item {
   agenticManualFallback?: boolean;
 }
 
+export type ItemReferenceFormData = Partial<ItemReferenceEdit> & {
+  picture1?: string | null;
+  picture2?: string | null;
+  picture3?: string | null;
+};
+
+export type ItemFormMode = 'full' | 'reference';
+export type ItemFormPayload = ItemFormData & ItemReferenceFormData;
+export type ItemFormFieldKey = keyof ItemFormPayload;
+
 export const ITEM_FORM_DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
 function resolveFormEinheit(value: unknown, context: string): ItemEinheit {
@@ -102,7 +113,7 @@ function resolveFormEinheit(value: unknown, context: string): ItemEinheit {
 }
 
 // TODO(langtext-json): Extend the inline editor with hinting for curated metaDataKeys ordering once the backend exposes rank metadata.
-const referenceFieldKeys: (keyof ItemRef)[] = [
+const referenceFieldKeys: (keyof ItemReferenceEdit)[] = [
   'Artikel_Nummer',
   'Grafikname',
   'Artikelbeschreibung',
@@ -125,8 +136,10 @@ const referenceFieldKeys: (keyof ItemRef)[] = [
   'EntityType'
 ];
 
-export function extractReferenceFields(source: Partial<Item> | Partial<ItemRef>): Partial<ItemRef> {
-  const reference: Partial<ItemRef> = {};
+export function extractReferenceFields(
+  source: Partial<Item> | Partial<ItemRef> | Partial<ItemReferenceEdit>
+): Partial<ItemReferenceEdit> {
+  const reference: Partial<ItemReferenceEdit> = {};
   for (const key of referenceFieldKeys) {
     if (key in source) {
       // Deliberately copy undefined to allow clearing inherited values
@@ -137,7 +150,7 @@ export function extractReferenceFields(source: Partial<Item> | Partial<ItemRef>)
 }
 
 export type LockedFieldMode = 'readonly' | 'hidden';
-export type LockedFieldConfig = Partial<Record<keyof ItemFormData, LockedFieldMode>>;
+export type LockedFieldConfig = Partial<Record<ItemFormFieldKey, LockedFieldMode>>;
 
 export type StockOperation = 'add' | 'remove';
 
@@ -151,21 +164,28 @@ export function buildStockConfirmOptions(op: StockOperation): ConfirmDialogOptio
 }
 
 interface UseItemFormStateOptions {
-  initialItem: Partial<ItemFormData>;
+  initialItem: Partial<ItemFormPayload>;
   initialPhotos?: readonly PhotoSeedCandidate[];
+  formMode?: ItemFormMode;
 }
 
-export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStateOptions) {
+export function useItemFormState({ initialItem, initialPhotos, formMode = 'full' }: UseItemFormStateOptions) {
+  const normalizedInitialItem = formMode === 'reference' ? extractReferenceFields(initialItem) : initialItem;
   const initialPhotoSeedsRef = useRef<(string | null)[]>(normalisePhotoSeedList(initialPhotos));
   const seededPhotosRef = useRef<(string | null)[]>(initialPhotoSeedsRef.current);
   const [seededPhotos, setSeededPhotos] = useState<(string | null)[]>(initialPhotoSeedsRef.current);
-  const [form, setForm] = useState<Partial<ItemFormData>>(() => {
-    const initialEinheit = initialItem ? resolveFormEinheit(initialItem.Einheit, 'initialState') : ITEM_FORM_DEFAULT_EINHEIT;
-    const initialQuality = normalizeQualityForForm(initialItem?.Quality ?? QUALITY_DEFAULT, 'initialState');
-    const draft: Partial<ItemFormData> = {
-      ...initialItem,
+  const [form, setForm] = useState<Partial<ItemFormPayload>>(() => {
+    const initialEinheit = normalizedInitialItem
+      ? resolveFormEinheit(normalizedInitialItem.Einheit, 'initialState')
+      : ITEM_FORM_DEFAULT_EINHEIT;
+    const shouldIncludeQuality = formMode === 'full';
+    const initialQuality = shouldIncludeQuality
+      ? normalizeQualityForForm((normalizedInitialItem as Partial<ItemFormData>)?.Quality ?? QUALITY_DEFAULT, 'initialState')
+      : undefined;
+    const draft: Partial<ItemFormPayload> = {
+      ...normalizedInitialItem,
       Einheit: initialEinheit,
-      Quality: initialQuality
+      ...(shouldIncludeQuality ? { Quality: initialQuality } : {})
     };
     const draftRecord = draft as Record<PhotoFieldKey, string | null | undefined>;
     initialPhotoSeedsRef.current.forEach((seed, index) => {
@@ -179,35 +199,50 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
     });
     return draft;
   });
-  const update = useCallback(<K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => {
-    const normalizedValue = key === 'Quality' ? (normalizeQualityForForm(value, 'update') as ItemFormData[K]) : value;
+  const update = useCallback((key: ItemFormFieldKey, value: ItemFormPayload[ItemFormFieldKey]) => {
+    const shouldNormalizeQuality = formMode === 'full' && key === 'Quality';
+    const normalizedValue = shouldNormalizeQuality
+      ? (normalizeQualityForForm(value, 'update') as ItemFormPayload[ItemFormFieldKey])
+      : value;
     setForm((prev) => ({ ...prev, [key]: normalizedValue }));
-  }, []);
+  }, [formMode]);
 
-  const mergeForm = useCallback((next: Partial<ItemFormData>) => {
+  const mergeForm = useCallback((next: Partial<ItemFormPayload>) => {
+    const safeNext = formMode === 'reference' ? extractReferenceFields(next) : next;
     setForm((prev) => {
-      const requestedEinheit = next.Einheit ?? prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT;
+      const requestedEinheit = safeNext.Einheit ?? prev.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT;
       const normalizedEinheit = resolveFormEinheit(requestedEinheit, 'mergeForm');
-      const normalizedQuality = normalizeQualityForForm(
-        next.Quality ?? prev.Quality ?? QUALITY_DEFAULT,
-        'mergeForm'
-      );
       return {
         ...prev,
-        ...next,
+        ...safeNext,
         Einheit: normalizedEinheit,
-        Quality: normalizedQuality
+        ...(formMode === 'full'
+          ? {
+              Quality: normalizeQualityForForm(
+                (safeNext as Partial<ItemFormData>).Quality ?? (prev as Partial<ItemFormData>).Quality ?? QUALITY_DEFAULT,
+                'mergeForm'
+              )
+            }
+          : {})
       };
     });
-  }, []);
+  }, [formMode]);
 
-  const resetForm = useCallback((next: Partial<ItemFormData>) => {
+  const resetForm = useCallback((next: Partial<ItemFormPayload>) => {
+    const safeNext = formMode === 'reference' ? extractReferenceFields(next) : next;
     setForm({
-      ...next,
-      Einheit: resolveFormEinheit(next.Einheit, 'resetForm'),
-      Quality: normalizeQualityForForm(next.Quality ?? QUALITY_DEFAULT, 'resetForm')
+      ...safeNext,
+      Einheit: resolveFormEinheit(safeNext.Einheit, 'resetForm'),
+      ...(formMode === 'full'
+        ? {
+            Quality: normalizeQualityForForm(
+              (safeNext as Partial<ItemFormData>).Quality ?? QUALITY_DEFAULT,
+              'resetForm'
+            )
+          }
+        : {})
     });
-  }, []);
+  }, [formMode]);
 
   const generateMaterialNumber = useCallback(async (): Promise<string | undefined> => {
     try {
@@ -232,17 +267,21 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
   }, [update]);
 
   const changeStock = useCallback(async (op: StockOperation) => {
+    if (formMode === 'reference') {
+      console.warn('Stock change requested in reference-only form mode; ignoring.', { op });
+      return;
+    }
     if (!form.ItemUUID) {
       try {
         setForm((prev) => {
-          const previousQuantity = prev.Auf_Lager ?? 0;
+          const previousQuantity = (prev as Partial<ItemFormData>).Auf_Lager ?? 0;
           const nextQuantity = op === 'add' ? previousQuantity + 1 : Math.max(0, previousQuantity - 1);
           console.log('Adjusting local stock quantity for unsaved item', {
             operation: op,
             previousQuantity,
             nextQuantity
           });
-          return { ...prev, Auf_Lager: nextQuantity };
+          return { ...prev, Auf_Lager: nextQuantity } as Partial<ItemFormPayload>;
         });
       } catch (error) {
         console.error('Failed to adjust local stock quantity for unsaved item', error);
@@ -275,7 +314,7 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
       }
       const j = await res.json();
       setForm((prev) => {
-        const next = { ...prev, Auf_Lager: j.quantity };
+        const next = { ...prev, Auf_Lager: j.quantity } as Partial<ItemFormPayload>;
         if (op === 'remove' && j.boxId === null) {
           next.BoxID = null as any;
         }
@@ -285,7 +324,7 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
     } catch (err) {
       console.error(`Failed to ${op} stock`, err);
     }
-  }, [form.ItemUUID, setForm]);
+  }, [form.ItemUUID, formMode, setForm]);
 
   const seedPhotos = useCallback(
     (photos?: readonly PhotoSeedCandidate[]) => {
@@ -295,7 +334,7 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
         const seedsChanged = normalized.some((value, index) => value !== previousSeeds[index]);
         let formChanged = false;
         setForm((prev) => {
-          const nextDraft: Partial<ItemFormData> = { ...prev };
+          const nextDraft: Partial<ItemFormPayload> = { ...prev };
           const draftRecord = nextDraft as Record<PhotoFieldKey, string | null | undefined>;
           let changed = false;
           PHOTO_FIELD_KEYS.forEach((key, index) => {
@@ -392,16 +431,17 @@ export function useItemFormState({ initialItem, initialPhotos }: UseItemFormStat
 }
 
 interface ItemDetailsFieldsProps {
-  form: Partial<ItemFormData>;
+  form: Partial<ItemFormPayload>;
   isNew?: boolean;
-  onUpdate: <K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => void;
+  onUpdate: (key: ItemFormFieldKey, value: ItemFormPayload[ItemFormFieldKey]) => void;
   onGenerateMaterialNumber?: () => void | Promise<void | string>;
   onChangeStock?: (op: StockOperation) => void | Promise<void>;
   lockedFields?: LockedFieldConfig;
   langtextEditorTestHarness?: (helpers: { add: (key?: string) => void; remove: (key: string) => void }) => void;
+  formMode?: ItemFormMode;
 }
 
-function isFieldLocked(lockedFields: LockedFieldConfig | undefined, field: keyof ItemFormData, mode: LockedFieldMode) {
+function isFieldLocked(lockedFields: LockedFieldConfig | undefined, field: ItemFormFieldKey, mode: LockedFieldMode) {
   return lockedFields?.[field] === mode;
 }
 
@@ -412,8 +452,10 @@ export function ItemDetailsFields({
   onGenerateMaterialNumber,
   onChangeStock,
   lockedFields,
-  langtextEditorTestHarness
+  langtextEditorTestHarness,
+  formMode = 'full'
 }: ItemDetailsFieldsProps) {
+  const isReferenceMode = formMode === 'reference';
   if (isNew && onGenerateMaterialNumber && form.Artikel_Nummer == null) {
     try {
       const maybePromise = onGenerateMaterialNumber();
@@ -428,6 +470,10 @@ export function ItemDetailsFields({
   }
 
   const handleStock = useCallback(async (op: StockOperation) => {
+    if (isReferenceMode) {
+      console.warn('Stock change ignored in reference-only mode', { operation: op });
+      return;
+    }
     if (!onChangeStock) {
       console.warn('onChangeStock: no callback');
       return;
@@ -454,7 +500,7 @@ export function ItemDetailsFields({
     } catch (err) {
       console.error('Stock change handler failed', err);
     }
-  }, [form.ItemUUID, onChangeStock]);
+  }, [form.ItemUUID, isReferenceMode, onChangeStock]);
 
   const descriptionLockHidden = isFieldLocked(lockedFields, 'Artikelbeschreibung', 'hidden');
   const descriptionLockReadonly = isFieldLocked(lockedFields, 'Artikelbeschreibung', 'readonly');
@@ -462,13 +508,13 @@ export function ItemDetailsFields({
   const artikelNummerHidden = isFieldLocked(lockedFields, 'Artikel_Nummer', 'hidden');
   const artikelNummerReadonly = isFieldLocked(lockedFields, 'Artikel_Nummer', 'readonly');
 
-  const quantityHidden = isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
+  const quantityHidden = isReferenceMode || isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
   const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
 
-  const qualityHidden = isFieldLocked(lockedFields, 'Quality', 'hidden');
+  const qualityHidden = isReferenceMode || isFieldLocked(lockedFields, 'Quality', 'hidden');
   const qualityReadonly = isFieldLocked(lockedFields, 'Quality', 'readonly');
 
-  const placementHidden = isFieldLocked(lockedFields, 'BoxID', 'hidden');
+  const placementHidden = isReferenceMode || isFieldLocked(lockedFields, 'BoxID', 'hidden');
   const placementReadonly = isFieldLocked(lockedFields, 'BoxID', 'readonly');
 
   // TODO(langtext-observability): Revisit Langtext rendering once parser mode stabilizes across
@@ -477,7 +523,11 @@ export function ItemDetailsFields({
   const [langtextFocusKey, setLangtextFocusKey] = useState<string | null>(null);
   const langtextValueRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const langtextFieldIdPrefix = useId();
-  const qualitySummary = useMemo(() => describeQuality(form.Quality ?? QUALITY_DEFAULT), [form.Quality]);
+  const qualitySummary = useMemo(
+    () =>
+      describeQuality((form as Partial<ItemFormData>).Quality ?? QUALITY_DEFAULT),
+    [form.Quality]
+  );
 
   // TODO(langtext-type-guards): Consider splitting JSON and text Langtext editors into
   // dedicated components so union handling is localised and type-safe.
@@ -546,7 +596,7 @@ export function ItemDetailsFields({
           key: currentKey
         });
         const fallbackValue = next.value ?? '';
-        onUpdate('Langtext', fallbackValue as ItemFormData['Langtext']);
+        onUpdate('Langtext', fallbackValue as ItemFormPayload['Langtext']);
         return;
       }
 
@@ -585,7 +635,7 @@ export function ItemDetailsFields({
         });
 
         const nextPayload = stringifyLangtextEntries(nextEntries);
-        onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
+        onUpdate('Langtext', nextPayload as ItemFormPayload['Langtext']);
       } catch (error) {
         console.error('Failed to update Langtext entry', { key: currentKey, error });
       }
@@ -615,7 +665,7 @@ export function ItemDetailsFields({
 
         const nextEntries = [...parsedLangtext.entries, { key: normalisedKey, value: '' }];
         const nextPayload = stringifyLangtextEntries(nextEntries);
-        onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
+        onUpdate('Langtext', nextPayload as ItemFormPayload['Langtext']);
 
         if (!explicitKey) {
           setPendingLangtextKey('');
@@ -657,7 +707,7 @@ export function ItemDetailsFields({
         }
 
         const nextPayload = stringifyLangtextEntries(nextEntries);
-        onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
+        onUpdate('Langtext', nextPayload as ItemFormPayload['Langtext']);
         console.info('Removed Langtext entry via JSON delete handler', { key: keyToRemove });
       } catch (error) {
         console.error('Failed to stringify Langtext entries during value update', {
@@ -684,7 +734,7 @@ export function ItemDetailsFields({
 
       try {
         const nextPayload = stringifyLangtextEntries(nextEntries);
-        onUpdate('Langtext', nextPayload as ItemFormData['Langtext']);
+        onUpdate('Langtext', nextPayload as ItemFormPayload['Langtext']);
         console.info('Removed Langtext entry', { key });
       } catch (error) {
         console.error('Failed to remove Langtext entry', { key, error });
@@ -695,7 +745,7 @@ export function ItemDetailsFields({
 
   const handleLangtextTextChange = useCallback(
     (value: string) => {
-      onUpdate('Langtext', value as ItemFormData['Langtext']);
+      onUpdate('Langtext', value as ItemFormPayload['Langtext']);
     },
     [onUpdate]
   );
@@ -705,9 +755,11 @@ export function ItemDetailsFields({
     langtextEditorTestHarness({ add: handleLangtextJsonAdd, remove: handleLangtextJsonDelete });
   }
 
-  const placementInputValue = typeof form.BoxID === 'string' ? form.BoxID : '';
+  const placementInputValue = typeof (form as Partial<ItemFormData>).BoxID === 'string'
+    ? (form as Partial<ItemFormData>).BoxID ?? ''
+    : '';
   const hasPlacementValue = placementInputValue.trim() !== '';
-  const shouldDisplayPlacement = !placementHidden && (!isNew || hasPlacementValue);
+  const shouldDisplayPlacement = !isReferenceMode && !placementHidden && (!isNew || hasPlacementValue);
 
   const handlePlacementChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -718,7 +770,7 @@ export function ItemDetailsFields({
 
       try {
         const nextValue = event.target.value;
-        onUpdate('BoxID', nextValue as ItemFormData['BoxID']);
+        onUpdate('BoxID', nextValue as ItemFormPayload['BoxID']);
         console.log('Updated item placement draft value', { nextBoxId: nextValue });
       } catch (error) {
         console.error('Failed to handle placement change', error);
@@ -904,6 +956,10 @@ export function ItemDetailsFields({
   );
 
   const handleQualityChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReferenceMode) {
+      console.info('Quality change ignored in reference-only mode');
+      return;
+    }
     if (qualityReadonly) {
       console.info('Quality change ignored because the field is readonly');
       return;
@@ -914,7 +970,7 @@ export function ItemDetailsFields({
     } catch (error) {
       console.error('Failed to update quality value in item form', error);
     }
-  }, [onUpdate, qualityReadonly]);
+  }, [isReferenceMode, onUpdate, qualityReadonly]);
 
   useEffect(() => {
     if (typeof form.Hauptkategorien_A === 'number' && !categoryLookup.has(form.Hauptkategorien_A)) {
@@ -995,7 +1051,9 @@ export function ItemDetailsFields({
       )}
 
       <div className="row">
-        {form.ItemUUID && <input type="hidden" value={form.ItemUUID} />}
+        {!isReferenceMode && (form as Partial<ItemFormData>).ItemUUID && (
+          <input type="hidden" value={(form as Partial<ItemFormData>).ItemUUID} />
+        )}
         <label>
           Artikelnummer*
         </label>
@@ -1025,7 +1083,7 @@ export function ItemDetailsFields({
             </button> */}
             <input
               type="number"
-              value={form.Auf_Lager ?? 0}
+              value={(form as Partial<ItemFormData>).Auf_Lager ?? 0}
               onChange={handleQuantityChange}
               required
               disabled={quantityReadonly}
@@ -1454,7 +1512,7 @@ export function usePhotoInputModes(initial?: Partial<PhotoInputModeState>) {
 }
 
 export function createPhotoChangeHandler(
-  onUpdate: <K extends keyof ItemFormData>(key: K, value: ItemFormData[K]) => void,
+  onUpdate: (key: ItemFormFieldKey, value: ItemFormPayload[ItemFormFieldKey]) => void,
   field: PhotoFieldKey
 ) {
   return (e: React.ChangeEvent<HTMLInputElement>) => {
