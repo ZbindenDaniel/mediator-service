@@ -56,7 +56,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
-import ItemMediaGallery from './ItemMediaGallery';
+import ItemMediaGallery, { buildMediaGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
@@ -730,6 +730,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticActionPending, setAgenticActionPending] = useState(false);
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
   // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
+  // TODO(media-controls): Confirm add/remove media alerts and messaging after stakeholder review.
   const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
   const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
@@ -746,6 +747,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
@@ -1414,6 +1416,195 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
   }, [itemId]);
+
+  const normalizeMediaPayload = useCallback(
+    (payload: unknown): string[] => {
+      try {
+        if (!Array.isArray(payload)) {
+          return [];
+        }
+        return payload.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '');
+      } catch (error) {
+        logError('ItemDetail: Failed to normalize media payload', error, { itemId });
+        return [];
+      }
+    },
+    [itemId]
+  );
+
+  const applyMediaUpdate = useCallback(
+    (payload: unknown) => {
+      const media = normalizeMediaPayload(payload);
+      setMediaAssets(media);
+      setItem((prev) => (prev ? { ...prev, Grafikname: media[0] ?? '' } : prev));
+      return media;
+    },
+    [normalizeMediaPayload]
+  );
+
+  const resolveMediaSlots = useCallback(() => {
+    if (!item) {
+      return [];
+    }
+    return buildMediaGalleryAssets(item.ItemUUID, item.Grafikname, mediaAssets);
+  }, [item, mediaAssets]);
+
+  const readFileAsDataUrl = useCallback(async (file: File) => {
+    try {
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Dateiinhalt konnte nicht gelesen werden.'));
+          }
+        };
+        reader.onerror = () => {
+          reject(reader.error ?? new Error('Datei konnte nicht gelesen werden.'));
+        };
+        reader.readAsDataURL(file);
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to read media file', error, { itemId, name: file.name });
+      throw error;
+    }
+  }, [itemId]);
+
+  const saveMediaSlot = useCallback(
+    async (slotIndex: number, value: string | null) => {
+      if (!item) {
+        logError('ItemDetail: Missing item for media update', undefined, { itemId });
+        return false;
+      }
+      const actor = await ensureUser();
+      if (!actor) {
+        try {
+          await dialogService.alert({
+            title: 'Aktion nicht möglich',
+            message: 'Bitte zuerst oben den Benutzer setzen.'
+          });
+        } catch (error) {
+          console.error('Failed to display media update user alert', error);
+        }
+        return false;
+      }
+      const payloadKey = `picture${slotIndex + 1}`;
+      const payload: Record<string, unknown> = {
+        actor,
+        [payloadKey]: value
+      };
+      try {
+        const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          console.error('ItemDetail: Failed to save media slot', {
+            itemId: item.ItemUUID,
+            status: res.status
+          });
+          return false;
+        }
+        const data = await res.json();
+        if (!data || data.ok !== true) {
+          console.error('ItemDetail: Unexpected save-item response for media update', {
+            itemId: item.ItemUUID,
+            response: data
+          });
+          return false;
+        }
+        applyMediaUpdate((data as { media?: unknown }).media);
+        return true;
+      } catch (error) {
+        logError('ItemDetail: Failed to persist media update', error, {
+          itemId: item.ItemUUID,
+          slotIndex
+        });
+        return false;
+      }
+    },
+    [applyMediaUpdate, item, itemId]
+  );
+
+  const handleMediaAdd = useCallback(() => {
+    try {
+      if (!mediaInputRef.current) {
+        logError('ItemDetail: Media file input not available for add', undefined, { itemId });
+        return;
+      }
+      mediaInputRef.current.value = '';
+      mediaInputRef.current.click();
+    } catch (error) {
+      logError('ItemDetail: Failed to open media file picker', error, { itemId });
+    }
+  }, [itemId]);
+
+  const handleMediaFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget;
+      try {
+        const file = input.files?.[0];
+        if (!file) {
+          return;
+        }
+        if (!item) {
+          logError('ItemDetail: Missing item for media upload', undefined, { itemId });
+          return;
+        }
+        const slots = resolveMediaSlots();
+        const usedSlots = new Set(slots.map((asset) => asset.slotIndex));
+        const nextSlot = [0, 1, 2].find((slot) => !usedSlots.has(slot));
+        if (nextSlot === undefined) {
+          logger.warn?.('ItemDetail: No available media slots for add', {
+            itemId: item.ItemUUID,
+            slots: slots.length
+          });
+          try {
+            await dialogService.alert({
+              title: 'Kein freier Slot',
+              message: 'Es sind bereits drei Medien vorhanden.'
+            });
+          } catch (error) {
+            console.error('Failed to display media slot alert', error);
+          }
+          return;
+        }
+        try {
+          const dataUrl = await readFileAsDataUrl(file);
+          await saveMediaSlot(nextSlot, dataUrl);
+        } catch (error) {
+          logError('ItemDetail: Failed to upload media asset', error, {
+            itemId: item.ItemUUID,
+            slotIndex: nextSlot
+          });
+        }
+      } finally {
+        input.value = '';
+      }
+    },
+    [item, itemId, readFileAsDataUrl, resolveMediaSlots, saveMediaSlot]
+  );
+
+  const handleMediaRemove = useCallback(
+    async (asset: GalleryAsset) => {
+      if (!item) {
+        logError('ItemDetail: Missing item for media removal', undefined, { itemId });
+        return;
+      }
+      if (asset.slotIndex < 0 || asset.slotIndex > 2) {
+        logger.warn?.('ItemDetail: Media removal requested for unsupported slot', {
+          itemId: item.ItemUUID,
+          slotIndex: asset.slotIndex,
+          src: asset.src
+        });
+        return;
+      }
+      await saveMediaSlot(asset.slotIndex, null);
+    },
+    [item, itemId, saveMediaSlot]
+  );
 
   const handleInstanceNavigation = useCallback(
     async (targetItemId: string | null) => {
@@ -2216,11 +2407,20 @@ export default function ItemDetail({ itemId }: Props) {
             <div className="card grid-span-row-2">
               <h3>Fotos</h3>
               <section className="item-media-section">
+                <input
+                  ref={mediaInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleMediaFileChange}
+                />
                 <ItemMediaGallery
                   itemId={item.ItemUUID}
                   grafikname={item.Grafikname}
                   mediaAssets={mediaAssets}
                   className="item-media-gallery--stacked"
+                  onAdd={handleMediaAdd}
+                  onRemove={handleMediaRemove}
                 />
               </section>
             </div>

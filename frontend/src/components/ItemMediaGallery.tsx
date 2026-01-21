@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 // TODO: Evaluate extracting the lightbox modal into a shared component if additional consumers emerge.
+// TODO(media-controls): Validate add/remove copy and button placement once UX feedback lands.
 
 interface ItemMediaGalleryProps {
   itemId: string;
@@ -8,12 +9,15 @@ interface ItemMediaGalleryProps {
   mediaAssets?: string[] | null;
   className?: string;
   initialFailedSources?: string[] | null;
+  onAdd?: () => void | Promise<void>;
+  onRemove?: (asset: GalleryAsset) => void | Promise<void>;
 }
 
-interface GalleryAsset {
+export interface GalleryAsset {
   src: string;
   label: string;
   isPrimary: boolean;
+  slotIndex: number;
 }
 
 function createFailureSet(seed: string[] | null | undefined): Set<string> {
@@ -30,7 +34,11 @@ function createFailureSet(seed: string[] | null | undefined): Set<string> {
   return failures;
 }
 
-function normaliseAssets(itemId: string, grafikname?: string | null, mediaAssets?: string[] | null): GalleryAsset[] {
+export function buildMediaGalleryAssets(
+  itemId: string,
+  grafikname?: string | null,
+  mediaAssets?: string[] | null
+): GalleryAsset[] {
   const entries: GalleryAsset[] = [];
   const seen = new Set<string>();
 
@@ -45,7 +53,8 @@ function normaliseAssets(itemId: string, grafikname?: string | null, mediaAssets
     entries.push({
       src: trimmed,
       isPrimary,
-      label: isPrimary ? 'Hauptbild' : fileName
+      label: isPrimary ? 'Hauptbild' : fileName,
+      slotIndex: -1
     });
   }
 
@@ -66,7 +75,10 @@ function normaliseAssets(itemId: string, grafikname?: string | null, mediaAssets
     }
   }
   secondary.sort((a, b) => a.src.localeCompare(b.src));
-  return [...primary, ...secondary];
+  return [...primary, ...secondary].map((asset, index) => ({
+    ...asset,
+    slotIndex: index
+  }));
 }
 
 export default function ItemMediaGallery({
@@ -74,7 +86,9 @@ export default function ItemMediaGallery({
   grafikname,
   mediaAssets,
   className,
-  initialFailedSources
+  initialFailedSources,
+  onAdd,
+  onRemove
 }: ItemMediaGalleryProps) {
   const defaultFailures = useMemo(
     () => createFailureSet(initialFailedSources),
@@ -121,7 +135,7 @@ export default function ItemMediaGallery({
     hasLoggedInitialFailures.current = true;
   }
 
-  const assets = useMemo(() => normaliseAssets(itemId, grafikname, mediaAssets), [
+  const assets = useMemo(() => buildMediaGalleryAssets(itemId, grafikname, mediaAssets), [
     itemId,
     grafikname,
     mediaAssets
@@ -184,6 +198,31 @@ export default function ItemMediaGallery({
               <h2 id={dialogTitleId} className="dialog-title">
                 {selectedAsset.label}
               </h2>
+              {onRemove ? (
+                <button
+                  type="button"
+                  className="item-media-gallery__dialog-remove"
+                  onClick={() => {
+                    try {
+                      void Promise.resolve(onRemove(selectedAsset)).catch((error) => {
+                        console.error('Failed to trigger media removal', {
+                          error,
+                          itemId,
+                          src: selectedAsset.src
+                        });
+                      });
+                    } catch (error) {
+                      console.error('Failed to trigger media removal', {
+                        error,
+                        itemId,
+                        src: selectedAsset.src
+                      });
+                    }
+                  }}
+                >
+                  Remove
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="item-media-gallery__dialog-close"
@@ -244,14 +283,40 @@ export default function ItemMediaGallery({
         </div>
       );
     }
-  }, [dialogTitleId, failedSources, handleImageError, handleModalClose, itemId, selectedAsset]);
+  }, [dialogTitleId, failedSources, handleImageError, handleModalClose, itemId, onRemove, selectedAsset]);
+
+  const addAction = onAdd ? (
+    <div className="item-media-gallery__actions">
+      <button
+        type="button"
+        className="btn item-media-gallery__add"
+        onClick={() => {
+          try {
+            void Promise.resolve(onAdd()).catch((error) => {
+              console.error('Failed to trigger media add', { error, itemId });
+            });
+          } catch (error) {
+            console.error('Failed to trigger media add', { error, itemId });
+          }
+        }}
+      >
+        +
+      </button>
+    </div>
+  ) : null;
 
   if (assets.length === 0) {
-    return <p className="muted">Keine Medien verfügbar.</p>;
+    return (
+      <>
+        {addAction}
+        <p className="muted">Keine Medien verfügbar.</p>
+      </>
+    );
   }
 
   return (
     <>
+      {addAction}
       <div className={effectiveClassName}>
         {assets.map((asset) => {
           const isBroken = failedSources.has(asset.src);

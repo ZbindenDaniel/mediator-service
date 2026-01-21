@@ -98,6 +98,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Enabled item detail agentic close to upsert when no prior run exists, keeping close available for loaded items.
 - Added a navigable location link on box detail summaries so valid shelf locations can be opened directly while keeping missing-location logging intact.
 - Removed the edit-form media gallery header and made Foto 1 optional in item creation flows, aligning UI validation and labels with optional photo uploads.
+- Added item detail media add/remove controls that reuse deterministic gallery ordering, call the save-item endpoint, and refresh gallery state with logging.
 - Batched item grouping warnings to handle unplaced items as a single bucket and reduce per-item log noise.
 - Adjusted item detail row grouping to treat Menge as instance data and refreshed the Vorrat table to show UUID text with quality badges for clarity.
 - Enabled nullable quality handling across shared models, persistence defaults, and creation flows while updating UI badges to show a `?` indicator when no quality is set.
