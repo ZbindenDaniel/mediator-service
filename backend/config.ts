@@ -105,13 +105,15 @@ export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || rawMediaDir
 const rawWebDavDir = (process.env.WEB_DAV_DIR || rawMediaDir).trim();
 const WEB_DAV_URL_PATTERN = /^[a-z]+:\/\//i;
 let resolvedWebDavDir = rawWebDavDir;
+// TODO(webdav-feedback): Confirm log wording and examples with operations once WebDAV deployment guidance is finalized.
 
 if (MEDIA_STORAGE_MODE === 'webdav') {
   if (!resolvedWebDavDir) {
     console.warn('[config] MEDIA_STORAGE_MODE=webdav requires WEB_DAV_DIR; default media directory will be used.');
   } else if (WEB_DAV_URL_PATTERN.test(resolvedWebDavDir) || !path.isAbsolute(resolvedWebDavDir)) {
     console.error(
-      `[config] WEB_DAV_DIR must be an absolute filesystem path (not a URL). Received "${resolvedWebDavDir}".`
+      `[config] WEB_DAV_DIR must be a mounted filesystem path (absolute, not a URL). ` +
+        `Example: "/mnt/webdav/media". Received "${resolvedWebDavDir}".`
     );
     resolvedWebDavDir = '';
   }
