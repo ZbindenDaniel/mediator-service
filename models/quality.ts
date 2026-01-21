@@ -4,6 +4,7 @@ export const QUALITY_MAX = 5 as const;
 export const QUALITY_DEFAULT = 3 as const;
 export const QUALITY_UNKNOWN_LABEL = '?' as const;
 export const QUALITY_UNKNOWN_COLOR = 'gray' as const;
+export type QualityValue = number | null;
 
 export const QUALITY_COLOR_MAP: Record<number, 'purple' | 'red' | 'yellow' | 'orange' | 'green'> = {
   1: 'purple',
@@ -113,7 +114,15 @@ export function describeQuality(
       color: QUALITY_UNKNOWN_COLOR
     };
   }
-  const label = QUALITY_LABELS[normalized] ?? QUALITY_LABELS[QUALITY_DEFAULT];
-  const color = QUALITY_COLOR_MAP[normalized] ?? QUALITY_COLOR_MAP[QUALITY_DEFAULT];
+  const label = QUALITY_LABELS[normalized];
+  const color = QUALITY_COLOR_MAP[normalized];
+  if (!label || !color) {
+    console.warn('[quality] Missing quality label/color mapping', { normalized });
+    return {
+      value: normalized,
+      label: QUALITY_UNKNOWN_LABEL,
+      color: QUALITY_UNKNOWN_COLOR
+    };
+  }
   return { value: normalized, label, color };
 }

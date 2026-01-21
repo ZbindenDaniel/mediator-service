@@ -5,6 +5,7 @@
 // TODO(quality-metadata): Align Quality field naming with ERP schema once upstream attributes are finalised.
 // TODO(reference-only-edit): Revalidate reference-only edit payload expectations against item_refs when schemas shift.
 import type { AgenticRunStatus } from './agentic-statuses';
+import type { QualityValue } from './quality';
 export enum ItemEinheit {
   Stk = 'Stk',
   Menge = 'Menge'
@@ -59,7 +60,7 @@ export interface ItemInstance {
   ShopwareVariantId?: string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade (nullable when unknown).
   // TODO(item-create): Keep creation payload expectations for Quality/Auf_Lager aligned across frontend and import flows.
-  Quality?: number | null;
+  Quality?: QualityValue;
 }
 
 export type LangtextPayload = Record<string, string>;
@@ -88,7 +89,7 @@ export interface ItemRef {
   EntityType?: string;
   ShopwareProductId?: string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade (nullable when unknown).
-  Quality?: number | null;
+  Quality?: QualityValue;
 }
 
 export type ItemReferenceEdit = ItemRef;
@@ -101,7 +102,7 @@ export type Item = ItemInstance & Partial<ItemRef> & {
 
 export interface GroupedItemSummary {
   Artikel_Nummer: string | null;
-  Quality: number | null;
+  Quality: QualityValue;
   BoxID: string | null;
   Location: string | null;
   Category?: string | null;

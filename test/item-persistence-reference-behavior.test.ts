@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit } from '../models';
-import { QUALITY_DEFAULT } from '../models/quality';
 
 const TEST_DB_FILE = path.join(__dirname, 'item-persistence-reference-behavior.sqlite');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
@@ -91,11 +90,11 @@ describe('item persistence reference behavior', () => {
       Verkaufspreis: 5.75,
       Einheit: ItemEinheit.Stk,
       Shopartikel: 1,
-      Quality: QUALITY_DEFAULT
+      Quality: null
     });
 
-    const instanceRow = selectInstance.get('I-DB-0001') as { Artikel_Nummer: string | null; Quality: number } | undefined;
-    expect(instanceRow).toEqual({ Artikel_Nummer: 'DB-REF-0001', Quality: QUALITY_DEFAULT });
+    const instanceRow = selectInstance.get('I-DB-0001') as { Artikel_Nummer: string | null; Quality: number | null } | undefined;
+    expect(instanceRow).toEqual({ Artikel_Nummer: 'DB-REF-0001', Quality: null });
   });
 
   test('creating an item from an existing reference leaves the reference row untouched', () => {

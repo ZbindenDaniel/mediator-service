@@ -103,6 +103,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Enabled nullable quality handling across shared models, persistence defaults, and creation flows while updating UI badges to show a `?` indicator when no quality is set.
 - Hardened the agentic trigger failure handler with bound status-update flags and contextual logging to prevent SQL parameter crashes.
 - Added an explicit event-level mapping for Updated events so observability metrics no longer default to error severity.
+- Removed default quality coercion so null quality stays unset across models, persistence, and creation flows while preserving explicit payload overrides.
 
 ## Documentation Map
 
