@@ -82,6 +82,7 @@ Design:owner@mediator and target the Q4 documentation refresh.
 
 ## Data & Media (`data/`, `media/`)
 - CSV seeds, import/export payloads, and runtime-generated media assets (item images, QR codes).
+- Media storage defaults to `MEDIA_STORAGE_MODE=local`, using the backend `media/` directory unless `MEDIA_DIR_OVERRIDE` is set; container deployments can switch to `MEDIA_STORAGE_MODE=webdav` and point `WEB_DAV_DIR` at the mounted WebDAV path.
 - Naming conventions include `media/{ItemId}/{Artikelnummer}-{imgNumber}` for item imagery.
 
 ## Legacy Scripts & Root Utilities
