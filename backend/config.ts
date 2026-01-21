@@ -83,6 +83,29 @@ if (rawDatabaseUrl && rawDbPathEnv) {
 
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
+// TODO(media-storage): Review media storage environment names once WebDAV rollout is finalized.
+const MEDIA_STORAGE_MODE_VALUES = new Set(['local', 'webdav']);
+const rawMediaStorageMode = (process.env.MEDIA_STORAGE_MODE || '').trim().toLowerCase();
+let resolvedMediaStorageMode: 'local' | 'webdav' = 'local';
+
+if (rawMediaStorageMode) {
+  if (MEDIA_STORAGE_MODE_VALUES.has(rawMediaStorageMode)) {
+    resolvedMediaStorageMode = rawMediaStorageMode as 'local' | 'webdav';
+  } else {
+    console.warn(
+      `[config] Unrecognized MEDIA_STORAGE_MODE value "${rawMediaStorageMode}" supplied; defaulting to local.`
+    );
+  }
+}
+
+export const MEDIA_STORAGE_MODE = resolvedMediaStorageMode;
+export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || '').trim();
+export const WEB_DAV_DIR = (process.env.WEB_DAV_DIR || '').trim();
+
+if (MEDIA_STORAGE_MODE === 'webdav' && !WEB_DAV_DIR) {
+  console.warn('[config] MEDIA_STORAGE_MODE=webdav requires WEB_DAV_DIR; default media directory will be used.');
+}
+
 // TODO(print-queues): Confirm per-label printer queue overrides once label routing settles for all templates.
 const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || '').trim();
 export const PRINTER_QUEUE = resolvedQueue;
