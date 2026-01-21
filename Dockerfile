@@ -31,8 +31,11 @@ RUN apt-get update \
         zip \
     && rm -rf /var/lib/apt/lists/*
 
+# TODO(media-storage): Ensure media directory defaults remain aligned with compose and runtime overrides.
 ENV NODE_ENV=production \
     HTTP_PORT=8080 \
+    MEDIA_DIR=/app/dist/backend/media \
+    WEB_DAV_DIR=/app/dist/backend/webDav \
     AGENTIC_MODEL_PROVIDER=ollama \
     AGENTIC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
     AGENTIC_OLLAMA_MODEL=gpt-oss:20b \
@@ -54,9 +57,11 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/public ./dist/frontend/public
 
 # Ensure required directories exist AND fix ownership
+# TODO(media-storage): Revisit directory creation if media paths move outside /app.
 RUN mkdir -p \
         dist/backend/data \
-        dist/backend/media \
+        "${MEDIA_DIR}" \
+        "${WEB_DAV_DIR}" \
         dist/frontend/public \
     && chown -R 33:33 /app
 

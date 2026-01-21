@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 
 - Added baseline tests for core backend actions (import, save, list, search, QR scan) with match/handle coverage and response assertions to reduce regression risk.
+- Added UI workflow tests for agentic trigger handling and match selection search error/cancel flows.
 - Balanced wide-screen landing grids by letting item/box detail tables and activity lists span both columns for readability.
 - Added grid span utilities and applied select layout spans on landing, item, and box detail cards for clearer wide/tall layouts.
 - Clarified the recent highlights log by replacing an empty placeholder link with a concrete documentation note for easier tracking.
@@ -84,6 +85,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Stacked the Fotos media gallery in item detail cards to keep image tiles consistently sized in a vertical layout.
 - Ensured item creation responses surface multi-instance ItemUUID lists with safe UI parsing and navigation-target logging for bulk creates.
 - Extended the test harness matchers to cover Jest-style throw checks, call counts, and subset equality for objectContaining expectations.
+- Updated container media configuration defaults so Dockerfile directory creation and compose volume mappings support WebDAV storage mode paths.
 
 ## Documentation Map
 

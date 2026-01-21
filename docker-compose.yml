@@ -43,6 +43,9 @@ services:
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
       INBOX_DIR: /var/lib/mediator/inbox
       ARCHIVE_DIR: /var/lib/mediator/archive
+      # TODO(media-storage): Keep media directory overrides aligned with Dockerfile defaults.
+      MEDIA_STORAGE_MODE: webdav
+      MEDIA_DIR: /app/dist/backend/webDav
       # Set to the externally reachable hostname or IP for generated links.
       PUBLIC_HOSTNAME: localhost
       # Additional environment variables may be supplied here to override defaults from backend/config.ts,
@@ -67,7 +70,7 @@ services:
       # Persist the mediator application state and inbox/archive content.
       - mediator-data:/var/lib/mediator
       # Persist generated media assets served by the backend.
-      - mediator-media:/app/dist/backend/media
+      - mediator-media:/app/dist/backend/webDav
       # Optional: mount TLS key/cert files and set TLS_CERT_PATH/TLS_KEY_PATH when enabling HTTPS support.
       # - ./secrets/tls/server.crt:/etc/mediator/tls/server.crt:ro
       # - ./secrets/tls/server.key:/etc/mediator/tls/server.key:ro
