@@ -31,10 +31,15 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 // TODO(agent): Confirm legacy Einheit normalization coverage for import-item once CSV-derived payloads are audited.
 // TODO(agent): Document ItemUUID parser expectations for Artikelnummer-based formats when adding new import clients.
 // TODO(agent): Align legacy quantity normalization rules between import-item and CSV ingestion flows.
-async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string> {
-  const maxAttempts = 3;
+async function ensureUniqueItemUUID(
+  candidate: string,
+  ctx: any,
+  options: { reserved?: ReadonlySet<string> } = {}
+): Promise<string> {
+  const maxAttempts = Math.max(3, (options.reserved?.size ?? 0) + 2);
   let attempt = 0;
   let itemUUID = candidate;
+  const reserved = options.reserved;
 
   const resolveSequentialContext = (
     current: string
@@ -106,27 +111,36 @@ async function ensureUniqueItemUUID(candidate: string, ctx: any): Promise<string
 
   while (attempt < maxAttempts) {
     let existing: unknown = null;
-    try {
-      const existingLookup = ctx.getItem?.get ? ctx.getItem.get(itemUUID) : null;
-      existing = typeof (existingLookup as Promise<unknown>)?.then === 'function'
-        ? await existingLookup
-        : existingLookup;
-    } catch (lookupError) {
-      console.error('[import-item] Failed to verify ItemUUID uniqueness during mint', {
+    const isReserved = Boolean(reserved?.has(itemUUID));
+    if (isReserved) {
+      console.warn('[import-item] Candidate ItemUUID already reserved for this import batch', {
         attempt,
-        itemUUID,
-        error: lookupError
+        itemUUID
       });
+    } else {
+      try {
+        const existingLookup = ctx.getItem?.get ? ctx.getItem.get(itemUUID) : null;
+        existing = typeof (existingLookup as Promise<unknown>)?.then === 'function'
+          ? await existingLookup
+          : existingLookup;
+      } catch (lookupError) {
+        console.error('[import-item] Failed to verify ItemUUID uniqueness during mint', {
+          attempt,
+          itemUUID,
+          error: lookupError
+        });
+      }
     }
 
-    if (!existing) {
+    if (!existing && !isReserved) {
       return itemUUID;
     }
 
     attempt += 1;
     console.warn('[import-item] Detected ItemUUID collision while minting; retrying with fresh identifier', {
       attempt,
-      itemUUID
+      itemUUID,
+      collisionType: isReserved ? 'reserved' : 'existing'
     });
 
     try {
@@ -1031,6 +1045,7 @@ const action = defineHttpAction({
         boxLabelToPersist = null;
       }
 
+      // TODO(import-item): Revisit batch ItemUUID reservation strategy once generator supports bulk allocation.
       let itemUUIDs: string[] = [];
       let hadExistingInstanceForArtikel = false;
       if (resolvedArtikelNummer && ctx.findByMaterial?.all) {
@@ -1046,6 +1061,10 @@ const action = defineHttpAction({
         }
       }
       try {
+        const reservedItemUUIDs = new Set<string>();
+        if (ItemUUID) {
+          reservedItemUUIDs.add(ItemUUID);
+        }
         itemUUIDs = [ItemUUID];
         if (creationPlan.instanceCount > 1) {
           if (!ctx || typeof ctx.generateItemUUID !== 'function') {
@@ -1073,8 +1092,9 @@ const action = defineHttpAction({
               throw new Error('Failed to mint ItemUUID for instance creation');
             }
             try {
-              const unique = await ensureUniqueItemUUID(candidate, ctx);
+              const unique = await ensureUniqueItemUUID(candidate, ctx, { reserved: reservedItemUUIDs });
               itemUUIDs.push(unique);
+              reservedItemUUIDs.add(unique);
             } catch (uniqueError) {
               console.error('[import-item] Failed to ensure unique ItemUUID for additional instance', {
                 ItemUUID,
