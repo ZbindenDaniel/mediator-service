@@ -449,7 +449,7 @@ export function AgenticStatusCard({
               </button>
             </div>
           ) : null}
-            {canDelete && onDelete ? (
+          {canDelete && onDelete ? (
             <div className='row'>
               <button type="button" className="btn danger" disabled={actionPending} onClick={onDelete}>
                 Lauf löschen
@@ -1131,11 +1131,11 @@ export default function ItemDetail({ itemId }: Props) {
       rows.push(['Unterkategorie B', unterkategorieB]);
     }
 
-    
+
     if (langtextRows.length > 0) {
       rows.push(...langtextRows);
     }
-  
+
     rows.push(
       ['Hersteller', item.Hersteller ?? null],
       ['Länge (mm)', item.Länge_mm ?? null],
@@ -1341,7 +1341,7 @@ export default function ItemDetail({ itemId }: Props) {
           const rawAgenticStatus = (entry as ItemInstanceSummary)?.AgenticStatus;
           const parsedAgenticStatus =
             typeof rawAgenticStatus === 'string'
-            && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
+              && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
               ? rawAgenticStatus
               : null;
 
@@ -1515,8 +1515,8 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO(agentic-close-running): Reconfirm close affordance rules once running-state copy is finalized.
   const agenticCanClose = Boolean(
     agenticHasRun &&
-      normalizedAgenticStatus &&
-      normalizedAgenticStatus !== AGENTIC_RUN_STATUS_RUNNING
+    normalizedAgenticStatus &&
+    normalizedAgenticStatus !== AGENTIC_RUN_STATUS_RUNNING
   );
   const agenticCanDelete = Boolean(
     agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
@@ -1597,7 +1597,7 @@ export default function ItemDetail({ itemId }: Props) {
     return promptResult.trim();
   }
 
-  
+
 
   async function handleAgenticReview(decision: 'approved' | 'rejected') {
     if (!agentic) return;
@@ -2219,8 +2219,27 @@ export default function ItemDetail({ itemId }: Props) {
             </div>
 
             <div className="card">
-              <h3>Instanz</h3>
+              <h3>dieser Artikel</h3>
               <div className="row">
+                {instanceDetailRows.length > 0 ? (
+                  <table className="details">
+                    <tbody>
+                      {instanceDetailRows.map(([k, v], idx) => {
+                        const cell = normalizeDetailValue(v);
+                        return (
+                          <tr key={`${k}-${idx}`} className="responsive-row">
+                            <th className="responsive-th">{k}</th>
+                            <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                              {cell.content}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="muted">Keine Instanzdaten vorhanden.</p>
+                )}
                 <button type="button" className="btn" onClick={async () => {
                   let confirmed = false;
                   const actor = await ensureUser();
@@ -2269,28 +2288,10 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
             </div>
 
-            <div className="card">
-              <h3>dieser Artikel</h3>
-              {instanceDetailRows.length > 0 ? (
-                <table className="details">
-                  <tbody>
-                    {instanceDetailRows.map(([k, v], idx) => {
-                      const cell = normalizeDetailValue(v);
-                      return (
-                        <tr key={`${k}-${idx}`} className="responsive-row">
-                          <th className="responsive-th">{k}</th>
-                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                            {cell.content}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="muted">Keine Instanzdaten vorhanden.</p>
-              )}
-            </div>
+            <RelocateItemCard
+              itemId={item.ItemUUID}
+              onRelocated={() => load({ showSpinner: false })}
+            />
 
             <div className="card grid-span-2">
               <h3>Vorrat</h3>
@@ -2391,10 +2392,6 @@ export default function ItemDetail({ itemId }: Props) {
               onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             />
 
-            <RelocateItemCard
-              itemId={item.ItemUUID}
-              onRelocated={() => load({ showSpinner: false })}
-            />
 
             <PrintLabelButton itemId={item.ItemUUID} />
 
