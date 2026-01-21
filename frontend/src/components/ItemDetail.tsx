@@ -1109,6 +1109,9 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
 
+    const qualityBadge = (
+      <QualityBadge compact value={qualitySummary.value} labelPrefix="Qualität" />
+    );
     const rows: [string, React.ReactNode][] = [
       // ['Erstellt von', creator],
       ['ItemUUID', item.ItemUUID ?? null],
@@ -1120,7 +1123,7 @@ export default function ItemDetail({ itemId }: Props) {
       ],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
       ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)],
-      ['Qualität', qualitySummary.label],
+      ['Qualität', qualityBadge],
       ['Ki Status', agenticStatusDisplay(agentic).label]
     ];
 
@@ -1155,13 +1158,13 @@ export default function ItemDetail({ itemId }: Props) {
     );
 
     return rows;
-  }, [agentic, events, item, langtextRows, qualitySummary.label, resolveUnterkategorieLabel]);
+  }, [agentic, events, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel]);
 
   const { referenceDetailRows, instanceDetailRows } = useMemo(() => {
     const referenceRows: [string, React.ReactNode][] = [];
     const instanceRows: [string, React.ReactNode][] = [];
     try {
-      // TODO(agent): Re-validate instance/reference row keys after the Menge row move stabilizes.
+      // TODO(agent): Re-validate instance/reference row keys if additional fields move between cards.
       const instanceKeys = new Set([
         'ItemUUID',
         'Behälter',
@@ -2599,6 +2602,7 @@ export default function ItemDetail({ itemId }: Props) {
                   <tbody>
                     {instanceRows.map((row) => {
                       const isQualityPlaceholder = row.qualityValue === null;
+                      const uuidCell = normalizeDetailValue(row.id);
                       const agenticCell = normalizeDetailValue(row.agenticStatus);
                       const locationCell = normalizeDetailValue(row.location);
                       const updatedCell = normalizeDetailValue(row.updatedAt);
@@ -2619,7 +2623,9 @@ export default function ItemDetail({ itemId }: Props) {
                           onKeyDown={handleRowKeyDown}
                           aria-label={navigationLabel}
                         >
-                          <td>{row.id}</td>
+                          <td className={uuidCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                            {uuidCell.content}
+                          </td>
                           <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
                             <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
                           </td>
