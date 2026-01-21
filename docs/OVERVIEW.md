@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Added UI workflow tests for agentic trigger handling and match selection search error/cancel flows.
 - Balanced wide-screen landing grids by letting item/box detail tables and activity lists span both columns for readability.
 - Added grid span utilities and applied select layout spans on landing, item, and box detail cards for clearer wide/tall layouts.
 - Clarified the recent highlights log by replacing an empty placeholder link with a concrete documentation note for easier tracking.
