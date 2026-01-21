@@ -103,9 +103,21 @@ const action = defineHttpAction({
         SearchQuery: searchTerm,
         LastModified: nowIso,
         ReviewState: 'not_required',
+        // TODO(agentic-trigger-failure): Keep updateAgenticRunStatus bindings aligned with SQL flags.
         ReviewedBy: null,
+        ReviewedByIsSet: 1,
         LastReviewDecision: existingRun?.LastReviewDecision ?? null,
-        LastReviewNotes: existingRun?.LastReviewNotes ?? null
+        LastReviewDecisionIsSet: 1,
+        LastReviewNotes: existingRun?.LastReviewNotes ?? null,
+        LastReviewNotesIsSet: 1,
+        RetryCount: existingRun?.RetryCount ?? 0,
+        RetryCountIsSet: 1,
+        NextRetryAt: existingRun?.NextRetryAt ?? null,
+        NextRetryAtIsSet: 1,
+        LastError: existingRun?.LastError ?? null,
+        LastErrorIsSet: 1,
+        LastAttemptAt: existingRun?.LastAttemptAt ?? null,
+        LastAttemptAtIsSet: 1
       };
 
       try {
@@ -117,7 +129,11 @@ const action = defineHttpAction({
           });
         }
       } catch (updateErr) {
-        console.error('Failed to update agentic run after trigger failure', updateErr);
+        console.error('Failed to update agentic run after trigger failure', {
+          itemId,
+          path: url,
+          error: updateErr
+        });
         return sendJson(res, 500, { error: 'Failed to update agentic run' });
       }
 
