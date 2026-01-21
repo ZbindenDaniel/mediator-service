@@ -23,6 +23,8 @@ This document enumerates all environment variables consumed by the mediator serv
 
 ## Database and file storage
 
+<!-- TODO(webdav-docs): Confirm WebDAV mount path examples with operations before finalizing guidance. -->
+
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
 | `DATABASE_URL` | (unset) | Postgres connection string. When set, `DB_PATH` is ignored. |
@@ -33,6 +35,8 @@ This document enumerates all environment variables consumed by the mediator serv
 | `MEDIA_DIR` | (unset) | Base media directory used for local storage. |
 | `MEDIA_DIR_OVERRIDE` | (unset) | Overrides `MEDIA_DIR` if provided. |
 | `WEB_DAV_DIR` | (unset) | WebDAV directory used when `MEDIA_STORAGE_MODE=webdav`. Must be an absolute mounted filesystem path (not a URL). |
+
+Example mounted WebDAV path: `/mnt/webdav/media` (Linux) or `/Volumes/webdav/media` (macOS). `davs://` URLs are not accepted; the service only accepts a local filesystem mount path.
 
 ## Printing
 
