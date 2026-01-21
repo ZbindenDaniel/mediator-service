@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Added confirmation before deleting item gallery media, renamed the modal action label, and wired remove payloads to delete targeted media assets reliably.
 - Validated WebDAV media directory configuration with absolute path checks and documented the required filesystem path format.
 - Auto-save box photo uploads through the existing note-save move flow so notes and photo updates persist together with consistent status feedback.
 - Added item detail media add/remove controls to update picture slots via the save-item endpoint with refreshed gallery state.

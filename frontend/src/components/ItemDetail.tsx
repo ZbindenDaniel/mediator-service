@@ -1483,11 +1483,13 @@ export default function ItemDetail({ itemId }: Props) {
     async ({
       slotIndex,
       dataUrl,
-      action
+      action,
+      removeAsset
     }: {
       slotIndex: number;
       dataUrl?: string;
       action: 'add' | 'remove';
+      removeAsset?: string;
     }) => {
       if (isMediaSaving) {
         logger.warn?.('ItemDetail: Media update already in progress; skipping.', { itemId });
@@ -1519,6 +1521,9 @@ export default function ItemDetail({ itemId }: Props) {
         payload.Artikel_Nummer = item.Artikel_Nummer;
       }
       payload[`picture${slotIndex + 1}`] = action === 'remove' ? null : dataUrl;
+      if (action === 'remove' && typeof removeAsset === 'string' && removeAsset.trim()) {
+        payload.removeAsset = removeAsset.trim();
+      }
 
       try {
         setIsMediaSaving(true);
@@ -1680,7 +1685,7 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
 
-      await persistMediaUpdate({ slotIndex, action: 'remove' });
+      await persistMediaUpdate({ slotIndex, action: 'remove', removeAsset: asset.src });
     },
     [galleryAssets, isMediaSaving, itemId, persistMediaUpdate]
   );
