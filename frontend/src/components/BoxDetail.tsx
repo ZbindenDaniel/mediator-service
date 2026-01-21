@@ -466,6 +466,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box, boxId, note, photoRemoved, photoUpload]);
 
+  // TODO(box-detail-photo-autosave): Add retry/backoff support for repeated photo save failures.
   const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
     const file = input.files?.[0];
@@ -479,11 +480,15 @@ export default function BoxDetail({ boxId }: Props) {
           console.warn('Box photo reader produced non-string result');
           return;
         }
-        setPhotoPreview(reader.result);
-        setPhotoUpload(reader.result);
+        const preparedPhotoData = reader.result;
+        setPhotoPreview(preparedPhotoData);
+        setPhotoUpload(preparedPhotoData);
         setPhotoRemoved(false);
         console.info('Prepared box photo upload preview', { boxId, size: file.size });
-        void saveBoxNoteAndPhoto({ photoData: reader.result, removePhotoOverride: false, source: 'photo-upload' });
+        void saveBoxNoteAndPhoto({ photoData: preparedPhotoData, removePhotoOverride: false, source: 'photo-upload' })
+          .catch((error) => {
+            logError('Failed to auto-save box photo after selection', error, { boxId });
+          });
       };
       reader.onerror = (error) => {
         console.error('Failed to read selected box photo', error);
