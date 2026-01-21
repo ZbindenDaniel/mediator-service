@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Updated agentic prompt/echo messaging to reference Postgres-compatible SQL in preparation for the database migration.
 - Added baseline tests for core backend actions (import, save, list, search, QR scan) with match/handle coverage and response assertions to reduce regression risk.
 - Noted layout constraints: mobile stays flex single-column, grid only above the breakpoint, and the ItemDetail card swap keeps references left with Fotos right and stacked images.
 - Added UI workflow tests for agentic trigger handling and match selection search error/cancel flows.

@@ -20,19 +20,19 @@ export async function echoSqliteQuery(query: unknown, options: SqliteEchoOptions
   const normalizedQuery = typeof query === 'string' ? query.trim() : '';
 
   if (!normalizedQuery) {
-    logger.warn?.({ msg: 'sqlite echo skipped empty query' });
+    logger.warn?.({ msg: 'postgres echo skipped empty query' });
     return { query: '', note: 'empty-query' };
   }
 
   try {
     logger.info?.({
-      msg: 'sqlite echo prepared',
+      msg: 'postgres echo prepared',
       preview: normalizedQuery.slice(0, 120)
     });
   } catch (err) {
-    logger.debug?.({ msg: 'sqlite echo logging failed', err });
+    logger.debug?.({ msg: 'postgres echo logging failed', err });
   }
 
-  // TODO(chat-tools): Replace echo with validated execution once dry-run mode is lifted.
+  // TODO(pg-migration): Replace echo with validated Postgres execution once dry-run mode is lifted.
   return { query: normalizedQuery };
 }
