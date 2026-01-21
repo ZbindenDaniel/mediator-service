@@ -85,6 +85,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Reinforced non-bulk import creation to log requested quantities, mint each instance safely, and report final instance counts for multi-quantity imports.
 - Stacked the Fotos media gallery in item detail cards to keep image tiles consistently sized in a vertical layout.
 - Ensured item creation responses surface multi-instance ItemUUID lists with safe UI parsing and navigation-target logging for bulk creates.
+- Prevented multi-instance import creation from reusing the same ItemUUID in a single batch by reserving minted identifiers during import response assembly.
 - Extended the test harness matchers to cover Jest-style throw checks, call counts, and subset equality for objectContaining expectations.
 - Updated container media configuration defaults so Dockerfile directory creation and compose volume mappings support WebDAV storage mode paths.
 - Refined the stacked Fotos gallery layout to keep photo cards vertically aligned with consistent sizing.
