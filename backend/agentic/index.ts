@@ -251,6 +251,15 @@ function resolveLogger(deps: AgenticServiceDependencies): AgenticServiceLogger {
   return deps.logger ?? console;
 }
 
+// TODO(agentic-logger-adapter): Consolidate logger adapters between agentic and DB helpers.
+function toConsoleLogger(logger: AgenticServiceLogger): Pick<Console, 'info' | 'warn' | 'error'> {
+  return {
+    info: logger.info ?? console.info.bind(console),
+    warn: logger.warn ?? console.warn.bind(console),
+    error: logger.error ?? console.error.bind(console)
+  };
+}
+
 function resolveNow(deps: AgenticServiceDependencies): Date {
   const nowFactory = deps.now;
   try {
@@ -411,7 +420,7 @@ function resolveCanonicalItemIdForAgentic(
   try {
     const resolution = resolveCanonicalItemUUIDForArtikelnummer(parsed.artikelNummer, {
       findByMaterial: deps.findByMaterial,
-      logger
+      logger: toConsoleLogger(logger)
     });
     if (!resolution.itemUUID) {
       logger.warn?.('[agentic-service] Failed to resolve canonical ItemUUID for reference', {
