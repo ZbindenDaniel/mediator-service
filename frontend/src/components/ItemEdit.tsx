@@ -5,9 +5,9 @@ import type { ItemReferenceEdit } from '../../../models';
 // TODO(agentic-edit-lock): Add a read-only fallback view when edits are blocked by active agentic runs.
 // TODO(reference-only-edit): Ensure item edit continues to submit reference-only payloads.
 // TODO(einheit-immutability): Keep Einheit immutable for existing item edits to avoid reference drift.
+// TODO(optional-photos): Confirm edit form photo initialization after removing the media gallery.
 import ItemForm from './ItemForm';
 import { ensureUser } from '../lib/user';
-import ItemMediaGallery from './ItemMediaGallery';
 import { useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import { logger } from '../utils/logger';
@@ -64,72 +64,31 @@ function stripInstanceFieldsForEdit(itemId: string, data: Partial<ItemFormPayloa
 
 export default function ItemEdit({ itemId }: Props) {
   const [item, setItem] = useState<ItemReferenceEdit | null>(null);
-  const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const dialog = useDialog();
 
   const initialPhotos = useMemo(() => {
     try {
-      const seen = new Set<string>();
       const primarySource = typeof item?.Grafikname === 'string' ? item.Grafikname.trim() : '';
-      const ordered: string[] = [];
-
-      const addPhoto = (candidate: unknown, isPrimary = false) => {
-        if (typeof candidate !== 'string') {
-          return;
-        }
-        const trimmed = candidate.trim();
-        if (!trimmed || seen.has(trimmed)) {
-          return;
-        }
-        seen.add(trimmed);
-        if (isPrimary) {
-          ordered.unshift(trimmed);
-        } else {
-          ordered.push(trimmed);
-        }
-      };
-
-      addPhoto(primarySource, true);
-
-      const secondary: string[] = [];
-      for (const asset of mediaAssets) {
-        if (typeof asset !== 'string') {
-          continue;
-        }
-        const trimmed = asset.trim();
-        if (!trimmed || trimmed === primarySource) {
-          continue;
-        }
-        if (seen.has(trimmed)) {
-          continue;
-        }
-        seen.add(trimmed);
-        secondary.push(trimmed);
-      }
-
-      secondary.sort((a, b) => a.localeCompare(b));
-      if (ordered.length > 0) {
-        const [primary] = ordered;
-        const result = [primary, ...secondary];
+      if (primarySource) {
         console.log('Derived initial photo ordering for item edit', {
           itemId,
-          photoCount: result.length
+          photoCount: 1
         });
-        return result;
+        return [primarySource];
       }
 
       console.log('Derived initial photo ordering for item edit without primary asset', {
         itemId,
-        photoCount: secondary.length
+        photoCount: 0
       });
-      return secondary;
+      return [];
     } catch (error) {
       console.error('Failed to derive initial photo list for item edit form', error);
       return [];
     }
-  }, [item?.Grafikname, itemId, mediaAssets]);
+  }, [item?.Grafikname, itemId]);
 
   useEffect(() => {
     async function load() {
@@ -140,7 +99,6 @@ export default function ItemEdit({ itemId }: Props) {
           const nextItem = data?.item ?? null;
           if (!nextItem) {
             console.error('Failed to load item: empty payload', { itemId });
-            setMediaAssets([]);
             return;
           }
           const agenticStatus = typeof nextItem.AgenticStatus === 'string'
@@ -172,17 +130,11 @@ export default function ItemEdit({ itemId }: Props) {
             ...referenceFields,
             Artikel_Nummer: artikelNummer || referenceFields.Artikel_Nummer || ''
           });
-          const media = Array.isArray(data.media)
-            ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
-            : [];
-          setMediaAssets(media);
         } else {
           console.error('Failed to load item', res.status);
-          setMediaAssets([]);
         }
       } catch (err) {
         console.error('Failed to load item', err);
-        setMediaAssets([]);
       }
     }
     load();
@@ -231,10 +183,6 @@ export default function ItemEdit({ itemId }: Props) {
             console.error('Failed to parse save item response', err);
             return null;
           });
-        if (payload && Array.isArray(payload.media)) {
-          const media = payload.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '');
-          setMediaAssets(media);
-        }
         navigate(`/items/${encodeURIComponent(itemId)}`);
       } else {
         console.error('Failed to save item', res.status);
@@ -272,13 +220,6 @@ export default function ItemEdit({ itemId }: Props) {
     </div>
   ) : null;
 
-  const gallery = (
-    <section className="item-media-section">
-      <h3>Medien</h3>
-      <ItemMediaGallery itemId={itemId} grafikname={item.Grafikname} mediaAssets={mediaAssets} />
-    </section>
-  );
-
   return (
     <>
       {blockingOverlay}
@@ -286,7 +227,6 @@ export default function ItemEdit({ itemId }: Props) {
         item={item}
         onSubmit={handleSubmit}
         submitLabel="Speichern"
-        headerContent={gallery}
         initialPhotos={initialPhotos}
         lockedFields={{ Auf_Lager: 'hidden', Quality: 'hidden', BoxID: 'hidden', Einheit: 'hidden' }}
         hidePhotoInputs

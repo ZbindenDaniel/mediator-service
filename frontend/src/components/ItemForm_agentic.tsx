@@ -11,6 +11,7 @@ import PhotoCaptureModal from './PhotoCaptureModal';
 
 type AgenticFormMode = 'details' | 'photos';
 
+// TODO(optional-photos): Re-evaluate agentic photo submission now that Foto 1 is optional.
 interface Props {
   draft: Partial<ItemFormData>;
   onSubmitDetails?: (data: Partial<ItemFormData>) => Promise<void>;
@@ -223,12 +224,6 @@ export default function ItemForm_Agentic({
       return;
     }
 
-    if (!form.picture1) {
-      console.warn('Agentic photo submit attempted without primary photo');
-      setSubmitError('Bitte mindestens ein Foto hochladen.');
-      return;
-    }
-
     try {
       let submissionData = form;
       if (isNew && !form.Artikel_Nummer) {
@@ -272,112 +267,105 @@ export default function ItemForm_Agentic({
           </>
         )}
 
-          {mode === 'photos' && (
-            <>
-              {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
+        {mode === 'photos' && (
+          <>
+            {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
+            <div className="row">
+              <label htmlFor="picture1">Foto 1</label>
+              <div className="photo-input-controls">
+                <input
+                  type="file"
+                  id="picture1"
+                  name="picture1"
+                  accept="image/*"
+                  capture={undefined}
+                  onChange={handlePhoto1Change}
+                />
+                {isCameraAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCamera('picture1')}
+                    aria-label="Kamera öffnen für Foto 1"
+                  >
+                    Kamera öffnen
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {(form.picture1 || seededPhotos[0]) && (
               <div className="row">
-                <label htmlFor="picture1">
-                  Foto 1*
-                </label>
+                <label htmlFor="picture2">Foto 2</label>
                 <div className="photo-input-controls">
                   <input
                     type="file"
-                    id="picture1"
-                    name="picture1"
+                    id="picture2"
+                    name="picture2"
                     accept="image/*"
                     capture={undefined}
-                    required
-                    onChange={handlePhoto1Change}
+                    onChange={handlePhoto2Change}
                   />
                   {isCameraAvailable ? (
                     <button
                       type="button"
-                      onClick={() => handleOpenCamera('picture1')}
-                      aria-label="Kamera öffnen für Foto 1"
+                      onClick={() => handleOpenCamera('picture2')}
+                      aria-label="Kamera öffnen für Foto 2"
                     >
                       Kamera öffnen
                     </button>
                   ) : null}
                 </div>
               </div>
+            )}
 
-              {(form.picture1 || seededPhotos[0]) && (
-                <div className="row">
-                  <label htmlFor="picture2">
-                    Foto 2
-                  </label>
-                  <div className="photo-input-controls">
-                    <input
-                      type="file"
-                      id="picture2"
-                      name="picture2"
-                      accept="image/*"
+            {(form.picture2 || seededPhotos[1]) && (
+              <div className="row">
+                <label htmlFor="picture3">Foto 3</label>
+                <div className="photo-input-controls">
+                  <input
+                    type="file"
+                    id="picture3"
+                    name="picture3"
+                    accept="image/*"
                     capture={undefined}
-                      onChange={handlePhoto2Change}
-                    />
-                    {isCameraAvailable ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCamera('picture2')}
-                        aria-label="Kamera öffnen für Foto 2"
-                      >
-                        Kamera öffnen
-                      </button>
-                    ) : null}
-                  </div>
+                    onChange={handlePhoto3Change}
+                  />
+                  {isCameraAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCamera('picture3')}
+                      aria-label="Kamera öffnen für Foto 3"
+                    >
+                      Kamera öffnen
+                    </button>
+                  ) : null}
                 </div>
-              )}
+              </div>
+            )}
+          </>
+        )}
 
-              {(form.picture2 || seededPhotos[1]) && (
-                <div className="row">
-                  <label htmlFor="picture3">
-                    Foto 3
-                  </label>
-                  <div className="photo-input-controls">
-                    <input
-                      type="file"
-                      id="picture3"
-                      name="picture3"
-                      accept="image/*"
-                    capture={undefined}
-                      onChange={handlePhoto3Change}
-                    />
-                    {isCameraAvailable ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCamera('picture3')}
-                        aria-label="Kamera öffnen für Foto 3"
-                      >
-                        Kamera öffnen
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="row">
-            <div className="button-group">
-              <button type="submit">{mode === 'details' ? 'Weiter' : submitLabel}</button>
-              {onFallbackToManual && (
-                // TODO: Replace manual fallback trigger with shared secondary button styling once design refresh lands.
-                <button
-                  type="button"
-                  className="button-secondary"
-                  onClick={handleManualFallback}
-                  disabled={manualFallbackPending}
-                >
-                  Zur manuellen Erfassung
-                </button>
-              )}
-            </div>
+        <div className="row">
+          <div className="button-group">
+            <button type="submit">{mode === 'details' ? 'Weiter' : submitLabel}</button>
+            {onFallbackToManual && (
+              // TODO: Replace manual fallback trigger with shared secondary button styling once design refresh lands.
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={handleManualFallback}
+                disabled={manualFallbackPending}
+              >
+                Zur manuellen Erfassung
+              </button>
+            )}
           </div>
-          {submitError && (
-            <div className="row error">
-              <span>{submitError}</span>
-            </div>
-          )}
+        </div>
+        {submitError && (
+          <div className="row error">
+            <span>{submitError}</span>
+          </div>
+        )}
       </form >
     </div>
   );

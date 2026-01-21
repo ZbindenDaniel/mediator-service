@@ -12,6 +12,7 @@ import {
 } from './forms/itemFormShared';
 import PhotoCaptureModal from './PhotoCaptureModal';
 
+// TODO(optional-photos): Re-validate new item flows now that Foto 1 is optional.
 type ItemFormProps<T extends ItemFormPayload = ItemFormData> = {
   item: Partial<T>;
   onSubmit: (data: Partial<T>) => Promise<void>;
@@ -189,97 +190,90 @@ export default function ItemForm<T extends ItemFormPayload = ItemFormData>({
           formMode={formMode}
         />
 
-          {!hidePhotoInputs ? (
-            <>
-              {photoPreview}
-              {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
+        {!hidePhotoInputs ? (
+          <>
+            {photoPreview}
+            {/* https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/capture */}
+            <div className="row">
+              <label htmlFor="picture1">Foto 1</label>
+              <div className="photo-input-controls">
+                <input
+                  type="file"
+                  id="picture1"
+                  name="picture1"
+                  accept="image/*"
+                  capture={undefined}
+                  onChange={handlePhoto1Change}
+                />
+                {isCameraAvailable ? (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenCamera('picture1')}
+                    aria-label="Kamera öffnen für Foto 1"
+                  >
+                    Kamera öffnen
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {(form.picture1 || seededPhotos[0]) && (
               <div className="row">
-                <label htmlFor="picture1">
-                  Foto 1{isNew ? '*' : ''}
-                </label>
+                <label htmlFor="picture2">Foto 2</label>
                 <div className="photo-input-controls">
                   <input
                     type="file"
-                    id="picture1"
-                    name="picture1"
+                    id="picture2"
+                    name="picture2"
                     accept="image/*"
                     capture={undefined}
-                    required={isNew}
-                    onChange={handlePhoto1Change}
+                    onChange={handlePhoto2Change}
                   />
                   {isCameraAvailable ? (
                     <button
                       type="button"
-                      onClick={() => handleOpenCamera('picture1')}
-                      aria-label="Kamera öffnen für Foto 1"
+                      onClick={() => handleOpenCamera('picture2')}
+                      aria-label="Kamera öffnen für Foto 2"
                     >
                       Kamera öffnen
                     </button>
                   ) : null}
                 </div>
               </div>
+            )}
 
-              {(form.picture1 || seededPhotos[0]) && (
-                <div className="row">
-                  <label htmlFor="picture2">
-                    Foto 2
-                  </label>
-                  <div className="photo-input-controls">
-                    <input
-                      type="file"
-                      id="picture2"
-                      name="picture2"
-                      accept="image/*"
+            {(form.picture2 || seededPhotos[1]) && (
+              <div className="row">
+                <label htmlFor="picture3">Foto 3</label>
+                <div className="photo-input-controls">
+                  <input
+                    type="file"
+                    id="picture3"
+                    name="picture3"
+                    accept="image/*"
                     capture={undefined}
-                      onChange={handlePhoto2Change}
-                    />
-                    {isCameraAvailable ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCamera('picture2')}
-                        aria-label="Kamera öffnen für Foto 2"
-                      >
-                        Kamera öffnen
-                      </button>
-                    ) : null}
-                  </div>
+                    onChange={handlePhoto3Change}
+                  />
+                  {isCameraAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCamera('picture3')}
+                      aria-label="Kamera öffnen für Foto 3"
+                    >
+                      Kamera öffnen
+                    </button>
+                  ) : null}
                 </div>
-              )}
+              </div>
+            )}
+          </>
+        ) : (
+          photoPreview
+        )}
 
-              {(form.picture2 || seededPhotos[1]) && (
-                <div className="row">
-                  <label htmlFor="picture3">
-                    Foto 3
-                  </label>
-                  <div className="photo-input-controls">
-                    <input
-                      type="file"
-                      id="picture3"
-                      name="picture3"
-                      accept="image/*"
-                    capture={undefined}
-                      onChange={handlePhoto3Change}
-                    />
-                    {isCameraAvailable ? (
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCamera('picture3')}
-                        aria-label="Kamera öffnen für Foto 3"
-                      >
-                        Kamera öffnen
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            photoPreview
-          )}
-
-          <div className="row">
-            <button type="submit">{submitLabel}</button>
-          </div>
+        <div className="row">
+          <button type="submit">{submitLabel}</button>
+        </div>
       </form >
     </div>
   );

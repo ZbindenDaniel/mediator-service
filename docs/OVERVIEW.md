@@ -93,6 +93,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Refined the stacked Fotos gallery layout to keep photo cards vertically aligned with consistent sizing.
 - Realigned box detail summary cards into left/right columns, embedded inline item creation on the overview, and compacted the overview stats placement for a tighter landing layout.
 - Moved the overview statistics card beneath the Erfassen entry and matched its width to the primary column for a clearer landing layout balance.
+- Removed the edit-form media gallery header and made Foto 1 optional in item creation flows, aligning UI validation and labels with optional photo uploads.
 
 ## Documentation Map
 
