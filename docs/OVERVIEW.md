@@ -93,6 +93,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Refined the stacked Fotos gallery layout to keep photo cards vertically aligned with consistent sizing.
 - Realigned box detail summary cards into left/right columns, embedded inline item creation on the overview, and compacted the overview stats placement for a tighter landing layout.
 - Moved the overview statistics card beneath the Erfassen entry and matched its width to the primary column for a clearer landing layout balance.
+- Enabled item detail agentic close to upsert when no prior run exists, keeping close available for loaded items.
 
 ## Documentation Map
 
