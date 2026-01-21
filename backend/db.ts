@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS item_refs (
   Hauptkategorien_B TEXT,
   Unterkategorien_B TEXT,
   Veröffentlicht_Status TEXT,
-  Quality INTEGER,
+  Quality INTEGER DEFAULT NULL,
   Shopartikel INTEGER,
   Artikeltyp TEXT,
   Einheit TEXT,
@@ -367,7 +367,7 @@ CREATE TABLE IF NOT EXISTS items (
   UpdatedAt TEXT NOT NULL,
   Datum_erfasst TEXT,
   Auf_Lager INTEGER,
-  Quality INTEGER,
+  Quality INTEGER DEFAULT NULL,
   ShopwareVariantId TEXT,
   FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE SET NULL ON UPDATE CASCADE,
   FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE

@@ -32,7 +32,7 @@ This document enumerates all environment variables consumed by the mediator serv
 | `MEDIA_STORAGE_MODE` | `local` | `local` or `webdav` media storage backend. |
 | `MEDIA_DIR` | (unset) | Base media directory used for local storage. |
 | `MEDIA_DIR_OVERRIDE` | (unset) | Overrides `MEDIA_DIR` if provided. |
-| `WEB_DAV_DIR` | (unset) | WebDAV directory used when `MEDIA_STORAGE_MODE=webdav`. |
+| `WEB_DAV_DIR` | (unset) | WebDAV directory used when `MEDIA_STORAGE_MODE=webdav`. Must be an absolute mounted filesystem path (not a URL). |
 
 ## Printing
 

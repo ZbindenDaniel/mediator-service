@@ -793,6 +793,19 @@ const action = defineHttpAction({
           qualityFromPayload = null;
         }
       }
+      let qualityFromReference: number | null | undefined;
+      if (referenceDefaults && Object.prototype.hasOwnProperty.call(referenceDefaults, 'Quality')) {
+        try {
+          qualityFromReference = normalizeQuality(referenceDefaults.Quality, console);
+        } catch (qualityError) {
+          console.error('[import-item] Failed to normalize Quality from reference defaults', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+            provided: referenceDefaults.Quality,
+            error: qualityError
+          });
+        }
+      }
       const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
 
       let verkaufspreis = referenceDefaults?.Verkaufspreis ?? 0;
@@ -990,7 +1003,7 @@ const action = defineHttpAction({
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
-        Quality: hasQualityParam ? (qualityFromPayload ?? null) : qualityFromLangtext,
+        Quality: hasQualityParam ? (qualityFromPayload ?? null) : (qualityFromLangtext ?? qualityFromReference ?? null),
         Hersteller: hersteller,
         Länge_mm: laenge,
         Breite_mm: breite,

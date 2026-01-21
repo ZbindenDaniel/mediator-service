@@ -23,6 +23,7 @@ import type { SimilarItem } from './forms/useSimilarItems';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 import { logger } from '../utils/logger';
+import { normalizeQuality } from '../../../models/quality';
 
 type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
@@ -231,7 +232,8 @@ export function maybeTriggerAgenticRun({
 
 export const MANUAL_CREATION_LOCKS: LockedFieldConfig = {
   Artikelbeschreibung: 'readonly',
-  Artikel_Nummer: 'readonly'
+  Artikel_Nummer: 'readonly',
+  Quality: 'hidden'
 };
 
 interface ManualSubmissionOptions {
@@ -393,6 +395,24 @@ export function buildCreationParams(
   } catch (error) {
     console.error('Failed to normalize Einheit for item creation payload; using default.', error);
     sanitized.Einheit = ITEM_FORM_DEFAULT_EINHEIT;
+  }
+
+  if (qualityProvided) {
+    try {
+      const normalizedQuality = normalizeQuality(
+        (sanitized as Partial<ItemFormData>).Quality,
+        console
+      );
+      if (normalizedQuality === null && sanitized.Quality !== null && sanitized.Quality !== undefined && sanitized.Quality !== '') {
+        console.warn('Invalid Quality provided during item creation; clearing value.', {
+          provided: sanitized.Quality
+        });
+      }
+      sanitized.Quality = normalizedQuality;
+    } catch (error) {
+      console.error('Failed to normalize Quality for item creation payload; clearing value.', error);
+      sanitized.Quality = null;
+    }
   }
 
   Object.entries(sanitized).forEach(([key, value]) => {
@@ -1322,7 +1342,6 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
       console.warn('Skipping match selection submit; creation already running.');
       return;
     }
-    // TODO(item-create): Confirm match selection payload maintains Einheit/Quality/Auf_Lager defaults across reference flows.
     // TODO: Capture metrics on match-selection agentic submissions to validate flow effectiveness.
     try {
       const referenceFields = extractReferenceFields(item);
@@ -1362,9 +1381,11 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         ? preferredReferenceFields.Einheit
         : undefined;
       const resolvedEinheit = basicEinheit ?? preferredEinheit ?? referenceEinheit ?? ITEM_FORM_DEFAULT_EINHEIT;
-      const resolvedQuality = Object.prototype.hasOwnProperty.call(basicInfo, 'Quality')
+      const hasBasicQuality = Object.prototype.hasOwnProperty.call(basicInfo, 'Quality');
+      const hasReferenceQuality = Object.prototype.hasOwnProperty.call(item, 'Quality');
+      const resolvedQuality = hasBasicQuality
         ? basicInfo.Quality
-        : referenceFields.Quality;
+        : (hasReferenceQuality ? item.Quality : undefined);
       const resolvedAufLager = resolveAufLagerInput({
         value: basicInfo.Auf_Lager,
         context: 'match-selection'
@@ -1380,9 +1401,11 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         Kurzbeschreibung:
           preferredReferenceFields.Kurzbeschreibung ?? basicInfo.Kurzbeschreibung ?? referenceFields.Kurzbeschreibung,
         Auf_Lager: resolvedAufLager,
-        Quality: resolvedQuality,
         Einheit: resolvedEinheit
       };
+      if (hasBasicQuality || hasReferenceQuality) {
+        clone.Quality = resolvedQuality ?? null;
+      }
 
       if (typeof clone.Artikelbeschreibung === 'string') {
         clone.Artikelbeschreibung = clone.Artikelbeschreibung.trim();

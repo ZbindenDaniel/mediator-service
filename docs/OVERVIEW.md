@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 
 - Added confirmation before deleting item gallery media, renamed the modal action label, and wired remove payloads to delete targeted media assets reliably.
+- Validated WebDAV media directory configuration with absolute path checks and documented the required filesystem path format.
 - Auto-save box photo uploads through the existing note-save move flow so notes and photo updates persist together with consistent status feedback.
 - Added item detail media add/remove controls to update picture slots via the save-item endpoint with refreshed gallery state.
 - Auto-save box photo uploads through the existing note-save move flow so notes and photo updates persist together with consistent status feedback, while clearing photo upload flags on success.
@@ -106,6 +107,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Enabled nullable quality handling across shared models, persistence defaults, and creation flows while updating UI badges to show a `?` indicator when no quality is set.
 - Hardened the agentic trigger failure handler with bound status-update flags and contextual logging to prevent SQL parameter crashes.
 - Added an explicit event-level mapping for Updated events so observability metrics no longer default to error severity.
+- Removed default quality coercion so null quality stays unset across models, persistence, and creation flows while preserving explicit payload overrides.
 
 ## Documentation Map
 
