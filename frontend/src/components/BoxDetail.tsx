@@ -17,6 +17,7 @@ import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
 
 // TODO(agent): Verify the BoxTag rendering still aligns with the detailed box metadata layout.
+// TODO(agent): Confirm location tags remain navigable only when LocationId is valid and link targets are encoded correctly.
 // TODO(agent): Confirm shelf box lists align with relocation rules before expanding shelf detail UI.
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
@@ -116,6 +117,18 @@ export default function BoxDetail({ boxId }: Props) {
   const photoDialogTitleId = useId();
   const relocationCategory = useMemo(() => resolveRelocationCategory(items), [items]);
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
+  const normalizedLocationId = useMemo(() => {
+    if (typeof box?.LocationId !== 'string') {
+      return '';
+    }
+    try {
+      return box.LocationId.trim();
+    } catch (error) {
+      logError('Failed to normalize box location link target', error, { boxId: box?.BoxID, locationId: box?.LocationId });
+      return '';
+    }
+  }, [box?.BoxID, box?.LocationId]);
+  const shouldLinkLocation = Boolean(normalizedLocationId);
   const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
     if (!itemId) {
       logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
@@ -489,7 +502,18 @@ export default function BoxDetail({ boxId }: Props) {
                     <tbody>
                       <tr>
                         <th>Standort</th>
-                        <td><BoxTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
+                        <td>
+                          {shouldLinkLocation ? (
+                            <Link
+                              to={`/boxes/${encodeURIComponent(normalizedLocationId)}`}
+                              aria-label="Zum Regal"
+                            >
+                              <BoxTag locationKey={box.LocationId} labelOverride={box.Label} />
+                            </Link>
+                          ) : (
+                            <BoxTag locationKey={box.LocationId} labelOverride={box.Label} />
+                          )}
+                        </td>
                       </tr>
                       <tr>
                         <th>Platziert am</th>
