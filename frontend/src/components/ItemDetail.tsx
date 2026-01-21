@@ -6,7 +6,7 @@ import RelocateItemCard from './RelocateItemCard';
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 // TODO(agent): Confirm instance inventory ordering requirements once detail UI feedback arrives.
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
-// TODO(agentic-close): Confirm close action copy and endpoint payload once backend wiring lands.
+// TODO(agentic-close): Confirm close action copy and upsert payload once backend wiring lands.
 // TODO(agentic-edit-lock): Confirm messaging for edit restrictions while agentic runs are active.
 import type { Item, EventLog, AgenticRun, ItemDetailResponse, ItemInstanceSummary } from '../../../models';
 import {
@@ -1514,9 +1514,8 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO(agentic-close-not-started): Confirm manual close remains available for not-started runs after import/export sync.
   // TODO(agentic-close-running): Reconfirm close affordance rules once running-state copy is finalized.
   const agenticCanClose = Boolean(
-    agenticHasRun &&
-    normalizedAgenticStatus &&
-    normalizedAgenticStatus !== AGENTIC_RUN_STATUS_RUNNING
+    item &&
+    (!normalizedAgenticStatus || normalizedAgenticStatus !== AGENTIC_RUN_STATUS_RUNNING)
   );
   const agenticCanDelete = Boolean(
     agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
@@ -1953,10 +1952,16 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   async function handleAgenticClose() {
-    if (!agentic) {
-      console.warn('Agentic close requested without run data');
-      setAgenticError('Kein KI Durchlauf vorhanden.');
+    if (!item) {
+      console.warn('Agentic close requested without loaded item data');
+      setAgenticError('Artikel konnte nicht geladen werden.');
       return;
+    }
+
+    if (!agentic) {
+      console.info('Agentic close requested without run data; upserting close record', {
+        itemId: item.ItemUUID
+      });
     }
 
     const actor = await ensureUser();
@@ -1999,8 +2004,9 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticError(null);
 
     try {
+      const itemIdForClose = agentic?.ItemUUID ?? item.ItemUUID;
       const closeResult = await persistAgenticRunClose({
-        itemId: agentic.ItemUUID,
+        itemId: itemIdForClose,
         actor,
         notes: noteInput,
         context: 'item detail close'
