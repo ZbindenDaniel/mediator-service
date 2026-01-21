@@ -1778,9 +1778,10 @@ button:focus {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 
+    // TODO(overview-layout): Confirm stats card width alignment with Erfassen at large breakpoints.
     .stats-card {
-        justify-self: end;
-        width: min(100%, 360px);
+        justify-self: stretch;
+        width: 100%;
     }
 }
 

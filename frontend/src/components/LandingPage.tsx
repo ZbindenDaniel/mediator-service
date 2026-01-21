@@ -111,7 +111,9 @@ export default function LandingPage() {
     <div className="container overview">
       <h1>Übersicht</h1>
       <div className="grid landing-grid">
-        {/* TODO(overview-inline-create): Confirm landing grid card order after inline creation form update. */}
+        {/* TODO(overview-layout): Reconfirm stats placement after Erfassen card order update. */}
+        <CreateItemCard />
+        <SearchCard />
         <StatsCard
           counts={overview?.counts}
           printerOk={printerOk}
@@ -119,8 +121,6 @@ export default function LandingPage() {
           health={health}
           className="stats-card"
         />
-        <SearchCard />
-        <CreateItemCard />
      {/*
         <div className="card" id="qr-scan-card">
           <Link className="linkcard" to="/scan">
