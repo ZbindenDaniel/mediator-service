@@ -1158,11 +1158,13 @@ export default function ItemDetail({ itemId }: Props) {
     const referenceRows: [string, React.ReactNode][] = [];
     const instanceRows: [string, React.ReactNode][] = [];
     try {
+      // TODO(agent): Re-validate instance/reference row keys after the Menge row move stabilizes.
       const instanceKeys = new Set([
         'ItemUUID',
         'Behälter',
         'Qualität',
         'Ki Status',
+        'Menge',
         'Erfasst am',
         'Aktualisiert am'
       ]);
@@ -1187,12 +1189,11 @@ export default function ItemDetail({ itemId }: Props) {
 
   const instanceRows = useMemo(() => {
     return instances.map((instance) => {
-      const qualityLabel =
-        typeof instance.Quality === 'number' ? describeQuality(instance.Quality).label : null;
+      const qualityValue = typeof instance.Quality === 'number' ? instance.Quality : null;
       const agenticStatus = instance.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED;
       return {
         id: instance.ItemUUID,
-        quality: qualityLabel,
+        qualityValue,
         agenticStatus: describeAgenticStatus(agenticStatus),
         location: instance.Location ?? null,
         updatedAt: instance.UpdatedAt ? formatDateTime(instance.UpdatedAt) : null,
@@ -2315,7 +2316,7 @@ export default function ItemDetail({ itemId }: Props) {
                   </thead>
                   <tbody>
                     {instanceRows.map((row) => {
-                      const qualityCell = normalizeDetailValue(row.quality);
+                      const isQualityPlaceholder = row.qualityValue === null;
                       const agenticCell = normalizeDetailValue(row.agenticStatus);
                       const locationCell = normalizeDetailValue(row.location);
                       const updatedCell = normalizeDetailValue(row.updatedAt);
@@ -2336,20 +2337,9 @@ export default function ItemDetail({ itemId }: Props) {
                           onKeyDown={handleRowKeyDown}
                           aria-label={navigationLabel}
                         >
-                          <td>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void handleInstanceNavigation(row.id);
-                              }}
-                              aria-label={navigationLabel}
-                            >
-                              {row.id}
-                            </button>
-                          </td>
-                          <td className={qualityCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {qualityCell.content}
+                          <td>{row.id}</td>
+                          <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
+                            <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
                           </td>
                           <td className={agenticCell.isPlaceholder ? 'is-placeholder' : undefined}>
                             {agenticCell.content}
