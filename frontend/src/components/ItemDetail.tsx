@@ -2181,21 +2181,7 @@ export default function ItemDetail({ itemId }: Props) {
                   <QualityBadge compact value={qualitySummary.value} />
                 </span>
               </h2>
-              <section className="item-media-section">
-                <ItemMediaGallery
-                  itemId={item.ItemUUID}
-                  grafikname={item.Grafikname}
-                  mediaAssets={mediaAssets}
-                />
-              </section>
-            </div>
-
-            {/* TODO(agent): Confirm the reference section renders once after layout cleanup. */}
-            <div className="card">
               <h3>Referenz</h3>
-              <div className="row">
-                <button type="button" className="btn" onClick={handleEdit}>Bearbeiten</button>
-              </div>
               {referenceDetailRows.length > 0 ? (
                 <table className="details">
                   <tbody>
@@ -2215,6 +2201,20 @@ export default function ItemDetail({ itemId }: Props) {
               ) : (
                 <p className="muted">Keine Referenzdaten vorhanden.</p>
               )}
+              <div className="row">
+                <button type="button" className="btn" onClick={handleEdit}>Bearbeiten</button>
+              </div>
+            </div>
+
+            <div className="card grid-span-row-2">
+              <h3>Fotos</h3>
+              <section className="item-media-section">
+                <ItemMediaGallery
+                  itemId={item.ItemUUID}
+                  grafikname={item.Grafikname}
+                  mediaAssets={mediaAssets}
+                />
+              </section>
             </div>
 
             <div className="card">

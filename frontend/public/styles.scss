@@ -378,9 +378,16 @@ div {
 }
 
 .grid {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 12px
+}
+
+@media (min-width: 720px) {
+    .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
 }
 
 .button-group {
@@ -1717,17 +1724,20 @@ button:focus {
 
 /* Responsive upgrades for desktop landing */
 .landing-grid {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
 }
 
 @media (min-width: 720px) {
     .landing-grid {
+        display: grid;
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr))
     }
 }
 
 @media (min-width: 960px) {
     .landing-grid {
+        display: grid;
         grid-template-columns: 1.2fr .8fr
     }
 }

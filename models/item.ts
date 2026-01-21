@@ -51,6 +51,7 @@ export interface ItemInstance {
   UpdatedAt: Date;
   Datum_erfasst?: Date;
   // For Einheit Stk this should be 1 per instance; grouped UI summaries rely on instance counts instead of Auf_Lager.
+  // TODO(agent): Reconfirm multi-instance creation preserves Auf_Lager=1 per instance after import-item changes.
   // TODO(agent): Keep Auf_Lager semantics aligned with import/create flows as unit handling evolves.
   // For Einheit=Menge (Mix), Auf_Lager stores the total bulk quantity.
   // For Einheit=Stk, each persisted instance uses Auf_Lager=1 and quantity displays should use grouped counts.
