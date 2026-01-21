@@ -7,12 +7,13 @@ import type { AgenticRunStatus } from './agentic-statuses';
 import type { Box } from './box';
 import type { EventLog } from './event-log';
 import type { Item, ItemRef } from './item';
+import type { QualityValue } from './quality';
 
 export interface ItemInstanceSummary {
   ItemUUID: string;
   AgenticStatus?: AgenticRunStatus | null;
   // Nullable when no quality has been assigned yet.
-  Quality?: number | null;
+  Quality?: QualityValue;
   Location?: string | null;
   BoxID?: string | null;
   UpdatedAt: string | null;

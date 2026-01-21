@@ -5,7 +5,7 @@ import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUSES
 } from '../../../models';
-import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS, QUALITY_MIN } from '../../../models/quality';
+import { describeQuality, normalizeQuality, QUALITY_LABELS, QUALITY_MIN } from '../../../models/quality';
 import { itemCategories } from '../data/itemCategories';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import {
@@ -37,7 +37,7 @@ import LoadingPage from './LoadingPage';
 // TODO(grouped-item-list): Confirm grouping keys and filter behavior once backend grouped payloads are live.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
-const resolveItemQuality = (value: unknown) => normalizeQuality(value ?? QUALITY_DEFAULT, console) ?? QUALITY_DEFAULT;
+const resolveItemQuality = (value: unknown) => normalizeQuality(value, console) ?? QUALITY_MIN;
 
 export interface ItemListComputationOptions {
   items: Item[];

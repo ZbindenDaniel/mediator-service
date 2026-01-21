@@ -3,7 +3,6 @@ import path from 'path';
 import { Readable } from 'stream';
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http';
 
-import { QUALITY_DEFAULT } from '../models/quality';
 
 const TEST_DB_FILE = path.join(__dirname, 'save-item-quality.sqlite');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
@@ -180,7 +179,7 @@ describe('save-item quality and Shopartikel defaults', () => {
 
     expect(response.statusCode).toBe(200);
     const reference = selectReference.get('Q-REF-300') as { Quality: number; Shopartikel: number } | undefined;
-    expect(reference?.Quality ?? QUALITY_DEFAULT).toBe(5);
+    expect(reference?.Quality).toBe(5);
     expect(reference?.Shopartikel).toBe(0);
   });
 });
