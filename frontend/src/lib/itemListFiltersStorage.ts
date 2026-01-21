@@ -190,7 +190,7 @@ export function loadItemListFilters(
     }
 
     if (typeof parsed.qualityThreshold === 'number') {
-      merged.qualityThreshold = normalizeQuality(parsed.qualityThreshold, logger);
+      merged.qualityThreshold = normalizeQuality(parsed.qualityThreshold, logger) ?? QUALITY_MIN;
     }
 
     if (parsed.agenticStatusFilter === 'any' || AGENTIC_RUN_STATUSES.includes(parsed.agenticStatusFilter as AgenticRunStatus)) {

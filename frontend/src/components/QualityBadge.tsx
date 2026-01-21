@@ -1,14 +1,15 @@
 // TODO(quality-ui): Align badge styling with future design tokens once shared badges are available.
 // TODO(agent): Confirm neutral styling for unknown quality values once the design system lands.
 import React from 'react';
-import { describeQuality, QUALITY_COLOR_MAP } from '../../../models/quality';
+import { describeQuality, QUALITY_COLOR_MAP, QUALITY_UNKNOWN_COLOR } from '../../../models/quality';
 
-const QUALITY_COLOR_HEX: Record<(typeof QUALITY_COLOR_MAP)[number], string> = {
+const QUALITY_COLOR_HEX: Record<(typeof QUALITY_COLOR_MAP)[number] | typeof QUALITY_UNKNOWN_COLOR, string> = {
   purple: '#6f42c1',
   red: '#d73a49',
   yellow: '#e3b341',
   orange: '#fb8c00',
-  green: '#2da44e'
+  green: '#2da44e',
+  gray: '#94a3b8'
 };
 
 interface Props {

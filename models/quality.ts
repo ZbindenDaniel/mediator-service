@@ -2,6 +2,8 @@
 export const QUALITY_MIN = 1 as const;
 export const QUALITY_MAX = 5 as const;
 export const QUALITY_DEFAULT = 3 as const;
+export const QUALITY_UNKNOWN_LABEL = '?' as const;
+export const QUALITY_UNKNOWN_COLOR = 'gray' as const;
 
 export const QUALITY_COLOR_MAP: Record<number, 'purple' | 'red' | 'yellow' | 'orange' | 'green'> = {
   1: 'purple',
@@ -29,7 +31,7 @@ const QUALITY_LABEL_LOOKUP: Readonly<Record<string, number>> = Object.freeze(
 export function normalizeQuality(
   value: unknown,
   logger: Pick<Console, 'warn' | 'error'> = console
-): number {
+): number | null {
   try {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return clampQuality(Math.round(value));
@@ -37,23 +39,23 @@ export function normalizeQuality(
     if (typeof value === 'string') {
       const trimmed = value.trim();
       if (!trimmed) {
-        return QUALITY_DEFAULT;
+        return null;
       }
       const parsed = Number.parseInt(trimmed, 10);
       if (Number.isNaN(parsed)) {
         logger.warn?.('[quality] Ignoring non-numeric quality value', { value });
-        return QUALITY_DEFAULT;
+        return null;
       }
       return clampQuality(parsed);
     }
     if (value === null || value === undefined) {
-      return QUALITY_DEFAULT;
+      return null;
     }
-    logger.warn?.('[quality] Unexpected quality type, applying default', { type: typeof value });
+    logger.warn?.('[quality] Unexpected quality type, leaving quality unset', { type: typeof value });
   } catch (error) {
     logger.error?.('[quality] Failed to normalize quality value', error);
   }
-  return QUALITY_DEFAULT;
+  return null;
 }
 
 export function resolveQualityFromLabel(
@@ -100,8 +102,17 @@ function clampQuality(value: number): number {
   return value;
 }
 
-export function describeQuality(value: unknown): { value: number; label: string; color: string } {
+export function describeQuality(
+  value: unknown
+): { value: number | null; label: string; color: typeof QUALITY_UNKNOWN_COLOR | (typeof QUALITY_COLOR_MAP)[number] } {
   const normalized = normalizeQuality(value);
+  if (normalized === null) {
+    return {
+      value: null,
+      label: QUALITY_UNKNOWN_LABEL,
+      color: QUALITY_UNKNOWN_COLOR
+    };
+  }
   const label = QUALITY_LABELS[normalized] ?? QUALITY_LABELS[QUALITY_DEFAULT];
   const color = QUALITY_COLOR_MAP[normalized] ?? QUALITY_COLOR_MAP[QUALITY_DEFAULT];
   return { value: normalized, label, color };

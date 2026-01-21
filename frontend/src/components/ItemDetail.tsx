@@ -27,7 +27,7 @@ import {
   normalizeItemEinheit,
   normalizeAgenticRunStatus
 } from '../../../models';
-import { describeQuality, QUALITY_DEFAULT } from '../../../models/quality';
+import { describeQuality } from '../../../models/quality';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -749,7 +749,7 @@ export default function ItemDetail({ itemId }: Props) {
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
-  const qualitySummary = useMemo(() => describeQuality(item?.Quality ?? QUALITY_DEFAULT), [item?.Quality]);
+  const qualitySummary = useMemo(() => describeQuality(item?.Quality ?? null), [item?.Quality]);
 
   const { unter: unterCategoryLookup } = categoryLookups;
 
