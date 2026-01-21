@@ -99,8 +99,9 @@ if (rawMediaStorageMode) {
 }
 
 export const MEDIA_STORAGE_MODE = resolvedMediaStorageMode;
-export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || '').trim();
-export const WEB_DAV_DIR = (process.env.WEB_DAV_DIR || '').trim();
+const rawMediaDir = (process.env.MEDIA_DIR || '').trim();
+export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || rawMediaDir).trim();
+export const WEB_DAV_DIR = (process.env.WEB_DAV_DIR || rawMediaDir).trim();
 
 if (MEDIA_STORAGE_MODE === 'webdav' && !WEB_DAV_DIR) {
   console.warn('[config] MEDIA_STORAGE_MODE=webdav requires WEB_DAV_DIR; default media directory will be used.');
