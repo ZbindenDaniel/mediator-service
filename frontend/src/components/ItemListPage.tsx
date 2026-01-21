@@ -37,7 +37,7 @@ import LoadingPage from './LoadingPage';
 // TODO(grouped-item-list): Confirm grouping keys and filter behavior once backend grouped payloads are live.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
-const resolveItemQuality = (value: unknown) => normalizeQuality(value ?? QUALITY_DEFAULT, console);
+const resolveItemQuality = (value: unknown) => normalizeQuality(value ?? QUALITY_DEFAULT, console) ?? QUALITY_DEFAULT;
 
 export interface ItemListComputationOptions {
   items: Item[];
@@ -707,7 +707,7 @@ export default function ItemListPage() {
                     max={5}
                     step={1}
                     value={qualityThreshold}
-                    onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console))}
+                    onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console) ?? QUALITY_MIN)}
                     aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
                   />
                   {/* <div className="quality-slider__labels">

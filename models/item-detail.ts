@@ -11,6 +11,7 @@ import type { Item, ItemRef } from './item';
 export interface ItemInstanceSummary {
   ItemUUID: string;
   AgenticStatus?: AgenticRunStatus | null;
+  // Nullable when no quality has been assigned yet.
   Quality?: number | null;
   Location?: string | null;
   BoxID?: string | null;

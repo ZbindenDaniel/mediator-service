@@ -31,7 +31,7 @@ import {
   parseEventLogLevelAllowList,
   resolveEventLogLevel
 } from '../models';
-import { normalizeQuality, QUALITY_DEFAULT } from '../models/quality';
+import { normalizeQuality } from '../models/quality';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
 import { resolveStandortLabel } from './standort-label';
 import { parseSequentialItemUUID } from './lib/itemIds';
@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS item_refs (
   Hauptkategorien_B TEXT,
   Unterkategorien_B TEXT,
   Veröffentlicht_Status TEXT,
-  Quality INTEGER NOT NULL DEFAULT 3,
+  Quality INTEGER,
   Shopartikel INTEGER,
   Artikeltyp TEXT,
   Einheit TEXT,
@@ -367,7 +367,7 @@ CREATE TABLE IF NOT EXISTS items (
   UpdatedAt TEXT NOT NULL,
   Datum_erfasst TEXT,
   Auf_Lager INTEGER,
-  Quality INTEGER NOT NULL DEFAULT 3,
+  Quality INTEGER,
   ShopwareVariantId TEXT,
   FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE SET NULL ON UPDATE CASCADE,
   FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE
@@ -440,7 +440,7 @@ type ItemInstanceRow = {
   UpdatedAt: string;
   Datum_erfasst: string | null;
   Auf_Lager: number | null;
-  Quality: number;
+  Quality: number | null;
   ShopwareVariantId: string | null;
 };
 
@@ -462,7 +462,7 @@ type ItemRefRow = {
   Hauptkategorien_B: number | null;
   Unterkategorien_B: number | null;
   Veröffentlicht_Status: string | null;
-  Quality: number;
+  Quality: number | null;
   Shopartikel: number | null;
   Artikeltyp: string | null;
   Einheit: string | null;
@@ -599,13 +599,13 @@ function toIsoString(value: unknown): string | null {
   return null;
 }
 
-function resolveQualityValue(value: unknown, context: string): number {
+function resolveQualityValue(value: unknown, context: string): number | null {
   try {
     const normalized = normalizeQuality(value, console);
-    return normalized ?? QUALITY_DEFAULT;
+    return normalized ?? null;
   } catch (error) {
-    console.error('[db] Failed to normalize quality value, applying default', { context, error });
-    return QUALITY_DEFAULT;
+    console.error('[db] Failed to normalize quality value, leaving unset', { context, error });
+    return null;
   }
 }
 
@@ -821,24 +821,12 @@ function ensureItemShopwareColumns(database: Database.Database = db): void {
 ensureItemShopwareColumns(db);
 
 function ensureItemQualityColumns(database: Database.Database = db): void {
-  const qualityDefault = QUALITY_DEFAULT;
-
   const addQualityColumn = (table: 'items' | 'item_refs') => {
     try {
-      database.prepare(`ALTER TABLE ${table} ADD COLUMN Quality INTEGER NOT NULL DEFAULT ${qualityDefault}`).run();
+      database.prepare(`ALTER TABLE ${table} ADD COLUMN Quality INTEGER`).run();
       console.info('[db] Added Quality column', { table });
     } catch (err) {
       console.error('Failed to add Quality column', { table, error: err });
-      throw err;
-    }
-  };
-
-  const backfillQuality = (table: 'items' | 'item_refs') => {
-    try {
-      database.prepare(`UPDATE ${table} SET Quality = ${qualityDefault} WHERE Quality IS NULL`).run();
-      console.info('[db] Backfilled missing Quality values', { table });
-    } catch (err) {
-      console.error('Failed to backfill Quality values', { table, error: err });
       throw err;
     }
   };
@@ -855,7 +843,6 @@ function ensureItemQualityColumns(database: Database.Database = db): void {
     if (!hasQuality) {
       addQualityColumn(table);
     }
-    backfillQuality(table);
   };
 
   inspectTable('item_refs');
@@ -1004,7 +991,7 @@ SELECT
   i.UpdatedAt AS UpdatedAt,
   i.Datum_erfasst AS Datum_erfasst,
   i.Auf_Lager AS Auf_Lager,
-  CAST(COALESCE(r.Quality, i.Quality, ${QUALITY_DEFAULT}) AS INTEGER) AS Quality,
+  CAST(COALESCE(r.Quality, i.Quality) AS INTEGER) AS Quality,
   i.ShopwareVariantId AS ShopwareVariantId,
   r.Grafikname AS Grafikname,
   r.ImageNames AS ImageNames,

@@ -390,6 +390,82 @@ export default function BoxDetail({ boxId }: Props) {
     console.info('Closed box photo modal', { boxId });
   }, [boxId]);
 
+  const saveBoxNoteAndPhoto = useCallback(async ({
+    photoData,
+    removePhotoOverride,
+    source
+  }: {
+    photoData?: string | null;
+    removePhotoOverride?: boolean;
+    source: 'note-form' | 'photo-upload';
+  }) => {
+    if (!box) {
+      return;
+    }
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Box note save aborted: missing username.', { source });
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display missing user alert for note save', error);
+      }
+      return;
+    }
+    try {
+      setIsSavingNote(true);
+      setNoteFeedback({ type: 'info', message: 'Speichern…' });
+      console.info('Saving box note', { boxId: box.BoxID, source });
+      const payload: Record<string, unknown> = { notes: note, actor };
+      if (typeof box.LocationId === 'string' && box.LocationId.trim()) {
+        payload.LocationId = box.LocationId.trim();
+      }
+      const resolvedPhotoUpload = typeof photoData === 'string' ? photoData : photoUpload;
+      const resolvedRemovePhoto = typeof removePhotoOverride === 'boolean' ? removePhotoOverride : photoRemoved;
+      if (resolvedPhotoUpload) {
+        payload.photo = resolvedPhotoUpload;
+      } else if (resolvedRemovePhoto) {
+        payload.removePhoto = true;
+      }
+      const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      let responseBody: any = null;
+      try {
+        responseBody = await res.json();
+      } catch (parseErr) {
+        console.error('Failed to parse box note response', parseErr);
+      }
+      if (res.ok) {
+        const nextPhotoPath = typeof responseBody?.photoPath === 'string' ? responseBody.photoPath.trim() : '';
+        setBox(b => b ? { ...b, Notes: note, PhotoPath: nextPhotoPath || null } : b);
+        setPhotoPreview(nextPhotoPath);
+        setPhotoUpload(null);
+        setPhotoRemoved(false);
+        setNoteFeedback({ type: 'success', message: 'Notiz gespeichert' });
+        console.info('Box note saved', { boxId: box.BoxID, hasPhoto: Boolean(nextPhotoPath), source });
+      } else {
+        let errorMessage = `Speichern fehlgeschlagen (Status ${res.status})`;
+        const errorBody = responseBody;
+        if (errorBody?.error) {
+          errorMessage = `Speichern fehlgeschlagen: ${errorBody.error}`;
+        }
+        console.error('Note save request failed', { boxId: box.BoxID, status: res.status, source });
+        setNoteFeedback({ type: 'error', message: errorMessage });
+      }
+    } catch (err) {
+      console.error('Note save failed', err);
+      setNoteFeedback({ type: 'error', message: 'Speichern fehlgeschlagen' });
+    } finally {
+      setIsSavingNote(false);
+    }
+  }, [box, boxId, note, photoRemoved, photoUpload]);
+
   const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
     const file = input.files?.[0];
@@ -407,6 +483,7 @@ export default function BoxDetail({ boxId }: Props) {
         setPhotoUpload(reader.result);
         setPhotoRemoved(false);
         console.info('Prepared box photo upload preview', { boxId, size: file.size });
+        void saveBoxNoteAndPhoto({ photoData: reader.result, removePhotoOverride: false, source: 'photo-upload' });
       };
       reader.onerror = (error) => {
         console.error('Failed to read selected box photo', error);
@@ -422,7 +499,7 @@ export default function BoxDetail({ boxId }: Props) {
     } catch (error) {
       console.error('Failed to prepare box photo upload', error);
     }
-  }, [boxId]);
+  }, [boxId, saveBoxNoteAndPhoto]);
 
   const handlePhotoRemove = useCallback(() => {
     try {
@@ -545,66 +622,7 @@ export default function BoxDetail({ boxId }: Props) {
                     <h3>Notizen</h3>
                     <form onSubmit={async (e) => {
                       e.preventDefault();
-                      const actor = await ensureUser();
-                      if (!actor) {
-                        console.info('Box note save aborted: missing username.');
-                        try {
-                          await dialogService.alert({
-                            title: 'Aktion nicht möglich',
-                            message: 'Bitte zuerst oben den Benutzer setzen.'
-                          });
-                        } catch (error) {
-                          console.error('Failed to display missing user alert for note save', error);
-                        }
-                        return;
-                      }
-                      try {
-                        setIsSavingNote(true);
-                        setNoteFeedback({ type: 'info', message: 'Speichern…' });
-                        console.info('Saving box note', { boxId: box.BoxID });
-                        const payload: Record<string, unknown> = { notes: note, actor };
-                        if (typeof box.LocationId === 'string' && box.LocationId.trim()) {
-                          payload.LocationId = box.LocationId.trim();
-                        }
-                        if (photoUpload) {
-                          payload.photo = photoUpload;
-                        } else if (photoRemoved) {
-                          payload.removePhoto = true;
-                        }
-                        const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(payload)
-                        });
-                        let responseBody: any = null;
-                        try {
-                          responseBody = await res.json();
-                        } catch (parseErr) {
-                          console.error('Failed to parse box note response', parseErr);
-                        }
-                        if (res.ok) {
-                          const nextPhotoPath = typeof responseBody?.photoPath === 'string' ? responseBody.photoPath.trim() : '';
-                          setBox(b => b ? { ...b, Notes: note, PhotoPath: nextPhotoPath || null } : b);
-                          setPhotoPreview(nextPhotoPath);
-                          setPhotoUpload(null);
-                          setPhotoRemoved(false);
-                          setNoteFeedback({ type: 'success', message: 'Notiz gespeichert' });
-                          console.info('Box note saved', { boxId: box.BoxID, hasPhoto: Boolean(nextPhotoPath) });
-                        } else {
-                          let errorMessage = `Speichern fehlgeschlagen (Status ${res.status})`;
-                          const errorBody = responseBody;
-                          if (errorBody?.error) {
-                            errorMessage = `Speichern fehlgeschlagen: ${errorBody.error}`;
-                          }
-                          console.error('Note save request failed', { boxId: box.BoxID, status: res.status });
-                          setNoteFeedback({ type: 'error', message: errorMessage });
-                        }
-                      } catch (err) {
-                        console.error('Note save failed', err);
-                        setNoteFeedback({ type: 'error', message: 'Speichern fehlgeschlagen' });
-                      } finally {
-                        setIsSavingNote(false);
-                      }
+                      await saveBoxNoteAndPhoto({ source: 'note-form' });
                     }}>
                       <div className=''>
                         <div className='row'>
@@ -644,6 +662,7 @@ export default function BoxDetail({ boxId }: Props) {
                             {photoRemoved ? (
                               <p className="muted">Foto wird nach dem Speichern entfernt.</p>
                             ) : null}
+                            {/* TODO(agent): Disable the photo upload control while autosave is in progress to prevent overlapping requests. */}
                             <input
                               type="file"
                               id="box-note-photo"

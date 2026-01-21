@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Auto-save box photo uploads through the existing note-save move flow so notes and photo updates persist together with consistent status feedback.
 - Documented all environment variables in a dedicated reference and expanded the example `.env` template to match runtime usage.
 - Updated agentic prompt/echo messaging to reference Postgres-compatible SQL in preparation for the database migration.
 - Added baseline tests for core backend actions (import, save, list, search, QR scan) with match/handle coverage and response assertions to reduce regression risk.
@@ -98,6 +99,11 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added a navigable location link on box detail summaries so valid shelf locations can be opened directly while keeping missing-location logging intact.
 - Removed the edit-form media gallery header and made Foto 1 optional in item creation flows, aligning UI validation and labels with optional photo uploads.
 - Added item detail media add/remove controls that reuse deterministic gallery ordering, call the save-item endpoint, and refresh gallery state with logging.
+- Batched item grouping warnings to handle unplaced items as a single bucket and reduce per-item log noise.
+- Adjusted item detail row grouping to treat Menge as instance data and refreshed the Vorrat table to show UUID text with quality badges for clarity.
+- Enabled nullable quality handling across shared models, persistence defaults, and creation flows while updating UI badges to show a `?` indicator when no quality is set.
+- Hardened the agentic trigger failure handler with bound status-update flags and contextual logging to prevent SQL parameter crashes.
+- Added an explicit event-level mapping for Updated events so observability metrics no longer default to error severity.
 
 ## Documentation Map
 
