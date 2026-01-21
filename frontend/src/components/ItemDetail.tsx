@@ -52,11 +52,12 @@ import { logger, logError } from '../utils/logger';
 import { filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
+// TODO(media-controls): Validate media add/remove slot mapping once details UX feedback lands.
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
-import ItemMediaGallery from './ItemMediaGallery';
+import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
@@ -733,6 +734,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
   const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
+  const [isMediaSaving, setIsMediaSaving] = useState(false);
   const [instances, setInstances] = useState<ItemInstanceSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -746,6 +748,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
@@ -1414,6 +1417,273 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
   }, [itemId]);
+
+  const galleryAssets = useMemo(
+    () => normalizeGalleryAssets(itemId, item?.Grafikname ?? null, mediaAssets),
+    [itemId, item?.Grafikname, mediaAssets]
+  );
+
+  const normalizeMediaPayload = useCallback(
+    (payload: unknown): string[] => {
+      if (!Array.isArray(payload)) {
+        logger.warn?.('ItemDetail: Media payload missing from save response', {
+          itemId,
+          payloadType: typeof payload
+        });
+        return [];
+      }
+
+      const normalized = payload
+        .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+        .map((value) => value.trim());
+
+      if (normalized.length !== payload.length) {
+        logger.warn?.('ItemDetail: Dropped invalid media entries from save response', { itemId });
+      }
+
+      return normalized;
+    },
+    [itemId]
+  );
+
+  const resolveNextMediaSlot = useCallback(() => {
+    const nextSlot = galleryAssets.length;
+    if (nextSlot >= 3) {
+      logger.warn?.('ItemDetail: Media slots already filled; cannot add.', {
+        itemId,
+        slotCount: galleryAssets.length
+      });
+      return null;
+    }
+    return nextSlot;
+  }, [galleryAssets.length, itemId]);
+
+  const readFileAsDataUrl = useCallback((file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      try {
+        const reader = new FileReader();
+        reader.onerror = () => {
+          reject(reader.error ?? new Error('FileReader failed'));
+        };
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error('FileReader returned non-string result'));
+          }
+        };
+        reader.readAsDataURL(file);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }, []);
+
+  const persistMediaUpdate = useCallback(
+    async ({
+      slotIndex,
+      dataUrl,
+      action
+    }: {
+      slotIndex: number;
+      dataUrl?: string;
+      action: 'add' | 'remove';
+    }) => {
+      if (isMediaSaving) {
+        logger.warn?.('ItemDetail: Media update already in progress; skipping.', { itemId });
+        return;
+      }
+
+      const actor = await ensureUser();
+      if (!actor) {
+        try {
+          await dialogService.alert({
+            title: 'Aktion nicht möglich',
+            message: 'Bitte zuerst oben den Benutzer setzen.'
+          });
+        } catch (error) {
+          console.error('ItemDetail: Failed to display missing user alert for media action', error);
+        }
+        return;
+      }
+
+      if (action === 'add' && (!dataUrl || typeof dataUrl !== 'string')) {
+        logger.warn?.('ItemDetail: Missing data URL for media add action', { itemId, slotIndex });
+        return;
+      }
+
+      const payload: Record<string, unknown> = {
+        actor
+      };
+      if (item?.Artikel_Nummer) {
+        payload.Artikel_Nummer = item.Artikel_Nummer;
+      }
+      payload[`picture${slotIndex + 1}`] = action === 'remove' ? null : dataUrl;
+
+      try {
+        setIsMediaSaving(true);
+        logger.info?.('ItemDetail: Saving media update', {
+          itemId,
+          slotIndex,
+          action
+        });
+
+        const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          logger.error?.('ItemDetail: Media update failed', { itemId, status: res.status });
+          try {
+            await dialogService.alert({
+              title: 'Speichern fehlgeschlagen',
+              message: 'Die Medien konnten nicht gespeichert werden.'
+            });
+          } catch (alertError) {
+            console.error('ItemDetail: Failed to display media save failure dialog', alertError);
+          }
+          return;
+        }
+
+        const responsePayload = await res.json().catch((error) => {
+          logError('ItemDetail: Failed to parse media save response', error, { itemId });
+          return null;
+        });
+
+        if (!responsePayload || responsePayload.ok !== true) {
+          logger.error?.('ItemDetail: Media save response not ok', {
+            itemId,
+            responsePayload
+          });
+          return;
+        }
+
+        const nextMedia = normalizeMediaPayload(responsePayload.media);
+        setMediaAssets(nextMedia);
+        if (slotIndex === 0) {
+          setItem((previous) => {
+            if (!previous) {
+              return previous;
+            }
+            if (action === 'remove') {
+              return { ...previous, Grafikname: undefined };
+            }
+            return {
+              ...previous,
+              Grafikname: nextMedia[0] ?? previous.Grafikname
+            };
+          });
+        }
+      } catch (error) {
+        logError('ItemDetail: Failed to save media update', error, { itemId, slotIndex, action });
+        try {
+          await dialogService.alert({
+            title: 'Speichern fehlgeschlagen',
+            message: 'Beim Speichern der Medien ist ein Fehler aufgetreten.'
+          });
+        } catch (alertError) {
+          console.error('ItemDetail: Failed to display media save exception dialog', alertError);
+        }
+      } finally {
+        setIsMediaSaving(false);
+      }
+    },
+    [isMediaSaving, item?.Artikel_Nummer, itemId, normalizeMediaPayload]
+  );
+
+  const handleMediaAdd = useCallback(() => {
+    if (isMediaSaving) {
+      logger.warn?.('ItemDetail: Media update already in progress; ignoring add.', { itemId });
+      return;
+    }
+
+    const nextSlot = resolveNextMediaSlot();
+    if (nextSlot === null) {
+      dialogService
+        .alert({
+          title: 'Keine freien Plätze',
+          message: 'Es sind bereits alle Medienplätze belegt.'
+        })
+        .catch((error) => {
+          console.error('ItemDetail: Failed to alert about full media slots', error);
+        });
+      return;
+    }
+
+    try {
+      if (mediaFileInputRef.current) {
+        mediaFileInputRef.current.value = '';
+        mediaFileInputRef.current.dataset.slotIndex = String(nextSlot);
+        mediaFileInputRef.current.click();
+      } else {
+        logger.warn?.('ItemDetail: Media file input ref missing', { itemId });
+      }
+    } catch (error) {
+      console.error('ItemDetail: Failed to open media file picker', error);
+    }
+  }, [isMediaSaving, itemId, resolveNextMediaSlot]);
+
+  const handleMediaFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const target = event.currentTarget;
+      const file = target.files?.[0] ?? null;
+      const slotIndexRaw = target.dataset.slotIndex;
+      const slotIndex = slotIndexRaw ? Number(slotIndexRaw) : Number.NaN;
+      target.value = '';
+      target.dataset.slotIndex = '';
+
+      if (!file) {
+        return;
+      }
+      if (Number.isNaN(slotIndex)) {
+        logger.warn?.('ItemDetail: Missing media slot index for file selection', {
+          itemId
+        });
+        return;
+      }
+
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        await persistMediaUpdate({ slotIndex, dataUrl, action: 'add' });
+      } catch (error) {
+        logError('ItemDetail: Failed to read selected media file', error, {
+          itemId,
+          fileName: file.name
+        });
+        try {
+          await dialogService.alert({
+            title: 'Datei konnte nicht gelesen werden',
+            message: 'Bitte versuchen Sie es erneut.'
+          });
+        } catch (alertError) {
+          console.error('ItemDetail: Failed to display media read error alert', alertError);
+        }
+      }
+    },
+    [itemId, persistMediaUpdate, readFileAsDataUrl]
+  );
+
+  const handleMediaRemove = useCallback(
+    async (asset: GalleryAsset) => {
+      if (isMediaSaving) {
+        logger.warn?.('ItemDetail: Media update already in progress; ignoring remove.', { itemId });
+        return;
+      }
+      const slotIndex = galleryAssets.findIndex((candidate) => candidate.src === asset.src);
+      if (slotIndex < 0) {
+        logger.warn?.('ItemDetail: Unable to resolve media slot for removal', {
+          itemId,
+          src: asset.src
+        });
+        return;
+      }
+
+      await persistMediaUpdate({ slotIndex, action: 'remove' });
+    },
+    [galleryAssets, isMediaSaving, itemId, persistMediaUpdate]
+  );
 
   const handleInstanceNavigation = useCallback(
     async (targetItemId: string | null) => {
@@ -2216,11 +2486,23 @@ export default function ItemDetail({ itemId }: Props) {
             <div className="card grid-span-row-2">
               <h3>Fotos</h3>
               <section className="item-media-section">
+                <input
+                  ref={mediaFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="item-media-gallery__input"
+                  onChange={handleMediaFileChange}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  style={{ display: 'none' }}
+                />
                 <ItemMediaGallery
                   itemId={item.ItemUUID}
                   grafikname={item.Grafikname}
                   mediaAssets={mediaAssets}
                   className="item-media-gallery--stacked"
+                  onAdd={handleMediaAdd}
+                  onRemove={handleMediaRemove}
                 />
               </section>
             </div>
