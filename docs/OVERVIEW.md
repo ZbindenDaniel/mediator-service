@@ -101,6 +101,8 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Batched item grouping warnings to handle unplaced items as a single bucket and reduce per-item log noise.
 - Adjusted item detail row grouping to treat Menge as instance data and refreshed the Vorrat table to show UUID text with quality badges for clarity.
 - Enabled nullable quality handling across shared models, persistence defaults, and creation flows while updating UI badges to show a `?` indicator when no quality is set.
+- Hardened the agentic trigger failure handler with bound status-update flags and contextual logging to prevent SQL parameter crashes.
+- Added an explicit event-level mapping for Updated events so observability metrics no longer default to error severity.
 
 ## Documentation Map
 
