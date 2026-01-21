@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Added baseline tests for core backend actions (import, save, list, search, QR scan) with match/handle coverage and response assertions to reduce regression risk.
 - Balanced wide-screen landing grids by letting item/box detail tables and activity lists span both columns for readability.
 - Added grid span utilities and applied select layout spans on landing, item, and box detail cards for clearer wide/tall layouts.
 - Clarified the recent highlights log by replacing an empty placeholder link with a concrete documentation note for easier tracking.

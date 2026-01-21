@@ -1,3 +1,4 @@
+// TODO(agent): add action tests.
 import type { IncomingMessage, ServerResponse } from 'http';
 import { AGENTIC_RUN_STATUSES, type AgenticRunStatus } from '../../models/agentic-statuses';
 import { groupItemsForResponse } from '../lib/itemGrouping';
