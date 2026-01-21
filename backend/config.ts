@@ -84,6 +84,7 @@ if (rawDatabaseUrl && rawDbPathEnv) {
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
 // TODO(media-storage): Review media storage environment names once WebDAV rollout is finalized.
+// TODO(media-storage): Remove MEDIA_DIR/MEDIA_DIR_OVERRIDE after the local override deprecation window closes.
 const MEDIA_STORAGE_MODE_VALUES = new Set(['local', 'webdav']);
 const rawMediaStorageMode = (process.env.MEDIA_STORAGE_MODE || '').trim().toLowerCase();
 let resolvedMediaStorageMode: 'local' | 'webdav' = 'local';
@@ -100,8 +101,26 @@ if (rawMediaStorageMode) {
 
 export const MEDIA_STORAGE_MODE = resolvedMediaStorageMode;
 const rawMediaDir = (process.env.MEDIA_DIR || '').trim();
-export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || rawMediaDir).trim();
+const rawMediaDirOverride = (process.env.MEDIA_DIR_OVERRIDE || '').trim();
+export const MEDIA_DIR_OVERRIDE = (rawMediaDirOverride || rawMediaDir).trim();
 export const WEB_DAV_DIR = (process.env.WEB_DAV_DIR || rawMediaDir).trim();
+
+if (MEDIA_STORAGE_MODE === 'local') {
+  const ignoredOverrides = [];
+  if (rawMediaDirOverride) {
+    ignoredOverrides.push('MEDIA_DIR_OVERRIDE');
+  }
+  if (rawMediaDir) {
+    ignoredOverrides.push('MEDIA_DIR');
+  }
+  if (ignoredOverrides.length) {
+    console.warn(
+      `[config] MEDIA_STORAGE_MODE=local ignores ${ignoredOverrides.join(
+        ', '
+      )}; using default backend media directory.`
+    );
+  }
+}
 
 if (MEDIA_STORAGE_MODE === 'webdav' && !WEB_DAV_DIR) {
   console.warn('[config] MEDIA_STORAGE_MODE=webdav requires WEB_DAV_DIR; default media directory will be used.');

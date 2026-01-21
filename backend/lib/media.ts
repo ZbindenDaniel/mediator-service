@@ -1,7 +1,7 @@
 import path from 'path';
-import { MEDIA_DIR_OVERRIDE, MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
+import { MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
 
-// TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
+// TODO(media-storage): Drop local-mode override support fully once deprecation window is complete.
 const DEFAULT_MEDIA_DIR = path.join(__dirname, '..', 'media');
 
 function resolveMediaDir(): string {
@@ -13,8 +13,6 @@ function resolveMediaDir(): string {
     } else {
       console.warn('[media] WEB_DAV_DIR missing; falling back to default media directory.');
     }
-  } else if (MEDIA_DIR_OVERRIDE) {
-    resolved = MEDIA_DIR_OVERRIDE;
   }
 
   if (resolved !== DEFAULT_MEDIA_DIR) {

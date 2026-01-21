@@ -30,8 +30,8 @@ This document enumerates all environment variables consumed by the mediator serv
 | `INBOX_DIR` | `backend/data/inbox` | Directory watched for CSV imports. |
 | `ARCHIVE_DIR` | `backend/data/archive` | Directory used to archive processed CSVs. |
 | `MEDIA_STORAGE_MODE` | `local` | `local` or `webdav` media storage backend. |
-| `MEDIA_DIR` | (unset) | Base media directory used for local storage. |
-| `MEDIA_DIR_OVERRIDE` | (unset) | Overrides `MEDIA_DIR` if provided. |
+| `MEDIA_DIR` | (unset) | Deprecated for local mode; ignored when `MEDIA_STORAGE_MODE=local`. Used as a fallback for `WEB_DAV_DIR` in WebDAV mode. |
+| `MEDIA_DIR_OVERRIDE` | (unset) | Deprecated for local mode; ignored when `MEDIA_STORAGE_MODE=local`. |
 | `WEB_DAV_DIR` | (unset) | WebDAV directory used when `MEDIA_STORAGE_MODE=webdav`. |
 
 ## Printing
