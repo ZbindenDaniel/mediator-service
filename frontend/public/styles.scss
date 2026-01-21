@@ -222,7 +222,7 @@ textarea {
 .item-media-gallery--stacked {
     flex-direction: column;
     flex-wrap: nowrap;
-    align-items: center;
+    align-items: stretch;
     width: 100%;
     max-width: 360px;
     margin: 0 auto;
@@ -235,7 +235,8 @@ textarea {
 
 .item-media-gallery--stacked .item-media-gallery__item img {
     width: 100%;
-    height: auto;
+    height: 240px;
+    object-fit: contain;
 }
 
 .item-media-gallery__item {

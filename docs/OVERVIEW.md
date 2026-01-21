@@ -86,6 +86,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Ensured item creation responses surface multi-instance ItemUUID lists with safe UI parsing and navigation-target logging for bulk creates.
 - Extended the test harness matchers to cover Jest-style throw checks, call counts, and subset equality for objectContaining expectations.
 - Updated container media configuration defaults so Dockerfile directory creation and compose volume mappings support WebDAV storage mode paths.
+- Refined the stacked Fotos gallery layout to keep photo cards vertically aligned with consistent sizing.
 
 ## Documentation Map
 
