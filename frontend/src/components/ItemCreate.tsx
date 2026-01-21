@@ -930,6 +930,45 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
       fallback: typeof basicInfo.Auf_Lager === 'number' ? basicInfo.Auf_Lager : undefined,
       context
     });
+    // TODO(item-create): Validate multi-instance confirmation messaging with operations.
+    const resolvedEinheit = isItemEinheit(submissionData.Einheit)
+      ? submissionData.Einheit
+      : ITEM_FORM_DEFAULT_EINHEIT;
+    const resolvedAufLager = submissionData.Auf_Lager ?? 1;
+    if (resolvedEinheit === ItemEinheit.Stk && resolvedAufLager > 1) {
+      try {
+        logger.info?.('Prompting for multi-instance confirmation before item creation.', {
+          context,
+          einheit: resolvedEinheit,
+          aufLager: resolvedAufLager
+        });
+        const shouldProceed = await dialog.confirm({
+          title: 'Mehrere Instanzen erstellen?',
+          message: `Für Einheit "Stk" werden ${resolvedAufLager} einzelne Instanzen angelegt. Möchtest du fortfahren?`,
+          confirmLabel: 'Weiter',
+          cancelLabel: 'Abbrechen'
+        });
+        if (!shouldProceed) {
+          logger.info?.('Item creation cancelled after multi-instance confirmation prompt.', {
+            context,
+            einheit: resolvedEinheit,
+            aufLager: resolvedAufLager
+          });
+          return;
+        }
+      } catch (error) {
+        logger.error?.('Failed to display multi-instance confirmation dialog.', error);
+        try {
+          await dialog.alert({
+            title: 'Bestätigung fehlgeschlagen',
+            message: 'Die Bestätigung konnte nicht angezeigt werden. Bitte erneut versuchen.'
+          });
+        } catch (alertError) {
+          logger.error?.('Failed to display multi-instance confirmation error alert.', alertError);
+        }
+        return;
+      }
+    }
 
     const matchSelectionContext = context === 'match-selection';
     let isManualSubmission = !shouldUseAgenticForm || context === 'manual-edit';
