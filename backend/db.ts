@@ -34,6 +34,7 @@ import {
 import { normalizeQuality, QUALITY_DEFAULT } from '../models/quality';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
 import { resolveStandortLabel } from './standort-label';
+import { parseSequentialItemUUID } from './lib/itemIds';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 let db: Database.Database;
@@ -1295,6 +1296,75 @@ export const findByMaterial = wrapLangtextAwareStatement(findByMaterialStatement
 export const itemsByBox = wrapLangtextAwareStatement(itemsByBoxStatement, 'db:itemsByBox');
 export const boxesByLocation = boxesByLocationStatement;
 export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
+
+export interface CanonicalItemUUIDResolution {
+  itemUUID: string | null;
+  usedFallback: boolean;
+}
+
+export function resolveCanonicalItemUUIDForArtikelnummer(
+  artikelNummer: string | null | undefined,
+  options: {
+    findByMaterial?: { all?: (artikelNummer: string) => Array<{ ItemUUID?: string | null }> };
+    logger?: Pick<Console, 'info' | 'warn' | 'error'>;
+  } = {}
+): CanonicalItemUUIDResolution {
+  const logger = options.logger ?? console;
+  const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalizedArtikelNummer) {
+    logger.warn?.('[db] Unable to resolve canonical ItemUUID without Artikelnummer', {
+      artikelNummer: artikelNummer ?? null
+    });
+    return { itemUUID: null, usedFallback: false };
+  }
+
+  if (!options.findByMaterial?.all) {
+    logger.warn?.('[db] Missing findByMaterial helper for canonical ItemUUID resolution', {
+      artikelNummer: normalizedArtikelNummer
+    });
+    return { itemUUID: null, usedFallback: false };
+  }
+
+  let instances: Array<{ ItemUUID?: string | null }> = [];
+  try {
+    instances = options.findByMaterial.all(normalizedArtikelNummer) ?? [];
+  } catch (err) {
+    logger.error?.('[db] Failed to load instances for canonical ItemUUID resolution', {
+      artikelNummer: normalizedArtikelNummer,
+      error: err
+    });
+    return { itemUUID: null, usedFallback: false };
+  }
+
+  const canonical = instances.find((instance) => {
+    const candidate = typeof instance?.ItemUUID === 'string' ? instance.ItemUUID.trim() : '';
+    if (!candidate) {
+      return false;
+    }
+    const parsed = parseSequentialItemUUID(candidate);
+    return parsed?.kind === 'artikelnummer'
+      && parsed.artikelNummer === normalizedArtikelNummer
+      && parsed.sequence === 1;
+  });
+
+  if (canonical?.ItemUUID) {
+    return { itemUUID: canonical.ItemUUID, usedFallback: false };
+  }
+
+  const fallback = instances.find((instance) => typeof instance?.ItemUUID === 'string' && instance.ItemUUID.trim());
+  if (fallback?.ItemUUID) {
+    logger.info?.('[db] Falling back to non-canonical ItemUUID for reference', {
+      artikelNummer: normalizedArtikelNummer,
+      fallbackItemUUID: fallback.ItemUUID
+    });
+    return { itemUUID: fallback.ItemUUID, usedFallback: true };
+  }
+
+  logger.warn?.('[db] Failed to resolve any ItemUUID for reference', {
+    artikelNummer: normalizedArtikelNummer
+  });
+  return { itemUUID: null, usedFallback: false };
+}
 // TODO(agent): Revisit list box queries once typed/location filters are stabilized for UI consumers.
 const listBoxesStatement = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
 const listBoxesByTypeStatement = db.prepare(
