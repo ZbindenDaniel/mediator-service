@@ -1447,6 +1447,7 @@ const action = defineHttpAction({
         }
       }
 
+      // TODO(import-item): Confirm multi-instance response payload stays aligned with Item contracts.
       // TODO(agent): Re-audit import response payload fields during next contract alignment review.
       let responseArtikelNummer: string | null = data.Artikel_Nummer || null;
       let responseBoxId: string | null = BoxID;
@@ -1498,6 +1499,13 @@ const action = defineHttpAction({
         BoxID: responseBoxId,
         Artikel_Nummer: responseArtikelNummer
       }));
+      if (responseItems.length > 1) {
+        console.info('[import-item] Multi-instance import response prepared', {
+          primaryItemUUID: responseItems[0]?.ItemUUID,
+          itemUUIDs: responseItems.map((item) => item.ItemUUID),
+          createdCount: responseItems.length
+        });
+      }
       sendJson(res, 200, {
         ok: true,
         item: responseItems[0],
