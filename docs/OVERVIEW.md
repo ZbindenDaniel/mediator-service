@@ -98,6 +98,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Enabled item detail agentic close to upsert when no prior run exists, keeping close available for loaded items.
 - Added a navigable location link on box detail summaries so valid shelf locations can be opened directly while keeping missing-location logging intact.
 - Removed the edit-form media gallery header and made Foto 1 optional in item creation flows, aligning UI validation and labels with optional photo uploads.
+- Adjusted item detail row grouping to treat Menge as instance data and refreshed the Vorrat table to show UUID text with quality badges for clarity.
 
 ## Documentation Map
 
