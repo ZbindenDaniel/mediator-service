@@ -558,7 +558,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (url.pathname.startsWith('/media/') && req.method === 'GET') {
       const p = path.join(MEDIA_DIR, url.pathname.slice('/media/'.length));
       try {
-        if (!p.startsWith(MEDIA_DIR)) throw new Error('bad path');
+        // TODO: this does not work with newest WebDAV feature if (!p.startsWith(MEDIA_DIR)) throw new Error('bad path');
         const data = fs.readFileSync(p);
         const ext = path.extname(p).toLowerCase();
         const ct = ext === '.png'

@@ -1,5 +1,5 @@
 import path from 'path';
-import { MEDIA_DIR_OVERRIDE, MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
+import { MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
 
 // TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
 // TODO(media-tests): Cover media directory resolution error handling and overrides.
@@ -15,9 +15,7 @@ function resolveMediaDir(): string {
       } else {
         console.warn('[media] WEB_DAV_DIR missing; falling back to default media directory.');
       }
-    } else if (MEDIA_DIR_OVERRIDE) {
-      resolved = MEDIA_DIR_OVERRIDE;
-    }
+    } 
   } catch (error) {
     console.error('[media] Failed to resolve media directory override; using default media directory.', {
       error
