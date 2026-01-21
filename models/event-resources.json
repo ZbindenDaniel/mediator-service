@@ -3,7 +3,7 @@
   { "key": "ManualCreateOrUpdate", "label": "Erstellt/Aktualisiert", "level": "info", "topic": "logistics" },
   { "key": "Edit", "label": "Bearbeitet", "level": "info", "topic": "data" },
   { "key": "Added", "label": "Hinzugefügt", "level": "info", "topic": "logistics" },
-  { "key": "updated", "label": "Aktualisiert", "level": "info", "topic": "data" },
+  { "key": "Updated", "label": "Aktualisiert", "level": "info", "topic": "data" },
   { "key": "Moved", "label": "Verschoben", "level": "important", "topic": "logistics" },
   { "key": "Removed", "label": "Entnommen", "level": "important", "topic": "logistics" },
   { "key": "Deleted", "label": "Gelöscht", "level": "important", "topic": "data" },
