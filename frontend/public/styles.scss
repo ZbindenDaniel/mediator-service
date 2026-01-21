@@ -1748,6 +1748,19 @@ button:focus {
     flex-direction: column;
 }
 
+// TODO(ui-grid): Validate box detail summary grid alignment once responsive refinements land.
+.box-detail-summary-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+.box-detail-summary-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
 @media (min-width: 720px) {
     .landing-grid {
         display: grid;
@@ -1759,6 +1772,15 @@ button:focus {
     .landing-grid {
         display: grid;
         grid-template-columns: 1.2fr .8fr
+    }
+
+    .box-detail-summary-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .stats-card {
+        justify-self: end;
+        width: min(100%, 360px);
     }
 }
 

@@ -468,7 +468,13 @@ function resolveAutoPrintTargets(options: {
   return { mode: 'instance', itemIds: Array.from(itemIds) };
 }
 
-export default function ItemCreate() {
+interface ItemCreateProps {
+  layout?: 'page' | 'embedded';
+  basicInfoHeader?: React.ReactNode;
+}
+
+// TODO(overview-inline-create): Confirm item creation flow remains accessible when embedded.
+export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCreateProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({}));
@@ -1449,7 +1455,12 @@ export default function ItemCreate() {
     return (
       <>
         {blockingOverlay}
-        <ItemBasicInfoForm initialValues={basicInfo} onSubmit={handleBasicInfoNext} />
+        <ItemBasicInfoForm
+          initialValues={basicInfo}
+          onSubmit={handleBasicInfoNext}
+          layout={layout}
+          headerContent={basicInfoHeader}
+        />
       </>
     );
   }
@@ -1462,6 +1473,7 @@ export default function ItemCreate() {
           searchTerm={basicInfo.Artikelbeschreibung || ''}
           onSelect={handleMatchSelection}
           onSkip={handleSkipMatches}
+          layout={layout}
         />
       </>
     );
@@ -1477,6 +1489,7 @@ export default function ItemCreate() {
           submitLabel="Speichern & Ki Vervollständigung"
           isNew
           onFallbackToManual={handleAgenticFallback}
+          layout={layout}
         />
       </>
     );
@@ -1497,6 +1510,7 @@ export default function ItemCreate() {
           </>
         }
         lockedFields={manualLockedFields}
+        layout={layout}
       />
     </>
   );

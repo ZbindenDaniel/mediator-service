@@ -9,9 +9,18 @@ interface ItemBasicInfoFormProps {
   initialValues: Partial<ItemFormData>;
   onSubmit: (data: Partial<ItemFormData>) => void;
   submitLabel?: string;
+  layout?: 'page' | 'embedded';
+  headerContent?: React.ReactNode;
 }
 
-export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weiter' }: ItemBasicInfoFormProps) {
+// TODO(overview-inline-create): Confirm basic info form header layout for the overview inline flow.
+export function ItemBasicInfoForm({
+  initialValues,
+  onSubmit,
+  submitLabel = 'Weiter',
+  layout = 'page',
+  headerContent
+}: ItemBasicInfoFormProps) {
   const { form, update, mergeForm, generateMaterialNumber } = useItemFormState({ initialItem: initialValues });
   const qualitySummary = useMemo(() => describeQuality(form.Quality ?? QUALITY_DEFAULT), [form.Quality]);
 
@@ -29,19 +38,19 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
     }
   };
 
-  return (
-    <div className='container item'>
-      <div className="card">
-        <form onSubmit={handleSubmit} className="item-form">
-          <div className="row">
-            <label>Artikelbeschreibung*</label>
-            <input
-              value={form.Artikelbeschreibung || ''}
-              onChange={(event) => update('Artikelbeschreibung', event.target.value)}
-              required
-              autoFocus
-            />
-          </div>
+  const formBody = (
+    <>
+      {headerContent ? <div className="item-form__header">{headerContent}</div> : null}
+      <form onSubmit={handleSubmit} className="item-form">
+        <div className="row">
+          <label>Artikelbeschreibung*</label>
+          <input
+            value={form.Artikelbeschreibung || ''}
+            onChange={(event) => update('Artikelbeschreibung', event.target.value)}
+            required
+            autoFocus
+          />
+        </div>
 
           <div className="row">
             <label>Anzahl*</label>
@@ -131,11 +140,22 @@ export function ItemBasicInfoForm({ initialValues, onSubmit, submitLabel = 'Weit
           </div>
 
 
-          <div className="row">
-            <button type="submit">{submitLabel}</button>
-          </div>
-        </form>
-      </div>
+        <div className="row">
+          <button type="submit">{submitLabel}</button>
+        </div>
+      </form>
+    </>
+  );
+
+  const card = <div className="card">{formBody}</div>;
+
+  if (layout === 'embedded') {
+    return card;
+  }
+
+  return (
+    <div className='container item'>
+      {card}
     </div>
   );
 }

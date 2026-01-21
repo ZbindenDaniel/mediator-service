@@ -26,6 +26,7 @@ import QualityBadge from './QualityBadge';
 // TODO(bulk-display): Recheck Einheit=Menge quantity display once box detail payloads are refined.
 // TODO(agent): Add shared focus styling for clickable table rows once global table styles support it.
 // TODO(bulk-display): Validate displayCount fallback logic for Menge rows after backend grouping changes.
+// TODO(box-detail-layout): Validate box detail summary grid alignment across breakpoints.
 
 interface Props {
   boxId: string;
@@ -480,183 +481,190 @@ export default function BoxDetail({ boxId }: Props) {
       <div className="grid landing-grid">
         {box ? (
           <>
-            <div className="card">
-              <h2 className='mono'>{box.BoxID}</h2>
-              <table className="details">
-                <tbody>
-                  <tr>
-                    <th>Standort</th>
-                    <td><BoxTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
-                  </tr>
-                  <tr>
-                    <th>Platziert am</th>
-                    <td>{box.PlacedAt ? formatDateTime(box.PlacedAt) : ''}</td>
-                  </tr>
-                  <tr>
-                    <th>Platziert von</th>
-                    <td>{box.PlacedBy ?? 'Niemandem!'}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div className='row'>
-                <button type="button" className="btn danger" onClick={handleDeleteBox}>Löschen</button>
+            <div className="box-detail-summary-grid grid-span-2">
+              <div className="box-detail-summary-column">
+                <div className="card">
+                  <h2 className='mono'>{box.BoxID}</h2>
+                  <table className="details">
+                    <tbody>
+                      <tr>
+                        <th>Standort</th>
+                        <td><BoxTag locationKey={box.LocationId} labelOverride={box.Label} /></td>
+                      </tr>
+                      <tr>
+                        <th>Platziert am</th>
+                        <td>{box.PlacedAt ? formatDateTime(box.PlacedAt) : ''}</td>
+                      </tr>
+                      <tr>
+                        <th>Platziert von</th>
+                        <td>{box.PlacedBy ?? 'Niemandem!'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className='row'>
+                    <button type="button" className="btn danger" onClick={handleDeleteBox}>Löschen</button>
+                  </div>
+                </div>
+
+                {isBoxRelocatable ? (
+                  <RelocateBoxCard
+                    boxId={box.BoxID}
+                    categorySegment={relocationCategory}
+                    onMoved={() => { void load({ showSpinner: false }); }}
+                  />
+                ) : null}
               </div>
-            </div>
 
-            <PrintLabelButton boxId={box.BoxID} />
-
-            {isBoxRelocatable ? (
-              <>
-                <RelocateBoxCard
-                  boxId={box.BoxID}
-                  categorySegment={relocationCategory}
-                  onMoved={() => { void load({ showSpinner: false }); }}
-                />
-
-                <div className="card grid-span-row-2">
-                  <h3>Notizen</h3>
-                  <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    const actor = await ensureUser();
-                    if (!actor) {
-                      console.info('Box note save aborted: missing username.');
-                      try {
-                        await dialogService.alert({
-                          title: 'Aktion nicht möglich',
-                          message: 'Bitte zuerst oben den Benutzer setzen.'
-                        });
-                      } catch (error) {
-                        console.error('Failed to display missing user alert for note save', error);
-                      }
-                      return;
-                    }
-                    try {
-                      setIsSavingNote(true);
-                      setNoteFeedback({ type: 'info', message: 'Speichern…' });
-                      console.info('Saving box note', { boxId: box.BoxID });
-                      const payload: Record<string, unknown> = { notes: note, actor };
-                      if (typeof box.LocationId === 'string' && box.LocationId.trim()) {
-                        payload.LocationId = box.LocationId.trim();
-                      }
-                      if (photoUpload) {
-                        payload.photo = photoUpload;
-                      } else if (photoRemoved) {
-                        payload.removePhoto = true;
-                      }
-                      const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                      });
-                      let responseBody: any = null;
-                      try {
-                        responseBody = await res.json();
-                      } catch (parseErr) {
-                        console.error('Failed to parse box note response', parseErr);
-                      }
-                      if (res.ok) {
-                        const nextPhotoPath = typeof responseBody?.photoPath === 'string' ? responseBody.photoPath.trim() : '';
-                        setBox(b => b ? { ...b, Notes: note, PhotoPath: nextPhotoPath || null } : b);
-                        setPhotoPreview(nextPhotoPath);
-                        setPhotoUpload(null);
-                        setPhotoRemoved(false);
-                        setNoteFeedback({ type: 'success', message: 'Notiz gespeichert' });
-                        console.info('Box note saved', { boxId: box.BoxID, hasPhoto: Boolean(nextPhotoPath) });
-                      } else {
-                        let errorMessage = `Speichern fehlgeschlagen (Status ${res.status})`;
-                        const errorBody = responseBody;
-                        if (errorBody?.error) {
-                          errorMessage = `Speichern fehlgeschlagen: ${errorBody.error}`;
+              <div className="box-detail-summary-column">
+                {isBoxRelocatable ? (
+                  <div className="card">
+                    <h3>Notizen</h3>
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      const actor = await ensureUser();
+                      if (!actor) {
+                        console.info('Box note save aborted: missing username.');
+                        try {
+                          await dialogService.alert({
+                            title: 'Aktion nicht möglich',
+                            message: 'Bitte zuerst oben den Benutzer setzen.'
+                          });
+                        } catch (error) {
+                          console.error('Failed to display missing user alert for note save', error);
                         }
-                        console.error('Note save request failed', { boxId: box.BoxID, status: res.status });
-                        setNoteFeedback({ type: 'error', message: errorMessage });
+                        return;
                       }
-                    } catch (err) {
-                      console.error('Note save failed', err);
-                      setNoteFeedback({ type: 'error', message: 'Speichern fehlgeschlagen' });
-                    } finally {
-                      setIsSavingNote(false);
-                    }
-                  }}>
-                    <div className=''>
-                      <div className='row'>
-                        <label htmlFor="box-note-photo">Foto</label>
-                        <div className="note-photo-controls">
-                          {photoPreview ? (
-                            <div className="note-photo-preview">
-                              {/* TODO(agent): Extract box note photo preview into shared media component when expanding uploader features. */}
-                              <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
-                                <img
-                                  src={photoPreview}
-                                  alt="Aktuelles Box-Foto"
-                                  style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
-                                  onClick={openPhotoModal}
-                                  onKeyDown={(event) => {
-                                    if (event.key === 'Enter' || event.key === ' ') {
-                                      event.preventDefault();
-                                      openPhotoModal();
-                                    }
-                                  }}
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-haspopup="dialog"
-                                  aria-label="Box-Foto vergrößern"
-                                  onError={handlePhotoImageError}
-                                />
-                              </figure>
-                              <div className='row'>
-                                <button type="button" className="btn danger" onClick={handlePhotoRemove}>
-                                  Foto entfernen
-                                </button>
+                      try {
+                        setIsSavingNote(true);
+                        setNoteFeedback({ type: 'info', message: 'Speichern…' });
+                        console.info('Saving box note', { boxId: box.BoxID });
+                        const payload: Record<string, unknown> = { notes: note, actor };
+                        if (typeof box.LocationId === 'string' && box.LocationId.trim()) {
+                          payload.LocationId = box.LocationId.trim();
+                        }
+                        if (photoUpload) {
+                          payload.photo = photoUpload;
+                        } else if (photoRemoved) {
+                          payload.removePhoto = true;
+                        }
+                        const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(payload)
+                        });
+                        let responseBody: any = null;
+                        try {
+                          responseBody = await res.json();
+                        } catch (parseErr) {
+                          console.error('Failed to parse box note response', parseErr);
+                        }
+                        if (res.ok) {
+                          const nextPhotoPath = typeof responseBody?.photoPath === 'string' ? responseBody.photoPath.trim() : '';
+                          setBox(b => b ? { ...b, Notes: note, PhotoPath: nextPhotoPath || null } : b);
+                          setPhotoPreview(nextPhotoPath);
+                          setPhotoUpload(null);
+                          setPhotoRemoved(false);
+                          setNoteFeedback({ type: 'success', message: 'Notiz gespeichert' });
+                          console.info('Box note saved', { boxId: box.BoxID, hasPhoto: Boolean(nextPhotoPath) });
+                        } else {
+                          let errorMessage = `Speichern fehlgeschlagen (Status ${res.status})`;
+                          const errorBody = responseBody;
+                          if (errorBody?.error) {
+                            errorMessage = `Speichern fehlgeschlagen: ${errorBody.error}`;
+                          }
+                          console.error('Note save request failed', { boxId: box.BoxID, status: res.status });
+                          setNoteFeedback({ type: 'error', message: errorMessage });
+                        }
+                      } catch (err) {
+                        console.error('Note save failed', err);
+                        setNoteFeedback({ type: 'error', message: 'Speichern fehlgeschlagen' });
+                      } finally {
+                        setIsSavingNote(false);
+                      }
+                    }}>
+                      <div className=''>
+                        <div className='row'>
+                          <label htmlFor="box-note-photo">Foto</label>
+                          <div className="note-photo-controls">
+                            {photoPreview ? (
+                              <div className="note-photo-preview">
+                                {/* TODO(agent): Extract box note photo preview into shared media component when expanding uploader features. */}
+                                <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
+                                  <img
+                                    src={photoPreview}
+                                    alt="Aktuelles Box-Foto"
+                                    style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
+                                    onClick={openPhotoModal}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        openPhotoModal();
+                                      }
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-haspopup="dialog"
+                                    aria-label="Box-Foto vergrößern"
+                                    onError={handlePhotoImageError}
+                                  />
+                                </figure>
+                                <div className='row'>
+                                  <button type="button" className="btn danger" onClick={handlePhotoRemove}>
+                                    Foto entfernen
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ) : (
-                            <p className="muted">Kein Foto gespeichert.</p>
+                            ) : (
+                              <p className="muted">Kein Foto gespeichert.</p>
+                            )}
+                            {photoRemoved ? (
+                              <p className="muted">Foto wird nach dem Speichern entfernt.</p>
+                            ) : null}
+                            <input
+                              type="file"
+                              id="box-note-photo"
+                              name="box-note-photo"
+                              accept="image/*"
+                              onChange={handlePhotoFileChange}
+                            />
+                          </div>
+                        </div>
+
+                        <div className='row'>
+                          <textarea
+                            value={note}
+                            onChange={e => {
+                              setNote(e.target.value);
+                              if (noteFeedback && noteFeedback.type !== 'info') {
+                                setNoteFeedback(null);
+                              }
+                            }}
+                            rows={Math.max(3, note.split('\n').length)} />
+                        </div>
+
+                        <div className='row'>
+                          <button type="submit" disabled={isSavingNote}>Speichern</button>
+                        </div>
+
+                        <div className='row'>
+                          {noteFeedback && (
+                            <span
+                              className="muted"
+                              role={noteFeedback.type === 'error' ? 'alert' : 'status'}
+                              style={noteFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}
+                            >
+                              {noteFeedback.message}
+                            </span>
                           )}
-                          {photoRemoved ? (
-                            <p className="muted">Foto wird nach dem Speichern entfernt.</p>
-                          ) : null}
-                          <input
-                            type="file"
-                            id="box-note-photo"
-                            name="box-note-photo"
-                            accept="image/*"
-                            onChange={handlePhotoFileChange}
-                          />
                         </div>
                       </div>
+                    </form>
+                  </div>
+                ) : null}
 
-                      <div className='row'>
-                        <textarea
-                          value={note}
-                          onChange={e => {
-                            setNote(e.target.value);
-                            if (noteFeedback && noteFeedback.type !== 'info') {
-                              setNoteFeedback(null);
-                            }
-                          }}
-                          rows={Math.max(3, note.split('\n').length)} />
-                      </div>
-
-                      <div className='row'>
-                        <button type="submit" disabled={isSavingNote}>Speichern</button>
-                      </div>
-
-                      <div className='row'>
-                        {noteFeedback && (
-                          <span
-                            className="muted"
-                            role={noteFeedback.type === 'error' ? 'alert' : 'status'}
-                            style={noteFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}
-                          >
-                            {noteFeedback.message}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              </>) : null}
+                <PrintLabelButton boxId={box.BoxID} />
+              </div>
+            </div>
 
             {isShelf ? (
               <div className="card">

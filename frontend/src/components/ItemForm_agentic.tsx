@@ -19,6 +19,7 @@ interface Props {
   submitLabel: string;
   isNew?: boolean;
   initialPhotos?: readonly string[];
+  layout?: 'page' | 'embedded';
 }
 
 export default function ItemForm_Agentic({
@@ -28,7 +29,8 @@ export default function ItemForm_Agentic({
   onFallbackToManual,
   submitLabel,
   isNew,
-  initialPhotos
+  initialPhotos,
+  layout = 'page'
 }: Props) {
   const { form, update, mergeForm, generateMaterialNumber, seedPhotos, seededPhotos } = useItemFormState({
     initialItem: draft,
@@ -253,22 +255,22 @@ export default function ItemForm_Agentic({
     }
   }
 
-  return (
-    <div className='container item'>
-      <div className="card">
-        <form ref={formRef} onSubmit={handleSubmit} className="item-form">
-          {mode === 'details' && (
-            <>
-              <ItemDetailsFields
-                form={form}
-                isNew={isNew}
-                onUpdate={update}
-                onGenerateMaterialNumber={generateMaterialNumber}
-              />
+  // TODO(overview-inline-create): Validate agentic form layout when embedded on the overview.
+  const cardBody = (
+    <div className="card">
+      <form ref={formRef} onSubmit={handleSubmit} className="item-form">
+        {mode === 'details' && (
+          <>
+            <ItemDetailsFields
+              form={form}
+              isNew={isNew}
+              onUpdate={update}
+              onGenerateMaterialNumber={generateMaterialNumber}
+            />
 
-              <hr></hr>
-            </>
-          )}
+            <hr></hr>
+          </>
+        )}
 
           {mode === 'photos' && (
             <>
@@ -376,14 +378,25 @@ export default function ItemForm_Agentic({
               <span>{submitError}</span>
             </div>
           )}
-        </form >
-      </div>
+      </form >
+    </div>
+  );
+
+  const formBlock = layout === 'embedded' ? cardBody : (
+    <div className='container item'>
+      {cardBody}
+    </div>
+  );
+
+  return (
+    <>
+      {formBlock}
       <PhotoCaptureModal
         isOpen={activePhotoField !== null}
         onClose={handleCloseCamera}
         onCapture={handleCapturePhoto}
         title={cameraTitle}
       />
-    </div>
+    </>
   );
 }
