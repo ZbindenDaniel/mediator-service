@@ -658,12 +658,20 @@ const action = defineHttpAction({
       const kurzbeschreibungInput = (p.get('Kurzbeschreibung') || '').trim();
       const langtextInput = (p.get('Langtext') || '').trim();
       let qualityParam: string | null = null;
+      let hasQualityParam = false;
       // TODO(import-item): Ensure creation-by-reference payloads always include explicit quantity/quality fields.
       try {
         const rawQualityParam = p.get('Quality');
+        hasQualityParam = p.has('Quality');
         qualityParam = typeof rawQualityParam === 'string' ? rawQualityParam.trim() : null;
-        if (!qualityParam && isCreationByReference) {
+        if (!hasQualityParam && isCreationByReference) {
           console.warn('[import-item] Missing Quality value in creation-by-reference payload', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null
+          });
+        }
+        if (hasQualityParam && !qualityParam) {
+          console.info('[import-item] Empty Quality value provided in payload; clearing quality', {
             ItemUUID,
             Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null
           });
@@ -739,7 +747,7 @@ const action = defineHttpAction({
         fallbackLangtext = referenceDefaults.Langtext ?? '';
       }
       let langtext = (parsedLangtextInput ?? fallbackLangtext) as ItemRef['Langtext'];
-      let qualityFromLangtext: number | undefined;
+      let qualityFromLangtext: number | null | undefined;
       if (langtext && typeof langtext === 'object' && !Array.isArray(langtext)) {
         const langtextPayload = { ...(langtext as Record<string, string>) };
         const qualityLabel = langtextPayload.Qualität ?? langtextPayload.Qualitaet;
@@ -768,17 +776,21 @@ const action = defineHttpAction({
         }
         langtext = langtextPayload;
       }
-      let qualityFromPayload: number | undefined;
-      if (qualityParam) {
-        try {
-          qualityFromPayload = normalizeQuality(qualityParam, console);
-        } catch (qualityError) {
-          console.error('[import-item] Failed to normalize Quality from request payload', {
-            ItemUUID,
-            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
-            provided: qualityParam,
-            error: qualityError
-          });
+      let qualityFromPayload: number | null | undefined;
+      if (hasQualityParam) {
+        if (qualityParam) {
+          try {
+            qualityFromPayload = normalizeQuality(qualityParam, console);
+          } catch (qualityError) {
+            console.error('[import-item] Failed to normalize Quality from request payload', {
+              ItemUUID,
+              Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+              provided: qualityParam,
+              error: qualityError
+            });
+          }
+        } else {
+          qualityFromPayload = null;
         }
       }
       const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
@@ -978,7 +990,7 @@ const action = defineHttpAction({
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
-        Quality: qualityFromPayload ?? qualityFromLangtext,
+        Quality: hasQualityParam ? (qualityFromPayload ?? null) : qualityFromLangtext,
         Hersteller: hersteller,
         Länge_mm: laenge,
         Breite_mm: breite,

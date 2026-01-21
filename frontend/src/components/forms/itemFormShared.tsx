@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { AgenticRunStatus, Item, ItemRef, ItemReferenceEdit } from '../../../../models';
 import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../../models';
-import { describeQuality, normalizeQuality, QUALITY_DEFAULT, QUALITY_LABELS } from '../../../../models/quality';
+import { describeQuality, normalizeQuality, QUALITY_MIN } from '../../../../models/quality';
 import { ensureUser, getUser } from '../../lib/user';
 import { itemCategories } from '../../data/itemCategories';
 import { buildItemCategoryLookups } from '../../lib/categoryLookup';
@@ -32,12 +32,12 @@ function normalisePhotoSeedList(seeds?: readonly PhotoSeedCandidate[]): (string 
   return PHOTO_FIELD_KEYS.map((_, index) => normalisePhotoSeedValue(seeds?.[index]));
 }
 
-function normalizeQualityForForm(value: unknown, context: string): number {
+function normalizeQualityForForm(value: unknown, context: string): number | null {
   try {
     return normalizeQuality(value, console);
   } catch (error) {
     console.error('[itemForm] Failed to normalize quality value', { context, error });
-    return QUALITY_DEFAULT;
+    return null;
   }
 }
 
@@ -181,7 +181,7 @@ export function useItemFormState({ initialItem, initialPhotos, formMode = 'full'
       : ITEM_FORM_DEFAULT_EINHEIT;
     const shouldIncludeQuality = formMode === 'full';
     const initialQuality = shouldIncludeQuality
-      ? normalizeQualityForForm((normalizedInitialItem as Partial<ItemFormData>)?.Quality ?? QUALITY_DEFAULT, 'initialState')
+      ? normalizeQualityForForm((normalizedInitialItem as Partial<ItemFormData>)?.Quality, 'initialState')
       : undefined;
     const draft: Partial<ItemFormPayload> = {
       ...normalizedInitialItem,
@@ -220,7 +220,7 @@ export function useItemFormState({ initialItem, initialPhotos, formMode = 'full'
         ...(formMode === 'full'
           ? {
               Quality: normalizeQualityForForm(
-                (safeNext as Partial<ItemFormData>).Quality ?? (prev as Partial<ItemFormData>).Quality ?? QUALITY_DEFAULT,
+                (safeNext as Partial<ItemFormData>).Quality ?? (prev as Partial<ItemFormData>).Quality ?? null,
                 'mergeForm'
               )
             }
@@ -237,7 +237,7 @@ export function useItemFormState({ initialItem, initialPhotos, formMode = 'full'
       ...(formMode === 'full'
         ? {
             Quality: normalizeQualityForForm(
-              (safeNext as Partial<ItemFormData>).Quality ?? QUALITY_DEFAULT,
+              (safeNext as Partial<ItemFormData>).Quality ?? null,
               'resetForm'
             )
           }
@@ -512,7 +512,7 @@ export function ItemDetailsFields({
   const quantityHidden = isReferenceMode || isFieldLocked(lockedFields, 'Auf_Lager', 'hidden');
   const quantityReadonly = isFieldLocked(lockedFields, 'Auf_Lager', 'readonly');
 
-  const qualityHidden = isReferenceMode || isFieldLocked(lockedFields, 'Quality', 'hidden');
+  const qualityHidden = isReferenceMode || isNew || isFieldLocked(lockedFields, 'Quality', 'hidden');
   const qualityReadonly = isFieldLocked(lockedFields, 'Quality', 'readonly');
 
   const placementHidden = isReferenceMode || isFieldLocked(lockedFields, 'BoxID', 'hidden');
@@ -528,8 +528,7 @@ export function ItemDetailsFields({
   const langtextValueRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const langtextFieldIdPrefix = useId();
   const qualitySummary = useMemo(
-    () =>
-      describeQuality((form as Partial<ItemFormData>).Quality ?? QUALITY_DEFAULT),
+    () => describeQuality((form as Partial<ItemFormData>).Quality ?? null),
     [form.Quality]
   );
 
@@ -1109,7 +1108,7 @@ export function ItemDetailsFields({
           <label>
             <span>Qualität:</span>
             {/* <QualityBadge compact labelPrefix="Qualität" value={qualitySummary.value} /> */}
-            <span key={`quality-label-${qualitySummary.value}`}>{QUALITY_LABELS[qualitySummary.value] ?? qualitySummary.value}</span>
+            <span key={`quality-label-${qualitySummary.value ?? 'unknown'}`}>{qualitySummary.label}</span>
           </label>
           <div className="combined-input">
             <input
@@ -1117,17 +1116,12 @@ export function ItemDetailsFields({
               min={1}
               max={5}
               step={1}
-              value={qualitySummary.value}
+              value={qualitySummary.value ?? QUALITY_MIN}
               onChange={handleQualityChange}
-              aria-valuetext={`${qualitySummary.label} (${qualitySummary.value})`}
+              aria-valuetext={`${qualitySummary.label} (${qualitySummary.value ?? QUALITY_MIN})`}
               disabled={qualityReadonly}
             />
           </div>
-          {/* <div className="quality-slider__labels">
-            {[1, 2, 3, 4, 5].map((level) => (
-              <span key={`quality-label-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
-            ))}
-          </div> */}
           {/* <div className="muted">
           </div> */}
         </div>

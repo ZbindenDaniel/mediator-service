@@ -347,6 +347,8 @@ export function buildCreationParams(
     sanitized.actor = actor;
   }
 
+  const qualityProvided = Object.prototype.hasOwnProperty.call(sanitized, 'Quality');
+
   if ('BoxID' in sanitized) {
     const rawBoxId = sanitized.BoxID;
     if (typeof rawBoxId === 'string') {
@@ -394,6 +396,10 @@ export function buildCreationParams(
   }
 
   Object.entries(sanitized).forEach(([key, value]) => {
+    if (key === 'Quality' && qualityProvided && value === null) {
+      params.append(key, '');
+      return;
+    }
     if (value !== undefined && value !== null && value !== '') {
       params.append(key, String(value));
     }

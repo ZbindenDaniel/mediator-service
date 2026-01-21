@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import type { AgenticRun, Item, ItemInstanceSummary, ItemRef } from '../../models';
-import { normalizeQuality, QUALITY_DEFAULT } from '../../models/quality';
+import { normalizeQuality } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { MEDIA_DIR } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
@@ -378,20 +378,23 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 const DEFAULT_ITEM_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
-function resolveItemQualityValue(value: unknown, context: string): number {
+function resolveItemQualityValue(value: unknown, context: string): number | null {
   try {
-    const candidate = value ?? QUALITY_DEFAULT;
+    const candidate = value ?? null;
     return normalizeQuality(candidate, console);
   } catch (error) {
-    console.error('[save-item] Failed to normalize quality value; using default.', { context, error });
-    return QUALITY_DEFAULT;
+    console.error('[save-item] Failed to normalize quality value; leaving unset.', { context, error });
+    return null;
   }
 }
 
-function resolveShopartikelFlag(value: unknown, quality: number): number {
-  const derivedFlag = quality < 3 ? 0 : 1;
+function resolveShopartikelFlag(value: unknown, quality: number | null): number {
+  const derivedFlag = quality !== null && quality < 3 ? 0 : 1;
   try {
     if (value === undefined || value === null || value === '') {
+      if (quality === null) {
+        console.warn('[save-item] Shopartikel value missing with unknown quality; using fallback', { value });
+      }
       return derivedFlag;
     }
 
@@ -747,7 +750,7 @@ const action = defineHttpAction({
       const resolvedQuality =
         incomingQuality !== undefined
           ? resolveItemQualityValue(incomingQuality, 'updatePayload')
-          : resolveItemQualityValue(referenceBase.Quality ?? QUALITY_DEFAULT, 'existingReference');
+          : resolveItemQualityValue(referenceBase.Quality ?? null, 'existingReference');
       if (Object.prototype.hasOwnProperty.call(referencePayload, 'Quality')) {
         referenceUpdates.Quality = resolvedQuality;
       }

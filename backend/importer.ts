@@ -1117,7 +1117,7 @@ export async function ingestCsvFile(
           artikelNummer: artikelNummer || null
         });
       }
-      let resolvedQuality: number | undefined;
+      let resolvedQuality: number | null | undefined;
       let langtext = parsedLangtext ?? '';
       if (parsedLangtext && typeof parsedLangtext === 'object' && !Array.isArray(parsedLangtext)) {
         const langtextPayload = { ...(parsedLangtext as Record<string, string>) };
