@@ -11,6 +11,7 @@ export interface EventResource {
 }
 
 const LOGGER_PREFIX = '[event-labels]';
+// TODO(agent): Validate event resource keys include explicit mappings for high-traffic events like Updated.
 export const EVENT_DEFAULT_LEVEL: EventLevel = 'error';
 const EVENT_TOPIC_INDEX = new Map<string, string>();
 
@@ -84,6 +85,12 @@ for (const resource of EVENT_RESOURCES) {
 
   EVENT_RESOURCE_MAP.set(resource.key, resource);
   EVENT_LABELS[resource.key] = resource.label;
+  if (resource.key === 'Updated') {
+    console.info(`${LOGGER_PREFIX} Loaded explicit mapping for Updated event.`, {
+      level: resource.level,
+      topic: resource.topic
+    });
+  }
   const existing = EVENT_TOPIC_TO_KEYS.get(resource.topic) ?? new Set<string>();
   existing.add(resource.key);
   EVENT_TOPIC_TO_KEYS.set(resource.topic, existing);
