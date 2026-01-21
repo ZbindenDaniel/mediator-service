@@ -33,10 +33,12 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
   updateQueuedAgenticRunQueueState,
+  resolveCanonicalItemUUIDForArtikelnummer,
   type AgenticRunQueueUpdate,
   type LogEventPayload
 } from '../db';
 import { locateTranscript } from './flow/transcript';
+import { parseSequentialItemUUID } from '../lib/itemIds';
 
 export interface AgenticServiceLogger {
   info?: Console['info'];
@@ -56,6 +58,7 @@ export interface AgenticServiceDependencies {
   updateQueuedAgenticRunQueueState?: (update: AgenticRunQueueUpdate) => void;
   logEvent: (payload: LogEventPayload) => void;
   updateAgenticReview?: Database.Statement;
+  findByMaterial?: { all?: (artikelNummer: string) => Array<{ ItemUUID?: string | null }> };
   now?: () => Date;
   logger?: AgenticServiceLogger;
   invokeModel?: AgenticModelInvokerFn;
@@ -389,6 +392,50 @@ function fetchAgenticRun(
       error: err instanceof Error ? err.message : err
     });
     throw err;
+  }
+}
+
+function resolveCanonicalItemIdForAgentic(
+  itemId: string,
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger
+): string {
+  const parsed = parseSequentialItemUUID(itemId);
+  if (!parsed || parsed.kind !== 'artikelnummer') {
+    logger.warn?.('[agentic-service] Unable to resolve canonical ItemUUID for non-artikelnummer item id', {
+      itemId
+    });
+    return itemId;
+  }
+
+  try {
+    const resolution = resolveCanonicalItemUUIDForArtikelnummer(parsed.artikelNummer, {
+      findByMaterial: deps.findByMaterial,
+      logger
+    });
+    if (!resolution.itemUUID) {
+      logger.warn?.('[agentic-service] Failed to resolve canonical ItemUUID for reference', {
+        itemId,
+        artikelNummer: parsed.artikelNummer
+      });
+      return itemId;
+    }
+
+    if (resolution.itemUUID !== itemId) {
+      logger.info?.('[agentic-service] Normalized agentic ItemUUID to canonical reference instance', {
+        itemId,
+        canonicalItemUUID: resolution.itemUUID
+      });
+    }
+
+    return resolution.itemUUID;
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to resolve canonical ItemUUID for reference', {
+      itemId,
+      artikelNummer: parsed.artikelNummer,
+      error: err instanceof Error ? err.message : err
+    });
+    return itemId;
   }
 }
 
@@ -749,25 +796,38 @@ export async function startAgenticRun(
     return { agentic: null, queued: false, created: false, reason: 'missing-item-id' };
   }
 
-  const existing = fetchAgenticRun(itemId, deps, logger);
-  const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
-  if (!searchQuery) {
-    logger.warn?.('[agentic-service] startAgenticRun missing search query', { itemId, context: input.context ?? null });
-    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-search-query', logger);
-    return { agentic: existing, queued: false, created: !existing, reason: 'missing-search-query' };
+  const canonicalItemId = resolveCanonicalItemIdForAgentic(itemId, deps, logger);
+  const existing = fetchAgenticRun(canonicalItemId, deps, logger);
+  if (existing) {
+    logger.info?.('[agentic-service] Skipping agentic run creation because canonical run already exists', {
+      itemId: canonicalItemId,
+      context: input.context ?? null
+    });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'already-exists', logger);
+    return { agentic: existing, queued: false, created: false, reason: 'already-exists' };
   }
 
-  const review = normalizeReviewMetadata(input.review ?? null, existing, logger);
+  const searchQuery = (input.searchQuery || '').trim();
+  if (!searchQuery) {
+    logger.warn?.('[agentic-service] startAgenticRun missing search query', {
+      itemId: canonicalItemId,
+      context: input.context ?? null
+    });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-search-query', logger);
+    return { agentic: null, queued: false, created: false, reason: 'missing-search-query' };
+  }
+
+  const review = normalizeReviewMetadata(input.review ?? null, null, logger);
   try {
     recordRequestLogStart(request, searchQuery, logger);
     const agentic = persistQueuedRun(
       {
-        itemId,
+        itemId: canonicalItemId,
         searchQuery,
         actor: input.actor?.trim() || null,
         context: input.context?.trim() || null,
         review,
-        created: !existing
+        created: true
       },
       deps,
       logger
@@ -779,7 +839,7 @@ export async function startAgenticRun(
     });
 
     scheduleAgenticModelInvocation({
-      itemId,
+      itemId: canonicalItemId,
       searchQuery,
       context: input.context?.trim() || null,
       review,
@@ -789,10 +849,10 @@ export async function startAgenticRun(
     });
 
     logger.info?.('[agentic-service] Agentic run queued for asynchronous execution', {
-      itemId,
+      itemId: canonicalItemId,
       context: input.context ?? null
     });
-    return { agentic, queued: true, created: !existing };
+    return { agentic, queued: true, created: true };
   } catch (err) {
     finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
     throw err;
@@ -1027,10 +1087,14 @@ export async function restartAgenticRun(
     return { agentic: null, queued: false, created: false, reason: 'missing-item-id' };
   }
 
-  const existing = fetchAgenticRun(itemId, deps, logger);
+  const canonicalItemId = resolveCanonicalItemIdForAgentic(itemId, deps, logger);
+  const existing = fetchAgenticRun(canonicalItemId, deps, logger);
   const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
   if (!searchQuery) {
-    logger.warn?.('[agentic-service] restartAgenticRun missing search query', { itemId, context: input.context ?? null });
+    logger.warn?.('[agentic-service] restartAgenticRun missing search query', {
+      itemId: canonicalItemId,
+      context: input.context ?? null
+    });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-search-query', logger);
     return { agentic: existing, queued: false, created: !existing, reason: 'missing-search-query' };
   }
@@ -1044,7 +1108,7 @@ export async function restartAgenticRun(
     if (existing) {
       const updateResult = deps.updateAgenticRunStatus.run(
         normalizeAgenticStatusUpdate({
-          ItemUUID: itemId,
+          ItemUUID: canonicalItemId,
           Status: AGENTIC_RUN_STATUS_QUEUED,
           SearchQuery: searchQuery,
           LastModified: nowIso,
@@ -1070,7 +1134,7 @@ export async function restartAgenticRun(
       }
     } else {
       deps.upsertAgenticRun.run({
-        ItemUUID: itemId,
+        ItemUUID: canonicalItemId,
         SearchQuery: searchQuery,
         Status: AGENTIC_RUN_STATUS_QUEUED,
         LastModified: nowIso,
@@ -1084,7 +1148,7 @@ export async function restartAgenticRun(
     deps.logEvent({
       Actor: actor,
       EntityType: 'Item',
-      EntityId: itemId,
+      EntityId: canonicalItemId,
       Event: 'AgenticRunRestarted',
       Meta: JSON.stringify({
         previousStatus: input.previousStatus ?? existing?.Status ?? null,
@@ -1101,14 +1165,14 @@ export async function restartAgenticRun(
     txn();
   } catch (err) {
     logger.error?.('[agentic-service] Failed to restart agentic run', {
-      itemId,
+      itemId: canonicalItemId,
       error: err instanceof Error ? err.message : err
     });
     finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
     throw err;
   }
 
-  const refreshed = fetchAgenticRun(itemId, deps, logger);
+  const refreshed = fetchAgenticRun(canonicalItemId, deps, logger);
 
   recordAgenticRequestLogUpdate(request, AGENTIC_RUN_STATUS_QUEUED, {
     searchQuery,
@@ -1116,7 +1180,7 @@ export async function restartAgenticRun(
   });
 
   scheduleAgenticModelInvocation({
-    itemId,
+    itemId: canonicalItemId,
     searchQuery,
     context,
     review,
@@ -1126,7 +1190,7 @@ export async function restartAgenticRun(
   });
 
   logger.info?.('[agentic-service] Agentic run restart queued for asynchronous execution', {
-    itemId,
+    itemId: canonicalItemId,
     context
   });
 

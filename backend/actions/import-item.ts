@@ -20,6 +20,7 @@ import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
 import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
 import { normalizeQuality, resolveQualityFromLabel } from '../../models/quality';
+import { resolveCanonicalItemUUIDForArtikelnummer } from '../db';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -1054,22 +1055,94 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: 'Failed to mint ItemUUIDs for item import' });
       }
 
-      const shouldSeedAgenticRun = !isUpdateRequest && !hadExistingInstanceForArtikel;
+      let canonicalAgenticItemId: string | null = null;
+      const artikelNummerForCanonical = resolvedArtikelNummer || incomingArtikelNummer || null;
+      if (artikelNummerForCanonical) {
+        try {
+          const resolution = resolveCanonicalItemUUIDForArtikelnummer(artikelNummerForCanonical, {
+            findByMaterial: ctx.findByMaterial,
+            logger: console
+          });
+          canonicalAgenticItemId = resolution.itemUUID;
+        } catch (canonicalErr) {
+          console.error('[import-item] Failed to resolve canonical ItemUUID for agentic run', {
+            artikelNummer: artikelNummerForCanonical,
+            error: canonicalErr
+          });
+        }
+      }
+
+      if (!canonicalAgenticItemId && itemUUIDs[0]) {
+        const parsedCandidate = parseSequentialItemUUID(itemUUIDs[0]);
+        if (
+          parsedCandidate?.kind === 'artikelnummer'
+          && parsedCandidate.artikelNummer === (artikelNummerForCanonical || '')
+          && parsedCandidate.sequence === 1
+        ) {
+          canonicalAgenticItemId = itemUUIDs[0];
+          console.info('[import-item] Falling back to newly minted canonical ItemUUID for agentic run', {
+            ItemUUID: itemUUIDs[0],
+            artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null
+          });
+        }
+      }
+
+      if (!canonicalAgenticItemId) {
+        console.warn('[import-item] Failed to resolve canonical ItemUUID for agentic run seeding', {
+          ItemUUID: itemUUIDs[0] ?? null,
+          artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null
+        });
+      }
+
+      let hasExistingAgenticRun = false;
+      if (canonicalAgenticItemId && ctx.getAgenticRun?.get) {
+        try {
+          const existingRun = ctx.getAgenticRun.get(canonicalAgenticItemId) as { Status?: string | null } | undefined;
+          if (existingRun) {
+            hasExistingAgenticRun = true;
+          }
+        } catch (agenticLookupErr) {
+          console.error('[import-item] Failed to load existing agentic run for canonical reference', {
+            ItemUUID: canonicalAgenticItemId,
+            error: agenticLookupErr
+          });
+        }
+      }
+
+      const hasCanonicalInRequest =
+        Boolean(canonicalAgenticItemId) && itemUUIDs.includes(canonicalAgenticItemId || '');
+      const shouldSeedAgenticRun =
+        !isUpdateRequest
+        && !hadExistingInstanceForArtikel
+        && !hasExistingAgenticRun
+        && hasCanonicalInRequest;
       const shouldTriggerAgenticRun = shouldSeedAgenticRun && !agenticRunManuallySkipped;
-      const agenticSeedItemId = shouldSeedAgenticRun ? itemUUIDs[0] : null;
+      const agenticSeedItemId = shouldSeedAgenticRun ? canonicalAgenticItemId : null;
       const agenticSeedReason = isUpdateRequest
         ? 'update-request'
         : hadExistingInstanceForArtikel
           ? 'existing-instance'
-          : null;
+          : hasExistingAgenticRun
+            ? 'existing-agentic-run'
+            : !canonicalAgenticItemId
+              ? 'missing-canonical'
+              : !hasCanonicalInRequest
+                ? 'canonical-outside-request'
+                : null;
 
       if (!agenticSeedItemId) {
         console.info('[import-item] Agentic seed skipped for import', {
-          ItemUUID: itemUUIDs[0] ?? null,
+          ItemUUID: canonicalAgenticItemId ?? itemUUIDs[0] ?? null,
           artikelNummer: resolvedArtikelNummer ?? incomingArtikelNummer ?? null,
           reason: agenticSeedReason ?? 'unknown',
           instanceCount: itemUUIDs.length
         });
+        if (hasExistingAgenticRun && canonicalAgenticItemId) {
+          console.info('[import-item] Agentic run skipped because canonical run already exists', {
+            ItemUUID: canonicalAgenticItemId,
+            artikelNummer: resolvedArtikelNummer ?? incomingArtikelNummer ?? null
+          });
+        }
       }
 
       const txn = ctx.db.transaction(
@@ -1281,6 +1354,7 @@ const action = defineHttpAction({
                   upsertAgenticRun: ctx.upsertAgenticRun,
                   updateAgenticRunStatus: ctx.updateAgenticRunStatus,
                   logEvent: ctx.logEvent,
+                  findByMaterial: ctx.findByMaterial,
                   logger: console,
                   now: () => new Date(),
                   invokeModel: ctx.agenticInvokeModel

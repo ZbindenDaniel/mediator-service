@@ -443,6 +443,7 @@ function createAgenticServiceDependencies(
     updateAgenticRunStatus,
     updateQueuedAgenticRunQueueState,
     logEvent,
+    findByMaterial,
     logger,
     now: overrides.now ?? (() => new Date()),
     invokeModel: boundAgenticInvokeModel
