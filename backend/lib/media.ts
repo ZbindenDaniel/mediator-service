@@ -2,6 +2,7 @@ import path from 'path';
 import { MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
 
 // TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
+// TODO(webdav-feedback): Confirm startup logging format with operators once WebDAV mounts are deployed.
 // TODO(media-tests): Cover media directory resolution error handling and overrides.
 const DEFAULT_MEDIA_DIR = path.join(__dirname, '..', 'media');
 
@@ -20,16 +21,15 @@ function resolveMediaDir(): string {
     console.error('[media] Failed to resolve media directory override; using default media directory.', {
       error
     });
-    return DEFAULT_MEDIA_DIR;
+    resolved = DEFAULT_MEDIA_DIR;
   }
 
-  if (resolved !== DEFAULT_MEDIA_DIR) {
-    console.info('[media] Media directory override resolved', {
-      mode: MEDIA_STORAGE_MODE,
-      resolved,
-      defaultDir: DEFAULT_MEDIA_DIR
-    });
-  }
+  console.info('[media] Media storage resolved', {
+    mode: MEDIA_STORAGE_MODE,
+    resolved,
+    defaultDir: DEFAULT_MEDIA_DIR,
+    usingDefault: resolved === DEFAULT_MEDIA_DIR
+  });
 
   return resolved;
 }
