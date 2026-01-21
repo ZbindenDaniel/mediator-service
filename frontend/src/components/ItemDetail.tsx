@@ -2213,6 +2213,7 @@ export default function ItemDetail({ itemId }: Props) {
                   itemId={item.ItemUUID}
                   grafikname={item.Grafikname}
                   mediaAssets={mediaAssets}
+                  className="item-media-gallery--stacked"
                 />
               </section>
             </div>

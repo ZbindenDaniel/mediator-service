@@ -219,6 +219,25 @@ textarea {
     gap: 0.75rem;
 }
 
+.item-media-gallery--stacked {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
+}
+
+.item-media-gallery--stacked .item-media-gallery__item {
+    width: 100%;
+    max-width: 100%;
+}
+
+.item-media-gallery--stacked .item-media-gallery__item img {
+    width: 100%;
+    height: auto;
+}
+
 .item-media-gallery__item {
     text-align: center;
     margin: auto;
