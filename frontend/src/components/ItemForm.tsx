@@ -22,6 +22,7 @@ type ItemFormProps<T extends ItemFormPayload = ItemFormData> = {
   hidePhotoInputs?: boolean;
   initialPhotos?: readonly string[];
   formMode?: ItemFormMode;
+  layout?: 'page' | 'embedded';
 };
 
 export default function ItemForm<T extends ItemFormPayload = ItemFormData>({
@@ -33,7 +34,8 @@ export default function ItemForm<T extends ItemFormPayload = ItemFormData>({
   lockedFields,
   hidePhotoInputs,
   initialPhotos,
-  formMode = 'full'
+  formMode = 'full',
+  layout = 'page'
 }: ItemFormProps<T>) {
   const { form, update, mergeForm, generateMaterialNumber, changeStock, seedPhotos, seededPhotos, clearPhoto } = useItemFormState({
     initialItem: item as Partial<ItemFormPayload>,
@@ -172,20 +174,20 @@ export default function ItemForm<T extends ItemFormPayload = ItemFormData>({
     );
   }, [form.picture1, form.picture2, form.picture3, handleRemovePhoto]);
 
-  return (
-    <div className='container item'>
-      <div className="card">
-        {headerContent ? <div className="item-form__header">{headerContent}</div> : null}
-        <form onSubmit={handleSubmit} className="item-form">
-          <ItemDetailsFields
-            form={form}
-            isNew={isNew}
-            onUpdate={update}
-            onGenerateMaterialNumber={generateMaterialNumber}
-            onChangeStock={changeStock}
-            lockedFields={lockedFields}
-            formMode={formMode}
-          />
+  // TODO(overview-inline-create): Confirm manual item form layout when embedded on overview.
+  const cardBody = (
+    <div className="card">
+      {headerContent ? <div className="item-form__header">{headerContent}</div> : null}
+      <form onSubmit={handleSubmit} className="item-form">
+        <ItemDetailsFields
+          form={form}
+          isNew={isNew}
+          onUpdate={update}
+          onGenerateMaterialNumber={generateMaterialNumber}
+          onChangeStock={changeStock}
+          lockedFields={lockedFields}
+          formMode={formMode}
+        />
 
           {!hidePhotoInputs ? (
             <>
@@ -278,14 +280,25 @@ export default function ItemForm<T extends ItemFormPayload = ItemFormData>({
           <div className="row">
             <button type="submit">{submitLabel}</button>
           </div>
-        </form >
-      </div>
+      </form >
+    </div>
+  );
+
+  const formBlock = layout === 'embedded' ? cardBody : (
+    <div className='container item'>
+      {cardBody}
+    </div>
+  );
+
+  return (
+    <>
+      {formBlock}
       <PhotoCaptureModal
         isOpen={activePhotoField !== null}
         onClose={handleCloseCamera}
         onCapture={handleCapturePhoto}
         title={cameraTitle}
       />
-    </div>
+    </>
   );
 }

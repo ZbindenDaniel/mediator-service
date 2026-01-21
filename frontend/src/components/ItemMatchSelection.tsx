@@ -7,9 +7,11 @@ interface ItemMatchSelectionProps {
   searchTerm: string;
   onSelect: (item: SimilarItem) => void | Promise<void>;
   onSkip: () => void;
+  layout?: 'page' | 'embedded';
 }
 
-export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSelectionProps) {
+// TODO(overview-inline-create): Validate duplicate selection layout inside the overview grid.
+export function ItemMatchSelection({ searchTerm, onSelect, onSkip, layout = 'page' }: ItemMatchSelectionProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<SimilarItem[]>([]);
@@ -87,32 +89,40 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip }: ItemMatchSe
     [onSelect]
   );
 
-  return (
-    <div className='container item'>
-      <div className="card">
-        <div className="item-form__header">
-          <h2>Ähnliche Artikel prüfen</h2>
-          <p>Wir haben nach bestehenden Artikeln mit der Beschreibung „{searchTerm || '—'}“ gesucht.</p>
-        </div>
-        <div className="item-form">
-          <SimilarItemsPanel items={items} loading={loading} error={error} onSelect={handleSelect} />
-          {!loading && !error && items.length === 0 && (
-            <div className="row">
-              <span>Keine ähnlichen Artikel gefunden.</span>
-            </div>
-          )}
-          {error && (
-            <div className="row error">
-              <span>{error}</span>
-            </div>
-          )}
+  const cardBody = (
+    <div className="card">
+      <div className="item-form__header">
+        <h2>Ähnliche Artikel prüfen</h2>
+        <p>Wir haben nach bestehenden Artikeln mit der Beschreibung „{searchTerm || '—'}“ gesucht.</p>
+      </div>
+      <div className="item-form">
+        <SimilarItemsPanel items={items} loading={loading} error={error} onSelect={handleSelect} />
+        {!loading && !error && items.length === 0 && (
           <div className="row">
-            <button type="button" onClick={onSkip}>
-              Kein Duplikat – weiter
-            </button>
+            <span>Keine ähnlichen Artikel gefunden.</span>
           </div>
+        )}
+        {error && (
+          <div className="row error">
+            <span>{error}</span>
+          </div>
+        )}
+        <div className="row">
+          <button type="button" onClick={onSkip}>
+            Kein Duplikat – weiter
+          </button>
         </div>
       </div>
+    </div>
+  );
+
+  if (layout === 'embedded') {
+    return cardBody;
+  }
+
+  return (
+    <div className='container item'>
+      {cardBody}
     </div>
   );
 }

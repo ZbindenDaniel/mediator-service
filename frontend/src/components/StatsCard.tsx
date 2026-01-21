@@ -11,11 +11,14 @@ interface Props {
   printerOk: boolean | null;
   printerReason?: string | null;
   health: string;
+  className?: string;
 }
 
-export default function StatsCard({ counts, printerOk, printerReason, health }: Props) {
+// TODO(overview-inline-create): Verify compact stats card sizing at wide breakpoints.
+export default function StatsCard({ counts, printerOk, printerReason, health, className }: Props) {
+  const classes = ['card', className].filter(Boolean).join(' ');
   return (
-    <div className="card">
+    <div className={classes}>
       <h2>Statistiken</h2>
       {counts ? (
         <div id="stats" className="list">

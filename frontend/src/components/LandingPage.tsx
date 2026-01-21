@@ -111,9 +111,17 @@ export default function LandingPage() {
     <div className="container overview">
       <h1>Übersicht</h1>
       <div className="grid landing-grid">
-        <CreateItemCard />
+        {/* TODO(overview-inline-create): Confirm landing grid card order after inline creation form update. */}
+        <StatsCard
+          counts={overview?.counts}
+          printerOk={printerOk}
+          printerReason={printerReason}
+          health={health}
+          className="stats-card"
+        />
         <SearchCard />
-     {/* 
+        <CreateItemCard />
+     {/*
         <div className="card" id="qr-scan-card">
           <Link className="linkcard" to="/scan">
             <div>
@@ -128,15 +136,9 @@ export default function LandingPage() {
               <h2>Chat</h2>
               <p className="muted">Mit dem Agenten sprechen und vorgeschlagene SQLite-Queries ansehen</p>
             </div>
-          </Link>
+              </Link>
         </div>
               */}
-        <StatsCard
-          counts={overview?.counts}
-          printerOk={printerOk}
-          printerReason={printerReason}
-          health={health}
-        />
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <div className="grid-span-2">
           <RecentEventsCard events={previewEvents}></RecentEventsCard>

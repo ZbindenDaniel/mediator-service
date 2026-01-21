@@ -1,15 +1,18 @@
 import React from 'react';
+import ItemCreate from './ItemCreate';
 
 /** Card describing item creation */
+// TODO(overview-inline-create): Confirm the overview create item card matches navigation expectations.
 export default function CreateItemCard() {
   return (
-    <div className="card" id="create-item">
-      <a href="/items/new">
-      <div>
-        <h2>Erfassen</h2>
-        <p className="muted">Neuen Artikel erfassen und später platzieren</p>
-      </div>
-      </a>
-    </div>
+    <ItemCreate
+      layout="embedded"
+      basicInfoHeader={(
+        <>
+          <h2>Erfassen</h2>
+          <p className="muted">Neuen Artikel erfassen und später platzieren</p>
+        </>
+      )}
+    />
   );
 }
