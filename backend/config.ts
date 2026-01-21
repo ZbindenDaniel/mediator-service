@@ -84,6 +84,7 @@ if (rawDatabaseUrl && rawDbPathEnv) {
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
 // TODO(media-storage): Review media storage environment names once WebDAV rollout is finalized.
+// TODO(config-tests): Add config validation tests for WEB_DAV_DIR format checks.
 const MEDIA_STORAGE_MODE_VALUES = new Set(['local', 'webdav']);
 const rawMediaStorageMode = (process.env.MEDIA_STORAGE_MODE || '').trim().toLowerCase();
 let resolvedMediaStorageMode: 'local' | 'webdav' = 'local';
@@ -101,11 +102,22 @@ if (rawMediaStorageMode) {
 export const MEDIA_STORAGE_MODE = resolvedMediaStorageMode;
 const rawMediaDir = (process.env.MEDIA_DIR || '').trim();
 export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || rawMediaDir).trim();
-export const WEB_DAV_DIR = (process.env.WEB_DAV_DIR || rawMediaDir).trim();
+const rawWebDavDir = (process.env.WEB_DAV_DIR || rawMediaDir).trim();
+const WEB_DAV_URL_PATTERN = /^[a-z]+:\/\//i;
+let resolvedWebDavDir = rawWebDavDir;
 
-if (MEDIA_STORAGE_MODE === 'webdav' && !WEB_DAV_DIR) {
-  console.warn('[config] MEDIA_STORAGE_MODE=webdav requires WEB_DAV_DIR; default media directory will be used.');
+if (MEDIA_STORAGE_MODE === 'webdav') {
+  if (!resolvedWebDavDir) {
+    console.warn('[config] MEDIA_STORAGE_MODE=webdav requires WEB_DAV_DIR; default media directory will be used.');
+  } else if (WEB_DAV_URL_PATTERN.test(resolvedWebDavDir) || !path.isAbsolute(resolvedWebDavDir)) {
+    console.error(
+      `[config] WEB_DAV_DIR must be an absolute filesystem path (not a URL). Received "${resolvedWebDavDir}".`
+    );
+    resolvedWebDavDir = '';
+  }
 }
+
+export const WEB_DAV_DIR = resolvedWebDavDir;
 
 // TODO(print-queues): Confirm per-label printer queue overrides once label routing settles for all templates.
 const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || '').trim();
