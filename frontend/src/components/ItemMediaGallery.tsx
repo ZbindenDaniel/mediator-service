@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { dialogService } from './dialog';
+import { logger } from '../utils/logger';
 
 // TODO: Evaluate extracting the lightbox modal into a shared component if additional consumers emerge.
 // TODO(media-controls): Confirm media control styling once add/remove UI feedback is available.
+// TODO(media-delete): Revisit deletion copy once UX feedback lands.
 
 interface ItemMediaGalleryProps {
   itemId: string;
@@ -179,11 +182,35 @@ export default function ItemMediaGallery({
     if (!onRemove || !selectedAsset) {
       return;
     }
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Bild löschen',
+        message: 'Möchten Sie dieses Bild löschen?',
+        confirmLabel: 'Löschen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      logger.error?.('ItemMediaGallery: Failed to confirm media removal', {
+        itemId,
+        error,
+        src: selectedAsset.src
+      });
+      return;
+    }
+    if (!confirmed) {
+      logger.info?.('ItemMediaGallery: Media removal cancelled', { itemId, src: selectedAsset.src });
+      return;
+    }
     try {
       await onRemove(selectedAsset);
       setSelectedAsset(null);
     } catch (error) {
-      console.error('Failed to trigger media remove action', { itemId, error, selectedAsset });
+      logger.error?.('ItemMediaGallery: Failed to trigger media remove action', {
+        itemId,
+        error,
+        selectedAsset
+      });
     }
   }, [itemId, onRemove, selectedAsset]);
 
@@ -223,7 +250,7 @@ export default function ItemMediaGallery({
                     className="item-media-gallery__dialog-remove"
                     onClick={handleRemove}
                   >
-                    Remove
+                    Löschen
                   </button>
                 ) : null}
                 <button

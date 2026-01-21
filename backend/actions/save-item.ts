@@ -570,6 +570,7 @@ const action = defineHttpAction({
       let grafik = existing.Grafikname || '';
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
+        // TODO(media-delete): Add coverage for removeAsset payload handling.
         const normalisedExistingGrafik = normaliseMediaReference(itemId, existing.Grafikname);
         const existingMediaBeforeUpdate = collectMediaAssets(
           itemId,
@@ -582,16 +583,38 @@ const action = defineHttpAction({
           }
           return acc;
         }, []);
-        if (removalSlots.length > 0) {
+        const assetsToRemove = new Set<string>();
+        const removeAssetRaw = typeof data.removeAsset === 'string' ? data.removeAsset.trim() : '';
+        if (removeAssetRaw) {
+          const normalisedRemoveAsset = normaliseMediaReference(itemId, removeAssetRaw) ?? removeAssetRaw;
+          if (normalisedRemoveAsset.startsWith(MEDIA_PREFIX)) {
+            assetsToRemove.add(normalisedRemoveAsset);
+          } else {
+            console.warn('[save-item] Skipped removeAsset outside media prefix', {
+              itemId,
+              removeAsset: removeAssetRaw
+            });
+          }
+        }
+
+        if (removalSlots.length > 0 || assetsToRemove.size > 0) {
           let removedCount = 0;
           for (const slot of removalSlots) {
             const asset = existingMediaBeforeUpdate[slot];
-            if (asset && removeItemMediaAsset(itemId, asset)) {
+            if (asset) {
+              assetsToRemove.add(asset);
+            }
+          }
+          for (const asset of assetsToRemove) {
+            if (removeItemMediaAsset(itemId, asset)) {
               removedCount += 1;
             }
-            if (slot === 0) {
-              grafik = '';
-            }
+          }
+          if (removalSlots.includes(0)) {
+            grafik = '';
+          }
+          if (normalisedExistingGrafik && assetsToRemove.has(normalisedExistingGrafik)) {
+            grafik = '';
           }
           if (removedCount > 0) {
             console.info('[save-item] Processed item photo removals', { itemId, removedCount });
