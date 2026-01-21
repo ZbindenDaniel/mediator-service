@@ -28,6 +28,6 @@
   Respond with a strict JSON object:
   {
     "reply": "Short summary of the statement's intent",
-    "sqliteQuery": "The single SQLite statement"
+    "sqliteQuery": "The single Postgres-compatible statement"
   }
 </output_format>
