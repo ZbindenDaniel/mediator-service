@@ -232,6 +232,13 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
   const grouped = new Map<string, GroupedItemDisplay>();
   const safeItems = Array.isArray(items) ? items : [];
   const logContext = options.logContext ?? 'item-grouping';
+  let missingKeyCount = 0;
+  let unplacedCount = 0;
+  const missingKeySamples: Array<{
+    itemId: string | null;
+    artikelNumber: string | null;
+    quality: number | null;
+  }> = [];
 
   try {
     for (const [index, item] of safeItems.entries()) {
@@ -242,23 +249,27 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         const category = resolveCategory(item);
         const quantityData = resolveItemQuantity(item, logContext);
         const bulkGroupingToken = quantityData.isBulk ? resolveBulkGroupingToken(item, logContext, index) : null;
-        const missingKeys = !artikelNumber || quality === null || (!boxId && !location);
-
-        if (missingKeys) {
-          logger.warn?.(`[${logContext}] Missing grouping keys for item`, {
-            itemId: item.ItemUUID ?? null,
-            artikelNumber,
-            quality,
-            boxId,
-            location,
-            category
-          });
+        const isUnplaced = !boxId && !location;
+        const missingCoreKeys = !artikelNumber || quality === null;
+        const missingKeys = missingCoreKeys;
+        if (isUnplaced) {
+          unplacedCount += 1;
+        }
+        if (missingCoreKeys) {
+          missingKeyCount += 1;
+          if (missingKeySamples.length < 5) {
+            missingKeySamples.push({
+              itemId: item.ItemUUID ?? null,
+              artikelNumber,
+              quality
+            });
+          }
         }
 
         const keySegments = [
           artikelNumber ?? 'unknown-artikel',
           quality !== null ? String(quality) : 'unknown-quality',
-          boxId ?? location ?? 'unknown-location'
+          boxId ?? location ?? 'unplaced'
         ];
         if (category) {
           keySegments.push(category);
@@ -336,6 +347,19 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
       itemCount: safeItems.length
     });
     return [];
+  }
+
+  // TODO(item-grouping): Revisit batch warning thresholds if grouping input volumes grow.
+  if (missingKeyCount > 0) {
+    logger.warn?.(`[${logContext}] Missing grouping keys detected in batch`, {
+      missingKeyCount,
+      sampleItems: missingKeySamples
+    });
+  }
+  if (unplacedCount > 0) {
+    logger.info?.(`[${logContext}] Grouped unplaced items in batch`, {
+      unplacedCount
+    });
   }
 
   for (const group of grouped.values()) {

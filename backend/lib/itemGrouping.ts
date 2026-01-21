@@ -89,6 +89,13 @@ export function groupItemsForResponse(
 ): GroupedItemSummary[] {
   const logger = options.logger ?? console;
   const grouped = new Map<string, GroupedItemSummary>();
+  let missingKeyCount = 0;
+  let unplacedCount = 0;
+  const missingKeySamples: Array<{
+    itemId: string | null;
+    artikelNumber: string | null;
+    quality: number | null;
+  }> = [];
 
   for (const item of items) {
     try {
@@ -96,23 +103,27 @@ export function groupItemsForResponse(
       const quality = normalizeQuality(item.Quality);
       const { boxId, location } = resolveLocation(item);
       const category = resolveCategory(item);
-      const missingKeys = !artikelNumber || quality === null || (!boxId && !location);
-
-      if (missingKeys) {
-        logger.warn?.('[item-grouping] Missing grouping keys for item', {
-          itemId: item.ItemUUID ?? null,
-          artikelNumber,
-          quality,
-          boxId,
-          location,
-          category
-        });
+      const isUnplaced = !boxId && !location;
+      const missingCoreKeys = !artikelNumber || quality === null;
+      const missingKeys = missingCoreKeys;
+      if (isUnplaced) {
+        unplacedCount += 1;
+      }
+      if (missingCoreKeys) {
+        missingKeyCount += 1;
+        if (missingKeySamples.length < 5) {
+          missingKeySamples.push({
+            itemId: item.ItemUUID ?? null,
+            artikelNumber,
+            quality
+          });
+        }
       }
 
       const keySegments = [
         artikelNumber ?? 'unknown-artikel',
         quality !== null ? String(quality) : 'unknown-quality',
-        boxId ?? location ?? 'unknown-location'
+        boxId ?? location ?? 'unplaced'
       ];
       if (category) {
         keySegments.push(category);
@@ -147,6 +158,19 @@ export function groupItemsForResponse(
         error
       });
     }
+  }
+
+  // TODO(item-grouping): Revisit batch warning thresholds if grouping input volumes grow.
+  if (missingKeyCount > 0) {
+    logger.warn?.('[item-grouping] Missing grouping keys detected in batch', {
+      missingKeyCount,
+      sampleItems: missingKeySamples
+    });
+  }
+  if (unplacedCount > 0) {
+    logger.info?.('[item-grouping] Grouped unplaced items in batch', {
+      unplacedCount
+    });
   }
 
   for (const entry of grouped.values()) {
