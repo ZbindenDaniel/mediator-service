@@ -27,6 +27,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Auto-save box photo uploads through the existing note-save move flow so notes and photo updates persist together with consistent status feedback.
+- Added item detail media add/remove controls to update picture slots via the save-item endpoint with refreshed gallery state.
 - Auto-save box photo uploads through the existing note-save move flow so notes and photo updates persist together with consistent status feedback, while clearing photo upload flags on success.
 - Documented all environment variables in a dedicated reference and expanded the example `.env` template to match runtime usage.
 - Updated agentic prompt/echo messaging to reference Postgres-compatible SQL in preparation for the database migration.

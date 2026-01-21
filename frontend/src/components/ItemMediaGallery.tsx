@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 // TODO: Evaluate extracting the lightbox modal into a shared component if additional consumers emerge.
+// TODO(media-controls): Confirm media control styling once add/remove UI feedback is available.
 
 interface ItemMediaGalleryProps {
   itemId: string;
@@ -8,9 +9,11 @@ interface ItemMediaGalleryProps {
   mediaAssets?: string[] | null;
   className?: string;
   initialFailedSources?: string[] | null;
+  onAdd?: () => void;
+  onRemove?: (asset: GalleryAsset) => void | Promise<void>;
 }
 
-interface GalleryAsset {
+export interface GalleryAsset {
   src: string;
   label: string;
   isPrimary: boolean;
@@ -30,7 +33,11 @@ function createFailureSet(seed: string[] | null | undefined): Set<string> {
   return failures;
 }
 
-function normaliseAssets(itemId: string, grafikname?: string | null, mediaAssets?: string[] | null): GalleryAsset[] {
+export function normalizeGalleryAssets(
+  itemId: string,
+  grafikname?: string | null,
+  mediaAssets?: string[] | null
+): GalleryAsset[] {
   const entries: GalleryAsset[] = [];
   const seen = new Set<string>();
 
@@ -74,7 +81,9 @@ export default function ItemMediaGallery({
   grafikname,
   mediaAssets,
   className,
-  initialFailedSources
+  initialFailedSources,
+  onAdd,
+  onRemove
 }: ItemMediaGalleryProps) {
   const defaultFailures = useMemo(
     () => createFailureSet(initialFailedSources),
@@ -121,7 +130,7 @@ export default function ItemMediaGallery({
     hasLoggedInitialFailures.current = true;
   }
 
-  const assets = useMemo(() => normaliseAssets(itemId, grafikname, mediaAssets), [
+  const assets = useMemo(() => normalizeGalleryAssets(itemId, grafikname, mediaAssets), [
     itemId,
     grafikname,
     mediaAssets
@@ -148,12 +157,35 @@ export default function ItemMediaGallery({
     setSelectedAsset(null);
   }, []);
 
+  const handleAdd = useCallback(() => {
+    if (!onAdd) {
+      return;
+    }
+    try {
+      onAdd();
+    } catch (error) {
+      console.error('Failed to trigger media add action', { itemId, error });
+    }
+  }, [itemId, onAdd]);
+
   const handleImageSelect = useCallback(
     (asset: GalleryAsset) => () => {
       setSelectedAsset(asset);
     },
     []
   );
+
+  const handleRemove = useCallback(async () => {
+    if (!onRemove || !selectedAsset) {
+      return;
+    }
+    try {
+      await onRemove(selectedAsset);
+      setSelectedAsset(null);
+    } catch (error) {
+      console.error('Failed to trigger media remove action', { itemId, error, selectedAsset });
+    }
+  }, [itemId, onRemove, selectedAsset]);
 
   const dialogTitleId = useId();
 
@@ -184,13 +216,24 @@ export default function ItemMediaGallery({
               <h2 id={dialogTitleId} className="dialog-title">
                 {selectedAsset.label}
               </h2>
-              <button
-                type="button"
-                className="item-media-gallery__dialog-close"
-                onClick={handleModalClose}
-              >
-                Schließen
-              </button>
+              <div className="item-media-gallery__dialog-actions">
+                {onRemove ? (
+                  <button
+                    type="button"
+                    className="item-media-gallery__dialog-remove"
+                    onClick={handleRemove}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="item-media-gallery__dialog-close"
+                  onClick={handleModalClose}
+                >
+                  Schließen
+                </button>
+              </div>
             </header>
             <div className="item-media-gallery__dialog-body">
               {!isBroken ? (
@@ -244,46 +287,64 @@ export default function ItemMediaGallery({
         </div>
       );
     }
-  }, [dialogTitleId, failedSources, handleImageError, handleModalClose, itemId, selectedAsset]);
+  }, [
+    dialogTitleId,
+    failedSources,
+    handleImageError,
+    handleModalClose,
+    handleRemove,
+    itemId,
+    onRemove,
+    selectedAsset
+  ]);
 
-  if (assets.length === 0) {
-    return <p className="muted">Keine Medien verfügbar.</p>;
-  }
+  const hasAssets = assets.length > 0;
 
   return (
     <>
+      {onAdd ? (
+        <div className="item-media-gallery__add">
+          <button type="button" className="item-media-gallery__add-button" onClick={handleAdd}>
+            +
+          </button>
+        </div>
+      ) : null}
       <div className={effectiveClassName}>
-        {assets.map((asset) => {
-          const isBroken = failedSources.has(asset.src);
-          const fallbackLabel = asset.isPrimary ? 'Primäres Bild' : 'Zusätzliches Bild';
-          return (
-            <figure className="item-media-gallery__item" key={asset.src}>
-              {!isBroken ? (
-                <img
-                  src={asset.src}
-                  alt={`${fallbackLabel} für Artikel ${itemId}`}
-                  loading="lazy"
-                  onError={handleImageError(asset.src)}
-                  onClick={handleImageSelect(asset)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      handleImageSelect(asset)();
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                />
-              ) : (
-                <div className="item-media-gallery__fallback" role="status">
-                  <span>Medieninhalt konnte nicht geladen werden.</span>
-                  {/* <small className="muted">{asset.src}</small> */}
-                </div>
-              )}
-              {/* <figcaption>{asset.label}</figcaption> */}
-            </figure>
-          );
-        })}
+        {hasAssets ? (
+          assets.map((asset) => {
+            const isBroken = failedSources.has(asset.src);
+            const fallbackLabel = asset.isPrimary ? 'Primäres Bild' : 'Zusätzliches Bild';
+            return (
+              <figure className="item-media-gallery__item" key={asset.src}>
+                {!isBroken ? (
+                  <img
+                    src={asset.src}
+                    alt={`${fallbackLabel} für Artikel ${itemId}`}
+                    loading="lazy"
+                    onError={handleImageError(asset.src)}
+                    onClick={handleImageSelect(asset)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handleImageSelect(asset)();
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  />
+                ) : (
+                  <div className="item-media-gallery__fallback" role="status">
+                    <span>Medieninhalt konnte nicht geladen werden.</span>
+                    {/* <small className="muted">{asset.src}</small> */}
+                  </div>
+                )}
+                {/* <figcaption>{asset.label}</figcaption> */}
+              </figure>
+            );
+          })
+        ) : (
+          <p className="muted">Keine Medien verfügbar.</p>
+        )}
       </div>
       {modalContent}
     </>
