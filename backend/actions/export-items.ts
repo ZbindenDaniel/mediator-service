@@ -196,10 +196,10 @@ export interface StageItemsExportOptions {
   archiveBaseName?: string;
   boxes: Record<string, unknown>[];
   exportMode: ExportMode;
+  // TODO(export-items): Rename includeMedia now that exports no longer bundle media directories.
   includeMedia: boolean;
   items: Record<string, unknown>[];
   logger?: Pick<Console, 'error' | 'info' | 'warn'>;
-  mediaDir?: string;
 }
 
 function filterExistingMediaAssets(assets: string[]): string[] {
@@ -818,7 +818,7 @@ async function createZipArchive(options: ZipArchiveOptions): Promise<void> {
 
 export async function stageItemsExport(options: StageItemsExportOptions): Promise<ItemsExportArtifact> {
   const logger = options.logger ?? console;
-  const mediaDir = options.mediaDir ?? MEDIA_DIR;
+  const mediaDir = MEDIA_DIR;
   const archiveBaseName = options.archiveBaseName || 'items-export';
   const exportMode = options.exportMode;
 
@@ -886,26 +886,16 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
       return { archivePath: itemsPath, boxesPath, cleanup, itemsPath, kind: 'csv', tempDir };
     }
 
-    let mediaLinked = false;
-    const mediaLink = path.join(tempDir, 'media');
     try {
-      if (fs.existsSync(mediaDir)) {
-        await fs.promises.symlink(mediaDir, mediaLink, 'dir');
-        mediaLinked = true;
-      } else {
-        logger.warn?.('[export-items] MEDIA_DIR missing during export; media folder omitted from archive.', {
-          mediaDir
-        });
-      }
-    } catch (mediaError) {
-      logger.error?.('[export-items] Failed to link media directory into export archive staging area', mediaError);
+      logger.info?.('[export-items] Media directory export disabled; omitting media folder from archive.', {
+        mediaDir
+      });
+    } catch (logError) {
+      logger.error?.('[export-items] Failed to log media export omission.', logError);
     }
 
     const archiveName = `${archiveBaseName}.zip`;
     const zipEntries = [path.basename(itemsPath), path.basename(boxesPath)];
-    if (mediaLinked) {
-      zipEntries.push('media');
-    }
 
     await createZipArchive({
       archiveName,
@@ -978,8 +968,7 @@ const action = defineHttpAction({
         exportMode,
         includeMedia: true,
         items,
-        logger: console,
-        mediaDir: MEDIA_DIR
+        logger: console
       });
 
       res.writeHead(200, {
