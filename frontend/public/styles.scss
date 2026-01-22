@@ -432,8 +432,17 @@ div {
     padding-right: 0.5rem;
 }
 
+/* TODO(agent): Revisit table sizing rules once layout tokens are standardized across cards. */
+.details {
+    width: 100%;
+}
+
 .details td {
     padding: 0.25rem 0;
+}
+
+.details tr.is-current-instance {
+    background-color: rgba(240, 230, 140, 0.5);
 }
 
 .details .item-detail__langtext {
