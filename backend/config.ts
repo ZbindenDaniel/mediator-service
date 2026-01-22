@@ -128,6 +128,7 @@ export const PRINTER_QUEUE_BOX = (process.env.PRINTER_QUEUE_BOX || '').trim();
 export const PRINTER_QUEUE_ITEM = (process.env.PRINTER_QUEUE_ITEM || '').trim();
 export const PRINTER_QUEUE_ITEM_SMALL = (process.env.PRINTER_QUEUE_ITEM_SMALL || '').trim();
 export const PRINTER_QUEUE_SHELF = (process.env.PRINTER_QUEUE_SHELF || '').trim();
+export const PRINTER_SERVER = (process.env.PRINTER_SERVER || '').trim();
 if (!PRINTER_QUEUE_BOX) {
   console.warn('[config] PRINTER_QUEUE_BOX not set; box labels will fall back to PRINTER_QUEUE.');
 }
