@@ -2685,8 +2685,10 @@ export default function ItemDetail({ itemId }: Props) {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* TODO(agent): Confirm current-instance row highlight styling with design review. */}
                     {instanceRows.map((row) => {
                       const isQualityPlaceholder = row.qualityValue === null;
+                      const isCurrentInstance = row.id === item.ItemUUID;
                       const uuidCell = normalizeDetailValue(row.id);
                       const boxCell = normalizeDetailValue(row.boxId);
                       const locationCell = normalizeDetailValue(row.location);
@@ -2702,6 +2704,7 @@ export default function ItemDetail({ itemId }: Props) {
                       return (
                         <tr
                           key={row.id}
+                          className={isCurrentInstance ? 'is-current-instance' : undefined}
                           role="button"
                           tabIndex={0}
                           onClick={() => void handleInstanceNavigation(row.id)}
