@@ -40,6 +40,14 @@ These planning responses should be explicit enough that another developer can im
 
 ## Planned Work Log
 
+### Add Behälter column to item instance table (in progress)
+**Goal & motivation:** Make the Vorrat table show per-instance container IDs (Behälter) instead of instance-level Ki status so staff can navigate directly to the correct box, aligning the UI with the shared agentic status and improving warehouse lookup accuracy.
+
+**Implementation plan (minimal diff):**
+1. Add a TODO note and update `frontend/src/components/ItemDetail.tsx` to swap the Vorrat table column from Ki to Behälter, render `BoxID` with a link to `/boxes/:id`, and log when `BoxID` is unexpectedly missing.
+2. Confirm `models/item-detail.ts::ItemInstanceSummary` contains `BoxID` and that `backend/actions/save-item.ts` includes it when normalizing instance payloads, avoiding new model changes.
+3. TODO(agent): Reconfirm the Behälter column label and link behavior after UI review before expanding any related UI changes.
+
 ### Isolate item reference updates in save-item (completed)
 **Goal & motivation:** Ensure edit requests for `/api/items/:id` only persist `ItemRef` data so instance fields (location, quantities, timestamps) are not accidentally overwritten, improving data integrity and auditability. This keeps edits scoped to reference metadata while preserving instance state.
 

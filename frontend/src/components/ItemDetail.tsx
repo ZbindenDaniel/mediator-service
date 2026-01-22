@@ -31,7 +31,6 @@ import { describeQuality } from '../../../models/quality';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
-import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
@@ -1193,20 +1192,37 @@ export default function ItemDetail({ itemId }: Props) {
     return { referenceDetailRows: referenceRows, instanceDetailRows: instanceRows };
   }, [detailRows]);
 
+  // TODO(agent): Validate Behälter column rendering in the Vorrat table once UI review confirms linking rules.
   const instanceRows = useMemo(() => {
-    return instances.map((instance) => {
-      const qualityValue = typeof instance.Quality === 'number' ? instance.Quality : null;
-      const agenticStatus = instance.AgenticStatus ?? AGENTIC_RUN_STATUS_NOT_STARTED;
-      return {
-        id: instance.ItemUUID,
-        qualityValue,
-        agenticStatus: describeAgenticStatus(agenticStatus),
-        location: instance.Location ?? null,
-        updatedAt: instance.UpdatedAt ? formatDateTime(instance.UpdatedAt) : null,
-        createdAt: instance.Datum_erfasst ? formatDateTime(instance.Datum_erfasst) : null
-      };
-    });
-  }, [instances]);
+    try {
+      return instances.map((instance) => {
+        const qualityValue = typeof instance.Quality === 'number' ? instance.Quality : null;
+        const rawBoxId = typeof instance.BoxID === 'string' ? instance.BoxID.trim() : '';
+        if (!rawBoxId) {
+          logger.warn?.('ItemDetail: Missing BoxID for instance row', {
+            itemId,
+            itemUUID: instance.ItemUUID
+          });
+        }
+        return {
+          id: instance.ItemUUID,
+          qualityValue,
+          boxId: rawBoxId
+            ? <Link to={`/boxes/${encodeURIComponent(rawBoxId)}`}>{rawBoxId}</Link>
+            : null,
+          location: instance.Location ?? null,
+          updatedAt: instance.UpdatedAt ? formatDateTime(instance.UpdatedAt) : null,
+          createdAt: instance.Datum_erfasst ? formatDateTime(instance.Datum_erfasst) : null
+        };
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to map instance rows for Vorrat table', error, {
+        itemId,
+        instanceCount: instances.length
+      });
+      return [];
+    }
+  }, [instances, itemId]);
 
   const latestAgenticReviewNote = useMemo(() => {
     let latestNote: string | null = null;
@@ -2598,7 +2614,7 @@ export default function ItemDetail({ itemId }: Props) {
                     <tr>
                       <th>UUID</th>
                       <th>Qualität</th>
-                      <th>Ki</th>
+                      <th>Behälter</th>
                       <th>Standort</th>
                       <th>Aktualisiert</th>
                       <th>Erfasst</th>
@@ -2608,7 +2624,7 @@ export default function ItemDetail({ itemId }: Props) {
                     {instanceRows.map((row) => {
                       const isQualityPlaceholder = row.qualityValue === null;
                       const uuidCell = normalizeDetailValue(row.id);
-                      const agenticCell = normalizeDetailValue(row.agenticStatus);
+                      const boxCell = normalizeDetailValue(row.boxId);
                       const locationCell = normalizeDetailValue(row.location);
                       const updatedCell = normalizeDetailValue(row.updatedAt);
                       const createdCell = normalizeDetailValue(row.createdAt);
@@ -2634,8 +2650,8 @@ export default function ItemDetail({ itemId }: Props) {
                           <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
                             <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
                           </td>
-                          <td className={agenticCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {agenticCell.content}
+                          <td className={boxCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                            {boxCell.content}
                           </td>
                           <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
                             {locationCell.content}
