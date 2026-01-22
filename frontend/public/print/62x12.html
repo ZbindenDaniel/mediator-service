@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Etikett 62x12</title>
+  <!-- TODO(agent): Keep 62x12 layout aligned with backend PDF sizing. -->
+  <!-- TODO(agent): Confirm box label branding once warehouse ops finalize box-specific print specs. -->
+  <!-- TODO(agentic-printing): Capture printer margin telemetry to keep single-page sizing reliable across devices. -->
+  <!-- TODO(agentic-printing): Verify inline payload injection stays in sync with backend QR generation. -->
+  <style>
+    @page {
+      size: 62mm 12mm;
+      margin: 0;
+    }
+
+    :root {
+      color-scheme: only light;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f3f4f6;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      width: 62mm;
+      height: 12mm;
+    }
+
+    .label {
+      box-sizing: border-box;
+      width: 62mm;
+      height: 12mm;
+      padding: 2mm;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6mm;
+    }
+
+    .item-id {
+      width: 100%;
+      text-align: center;
+      font-size: 18pt;
+      font-weight: 700;
+      letter-spacing: 0.4pt;
+      color: #111827;
+    }
+
+
+    .error {
+      margin: 16px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 12pt;
+      max-width: 420px;
+    }
+
+    @media print {
+      body {
+        background: none;
+        width: 62mm;
+        height: 12mm;
+        min-height: 12mm;
+      }
+
+      .label {
+        box-shadow: none;
+        border-color: transparent;
+        page-break-inside: avoid;
+      }
+
+      .error {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="label" id="label" hidden>
+    <div class="item-id" id="itemId">I-000000-0001</div>
+  </div>
+  <div class="error" id="error" hidden></div>
+  <script>
+    (function init() {
+      const state = { payload: null };
+      const itemIdEl = document.getElementById('itemId');
+
+      function showError(message) {
+        if (!errorEl) return;
+        errorEl.textContent = message;
+        errorEl.hidden = false;
+        if (labelEl) labelEl.hidden = true;
+      }
+
+      function render(payload) {
+        if (!payload || typeof payload !== 'object') {
+          showError('Kein gültiger Payload vorhanden.');
+          return;
+        }
+        try {
+          const itemId = payload.id || payload.labelText || payload.itemId;
+          if (itemIdEl && itemId) {
+            itemIdEl.textContent = `${itemId}`;
+          } else if (itemIdEl) {
+            itemIdEl.textContent = 'ITEM-UNKNOWN';
+            console.warn('Item label payload missing item id', payload);
+          }
+       
+          state.payload = payload;
+        } catch (err) {
+          console.error('Render error in 62x12 label', err);
+          showError('Vorlage konnte nicht gerendert werden.');
+        }
+      }
+
+      function tryFromStorage(key) {
+        if (!key) return false;
+        try {
+          const raw = sessionStorage.getItem(key);
+          if (!raw) {
+            showError('Kein zwischengespeicherter Payload gefunden.');
+            return true;
+          }
+          const payload = JSON.parse(raw);
+          sessionStorage.removeItem(key);
+          render(payload);
+          return true;
+        } catch (err) {
+          console.error('Failed to load payload from storage', err);
+          showError('Payload konnte nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function tryInlinePayload() {
+        const inlinePayload = window.__LABEL_PAYLOAD__;
+        if (!inlinePayload) return false;
+        try {
+          render(inlinePayload);
+          return true;
+        } catch (err) {
+          console.error('Failed to render inline payload', err);
+          showError('Eingebettete Druckdaten konnten nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function handleMessage(event) {
+        if (event.origin && event.origin !== window.location.origin) {
+          console.warn('Ignoring message from unexpected origin', event.origin);
+          return;
+        }
+        try {
+          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+          if (data && data.payload) {
+            render(data.payload);
+          }
+        } catch (err) {
+          console.error('Failed to parse postMessage payload', err);
+          showError('Übertragene Daten ungültig.');
+        }
+      }
+
+      window.addEventListener('message', handleMessage, { once: true });
+
+      const params = new URLSearchParams(window.location.search);
+      const key = params.get('key');
+      if (!tryInlinePayload() && !tryFromStorage(key)) {
+        console.warn('Warte auf Payload via postMessage…');
+      }
+    })();
+  </script>
+</body>
+
+</html>

@@ -31,7 +31,7 @@ export interface PrintFileResult {
   artifactPath?: string;
 }
 
-export type PrintLabelType = 'box' | 'item' | 'shelf';
+export type PrintLabelType = 'box' | 'item' | 'shelf' | 'smallitem';
 export type PrinterQueueSource = 'label' | 'default' | 'missing';
 
 export interface PrinterQueueResolution {
