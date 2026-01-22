@@ -16,7 +16,7 @@ import { defineHttpAction } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger } from './agentic-trigger';
 import { parseSequentialItemUUID } from '../lib/itemIds';
-import { MEDIA_DIR } from '../lib/media';
+import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
 import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
@@ -626,9 +626,11 @@ const action = defineHttpAction({
       const images = [p.get('picture1') || '', p.get('picture2') || '', p.get('picture3') || ''];
       let firstImage = '';
       try {
-        const dir = path.join(MEDIA_DIR, ItemUUID);
+        const formattedArtikelNummer = formatArtikelNummerForMedia(resolvedArtikelNummer, console);
+        const mediaFolder = resolveMediaFolder(ItemUUID, formattedArtikelNummer, console);
+        const dir = path.join(MEDIA_DIR, mediaFolder);
         fs.mkdirSync(dir, { recursive: true });
-        const artNr = resolvedArtikelNummer || ItemUUID;
+        const artNr = formattedArtikelNummer || mediaFolder;
         images.forEach((img, idx) => {
           if (!img) return;
           const m = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
@@ -637,7 +639,7 @@ const action = defineHttpAction({
           const buf = Buffer.from(m[2], 'base64');
           const file = `${artNr}-${idx + 1}.${ext}`;
           fs.writeFileSync(path.join(dir, file), buf);
-          if (!firstImage) firstImage = `/media/${ItemUUID}/${file}`;
+          if (!firstImage) firstImage = `/media/${mediaFolder}/${file}`;
         });
       } catch (e) {
         console.error('Failed to save images', e);
