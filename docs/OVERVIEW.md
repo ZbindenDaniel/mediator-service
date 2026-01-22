@@ -113,6 +113,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Removed default quality coercion so null quality stays unset across models, persistence, and creation flows while preserving explicit payload overrides.
 - Resolved local media directory overrides so MEDIA_DIR can be used with consistent relative-path resolution and logging for local storage mode.
 - Improved WebDAV configuration feedback with explicit mount-path guidance, startup storage logging, and documentation warnings about URL-based WebDAV paths.
+- Updated print label cards to use a standard action button so grid layouts stay consistent across the UI.
 
 ## Documentation Map
 
