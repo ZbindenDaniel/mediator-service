@@ -230,7 +230,13 @@ export function buildTranscriptBody(
 }
 
 function buildTranscriptReference(itemId: string, logger?: AgentTranscriptLogger | null): AgentTranscriptReference {
-  const mediaFolder = resolveMediaFolder(itemId, null, logger ?? console);
+  const fallbackLogger = logger ?? console;
+  const safeLogger: Pick<Console, 'warn' | 'error' | 'info'> = {
+    warn: fallbackLogger.warn ?? console.warn,
+    error: fallbackLogger.error ?? console.error,
+    info: fallbackLogger.info ?? console.info
+  };
+  const mediaFolder = resolveMediaFolder(itemId, null, safeLogger);
   const filePath = resolveMediaPath(mediaFolder, TRANSCRIPT_FILE_NAME);
   const publicUrl = `/media/${encodeURIComponent(mediaFolder)}/${TRANSCRIPT_FILE_NAME}`;
   return { filePath, publicUrl };

@@ -61,10 +61,11 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
   return (
     <div className="card">
       <div className="card-header">
-        <h2>Label drucken</h2>
-        <button type="button" className="btn" onClick={handleClick}>
-          Drucken
+        <h3 style={{ width: '70%', margin: 'auto', marginTop: '8px'}}>
+        <button id='printlabelbutton' type="button" className="btn" onClick={handleClick}>
+          Label drucken
         </button>
+        </h3>
       </div>
       {status && (
         <div>
