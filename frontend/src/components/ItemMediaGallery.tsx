@@ -361,7 +361,7 @@ export default function ItemMediaGallery({
             );
           })
         ) : (
-          <p className="muted">Medieninhalt konnte nicht geladen werden.</p>
+          <p className="muted">Keine medien vorhanden.</p>
         )}
       </div>
       {onAdd ? (

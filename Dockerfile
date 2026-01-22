@@ -67,7 +67,10 @@ RUN mkdir -p \
         "${MEDIA_DIR}" \
         "${WEB_DAV_DIR}" \
         dist/frontend/public \
-    && chown -R 33:33 /app
+        /var/lib/mediator/inbox \
+        /var/lib/mediator/archive \
+    && chown -R 33:33 /app \
+    && chown -R 33:33 /var/lib/mediator
 
 # Switch to non-root user (www-data)
 USER 33:33
