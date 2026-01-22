@@ -272,8 +272,7 @@ export default function ItemMediaGallery({
                 />
               ) : (
                 <div className="item-media-gallery__fallback" role="status">
-                  <span>Medieninhalt konnte nicht geladen werden.</span>
-                  {/* <small className="muted">{selectedAsset.src}</small> */}
+                  <span>Bild konnte nicht geladen werden.</span>
                 </div>
               )}
               <figcaption className="item-media-gallery__dialog-caption">{selectedAsset.label}</figcaption>
@@ -329,13 +328,6 @@ export default function ItemMediaGallery({
 
   return (
     <>
-      {onAdd ? (
-        <div className="item-media-gallery__add">
-          <button type="button" className="item-media-gallery__add-button" onClick={handleAdd}>
-            +
-          </button>
-        </div>
-      ) : null}
       <div className={effectiveClassName}>
         {hasAssets ? (
           assets.map((asset) => {
@@ -361,8 +353,7 @@ export default function ItemMediaGallery({
                   />
                 ) : (
                   <div className="item-media-gallery__fallback" role="status">
-                    <span>Medieninhalt konnte nicht geladen werden.</span>
-                    {/* <small className="muted">{asset.src}</small> */}
+                    <span>Bild konnte nicht geladen werden.</span>
                   </div>
                 )}
                 {/* <figcaption>{asset.label}</figcaption> */}
@@ -370,9 +361,16 @@ export default function ItemMediaGallery({
             );
           })
         ) : (
-          <p className="muted">Keine Medien verfügbar.</p>
+          <p className="muted">Medieninhalt konnte nicht geladen werden.</p>
         )}
       </div>
+      {onAdd ? (
+        <div className="item-media-gallery__add">
+          <button type="button" className="item-media-gallery__add-button" onClick={handleAdd}>
+            +
+          </button>
+        </div>
+      ) : null}
       {modalContent}
     </>
   );
