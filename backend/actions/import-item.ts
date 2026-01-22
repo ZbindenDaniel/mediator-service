@@ -749,6 +749,7 @@ const action = defineHttpAction({
         fallbackLangtext = referenceDefaults.Langtext ?? '';
       }
       let langtext = (parsedLangtextInput ?? fallbackLangtext) as ItemRef['Langtext'];
+      // TODO(quality-create): Keep langtext-derived quality parsing scoped to update flows only.
       let qualityFromLangtext: number | null | undefined;
       if (langtext && typeof langtext === 'object' && !Array.isArray(langtext)) {
         const langtextPayload = { ...(langtext as Record<string, string>) };
@@ -795,6 +796,7 @@ const action = defineHttpAction({
           qualityFromPayload = null;
         }
       }
+      // TODO(quality-create): Remove reference-derived quality fallback once all creation payloads send Quality explicitly.
       let qualityFromReference: number | null | undefined;
       if (referenceDefaults && Object.prototype.hasOwnProperty.call(referenceDefaults, 'Quality')) {
         try {
@@ -807,6 +809,15 @@ const action = defineHttpAction({
             error: qualityError
           });
         }
+      }
+      const shouldIgnoreDerivedQuality = !isUpdateRequest && !hasQualityParam;
+      if (shouldIgnoreDerivedQuality && (qualityFromReference !== undefined || qualityFromLangtext !== undefined)) {
+        console.info('[import-item] Ignoring derived Quality for new item creation without explicit Quality', {
+          ItemUUID,
+          Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+          qualityFromReference,
+          qualityFromLangtext
+        });
       }
       const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
 
@@ -1005,7 +1016,13 @@ const action = defineHttpAction({
         Verkaufspreis: verkaufspreis,
         Kurzbeschreibung: kurzbeschreibung,
         Langtext: langtext,
-        Quality: hasQualityParam ? (qualityFromPayload ?? null) : (qualityFromLangtext ?? qualityFromReference ?? null),
+        Quality: isUpdateRequest
+          ? hasQualityParam
+            ? (qualityFromPayload ?? null)
+            : (qualityFromLangtext ?? qualityFromReference ?? null)
+          : hasQualityParam
+            ? (qualityFromPayload ?? null)
+            : null,
         Hersteller: hersteller,
         Länge_mm: laenge,
         Breite_mm: breite,
