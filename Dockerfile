@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# TODO(agent): Update the runtime stage with a supported headless PDF renderer and document its env configuration.
 
 ############################
 # Builder stage
@@ -29,6 +30,9 @@ RUN apt-get update \
         cups-client \
         unzip \
         zip \
+        chromium \
+        fonts-liberation \
+        fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # TODO(media-storage): Ensure media directory defaults remain aligned with compose and runtime overrides.
