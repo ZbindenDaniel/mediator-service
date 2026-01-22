@@ -1,4 +1,5 @@
-export type PrintLabelType = 'box' | 'item' | 'shelf';
+// TODO(agent): Align print label type additions with backend template registry updates.
+export type PrintLabelType = 'box' | 'item' | 'smallitem' | 'shelf';
 
 export interface PrintLabelRequestBody {
   actor: string;

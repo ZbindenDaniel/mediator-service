@@ -126,12 +126,16 @@ const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || 
 export const PRINTER_QUEUE = resolvedQueue;
 export const PRINTER_QUEUE_BOX = (process.env.PRINTER_QUEUE_BOX || '').trim();
 export const PRINTER_QUEUE_ITEM = (process.env.PRINTER_QUEUE_ITEM || '').trim();
+export const PRINTER_QUEUE_ITEM_SMALL = (process.env.PRINTER_QUEUE_ITEM_SMALL || '').trim();
 export const PRINTER_QUEUE_SHELF = (process.env.PRINTER_QUEUE_SHELF || '').trim();
 if (!PRINTER_QUEUE_BOX) {
   console.warn('[config] PRINTER_QUEUE_BOX not set; box labels will fall back to PRINTER_QUEUE.');
 }
 if (!PRINTER_QUEUE_ITEM) {
   console.warn('[config] PRINTER_QUEUE_ITEM not set; item labels will fall back to PRINTER_QUEUE.');
+}
+if (!PRINTER_QUEUE_ITEM_SMALL) {
+  console.warn('[config] PRINTER_QUEUE_ITEM_SMALL not set; small item labels will fall back to PRINTER_QUEUE.');
 }
 if (!PRINTER_QUEUE_SHELF) {
   console.warn('[config] PRINTER_QUEUE_SHELF not set; shelf labels will fall back to PRINTER_QUEUE.');

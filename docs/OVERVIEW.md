@@ -116,6 +116,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Resolved local media directory overrides so MEDIA_DIR can be used with consistent relative-path resolution and logging for local storage mode.
 - Improved WebDAV configuration feedback with explicit mount-path guidance, startup storage logging, and documentation warnings about URL-based WebDAV paths.
 - Updated print label cards to use a standard action button so grid layouts stay consistent across the UI.
+- Added item label selection prompts for gross vs small print rolls and wired a dedicated printer queue for small item labels.
 - Removed media directory bundling from exports now that media lives in WebDAV, reducing export archive size.
 - Added an inline "Hinzufügen" action on item detail pages for bulk (Menge) items to adjust stock with logged add-item calls.
 - Set match-selection item creation payloads to send Quality as null so new items start ungraded, with logging to confirm the intended null state.
