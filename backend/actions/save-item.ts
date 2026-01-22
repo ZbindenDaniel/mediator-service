@@ -6,7 +6,7 @@ import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import type { AgenticRun, Item, ItemInstanceSummary, ItemRef } from '../../models';
 import { normalizeQuality } from '../../models/quality';
 import { defineHttpAction } from './index';
-import { MEDIA_DIR } from '../lib/media';
+import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
 
 const MEDIA_PREFIX = '/media/';
@@ -69,10 +69,16 @@ function mediaExists(relative: string): boolean {
   }
 }
 
-function normaliseMediaReference(itemId: string, value?: string | null): string | null {
+function normaliseMediaReference(
+  itemId: string,
+  artikelNummer: string | null | undefined,
+  value?: string | null
+): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
+
+  const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
 
   if (/^[a-zA-Z]+:\/\//.test(trimmed)) {
     return trimmed;
@@ -107,10 +113,14 @@ function normaliseMediaReference(itemId: string, value?: string | null): string 
     }
   };
 
-  pushCandidate(buildRelativePath(`${itemId}/${cleaned}`));
+  pushCandidate(buildRelativePath(`${mediaFolder}/${cleaned}`));
   pushCandidate(buildRelativePath(cleaned));
   const baseName = path.posix.basename(cleaned);
-  pushCandidate(buildRelativePath(`${itemId}/${baseName}`));
+  pushCandidate(buildRelativePath(`${mediaFolder}/${baseName}`));
+  if (mediaFolder !== itemId) {
+    pushCandidate(buildRelativePath(`${itemId}/${cleaned}`));
+    pushCandidate(buildRelativePath(`${itemId}/${baseName}`));
+  }
 
   for (const relative of candidates) {
     if (mediaExists(relative)) {
@@ -172,7 +182,7 @@ export function collectMediaAssets(
   const normalisedPrimary =
     trimmedPrimary && trimmedPrimary.startsWith(MEDIA_PREFIX)
       ? trimmedPrimary
-      : normaliseMediaReference(itemId, trimmedPrimary || null);
+      : normaliseMediaReference(itemId, artikelNummer, trimmedPrimary || null);
   if (normalisedPrimary && !isAllowedMediaAsset(normalisedPrimary)) {
     console.info('[save-item] Skipping non-image media asset from Grafikname', {
       itemId,
@@ -185,46 +195,56 @@ export function collectMediaAssets(
   const expectedStems = deriveExpectedStems(stemSource, artikelNummer);
 
   try {
-    const dir = path.join(MEDIA_DIR, itemId);
-    if (fs.existsSync(dir)) {
+    const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
+    const foldersToScan = mediaFolder === itemId ? [mediaFolder] : [mediaFolder, itemId];
+    for (const folder of foldersToScan) {
+      const dir = path.join(MEDIA_DIR, folder);
+      if (!fs.existsSync(dir)) {
+        continue;
+      }
       const stat = fs.statSync(dir);
-      if (stat.isDirectory()) {
-        const entries = fs.readdirSync(dir).sort();
-        const mediaEntries = entries.filter((entry) => {
-          const resolvedPath = `${MEDIA_PREFIX}${itemId}/${entry}`;
-          if (!isAllowedMediaAsset(entry)) {
-            console.info('[save-item] Skipping non-image media asset from media directory', {
-              itemId,
-              entry: resolvedPath,
-            });
-            return false;
-          }
-          return true;
-        });
-        const matchingEntries =
-          expectedStems.size > 0
-            ? mediaEntries.filter((entry) => {
-                const stem = extractStemFromFilename(entry);
-                return !!stem && expectedStems.has(stem);
-              })
-            : mediaEntries;
-        const entriesToPush =
-          expectedStems.size > 0 && matchingEntries.length === 0 ? mediaEntries : matchingEntries;
-        if (
-          entriesToPush === mediaEntries &&
-          matchingEntries.length === 0 &&
-          mediaEntries.length > 0 &&
-          expectedStems.size > 0
-        ) {
-          console.info('Falling back to legacy media listing', {
+      if (!stat.isDirectory()) {
+        continue;
+      }
+      const entries = fs.readdirSync(dir).sort();
+      const mediaEntries = entries.filter((entry) => {
+        const resolvedPath = `${MEDIA_PREFIX}${folder}/${entry}`;
+        if (!isAllowedMediaAsset(entry)) {
+          console.info('[save-item] Skipping non-image media asset from media directory', {
             itemId,
-            expectedStems: Array.from(expectedStems)
+            entry: resolvedPath,
           });
+          return false;
         }
-        for (const entry of entriesToPush) {
-          const resolved = `${MEDIA_PREFIX}${itemId}/${entry}`;
-          pushMedia(assets, resolved, seen);
-        }
+        return true;
+      });
+      const matchingEntries =
+        expectedStems.size > 0
+          ? mediaEntries.filter((entry) => {
+              const stem = extractStemFromFilename(entry);
+              return !!stem && expectedStems.has(stem);
+            })
+          : mediaEntries;
+      const entriesToPush =
+        expectedStems.size > 0 && matchingEntries.length === 0 ? mediaEntries : matchingEntries;
+      if (
+        entriesToPush === mediaEntries &&
+        matchingEntries.length === 0 &&
+        mediaEntries.length > 0 &&
+        expectedStems.size > 0
+      ) {
+        console.info('[save-item] Falling back to media listing with relaxed stem filtering', {
+          itemId,
+          folder,
+          expectedStems: Array.from(expectedStems)
+        });
+      }
+      if (folder !== mediaFolder && entriesToPush.length > 0) {
+        console.info('[save-item] Found legacy media folder assets', { itemId, folder });
+      }
+      for (const entry of entriesToPush) {
+        const resolved = `${MEDIA_PREFIX}${folder}/${entry}`;
+        pushMedia(assets, resolved, seen);
       }
     }
   } catch (err) {
@@ -271,20 +291,24 @@ function removeItemMediaAsset(itemId: string, asset: string): boolean {
   }
 }
 
-function pruneEmptyItemMediaDirectory(itemId: string): void {
+function pruneEmptyItemMediaDirectory(itemId: string, artikelNummer?: string | null): void {
   try {
-    const dir = path.join(MEDIA_DIR, itemId);
-    if (!fs.existsSync(dir)) {
-      return;
-    }
-    const stat = fs.statSync(dir);
-    if (!stat.isDirectory()) {
-      return;
-    }
-    const entries = fs.readdirSync(dir);
-    if (entries.length === 0) {
-      fs.rmdirSync(dir);
-      console.info('[save-item] Removed empty media directory after update', { itemId });
+    const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
+    const foldersToCheck = mediaFolder === itemId ? [mediaFolder] : [mediaFolder, itemId];
+    for (const folder of foldersToCheck) {
+      const dir = path.join(MEDIA_DIR, folder);
+      if (!fs.existsSync(dir)) {
+        continue;
+      }
+      const stat = fs.statSync(dir);
+      if (!stat.isDirectory()) {
+        continue;
+      }
+      const entries = fs.readdirSync(dir);
+      if (entries.length === 0) {
+        fs.rmdirSync(dir);
+        console.info('[save-item] Removed empty media directory after update', { itemId, folder });
+      }
     }
   } catch (err) {
     console.error('[save-item] Failed to prune empty media directory', { itemId, err });
@@ -460,7 +484,7 @@ const action = defineHttpAction({
           console.error('[save-item] Failed to load agentic run for item detail', { itemId, error });
           agentic = null;
         }
-        const normalisedGrafikname = normaliseMediaReference(itemId, item.Grafikname);
+        const normalisedGrafikname = normaliseMediaReference(itemId, item.Artikel_Nummer, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
         const sanitizedItem = {
           ...item,
@@ -567,15 +591,20 @@ const action = defineHttpAction({
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const existing = ctx.getItem.get(itemId) || {};
+      const mediaArtikelNummer = data.Artikel_Nummer || existing.Artikel_Nummer || null;
       let grafik = existing.Grafikname || '';
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
         // TODO(media-delete): Add coverage for removeAsset payload handling.
-        const normalisedExistingGrafik = normaliseMediaReference(itemId, existing.Grafikname);
+        const normalisedExistingGrafik = normaliseMediaReference(
+          itemId,
+          mediaArtikelNummer,
+          existing.Grafikname
+        );
         const existingMediaBeforeUpdate = collectMediaAssets(
           itemId,
           normalisedExistingGrafik,
-          existing.Artikel_Nummer
+          mediaArtikelNummer
         );
         const removalSlots = imgs.reduce<number[]>((acc, value, index) => {
           if (value === null) {
@@ -586,7 +615,8 @@ const action = defineHttpAction({
         const assetsToRemove = new Set<string>();
         const removeAssetRaw = typeof data.removeAsset === 'string' ? data.removeAsset.trim() : '';
         if (removeAssetRaw) {
-          const normalisedRemoveAsset = normaliseMediaReference(itemId, removeAssetRaw) ?? removeAssetRaw;
+          const normalisedRemoveAsset =
+            normaliseMediaReference(itemId, mediaArtikelNummer, removeAssetRaw) ?? removeAssetRaw;
           if (normalisedRemoveAsset.startsWith(MEDIA_PREFIX)) {
             assetsToRemove.add(normalisedRemoveAsset);
           } else {
@@ -637,8 +667,10 @@ const action = defineHttpAction({
         });
 
         if (uploads.length > 0) {
-          const dir = path.join(MEDIA_DIR, itemId);
-          const artNr = data.Artikel_Nummer || existing.Artikel_Nummer || itemId;
+          const resolvedArtikelNummer = formatArtikelNummerForMedia(mediaArtikelNummer, console);
+          const mediaFolder = resolveMediaFolder(itemId, resolvedArtikelNummer, console);
+          const dir = path.join(MEDIA_DIR, mediaFolder);
+          const artNr = resolvedArtikelNummer || mediaFolder;
           fs.mkdirSync(dir, { recursive: true });
           uploads.forEach(({ index, dataUrl }) => {
             const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
@@ -652,7 +684,7 @@ const action = defineHttpAction({
             try {
               fs.writeFileSync(path.join(dir, file), buf);
               if (index === 0) {
-                grafik = `${MEDIA_PREFIX}${itemId}/${file}`;
+                grafik = `${MEDIA_PREFIX}${mediaFolder}/${file}`;
               }
             } catch (writeErr) {
               console.error('Failed to persist media file', {
@@ -664,20 +696,20 @@ const action = defineHttpAction({
           });
         }
 
-        pruneEmptyItemMediaDirectory(itemId);
+        pruneEmptyItemMediaDirectory(itemId, mediaArtikelNummer);
       } catch (e) {
         console.error('Failed to save item images', e);
       }
-      let normalisedGrafikname = normaliseMediaReference(itemId, grafik);
+      let normalisedGrafikname = normaliseMediaReference(itemId, mediaArtikelNummer, grafik);
       if (!normalisedGrafikname) {
         const fallbackMedia = collectMediaAssets(
           itemId,
           null,
-          data.Artikel_Nummer || existing.Artikel_Nummer || null
+          mediaArtikelNummer
         );
         if (fallbackMedia.length > 0) {
           const fallbackPrimary = fallbackMedia[0];
-          normalisedGrafikname = normaliseMediaReference(itemId, fallbackPrimary) ?? fallbackPrimary;
+          normalisedGrafikname = normaliseMediaReference(itemId, mediaArtikelNummer, fallbackPrimary) ?? fallbackPrimary;
           grafik = normalisedGrafikname ?? '';
           console.info('[save-item] Updated primary graphic after removals', {
             itemId,

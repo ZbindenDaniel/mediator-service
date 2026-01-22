@@ -1,7 +1,7 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
-import { resolveMediaPath } from '../../lib/media';
+import { resolveMediaFolder, resolveMediaPath } from '../../lib/media';
 import type { ExtractionLogger } from './item-flow-extraction';
 
 // TODO(agent): Rotate transcript snapshots once multi-run history needs to be preserved for audits.
@@ -229,14 +229,19 @@ export function buildTranscriptBody(
   }
 }
 
-function buildTranscriptReference(itemId: string): AgentTranscriptReference {
-  const filePath = resolveMediaPath(itemId, TRANSCRIPT_FILE_NAME);
-  const publicUrl = `/media/${encodeURIComponent(itemId)}/${TRANSCRIPT_FILE_NAME}`;
+function buildTranscriptReference(itemId: string, logger?: AgentTranscriptLogger | null): AgentTranscriptReference {
+  const mediaFolder = resolveMediaFolder(itemId, null, logger ?? console);
+  const filePath = resolveMediaPath(mediaFolder, TRANSCRIPT_FILE_NAME);
+  const publicUrl = `/media/${encodeURIComponent(mediaFolder)}/${TRANSCRIPT_FILE_NAME}`;
   return { filePath, publicUrl };
 }
 
 export function locateTranscript(itemId: string, logger?: AgentTranscriptLogger | null): AgentTranscriptReference | null {
-  const reference = buildTranscriptReference(itemId);
+  const reference = buildTranscriptReference(itemId, logger);
+  const legacyHtmlReference: AgentTranscriptReference = {
+    filePath: resolveMediaPath(itemId, TRANSCRIPT_FILE_NAME),
+    publicUrl: `/media/${encodeURIComponent(itemId)}/${TRANSCRIPT_FILE_NAME}`
+  };
   const legacyReference: AgentTranscriptReference = {
     filePath: resolveMediaPath(itemId, 'agentic-transcript.md'),
     publicUrl: `/media/${encodeURIComponent(itemId)}/agentic-transcript.md`
@@ -244,6 +249,14 @@ export function locateTranscript(itemId: string, logger?: AgentTranscriptLogger 
   try {
     if (fs.existsSync(reference.filePath)) {
       return reference;
+    }
+    if (fs.existsSync(legacyHtmlReference.filePath)) {
+      logger?.warn?.({
+        msg: 'serving legacy html transcript',
+        itemId,
+        transcriptPath: legacyHtmlReference.filePath
+      });
+      return legacyHtmlReference;
     }
     if (fs.existsSync(legacyReference.filePath)) {
       logger?.warn?.({
@@ -264,7 +277,7 @@ export async function createTranscriptWriter(
   itemId: string,
   logger?: AgentTranscriptLogger | null
 ): Promise<AgentTranscriptWriter | null> {
-  const reference = buildTranscriptReference(itemId);
+  const reference = buildTranscriptReference(itemId, logger);
   const nowIso = new Date().toISOString();
   const header = `${buildTranscriptHeader(itemId, nowIso)}\n${TRANSCRIPT_SECTION_MARKER}\n${TRANSCRIPT_FOOTER}`;
   let fileExists = false;
