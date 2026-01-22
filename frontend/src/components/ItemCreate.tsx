@@ -1363,6 +1363,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
       console.warn('Skipping match selection submit; creation already running.');
       return;
     }
+    // TODO(item-create-quality): Keep match-selection payloads ungraded; new items should start with null quality.
+    // TODO(item-create-quality-null): Confirm backend expectations for explicit null Quality on match selection.
     // TODO: Capture metrics on match-selection agentic submissions to validate flow effectiveness.
     try {
       const referenceFields = extractReferenceFields(item);
@@ -1403,10 +1405,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         : undefined;
       const resolvedEinheit = basicEinheit ?? preferredEinheit ?? referenceEinheit ?? ITEM_FORM_DEFAULT_EINHEIT;
       const hasBasicQuality = Object.prototype.hasOwnProperty.call(basicInfo, 'Quality');
-      const hasReferenceQuality = Object.prototype.hasOwnProperty.call(item, 'Quality');
-      const resolvedQuality = hasBasicQuality
-        ? basicInfo.Quality
-        : (hasReferenceQuality ? item.Quality : undefined);
+      const hasMatchQuality = Object.prototype.hasOwnProperty.call(item, 'Quality');
       const resolvedAufLager = resolveAufLagerInput({
         value: basicInfo.Auf_Lager,
         context: 'match-selection'
@@ -1424,9 +1423,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         Auf_Lager: resolvedAufLager,
         Einheit: resolvedEinheit
       };
-      if (hasBasicQuality || hasReferenceQuality) {
-        clone.Quality = resolvedQuality ?? null;
-      }
+      clone.Quality = null;
+      logger.info('Set match-selection Quality to null to keep new items ungraded.', {
+        artikelNummer: item.Artikel_Nummer,
+        hadBasicQuality: hasBasicQuality,
+        hadMatchQuality: hasMatchQuality
+      });
 
       if (typeof clone.Artikelbeschreibung === 'string') {
         clone.Artikelbeschreibung = clone.Artikelbeschreibung.trim();
@@ -1440,9 +1442,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         resolvedDescription: clone.Artikelbeschreibung,
         useAgenticFlow: shouldUseAgenticForm
       });
-      logger.info('Match selection payload includes quality/unit fields', {
+      logger.info('Match selection payload includes unit/quantity fields', {
         Auf_Lager: clone.Auf_Lager,
-        Quality: clone.Quality,
         Einheit: clone.Einheit
       });
 
