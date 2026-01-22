@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 
 - Switched item media storage to use 6-digit Artikelnummer folder names (with legacy ItemUUID fallback) while keeping media listing and agentic transcripts aligned.
+- Updated media enumeration to display every image in an item's Artikelnummer folder, regardless of source.
 - Added confirmation before deleting item gallery media, renamed the modal action label, and wired remove payloads to delete targeted media assets reliably.
 - Logged resolved media storage paths on startup, including local override support and clearer WebDAV fallback visibility.
 - Validated WebDAV media directory configuration with absolute path checks and documented the required filesystem path format.
@@ -114,6 +115,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Resolved local media directory overrides so MEDIA_DIR can be used with consistent relative-path resolution and logging for local storage mode.
 - Improved WebDAV configuration feedback with explicit mount-path guidance, startup storage logging, and documentation warnings about URL-based WebDAV paths.
 - Updated print label cards to use a standard action button so grid layouts stay consistent across the UI.
+- Removed media directory bundling from exports now that media lives in WebDAV, reducing export archive size.
 
 ## Documentation Map
 

@@ -141,35 +141,7 @@ function normaliseMediaReference(
   return trimmed;
 }
 
-function extractStemFromFilename(filename: string | null | undefined): string | null {
-  if (!filename) return null;
-  const trimmed = filename.trim();
-  if (!trimmed) return null;
-  const withoutQuery = trimmed.split('?')[0];
-  const base = path.posix.basename(withoutQuery);
-  if (!base) return null;
-  const noExt = base.replace(/\.[^/.]+$/, '');
-  if (!noExt) return null;
-  const hyphenMatch = noExt.match(/^(.*?)-\d+$/);
-  const stem = hyphenMatch ? hyphenMatch[1] : noExt;
-  const finalStem = stem.trim();
-  return finalStem ? finalStem : null;
-}
-
-function deriveExpectedStems(primary?: string | null, artikelNummer?: string | null): Set<string> {
-  const stems = new Set<string>();
-  const primaryStem = extractStemFromFilename(
-    primary && primary.startsWith(MEDIA_PREFIX) ? primary.slice(MEDIA_PREFIX.length) : primary
-  );
-  if (primaryStem) stems.add(primaryStem);
-  if (typeof artikelNummer === 'string') {
-    const trimmedArtikel = artikelNummer.trim();
-    if (trimmedArtikel) {
-      stems.add(trimmedArtikel);
-    }
-  }
-  return stems;
-}
+// TODO(media-enumeration): Confirm non-image files never leak into media folders once new sources are added.
 
 export function collectMediaAssets(
   itemId: string,
@@ -191,8 +163,6 @@ export function collectMediaAssets(
   } else {
     pushMedia(assets, normalisedPrimary || '', seen);
   }
-  const stemSource = normalisedPrimary && isAllowedMediaAsset(normalisedPrimary) ? normalisedPrimary : null;
-  const expectedStems = deriveExpectedStems(stemSource, artikelNummer);
 
   try {
     const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
@@ -218,31 +188,10 @@ export function collectMediaAssets(
         }
         return true;
       });
-      const matchingEntries =
-        expectedStems.size > 0
-          ? mediaEntries.filter((entry) => {
-              const stem = extractStemFromFilename(entry);
-              return !!stem && expectedStems.has(stem);
-            })
-          : mediaEntries;
-      const entriesToPush =
-        expectedStems.size > 0 && matchingEntries.length === 0 ? mediaEntries : matchingEntries;
-      if (
-        entriesToPush === mediaEntries &&
-        matchingEntries.length === 0 &&
-        mediaEntries.length > 0 &&
-        expectedStems.size > 0
-      ) {
-        console.info('[save-item] Falling back to media listing with relaxed stem filtering', {
-          itemId,
-          folder,
-          expectedStems: Array.from(expectedStems)
-        });
-      }
-      if (folder !== mediaFolder && entriesToPush.length > 0) {
+      if (folder !== mediaFolder && mediaEntries.length > 0) {
         console.info('[save-item] Found legacy media folder assets', { itemId, folder });
       }
-      for (const entry of entriesToPush) {
+      for (const entry of mediaEntries) {
         const resolved = `${MEDIA_PREFIX}${folder}/${entry}`;
         pushMedia(assets, resolved, seen);
       }
