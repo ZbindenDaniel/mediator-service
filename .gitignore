@@ -27,3 +27,4 @@ data/mediator.db-wal
 dist_tmp/*
 dist_old/*
 coverage/*
+env.old
