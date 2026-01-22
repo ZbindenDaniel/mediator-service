@@ -1,5 +1,6 @@
 import path from 'path';
 import { MEDIA_DIR_OVERRIDE, MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
+import { parseSequentialItemUUID } from './itemIds';
 
 // TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
 // TODO(media-storage): Validate MEDIA_DIR_OVERRIDE relative path resolution conventions with deployments.
@@ -49,4 +50,67 @@ export const MEDIA_DIR = resolveMediaDir();
 
 export function resolveMediaPath(...segments: string[]): string {
   return path.join(MEDIA_DIR, ...segments);
+}
+
+export function formatArtikelNummerForMedia(
+  value: string | null | undefined,
+  logger: Pick<Console, 'warn' | 'error'> = console
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  try {
+    const trimmed = typeof value === 'string' ? value.trim() : String(value);
+    if (!trimmed) {
+      return null;
+    }
+    if (/^\d+$/u.test(trimmed)) {
+      const formatted = trimmed.padStart(6, '0');
+      if (formatted.length > 6) {
+        logger.warn?.('[media] Artikel_Nummer exceeds 6 digits for media folder; using raw value.', {
+          provided: trimmed,
+          formatted
+        });
+      }
+      return formatted;
+    }
+    logger.warn?.('[media] Artikel_Nummer is non-numeric for media folder; using raw value.', {
+      provided: trimmed
+    });
+    return trimmed;
+  } catch (error) {
+    logger.error?.('[media] Failed to format Artikel_Nummer for media folder; using raw value.', {
+      error,
+      provided: value
+    });
+    return typeof value === 'string' ? value.trim() : String(value);
+  }
+}
+
+export function resolveMediaFolder(
+  itemId: string,
+  artikelNummer?: string | null,
+  logger: Pick<Console, 'warn' | 'error' | 'info'> = console
+): string {
+  // TODO(media-folder-migration): Remove ItemUUID fallback once media assets are migrated to Artikelnummer folders.
+  const formatted = formatArtikelNummerForMedia(artikelNummer, logger);
+  if (formatted) {
+    return formatted;
+  }
+
+  const parsed = parseSequentialItemUUID(itemId);
+  if (parsed?.kind === 'artikelnummer') {
+    const derived = formatArtikelNummerForMedia(parsed.artikelNummer, logger);
+    if (derived) {
+      logger.info?.('[media] Derived media folder from ItemUUID Artikel_Nummer segment', {
+        itemId,
+        artikelNummer: derived
+      });
+      return derived;
+    }
+  }
+
+  logger.warn?.('[media] Falling back to ItemUUID for media folder', { itemId });
+  return itemId;
 }

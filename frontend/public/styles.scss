@@ -219,6 +219,12 @@ textarea {
     gap: 0.75rem;
 }
 
+.item-media-gallery__add {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.75rem;
+    width: 100%;
+}
 .item-media-gallery--stacked {
     flex-direction: column;
     flex-wrap: nowrap;
@@ -519,7 +525,7 @@ div {
     padding: 24px;
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(2px);
-    z-index: 1000;
+    z-index: 1100;
 }
 
 .dialog-content {
@@ -575,6 +581,14 @@ div {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+}
+
+.item-media-gallery__dialog-header .dialog-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .item-media-gallery__dialog-close {
