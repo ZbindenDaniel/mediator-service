@@ -1,3 +1,4 @@
+// TODO(agent): Confirm Docker runtime renderer install stays in sync with PRINT_RENDERER docs.
 import fs from 'fs';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
