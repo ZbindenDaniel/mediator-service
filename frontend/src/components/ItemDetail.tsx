@@ -2429,6 +2429,65 @@ export default function ItemDetail({ itemId }: Props) {
     navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
   }
 
+  // TODO(agent): Revisit bulk add action copy once inline stock adjustments are validated by UX.
+  async function handleAddItem() {
+    if (!item) {
+      return;
+    }
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        logError('ItemDetail: Failed to display add-item user alert', error, {
+          itemId: item.ItemUUID
+        });
+      }
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor })
+      });
+      if (!res.ok) {
+        logError('ItemDetail: Failed to add item stock', null, {
+          itemId: item.ItemUUID,
+          actor,
+          status: res.status
+        });
+        return;
+      }
+      let payload: { quantity?: number; boxId?: string } = {};
+      try {
+        payload = await res.json();
+      } catch (error) {
+        logError('ItemDetail: Failed to parse add-item response', error, {
+          itemId: item.ItemUUID,
+          actor
+        });
+      }
+      const nextQuantity = typeof payload.quantity === 'number' ? payload.quantity : item.Auf_Lager;
+      const nextBoxId = typeof payload.boxId === 'string' ? payload.boxId : item.BoxID;
+      setItem({ ...item, Auf_Lager: nextQuantity, BoxID: nextBoxId });
+      logger.info?.('ItemDetail: Item stock added', {
+        itemId: item.ItemUUID,
+        actor,
+        quantity: nextQuantity
+      });
+    } catch (error) {
+      logError('ItemDetail: Add item failed', error, {
+        itemId: item.ItemUUID,
+        actor
+      });
+    }
+  }
+
   return (
     <div
       className="container item"
@@ -2582,6 +2641,11 @@ export default function ItemDetail({ itemId }: Props) {
                 >
                   Entnehmen
                 </button>
+                {resolveQuantityEinheit(item.Einheit, item.ItemUUID) === ItemEinheit.Menge ? (
+                  <button type="button" className="btn" onClick={handleAddItem}>
+                    Hinzufügen
+                  </button>
+                ) : null}
               </div>
             </div>
 

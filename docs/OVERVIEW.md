@@ -116,6 +116,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Improved WebDAV configuration feedback with explicit mount-path guidance, startup storage logging, and documentation warnings about URL-based WebDAV paths.
 - Updated print label cards to use a standard action button so grid layouts stay consistent across the UI.
 - Removed media directory bundling from exports now that media lives in WebDAV, reducing export archive size.
+- Added an inline "Hinzufügen" action on item detail pages for bulk (Menge) items to adjust stock with logged add-item calls.
 
 ## Documentation Map
 
