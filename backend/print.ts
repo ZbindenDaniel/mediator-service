@@ -7,6 +7,7 @@ import {
   PRINTER_QUEUE_ITEM,
   PRINTER_QUEUE_ITEM_SMALL,
   PRINTER_QUEUE_SHELF,
+  PRINTER_SERVER,
   LP_COMMAND,
   LPSTAT_COMMAND,
   PRINT_TIMEOUT_MS
@@ -113,6 +114,11 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
     return { sent: false, reason: 'printer_queue_not_configured' };
   }
 
+  const printerHost = (PRINTER_SERVER || '').trim();
+  if (!printerHost) {
+    console.warn('[print] Printer host not configured; relying on local CUPS defaults.');
+  }
+
   let artifactPath = path.resolve(filePath);
   if (renderMode === 'html-to-pdf') {
     try {
@@ -142,7 +148,10 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
   }
 
   const absolute = artifactPath;
-  const args = ['-d', effectiveQueue, '-h', '192.168.10.202:631'];
+  const args = ['-d', effectiveQueue];
+  if (printerHost) {
+    args.push('-h', printerHost);
+  }
   if (jobName && jobName.trim()) {
     args.push('-t', jobName.trim());
   }

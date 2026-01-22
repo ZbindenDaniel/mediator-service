@@ -48,6 +48,7 @@ Example mounted WebDAV path: `/mnt/webdav/media` (Linux) or `/Volumes/webdav/med
 | `PRINTER_QUEUE_ITEM` | (unset) | Overrides printer queue for item labels. |
 | `PRINTER_QUEUE_ITEM_SMALL` | (unset) | Overrides printer queue for small item labels. |
 | `PRINTER_QUEUE_SHELF` | (unset) | Overrides printer queue for shelf labels. |
+| `PRINTER_SERVER` | (unset) | Optional CUPS host override passed to `lp -h` (e.g., `localhost:631`). |
 | `LP_COMMAND` | `lp` | Print command used for dispatching jobs. |
 | `LPSTAT_COMMAND` | `lpstat` | Command used to query printer status. |
 | `PRINT_TIMEOUT_MS` | `15000` | Print job timeout for spooled labels. |
