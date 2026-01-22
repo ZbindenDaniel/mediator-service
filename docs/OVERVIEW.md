@@ -117,6 +117,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Updated print label cards to use a standard action button so grid layouts stay consistent across the UI.
 - Removed media directory bundling from exports now that media lives in WebDAV, reducing export archive size.
 - Added an inline "Hinzufügen" action on item detail pages for bulk (Menge) items to adjust stock with logged add-item calls.
+- Set match-selection item creation payloads to send Quality as null so new items start ungraded, with logging to confirm the intended null state.
 
 ## Documentation Map
 
