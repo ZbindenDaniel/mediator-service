@@ -12,9 +12,9 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
   const [status, setStatus] = useState('');
   const [preview, setPreview] = useState('');
 
+  // TODO(ui): Reconfirm status spacing once the grid layout for print cards is finalized.
   // TODO(agent): Review spacing and status copy when embedding this button in success dialogs.
   // TODO(agent): Align print label payloads with backend actor + labelType expectations.
-  // TODO(agent): Confirm button styling matches previous linkcard navigation affordance.
   // TODO(agent): Surface label type and entity metadata in status output for troubleshooting.
   async function handleClick(event?: React.MouseEvent<HTMLElement>) {
     try {
@@ -59,15 +59,21 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
   }
 
   return (
-    <div>
-      <div className="card linkcard">
-        <a onClick={handleClick}>
-          <h3>Label drucken</h3>
-        </a>
-        {status && <div>{status}{preview && (
-          <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
-        )}</div>}
+    <div className="card">
+      <div className="card-header">
+        <h2>Label drucken</h2>
+        <button type="button" className="btn" onClick={handleClick}>
+          Drucken
+        </button>
       </div>
+      {status && (
+        <div>
+          {status}
+          {preview && (
+            <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
+          )}
+        </div>
+      )}
     </div>
   );
 }
