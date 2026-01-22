@@ -25,6 +25,8 @@ import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 import { logger } from '../utils/logger';
 import { normalizeQuality } from '../../../models/quality';
 
+// TODO(agentic-trigger-skip-ui): Suppress alerts for already-queued agentic runs.
+
 type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
 export interface AgenticHealthProxyOptions {
@@ -107,6 +109,25 @@ export async function handleAgenticRunTrigger({
     }
 
     if (result.outcome === 'skipped') {
+      const normalizedMessage = result.message?.toLowerCase() ?? '';
+      const isAlreadyQueued =
+        result.reason === 'already-exists' ||
+        normalizedMessage.includes('already') ||
+        normalizedMessage.includes('bereits') ||
+        normalizedMessage.includes('queued');
+      if (isAlreadyQueued) {
+        logger.info?.('Agentic trigger skipped because run already exists', {
+          context,
+          itemId: trimmedItemId,
+          reason: result.reason,
+          status
+        });
+        if (trimmedItemId) {
+          onSkipped?.(trimmedItemId);
+        }
+        return;
+      }
+
       if (trimmedItemId) {
         try {
           await reportFailure({

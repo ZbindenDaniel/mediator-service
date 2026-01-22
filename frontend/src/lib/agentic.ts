@@ -1,6 +1,7 @@
 import type { AgenticRun } from '../../../models';
 import { logError, logger } from '../utils/logger';
 // TODO(agentic-close): Confirm close endpoint payload once backend wiring lands.
+// TODO(agentic-trigger-skip): Treat already-exists responses as non-failures in the UI.
 
 // TODO(agentic-failure-reason): Surface backend failure reasons to UI consumers.
 
@@ -96,7 +97,8 @@ export interface AgenticRunTriggerOptions {
 export type AgenticTriggerSkippedReason =
   | 'run-url-missing'
   | 'missing-artikelbeschreibung'
-  | 'missing-item-id';
+  | 'missing-item-id'
+  | 'already-exists';
 
 export type AgenticTriggerFailedReason = 'response-not-ok' | 'network-error';
 
@@ -181,14 +183,24 @@ export async function triggerAgenticRun({
         }
         console.warn(`KI-Auslösung fehlgeschlagen (${context}): non-JSON error payload`, jsonErr);
       }
+      const extractedReason = extractAgenticFailureReason(errorDetails);
+      const normalizedReason =
+        typeof extractedReason === 'string' ? extractedReason.trim().toLowerCase() : null;
+      if (normalizedReason === 'already-exists') {
+        const message = `KI-Auslösung übersprungen (${context}): bereits vorhanden`;
+        console.warn(`KI-Auslösung übersprungen (${context})`, {
+          status: response.status,
+          reason: normalizedReason
+        });
+        return {
+          outcome: 'skipped',
+          reason: 'already-exists',
+          message
+        };
+      }
       console.error(`KI-Auslösung fehlgeschlagen (${context})`, response.status, errorDetails);
-      const failureReason = describeAgenticFailureReason(
-        extractAgenticFailureReason(errorDetails) ?? 'response-not-ok'
-      );
-      const message = formatAgenticFailureMessage(
-        `KI-Auslösung fehlgeschlagen (${context})`,
-        failureReason
-      );
+      const failureReason = describeAgenticFailureReason(extractedReason ?? 'response-not-ok');
+      const message = formatAgenticFailureMessage(`KI-Auslösung fehlgeschlagen (${context})`, failureReason);
       return {
         outcome: 'failed',
         reason: 'response-not-ok',

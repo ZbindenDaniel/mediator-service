@@ -40,6 +40,13 @@ These planning responses should be explicit enough that another developer can im
 
 ## Planned Work Log
 
+### Handle agentic trigger already-exists skip (in progress)
+**Goal & motivation:** Avoid surfacing redundant failure alerts when a run is already queued, while keeping the frontend change minimal and aligned with the existing error contract.
+
+**Implementation summary (minimal diff):**
+1. Add frontend handling to treat `already-exists` trigger responses as skips with lightweight logging.
+2. Keep reporting/alerts for true failures only, preserving current error handling behavior.
+
 ### Isolate item reference updates in save-item (completed)
 **Goal & motivation:** Ensure edit requests for `/api/items/:id` only persist `ItemRef` data so instance fields (location, quantities, timestamps) are not accidentally overwritten, improving data integrity and auditability. This keeps edits scoped to reference metadata while preserving instance state.
 
