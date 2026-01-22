@@ -40,6 +40,12 @@ These planning responses should be explicit enough that another developer can im
 
 ## Planned Work Log
 
+### Handle agentic trigger already-exists skip (in progress)
+**Goal & motivation:** Avoid surfacing redundant failure alerts when a run is already queued, while keeping the frontend change minimal and aligned with the existing error contract.
+
+**Implementation summary (minimal diff):**
+1. Add frontend handling to treat `already-exists` trigger responses as skips with lightweight logging.
+2. Keep reporting/alerts for true failures only, preserving current error handling behavior.
 ### Add Behälter column to item instance table (in progress)
 **Goal & motivation:** Make the Vorrat table show per-instance container IDs (Behälter) instead of instance-level Ki status so staff can navigate directly to the correct box, aligning the UI with the shared agentic status and improving warehouse lookup accuracy.
 
