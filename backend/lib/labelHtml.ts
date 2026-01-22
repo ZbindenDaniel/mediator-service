@@ -7,6 +7,7 @@ export type LabelTemplate = LabelHtmlTemplate;
 // TODO(agent): Validate item label layout before rolling to all printers.
 const BOX_TEMPLATE: LabelTemplate = '62x100';
 const ITEM_TEMPLATE: LabelTemplate = '29x90';
+const ITEM_SMALL_TEMPLATE: LabelTemplate = '62x12';
 const SHELF_TEMPLATE: LabelTemplate = 'shelf-a4';
 
 let QRCode: any;
@@ -110,11 +111,21 @@ export interface ItemLabelOptions {
   itemData: ItemLabelPayload;
   outPath: string;
   logger?: Console;
+  template?: LabelTemplate;
 }
 
-export async function htmlForItem({ itemData, outPath, logger = console }: ItemLabelOptions): Promise<string> {
+export async function htmlForItem({
+  itemData,
+  outPath,
+  logger = console,
+  template = ITEM_TEMPLATE
+}: ItemLabelOptions): Promise<string> {
   const labelText = resolveItemLabelText(itemData);
-  return renderLabel(ITEM_TEMPLATE, { ...itemData, labelText, type: 'item' }, outPath, logger);
+  return renderLabel(template, { ...itemData, labelText, type: 'item' }, outPath, logger);
+}
+
+export async function htmlForSmallItem(options: ItemLabelOptions): Promise<string> {
+  return htmlForItem({ ...options, template: ITEM_SMALL_TEMPLATE });
 }
 
 export interface ShelfLabelPayload {

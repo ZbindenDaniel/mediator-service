@@ -13,13 +13,22 @@ export interface PrintLabelRequestOptions {
   boxId?: string;
   itemId?: string;
   actor: string;
+  labelTypeOverride?: PrintLabelType;
   fetchImpl?: typeof fetch;
 }
 
 function resolveLabelMetadata(
   boxId?: string,
-  itemId?: string
+  itemId?: string,
+  labelTypeOverride?: PrintLabelType
 ): { labelType: PrintLabelType; entityId: string } | null {
+  if (labelTypeOverride) {
+    if (labelTypeOverride === 'box' || labelTypeOverride === 'shelf') {
+      return boxId ? { labelType: labelTypeOverride, entityId: boxId } : null;
+    }
+    return itemId ? { labelType: labelTypeOverride, entityId: itemId } : null;
+  }
+
   const entityId = boxId || itemId || '';
   if (!entityId) {
     return null;
@@ -36,10 +45,11 @@ export async function requestPrintLabel({
   boxId,
   itemId,
   actor,
+  labelTypeOverride,
   fetchImpl = fetch
 }: PrintLabelRequestOptions): Promise<PrintLabelRequestResult> {
   const trimmedActor = actor.trim();
-  const labelMetadata = resolveLabelMetadata(boxId, itemId);
+  const labelMetadata = resolveLabelMetadata(boxId, itemId, labelTypeOverride);
 
   if (!trimmedActor) {
     logError('Print request blocked: missing actor', undefined, { boxId, itemId });

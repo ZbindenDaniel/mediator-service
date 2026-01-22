@@ -11,6 +11,7 @@ import {
   itemCategories
 } from '../../models';
 import type { BoxLabelPayload, ItemLabelPayload, ShelfLabelPayload } from '../lib/labelHtml';
+import { htmlForSmallItem } from '../lib/labelHtml';
 import type { PrintFileResult, PrintLabelType } from '../print';
 import { resolvePrinterQueue } from '../print';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
@@ -18,7 +19,7 @@ import { buildItemCategoryLookups } from '../../models/item-category-lookups';
 const LABEL_TEMPLATES: Record<PrintLabelType, string> = {
   box: '62x100',
   item: '29x90',
-  smallitem: '62x90',
+  smallitem: '62x12',
   shelf: 'shelf-a4'
 };
 
@@ -38,8 +39,9 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
+// TODO(agent): Keep label type parsing aligned with frontend label selection prompts.
 function parseLabelType(raw: string): PrintLabelType | null {
-  if (raw === 'box' || raw === 'item' || raw === 'shelf') {
+  if (raw === 'box' || raw === 'item' || raw === 'smallitem' || raw === 'shelf') {
     return raw;
   }
   return null;
@@ -259,6 +261,7 @@ function resolveInvalidIdMessage(labelType: PrintLabelType): string {
     case 'box':
       return 'invalid box id';
     case 'item':
+    case 'smallitem':
       return 'invalid item id';
     case 'shelf':
       return 'invalid shelf id';
@@ -272,6 +275,7 @@ function resolveNotFoundMessage(labelType: PrintLabelType): string {
     case 'box':
       return 'box not found';
     case 'item':
+    case 'smallitem':
       return 'item not found';
     case 'shelf':
       return 'shelf not found';
@@ -359,7 +363,7 @@ export async function handleUnifiedPrintRequest(
     let entityId: string;
 
     try {
-      if (labelType === 'item') {
+      if (labelType === 'item' || labelType === 'smallitem') {
         const item = ctx.getItem.get(id) as Item | undefined;
         if (!item) return sendJson(res, 404, { error: resolveNotFoundMessage(labelType) });
         payload = buildItemLabelPayload(item);
@@ -415,6 +419,8 @@ export async function handleUnifiedPrintRequest(
         await ctx.htmlForBox({ boxData: labelPayload as BoxLabelPayload, outPath: htmlPath });
       } else if (labelType === 'item') {
         await ctx.htmlForItem({ itemData: labelPayload as ItemLabelPayload, outPath: htmlPath });
+      } else if (labelType === 'smallitem') {
+        await htmlForSmallItem({ itemData: labelPayload as ItemLabelPayload, outPath: htmlPath });
       } else {
         await ctx.htmlForShelf({ shelfData: labelPayload as ShelfLabelPayload, outPath: htmlPath });
       }
@@ -444,7 +450,13 @@ export async function handleUnifiedPrintRequest(
       console.warn('[print-unified] Printer queue missing for label type', { ...logContext });
     }
     try {
-      const jobName = labelType === 'item' ? `Item ${entityId}` : labelType === 'shelf' ? `Shelf ${entityId}` : `Box ${entityId}`;
+      const jobName = labelType === 'item'
+        ? `Item ${entityId}`
+        : labelType === 'smallitem'
+          ? `Small Item ${entityId}`
+          : labelType === 'shelf'
+            ? `Shelf ${entityId}`
+            : `Box ${entityId}`;
       printResult = await ctx.printFile({
         filePath: htmlPath,
         jobName,
@@ -501,7 +513,7 @@ const action = defineHttpAction({
   key: 'print-unified',
   label: 'Print label (unified)',
   appliesTo: () => false,
-  matches: (p, m) => /^\/api\/print\/(box|item|shelf)\/[^/]+$/.test(p) && m === 'POST',
+  matches: (p, m) => /^\/api\/print\/(box|item|smallitem|shelf)\/[^/]+$/.test(p) && m === 'POST',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     await handleUnifiedPrintRequest(req, res, ctx);
   },

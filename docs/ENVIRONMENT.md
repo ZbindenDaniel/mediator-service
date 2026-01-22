@@ -46,6 +46,7 @@ Example mounted WebDAV path: `/mnt/webdav/media` (Linux) or `/Volumes/webdav/med
 | `PRINTER_HOST` | (unset) | Legacy alias used as a fallback for `PRINTER_QUEUE`. |
 | `PRINTER_QUEUE_BOX` | (unset) | Overrides printer queue for box labels. |
 | `PRINTER_QUEUE_ITEM` | (unset) | Overrides printer queue for item labels. |
+| `PRINTER_QUEUE_ITEM_SMALL` | (unset) | Overrides printer queue for small item labels. |
 | `PRINTER_QUEUE_SHELF` | (unset) | Overrides printer queue for shelf labels. |
 | `LP_COMMAND` | `lp` | Print command used for dispatching jobs. |
 | `LPSTAT_COMMAND` | `lpstat` | Command used to query printer status. |

@@ -5,6 +5,7 @@ import {
   PRINTER_QUEUE,
   PRINTER_QUEUE_BOX,
   PRINTER_QUEUE_ITEM,
+  PRINTER_QUEUE_ITEM_SMALL,
   PRINTER_QUEUE_SHELF,
   LP_COMMAND,
   LPSTAT_COMMAND,
@@ -50,6 +51,9 @@ export function resolvePrinterQueue(
       break;
     case 'item':
       queue = PRINTER_QUEUE_ITEM;
+      break;
+    case 'smallitem':
+      queue = PRINTER_QUEUE_ITEM_SMALL;
       break;
     case 'shelf':
       queue = PRINTER_QUEUE_SHELF;

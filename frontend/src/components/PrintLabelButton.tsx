@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import type { PrintLabelType } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 
@@ -16,6 +17,29 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
   // TODO(agent): Review spacing and status copy when embedding this button in success dialogs.
   // TODO(agent): Align print label payloads with backend actor + labelType expectations.
   // TODO(agent): Surface label type and entity metadata in status output for troubleshooting.
+  // TODO(agent): Reconfirm gross/klein copy with warehouse to align with label roll naming.
+  function resolveItemLabelType(): PrintLabelType | null {
+    const choice = window.prompt('Label drucken: "Gross" oder "Klein"?', 'Gross');
+    if (choice === null) {
+      setStatus('Druck abgebrochen.');
+      return null;
+    }
+    const normalized = choice.trim().toLowerCase();
+    if (!normalized) {
+      setStatus('Bitte "Gross" oder "Klein" auswählen.');
+      return null;
+    }
+    if (normalized === 'klein' || normalized === 'k') {
+      return 'smallitem';
+    }
+    if (normalized === 'gross' || normalized === 'groß' || normalized === 'g') {
+      return 'item';
+    }
+    console.warn('Unknown item label choice', { choice });
+    setStatus('Ungültige Auswahl. Bitte "Gross" oder "Klein" eingeben.');
+    return null;
+  }
+
   async function handleClick(event?: React.MouseEvent<HTMLElement>) {
     try {
       event?.preventDefault();
@@ -27,8 +51,13 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
         return;
       }
 
+      const labelTypeOverride = itemId && !boxId ? resolveItemLabelType() : undefined;
+      if (itemId && !boxId && !labelTypeOverride) {
+        return;
+      }
+
       onPrintStart?.({ boxId, itemId });
-      const result = await requestPrintLabel({ boxId, itemId, actor });
+      const result = await requestPrintLabel({ boxId, itemId, actor, labelTypeOverride });
       if (!result.labelType || !result.entityId) {
         setStatus('Fehler: Ungültige ID.');
         return;
