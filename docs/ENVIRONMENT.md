@@ -51,6 +51,7 @@ Example mounted WebDAV path: `/mnt/webdav/media` (Linux) or `/Volumes/webdav/med
 | `LP_COMMAND` | `lp` | Print command used for dispatching jobs. |
 | `LPSTAT_COMMAND` | `lpstat` | Command used to query printer status. |
 | `PRINT_TIMEOUT_MS` | `15000` | Print job timeout for spooled labels. |
+| `PRINT_PREVIEW_DIR` | (unset) | Absolute path override for storing HTML/PDF label previews (defaults to `${PUBLIC_DIR}/prints`). |
 | `PRINT_RENDERER` | (unset) | HTML-to-PDF renderer override (e.g., `chromium`). The Docker runtime installs `chromium`, so set this to `chromium` when running inside the container. |
 | `PRINT_RENDER_TIMEOUT_MS` | `10000` | Timeout for HTML-to-PDF rendering. |
 

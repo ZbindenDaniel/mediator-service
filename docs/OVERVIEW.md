@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Added a configurable print preview directory override and routed preview downloads through it to keep container print paths aligned.
 - Added Chromium to the runtime Docker image for headless PDF rendering and documented the matching `PRINT_RENDERER` configuration.
 - Switched item media storage to use 6-digit Artikelnummer folder names (with legacy ItemUUID fallback) while keeping media listing and agentic transcripts aligned.
 - Updated media enumeration to display every image in an item's Artikelnummer folder, regardless of source.

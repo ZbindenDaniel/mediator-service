@@ -145,7 +145,9 @@ function resolveRequestBase(req: IncomingMessage): string {
 const DIST_PUBLIC = path.join(__dirname, '../frontend/public');
 const REPO_PUBLIC = path.join(__dirname, '../../..', 'frontend', 'public');
 export let PUBLIC_DIR = DIST_PUBLIC;
-export let PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
+const ENV_PREVIEW_DIR = (process.env.PRINT_PREVIEW_DIR || '').trim();
+export let PREVIEW_DIR = ENV_PREVIEW_DIR || path.join(PUBLIC_DIR, 'prints');
+let PREVIEW_DIR_SOURCE: 'env' | 'public' = ENV_PREVIEW_DIR ? 'env' : 'public';
 
 try {
   fs.mkdirSync(INBOX_DIR, { recursive: true });
@@ -156,9 +158,20 @@ try {
     : fs.existsSync(path.join(REPO_PUBLIC, 'index.html'))
       ? REPO_PUBLIC
       : DIST_PUBLIC;
-  PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
+  if (ENV_PREVIEW_DIR) {
+    PREVIEW_DIR = path.resolve(ENV_PREVIEW_DIR);
+    PREVIEW_DIR_SOURCE = 'env';
+  } else {
+    PREVIEW_DIR = path.join(PUBLIC_DIR, 'prints');
+    PREVIEW_DIR_SOURCE = 'public';
+  }
   fs.mkdirSync(PREVIEW_DIR, { recursive: true });
   fs.mkdirSync(MEDIA_DIR, { recursive: true });
+  console.info('[server] Print preview directory resolved', {
+    publicDir: PUBLIC_DIR,
+    previewDir: PREVIEW_DIR,
+    source: PREVIEW_DIR_SOURCE
+  });
 } catch (err) {
   console.error('Failed to initialise directories', err);
 }
@@ -542,11 +555,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     }
 
     if (url.pathname.startsWith('/prints/') && req.method === 'GET') {
-      const p = path.join(PUBLIC_DIR, url.pathname);
+      const relativePath = url.pathname.replace(/^\/prints\//, '');
+      const p = path.join(PREVIEW_DIR, relativePath);
       try {
-        if (!p.startsWith(path.join(PUBLIC_DIR, 'prints'))) throw new Error('bad path');
+        if (!p.startsWith(PREVIEW_DIR)) throw new Error('bad path');
         if (fs.existsSync(p)) {
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          const ext = path.extname(p).toLowerCase();
+          const contentType = ext === '.pdf'
+            ? 'application/pdf'
+            : 'text/html; charset=utf-8';
+          res.writeHead(200, { 'Content-Type': contentType });
           return res.end(fs.readFileSync(p));
         }
       } catch {
