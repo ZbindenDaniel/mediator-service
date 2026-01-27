@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
+- Added an nginx reverse proxy service with TLS termination, Basic Auth, and rate limiting to protect all ingress traffic while keeping the mediator service unexposed directly.
 - Added `PRINTER_SERVER` to configure the CUPS host used for print dispatches instead of relying on a hard-coded address.
 - Added a configurable print preview directory override and routed preview downloads through it to keep container print paths aligned.
 - Added Chromium to the runtime Docker image for headless PDF rendering and documented the matching `PRINT_RENDERER` configuration.
