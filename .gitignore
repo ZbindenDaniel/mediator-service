@@ -28,3 +28,4 @@ dist_tmp/*
 dist_old/*
 coverage/*
 env.old
+secrets/

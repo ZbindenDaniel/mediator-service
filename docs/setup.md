@@ -27,6 +27,21 @@ the print job need to renderPDFs from the html templates. This need to happen he
 3. If you swap in an external Postgres instance, update the `.env` variables (`DATABASE_URL`, `PGHOST`, etc.) accordingly and document the change so teammates inherit the correct connection string.
 4. When running the mediator against the host-installed Ollama daemon, ensure Docker has access to the host gateway. The Compose stack now resolves `host.docker.internal` automatically; confirm the daemon listens on `http://127.0.0.1:11434` (default) so the container can reach `http://host.docker.internal:11434` without extra port publishing.
 
+## Ingress proxy (TLS + Basic Auth)
+
+The public ingress is now handled by the `proxy` service, which terminates TLS, enforces Basic Auth, and rate limits inbound requests before forwarding to the mediator container. The mediator itself should not be exposed directly.
+
+1. Create the auth file (store it outside of source control, e.g. `./secrets/htpasswd`): `htpasswd -c ./secrets/htpasswd mediator`.
+2. Provide TLS material at `./secrets/tls/tls.crt` and `./secrets/tls/tls.key` (or adjust the mount paths in `docker-compose.yml`).
+3. Start the stack with `docker compose up -d` and verify traffic is served through `https://<host>` only.
+4. Review proxy access/error logs in the `nginx-logs` volume (`/var/log/nginx/access.log` and `/var/log/nginx/error.log`) for authentication visibility.
+
+### Credential rotation
+
+1. Replace `./secrets/htpasswd` with the new credentials.
+2. Restart the proxy container: `docker compose restart proxy`.
+3. Confirm the new credentials are required and audit the access log for expected logins.
+
 ## Postgres rollout notes
 
 - These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
@@ -60,10 +75,10 @@ the print job need to renderPDFs from the html templates. This need to happen he
 
 ## Networking note
 
-If the firewall is enabled on your host, remember to open the HTTP port used by the mediator service. For example:
+If the firewall is enabled on your host, remember to open the HTTPS port used by the proxy service. For example:
 
 ```bash
-sudo ufw allow 3000
+sudo ufw allow 443
 ```
 
 ## Troubleshooting Postgres connectivity
