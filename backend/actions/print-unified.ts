@@ -19,7 +19,7 @@ import { buildItemCategoryLookups } from '../../models/item-category-lookups';
 const LABEL_TEMPLATES: Record<PrintLabelType, string> = {
   box: '62x100',
   item: '29x90',
-  smallitem: '62x12',
+  smallitem: '62x10',
   shelf: 'shelf-a4'
 };
 
