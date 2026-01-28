@@ -25,6 +25,7 @@ import { resolveCanonicalItemUUIDForArtikelnummer } from '../db';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
+// TODO(grouping-audit): Evaluate if import should enforce default Quality when null-grouping spikes persist.
 // TODO(agent): Consolidate ItemUUID collision handling into a shared allocator helper for reuse across actions.
 // TODO(agent): Capture the provisional ItemUUID sequence snapshot to avoid reusing stale maxima during regeneration.
 // TODO(agent): Normalize getItem.get to a consistent sync/async contract to simplify uniqueness checks.
