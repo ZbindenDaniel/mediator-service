@@ -774,10 +774,11 @@ const action = defineHttpAction({
         }
       });
       if (Object.prototype.hasOwnProperty.call(referencePayload, 'Suchbegriff')) {
-        referenceUpdates.Suchbegriff = normalizeSearchTerm(referencePayload.Suchbegriff, {
+        const normalized = normalizeSearchTerm(referencePayload.Suchbegriff, {
           itemId,
           artikelNummer
         });
+        referenceUpdates.Suchbegriff = normalized ?? undefined;
       }
       const resolvedQuality =
         incomingQuality !== undefined
