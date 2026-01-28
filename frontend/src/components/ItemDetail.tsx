@@ -1170,19 +1170,13 @@ export default function ItemDetail({ itemId }: Props) {
 
   // TODO(agent): Validate Behälter column rendering in the Vorrat table once UI review confirms linking rules.
   // TODO(agent): Confirm instance stock filtering stays aligned with instance payload contract updates.
+  // TODO(agent): Reconfirm safe stock fallback behavior once instance payloads stabilize for Stück items.
   const { filteredInstances, skippedInstanceCount } = useMemo(() => {
     try {
       let skippedCount = 0;
       const visibleInstances = instances.filter((instance) => {
-        const rawStock = instance.Auf_Lager;
-        const parsedStock =
-          typeof rawStock === 'number'
-            ? rawStock
-            : typeof rawStock === 'string'
-              ? Number(rawStock)
-              : null;
-        const stockValue = Number.isNaN(parsedStock ?? NaN) ? null : parsedStock;
-        if (typeof stockValue === 'number' && stockValue > 0) {
+        const stock = typeof instance.Auf_Lager === 'number' ? instance.Auf_Lager : 1;
+        if (stock > 0) {
           return true;
         }
         skippedCount += 1;
@@ -1198,32 +1192,46 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [instances, itemId]);
 
-  const skippedInstanceLogRef = useRef<{ itemId: string; skipped: number; total: number } | null>(null);
+  const instanceFilterLogRef = useRef<{
+    itemId: string;
+    filtered: number;
+    skipped: number;
+    total: number;
+  } | null>(null);
 
   useEffect(() => {
-    if (skippedInstanceCount <= 0) {
-      return;
+    try {
+      const totalInstances = instances.length;
+      const filteredCount = filteredInstances.length;
+      const skippedCount = skippedInstanceCount;
+      const lastLog = instanceFilterLogRef.current;
+      if (
+        lastLog
+        && lastLog.itemId === itemId
+        && lastLog.filtered === filteredCount
+        && lastLog.skipped === skippedCount
+        && lastLog.total === totalInstances
+      ) {
+        return;
+      }
+      logger.info?.('ItemDetail: Filtered instance rows for Vorrat table', {
+        itemId,
+        totalInstances,
+        filteredInstances: filteredCount,
+        skippedInstances: skippedCount
+      });
+      instanceFilterLogRef.current = {
+        itemId,
+        filtered: filteredCount,
+        skipped: skippedCount,
+        total: totalInstances
+      };
+    } catch (error) {
+      logError('ItemDetail: Failed to log Vorrat filtering stats', error, {
+        itemId
+      });
     }
-    const lastLog = skippedInstanceLogRef.current;
-    if (
-      lastLog
-      && lastLog.itemId === itemId
-      && lastLog.skipped === skippedInstanceCount
-      && lastLog.total === instances.length
-    ) {
-      return;
-    }
-    logger.info?.('ItemDetail: Skipped out-of-stock instances in Vorrat table', {
-      itemId,
-      skippedCount: skippedInstanceCount,
-      totalInstances: instances.length
-    });
-    skippedInstanceLogRef.current = {
-      itemId,
-      skipped: skippedInstanceCount,
-      total: instances.length
-    };
-  }, [itemId, instances.length, skippedInstanceCount]);
+  }, [filteredInstances.length, instances.length, itemId, skippedInstanceCount]);
 
   const instanceRows = useMemo(() => {
     try {
