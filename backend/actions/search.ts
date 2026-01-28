@@ -1,5 +1,6 @@
 // TODO(agent): add action tests.
 // TODO(search-suchbegriff): Confirm Suchbegriff search performance and add DB indexes if needed.
+// TODO(search-suchbegriff): Re-evaluate Suchbegriff fallback logging volume after monitoring search traffic.
 // TODO(agent): Review Langtext search tokenization once structured payload telemetry is available.
 // TODO(deep-search): Confirm default deep search behavior once product guidance is finalized.
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -11,6 +12,53 @@ import { parseLangtext } from '../lib/langtext';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function resolveSearchSuchbegriff(
+  value: unknown,
+  fallback: { artikelbeschreibung?: unknown; artikelNummer?: unknown; context: string; itemUUID?: string | null }
+): string {
+  try {
+    const primary = asNonEmptyString(value);
+    if (primary) {
+      return primary;
+    }
+    const fallbackArtikelbeschreibung = asNonEmptyString(fallback.artikelbeschreibung);
+    if (fallbackArtikelbeschreibung) {
+      console.info('[search] Using Artikelbeschreibung fallback for Suchbegriff search normalization', {
+        context: fallback.context,
+        artikelNummer: fallback.artikelNummer ?? null,
+        itemUUID: fallback.itemUUID ?? null
+      });
+      return fallbackArtikelbeschreibung;
+    }
+    const fallbackArtikelNummer = asNonEmptyString(fallback.artikelNummer);
+    if (fallbackArtikelNummer) {
+      console.info('[search] Using Artikel_Nummer fallback for Suchbegriff search normalization', {
+        context: fallback.context,
+        artikelNummer: fallback.artikelNummer ?? null,
+        itemUUID: fallback.itemUUID ?? null
+      });
+      return fallbackArtikelNummer;
+    }
+    return '';
+  } catch (error) {
+    console.error('[search] Failed to resolve Suchbegriff fallback', {
+      context: fallback.context,
+      artikelNummer: fallback.artikelNummer ?? null,
+      itemUUID: fallback.itemUUID ?? null,
+      error
+    });
+    return '';
+  }
 }
 
 function computeTokenScore(tokens: string[], candidateTokens: string[]): number {
@@ -184,10 +232,16 @@ function parseDeepSearchParam(value: string | null): boolean {
 
 function scoreItem(term: string, tokens: string[], item: any): number {
   const langtextCandidate = normalizeLangtextValue(item?.Langtext, `item-score-${item?.ItemUUID ?? 'unknown'}`);
+  const suchbegriffCandidate = resolveSearchSuchbegriff(item?.Suchbegriff, {
+    artikelbeschreibung: item?.Artikelbeschreibung,
+    artikelNummer: item?.Artikel_Nummer,
+    context: `item-score-${item?.ItemUUID ?? 'unknown'}`,
+    itemUUID: item?.ItemUUID ?? null
+  });
   const fields = [
     item?.Artikelbeschreibung,
     item?.Kurzbeschreibung,
-    item?.Suchbegriff,
+    suchbegriffCandidate,
     langtextCandidate,
     item?.Artikel_Nummer,
     item?.Hersteller,
@@ -228,10 +282,15 @@ function scoreBox(term: string, tokens: string[], box: any): number {
 
 function scoreReference(term: string, tokens: string[], reference: any): number {
   const langtextCandidate = {};
+  const suchbegriffCandidate = resolveSearchSuchbegriff(reference?.Suchbegriff, {
+    artikelbeschreibung: reference?.Artikelbeschreibung,
+    artikelNummer: reference?.Artikel_Nummer,
+    context: `ref-score-${reference?.Artikel_Nummer ?? 'unknown'}`
+  });
   const fields = [
     reference?.Artikelbeschreibung,
     reference?.Kurzbeschreibung,
-    reference?.Suchbegriff,
+    suchbegriffCandidate,
     langtextCandidate,
     reference?.Artikel_Nummer,
     reference?.Hersteller
@@ -285,6 +344,8 @@ const action = defineHttpAction({
 
       // require at least 50% of tokens (min 1)
       const minTokenHits = Math.max(1, Math.ceil(tokens.length * 0.5));
+      const suchbegriffFallbackExpr =
+        "COALESCE(NULLIF(r.Suchbegriff, ''), r.Artikelbeschreibung, r.Artikel_Nummer, '')";
 
       const scopeParam = url.searchParams.get("scope");
       const dedupeParam = url.searchParams.get("dedupe");
@@ -312,35 +373,40 @@ const action = defineHttpAction({
       });
 
       if (wantsRefs) {
-        const like6 = (t: string) => {
-          const p = `%${t}%`;
-          return [p, p, p, p, p, p] as const;
-        };
+        let refTokenPresenceTerms = '';
+        let refExactMatchExpr = '';
+        let refSql = '';
+        let refParams: Array<string | number> = [];
+        try {
+          const like6 = (t: string) => {
+            const p = `%${t}%`;
+            return [p, p, p, p, p, p] as const;
+          };
 
-        const refTokenPresenceTerms = tokens
-          .map(
-            () => `
+          refTokenPresenceTerms = tokens
+            .map(
+              () => `
     CASE WHEN (
       lower(r.Artikel_Nummer) LIKE ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
       OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?
-      OR lower(COALESCE(r.Suchbegriff, '')) LIKE ?
+      OR lower(${suchbegriffFallbackExpr}) LIKE ?
       OR lower(COALESCE(r.Langtext, '')) LIKE ?
       OR lower(COALESCE(r.Hersteller, '')) LIKE ?
     ) THEN 1 ELSE 0 END
   `
-          )
-          .join(" + ");
+            )
+            .join(" + ");
 
-        const refExactMatchExpr = `
+          refExactMatchExpr = `
     CASE WHEN (
       lower(r.Artikel_Nummer) = ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
-      OR lower(COALESCE(r.Suchbegriff, '')) = ?
+      OR lower(${suchbegriffFallbackExpr}) = ?
     ) THEN 1 ELSE 0 END
   `;
 
-        const refSql = `
+          refSql = `
     SELECT *
     FROM (
       SELECT
@@ -381,26 +447,36 @@ const action = defineHttpAction({
     LIMIT 25
   `;
 
-        const refParams = [
-          // token_hits params
-          ...tokens.flatMap(like6),
-          // exact_match params (equality)
-          normalized,
-          normalized,
-          normalized,
-          // sql_score CASE exact_match params (repeat equality)
-          normalized,
-          normalized,
-          normalized,
-          // sql_score token_hits terms again (used in ELSE)
-          ...tokens.flatMap(like6),
-          // divisor = tokens.length
-          tokens.length,
-          // WHERE threshold
-          minTokenHits
-        ];
+          refParams = [
+            // token_hits params
+            ...tokens.flatMap(like6),
+            // exact_match params (equality)
+            normalized,
+            normalized,
+            normalized,
+            // sql_score CASE exact_match params (repeat equality)
+            normalized,
+            normalized,
+            normalized,
+            // sql_score token_hits terms again (used in ELSE)
+            ...tokens.flatMap(like6),
+            // divisor = tokens.length
+            tokens.length,
+            // WHERE threshold
+            minTokenHits
+          ];
+        } catch (error) {
+          console.error('[search] Failed to build reference search query', { term: trimmed, error });
+          throw error;
+        }
 
-        const rawRefs = ctx.db.prepare(refSql).all(...refParams);
+        let rawRefs: any[] = [];
+        try {
+          rawRefs = ctx.db.prepare(refSql).all(...refParams);
+        } catch (error) {
+          console.error('[search] Failed to execute reference search query', { term: trimmed, error });
+          throw error;
+        }
 
         const deduped = new Map<
           string,
@@ -473,30 +549,36 @@ const action = defineHttpAction({
 
       // ---------------- ITEMS ----------------
       // token_hits: per-token presence (0/1), not per-field sum
-      const itemTokenPresenceTerms = tokens.map(() => `
+      let itemTokenPresenceTerms = '';
+      let itemExactMatchExpr = '';
+      let itemSql = '';
+      let itemExactParams: string[] = [];
+      let itemParams: Array<string | number> = [];
+      try {
+        itemTokenPresenceTerms = tokens.map(() => `
     CASE WHEN (
       lower(i.ItemUUID)            LIKE ?
       OR lower(i.Artikel_Nummer)   LIKE ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
-      OR lower(COALESCE(r.Suchbegriff, '')) LIKE ?
+      OR lower(${suchbegriffFallbackExpr}) LIKE ?
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?\n      OR lower(COALESCE(r.Langtext, '')) LIKE ?" : ''}
       OR lower(i.BoxID)            LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
 
-      // exact match if ANY field equals the normalized query
-      const itemExactMatchExpr = `
+        // exact match if ANY field equals the normalized query
+        itemExactMatchExpr = `
     CASE WHEN (
       lower(i.ItemUUID)            = ?
       OR lower(i.Artikel_Nummer)   = ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
-      OR lower(COALESCE(r.Suchbegriff, '')) = ?
+      OR lower(${suchbegriffFallbackExpr}) = ?
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) = ?\n      OR lower(COALESCE(r.Langtext, '')) = ?" : ''}
       OR lower(i.BoxID)            = ?
     ) THEN 1 ELSE 0 END
   `;
 
-      const itemSql = `
+        itemSql = `
     SELECT *
     FROM (
       SELECT
@@ -542,28 +624,38 @@ const action = defineHttpAction({
     LIMIT ?
   `;
 
-      const itemExactParams = deepSearch
-        ? [normalized, normalized, normalized, normalized, normalized, normalized, normalized]
-        : [normalized, normalized, normalized, normalized, normalized];
+        itemExactParams = deepSearch
+          ? [normalized, normalized, normalized, normalized, normalized, normalized, normalized]
+          : [normalized, normalized, normalized, normalized, normalized];
 
-      const itemParams = [
-        // token_hits params
-        ...tokens.flatMap(likeItem),
-        // exact_match params (equality fields)
-        ...itemExactParams,
-        // sql_score CASE exact_match params (repeat the equality)
-        ...itemExactParams,
-        // sql_score token_hits terms again (used in ELSE)
-        ...tokens.flatMap(likeItem),
-        // divisor = tokens.length
-        tokens.length,
-        // WHERE threshold
-        minTokenHits,
-        // LIMIT
-        itemLimit
-      ];
+        itemParams = [
+          // token_hits params
+          ...tokens.flatMap(likeItem),
+          // exact_match params (equality fields)
+          ...itemExactParams,
+          // sql_score CASE exact_match params (repeat the equality)
+          ...itemExactParams,
+          // sql_score token_hits terms again (used in ELSE)
+          ...tokens.flatMap(likeItem),
+          // divisor = tokens.length
+          tokens.length,
+          // WHERE threshold
+          minTokenHits,
+          // LIMIT
+          itemLimit
+        ];
+      } catch (error) {
+        console.error('[search] Failed to build item search query', { term: trimmed, error });
+        throw error;
+      }
 
-      const rawItems = ctx.db.prepare(itemSql).all(...itemParams);
+      let rawItems: any[] = [];
+      try {
+        rawItems = ctx.db.prepare(itemSql).all(...itemParams);
+      } catch (error) {
+        console.error('[search] Failed to execute item search query', { term: trimmed, error });
+        throw error;
+      }
       if (rawItems.length >= itemLimit) {
         console.info('[search] Item results reached limit; results may be truncated.', {
           term: trimmed,
