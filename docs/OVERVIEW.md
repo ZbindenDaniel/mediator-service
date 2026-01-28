@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Refreshed item detail removal to reload item payloads after successful withdrawals, with logging for reload failures.
 - Added a mobile overflow guard for the item detail Vorrat table to keep wide columns scrollable on small screens.
 - Filtered item list queries to hide zero-stock instances while keeping reference-only listings intact and logged list filtering activation.
 - Added a persisted Suchbegriff search term on item references to seed agentic search defaults and share through item payloads.

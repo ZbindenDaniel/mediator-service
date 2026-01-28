@@ -2584,6 +2584,7 @@ export default function ItemDetail({ itemId }: Props) {
                 ) : (
                   <p className="muted">Keine Instanzdaten vorhanden.</p>
                 )}
+                {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
                 <button type="button" className="btn" onClick={async () => {
                   let confirmed = false;
                   const actor = await ensureUser();
@@ -2617,8 +2618,18 @@ export default function ItemDetail({ itemId }: Props) {
                     });
                     if (res.ok) {
                       const j = await res.json();
-                      setItem({ ...item, Auf_Lager: j.quantity, BoxID: j.boxId });
-                      console.log('Item entnommen', item.ItemUUID);
+                      logger.info?.('Item entnommen', {
+                        itemId: item.ItemUUID,
+                        quantity: j.quantity,
+                        boxId: j.boxId
+                      });
+                      try {
+                        await load({ showSpinner: false });
+                      } catch (reloadError) {
+                        logError('ItemDetail: Failed to reload after item removal', reloadError, {
+                          itemId: item.ItemUUID
+                        });
+                      }
                     } else {
                       console.error('Failed to remove item', res.status);
                     }
