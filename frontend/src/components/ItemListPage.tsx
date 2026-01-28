@@ -36,9 +36,37 @@ import LoadingPage from './LoadingPage';
 // TODO(subcategory-input): Validate the subcategory filter options against updated taxonomy definitions.
 // TODO(subcategory-input-logging): Confirm datalist input logging after feedback from warehouse users.
 // TODO(grouped-item-list): Confirm grouping keys and filter behavior once backend grouped payloads are live.
+// TODO(entrydate-sort): Confirm entry date ordering expectations for the list view.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 const resolveItemQuality = (value: unknown) => normalizeQuality(value, console) ?? QUALITY_MIN;
+const resolveEntryTimestamp = (
+  value: unknown,
+  context: { field: string; itemId: string | null }
+): number | null => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  try {
+    const parsed = Date.parse(String(value));
+    if (Number.isNaN(parsed)) {
+      logger.warn?.('Invalid item date for entry sort', {
+        field: context.field,
+        value,
+        itemId: context.itemId
+      });
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    logError('Failed to parse item entry date for sorting', error, {
+      field: context.field,
+      value,
+      itemId: context.itemId
+    });
+    return null;
+  }
+};
 
 export interface ItemListComputationOptions {
   items: Item[];
@@ -147,6 +175,32 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
         return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
       }
       return (aQuality - bQuality) * direction;
+    }
+
+    if (sortKey === 'entryDate') {
+      const entryTimestampFor = (group: GroupedItemDisplay) => {
+        const representative = group.representative;
+        const itemId = group.summary.representativeItemId ?? representative?.ItemUUID ?? null;
+        const primary = resolveEntryTimestamp(representative?.Datum_erfasst, {
+          field: 'Datum_erfasst',
+          itemId
+        });
+        if (primary !== null) {
+          return primary;
+        }
+        return resolveEntryTimestamp(representative?.UpdatedAt ?? '', {
+          field: 'UpdatedAt',
+          itemId
+        });
+      };
+      const aEntry = entryTimestampFor(a);
+      const bEntry = entryTimestampFor(b);
+      if (aEntry === bEntry) {
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
+      }
+      const aValue = aEntry ?? Number.NEGATIVE_INFINITY;
+      const bValue = bEntry ?? Number.NEGATIVE_INFINITY;
+      return (aValue - bValue) * direction;
     }
 
     const valueFor = (group: GroupedItemDisplay) => {
@@ -611,6 +665,7 @@ export default function ItemListPage() {
                     <option value="artikelbeschreibung">Artikel</option>
                     <option value="artikelnummer">Artikelnummer</option>
                     <option value="box">Behälter</option>
+                    <option value="entryDate">Erfasst am</option>
                     <option value="agenticStatus">Ki-Status</option>
                     <option value="quality">Qualität</option>
                     <option value="uuid">UUID</option>
