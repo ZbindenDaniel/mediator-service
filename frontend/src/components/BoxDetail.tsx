@@ -28,6 +28,7 @@ import QualityBadge from './QualityBadge';
 // TODO(bulk-display): Validate displayCount fallback logic for Menge rows after backend grouping changes.
 // TODO(box-detail-layout): Validate box detail summary grid alignment across breakpoints.
 // TODO(agent): Reassess shelf label/notes editing once shelf tagging conventions stabilize.
+// TODO(mobile-box-detail): Keep box detail container width constrained to the viewport on small screens.
 
 interface Props {
   boxId: string;
@@ -588,7 +589,7 @@ export default function BoxDetail({ boxId }: Props) {
   if (loadError && !box) {
     // TODO: Replace basic retry UI with shared error boundary once available.
     return (
-      <div className="container box">
+      <div className="container box box-detail-container">
         <div className="grid landing-grid">
           <div className="card">
             <h2>Fehler beim Laden</h2>
@@ -605,7 +606,7 @@ export default function BoxDetail({ boxId }: Props) {
   }
 
   return (
-    <div className="container box">
+    <div className="container box box-detail-container">
       <div className="grid landing-grid">
         {box ? (
           <>
