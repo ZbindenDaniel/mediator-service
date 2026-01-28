@@ -29,6 +29,7 @@ type GroupItemsOptions = {
   logContext?: string;
 };
 
+// TODO(grouping-audit): Confirm null-quality grouping fallback rates after production import telemetry review.
 // TODO(instance-1-grouping): Revisit ItemUUID parsing once prefix rules are finalized.
 // TODO(agent): Revisit grouped quantity semantics if mixed Einheit payloads appear in a single grouping bucket.
 // TODO(bulk-grouping): Validate bulk ItemUUID-based grouping once backend grouped payloads are aligned.
@@ -233,11 +234,20 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
   const safeItems = Array.isArray(items) ? items : [];
   const logContext = options.logContext ?? 'item-grouping';
   let missingKeyCount = 0;
+  let missingArtikelCount = 0;
+  let missingQualityCount = 0;
   let unplacedCount = 0;
+  let qualityFallbackCount = 0;
   const missingKeySamples: Array<{
     itemId: string | null;
     artikelNumber: string | null;
     quality: number | null;
+  }> = [];
+  const qualityFallbackSamples: Array<{
+    itemId: string | null;
+    artikelNumber: string | null;
+    boxId: string | null;
+    location: string | null;
   }> = [];
 
   try {
@@ -250,8 +260,11 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         const quantityData = resolveItemQuantity(item, logContext);
         const bulkGroupingToken = quantityData.isBulk ? resolveBulkGroupingToken(item, logContext, index) : null;
         const isUnplaced = !boxId && !location;
-        const missingCoreKeys = !artikelNumber || quality === null;
-        const missingKeys = missingCoreKeys;
+        const missingArtikel = !artikelNumber;
+        const missingQuality = quality === null;
+        const missingCoreKeys = missingArtikel || missingQuality;
+        const shouldFallbackQualityGrouping = !missingArtikel && missingQuality;
+        const missingKeys = missingArtikel;
         if (isUnplaced) {
           unplacedCount += 1;
         }
@@ -265,12 +278,31 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
             });
           }
         }
+        if (missingArtikel) {
+          missingArtikelCount += 1;
+        }
+        if (missingQuality) {
+          missingQualityCount += 1;
+        }
+        if (shouldFallbackQualityGrouping) {
+          qualityFallbackCount += 1;
+          if (qualityFallbackSamples.length < 5) {
+            qualityFallbackSamples.push({
+              itemId: item.ItemUUID ?? null,
+              artikelNumber,
+              boxId,
+              location
+            });
+          }
+        }
 
-        const keySegments = [
-          artikelNumber ?? 'unknown-artikel',
-          quality !== null ? String(quality) : 'unknown-quality',
-          boxId ?? location ?? 'unplaced'
-        ];
+        const keySegments = [artikelNumber ?? 'unknown-artikel'];
+        if (quality !== null) {
+          keySegments.push(String(quality));
+        } else if (missingArtikel) {
+          keySegments.push('unknown-quality');
+        }
+        keySegments.push(boxId ?? location ?? 'unplaced');
         if (category) {
           keySegments.push(category);
         }
@@ -353,7 +385,15 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
   if (missingKeyCount > 0) {
     logger.warn?.(`[${logContext}] Missing grouping keys detected in batch`, {
       missingKeyCount,
+      missingArtikelCount,
+      missingQualityCount,
       sampleItems: missingKeySamples
+    });
+  }
+  if (qualityFallbackCount > 0) {
+    logger.info?.(`[${logContext}] Applied null-quality grouping fallback`, {
+      qualityFallbackCount,
+      sampleItems: qualityFallbackSamples
     });
   }
   if (unplacedCount > 0) {
