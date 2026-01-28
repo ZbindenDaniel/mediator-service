@@ -132,6 +132,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added null-quality grouping fallbacks (Artikelnummer + location) with batch logging to audit missing Quality/Artikelnummer inputs in grouped item responses.
 - Hid the header title link on small screens to keep navigation icons visible in the header.
 - Removed the unconditional touch start/end bindings from the item detail container to prevent global swipe handling by default.
+- Added optional shelf label/notes inputs for shelf creation and shelf detail editing while keeping relocation shelf lookups unfiltered by category.
 
 ## Documentation Map
 
