@@ -180,6 +180,9 @@ textarea {
     }
 
     // TODO(mobile-header-buttons): Reconfirm compact header button sizing on smaller phones.
+    // TODO(mobile-header-sizing): Validate 30px tap targets and icon sizing on narrow devices.
+    // Mobile-only sizing to keep header buttons compact.
+    #header-back-button,
     #header-home-button,
     .header-nav a,
     .header-filter-indicator {
@@ -187,9 +190,10 @@ textarea {
         height: 30px;
     }
 
+    #header-back-button,
     #header-home-button,
     .header-nav a {
-        font-size: 18px;
+        font-size: 20px;
     }
 
     .header-filter-indicator {
