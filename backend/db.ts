@@ -8,6 +8,7 @@ import path from 'path';
 // TODO(agent): Document CSV-based shelf seeding expectations once import tooling is formalized.
 // TODO(quality-migration): Confirm Quality defaults remain accurate once upstream ERP integration defines quality grades.
 // TODO(agent): Reconfirm recent activities search filtering once term usage is finalized.
+// TODO(agent): Review zero-stock updates for non-bulk items once list/grouping changes are finalized.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -2146,6 +2147,14 @@ export const decrementItemStock = db.prepare(
 export const incrementItemStock = db.prepare(
   `UPDATE items
    SET Auf_Lager = Auf_Lager + 1,
+       UpdatedAt = datetime('now')
+   WHERE ItemUUID = ?`
+);
+export const zeroItemStock = db.prepare(
+  `UPDATE items
+   SET Auf_Lager = 0,
+       BoxID = NULL,
+       Location = NULL,
        UpdatedAt = datetime('now')
    WHERE ItemUUID = ?`
 );
