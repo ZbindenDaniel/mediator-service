@@ -252,6 +252,27 @@ function resolveRequestedQuantity(
   return quantity;
 }
 
+function normalizeSearchTermInput(
+  value: string | null,
+  context: { itemUUID: string; artikelNummer: string | null; source: string }
+): string {
+  try {
+    const trimmed = (value ?? '').trim();
+    if (!trimmed) {
+      return '';
+    }
+    return trimmed;
+  } catch (error) {
+    console.error('[import-item] Failed to normalize Suchbegriff input', {
+      itemUUID: context.itemUUID,
+      artikelNummer: context.artikelNummer,
+      source: context.source,
+      error
+    });
+    return '';
+  }
+}
+
 type ItemCreationMode = 'bulk' | 'instance';
 
 // TODO(agent): Align add/remove item quantity adjustments with instance-based creation for Einheit Stk.
@@ -290,6 +311,7 @@ function normalizeItemReferenceRow(row: unknown): ItemRef | null {
 
   const normalized: ItemRef = { Artikel_Nummer: artikelNummer };
 
+  if (typeof record.Suchbegriff === 'string') normalized.Suchbegriff = record.Suchbegriff;
   if (typeof record.Grafikname === 'string') normalized.Grafikname = record.Grafikname;
   if (typeof record.Artikelbeschreibung === 'string') normalized.Artikelbeschreibung = record.Artikelbeschreibung;
   if (typeof record.Verkaufspreis === 'number' && Number.isFinite(record.Verkaufspreis)) {
@@ -732,6 +754,26 @@ const action = defineHttpAction({
 
       const artikelbeschreibung = artikelbeschreibungInput || referenceDefaults?.Artikelbeschreibung || '';
       const kurzbeschreibung = kurzbeschreibungInput || referenceDefaults?.Kurzbeschreibung || '';
+      // TODO(agentic-search-term): Revisit Suchbegriff fallback priority once dedicated UI persists it.
+      const suchbegriffCandidate = (() => {
+        const explicit = p.get('Suchbegriff');
+        if (typeof explicit === 'string' && explicit.trim()) {
+          return explicit;
+        }
+        const agenticSearch = p.get('agenticSearch');
+        if (typeof agenticSearch === 'string' && agenticSearch.trim()) {
+          return agenticSearch;
+        }
+        if (typeof referenceDefaults?.Suchbegriff === 'string' && referenceDefaults.Suchbegriff.trim()) {
+          return referenceDefaults.Suchbegriff;
+        }
+        return artikelbeschreibung;
+      })();
+      const suchbegriff = normalizeSearchTermInput(suchbegriffCandidate, {
+        itemUUID: ItemUUID,
+        artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+        source: 'import-item'
+      });
       const parsedLangtextInput = parseLangtext(langtextInput || null, {
         logger: console,
         context: 'import-item:form-langtext',
@@ -1012,6 +1054,7 @@ const action = defineHttpAction({
         Datum_erfasst: datumErfasst,
         Artikel_Nummer: resolvedArtikelNummer,
         Grafikname: firstImage || referenceDefaults?.Grafikname || '',
+        Suchbegriff: suchbegriff || undefined,
         Artikelbeschreibung: artikelbeschreibung,
         Auf_Lager: creationPlan.quantityPerItem,
         Verkaufspreis: verkaufspreis,
@@ -1041,7 +1084,14 @@ const action = defineHttpAction({
       };
 
       // TODO(agentic-triggering): Confirm agentic seed rules for multi-instance creation once UX clarifies intent.
-      const agenticSearchQuery = (p.get('agenticSearch') || data.Artikelbeschreibung || '').trim();
+      const agenticSearchQuery = normalizeSearchTermInput(
+        (p.get('agenticSearch') || suchbegriff || data.Artikelbeschreibung || '') as string,
+        {
+          itemUUID: ItemUUID,
+          artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+          source: 'agenticSearch'
+        }
+      );
       const requestedStatus = (p.get('agenticStatus') || '').trim();
       const manualFallbackFlag = (p.get('agenticManualFallback') || '').trim().toLowerCase();
       const agenticManualFallback = manualFallbackFlag === 'true';
