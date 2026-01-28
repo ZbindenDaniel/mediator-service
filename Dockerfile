@@ -27,7 +27,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3 \
         build-essential \
-        cups-client \
+        cups-client libcups2 \
         unzip \
         zip \
         chromium \
