@@ -33,7 +33,8 @@ import LoadingPage from './LoadingPage';
 // TODO(storage-sync): Persist list filters to localStorage so returning users keep their preferences across sessions.
 // TODO(item-entity-filter): Confirm UX for reference-only rows when enriching the item repository view.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
-// TODO(subcategory-select): Validate the subcategory filter options against updated taxonomy definitions.
+// TODO(subcategory-input): Validate the subcategory filter options against updated taxonomy definitions.
+// TODO(subcategory-input-logging): Confirm datalist input logging after feedback from warehouse users.
 // TODO(grouped-item-list): Confirm grouping keys and filter behavior once backend grouped payloads are live.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
@@ -402,27 +403,28 @@ export default function ItemListPage() {
     }
   }, [subcategoryFilter, subcategoryLookup, subcategoryOptions]);
 
-  useEffect(() => {
-    if (!filtersReady) {
-      return;
-    }
-    const trimmedValue = subcategoryFilter.trim();
-    if (!trimmedValue) {
+  const handleSubcategoryInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setSubcategoryFilter(event.target.value);
+  }, []);
+
+  const handleSubcategoryInputBlur = useCallback((event: React.FocusEvent<HTMLInputElement>) => {
+    const typedValue = event.currentTarget.value.trim();
+    if (!typedValue) {
       return;
     }
     try {
-      if (!subcategoryLookup.has(trimmedValue)) {
-        logger.warn?.('Unknown subcategory filter selection', {
-          value: trimmedValue,
+      if (!subcategoryLookup.has(typedValue)) {
+        logger.info?.('Subcategory filter typed value not in options', {
+          value: typedValue,
           optionCount: subcategoryOptions.length
         });
       }
     } catch (error) {
-      logError('Failed to validate subcategory filter selection', error, {
-        value: subcategoryFilter
+      logError('Failed to log subcategory filter input mismatch', error, {
+        value: typedValue
       });
     }
-  }, [filtersReady, subcategoryFilter, subcategoryLookup, subcategoryOptions]);
+  }, [subcategoryLookup, subcategoryOptions.length]);
 
   useEffect(() => {
     if (!filtersReady) {
@@ -655,18 +657,24 @@ export default function ItemListPage() {
               <div className="filter-grid__item">
                 <label className="filter-control">
                   <span>Unterkategorie</span>
-                  <select
+                  <input
                     aria-label="Unterkategorie filtern"
-                    onChange={(event) => setSubcategoryFilter(event.target.value)}
+                    list="subcategory-filter-options"
+                    onBlur={handleSubcategoryInputBlur}
+                    onChange={handleSubcategoryInputChange}
+                    placeholder="Alle"
+                    type="search"
                     value={subcategoryFilter}
-                  >
-                    <option value="">Alle</option>
+                  />
+                  <datalist id="subcategory-filter-options">
                     {subcategorySelectOptions.map((option) => (
-                      <option key={`${option.categoryLabel}-${option.value}`} value={option.value}>
-                        {option.label}
-                      </option>
+                      <option
+                        key={`${option.categoryLabel}-${option.value}`}
+                        label={option.label}
+                        value={option.value}
+                      />
                     ))}
-                  </select>
+                  </datalist>
                 </label>
               </div>
               {/* <div className='row'>
