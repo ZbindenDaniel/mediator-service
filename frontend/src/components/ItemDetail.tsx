@@ -52,6 +52,7 @@ import { filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
 // TODO(media-controls): Validate media add/remove slot mapping once details UX feedback lands.
+// TODO(touch-handlers): Validate touch navigation UX after removing root container touch bindings.
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
@@ -746,7 +747,6 @@ export default function ItemDetail({ itemId }: Props) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
@@ -987,39 +987,6 @@ export default function ItemDetail({ itemId }: Props) {
       navigate(`/items/${encodeURIComponent(targetId)}${search}`);
     },
     [itemId, navigate, neighborIds.nextId, neighborIds.previousId, neighborSource]
-  );
-
-  const handleTouchStart = useCallback((event: React.TouchEvent) => {
-    const touch = event.touches[0];
-    if (touch) {
-      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    }
-  }, []);
-
-  const handleTouchEnd = useCallback(
-    (event: React.TouchEvent) => {
-      const start = touchStartRef.current;
-      const touch = event.changedTouches[0];
-      touchStartRef.current = null;
-
-      if (!start || !touch) {
-        return;
-      }
-
-      const deltaX = touch.clientX - start.x;
-      const deltaY = touch.clientY - start.y;
-
-      if (Math.abs(deltaX) < 40 || Math.abs(deltaX) < Math.abs(deltaY)) {
-        return;
-      }
-
-      if (deltaX > 0 && neighborIds.previousId) {
-        handleNeighborNavigation('previous');
-      } else if (deltaX < 0 && neighborIds.nextId) {
-        handleNeighborNavigation('next');
-      }
-    },
-    [handleNeighborNavigation, neighborIds.nextId, neighborIds.previousId]
   );
 
   useEffect(() => {
@@ -2505,11 +2472,7 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   return (
-    <div
-      className="container item"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="container item">
       <div className="grid landing-grid">
         {item ? (
           <>
