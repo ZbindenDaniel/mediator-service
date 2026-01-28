@@ -1,4 +1,5 @@
 // TODO(agent): add action tests.
+// TODO(search-suchbegriff): Confirm Suchbegriff search performance and add DB indexes if needed.
 // TODO(agent): Review Langtext search tokenization once structured payload telemetry is available.
 // TODO(deep-search): Confirm default deep search behavior once product guidance is finalized.
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -186,6 +187,7 @@ function scoreItem(term: string, tokens: string[], item: any): number {
   const fields = [
     item?.Artikelbeschreibung,
     item?.Kurzbeschreibung,
+    item?.Suchbegriff,
     langtextCandidate,
     item?.Artikel_Nummer,
     item?.Hersteller,
@@ -229,6 +231,7 @@ function scoreReference(term: string, tokens: string[], reference: any): number 
   const fields = [
     reference?.Artikelbeschreibung,
     reference?.Kurzbeschreibung,
+    reference?.Suchbegriff,
     langtextCandidate,
     reference?.Artikel_Nummer,
     reference?.Hersteller
@@ -309,9 +312,9 @@ const action = defineHttpAction({
       });
 
       if (wantsRefs) {
-        const like5 = (t: string) => {
+        const like6 = (t: string) => {
           const p = `%${t}%`;
-          return [p, p, p, p, p] as const;
+          return [p, p, p, p, p, p] as const;
         };
 
         const refTokenPresenceTerms = tokens
@@ -321,6 +324,7 @@ const action = defineHttpAction({
       lower(r.Artikel_Nummer) LIKE ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
       OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?
+      OR lower(COALESCE(r.Suchbegriff, '')) LIKE ?
       OR lower(COALESCE(r.Langtext, '')) LIKE ?
       OR lower(COALESCE(r.Hersteller, '')) LIKE ?
     ) THEN 1 ELSE 0 END
@@ -332,6 +336,7 @@ const action = defineHttpAction({
     CASE WHEN (
       lower(r.Artikel_Nummer) = ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
+      OR lower(COALESCE(r.Suchbegriff, '')) = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -378,15 +383,17 @@ const action = defineHttpAction({
 
         const refParams = [
           // token_hits params
-          ...tokens.flatMap(like5),
+          ...tokens.flatMap(like6),
           // exact_match params (equality)
+          normalized,
           normalized,
           normalized,
           // sql_score CASE exact_match params (repeat equality)
           normalized,
           normalized,
+          normalized,
           // sql_score token_hits terms again (used in ELSE)
-          ...tokens.flatMap(like5),
+          ...tokens.flatMap(like6),
           // divisor = tokens.length
           tokens.length,
           // WHERE threshold
@@ -457,7 +464,7 @@ const action = defineHttpAction({
 
       const likeItem = (t: string) => {
         const p = `%${t}%`;
-        return deepSearch ? [p, p, p, p, p, p] as const : [p, p, p, p] as const;
+        return deepSearch ? [p, p, p, p, p, p, p] as const : [p, p, p, p, p] as const;
       };
       const likeBox = (t: string) => {
         const p = `%${t}%`;
@@ -471,6 +478,7 @@ const action = defineHttpAction({
       lower(i.ItemUUID)            LIKE ?
       OR lower(i.Artikel_Nummer)   LIKE ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
+      OR lower(COALESCE(r.Suchbegriff, '')) LIKE ?
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?\n      OR lower(COALESCE(r.Langtext, '')) LIKE ?" : ''}
       OR lower(i.BoxID)            LIKE ?
     ) THEN 1 ELSE 0 END
@@ -482,6 +490,7 @@ const action = defineHttpAction({
       lower(i.ItemUUID)            = ?
       OR lower(i.Artikel_Nummer)   = ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
+      OR lower(COALESCE(r.Suchbegriff, '')) = ?
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) = ?\n      OR lower(COALESCE(r.Langtext, '')) = ?" : ''}
       OR lower(i.BoxID)            = ?
     ) THEN 1 ELSE 0 END
@@ -502,6 +511,7 @@ const action = defineHttpAction({
         r.Artikelbeschreibung,
         r.Verkaufspreis,
         r.Kurzbeschreibung,
+        r.Suchbegriff,
         r.Langtext,
         r.Hersteller,
         r.Länge_mm,
@@ -533,8 +543,8 @@ const action = defineHttpAction({
   `;
 
       const itemExactParams = deepSearch
-        ? [normalized, normalized, normalized, normalized, normalized, normalized]
-        : [normalized, normalized, normalized, normalized];
+        ? [normalized, normalized, normalized, normalized, normalized, normalized, normalized]
+        : [normalized, normalized, normalized, normalized, normalized];
 
       const itemParams = [
         // token_hits params
