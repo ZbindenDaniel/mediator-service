@@ -29,51 +29,16 @@ services:
       - postgres
 
   mediator:
-    image: ghcr.io/zbindendaniel/mediator-service:latest   # or docker.io/youruser/yourapp:1.3.0
+    image: ghcr.io/zbindendaniel/mediator-service:2.0
     env_file: .env
     container_name: mediator
-    # TODO(host-ollama): Monitor upstream changes that could remove the host gateway requirement once a containerised Ollama ships.
     expose:
       - "8080"
-    environment:
-      # Storage locations for persistent state.
-      DB_PATH: /var/lib/mediator/mediator.sqlite
-      DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
-      INBOX_DIR: /var/lib/mediator/inbox
-      ARCHIVE_DIR: /var/lib/mediator/archive
-      # TODO(media-storage): Keep media directory overrides aligned with Dockerfile defaults.
-      MEDIA_STORAGE_MODE: webdav
-      MEDIA_DIR: /app/dist/backend/webDav
-      # Set to the externally reachable hostname or IP for generated links.
-      PUBLIC_HOSTNAME: localhost
-      # Additional environment variables may be supplied here to override defaults from backend/config.ts,
-      # such as HTTP_PORT, HTTPS_PORT, PUBLIC_PORT, PUBLIC_ORIGIN, BASE_QR_URL, BASE_UI_URL, PUBLIC_PROTOCOL, etc.
-      # Configure printing by setting PRINTER_QUEUE (and optionally LP_COMMAND / LPSTAT_COMMAND / PRINT_TIMEOUT_MS).
-      # The in-process agentic orchestrator reuses these defaults; provide provider-specific overrides or secrets via an env_file.
-      AGENTIC_MODEL_PROVIDER: ollama
-      # TODO(host-ollama): Remove this once the stack ships an internal Ollama sidecar.
-      AGENTIC_OLLAMA_BASE_URL: http://host.docker.internal:11434
-      AGENTIC_OLLAMA_MODEL: gpt-oss:20b
-      # Uncomment to enable OpenAI-compatible providers and inject credentials through env_file or secrets management.
-      # AGENTIC_OPENAI_API_KEY: ""
-      AGENTIC_OPENAI_BASE_URL: https://api.openai.com/v1
-      AGENTIC_OPENAI_MODEL: gpt-4o-mini
-      # Agentic runs dispatch immediately; no queue polling configuration is required.
-      # Leave AGENT_API_BASE_URL unset to persist results in-process. Set it (and optionally AGENT_SHARED_SECRET)
-      # when an external service should receive agentic result callbacks instead.
-      # Provide API keys for third-party enrichment separately.
-      TAVILY_API_KEY: "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"
-      SEARCH_WEB_ALLOWED_ENGINES: google,duckduckgo,brave
     volumes:
-      # Persist the mediator application state and inbox/archive content.
       - mediator-data:/var/lib/mediator
-      # Persist generated media assets served by the backend.
-      - /var/webdav/uploads:/app/dist/backend/webDav
-      # Optional: mount TLS key/cert files and set TLS_CERT_PATH/TLS_KEY_PATH when enabling HTTPS support.
-      # - ./secrets/tls/server.crt:/etc/mediator/tls/server.crt:ro
-      # - ./secrets/tls/server.key:/etc/mediator/tls/server.key:ro
-      # Optional: mount printer configuration files or device mappings if required for the target printer setup.
-      # - ./config/printers:/etc/mediator/printers:ro
+      - mediator-media:/app/dist/backend/media
+      - /mnt/shopbilder:/app/dist/backend/webDav
+      - /run/cups/cups.sock:/run/cups/cups.sock
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -81,7 +46,7 @@ services:
       postgres:
         condition: service_healthy
 
-  # TODO(ingress-auth): Keep the proxy configuration aligned with docs/setup.md and secrets rotation steps.
+# TODO(ingress-auth): Keep the proxy configuration aligned with docs/setup.md and secrets rotation steps.
   proxy:
     image: nginx:1.25-alpine
     container_name: mediator-proxy
