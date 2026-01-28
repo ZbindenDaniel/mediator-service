@@ -2645,67 +2645,72 @@ export default function ItemDetail({ itemId }: Props) {
             <div className="card grid-span-2">
               <h3>Vorrat</h3>
               {instanceRows.length > 0 ? (
-                <table className="details">
-                  <thead>
-                    <tr>
-                      <th>UUID</th>
-                      <th>Qualität</th>
-                      <th>Behälter</th>
-                      <th>Standort</th>
-                      <th>Aktualisiert</th>
-                      <th>Erfasst</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* TODO(agent): Confirm current-instance row highlight styling with design review. */}
-                    {instanceRows.map((row) => {
-                      const isQualityPlaceholder = row.qualityValue === null;
-                      const isCurrentInstance = row.id === item.ItemUUID;
-                      const uuidCell = normalizeDetailValue(row.id);
-                      const boxCell = normalizeDetailValue(row.boxId);
-                      const locationCell = normalizeDetailValue(row.location);
-                      const updatedCell = normalizeDetailValue(row.updatedAt);
-                      const createdCell = normalizeDetailValue(row.createdAt);
-                      const navigationLabel = `Instanz ${row.id} öffnen`;
-                      const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          void handleInstanceNavigation(row.id);
-                        }
-                      };
-                      return (
-                        <tr
-                          key={row.id}
-                          className={isCurrentInstance ? 'is-current-instance' : undefined}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => void handleInstanceNavigation(row.id)}
-                          onKeyDown={handleRowKeyDown}
-                          aria-label={navigationLabel}
-                        >
-                          <td className={uuidCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {uuidCell.content}
-                          </td>
-                          <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
-                            <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
-                          </td>
-                          <td className={boxCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {boxCell.content}
-                          </td>
-                          <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {locationCell.content}
-                          </td>
-                          <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {updatedCell.content}
-                          </td>
-                          <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {createdCell.content}
-                          </td>
+                <>
+                  {/* TODO(mobile-stock-table): Keep Vorrat overflow guard aligned with mobile layout expectations. */}
+                  <div className="item-detail__stock-table">
+                    <table className="details">
+                      <thead>
+                        <tr>
+                          <th>UUID</th>
+                          <th>Qualität</th>
+                          <th>Behälter</th>
+                          <th>Standort</th>
+                          <th>Aktualisiert</th>
+                          <th>Erfasst</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {/* TODO(agent): Confirm current-instance row highlight styling with design review. */}
+                        {instanceRows.map((row) => {
+                          const isQualityPlaceholder = row.qualityValue === null;
+                          const isCurrentInstance = row.id === item.ItemUUID;
+                          const uuidCell = normalizeDetailValue(row.id);
+                          const boxCell = normalizeDetailValue(row.boxId);
+                          const locationCell = normalizeDetailValue(row.location);
+                          const updatedCell = normalizeDetailValue(row.updatedAt);
+                          const createdCell = normalizeDetailValue(row.createdAt);
+                          const navigationLabel = `Instanz ${row.id} öffnen`;
+                          const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              void handleInstanceNavigation(row.id);
+                            }
+                          };
+                          return (
+                            <tr
+                              key={row.id}
+                              className={isCurrentInstance ? 'is-current-instance' : undefined}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => void handleInstanceNavigation(row.id)}
+                              onKeyDown={handleRowKeyDown}
+                              aria-label={navigationLabel}
+                            >
+                              <td className={uuidCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {uuidCell.content}
+                              </td>
+                              <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
+                                <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
+                              </td>
+                              <td className={boxCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {boxCell.content}
+                              </td>
+                              <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {locationCell.content}
+                              </td>
+                              <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {updatedCell.content}
+                              </td>
+                              <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {createdCell.content}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : (
                 <p className="muted">Keine Instanzen vorhanden.</p>
               )}

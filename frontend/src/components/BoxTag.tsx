@@ -2,30 +2,38 @@ import React from 'react';
 import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Confirm BoxTag presentation stays aligned with the latest location label requirements.
+// TODO(agent): Revisit BoxTag showId defaults once label coverage is validated across all box surfaces.
 
 interface BoxTagProps {
   locationKey?: string | null;
   labelOverride?: string | null;
   className?: string;
+  showId?: boolean;
 }
 
-export default function BoxTag({ locationKey, labelOverride, className }: BoxTagProps) {
+function normalizeTagValue(value: string | null | undefined, context: string): string {
+  if (value == null) {
+    return '';
+  }
+
+  try {
+    return value.trim();
+  } catch (error) {
+    logError(`Failed to normalize ${context} for box tag`, error, { value });
+    return '';
+  }
+}
+
+export default function BoxTag({ locationKey, labelOverride, className, showId = false }: BoxTagProps) {
   let normalizedLocation = '';
   let normalizedLabel = '';
 
-  try {
-    normalizedLocation = locationKey?.trim() ?? '';
-  } catch (error) {
-    logError('Failed to normalize box location', error, { locationKey });
-  }
+  normalizedLocation = normalizeTagValue(locationKey, 'box location');
+  normalizedLabel = normalizeTagValue(labelOverride, 'box label override');
 
-  try {
-    normalizedLabel = labelOverride?.trim() ?? '';
-  } catch (error) {
-    logError('Failed to normalize box label override', error, { labelOverride });
-  }
+  const displayLabel = normalizedLabel || normalizedLocation;
 
-  if (!normalizedLocation) {
+  if (!displayLabel) {
     logger.warn('Missing box location', { locationKey });
     return <span className={className}>(nicht gesetzt)</span>;
   }
@@ -39,8 +47,10 @@ export default function BoxTag({ locationKey, labelOverride, className }: BoxTag
         gap: '0.125rem'
       }}
     >
-      {normalizedLabel ? <span>{normalizedLabel}</span> : null}
-      <span className="mono">{normalizedLocation}</span>
+      <span>{displayLabel}</span>
+      {showId && normalizedLabel && normalizedLocation ? (
+        <span className="mono">{normalizedLocation}</span>
+      ) : null}
     </span>
   );
 }

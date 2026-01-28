@@ -249,7 +249,9 @@ export default function ItemListPage() {
   const [sortKey, setSortKey] = useState<ItemListSortKey>(ITEM_LIST_DEFAULT_FILTERS.sortKey);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // TODO(subcategory-input-staging): Confirm whether we should surface an explicit apply button next to the input.
   const [subcategoryFilter, setSubcategoryFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
+  const [subcategoryInput, setSubcategoryInput] = useState(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
   const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
   const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
@@ -265,6 +267,7 @@ export default function ItemListPage() {
       setSearchTerm(storedFilters.searchTerm);
       setSearchInput(storedFilters.searchTerm);
       setSubcategoryFilter(storedFilters.subcategoryFilter);
+      setSubcategoryInput(storedFilters.subcategoryFilter);
       setBoxFilter(storedFilters.boxFilter);
       setAgenticStatusFilter(storedFilters.agenticStatusFilter);
       setShowUnplaced(storedFilters.showUnplaced);
@@ -283,6 +286,7 @@ export default function ItemListPage() {
       setSearchTerm(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
       setSearchInput(ITEM_LIST_DEFAULT_FILTERS.searchTerm);
       setSubcategoryFilter(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
+      setSubcategoryInput(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
       setBoxFilter(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
       setAgenticStatusFilter(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
       setShowUnplaced(ITEM_LIST_DEFAULT_FILTERS.showUnplaced);
@@ -439,7 +443,7 @@ export default function ItemListPage() {
 
   const subcategorySelectOptions = useMemo(() => {
     try {
-      const trimmedValue = subcategoryFilter.trim();
+      const trimmedValue = subcategoryInput.trim();
       const options = [...subcategoryOptions];
       if (trimmedValue && !subcategoryLookup.has(trimmedValue)) {
         options.unshift({
@@ -455,11 +459,33 @@ export default function ItemListPage() {
       });
       return [];
     }
-  }, [subcategoryFilter, subcategoryLookup, subcategoryOptions]);
+  }, [subcategoryInput, subcategoryLookup, subcategoryOptions]);
 
   const handleSubcategoryInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setSubcategoryFilter(event.target.value);
+    setSubcategoryInput(event.target.value);
   }, []);
+
+  const commitSubcategoryFilter = useCallback((nextValue: string) => {
+    try {
+      setSubcategoryFilter(nextValue);
+      logger.info?.('Applied item list subcategory filter', {
+        value: nextValue.trim(),
+        length: nextValue.trim().length
+      });
+    } catch (error) {
+      logError('Failed to apply item list subcategory filter', error, {
+        value: nextValue
+      });
+    }
+  }, []);
+
+  const handleSubcategoryInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    event.preventDefault();
+    commitSubcategoryFilter(event.currentTarget.value);
+  }, [commitSubcategoryFilter]);
 
   const handleSubcategoryInputBlur = useCallback((event: React.FocusEvent<HTMLInputElement>) => {
     const typedValue = event.currentTarget.value.trim();
@@ -717,9 +743,10 @@ export default function ItemListPage() {
                     list="subcategory-filter-options"
                     onBlur={handleSubcategoryInputBlur}
                     onChange={handleSubcategoryInputChange}
+                    onKeyDown={handleSubcategoryInputKeyDown}
                     placeholder="Alle"
                     type="search"
-                    value={subcategoryFilter}
+                    value={subcategoryInput}
                   />
                   <datalist id="subcategory-filter-options">
                     {subcategorySelectOptions.map((option) => (

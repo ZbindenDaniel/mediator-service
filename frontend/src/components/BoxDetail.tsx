@@ -18,6 +18,7 @@ import QualityBadge from './QualityBadge';
 
 // TODO(agent): Verify the BoxTag rendering still aligns with the detailed box metadata layout.
 // TODO(agent): Confirm location tags remain navigable only when LocationId is valid and link targets are encoded correctly.
+// TODO(agent): Audit box label fallbacks here if backend label fields change.
 // TODO(agent): Confirm shelf box lists align with relocation rules before expanding shelf detail UI.
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
@@ -28,6 +29,7 @@ import QualityBadge from './QualityBadge';
 // TODO(bulk-display): Validate displayCount fallback logic for Menge rows after backend grouping changes.
 // TODO(box-detail-layout): Validate box detail summary grid alignment across breakpoints.
 // TODO(agent): Reassess shelf label/notes editing once shelf tagging conventions stabilize.
+// TODO(mobile-box-detail): Keep box detail container width constrained to the viewport on small screens.
 
 interface Props {
   boxId: string;
@@ -588,7 +590,7 @@ export default function BoxDetail({ boxId }: Props) {
   if (loadError && !box) {
     // TODO: Replace basic retry UI with shared error boundary once available.
     return (
-      <div className="container box">
+      <div className="container box box-detail-container">
         <div className="grid landing-grid">
           <div className="card">
             <h2>Fehler beim Laden</h2>
@@ -605,7 +607,7 @@ export default function BoxDetail({ boxId }: Props) {
   }
 
   return (
-    <div className="container box">
+    <div className="container box box-detail-container">
       <div className="grid landing-grid">
         {box ? (
           <>

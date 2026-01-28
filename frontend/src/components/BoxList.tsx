@@ -7,6 +7,7 @@ import BoxTag from './BoxTag';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 // TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
+// TODO(agent): Review BoxTag label override coverage if new box metadata fields are added.
 
 export type BoxSortKey = 'BoxID' | 'Label' | 'UpdatedAt';
 

@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Added a mobile overflow guard for the item detail Vorrat table to keep wide columns scrollable on small screens.
 - Filtered item list queries to hide zero-stock instances while keeping reference-only listings intact and logged list filtering activation.
 - Added a persisted Suchbegriff search term on item references to seed agentic search defaults and share through item payloads.
 - Added an nginx reverse proxy service with TLS termination, Basic Auth, and rate limiting to protect all ingress traffic while keeping the mediator service unexposed directly.
@@ -99,6 +100,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Restored mobile flex stacking for shared grid layouts while keeping landing grids in multi-column mode only at larger breakpoints.
 - Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
 - Updated mobile container sizing to prevent overflow by constraining widths to the viewport.
+- Constrained box detail mobile containers and summary grids to the viewport width with wrapping to avoid overflow on small screens.
 - Added a pre-submit confirmation prompt when creating multiple Stück instances to avoid accidental multi-instance creation.
 - Normalized agentic run handling to resolve canonical ItemUUIDs per Artikelnummer and skip reference-scoped runs when one already exists, with added logging for fallbacks and resolution failures.
 - Reinforced non-bulk import creation to log requested quantities, mint each instance safely, and report final instance counts for multi-quantity imports.
@@ -138,6 +140,8 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added a unified /api/export/data action that can bundle items, boxes, agentic runs, and labeled events into a single archive or JSON payload with filterable query parameters.
 - Added optional shelf label/notes inputs for shelf creation and shelf detail editing while keeping relocation shelf lookups unfiltered by category.
 - Reset item detail agentic search terms on item changes and hydrate them from persisted Suchbegriff values after item load.
+- Replaced the header back control with a home link, added mobile-only header button sizing, and logged navigation failures for the home shortcut.
+- Staged the item list Unterkategorie input so keystrokes update a draft value while Enter commits the filter with logging.
 
 ## Documentation Map
 

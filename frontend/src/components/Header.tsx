@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
 import {
@@ -12,11 +12,13 @@ import {
   ItemListFilterChangeDetail,
   loadItemListFilters
 } from '../lib/itemListFiltersStorage';
-import { GoArchive, GoArrowLeft, GoFilter, GoListUnordered, GoPlus, GoPulse } from 'react-icons/go';
+import { GoArchive, GoFilter, GoHome, GoListUnordered, GoPlus, GoPulse } from 'react-icons/go';
+import { logError } from '../utils/logger';
 
 // TODO(filter-indicator): Surface stored filter state changes in the header and allow quick reset.
 export default function Header() {
   const dialog = useDialog();
+  const navigate = useNavigate();
   const [user, setUserState] = useState(() => getUser().trim());
   const [filterSummaries, setFilterSummaries] = useState<string[]>([]);
   const [hasStoredFilters, setHasStoredFilters] = useState(false);
@@ -99,6 +101,16 @@ export default function Header() {
     }
   }, [dialog, user]);
 
+  // TODO(header-home-link): Validate home navigation tracking once error telemetry is wired.
+  const handleHomeClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    try {
+      navigate('/');
+    } catch (err) {
+      logError('Failed to navigate to the home route from the header.', err);
+    }
+  }, [navigate]);
+
   const handleClearFiltersClick = useCallback(() => {
     try {
       clearItemListFilters();
@@ -118,9 +130,15 @@ export default function Header() {
   return (
     <header className="header">
       <div className="left">
-        <button id="header-back-button" type="button" onClick={() => window.history.back()} aria-label="Zurück">
-          <GoArrowLeft aria-hidden="true" />
-        </button>
+        <Link
+          id="header-home-button"
+          to="/"
+          onClick={handleHomeClick}
+          aria-label="Startseite"
+          title="Startseite"
+        >
+          <GoHome aria-hidden="true" />
+        </Link>
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
         <nav className="header-nav" aria-label="Hauptnavigation">
           {/* TODO(navigation): Re-evaluate header icon spacing if more nav items are added. */}
