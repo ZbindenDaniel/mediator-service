@@ -3,14 +3,14 @@
 
 <head>
   <meta charset="utf-8" />
-  <title>Etikett 62x12</title>
-  <!-- TODO(agent): Keep 62x12 layout aligned with backend PDF sizing. -->
+  <title>Etikett 62x10</title>
+  <!-- TODO(agent): Keep 62x10 layout aligned with backend PDF sizing. -->
   <!-- TODO(agent): Confirm box label branding once warehouse ops finalize box-specific print specs. -->
   <!-- TODO(agentic-printing): Capture printer margin telemetry to keep single-page sizing reliable across devices. -->
   <!-- TODO(agentic-printing): Verify inline payload injection stays in sync with backend QR generation. -->
   <style>
     @page {
-      size: 62mm 12mm;
+      size: 62mm 10mm;
       margin: 0;
     }
 
@@ -26,13 +26,13 @@
       background: #f3f4f6;
       font-family: 'Helvetica Neue', Arial, sans-serif;
       width: 62mm;
-      height: 12mm;
+      height: 10mm;
     }
 
     .label {
       box-sizing: border-box;
       width: 62mm;
-      height: 12mm;
+      height: 10mm;
       padding: 2mm;
       background: #fff;
       display: flex;
@@ -45,7 +45,7 @@
     .item-id {
       width: 100%;
       text-align: center;
-      font-size: 18pt;
+      font-size: 12pt;
       font-weight: 700;
       letter-spacing: 0.4pt;
       color: #111827;
@@ -58,7 +58,7 @@
       border-radius: 6px;
       background: #fee2e2;
       color: #b91c1c;
-      font-size: 12pt;
+      font-size: 8pt;
       max-width: 420px;
     }
 
@@ -66,8 +66,8 @@
       body {
         background: none;
         width: 62mm;
-        height: 12mm;
-        min-height: 12mm;
+        height: 10mm;
+        min-height: 10mm;
       }
 
       .label {
@@ -116,7 +116,7 @@
        
           state.payload = payload;
         } catch (err) {
-          console.error('Render error in 62x12 label', err);
+          console.error('Render error in 62x8 label', err);
           showError('Vorlage konnte nicht gerendert werden.');
         }
       }

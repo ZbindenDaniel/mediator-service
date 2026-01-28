@@ -4,13 +4,13 @@ import path from 'path';
 // TODO(agent): Revisit shelf template registration if additional label sizes are introduced.
 // TODO(agent): Align new label template additions with frontend print template inventory tracking.
 // TODO(agent): Confirm small item template availability in all deployment environments.
-export type LabelHtmlTemplate = '62x100' | '29x90' | '62x12' | 'shelf-a4';
+export type LabelHtmlTemplate = '62x100' | '29x90' | '62x10' | 'shelf-a4';
 
 // TODO(agent): Align template root discovery with server PUBLIC_DIR detection to avoid missing runtime assets.
 const TEMPLATE_FILES: Record<LabelHtmlTemplate, string> = {
   '62x100': '62x100.html',
   '29x90': '29x90.html',
-  '62x12': '62x12.html',
+  '62x10': '62x10.html',
   'shelf-a4': 'shelf-a4.html'
 };
 

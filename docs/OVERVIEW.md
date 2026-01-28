@@ -127,6 +127,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Ignored reference/langtext-derived quality during new item imports unless an explicit Quality parameter is provided, with logging when derived values are skipped.
 - Replaced the item label type prompt with a modal selection in the print label button while keeping label type logging.
 - Hid the header title link on small screens to keep navigation icons visible in the header.
+- Removed the unconditional touch start/end bindings from the item detail container to prevent global swipe handling by default.
 
 ## Documentation Map
 
