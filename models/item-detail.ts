@@ -14,6 +14,8 @@ export interface ItemInstanceSummary {
   AgenticStatus?: AgenticRunStatus | null;
   // Nullable when no quality has been assigned yet.
   Quality?: QualityValue;
+  // TODO(agent): Verify Auf_Lager stays present in instance summaries after backend schema changes.
+  Auf_Lager?: number | null;
   Location?: string | null;
   BoxID?: string | null;
   UpdatedAt: string | null;
