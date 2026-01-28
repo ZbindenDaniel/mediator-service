@@ -2,12 +2,13 @@ import React, { ChangeEvent, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Box } from '../../../models/box';
 import { formatDate } from '../lib/format';
-import { formatShelfLabel } from '../lib/shelfLabel';
+import { logError } from '../utils/logger';
 import BoxTag from './BoxTag';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 // TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
 // TODO(agent): Review BoxTag label override coverage if new box metadata fields are added.
+// TODO(agent): Revisit box list ARIA labels if location label formatting changes.
 
 export type BoxSortKey = 'BoxID' | 'Label' | 'UpdatedAt';
 
@@ -24,6 +25,23 @@ const SORT_LABELS: Record<BoxSortKey, string> = {
   Label: 'Standort',
   UpdatedAt: 'Zuletzt aktualisiert',
 };
+
+function normalizeLabelValue(
+  value: string | null | undefined,
+  context: string,
+  boxId?: string | null
+): string {
+  if (value == null) {
+    return '';
+  }
+
+  try {
+    return value.trim();
+  } catch (error) {
+    logError(`Failed to normalize ${context}`, error, { value, boxId });
+    return '';
+  }
+}
 
 function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
@@ -109,17 +127,10 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
         <tbody>
           {safeBoxes.map((box) => {
             try {
-              const rowLabel = box.Label?.trim()
-                ? `Details für Box ${box.BoxID} in ${box.Label} öffnen`
+              const normalizedLabel = normalizeLabelValue(box.Label, 'box label', box.BoxID);
+              const rowLabel = normalizedLabel
+                ? `Details für Box ${box.BoxID} in ${normalizedLabel} öffnen`
                 : `Details für Box ${box.BoxID} öffnen`;
-              const shelfId = box.BoxID?.startsWith('S-')
-                ? box.BoxID
-                : box.LocationId?.startsWith('S-')
-                  ? box.LocationId
-                  : null;
-              const shelfLabel = formatShelfLabel(shelfId);
-              const locationLabel = shelfLabel ?? box.Label?.trim() ?? null;
-
               return (
                 <tr
                   key={box.BoxID}
@@ -149,7 +160,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                   <td className="col-location">
                     <BoxTag
                       locationKey={box.LocationId}
-                      labelOverride={locationLabel}
+                      labelOverride={box.Label}
                     />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>

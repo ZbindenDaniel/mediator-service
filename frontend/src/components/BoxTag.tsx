@@ -1,8 +1,10 @@
 import React from 'react';
+import { formatShelfLabel } from '../lib/shelfLabel';
 import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Confirm BoxTag presentation stays aligned with the latest location label requirements.
 // TODO(agent): Revisit BoxTag showId defaults once label coverage is validated across all box surfaces.
+// TODO(agent): Align BoxTag fallback label formatting once shelf naming conventions finalize.
 
 interface BoxTagProps {
   locationKey?: string | null;
@@ -24,14 +26,23 @@ function normalizeTagValue(value: string | null | undefined, context: string): s
   }
 }
 
+function resolveFallbackLabel(locationKey: string): string {
+  if (!locationKey) {
+    return '';
+  }
+
+  try {
+    return formatShelfLabel(locationKey) ?? locationKey;
+  } catch (error) {
+    logError('Failed to format fallback shelf label for box tag', error, { locationKey });
+    return locationKey;
+  }
+}
+
 export default function BoxTag({ locationKey, labelOverride, className, showId = false }: BoxTagProps) {
-  let normalizedLocation = '';
-  let normalizedLabel = '';
-
-  normalizedLocation = normalizeTagValue(locationKey, 'box location');
-  normalizedLabel = normalizeTagValue(labelOverride, 'box label override');
-
-  const displayLabel = normalizedLabel || normalizedLocation;
+  const normalizedLocation = normalizeTagValue(locationKey, 'box location');
+  const normalizedLabel = normalizeTagValue(labelOverride, 'box label override');
+  const displayLabel = normalizedLabel || resolveFallbackLabel(normalizedLocation);
 
   if (!displayLabel) {
     logger.warn('Missing box location', { locationKey });
@@ -48,7 +59,7 @@ export default function BoxTag({ locationKey, labelOverride, className, showId =
       }}
     >
       <span>{displayLabel}</span>
-      {showId && normalizedLabel && normalizedLocation ? (
+      {showId && normalizedLocation && displayLabel !== normalizedLocation ? (
         <span className="mono">{normalizedLocation}</span>
       ) : null}
     </span>
