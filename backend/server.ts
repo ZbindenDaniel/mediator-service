@@ -81,6 +81,7 @@ import {
   listItemsWithFilters,
   decrementItemStock,
   incrementItemStock,
+  zeroItemStock,
   deleteItem,
   deleteBox,
   enqueueShopwareSyncJob
@@ -383,6 +384,7 @@ type ActionContext = {
   getItem: typeof getItem;
   decrementItemStock: typeof decrementItemStock;
   incrementItemStock: typeof incrementItemStock;
+  zeroItemStock: typeof zeroItemStock;
   deleteItem: typeof deleteItem;
   deleteBox: typeof deleteBox;
   bulkMoveItems: typeof bulkMoveItems;
@@ -635,6 +637,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           getItem,
           decrementItemStock,
           incrementItemStock,
+          zeroItemStock,
           deleteItem,
           deleteBox,
           enqueueShopwareSyncJob,
