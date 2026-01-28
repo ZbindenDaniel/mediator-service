@@ -40,7 +40,10 @@ export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
     Artikelbeschreibung: { note: 'Produkt/Model name oder Name des jeweiligen Artikels' },
     Verkaufspreis: { note: 'Preis' },
     Kurzbeschreibung: { note: 'Kurzer Prosa Text für die Artikel Anzeige im Webshop' },
-    Langtext: { note: 'RichText in dem verschiedene Attribute zum Artikel als JSON formatiert vorliegen' },
+    // TODO(spezifikationen-prompts): Confirm Spezifikationen wording stays aligned with UI copy updates.
+    Langtext: {
+      note: 'Spezifikationen (Langtext): RichText in dem verschiedene Attribute zum Artikel als JSON formatiert vorliegen'
+    },
     Hersteller: { note: 'Manufacturer label', aliases: ['brand'] },
     Länge_mm: { note: 'Length in millimeters', aliases: ['dimensions'] },
     Breite_mm: { note: 'Width in millimeters', aliases: ['dimensions'] },

@@ -911,6 +911,7 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [agentic, item]);
 
+  // TODO(spezifikationen-ui): Confirm Spezifikationen label copy once UI text review completes.
   const langtextRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
       return [];
@@ -954,13 +955,13 @@ export default function ItemDetail({ itemId }: Props) {
       if (!rendered) {
         return [];
       }
-      return [['Langtext', rendered]];
+      return [['Spezifikationen', rendered]];
     } catch (error) {
       console.error('ItemDetail: Failed to render Langtext markdown', {
         error,
         value: legacyText
       });
-      return [['Langtext', legacyText]];
+      return [['Spezifikationen', legacyText]];
     }
   }, [item?.Langtext]);
 

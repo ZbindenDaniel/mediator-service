@@ -1137,14 +1137,15 @@ export function ItemDetailsFields({
         />
       </div>
 
+      {/* TODO(spezifikationen-ui): Align Spezifikationen label strings with final UX copy review. */}
       <div className="row">
         <label>
-          Langtext
+          Spezifikationen
         </label>
         {parsedLangtext.mode === 'json' ? (
-          <div className="langtext-editor" role="group" aria-label="Langtext Schlüssel-Wert-Paare">
+          <div className="langtext-editor" role="group" aria-label="Spezifikationen Schlüssel-Wert-Paare">
             {parsedLangtext.entries.length === 0 ? (
-              <p className="langtext-editor__empty">Es sind derzeit keine Langtext-Schlüssel hinterlegt.</p>
+              <p className="langtext-editor__empty">Es sind derzeit keine Spezifikationen-Schlüssel hinterlegt.</p>
             ) : (
               parsedLangtext.entries.map((entry, index) => {
                 const entryValueId = `${langtextFieldIdPrefix}-value-${index}`;
@@ -1174,7 +1175,7 @@ export function ItemDetailsFields({
                       type="button"
                       className="langtext-editor__remove"
                       onClick={() => handleLangtextRemoveEntry(entry.key)}
-                      aria-label={`Langtext-Schlüssel ${entry.key} entfernen`}
+                      aria-label={`Spezifikationen-Schlüssel ${entry.key} entfernen`}
                     >
                       -
                     </button>
@@ -1188,7 +1189,7 @@ export function ItemDetailsFields({
                 <input
                   type="text"
                   className="langtext-editor__input"
-                  aria-label="Neuer Langtext-Schlüssel"
+                  aria-label="Neuer Spezifikationen-Schlüssel"
                   value={pendingLangtextKey}
                   maxLength={25}
                   onChange={(event) => handlePendingLangtextKeyChange(event.target.value)}
@@ -1210,7 +1211,7 @@ export function ItemDetailsFields({
                   className="langtext-editor__add-button"
                   onClick={() => handleLangtextJsonAdd()}
                   disabled={!pendingLangtextKey.trim()}
-                  aria-label="Langtext-Schlüssel hinzufügen"
+                  aria-label="Spezifikationen-Schlüssel hinzufügen"
                 >
                   +
                 </button>
