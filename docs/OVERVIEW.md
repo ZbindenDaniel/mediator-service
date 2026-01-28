@@ -143,6 +143,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Reset item detail agentic search terms on item changes and hydrate them from persisted Suchbegriff values after item load.
 - Replaced the header back control with a home link, added mobile-only header button sizing, and logged navigation failures for the home shortcut.
 - Staged the item list Unterkategorie input so keystrokes update a draft value while Enter commits the filter with logging.
+- Tuned mobile header icon sizing to 30px square tap targets with slightly reduced icon font sizes for small screens.
 
 ## Documentation Map
 
