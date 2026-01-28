@@ -4,6 +4,7 @@ import { AGENTIC_RUN_STATUSES, type AgenticRunStatus } from '../../models/agenti
 import { groupItemsForResponse } from '../lib/itemGrouping';
 import { defineHttpAction } from './index';
 
+// TODO(agent): Confirm zero-stock list filter logging remains aligned with DB query filtering.
 // TODO(filters-api): Share filter parsing with other listing endpoints once navigation keeps filters in sync.
 // TODO(item-entity-filter): Revisit reference union performance once catalogue browsing expands beyond the item list.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
@@ -79,6 +80,11 @@ const action = defineHttpAction({
   matches: (path, method) => path === '/api/items' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
+      try {
+        console.info('list-items zero-stock filter active');
+      } catch (logError) {
+        console.warn('Failed to log list-items zero-stock filter status', logError);
+      }
       const filters = parseItemListFilters(_req);
       const searchTerm = filters.searchTerm ? `%${filters.searchTerm.toLowerCase()}%` : null;
       const subcategoryFilter = filters.subcategoryFilter

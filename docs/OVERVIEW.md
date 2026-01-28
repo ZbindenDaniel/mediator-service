@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Filtered item list queries to hide zero-stock instances while keeping reference-only listings intact and logged list filtering activation.
 - Added a persisted Suchbegriff search term on item references to seed agentic search defaults and share through item payloads.
 - Added an nginx reverse proxy service with TLS termination, Basic Auth, and rate limiting to protect all ingress traffic while keeping the mediator service unexposed directly.
 - Added `PRINTER_SERVER` to configure the CUPS host used for print dispatches instead of relying on a hard-coded address.
