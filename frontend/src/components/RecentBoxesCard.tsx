@@ -6,6 +6,7 @@ import BoxTag from './BoxTag';
 
 // TODO(agent): Confirm recent boxes still surface location labels clearly without color data.
 // TODO(navigation): Keep header nav links aligned with cards as entry points evolve.
+// TODO(agent): Recheck RecentBoxesCard label overrides if box metadata changes.
 
 interface Props {
   boxes: Box[];
