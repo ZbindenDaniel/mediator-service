@@ -2485,6 +2485,7 @@ const listItemReferencesStatement = db.prepare(`
 
 export const listItemReferences = listItemReferencesStatement;
 
+// TODO(agent): Confirm zero-stock filtering impact on list queries before expanding list usage.
 // TODO(agentic-status-ui): Evaluate whether additional agentic audit fields should be projected once frontend requires them.
 const listItemsStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
@@ -2493,11 +2494,13 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
 ])}
 ${ITEM_JOIN_WITH_BOX}
 LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+WHERE COALESCE(i.Auf_Lager, 0) > 0
 ORDER BY i.ItemUUID
 `);
 
 export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
 
+// TODO(agent): Validate zero-stock filtering for filtered listings once reference-only views are audited.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be included in subcategory filters.
 const listItemsWithFiltersStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
@@ -2506,7 +2509,8 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
 ])}
 ${ITEM_JOIN_WITH_BOX}
 LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
-  WHERE (
+  WHERE COALESCE(i.Auf_Lager, 0) > 0
+AND (
     @searchTerm IS NULL
     OR @searchTerm = ''
     OR LOWER(COALESCE(r.Artikelbeschreibung, '')) LIKE @searchTerm
