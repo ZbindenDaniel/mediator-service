@@ -8,6 +8,7 @@ import { dialogService } from './dialog';
 
 // TODO(agent): Confirm shelf creation copy once warehouse naming conventions are finalized.
 // TODO(agent): Consolidate shelf category selectors with the item filter UI when shared controls are available.
+// TODO(agent): Review shelf label/notes defaults once shelf creation UX is finalized.
 
 interface ShelfCreateResponse {
   ok?: boolean;
@@ -20,6 +21,8 @@ export default function ShelfCreateForm() {
   const [floor, setFloor] = useState('');
   const [category, setCategory] = useState('');
   const [subcategory, setSubcategory] = useState('');
+  const [label, setLabel] = useState('');
+  const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('');
   const [mintedId, setMintedId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -142,6 +145,8 @@ export default function ShelfCreateForm() {
     const selectedFloor = floor.trim();
     const selectedCategory = category.trim();
     const selectedSubcategory = subcategory.trim();
+    const trimmedLabel = label.trim();
+    const trimmedNotes = notes.trim();
 
     if (!selectedLocation || !selectedFloor || !selectedCategory || !selectedSubcategory) {
       setStatus('Bitte alle Felder auswählen.');
@@ -302,13 +307,26 @@ export default function ShelfCreateForm() {
     setMintedId('');
 
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         actor,
         type: 'shelf',
         location: selectedLocation,
         floor: selectedFloor,
         category: selectedSubcategoryCode
       };
+      if (trimmedLabel) {
+        payload.label = trimmedLabel;
+      }
+      if (trimmedNotes) {
+        payload.notes = trimmedNotes;
+      }
+      logger.info('[shelf-create] Submitting shelf creation', {
+        location: selectedLocation,
+        floor: selectedFloor,
+        category: selectedSubcategory,
+        hasLabel: Boolean(trimmedLabel),
+        hasNotes: Boolean(trimmedNotes)
+      });
 
       const response = await fetch('/api/boxes', {
         method: 'POST',
@@ -467,6 +485,26 @@ export default function ShelfCreateForm() {
                   </option>
                 ))}
               </select>
+            </label>
+            <label>
+              Label/Notiz (optional)
+              <input
+                type="text"
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                placeholder="Regalname"
+                disabled={isSubmitting}
+              />
+            </label>
+            <label>
+              Notizen (optional)
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                rows={2}
+                placeholder="Zusätzliche Hinweise"
+                disabled={isSubmitting}
+              />
             </label>
           </div>
           <div className="row">

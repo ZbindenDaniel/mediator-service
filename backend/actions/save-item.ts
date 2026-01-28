@@ -410,6 +410,27 @@ function resolveItemEinheitValue(value: unknown, context: string): ItemEinheit {
   return DEFAULT_ITEM_EINHEIT;
 }
 
+function normalizeSearchTerm(
+  value: unknown,
+  context: { itemId: string; artikelNummer: string }
+): string | null {
+  // TODO(agentic-search-term): Revisit Suchbegriff normalization once UI edit flow persists it directly.
+  try {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const trimmed = String(value).trim();
+    return trimmed ? trimmed : null;
+  } catch (error) {
+    console.error('[save-item] Failed to normalize Suchbegriff value', {
+      itemId: context.itemId,
+      artikelNummer: context.artikelNummer,
+      error
+    });
+    return null;
+  }
+}
+
 const action = defineHttpAction({
   key: 'save-item',
   label: 'Save item',
@@ -723,6 +744,7 @@ const action = defineHttpAction({
       };
       const referenceUpdates: Partial<ItemRef> = {};
       const referenceFieldKeys: Array<keyof ItemRef> = [
+        'Suchbegriff',
         'Grafikname',
         'ImageNames',
         'Artikelbeschreibung',
@@ -751,6 +773,12 @@ const action = defineHttpAction({
           (referenceUpdates as Record<string, unknown>)[key] = referencePayload[key];
         }
       });
+      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Suchbegriff')) {
+        referenceUpdates.Suchbegriff = normalizeSearchTerm(referencePayload.Suchbegriff, {
+          itemId,
+          artikelNummer
+        });
+      }
       const resolvedQuality =
         incomingQuality !== undefined
           ? resolveItemQualityValue(incomingQuality, 'updatePayload')
