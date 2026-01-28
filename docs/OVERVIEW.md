@@ -133,6 +133,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Hid the header title link on small screens to keep navigation icons visible in the header.
 - Removed the unconditional touch start/end bindings from the item detail container to prevent global swipe handling by default.
 - Added a unified /api/export/data action that can bundle items, boxes, agentic runs, and labeled events into a single archive or JSON payload with filterable query parameters.
+- Added optional shelf label/notes inputs for shelf creation and shelf detail editing while keeping relocation shelf lookups unfiltered by category.
 
 ## Documentation Map
 

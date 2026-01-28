@@ -21,13 +21,13 @@ import QualityBadge from './QualityBadge';
 // TODO(agent): Confirm shelf box lists align with relocation rules before expanding shelf detail UI.
 // TODO(agent): Evaluate consolidating box photo preview modal with ItemMediaGallery once use cases align.
 // TODO(agent): Audit remaining box detail form fields to ensure LocationId/Label handling is consistent after legacy migration.
-// TODO(agent): Revisit relocation category selection when boxes contain mixed item subcategories.
 // TODO(agent): Confirm note-only box updates preserve stored labels after label input removal.
 // TODO(grouped-box-items): Align grouped box item display with forthcoming backend grouped payloads.
 // TODO(bulk-display): Recheck Einheit=Menge quantity display once box detail payloads are refined.
 // TODO(agent): Add shared focus styling for clickable table rows once global table styles support it.
 // TODO(bulk-display): Validate displayCount fallback logic for Menge rows after backend grouping changes.
 // TODO(box-detail-layout): Validate box detail summary grid alignment across breakpoints.
+// TODO(agent): Reassess shelf label/notes editing once shelf tagging conventions stabilize.
 
 interface Props {
   boxId: string;
@@ -35,38 +35,6 @@ interface Props {
 
 function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
-}
-
-function normalizeCategorySegment(value: unknown): string | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(Math.trunc(value)).padStart(4, '0');
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-    const parsed = Number.parseInt(trimmed, 10);
-    if (!Number.isNaN(parsed)) {
-      return String(parsed).padStart(4, '0');
-    }
-  }
-
-  return null;
-}
-
-function resolveRelocationCategory(items: Item[]): string | null {
-  for (const item of items) {
-    const category =
-      normalizeCategorySegment(item.Unterkategorien_A) ??
-      normalizeCategorySegment(item.Unterkategorien_B);
-    if (category) {
-      return category;
-    }
-  }
-
-  return null;
 }
 
 function resolveDisplayCount(group: ReturnType<typeof groupItemsForDisplay>[number]): number {
@@ -102,8 +70,11 @@ export default function BoxDetail({ boxId }: Props) {
   type NoteFeedback = { type: 'info' | 'success' | 'error'; message: string } | null;
 
   const [note, setNote] = useState('');
+  const [label, setLabel] = useState('');
   const [noteFeedback, setNoteFeedback] = useState<NoteFeedback>(null);
+  const [shelfFeedback, setShelfFeedback] = useState<NoteFeedback>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [isSavingShelfDetails, setIsSavingShelfDetails] = useState(false);
   const [photoPreview, setPhotoPreview] = useState('');
   const [photoUpload, setPhotoUpload] = useState<string | null>(null);
   const [photoRemoved, setPhotoRemoved] = useState(false);
@@ -115,7 +86,6 @@ export default function BoxDetail({ boxId }: Props) {
   const navigate = useNavigate();
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
-  const relocationCategory = useMemo(() => resolveRelocationCategory(items), [items]);
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
   const normalizedLocationId = useMemo(() => {
     if (typeof box?.LocationId !== 'string') {
@@ -295,7 +265,9 @@ export default function BoxDetail({ boxId }: Props) {
         }
         setBox(data.box);
         setNote(data.box?.Notes || '');
+        setLabel(typeof data.box?.Label === 'string' ? data.box.Label : '');
         setNoteFeedback(null);
+        setShelfFeedback(null);
         const nextPhotoPath = typeof data.box?.PhotoPath === 'string' ? data.box.PhotoPath.trim() : '';
         setPhotoPreview(nextPhotoPath);
         setPhotoUpload(null);
@@ -466,6 +438,67 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box, boxId, note, photoRemoved, photoUpload]);
 
+  const saveShelfDetails = useCallback(async () => {
+    if (!box) {
+      return;
+    }
+    const actor = await ensureUser();
+    if (!actor) {
+      console.info('Shelf detail save aborted: missing username.');
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        logError('Failed to display missing user alert for shelf detail save', error, { boxId: box.BoxID });
+      }
+      return;
+    }
+    try {
+      setIsSavingShelfDetails(true);
+      setShelfFeedback({ type: 'info', message: 'Speichern…' });
+      const trimmedLabel = label.trim();
+      const trimmedNotes = note.trim();
+      logger.info('[shelf-detail] Saving shelf label/notes', {
+        boxId: box.BoxID,
+        hasLabel: Boolean(trimmedLabel),
+        hasNotes: Boolean(trimmedNotes)
+      });
+      const payload = {
+        actor,
+        Label: trimmedLabel,
+        notes: trimmedNotes
+      };
+      const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const responseBody = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setBox((current) => current ? { ...current, Label: trimmedLabel || null, Notes: trimmedNotes } : current);
+        setShelfFeedback({ type: 'success', message: 'Regal gespeichert' });
+        logger.info('[shelf-detail] Shelf label/notes saved', { boxId: box.BoxID, status: res.status });
+      } else {
+        const errorMessage = responseBody?.error
+          ? `Speichern fehlgeschlagen: ${responseBody.error}`
+          : `Speichern fehlgeschlagen (Status ${res.status})`;
+        setShelfFeedback({ type: 'error', message: errorMessage });
+        logger.warn('[shelf-detail] Shelf label/notes update failed', {
+          boxId: box.BoxID,
+          status: res.status,
+          error: responseBody?.error
+        });
+      }
+    } catch (error) {
+      logError('Shelf label/notes update failed', error, { boxId: box.BoxID });
+      setShelfFeedback({ type: 'error', message: 'Speichern fehlgeschlagen' });
+    } finally {
+      setIsSavingShelfDetails(false);
+    }
+  }, [box, label, note]);
+
   // TODO(box-detail-photo-autosave): Add retry/backoff support for repeated photo save failures.
   const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
@@ -615,7 +648,6 @@ export default function BoxDetail({ boxId }: Props) {
                 {isBoxRelocatable ? (
                   <RelocateBoxCard
                     boxId={box.BoxID}
-                    categorySegment={relocationCategory}
                     onMoved={() => { void load({ showSpinner: false }); }}
                   />
                 ) : null}
@@ -705,6 +737,57 @@ export default function BoxDetail({ boxId }: Props) {
                             </span>
                           )}
                         </div>
+                      </div>
+                    </form>
+                  </div>
+                ) : null}
+
+                {isShelf ? (
+                  <div className="card">
+                    <h3>Regal-Details</h3>
+                    <form onSubmit={async (event) => {
+                      event.preventDefault();
+                      await saveShelfDetails();
+                    }}>
+                      <div className="row">
+                        <label htmlFor="shelf-label">Label</label>
+                        <input
+                          id="shelf-label"
+                          type="text"
+                          value={label}
+                          onChange={(event) => setLabel(event.target.value)}
+                          placeholder="Regalname"
+                          disabled={isSavingShelfDetails}
+                        />
+                      </div>
+                      <div className="row">
+                        <label htmlFor="shelf-notes">Notizen</label>
+                        <textarea
+                          id="shelf-notes"
+                          value={note}
+                          onChange={(event) => {
+                            setNote(event.target.value);
+                            if (shelfFeedback && shelfFeedback.type !== 'info') {
+                              setShelfFeedback(null);
+                            }
+                          }}
+                          rows={Math.max(3, note.split('\n').length)}
+                          disabled={isSavingShelfDetails}
+                        />
+                      </div>
+                      <div className="row">
+                        <button type="submit" disabled={isSavingShelfDetails}>Speichern</button>
+                      </div>
+                      <div className="row">
+                        {shelfFeedback ? (
+                          <span
+                            className="muted"
+                            role={shelfFeedback.type === 'error' ? 'alert' : 'status'}
+                            style={shelfFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}
+                          >
+                            {shelfFeedback.message}
+                          </span>
+                        ) : null}
                       </div>
                     </form>
                   </div>

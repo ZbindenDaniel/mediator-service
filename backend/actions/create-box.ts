@@ -6,6 +6,7 @@ import { resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
 // TODO(agent): Share shelf category validation with model-level helpers for consistency.
+// TODO(agent): Standardize shelf label/note normalization rules with frontend validation.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -173,6 +174,24 @@ const action = defineHttpAction({
             error
           });
         }
+        const rawLabel =
+          typeof shelfPayload.label === 'string'
+            ? shelfPayload.label
+            : typeof (shelfPayload as { Label?: string }).Label === 'string'
+              ? (shelfPayload as { Label?: string }).Label ?? ''
+              : '';
+        const normalizedLabel = rawLabel.trim();
+        const rawNotes = typeof shelfPayload.notes === 'string' ? shelfPayload.notes : '';
+        const normalizedNotes = rawNotes.trim();
+        const resolvedShelfLabel = normalizedLabel || `Regal ${categoryLabel}`;
+        const resolvedNotes = normalizedNotes ? normalizedNotes : null;
+        console.info('[shelf] Resolved shelf label/notes for create', {
+          location,
+          floor,
+          category: categorySegment,
+          hasCustomLabel: Boolean(normalizedLabel),
+          hasNotes: Boolean(normalizedNotes)
+        });
         const prefix = `S-${location}-${floor}-${categorySegment}-`;
         const nowDate = new Date();
         const now = nowDate.toISOString();
@@ -183,7 +202,8 @@ const action = defineHttpAction({
             location: string;
             floor: string;
             category: string;
-            categoryLabel: string;
+            label: string;
+            notes: string | null;
             now: string;
           }) => {
             const maxRow = ctx.getMaxShelfIndex.get({ prefix: payload.prefix }) as
@@ -213,9 +233,9 @@ const action = defineHttpAction({
               ctx.upsertBox.run({
                 BoxID: candidate,
                 LocationId: candidate,
-                Label: `Regal ${payload.categoryLabel}`,
+                Label: payload.label,
                 CreatedAt: payload.now,
-                Notes: null,
+                Notes: payload.notes,
                 PhotoPath: null,
                 PlacedBy: payload.actor,
                 PlacedAt: null,
@@ -246,7 +266,8 @@ const action = defineHttpAction({
           location,
           floor,
           category: categorySegment,
-          categoryLabel,
+          label: resolvedShelfLabel,
+          notes: resolvedNotes,
           now
         });
         console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, category: categorySegment, actor });

@@ -5,16 +5,15 @@ import { dialogService } from './dialog';
 
 // TODO(agent): Extend relocation picker to support searching/filtering when location lists grow larger.
 // TODO(agent): Confirm relocation flows fully rely on LocationId payloads once legacy Location fields are deprecated.
-// TODO(agent): Validate relocation shelf filter behavior when boxes contain multiple categories.
 // TODO(agent): Consider sorting shelf options by parsed location/floor/shelf once labels are expanded.
+// TODO(agent): Align relocation shelf loading logs with shared telemetry once analytics are centralized.
 
 interface Props {
   boxId: string;
-  categorySegment?: string | null;
   onMoved?: () => void;
 }
 
-export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Props) {
+export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   const LOCATION_BOX_TYPE = 'S';
   const [selectedLocation, setSelectedLocation] = useState('');
   const [status, setStatus] = useState('');
@@ -49,24 +48,17 @@ export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Pro
 
     async function loadLocations() {
       setIsLoadingLocations(true);
-      const normalizedCategory = categorySegment?.trim() ?? '';
-      if (!normalizedCategory) {
-        logger.warn('[relocate-box] Missing category filter for shelf lookup', { boxId });
-      }
       const searchParams = new URLSearchParams();
       searchParams.set('type', LOCATION_BOX_TYPE);
-      if (normalizedCategory) {
-        searchParams.set('category', normalizedCategory);
-      }
       const requestUrl = `/api/boxes?${searchParams.toString()}`;
       let responseStatus: number | undefined;
+      logger.info('[relocate-box] Loading shelf locations', { boxId, requestUrl });
       try {
         const response = await fetch(requestUrl);
         responseStatus = response.status;
         const data = await response.json().catch((parseError) => {
           logError('Standorte konnten nicht geladen werden (Parsing)', parseError, {
             boxId,
-            category: normalizedCategory || null,
             status: responseStatus
           });
           return {} as { boxes?: Array<{ BoxID?: string; Label?: string | null; LocationId?: string | null }> };
@@ -76,7 +68,6 @@ export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Pro
           logger.error('[relocate-box] Standorte konnten nicht geladen werden', {
             status: responseStatus,
             boxId,
-            category: normalizedCategory || null,
             payload: data
           });
           return;
@@ -101,7 +92,6 @@ export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Pro
         } catch (error) {
           logError('Failed to filter relocation locations', error, {
             boxId,
-            category: normalizedCategory || null,
             status: responseStatus
           });
           return;
@@ -110,21 +100,12 @@ export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Pro
         if (isMounted) {
           setLocationOptions(nextOptions);
           logger.info('Loaded relocation locations', {
-            count: nextOptions.length,
-            category: normalizedCategory || null
+            count: nextOptions.length
           });
-          if (normalizedCategory && nextOptions.length === 0) {
-            logger.warn('[relocate-box] No shelf locations returned for category filter', {
-              boxId,
-              category: normalizedCategory,
-              status: responseStatus
-            });
-          }
         }
       } catch (error) {
         logError('Standorte konnten nicht geladen werden', error, {
           boxId,
-          category: normalizedCategory || null,
           status: responseStatus
         });
       } finally {
@@ -139,7 +120,7 @@ export default function RelocateBoxCard({ boxId, categorySegment, onMoved }: Pro
     return () => {
       isMounted = false;
     };
-  }, [boxId, categorySegment]);
+  }, [boxId]);
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
