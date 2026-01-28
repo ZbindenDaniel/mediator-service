@@ -7,12 +7,14 @@ import { describeAgenticStatus } from './agenticStatusLabels';
 import { logger as defaultLogger, logError } from '../utils/logger';
 
 // TODO(item-entity-filter): Consider centralizing filter type constants for cross-view reuse once repository navigation shares state.
+// TODO(entrydate-sort): Confirm localized labels for entry date sorting in active filter descriptions.
 // TODO(filter-normalization): Extract shared filter parsing helpers so list pages stay aligned when new fields arrive.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
 export type ItemListSortKey =
   | 'artikelbeschreibung'
   | 'artikelnummer'
   | 'box'
+  | 'entryDate'
   | 'uuid'
   | 'stock'
   | 'subcategory'
@@ -44,6 +46,7 @@ const SORT_KEYS: ItemListSortKey[] = [
   'artikelbeschreibung',
   'artikelnummer',
   'box',
+  'entryDate',
   'uuid',
   'stock',
   'subcategory',
