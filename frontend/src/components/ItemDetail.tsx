@@ -694,19 +694,12 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
   };
 }
 
-// TODO(agentic-search-term): Verify Suchbegriff fallback ordering once persisted edits are enabled.
-function resolveAgenticSearchTerm(run: AgenticRun | null, item: Item | null): string {
+// TODO(agentic-search-term): Verify Suchbegriff hydration ordering once persisted edits are enabled.
+function resolveAgenticSearchTerm(item: Item | null): string {
   try {
-    const candidates = [item?.Suchbegriff, run?.SearchQuery, item?.Artikelbeschreibung, item?.Artikel_Nummer];
-    for (const candidate of candidates) {
-      if (typeof candidate !== 'string') {
-        continue;
-      }
-
-      const trimmed = candidate.trim();
-      if (trimmed) {
-        return trimmed;
-      }
+    const candidate = item?.Suchbegriff;
+    if (typeof candidate === 'string') {
+      return candidate.trim();
     }
   } catch (error) {
     logError('ItemDetail: Failed to resolve agentic search term', error, {
@@ -911,22 +904,20 @@ export default function ItemDetail({ itemId }: Props) {
   }, [itemId]);
 
   useEffect(() => {
+    if (!item) {
+      return;
+    }
     try {
-      const resolved = resolveAgenticSearchTerm(agentic, item);
-      if (!resolved) {
-        return;
-      }
-      setAgenticSearchTerm((current) => {
-        const trimmed = typeof current === 'string' ? current.trim() : '';
-        if (trimmed) {
-          return current;
-        }
-        return resolved;
+      const resolved = resolveAgenticSearchTerm(item);
+      setAgenticSearchTerm(resolved);
+      logger.info?.('ItemDetail: Hydrated agentic search term from persisted Suchbegriff', {
+        itemId,
+        hasValue: Boolean(resolved)
       });
     } catch (error) {
-      logError('ItemDetail: Failed to sync agentic search term state', error, { itemId });
+      logError('ItemDetail: Failed to hydrate agentic search term from persisted Suchbegriff', error, { itemId });
     }
-  }, [agentic, item, itemId]);
+  }, [item, itemId]);
 
   // TODO(spezifikationen-ui): Confirm Spezifikationen label copy once UI text review completes.
   const langtextRows = useMemo<[string, React.ReactNode][]>(() => {
@@ -2665,67 +2656,72 @@ export default function ItemDetail({ itemId }: Props) {
             <div className="card grid-span-2">
               <h3>Vorrat</h3>
               {instanceRows.length > 0 ? (
-                <table className="details">
-                  <thead>
-                    <tr>
-                      <th>UUID</th>
-                      <th>Qualität</th>
-                      <th>Behälter</th>
-                      <th>Standort</th>
-                      <th>Aktualisiert</th>
-                      <th>Erfasst</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* TODO(agent): Confirm current-instance row highlight styling with design review. */}
-                    {instanceRows.map((row) => {
-                      const isQualityPlaceholder = row.qualityValue === null;
-                      const isCurrentInstance = row.id === item.ItemUUID;
-                      const uuidCell = normalizeDetailValue(row.id);
-                      const boxCell = normalizeDetailValue(row.boxId);
-                      const locationCell = normalizeDetailValue(row.location);
-                      const updatedCell = normalizeDetailValue(row.updatedAt);
-                      const createdCell = normalizeDetailValue(row.createdAt);
-                      const navigationLabel = `Instanz ${row.id} öffnen`;
-                      const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          void handleInstanceNavigation(row.id);
-                        }
-                      };
-                      return (
-                        <tr
-                          key={row.id}
-                          className={isCurrentInstance ? 'is-current-instance' : undefined}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => void handleInstanceNavigation(row.id)}
-                          onKeyDown={handleRowKeyDown}
-                          aria-label={navigationLabel}
-                        >
-                          <td className={uuidCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {uuidCell.content}
-                          </td>
-                          <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
-                            <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
-                          </td>
-                          <td className={boxCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {boxCell.content}
-                          </td>
-                          <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {locationCell.content}
-                          </td>
-                          <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {updatedCell.content}
-                          </td>
-                          <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                            {createdCell.content}
-                          </td>
+                <>
+                  {/* TODO(mobile-stock-table): Keep Vorrat overflow guard aligned with mobile layout expectations. */}
+                  <div className="item-detail__stock-table">
+                    <table className="details">
+                      <thead>
+                        <tr>
+                          <th>UUID</th>
+                          <th>Qualität</th>
+                          <th>Behälter</th>
+                          <th>Standort</th>
+                          <th>Aktualisiert</th>
+                          <th>Erfasst</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {/* TODO(agent): Confirm current-instance row highlight styling with design review. */}
+                        {instanceRows.map((row) => {
+                          const isQualityPlaceholder = row.qualityValue === null;
+                          const isCurrentInstance = row.id === item.ItemUUID;
+                          const uuidCell = normalizeDetailValue(row.id);
+                          const boxCell = normalizeDetailValue(row.boxId);
+                          const locationCell = normalizeDetailValue(row.location);
+                          const updatedCell = normalizeDetailValue(row.updatedAt);
+                          const createdCell = normalizeDetailValue(row.createdAt);
+                          const navigationLabel = `Instanz ${row.id} öffnen`;
+                          const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              void handleInstanceNavigation(row.id);
+                            }
+                          };
+                          return (
+                            <tr
+                              key={row.id}
+                              className={isCurrentInstance ? 'is-current-instance' : undefined}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => void handleInstanceNavigation(row.id)}
+                              onKeyDown={handleRowKeyDown}
+                              aria-label={navigationLabel}
+                            >
+                              <td className={uuidCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {uuidCell.content}
+                              </td>
+                              <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
+                                <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
+                              </td>
+                              <td className={boxCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {boxCell.content}
+                              </td>
+                              <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {locationCell.content}
+                              </td>
+                              <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {updatedCell.content}
+                              </td>
+                              <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
+                                {createdCell.content}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               ) : (
                 <p className="muted">Keine Instanzen vorhanden.</p>
               )}

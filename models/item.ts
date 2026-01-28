@@ -68,6 +68,7 @@ export type LangtextPayload = Record<string, string>;
 export interface ItemRef {
   Artikel_Nummer: string;
   // TODO(agentic-search-term): Confirm Suchbegriff defaults stay aligned with agentic search workflows.
+  // TODO(agentic-search-term): Revisit Suchbegriff persistence expectations after UI hydration changes.
   Suchbegriff?: string;
   Grafikname?: string;
   ImageNames?: string | null;
