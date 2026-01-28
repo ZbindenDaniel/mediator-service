@@ -125,7 +125,7 @@ textarea {
     gap: 0.75rem;
 }
 
-#header-back-button {
+#header-home-button {
     font-size: 24px;
     padding: 4px;
     font-weight: bolder;
@@ -178,6 +178,24 @@ textarea {
     .header h1 {
         display: none;
     }
+
+    // TODO(mobile-header-buttons): Reconfirm compact header button sizing on smaller phones.
+    #header-home-button,
+    .header-nav a,
+    .header-filter-indicator {
+        width: 30px;
+        height: 30px;
+    }
+
+    #header-home-button,
+    .header-nav a {
+        font-size: 18px;
+    }
+
+    .header-filter-indicator {
+        font-size: 18px;
+        padding: 6px;
+    }
 }
 
 // TODO(navigation): Revisit header icon sizing if additional controls are added.
@@ -198,8 +216,8 @@ textarea {
 
 .header-nav a:hover,
 .header-nav a:focus-visible,
-#header-back-button:hover,
-#header-back-button:focus-visible {
+#header-home-button:hover,
+#header-home-button:focus-visible {
     background: #0000000d;
 }
 
