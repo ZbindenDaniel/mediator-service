@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Added shelf label projections for box/item list payloads and updated list rendering to prefer shelf labels with logging when labels are missing.
 - Centralized BoxTag label fallbacks to prefer editable labels with normalization logging and shelf-label formatting only when no label is present, keeping IDs hidden by default across box surfaces.
 - Refreshed item detail removal to reload item payloads after successful withdrawals, with logging for reload failures.
 - Added a mobile overflow guard for the item detail Vorrat table to keep wide columns scrollable on small screens.
@@ -147,6 +148,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Included item reference Suchbegriff terms in search token-hit and exact-match scoring for refs and items to keep query behavior aligned with persisted metadata.
 - Tuned mobile header icon sizing to 30px square tap targets with slightly reduced icon font sizes for small screens.
 - Added Suchbegriff fallback normalization in search queries, logging when empty values fall back to Artikelbeschreibung or Artikel_Nummer while keeping token-hit and exact-match scoring aligned.
+- Updated item detail instance filtering to default missing stock to 1 for Stück rows while logging before/after counts for the Vorrat table.
 
 ## Documentation Map
 

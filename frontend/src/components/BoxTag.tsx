@@ -32,17 +32,18 @@ function resolveFallbackLabel(locationKey: string): string {
   }
 
   try {
-    return formatShelfLabel(locationKey) ?? locationKey;
+    return formatShelfLabel(locationKey) ?? '';
   } catch (error) {
     logError('Failed to format fallback shelf label for box tag', error, { locationKey });
-    return locationKey;
+    return '';
   }
 }
 
 export default function BoxTag({ locationKey, labelOverride, className, showId = false }: BoxTagProps) {
   const normalizedLocation = normalizeTagValue(locationKey, 'box location');
   const normalizedLabel = normalizeTagValue(labelOverride, 'box label override');
-  const displayLabel = normalizedLabel || resolveFallbackLabel(normalizedLocation);
+  const fallbackLabel = resolveFallbackLabel(normalizedLocation);
+  const displayLabel = normalizedLabel || fallbackLabel || (showId ? normalizedLocation : '');
 
   if (!displayLabel) {
     logger.warn('Missing box location', { locationKey });
