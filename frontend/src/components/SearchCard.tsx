@@ -6,6 +6,7 @@ import BoxTag from './BoxTag';
 // TODO(agent): Double-check that the simplified BoxTag output matches the search results layout expectations.
 // TODO(navigation): Review header navigation labels before adding new search shortcuts here.
 // TODO(deep-search): Add an explicit deep-search toggle to this card when UX copy is ready.
+// TODO(agent): Confirm box search rows still prefer label overrides over IDs once API fields expand.
 
 type SearchResult =
   | { type: 'box'; id: string; locationId?: string | null; label?: string | null }

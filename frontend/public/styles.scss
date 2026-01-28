@@ -464,6 +464,10 @@ div {
     width: 100%;
 }
 
+.item-detail__stock-table {
+    width: 100%;
+}
+
 .details td {
     padding: 0.25rem 0;
 }
@@ -488,6 +492,14 @@ div {
 
 .details .item-detail__langtext li {
     margin-bottom: 0.25rem;
+}
+
+@media (max-width: 600px) {
+    // TODO(mobile-stock-table): Reconfirm overflow guard once item detail layout is re-reviewed.
+    .item-detail__stock-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 }
 
 .card-header {
