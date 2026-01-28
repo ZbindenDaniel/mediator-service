@@ -7,7 +7,7 @@ export type LabelTemplate = LabelHtmlTemplate;
 // TODO(agent): Validate item label layout before rolling to all printers.
 const BOX_TEMPLATE: LabelTemplate = '62x100';
 const ITEM_TEMPLATE: LabelTemplate = '29x90';
-const ITEM_SMALL_TEMPLATE: LabelTemplate = '62x12';
+const ITEM_SMALL_TEMPLATE: LabelTemplate = '62x10';
 const SHELF_TEMPLATE: LabelTemplate = 'shelf-a4';
 
 let QRCode: any;

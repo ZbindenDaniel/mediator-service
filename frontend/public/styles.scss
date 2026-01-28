@@ -171,6 +171,15 @@ textarea {
     gap: 0.5rem;
 }
 
+// TODO(mobile-header): Confirm small-screen header title hiding matches UX expectations.
+@media (max-width: 600px) {
+    // Mobile-only: hide header title while keeping icons visible.
+    .header #homelink,
+    .header h1 {
+        display: none;
+    }
+}
+
 // TODO(navigation): Revisit header icon sizing if additional controls are added.
 .header-nav a {
     color: var(--fg);
