@@ -47,6 +47,32 @@ Recent alignment: the item edit UI now hides Quality/Auf_Lager inputs while the 
 - Enforce size limits and validate content for uploaded CSV files prior to writing them to disk.
 - Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
 
+## Active Issues: UI polish & workflow fixes (Sept 2025)
+
+Goal: address recent UX regressions and workflow bugs while keeping changes minimal and data contracts aligned. Reason: ensure operators can navigate lists, shelves, and item details cleanly without introducing new structures.
+
+Planned fixes (confirm order before implementation):
+
+1) **Box location labels** – show shelf/box labels (not IDs) in BoxList and other label surfaces that currently prefer raw LocationId. Reason: improve readability for warehouse operators. Files: `frontend/src/components/BoxList.tsx`, `frontend/src/components/BoxTag.tsx`, `frontend/src/components/BoxDetail.tsx`, `frontend/src/components/RecentBoxesCard.tsx`, `frontend/src/components/SearchCard.tsx`.
+
+2) **Item list category filter submit-on-enter** – stage Unterkategorie input and apply only on Enter (like search). Reason: avoid filter churn on every keystroke. Files: `frontend/src/components/ItemListPage.tsx`, `frontend/src/lib/itemListFiltersStorage.ts`.
+
+3) **Item detail Vorrat mobile overflow** – constrain table layout and enable horizontal scroll or stacked cells on small screens. Reason: prevent layout breaks on phones. Files: `frontend/src/components/ItemDetail.tsx`, `frontend/public/styles.scss`.
+
+4) **Mobile header controls** – shrink nav buttons to 30px and replace back arrow with a home button linking to `/`. Reason: improve mobile tap targets and simplify navigation. Files: `frontend/src/components/Header.tsx`, `frontend/public/styles.scss`.
+
+5) **Box detail mobile width** – ensure non-shelf box detail view doesn’t overflow the viewport. Reason: fix mobile layout for boxes. Files: `frontend/src/components/BoxDetail.tsx`, `frontend/public/styles.scss`.
+
+6) **Suchbegriff persistence correctness** – reset agentic search term when item changes so it doesn’t leak between items, while keeping persisted Suchbegriff as the default. Reason: preserve accurate agentic runs. Files: `frontend/src/components/ItemDetail.tsx`, `models/item.ts`, `backend/db.ts`, `backend/actions/save-item.ts`, `backend/actions/import-item.ts`.
+
+7) **Entnehmen reload** – reload item detail after stock removal to refresh instance list and metadata. Reason: keep UI in sync with removal actions. Files: `frontend/src/components/ItemDetail.tsx`.
+
+8) **Hide zero-stock instances in Vorrat table** – filter out instances with Auf_Lager <= 0 in the Vorrat card (but keep direct navigation possible). Reason: avoid showing removed instances in list. Files: `frontend/src/components/ItemDetail.tsx`, `backend/actions/box-detail.ts` (if needed), `backend/db.ts` (only if response filtering is preferred server-side).
+
+9) **Item list selection action bar placement** – render the bulk action bar in place of the filter bar when items are selected. Reason: keep actions visible without adding new layout containers. Files: `frontend/src/components/ItemListPage.tsx`, `frontend/public/styles.scss`.
+
+Note: Add TODOs in touched files before implementation, keep logging and try/catch coverage, and validate data structure changes in `models/` + `backend/db.ts` for Suchbegriff field handling.
+
 ## Risks & Dependencies
 
 - Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.
