@@ -1022,6 +1022,7 @@ SELECT
   i.Auf_Lager AS Auf_Lager,
   CAST(COALESCE(r.Quality, i.Quality) AS INTEGER) AS Quality,
   i.ShopwareVariantId AS ShopwareVariantId,
+  -- TODO(agentic-search-term): Keep Suchbegriff in item selects for detail hydration.
   r.Suchbegriff AS Suchbegriff,
   r.Grafikname AS Grafikname,
   r.ImageNames AS ImageNames,
