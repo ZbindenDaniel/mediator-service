@@ -126,6 +126,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Highlighted the current instance row in the item detail Vorrat table and ensured the table spans the full card width for clearer scanning.
 - Ignored reference/langtext-derived quality during new item imports unless an explicit Quality parameter is provided, with logging when derived values are skipped.
 - Replaced the item label type prompt with a modal selection in the print label button while keeping label type logging.
+- Updated remove-item for non-bulk instances to zero stock and clear placement with new prepared statements and logging for consistent grouping.
 - Replaced the item list Unterkategorie filter select with a datalist-backed input to support typed values while keeping filter normalization and unknown-value logging.
 - Added null-quality grouping fallbacks (Artikelnummer + location) with batch logging to audit missing Quality/Artikelnummer inputs in grouped item responses.
 - Hid the header title link on small screens to keep navigation icons visible in the header.

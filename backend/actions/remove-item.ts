@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
+// TODO(agent): Verify non-bulk removals keep grouping/list views consistent after zeroing stock.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -89,16 +90,24 @@ const action = defineHttpAction({
         }
 
         try {
-          ctx.deleteItem.run(u);
-        } catch (deleteErr) {
-          console.error('[remove-item] Failed to delete item instance', {
+          ctx.zeroItemStock.run(u);
+        } catch (updateErr) {
+          console.error('[remove-item] Failed to zero item stock for instance removal', {
             actor: a,
             itemId: u,
-            quantityDelta: -1,
-            error: deleteErr
+            quantityBefore: currentQty,
+            error: updateErr
           });
-          throw deleteErr;
+          throw updateErr;
         }
+
+        const updated = ctx.getItem.get(u);
+        console.info('[remove-item] Cleared item instance stock', {
+          actor: a,
+          itemId: u,
+          quantityBefore: currentQty,
+          quantityAfter: updated?.Auf_Lager ?? 0
+        });
 
         ctx.logEvent({
           Actor: a,
@@ -107,7 +116,8 @@ const action = defineHttpAction({
           Event: 'Removed',
           Meta: JSON.stringify({
             fromBox: item.BoxID ?? null,
-            quantityDelta: -1,
+            quantityBefore: currentQty,
+            quantityAfter: 0,
             clearedBox: true
           })
         });
@@ -116,7 +126,9 @@ const action = defineHttpAction({
           const correlationId = generateShopwareCorrelationId('remove-item-instance', u);
           const payload = JSON.stringify({
             actor: a,
-            quantityDelta: -1,
+            quantityBefore: currentQty,
+            quantityAfter: 0,
+            clearedBox: true,
             boxId: item.BoxID ?? null,
             itemUUID: u,
             trigger: 'remove-item'
@@ -134,13 +146,17 @@ const action = defineHttpAction({
           });
         }
 
-        return { updated: null, deleted: true };
+        return { updated, deleted: false };
       });
       const result = txn(uuid, actor);
       if (isBulk) {
         console.log('Removed item', uuid, 'new qty', result.updated?.Auf_Lager);
       } else {
-        console.log('Deleted item instance for remove', { actor, itemId: uuid });
+        console.log('Cleared item instance stock for remove', {
+          actor,
+          itemId: uuid,
+          quantityAfter: result.updated?.Auf_Lager ?? 0
+        });
       }
       sendJson(res, 200, {
         ok: true,
