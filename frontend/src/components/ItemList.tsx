@@ -61,6 +61,24 @@ function resolveDisplayCount(group: GroupedItemDisplay): number {
   }
 }
 
+// TODO(agent): Revisit shelf label normalization once shelf labels are editable in list payloads.
+function normalizeLabelValue(
+  value: string | null | undefined,
+  context: string,
+  itemId?: string | null
+): string {
+  if (value == null) {
+    return '';
+  }
+
+  try {
+    return value.trim();
+  } catch (error) {
+    logError(`Failed to normalize ${context}`, error, { value, itemId });
+    return '';
+  }
+}
+
 export default function ItemList({
   items,
   selectedItemIds,
@@ -133,6 +151,7 @@ export default function ItemList({
               .filter((itemId): itemId is string => Boolean(itemId));
             let boxId: string | undefined;
             let shelfId: string | undefined;
+            let shelfLabel: string | undefined;
 
             try {
               if (typeof group.summary.BoxID === 'string') {
@@ -167,6 +186,17 @@ export default function ItemList({
               logError('Failed to normalize item Location', error, {
                 itemId: group.summary.representativeItemId,
                 location: group.summary.Location ?? representative?.Location
+              });
+            }
+
+            const rawShelfLabel = typeof group.summary.ShelfLabel === 'string'
+              ? group.summary.ShelfLabel
+              : (typeof representative?.ShelfLabel === 'string' ? representative.ShelfLabel : null);
+            shelfLabel = normalizeLabelValue(rawShelfLabel, 'item shelf label', group.summary.representativeItemId);
+            if (shelfId && !shelfLabel) {
+              logger.warn('Missing shelf label for item list row', {
+                itemId: group.summary.representativeItemId,
+                shelfId
               });
             }
 
@@ -252,7 +282,7 @@ export default function ItemList({
                 <td className="col-location">
                   {shelfId && shelfLinkTarget ? (
                     <Link to={shelfLinkTarget}>
-                      <BoxTag locationKey={shelfId} labelOverride={null} />
+                      <BoxTag locationKey={shelfId} labelOverride={shelfLabel || null} />
                     </Link>
                   ) : (
                     <span>—</span>

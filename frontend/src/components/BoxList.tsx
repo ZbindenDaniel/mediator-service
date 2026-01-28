@@ -2,7 +2,7 @@ import React, { ChangeEvent, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Box } from '../../../models/box';
 import { formatDate } from '../lib/format';
-import { logError } from '../utils/logger';
+import { logError, logger } from '../utils/logger';
 import BoxTag from './BoxTag';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
@@ -26,6 +26,7 @@ const SORT_LABELS: Record<BoxSortKey, string> = {
   UpdatedAt: 'Zuletzt aktualisiert',
 };
 
+// TODO(agent): Revisit shelf label normalization once shelf labels are editable.
 function normalizeLabelValue(
   value: string | null | undefined,
   context: string,
@@ -128,8 +129,16 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
           {safeBoxes.map((box) => {
             try {
               const normalizedLabel = normalizeLabelValue(box.Label, 'box label', box.BoxID);
-              const rowLabel = normalizedLabel
-                ? `Details für Box ${box.BoxID} in ${normalizedLabel} öffnen`
+              const normalizedShelfLabel = normalizeLabelValue(box.ShelfLabel, 'box shelf label', box.BoxID);
+              if (box.LocationId && !normalizedShelfLabel) {
+                logger.warn('Missing shelf label for box list row', {
+                  boxId: box.BoxID,
+                  locationId: box.LocationId
+                });
+              }
+              const rowLabelLabel = normalizedShelfLabel || normalizedLabel;
+              const rowLabel = rowLabelLabel
+                ? `Details für Box ${box.BoxID} in ${rowLabelLabel} öffnen`
                 : `Details für Box ${box.BoxID} öffnen`;
               return (
                 <tr
@@ -160,7 +169,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                   <td className="col-location">
                     <BoxTag
                       locationKey={box.LocationId}
-                      labelOverride={box.Label}
+                      labelOverride={normalizedShelfLabel || null}
                     />
                   </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>

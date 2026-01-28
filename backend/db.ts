@@ -805,8 +805,10 @@ const ITEM_JOIN_BASE = `
 ensureItemTables(db);
 ensureItemImageNamesColumn(db);
 ensureItemSearchTermColumn(db);
+// TODO(agent): Keep shelf label joins aligned with box list payloads for location rendering.
 const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
   LEFT JOIN boxes b ON i.BoxID = b.BoxID
+  LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
 `;
 
 function ensureItemShopwareColumns(database: Database.Database = db): void {
@@ -1017,6 +1019,7 @@ SELECT
   i.Artikel_Nummer AS Artikel_Nummer,
   i.BoxID AS BoxID,
   ${locationExpr} AS Location,
+  shelf.Label AS ShelfLabel,
   i.UpdatedAt AS UpdatedAt,
   i.Datum_erfasst AS Datum_erfasst,
   i.Auf_Lager AS Auf_Lager,
@@ -1384,9 +1387,25 @@ export function resolveCanonicalItemUUIDForArtikelnummer(
   return { itemUUID: null, usedFallback: false };
 }
 // TODO(agent): Revisit list box queries once typed/location filters are stabilized for UI consumers.
-const listBoxesStatement = db.prepare(`SELECT * FROM boxes ORDER BY BoxID`);
+// TODO(agent): Confirm shelf label projection stays aligned with BoxList rendering.
+const listBoxesStatement = db.prepare(`
+  SELECT
+    b.*,
+    shelf.Label AS ShelfLabel
+  FROM boxes b
+  LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
+  ORDER BY b.BoxID
+`);
 const listBoxesByTypeStatement = db.prepare(
-  `SELECT * FROM boxes WHERE SUBSTR(BoxID, 1, 1) = @type ORDER BY BoxID`
+  `
+    SELECT
+      b.*,
+      shelf.Label AS ShelfLabel
+    FROM boxes b
+    LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
+    WHERE SUBSTR(b.BoxID, 1, 1) = @type
+    ORDER BY b.BoxID
+  `
 );
 
 export interface ListBoxesHelper {
@@ -2581,6 +2600,7 @@ SELECT
   COALESCE(NULLIF(r.Artikel_Nummer, ''), i.ItemUUID) AS Artikel_Nummer,
   i.BoxID AS BoxID,
   ${LOCATION_WITH_BOX_FALLBACK} AS Location,
+  shelf.Label AS ShelfLabel,
   i.UpdatedAt AS UpdatedAt,
   i.Datum_erfasst AS Datum_erfasst,
   i.Auf_Lager AS Auf_Lager,
@@ -2611,6 +2631,7 @@ SELECT
 FROM item_refs r
 LEFT JOIN items i ON i.Artikel_Nummer = r.Artikel_Nummer
 LEFT JOIN boxes b ON i.BoxID = b.BoxID
+LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
 LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
 WHERE (
   i.ItemUUID IS NULL

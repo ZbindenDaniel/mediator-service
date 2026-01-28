@@ -96,6 +96,11 @@ function resolveLocation(item: Item): { boxId: string | null; location: string |
   return { boxId: null, location: normalizeString(item.Location) };
 }
 
+// TODO(agent): Revisit shelf label normalization when shelf labels are editable via UI flows.
+function resolveShelfLabel(item: Item): string | null {
+  return normalizeString(item.ShelfLabel);
+}
+
 function resolveStock(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -256,6 +261,7 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
         const artikelNumber = normalizeString(item.Artikel_Nummer);
         const quality = normalizeQuality(item.Quality);
         const { boxId, location } = resolveLocation(item);
+        const shelfLabel = resolveShelfLabel(item);
         const category = resolveCategory(item);
         const quantityData = resolveItemQuantity(item, logContext);
         const bulkGroupingToken = quantityData.isBulk ? resolveBulkGroupingToken(item, logContext, index) : null;
@@ -344,6 +350,9 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
           if (item.ItemUUID && (canonicalInstance || !existing.summary.representativeItemId)) {
             existing.summary.representativeItemId = item.ItemUUID;
           }
+          if (!existing.summary.ShelfLabel && shelfLabel) {
+            existing.summary.ShelfLabel = shelfLabel;
+          }
           if (canonicalInstance || !existing.representative) {
             existing.representative = item;
           }
@@ -357,6 +366,7 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
             Quality: quality,
             BoxID: boxId,
             Location: location,
+            ShelfLabel: shelfLabel ?? undefined,
             Category: category ?? undefined,
             count: 1,
             representativeItemId: item.ItemUUID ?? null

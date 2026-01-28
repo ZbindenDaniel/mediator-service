@@ -49,6 +49,8 @@ export interface ItemInstance {
   Artikel_Nummer?: string | null;
   BoxID: string | null;
   Location?: string | null;
+  // TODO(agent): Confirm ShelfLabel is provided for list responses once shelf joins ship everywhere.
+  ShelfLabel?: string | null;
   UpdatedAt: Date;
   Datum_erfasst?: Date;
   // For Einheit Stk this should be 1 per instance; grouped UI summaries rely on instance counts instead of Auf_Lager.
@@ -109,6 +111,7 @@ export interface GroupedItemSummary {
   Quality: QualityValue;
   BoxID: string | null;
   Location: string | null;
+  ShelfLabel?: string | null;
   Category?: string | null;
   count: number;
   representativeItemId: string | null;

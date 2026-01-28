@@ -2,8 +2,10 @@ export interface Box {
   // BoxID format: boxes use B-DDMMYY-####, shelves use S-<location>-<floor>-<category>-<index>.
   BoxID: string;
   // TODO(agent): Validate LocationId/Label naming alignment once downstream clients migrate off legacy Standort mappings.
+  // TODO(agent): Confirm ShelfLabel stays aligned with shelf label joins for list endpoints.
   LocationId?: string | null;
   Label?: string | null;
+  ShelfLabel?: string | null;
   CreatedAt?: string | null;
   Notes?: string | null;
   PlacedBy?: string | null;
