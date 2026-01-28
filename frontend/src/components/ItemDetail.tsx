@@ -1178,6 +1178,7 @@ export default function ItemDetail({ itemId }: Props) {
   }, [detailRows]);
 
   // TODO(agent): Validate Behälter column rendering in the Vorrat table once UI review confirms linking rules.
+  // TODO(agent): Confirm detail view should surface zero-stock instances returned by item detail payloads.
   const instanceRows = useMemo(() => {
     try {
       return instances.map((instance) => {
