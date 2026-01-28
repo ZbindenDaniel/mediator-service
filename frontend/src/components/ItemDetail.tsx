@@ -1169,9 +1169,65 @@ export default function ItemDetail({ itemId }: Props) {
   }, [detailRows]);
 
   // TODO(agent): Validate Behälter column rendering in the Vorrat table once UI review confirms linking rules.
+  // TODO(agent): Confirm instance stock filtering stays aligned with instance payload contract updates.
+  const { filteredInstances, skippedInstanceCount } = useMemo(() => {
+    try {
+      let skippedCount = 0;
+      const visibleInstances = instances.filter((instance) => {
+        const rawStock = instance.Auf_Lager;
+        const parsedStock =
+          typeof rawStock === 'number'
+            ? rawStock
+            : typeof rawStock === 'string'
+              ? Number(rawStock)
+              : null;
+        const stockValue = Number.isNaN(parsedStock ?? NaN) ? null : parsedStock;
+        if (typeof stockValue === 'number' && stockValue > 0) {
+          return true;
+        }
+        skippedCount += 1;
+        return false;
+      });
+      return { filteredInstances: visibleInstances, skippedInstanceCount: skippedCount };
+    } catch (error) {
+      logError('ItemDetail: Failed to filter instance rows for Vorrat table', error, {
+        itemId,
+        instanceCount: instances.length
+      });
+      return { filteredInstances: instances, skippedInstanceCount: 0 };
+    }
+  }, [instances, itemId]);
+
+  const skippedInstanceLogRef = useRef<{ itemId: string; skipped: number; total: number } | null>(null);
+
+  useEffect(() => {
+    if (skippedInstanceCount <= 0) {
+      return;
+    }
+    const lastLog = skippedInstanceLogRef.current;
+    if (
+      lastLog
+      && lastLog.itemId === itemId
+      && lastLog.skipped === skippedInstanceCount
+      && lastLog.total === instances.length
+    ) {
+      return;
+    }
+    logger.info?.('ItemDetail: Skipped out-of-stock instances in Vorrat table', {
+      itemId,
+      skippedCount: skippedInstanceCount,
+      totalInstances: instances.length
+    });
+    skippedInstanceLogRef.current = {
+      itemId,
+      skipped: skippedInstanceCount,
+      total: instances.length
+    };
+  }, [itemId, instances.length, skippedInstanceCount]);
+
   const instanceRows = useMemo(() => {
     try {
-      return instances.map((instance) => {
+      return filteredInstances.map((instance) => {
         const qualityValue = typeof instance.Quality === 'number' ? instance.Quality : null;
         const rawBoxId = typeof instance.BoxID === 'string' ? instance.BoxID.trim() : '';
         if (!rawBoxId) {
@@ -1194,11 +1250,11 @@ export default function ItemDetail({ itemId }: Props) {
     } catch (error) {
       logError('ItemDetail: Failed to map instance rows for Vorrat table', error, {
         itemId,
-        instanceCount: instances.length
+        instanceCount: filteredInstances.length
       });
       return [];
     }
-  }, [instances, itemId]);
+  }, [filteredInstances, itemId]);
 
   const latestAgenticReviewNote = useMemo(() => {
     let latestNote: string | null = null;
@@ -1340,14 +1396,23 @@ export default function ItemDetail({ itemId }: Props) {
           const rawAgenticStatus = (entry as ItemInstanceSummary)?.AgenticStatus;
           const parsedAgenticStatus =
             typeof rawAgenticStatus === 'string'
-              && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
-              ? rawAgenticStatus
-              : null;
+            && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
+            ? rawAgenticStatus
+            : null;
+          const rawStock = (entry as ItemInstanceSummary)?.Auf_Lager;
+          const parsedStock =
+            typeof rawStock === 'number'
+              ? rawStock
+              : typeof rawStock === 'string'
+                ? Number(rawStock)
+                : null;
+          const normalizedStock = Number.isNaN(parsedStock ?? NaN) ? null : parsedStock;
 
           normalized.push({
             ItemUUID: itemUUID,
             AgenticStatus: parsedAgenticStatus,
             Quality: Number.isNaN(parsedQuality ?? NaN) ? null : parsedQuality,
+            Auf_Lager: normalizedStock,
             Location: (entry as ItemInstanceSummary)?.Location ?? null,
             BoxID: (entry as ItemInstanceSummary)?.BoxID ?? null,
             UpdatedAt: (entry as ItemInstanceSummary)?.UpdatedAt ?? null,
