@@ -69,6 +69,7 @@ export interface ItemRef {
   Artikel_Nummer: string;
   // TODO(agentic-search-term): Confirm Suchbegriff defaults stay aligned with agentic search workflows.
   // TODO(agentic-search-term): Revisit Suchbegriff persistence expectations after UI hydration changes.
+  // TODO(search-suchbegriff): Keep Suchbegriff included in search projections/scoring when queries change.
   Suchbegriff?: string;
   Grafikname?: string;
   ImageNames?: string | null;
