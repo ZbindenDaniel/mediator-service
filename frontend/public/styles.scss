@@ -1077,6 +1077,8 @@ button:focus {
     gap: 12px;
     // position: sticky;
     // top: 60vh;
+    // TODO(bulk-bar-spacing): Reconfirm spacing matches filter bar when swapping list controls.
+    margin-bottom: 10px;
 
 }
 

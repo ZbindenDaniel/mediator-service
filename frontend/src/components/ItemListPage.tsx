@@ -566,41 +566,100 @@ export default function ItemListPage() {
     visibleIds.some((id) => selectedIds.has(id))
   ), [selectedIds, visibleIds]);
 
+  // TODO(bulk-filter-toggle): Verify spacing when bulk action bar replaces filter controls.
   const handleToggleItem = useCallback((itemIds: string[], nextValue: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      itemIds.forEach((itemId) => {
-        if (!itemId) {
-          return;
+    try {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        let changed = 0;
+        itemIds.forEach((itemId) => {
+          if (!itemId) {
+            return;
+          }
+          if (nextValue) {
+            if (!next.has(itemId)) {
+              next.add(itemId);
+              changed += 1;
+            }
+          } else if (next.delete(itemId)) {
+            changed += 1;
+          }
+        });
+        if (changed) {
+          logger.info?.('Item selection updated', {
+            action: nextValue ? 'select' : 'deselect',
+            changed,
+            total: next.size
+          });
         }
-        if (nextValue) {
-          next.add(itemId);
-        } else {
-          next.delete(itemId);
-        }
+        return next;
       });
-      return next;
-    });
+    } catch (error) {
+      logError('Failed to toggle item selection', error, {
+        itemCount: itemIds.length,
+        nextValue
+      });
+    }
   }, []);
 
   const handleToggleAll = useCallback((nextValue: boolean) => {
-    setSelectedIds((prev) => {
-      if (!nextValue) {
-        if (!prev.size) {
-          return prev;
+    try {
+      setSelectedIds((prev) => {
+        if (!nextValue) {
+          if (!prev.size) {
+            return prev;
+          }
+          const next = new Set(prev);
+          let removed = 0;
+          visibleIds.forEach((id) => {
+            if (next.delete(id)) {
+              removed += 1;
+            }
+          });
+          if (removed) {
+            logger.info?.('Cleared visible item selection', {
+              removed,
+              total: next.size
+            });
+          }
+          return next;
         }
         const next = new Set(prev);
-        visibleIds.forEach((id) => next.delete(id));
+        let added = 0;
+        visibleIds.forEach((id) => {
+          if (!next.has(id)) {
+            next.add(id);
+            added += 1;
+          }
+        });
+        if (added) {
+          logger.info?.('Selected all visible items', {
+            added,
+            total: next.size
+          });
+        }
         return next;
-      }
-      const next = new Set(prev);
-      visibleIds.forEach((id) => next.add(id));
-      return next;
-    });
+      });
+    } catch (error) {
+      logError('Failed to toggle all visible item selections', error, {
+        nextValue,
+        visibleCount: visibleIds.length
+      });
+    }
   }, [visibleIds]);
 
   const handleClearSelection = useCallback(() => {
-    setSelectedIds(new Set());
+    try {
+      setSelectedIds((prev) => {
+        if (!prev.size) {
+          return prev;
+        }
+        logger.info?.('Cleared item selection', { previousCount: prev.size });
+        return new Set();
+      });
+    } catch (error) {
+      logError('Failed to clear item selection', error);
+    }
   }, []);
 
   const selectedItems = useMemo(() => {
@@ -631,195 +690,6 @@ export default function ItemListPage() {
     <div className="list-container item">
       <h2>Alle Artikel</h2>
       {/* TODO(filter-panel-layout): Confirm filter panel sizing in CSS after grid wrapper update. */}
-      <div className="filter-bar">
-        <div className="filter-grid row">
-          <div className="filter-panel filter-panel--primary col-12 col-lg-6">
-            <div className="filter-grid">
-              <div className="filter-grid__item">
-                <label className="sort-control sort-control--box">
-                  <span>Artikelname</span>
-                  <div className="sort-control__input">
-                    <GoSearch aria-hidden="true" />
-                    <input
-                      aria-label="Artikel suchen"
-                      id="item-list-search"
-                      onChange={handleSearchInputChange}
-                      onKeyDown={handleSearchInputKeyDown}
-                      placeholder="Beschreibung oder Nummer"
-                      type="search"
-                      value={searchInput}
-                      autoFocus
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="sort-control">
-                  <span>Sortieren nach</span>
-                  <select
-                    aria-label="Sortierkriterium wählen"
-                    onChange={(event) => setSortKey(event.target.value as ItemListSortKey)}
-                    value={sortKey}
-                  >
-                    <option value="artikelbeschreibung">Artikel</option>
-                    <option value="artikelnummer">Artikelnummer</option>
-                    <option value="box">Behälter</option>
-                    <option value="entryDate">Erfasst am</option>
-                    <option value="agenticStatus">Ki-Status</option>
-                    <option value="quality">Qualität</option>
-                    <option value="uuid">UUID</option>
-                    <option value="stock">Bestand</option>
-                    <option value="subcategory">Unterkategorie</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="sort-direction-control">
-                  <span>Reihenfolge</span>
-                  <select
-                    aria-label="Sortierreihenfolge"
-                    onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
-                    value={sortDirection}
-                  >
-                    <option value="asc">Aufsteigend</option>
-                    <option value="desc">Absteigend</option>
-                  </select>
-                </label>
-              </div>
-
-              {/* <div className="filter-grid__item">
-                <label className="sort-control sort-control--box">
-                  <span>Behälter</span>
-                  <div className="sort-control__input">
-                    <GoContainer aria-hidden="true" />
-                    <input
-                      aria-label="Behälter filtern"
-                      onChange={(event) => setBoxFilter(event.target.value)}
-                      placeholder="Box-ID oder Standort"
-                      type="search"
-                      value={boxFilter}
-                    />
-                  </div>
-                </label>
-              </div> */}
-            </div>
-          </div>
-
-          <div className="filter-panel filter-panel--secondary col-12 col-lg-6">
-            <div className="filter-grid">
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Unterkategorie</span>
-                  <input
-                    aria-label="Unterkategorie filtern"
-                    list="subcategory-filter-options"
-                    onBlur={handleSubcategoryInputBlur}
-                    onChange={handleSubcategoryInputChange}
-                    placeholder="Alle"
-                    type="search"
-                    value={subcategoryFilter}
-                  />
-                  <datalist id="subcategory-filter-options">
-                    {subcategorySelectOptions.map((option) => (
-                      <option
-                        key={`${option.categoryLabel}-${option.value}`}
-                        label={option.label}
-                        value={option.value}
-                      />
-                    ))}
-                  </datalist>
-                </label>
-              </div>
-              {/* <div className='row'>
-            <label className="filter-control">
-              <span>Bestand</span>
-              <select
-                aria-label="Bestandsstatus filtern"
-                onChange={(event) => setStockFilter(event.target.value as typeof stockFilter)}
-                value={stockFilter}
-              >
-                <option value="any">Alle</option>
-                <option value="instock">Auf Lager</option>
-                <option value="outofstock">Nicht auf Lager</option>
-              </select>
-            </label>
-          </div> */}
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Ki-Status</span>
-                  <select
-                    aria-label="Ki-Status filtern"
-                    onChange={(event) => handleAgenticStatusFilterChange(event.target.value)}
-                    value={agenticStatusFilter}
-                  >
-                    {agenticStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
-                  <input
-                    type="range"
-                    min={QUALITY_MIN}
-                    max={5}
-                    step={1}
-                    value={qualityThreshold}
-                    onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console) ?? QUALITY_MIN)}
-                    aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
-                  />
-                  {/* <div className="quality-slider__labels">
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <span key={`filter-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
-                ))}
-              </div> */}
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Typ</span>
-                  <select
-                    aria-label="Instanzen oder Referenzen anzeigen"
-                    onChange={(event) => setEntityFilter(event.target.value as ItemListFilters['entityFilter'])}
-                    value={entityFilter}
-                  >
-                    <option value="all">Alle</option>
-                    <option value="instances">Instanzen</option>
-                    <option value="references">Referenzen</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="unplaced-filter" htmlFor="unplaced">
-                  <span>unplatziert</span>
-                  <input
-                    checked={showUnplaced}
-                    id="unplaced"
-                    name="unplaced"
-                    onChange={(event) => setShowUnplaced(event.target.checked)}
-                    type="checkbox"
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {error ? (
-        <div aria-live="assertive" className="alert alert-error" role="alert">
-          {error}
-        </div>
-      ) : null}
-      {isRefreshing ? (
-        <p className="muted" data-testid="item-list-refresh-status">Aktualisiere Liste…</p>
-      ) : null}
       {selectedIds.size ? (
         <BulkItemActionBar
           onActionComplete={() => loadItems({ silent: true })}
@@ -827,6 +697,196 @@ export default function ItemListPage() {
           selectedItems={selectedItems}
           selectedIds={Array.from(selectedIds)}
         />
+      ) : (
+        <div className="filter-bar">
+          <div className="filter-grid row">
+            <div className="filter-panel filter-panel--primary col-12 col-lg-6">
+              <div className="filter-grid">
+                <div className="filter-grid__item">
+                  <label className="sort-control sort-control--box">
+                    <span>Artikelname</span>
+                    <div className="sort-control__input">
+                      <GoSearch aria-hidden="true" />
+                      <input
+                        aria-label="Artikel suchen"
+                        id="item-list-search"
+                        onChange={handleSearchInputChange}
+                        onKeyDown={handleSearchInputKeyDown}
+                        placeholder="Beschreibung oder Nummer"
+                        type="search"
+                        value={searchInput}
+                        autoFocus
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="filter-grid__item">
+                  <label className="sort-control">
+                    <span>Sortieren nach</span>
+                    <select
+                      aria-label="Sortierkriterium wählen"
+                      onChange={(event) => setSortKey(event.target.value as ItemListSortKey)}
+                      value={sortKey}
+                    >
+                      <option value="artikelbeschreibung">Artikel</option>
+                      <option value="artikelnummer">Artikelnummer</option>
+                      <option value="box">Behälter</option>
+                      <option value="entryDate">Erfasst am</option>
+                      <option value="agenticStatus">Ki-Status</option>
+                      <option value="quality">Qualität</option>
+                      <option value="uuid">UUID</option>
+                      <option value="stock">Bestand</option>
+                      <option value="subcategory">Unterkategorie</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="filter-grid__item">
+                  <label className="sort-direction-control">
+                    <span>Reihenfolge</span>
+                    <select
+                      aria-label="Sortierreihenfolge"
+                      onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
+                      value={sortDirection}
+                    >
+                      <option value="asc">Aufsteigend</option>
+                      <option value="desc">Absteigend</option>
+                    </select>
+                  </label>
+                </div>
+
+                {/* <div className="filter-grid__item">
+                  <label className="sort-control sort-control--box">
+                    <span>Behälter</span>
+                    <div className="sort-control__input">
+                      <GoContainer aria-hidden="true" />
+                      <input
+                        aria-label="Behälter filtern"
+                        onChange={(event) => setBoxFilter(event.target.value)}
+                        placeholder="Box-ID oder Standort"
+                        type="search"
+                        value={boxFilter}
+                      />
+                    </div>
+                  </label>
+                </div> */}
+              </div>
+            </div>
+
+            <div className="filter-panel filter-panel--secondary col-12 col-lg-6">
+              <div className="filter-grid">
+                <div className="filter-grid__item">
+                  <label className="filter-control">
+                    <span>Unterkategorie</span>
+                    <input
+                      aria-label="Unterkategorie filtern"
+                      list="subcategory-filter-options"
+                      onBlur={handleSubcategoryInputBlur}
+                      onChange={handleSubcategoryInputChange}
+                      placeholder="Alle"
+                      type="search"
+                      value={subcategoryFilter}
+                    />
+                    <datalist id="subcategory-filter-options">
+                      {subcategorySelectOptions.map((option) => (
+                        <option
+                          key={`${option.categoryLabel}-${option.value}`}
+                          label={option.label}
+                          value={option.value}
+                        />
+                      ))}
+                    </datalist>
+                  </label>
+                </div>
+                {/* <div className='row'>
+              <label className="filter-control">
+                <span>Bestand</span>
+                <select
+                  aria-label="Bestandsstatus filtern"
+                  onChange={(event) => setStockFilter(event.target.value as typeof stockFilter)}
+                  value={stockFilter}
+                >
+                  <option value="any">Alle</option>
+                  <option value="instock">Auf Lager</option>
+                  <option value="outofstock">Nicht auf Lager</option>
+                </select>
+              </label>
+            </div> */}
+                <div className="filter-grid__item">
+                  <label className="filter-control">
+                    <span>Ki-Status</span>
+                    <select
+                      aria-label="Ki-Status filtern"
+                      onChange={(event) => handleAgenticStatusFilterChange(event.target.value)}
+                      value={agenticStatusFilter}
+                    >
+                      {agenticStatusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="filter-grid__item">
+                  <label className="filter-control">
+                    <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
+                    <input
+                      type="range"
+                      min={QUALITY_MIN}
+                      max={5}
+                      step={1}
+                      value={qualityThreshold}
+                      onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console) ?? QUALITY_MIN)}
+                      aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
+                    />
+                    {/* <div className="quality-slider__labels">
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <span key={`filter-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
+                  ))}
+                </div> */}
+                  </label>
+                </div>
+
+                <div className="filter-grid__item">
+                  <label className="filter-control">
+                    <span>Typ</span>
+                    <select
+                      aria-label="Instanzen oder Referenzen anzeigen"
+                      onChange={(event) => setEntityFilter(event.target.value as ItemListFilters['entityFilter'])}
+                      value={entityFilter}
+                    >
+                      <option value="all">Alle</option>
+                      <option value="instances">Instanzen</option>
+                      <option value="references">Referenzen</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="filter-grid__item">
+                  <label className="unplaced-filter" htmlFor="unplaced">
+                    <span>unplatziert</span>
+                    <input
+                      checked={showUnplaced}
+                      id="unplaced"
+                      name="unplaced"
+                      onChange={(event) => setShowUnplaced(event.target.checked)}
+                      type="checkbox"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {error ? (
+        <div aria-live="assertive" className="alert alert-error" role="alert">
+          {error}
+        </div>
+      ) : null}
+      {isRefreshing ? (
+        <p className="muted" data-testid="item-list-refresh-status">Aktualisiere Liste…</p>
       ) : null}
       <ItemList
         allVisibleSelected={allVisibleSelected}
