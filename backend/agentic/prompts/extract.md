@@ -8,13 +8,14 @@
   - Consider the user's original item input and existing target values before deciding whether any fields need new searches.
 </task>
 <rules>
+  <!-- TODO(spezifikationen-prompt): Confirm Spezifikationen wording stays aligned with schema key naming. -->
   - always format the response exactly as defined in the 'output_format' tags
-  - Use only schema-approved keys; introduce additional fields only on the 'langtext' field.
+  - Use only schema-approved keys; introduce additional fields only on the Spezifikationen field.
   - When a required field is unknown, insert a placeholder such as an empty string instead of omitting the key.
   - Field expectations:
     - Artikelbeschreibung: Use the product name exactly as stated in the sources. Often times an incomplete or misleading name comes in. It is your responsibility to correct it to a meaningfull product name.
     - Kurzbeschreibung: Supply a single concise paragraph summarising the item; embed bullet points only when they clarify the summary.
-    - Langtext: **Must** be a JSON object containing only hardware specs. Use descriptive keys (e.g., "RAM", "DPI", "Stromversorgung", "Erscheinungsjahr") mapped to string values or arrays of strings.
+    - Spezifikationen: **Must** be a JSON object containing only hardware specs. Use descriptive keys (e.g., "RAM", "DPI", "Stromversorgung", "Erscheinungsjahr") mapped to string values or arrays of strings.
     - Verkaufspreis, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg, Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B: Extract numeric values when the source provides them; otherwise leave the schema defaults untouched.
     - Hersteller: Copy directly from the source material or keep the supplied value when no evidence is available.
     - reviewNotes: Do not alter reviewer-provided content; treat it as guidance for your extraction.
@@ -45,7 +46,7 @@ Output:
 
 <think> The search results are quite clearly talking about a graphics card.
 The input is already a good short description, allthough I have to translate and shorten it. I try to make a short pregnant paragraph.
-I know it is a graphics card so I list specific information in the Langtext. Things like APIs, Interfaces, connectors and alike.
+I know it is a graphics card so I list specific information in the Spezifikationen. Things like APIs, Interfaces, connectors and alike.
 It seems like there is plenty of information regarding this product so I do not need additional queries for now.
 </think>
 
@@ -80,7 +81,7 @@ Output:
 <think> The search results are quite clearly talking about a harddrive due to the mentions of Speicherplatz. It seems to be a SATA Harddrive made by Toshiba. 
 '661697‑001' seems to be the actual product name so i will use it for the Artikelbeschreibung.
 The input is already a good short description, I will shorten it a bit but use it more or less. I try to make a short pregnant paragraph.
-I know It is a harddrive so I list harddrive specific information in the Langtext. Things like Capacity, Interfaces and alike.
+I know It is a harddrive so I list harddrive specific information in the Spezifikationen. Things like Capacity, Interfaces and alike.
 I do not see any Information regarding the physical dimensions so I will add this as an additional query to the output...
 </think>
 
