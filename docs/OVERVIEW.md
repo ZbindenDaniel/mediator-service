@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Filtered item list queries to hide zero-stock instances while keeping reference-only listings intact and logged list filtering activation.
+- Added a persisted Suchbegriff search term on item references to seed agentic search defaults and share through item payloads.
 - Added an nginx reverse proxy service with TLS termination, Basic Auth, and rate limiting to protect all ingress traffic while keeping the mediator service unexposed directly.
 - Added `PRINTER_SERVER` to configure the CUPS host used for print dispatches instead of relying on a hard-coded address.
 - Added a configurable print preview directory override and routed preview downloads through it to keep container print paths aligned.
@@ -133,6 +135,8 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Hid the header title link on small screens to keep navigation icons visible in the header.
 - Removed the unconditional touch start/end bindings from the item detail container to prevent global swipe handling by default.
 - Updated UI labels and agentic prompt guidance to surface “Spezifikationen” while keeping the Langtext payload key unchanged for schema compatibility.
+- Added a unified /api/export/data action that can bundle items, boxes, agentic runs, and labeled events into a single archive or JSON payload with filterable query parameters.
+- Added optional shelf label/notes inputs for shelf creation and shelf detail editing while keeping relocation shelf lookups unfiltered by category.
 
 ## Documentation Map
 

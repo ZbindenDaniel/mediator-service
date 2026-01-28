@@ -694,9 +694,10 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
   };
 }
 
+// TODO(agentic-search-term): Verify Suchbegriff fallback ordering once persisted edits are enabled.
 function resolveAgenticSearchTerm(run: AgenticRun | null, item: Item | null): string {
   try {
-    const candidates = [run?.SearchQuery, item?.Artikelbeschreibung, item?.Artikel_Nummer];
+    const candidates = [item?.Suchbegriff, run?.SearchQuery, item?.Artikelbeschreibung, item?.Artikel_Nummer];
     for (const candidate of candidates) {
       if (typeof candidate !== 'string') {
         continue;
@@ -708,7 +709,9 @@ function resolveAgenticSearchTerm(run: AgenticRun | null, item: Item | null): st
       }
     }
   } catch (error) {
-    console.error('Failed to resolve agentic search term', error);
+    logError('ItemDetail: Failed to resolve agentic search term', error, {
+      itemId: item?.ItemUUID ?? null
+    });
   }
 
   return '';
@@ -899,17 +902,31 @@ export default function ItemDetail({ itemId }: Props) {
 
   useEffect(() => {
     try {
+      setAgenticSearchTerm('');
+      setAgenticSearchError(null);
+      logger.info?.('ItemDetail: Reset agentic search term for item change', { itemId });
+    } catch (error) {
+      logError('ItemDetail: Failed to reset agentic search term on item change', error, { itemId });
+    }
+  }, [itemId]);
+
+  useEffect(() => {
+    try {
       const resolved = resolveAgenticSearchTerm(agentic, item);
-      setAgenticSearchTerm((prev) => {
-        if (prev && prev.trim()) {
-          return prev;
+      if (!resolved) {
+        return;
+      }
+      setAgenticSearchTerm((current) => {
+        const trimmed = typeof current === 'string' ? current.trim() : '';
+        if (trimmed) {
+          return current;
         }
         return resolved;
       });
     } catch (error) {
-      console.error('ItemDetail: Failed to sync agentic search term state', error);
+      logError('ItemDetail: Failed to sync agentic search term state', error, { itemId });
     }
-  }, [agentic, item]);
+  }, [agentic, item, itemId]);
 
   // TODO(spezifikationen-ui): Confirm Spezifikationen label copy once UI text review completes.
   const langtextRows = useMemo<[string, React.ReactNode][]>(() => {

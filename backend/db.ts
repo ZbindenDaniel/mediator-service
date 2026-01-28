@@ -334,6 +334,8 @@ function topicFilterExpression(alias?: string): string {
 const CREATE_ITEM_REFS_SQL = `
 CREATE TABLE IF NOT EXISTS item_refs (
   Artikel_Nummer TEXT PRIMARY KEY,
+  -- TODO(agentic-search-term): Backfill Suchbegriff for legacy references when defaults are finalized.
+  Suchbegriff TEXT,
   Grafikname TEXT,
   ImageNames TEXT,
   Artikelbeschreibung TEXT,
@@ -379,18 +381,19 @@ CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
 
 const UPSERT_ITEM_REFERENCE_SQL = `
   INSERT INTO item_refs (
-    Artikel_Nummer, Grafikname, ImageNames, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
+    Artikel_Nummer, Suchbegriff, Grafikname, ImageNames, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
     Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
     Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
     Veröffentlicht_Status, Quality, Shopartikel, Artikeltyp, Einheit, EntityType, ShopwareProductId
   )
   VALUES (
-    @Artikel_Nummer, @Grafikname, @ImageNames, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
+    @Artikel_Nummer, @Suchbegriff, @Grafikname, @ImageNames, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
     @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
     @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
     @Veröffentlicht_Status, @Quality, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @ShopwareProductId
   )
   ON CONFLICT(Artikel_Nummer) DO UPDATE SET
+    Suchbegriff=excluded.Suchbegriff,
     Grafikname=excluded.Grafikname,
     ImageNames=excluded.ImageNames,
     Artikelbeschreibung=excluded.Artikelbeschreibung,
@@ -447,6 +450,7 @@ type ItemInstanceRow = {
 
 type ItemRefRow = {
   Artikel_Nummer: string;
+  Suchbegriff: string | null;
   Grafikname: string | null;
   ImageNames: string | null;
   Artikelbeschreibung: string | null;
@@ -639,6 +643,7 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
   const resolvedQuality = resolveQualityValue((ref as ItemRef & { Quality?: unknown }).Quality, 'prepareRefRow');
   return {
     Artikel_Nummer: artikelNummer,
+    Suchbegriff: asNullableTrimmedString((ref as ItemRef & { Suchbegriff?: string | null }).Suchbegriff),
     Grafikname: asNullableString(ref.Grafikname),
     ImageNames: asNullableString(ref.ImageNames),
     Artikelbeschreibung: asNullableString(ref.Artikelbeschreibung),
@@ -765,6 +770,28 @@ function ensureItemImageNamesColumn(database: Database.Database = db): void {
   }
 }
 
+function ensureItemSearchTermColumn(database: Database.Database = db): void {
+  let refColumns: Array<{ name: string }> = [];
+  try {
+    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect item_refs schema for Suchbegriff column', err);
+    throw err;
+  }
+
+  if (refColumns.some((column) => column.name === 'Suchbegriff')) {
+    return;
+  }
+
+  try {
+    database.prepare('ALTER TABLE item_refs ADD COLUMN Suchbegriff TEXT').run();
+    console.info('[db] Added Suchbegriff column to item_refs');
+  } catch (err) {
+    console.error('Failed to add Suchbegriff column to item_refs', err);
+    throw err;
+  }
+}
+
 const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Label,''))";
 
 const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
@@ -777,6 +804,7 @@ const ITEM_JOIN_BASE = `
 
 ensureItemTables(db);
 ensureItemImageNamesColumn(db);
+ensureItemSearchTermColumn(db);
 const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
   LEFT JOIN boxes b ON i.BoxID = b.BoxID
 `;
@@ -994,6 +1022,7 @@ SELECT
   i.Auf_Lager AS Auf_Lager,
   CAST(COALESCE(r.Quality, i.Quality) AS INTEGER) AS Quality,
   i.ShopwareVariantId AS ShopwareVariantId,
+  r.Suchbegriff AS Suchbegriff,
   r.Grafikname AS Grafikname,
   r.ImageNames AS ImageNames,
   r.Artikelbeschreibung AS Artikelbeschreibung,
@@ -2485,6 +2514,7 @@ const listItemReferencesStatement = db.prepare(`
 
 export const listItemReferences = listItemReferencesStatement;
 
+// TODO(agent): Confirm zero-stock filtering impact on list queries before expanding list usage.
 // TODO(agentic-status-ui): Evaluate whether additional agentic audit fields should be projected once frontend requires them.
 const listItemsStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
@@ -2493,11 +2523,13 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
 ])}
 ${ITEM_JOIN_WITH_BOX}
 LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+WHERE COALESCE(i.Auf_Lager, 0) > 0
 ORDER BY i.ItemUUID
 `);
 
 export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
 
+// TODO(agent): Validate zero-stock filtering for filtered listings once reference-only views are audited.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be included in subcategory filters.
 const listItemsWithFiltersStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
@@ -2506,7 +2538,8 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
 ])}
 ${ITEM_JOIN_WITH_BOX}
 LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
-  WHERE (
+  WHERE COALESCE(i.Auf_Lager, 0) > 0
+AND (
     @searchTerm IS NULL
     OR @searchTerm = ''
     OR LOWER(COALESCE(r.Artikelbeschreibung, '')) LIKE @searchTerm
