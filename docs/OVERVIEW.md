@@ -100,6 +100,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Restored mobile flex stacking for shared grid layouts while keeping landing grids in multi-column mode only at larger breakpoints.
 - Increased the desktop container max-width cap at larger breakpoints to better use wide screens.
 - Updated mobile container sizing to prevent overflow by constraining widths to the viewport.
+- Constrained box detail mobile containers and summary grids to the viewport width with wrapping to avoid overflow on small screens.
 - Added a pre-submit confirmation prompt when creating multiple Stück instances to avoid accidental multi-instance creation.
 - Normalized agentic run handling to resolve canonical ItemUUIDs per Artikelnummer and skip reference-scoped runs when one already exists, with added logging for fallbacks and resolution failures.
 - Reinforced non-bulk import creation to log requested quantities, mint each instance safely, and report final instance counts for multi-quantity imports.
