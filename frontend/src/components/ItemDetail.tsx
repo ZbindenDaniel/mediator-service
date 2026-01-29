@@ -2553,6 +2553,12 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  const resolvedQuantityEinheit = item ? resolveQuantityEinheit(item.Einheit, item.ItemUUID) : null;
+  const isBulkItem = resolvedQuantityEinheit === ItemEinheit.Menge;
+  const isOutOfStock = !!item
+    && !isBulkItem
+    && (typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0) <= 0;
+
   return (
     <div className="container item">
       <div className="grid landing-grid">
@@ -2657,63 +2663,68 @@ export default function ItemDetail({ itemId }: Props) {
                 ) : (
                   <p className="muted">Keine Instanzdaten vorhanden.</p>
                 )}
+                {/* TODO(stock-visibility): Validate out-of-stock messaging for non-bulk withdrawals. */}
                 {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
-                <button type="button" className="btn" onClick={async () => {
-                  let confirmed = false;
-                  const actor = await ensureUser();
-                  if (!actor) {
+                {isOutOfStock ? (
+                  <p className="muted">Instanz nicht mehr eingelagert.</p>
+                ) : (
+                  <button type="button" className="btn" onClick={async () => {
+                    let confirmed = false;
+                    const actor = await ensureUser();
+                    if (!actor) {
+                      try {
+                        await dialogService.alert({
+                          title: 'Aktion nicht möglich',
+                          message: 'Bitte zuerst oben den Benutzer setzen.'
+                        });
+                      } catch (error) {
+                        console.error('Failed to display agentic cancel user alert', error);
+                      }
+                      return;
+                    }
                     try {
-                      await dialogService.alert({
-                        title: 'Aktion nicht möglich',
-                        message: 'Bitte zuerst oben den Benutzer setzen.'
+                      confirmed = await dialogService.confirm({
+                        title: 'Artikel entnehmen',
+                        message: 'Entnehmen?',
+                        confirmLabel: 'Entnehmen',
+                        cancelLabel: 'Abbrechen'
                       });
                     } catch (error) {
-                      console.error('Failed to display agentic cancel user alert', error);
+                      console.error('Failed to confirm inline item removal', error);
+                      return;
                     }
-                    return;
-                  }
-                  try {
-                    confirmed = await dialogService.confirm({
-                      title: 'Artikel entnehmen',
-                      message: 'Entnehmen?',
-                      confirmLabel: 'Entnehmen',
-                      cancelLabel: 'Abbrechen'
-                    });
-                  } catch (error) {
-                    console.error('Failed to confirm inline item removal', error);
-                    return;
-                  }
-                  try {
-                    const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ actor })
-                    });
-                    if (res.ok) {
-                      const j = await res.json();
-                      logger.info?.('Item entnommen', {
-                        itemId: item.ItemUUID,
-                        quantity: j.quantity,
-                        boxId: j.boxId
+                    try {
+                      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ actor })
                       });
-                      try {
-                        await load({ showSpinner: false });
-                      } catch (reloadError) {
-                        logError('ItemDetail: Failed to reload after item removal', reloadError, {
-                          itemId: item.ItemUUID
+                      if (res.ok) {
+                        const j = await res.json();
+                        logger.info?.('Item entnommen', {
+                          itemId: item.ItemUUID,
+                          quantity: j.quantity,
+                          boxId: j.boxId
                         });
+                        try {
+                          await load({ showSpinner: false });
+                        } catch (reloadError) {
+                          logError('ItemDetail: Failed to reload after item removal', reloadError, {
+                            itemId: item.ItemUUID
+                          });
+                        }
+                      } else {
+                        console.error('Failed to remove item', res.status);
                       }
-                    } else {
-                      console.error('Failed to remove item', res.status);
+                    } catch (err) {
+                      console.error('Entnahme fehlgeschlagen', err);
                     }
-                  } catch (err) {
-                    console.error('Entnahme fehlgeschlagen', err);
-                  }
-                }}
-                >
-                  Entnehmen
-                </button>
-                {resolveQuantityEinheit(item.Einheit, item.ItemUUID) === ItemEinheit.Menge ? (
+                  }}
+                  >
+                    Entnehmen
+                  </button>
+                )}
+                {resolvedQuantityEinheit === ItemEinheit.Menge ? (
                   <button type="button" className="btn" onClick={handleAddItem}>
                     Hinzufügen
                   </button>
