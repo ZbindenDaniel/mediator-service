@@ -58,6 +58,7 @@ const action = defineHttpAction({
         mediaFiles: 0,
         message: ''
       };
+      // TODO(csv-import): Confirm media extraction should always short-circuit loop once buffered.
 
       const unzipController = new AbortController();
       const unzipOptions = { signal: unzipController.signal, timeoutMs: 20000 };
@@ -176,7 +177,6 @@ const action = defineHttpAction({
           continue;
         }
 
-        // TODO(csv-import): verify each archive CSV branch exits cleanly after buffering.
         if (/(^|\/)events\.csv$/.test(lowerPath)) {
           try {
             const entryStartedAt = Date.now();
@@ -293,137 +293,132 @@ const action = defineHttpAction({
             const status = isClientZipIssue ? 400 : 500;
             return sendJson(res, status, { error: mediaError instanceof Error ? mediaError.message : 'Failed to extract media.' });
           }
+          continue;
         }
-          }
+      }
 
-          console.info('[csv-import] Completed archive extraction pass', {
-            itemsBuffered: Boolean(itemsBuffer),
-            boxesBuffered: Boolean(boxesBuffer),
-            eventsBuffered: Boolean(eventsBuffer),
-            agenticBuffered: Boolean(agenticRunsBuffer),
-            mediaFiles: uploadContext.mediaFiles,
-            extractionDuration: Date.now() - extractionStartedAt,
+      console.info('[csv-import] Completed archive extraction pass', {
+        itemsBuffered: Boolean(itemsBuffer),
+        boxesBuffered: Boolean(boxesBuffer),
+        eventsBuffered: Boolean(eventsBuffer),
+        agenticBuffered: Boolean(agenticRunsBuffer),
+        mediaFiles: uploadContext.mediaFiles,
+        extractionDuration: Date.now() - extractionStartedAt,
+      });
+
+      if (boxesBuffer) {
+        try {
+          const { count } = await ingestBoxesCsv(boxesBuffer);
+          uploadContext.boxesProcessed = count;
+          if (!itemsBuffer) {
+            console.info('[csv-import] Completed boxes-only archive ingestion', {
+              boxesProcessed: count,
+            });
+            if (!uploadContext.message) {
+              uploadContext.message = `Processed boxes.csv with ${count} row${count === 1 ? '' : 's'}.`;
+            }
+          }
+        } catch (boxesError) {
+          console.error('[csv-import] Failed to ingest boxes.csv from archive', boxesError);
+        }
+      }
+
+      if (eventsBuffer) {
+        try {
+          const { count } = await ingestEventsCsv(eventsBuffer);
+          uploadContext.eventsProcessed = count;
+          if (!itemsBuffer && !boxesBuffer) {
+            console.info('[csv-import] Completed events-only archive ingestion', {
+              eventsProcessed: count,
+            });
+            if (!uploadContext.message) {
+              uploadContext.message = `Processed events.csv with ${count} row${count === 1 ? '' : 's'}.`;
+            }
+          }
+        } catch (eventsError) {
+          console.error('[csv-import] Failed to ingest events.csv from archive', eventsError);
+        }
+      }
+
+      if (agenticRunsBuffer) {
+        try {
+          const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
+          uploadContext.agenticRunsProcessed = count;
+          console.info('[csv-import] Completed agentic_runs.csv ingestion', {
+            rowsProcessed: count,
           });
+        } catch (agenticError) {
+          console.error('[csv-import] Failed to ingest agentic_runs.csv from archive', agenticError);
+        }
+      }
 
-          if (boxesBuffer) {
+      if (itemsBuffer) {
+        const checksum = computeChecksum(itemsBuffer);
+        const duplicate = findArchiveDuplicate(ARCHIVE_DIR, normalizedCsvName, checksum);
+        if (duplicate) {
+          uploadContext.duplicate = true;
+          uploadContext.duplicateReason = duplicate.reason;
+          uploadContext.message = duplicate.reason === 'name'
+            ? `A CSV named ${normalizedCsvName} has already been processed.`
+            : 'An identical CSV payload has already been processed.';
+          console.warn('[csv-import] Refusing duplicate CSV payload in archive', {
+            archiveName,
+            normalizedCsvName,
+            duplicate,
+          });
+        } else {
+          const tmpPath = path.join(ctx.INBOX_DIR, `${Date.now()}_${normalizedCsvName}`);
+          if (zeroStockRequested && typeof ctx?.registerCsvIngestionOptions === 'function') {
             try {
-              const { count } = await ingestBoxesCsv(boxesBuffer);
-              uploadContext.boxesProcessed = count;
-              if (!itemsBuffer) {
-                console.info('[csv-import] Completed boxes-only archive ingestion', {
-                  boxesProcessed: count,
-                });
-                if (!uploadContext.message) {
-                  uploadContext.message = `Processed boxes.csv with ${count} row${count === 1 ? '' : 's'}.`;
-                }
-              }
-            } catch (boxesError) {
-              console.error('[csv-import] Failed to ingest boxes.csv from archive', boxesError);
-            }
-          }
-
-          if (eventsBuffer) {
-            try {
-              const { count } = await ingestEventsCsv(eventsBuffer);
-              uploadContext.eventsProcessed = count;
-              if (!itemsBuffer && !boxesBuffer) {
-                console.info('[csv-import] Completed events-only archive ingestion', {
-                  eventsProcessed: count,
-                });
-                if (!uploadContext.message) {
-                  uploadContext.message = `Processed events.csv with ${count} row${count === 1 ? '' : 's'}.`;
-                }
-              }
-            } catch (eventsError) {
-              console.error('[csv-import] Failed to ingest events.csv from archive', eventsError);
-
-            }
-          }
-
-          if (agenticRunsBuffer) {
-            try {
-              const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
-              uploadContext.agenticRunsProcessed = count;
-              console.info('[csv-import] Completed agentic_runs.csv ingestion', {
-                rowsProcessed: count,
+              ctx.registerCsvIngestionOptions(tmpPath, { zeroStock: true });
+              console.info('[csv-import] Zero stock override requested for uploaded CSV', {
+                filename: normalizedCsvName,
               });
-            } catch (agenticError) {
-              console.error('[csv-import] Failed to ingest agentic_runs.csv from archive', agenticError);
+            } catch (registrationError) {
+              console.error('[csv-import] Failed to register zero stock ingestion option', registrationError);
             }
           }
 
-          if (itemsBuffer) {
-            const checksum = computeChecksum(itemsBuffer);
-            const duplicate = findArchiveDuplicate(ARCHIVE_DIR, normalizedCsvName, checksum);
-            if (duplicate) {
-              uploadContext.duplicate = true;
-              uploadContext.duplicateReason = duplicate.reason;
-              uploadContext.message = duplicate.reason === 'name'
-                ? `A CSV named ${normalizedCsvName} has already been processed.`
-                : 'An identical CSV payload has already been processed.';
-              console.warn('[csv-import] Refusing duplicate CSV payload in archive', {
-                archiveName,
-                normalizedCsvName,
-                duplicate,
-              });
-            } else {
-              const tmpPath = path.join(ctx.INBOX_DIR, `${Date.now()}_${normalizedCsvName}`);
-              if (zeroStockRequested && typeof ctx?.registerCsvIngestionOptions === 'function') {
-                try {
-                  ctx.registerCsvIngestionOptions(tmpPath, { zeroStock: true });
-                  console.info('[csv-import] Zero stock override requested for uploaded CSV', {
-                    filename: normalizedCsvName,
-                  });
-                } catch (registrationError) {
-                  console.error('[csv-import] Failed to register zero stock ingestion option', registrationError);
-                }
-              }
-
+          try {
+            fs.writeFileSync(tmpPath, itemsBuffer);
+            uploadContext.queuedCsv = path.basename(tmpPath);
+            uploadContext.message = `Saved to inbox as ${path.basename(tmpPath)}`;
+          } catch (e) {
+            console.error('CSV write failed', e);
+            if (zeroStockRequested && typeof ctx?.clearCsvIngestionOptions === 'function') {
               try {
-                fs.writeFileSync(tmpPath, itemsBuffer);
-                uploadContext.queuedCsv = path.basename(tmpPath);
-                uploadContext.message = `Saved to inbox as ${path.basename(tmpPath)}`;
-              } catch (e) {
-                console.error('CSV write failed', e);
-                if (zeroStockRequested && typeof ctx?.clearCsvIngestionOptions === 'function') {
-                  try {
-                    ctx.clearCsvIngestionOptions(tmpPath);
-                  } catch (cleanupError) {
-                    console.error('[csv-import] Failed to clear zero stock ingestion option after write error', cleanupError);
-                  }
-                }
-                return sendJson(res, 500, { error: (e as Error).message });
+                ctx.clearCsvIngestionOptions(tmpPath);
+              } catch (cleanupError) {
+                console.error('[csv-import] Failed to clear zero stock ingestion option after write error', cleanupError);
               }
             }
-          }
-
-          if (!itemsBuffer && !boxesBuffer && !eventsBuffer && uploadContext.mediaFiles === 0) {
-            return sendJson(res, 400, { error: 'The ZIP archive did not include items.csv, boxes.csv, events.csv, or media assets.' });
-          }
-
-          return sendJson(res, uploadContext.duplicate ? 409 : 200, {
-            ok: !uploadContext.duplicate,
-            ...uploadContext
-          });
-        } try { } catch (err) {
-          console.error('CSV import failed', err);
-          sendJson(res, 500, { error: (err as Error).message });
-        } finally {
-          if (tempDir) {
-            try {
-              await fs.promises.rm(tempDir, { recursive: true, force: true });
-            } catch (cleanupError) {
-              console.error('[csv-import] Failed to clean up staged ZIP upload', cleanupError);
-            }
+            return sendJson(res, 500, { error: (e as Error).message });
           }
         }
       }
-      view: () => '<div class="card"><p class="muted">CSV import API</p></div>';
-    } finally { }
+
+      if (!itemsBuffer && !boxesBuffer && !eventsBuffer && uploadContext.mediaFiles === 0) {
+        return sendJson(res, 400, { error: 'The ZIP archive did not include items.csv, boxes.csv, events.csv, or media assets.' });
+      }
+
+      return sendJson(res, uploadContext.duplicate ? 409 : 200, {
+        ok: !uploadContext.duplicate,
+        ...uploadContext
+      });
+    } catch (err) {
+      console.error('CSV import failed', err);
+      sendJson(res, 500, { error: (err as Error).message });
+    } finally {
+      if (tempDir) {
+        try {
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          console.error('[csv-import] Failed to clean up staged ZIP upload', cleanupError);
+        }
+      }
+    }
   },
-  view: function (entity: Entity): string {
-    throw new Error('Function not implemented.');
-  }
+  view: () => '<div class="card"><p class="muted">CSV import API</p></div>'
 });
 
 export default action;
