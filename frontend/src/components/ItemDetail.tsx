@@ -2743,6 +2743,7 @@ export default function ItemDetail({ itemId }: Props) {
                 )}
                 {/* TODO(stock-visibility): Validate out-of-stock messaging for non-bulk withdrawals. */}
                 {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
+                {/* TODO(confirm-withdrawal): Verify cancel behavior never triggers removal in the instance view. */}
                 {isOutOfStock ? (
                   <p className="muted">Instanz nicht mehr eingelagert.</p>
                 ) : (
@@ -2769,6 +2770,10 @@ export default function ItemDetail({ itemId }: Props) {
                       });
                     } catch (error) {
                       console.error('Failed to confirm inline item removal', error);
+                      return;
+                    }
+                    if (!confirmed) {
+                      logger.info?.('ItemDetail: Item removal cancelled', { itemId: item.ItemUUID });
                       return;
                     }
                     try {
