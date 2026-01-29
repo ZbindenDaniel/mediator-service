@@ -159,6 +159,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Filtered item detail instance queries to exclude zero-stock rows while logging any unexpected zero-stock entries returned for visibility.
 - Stored reference score breakdowns during ref dedupe to reuse them in top-result logging without altering the response payload.
 - Added minimal typed search score inputs for item/reference scoring to replace `any` while preserving existing response payloads.
+- Refactored search field scoring into a shared helper for item/reference scoring while keeping exact-match and top-result logging structures intact.
 
 ## Documentation Map
 
