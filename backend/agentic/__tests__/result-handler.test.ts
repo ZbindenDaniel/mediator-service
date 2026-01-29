@@ -21,6 +21,7 @@ describe('agentic result handler integration', () => {
   test('handleAgenticResult keeps supervisor approvals pending for user review', () => {
     const existingItem = {
       ItemUUID: 'item-123',
+      Artikel_Nummer: 'R-100',
       Artikelbeschreibung: 'Example item',
       Datum_erfasst: '2024-01-01T00:00:00.000Z',
       Veröffentlicht_Status: 'no',
@@ -28,7 +29,7 @@ describe('agentic result handler integration', () => {
     };
     const existingRun: AgenticRun = {
       Id: 1,
-      ItemUUID: 'item-123',
+      Artikel_Nummer: 'R-100',
       SearchQuery: 'example search',
       Status: AGENTIC_RUN_STATUS_QUEUED,
       LastModified: '2024-01-01T00:00:00.000Z',
@@ -55,13 +56,13 @@ describe('agentic result handler integration', () => {
     };
 
     const items = new Map<string, any>([[existingItem.ItemUUID, existingItem]]);
-    const runs = new Map<string, AgenticRun>([[existingRun.ItemUUID, existingRun]]);
+    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
     const logEvent = jest.fn();
     const persistItemWithinTransaction = jest.fn();
     const updateAgenticRunStatus = {
       run: jest.fn((update: Record<string, unknown>) => {
-        const merged = { ...runs.get(update.ItemUUID as string), ...update } as AgenticRun;
-        runs.set(update.ItemUUID as string, merged);
+        const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
+        runs.set(update.Artikel_Nummer as string, merged);
         return { changes: 1 };
       })
     };
@@ -102,13 +103,13 @@ describe('agentic result handler integration', () => {
 
     expect(result.status).toBe(AGENTIC_RUN_STATUS_REVIEW);
     expect(updateAgenticRunStatus.run).toHaveBeenCalledWith(
-      expect.objectContaining({ Status: AGENTIC_RUN_STATUS_REVIEW })
+      expect.objectContaining({ Artikel_Nummer: 'R-100', Status: AGENTIC_RUN_STATUS_REVIEW })
     );
     expect(persistItemWithinTransaction).toHaveBeenCalledWith(
       expect.objectContaining({ ItemUUID: 'item-123' })
     );
     expect(logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ EntityId: 'item-123', Event: 'AgenticResultReceived' })
+      expect.objectContaining({ EntityId: 'R-100', Event: 'AgenticResultReceived' })
     );
     expect(recordAgenticRequestLogUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'item-123' }),

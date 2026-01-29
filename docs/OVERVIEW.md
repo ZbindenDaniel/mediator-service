@@ -96,6 +96,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Centralized shelf label formatting in the frontend to standardize Lagerort labels across box and item lists with safe parsing and logging.
 - Normalized item creation quantity handling to keep Auf_Lager flowing through match selection and guard against missing payloads while clarifying bulk-vs-instance behavior in the UI.
 - Aligned agentic close availability to allow closing in any non-running state while keeping running runs locked to prevent accidental termination.
+- Migrated agentic run persistence to key off Artikel_Nummer with backfill logging and updated queue/index usage to align runs with item references.
 - Aligned relocation create-and-move flow with auto-print item label behavior to match creation-time printing expectations.
 - Made box detail item rows open the representative item on click/keyboard while removing the redundant details action.
 - Adjusted grouped list and box detail quantity display to use bulk Auf_Lager values for Menge items while logging parse failures.

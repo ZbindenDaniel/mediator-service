@@ -934,7 +934,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
 ${ITEM_JOIN_WITH_BOX}
 WHERE i.ItemUUID = ?
 `);
-  // TODO(agentic-instance-status): Keep agentic run joins aligned with ItemUUID-only semantics.
+  // TODO(agentic-instance-status): Keep agentic run joins aligned with Artikel_Nummer reference semantics.
   // TODO(agent): Confirm findByMaterial stock filtering stays aligned with list endpoint policy.
   findByMaterialStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
@@ -942,7 +942,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
 ])}
 ${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = i.Artikel_Nummer
 WHERE i.Artikel_Nummer = ?
   AND COALESCE(i.Auf_Lager, 0) > 0
 ORDER BY i.UpdatedAt DESC
@@ -1118,11 +1118,12 @@ export function persistItem(item: Item): void {
   }
 }
 
+// TODO(agentic-run-migration): Drop legacy ItemUUID columns from agentic_runs once all deployments backfill Artikel_Nummer.
 export function ensureAgenticRunSchema(database: Database.Database = db): void {
   const createAgenticRunsSql = `
 CREATE TABLE IF NOT EXISTS agentic_runs (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ItemUUID TEXT NOT NULL UNIQUE,
+  Artikel_Nummer TEXT NOT NULL UNIQUE,
   SearchQuery TEXT,
   Status TEXT NOT NULL,
   LastModified TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1134,10 +1135,10 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
   NextRetryAt TEXT,
   LastError TEXT,
   LastAttemptAt TEXT,
-  FOREIGN KEY(ItemUUID) REFERENCES items(ItemUUID) ON DELETE CASCADE ON UPDATE CASCADE
+  FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
+CREATE INDEX IF NOT EXISTS idx_agentic_runs_artikel_nummer ON agentic_runs(Artikel_Nummer);
 `;
   try {
     database.exec(createAgenticRunsSql);
@@ -1146,7 +1147,98 @@ CREATE INDEX IF NOT EXISTS idx_agentic_runs_item ON agentic_runs(ItemUUID);
     throw err;
   }
 
+  ensureAgenticRunReferenceKeyColumns(database);
   ensureAgenticRunQueueColumns(database);
+}
+
+function ensureAgenticRunReferenceKeyColumns(database: Database.Database = db): void {
+  let columns: Array<{ name: string }> = [];
+  try {
+    columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect agentic_runs schema for reference key columns', err);
+    throw err;
+  }
+
+  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
+  const hasArtikelNummer = hasColumn('Artikel_Nummer');
+  const hasItemUUID = hasColumn('ItemUUID');
+
+  if (!hasArtikelNummer) {
+    try {
+      database.prepare('ALTER TABLE agentic_runs ADD COLUMN Artikel_Nummer TEXT').run();
+      console.info('[db] Added missing agentic_runs Artikel_Nummer column');
+    } catch (err) {
+      console.error('Failed to add agentic_runs Artikel_Nummer column', err);
+      throw err;
+    }
+  }
+
+  try {
+    database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_agentic_runs_artikel_nummer ON agentic_runs(Artikel_Nummer);');
+  } catch (err) {
+    console.error('Failed to ensure agentic_runs Artikel_Nummer index', err);
+    throw err;
+  }
+
+  if (!hasItemUUID) {
+    if (!hasArtikelNummer) {
+      console.warn('[db] Agentic run backfill skipped because Artikel_Nummer was just added without ItemUUID support');
+    }
+    return;
+  }
+
+  try {
+    const totalCount = Number(
+      (database.prepare(`SELECT COUNT(*) as count FROM agentic_runs`).get() as { count?: number })?.count ?? 0
+    );
+    const missingBefore = Number(
+      (database.prepare(
+        `SELECT COUNT(*) as count FROM agentic_runs WHERE Artikel_Nummer IS NULL OR TRIM(Artikel_Nummer) = ''`
+      ).get() as { count?: number })?.count ?? 0
+    );
+    const emptyItemUUID = Number(
+      (database.prepare(
+        `SELECT COUNT(*) as count FROM agentic_runs WHERE ItemUUID IS NULL OR TRIM(ItemUUID) = ''`
+      ).get() as { count?: number })?.count ?? 0
+    );
+
+    const result = database.prepare(
+      `UPDATE agentic_runs
+          SET Artikel_Nummer = (
+            SELECT items.Artikel_Nummer
+              FROM items
+             WHERE items.ItemUUID = agentic_runs.ItemUUID
+          )
+        WHERE (Artikel_Nummer IS NULL OR TRIM(Artikel_Nummer) = '')
+          AND ItemUUID IS NOT NULL
+          AND TRIM(ItemUUID) <> ''
+          AND EXISTS (
+            SELECT 1
+              FROM items
+             WHERE items.ItemUUID = agentic_runs.ItemUUID
+               AND items.Artikel_Nummer IS NOT NULL
+               AND TRIM(items.Artikel_Nummer) <> ''
+          )`
+    ).run();
+
+    const missingAfter = Number(
+      (database.prepare(
+        `SELECT COUNT(*) as count FROM agentic_runs WHERE Artikel_Nummer IS NULL OR TRIM(Artikel_Nummer) = ''`
+      ).get() as { count?: number })?.count ?? 0
+    );
+
+    console.info('[db] Backfilled agentic_runs Artikel_Nummer values', {
+      totalCount,
+      missingBefore,
+      migratedCount: result?.changes ?? 0,
+      missingAfter,
+      emptyItemUUID
+    });
+  } catch (err) {
+    console.error('Failed to backfill agentic_runs Artikel_Nummer values', err);
+    throw err;
+  }
 }
 
 function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
@@ -1789,12 +1881,12 @@ export function getAgenticRequestLog(uuid: string): AgenticRequestLog | null {
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
-      ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy, LastReviewDecision, LastReviewNotes
+      Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy, LastReviewDecision, LastReviewNotes
     )
     VALUES (
-      @ItemUUID, @SearchQuery, @Status, @LastModified, @ReviewState, @ReviewedBy, @LastReviewDecision, @LastReviewNotes
+      @Artikel_Nummer, @SearchQuery, @Status, @LastModified, @ReviewState, @ReviewedBy, @LastReviewDecision, @LastReviewNotes
     )
-    ON CONFLICT(ItemUUID) DO UPDATE SET
+    ON CONFLICT(Artikel_Nummer) DO UPDATE SET
       SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
       Status=excluded.Status,
       LastModified=excluded.LastModified,
@@ -1809,11 +1901,11 @@ export const upsertAgenticRun = db.prepare(
   `
 );
 export const getAgenticRun = db.prepare(`
-  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+  SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes,
          RetryCount, NextRetryAt, LastError, LastAttemptAt
   FROM agentic_runs
-  WHERE ItemUUID = ?
+  WHERE Artikel_Nummer = ?
 `);
 // TODO(agentic-retries): Align status update flags with queue helper defaults when additional
 // retry metadata fields are introduced.
@@ -1837,18 +1929,18 @@ export const updateAgenticRunStatus = db.prepare(
            NextRetryAt=CASE WHEN @NextRetryAtIsSet THEN @NextRetryAt ELSE NextRetryAt END,
            LastError=CASE WHEN @LastErrorIsSet THEN @LastError ELSE LastError END,
            LastAttemptAt=CASE WHEN @LastAttemptAtIsSet THEN @LastAttemptAt ELSE LastAttemptAt END
-     WHERE ItemUUID=@ItemUUID
+     WHERE Artikel_Nummer=@Artikel_Nummer
   `
 );
 
 export function persistAgenticRunError(params: {
-  itemId: string;
+  artikelNummer: string;
   error: string | null;
   attemptAt?: string | null;
 }): void {
-  const itemUUID = typeof params.itemId === 'string' ? params.itemId.trim() : '';
-  if (!itemUUID) {
-    console.warn('[db] Skipping agentic run error persistence for empty item id');
+  const artikelNummer = typeof params.artikelNummer === 'string' ? params.artikelNummer.trim() : '';
+  if (!artikelNummer) {
+    console.warn('[db] Skipping agentic run error persistence for empty Artikel_Nummer');
     return;
   }
 
@@ -1862,16 +1954,16 @@ export function persistAgenticRunError(params: {
 
   try {
     const result = updateAgenticRunErrorStatement.run({
-      ItemUUID: itemUUID,
+      Artikel_Nummer: artikelNummer,
       LastError: normalizedError,
       LastAttemptAt: attemptAt,
       LastModified: attemptAt
     });
     if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic run error persistence affected zero rows', { itemUUID });
+      console.warn('[db] Agentic run error persistence affected zero rows', { artikelNummer });
     }
   } catch (err) {
-    console.error('[db] Failed to persist agentic run error', { itemUUID, error: err });
+    console.error('[db] Failed to persist agentic run error', { artikelNummer, error: err });
     throw err;
   }
 }
@@ -1883,12 +1975,12 @@ const updateAgenticRunErrorStatement = db.prepare(
        SET LastError = @LastError,
            LastAttemptAt = COALESCE(@LastAttemptAt, LastAttemptAt),
            LastModified = COALESCE(@LastModified, LastModified)
-     WHERE ItemUUID = @ItemUUID
+     WHERE Artikel_Nummer = @Artikel_Nummer
   `
 );
 
 const selectQueuedAgenticRuns = db.prepare(`
-  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+  SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes,
          RetryCount, NextRetryAt, LastError, LastAttemptAt
   FROM agentic_runs
@@ -1906,11 +1998,11 @@ const updateQueuedAgenticRunQueueStatement = db.prepare(`
          NextRetryAt = @NextRetryAt,
          LastError = @LastError,
          LastAttemptAt = @LastAttemptAt
-   WHERE ItemUUID = @ItemUUID
+   WHERE Artikel_Nummer = @Artikel_Nummer
 `);
 
 export type AgenticRunQueueUpdate = {
-  ItemUUID: string;
+  Artikel_Nummer: string;
   Status?: string | null;
   LastModified: string;
   RetryCount: number;
@@ -1940,10 +2032,10 @@ export function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate):
   try {
     const result = updateQueuedAgenticRunQueueStatement.run(payload);
     if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic run queue update had no effect', { itemUUID: update.ItemUUID });
+      console.warn('[db] Agentic run queue update had no effect', { artikelNummer: update.Artikel_Nummer });
     }
   } catch (err) {
-    console.error('[db] Failed to update queued agentic run state', { itemUUID: update.ItemUUID, error: err });
+    console.error('[db] Failed to update queued agentic run state', { artikelNummer: update.Artikel_Nummer, error: err });
     throw err;
   }
 }
@@ -2520,7 +2612,7 @@ export const updateAgenticReview = db.prepare(`
       LastReviewDecision = @LastReviewDecision,
       LastReviewNotes = @LastReviewNotes,
       Status = COALESCE(@Status, Status)
-  WHERE ItemUUID = @ItemUUID
+  WHERE Artikel_Nummer = @Artikel_Nummer
 `);
 
 // TODO(agent): Capture metrics on Langtext parsing for list endpoints to guide frontend rollout timing.
@@ -2544,7 +2636,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
 ])}
 ${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = i.Artikel_Nummer
 WHERE COALESCE(i.Auf_Lager, 0) > 0
 ORDER BY i.ItemUUID
 `);
@@ -2559,7 +2651,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
 ])}
 ${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = i.Artikel_Nummer
   WHERE COALESCE(i.Auf_Lager, 0) > 0
 AND (
     @searchTerm IS NULL
@@ -2634,7 +2726,7 @@ FROM item_refs r
 LEFT JOIN items i ON i.Artikel_Nummer = r.Artikel_Nummer
 LEFT JOIN boxes b ON i.BoxID = b.BoxID
 LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
-LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = COALESCE(i.Artikel_Nummer, r.Artikel_Nummer)
 WHERE (
   i.ItemUUID IS NULL
   OR i.ItemUUID = ''

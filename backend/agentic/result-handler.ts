@@ -307,7 +307,14 @@ export function handleAgenticResult(
         throw new Error('Item not found');
       }
 
-      const existingRun = ctx.getAgenticRun.get(itemUUID) as AgenticRun | undefined;
+      const artikelNummer = typeof existingItem.Artikel_Nummer === 'string' ? existingItem.Artikel_Nummer.trim() : '';
+      if (!artikelNummer) {
+        logger.warn?.('Agentic result missing Artikel_Nummer for run update', { itemUUID });
+      }
+
+      const existingRun = artikelNummer
+        ? (ctx.getAgenticRun.get(artikelNummer) as AgenticRun | undefined)
+        : undefined;
       const shouldPersistItemUpdate = status !== AGENTIC_RUN_STATUS_REJECTED;
       if (shouldPersistItemUpdate) {
         const merged: Record<string, any> = { ...existingItem };
@@ -375,42 +382,46 @@ export function handleAgenticResult(
           : existingRun?.SearchQuery ?? null;
       searchQueryForLog = searchQueryUpdate;
 
-      const runUpdate = {
-        ItemUUID: itemUUID,
-        SearchQuery: searchQueryUpdate,
-        Status: status,
-        LastModified: now,
-        ReviewState: effectiveReviewState,
-        ReviewedBy: effectiveReviewedBy,
-        ReviewedByIsSet: true,
-        LastReviewDecision: normalizedReviewDecision,
-        LastReviewDecisionIsSet: true,
-        LastReviewNotes: normalizedReviewNotes,
-        LastReviewNotesIsSet: true,
-        RetryCount: existingRun?.RetryCount ?? 0,
-        RetryCountIsSet: true,
-        NextRetryAt: existingRun?.NextRetryAt ?? null,
-        NextRetryAtIsSet: true,
-        LastError: existingRun?.LastError ?? null,
-        LastErrorIsSet: true,
-        LastAttemptAt: existingRun?.LastAttemptAt ?? null,
-        LastAttemptAtIsSet: true
-      };
+      if (!artikelNummer) {
+        logger.warn?.('Agentic result skipped run update without Artikel_Nummer', { itemUUID, status });
+      } else {
+        const runUpdate = {
+          Artikel_Nummer: artikelNummer,
+          SearchQuery: searchQueryUpdate,
+          Status: status,
+          LastModified: now,
+          ReviewState: effectiveReviewState,
+          ReviewedBy: effectiveReviewedBy,
+          ReviewedByIsSet: true,
+          LastReviewDecision: normalizedReviewDecision,
+          LastReviewDecisionIsSet: true,
+          LastReviewNotes: normalizedReviewNotes,
+          LastReviewNotesIsSet: true,
+          RetryCount: existingRun?.RetryCount ?? 0,
+          RetryCountIsSet: true,
+          NextRetryAt: existingRun?.NextRetryAt ?? null,
+          NextRetryAtIsSet: true,
+          LastError: existingRun?.LastError ?? null,
+          LastErrorIsSet: true,
+          LastAttemptAt: existingRun?.LastAttemptAt ?? null,
+          LastAttemptAtIsSet: true
+        };
 
-      // TODO(agentic-flag-normalization): Centralize SQLite-safe status payload coercion once
-      // the updateAgenticRunStatus statement accepts native booleans.
-      const normalizedRunUpdate = normalizeAgenticStatusUpdate(runUpdate);
+        // TODO(agentic-flag-normalization): Centralize SQLite-safe status payload coercion once
+        // the updateAgenticRunStatus statement accepts native booleans.
+        const normalizedRunUpdate = normalizeAgenticStatusUpdate(runUpdate);
 
-      const updateResult = ctx.updateAgenticRunStatus.run(normalizedRunUpdate);
-      if (!updateResult?.changes) {
-        logger.warn?.('Agentic run missing on status update, creating record', itemUUID);
-        ctx.upsertAgenticRun.run(normalizedRunUpdate);
+        const updateResult = ctx.updateAgenticRunStatus.run(normalizedRunUpdate);
+        if (!updateResult?.changes) {
+          logger.warn?.('Agentic run missing on status update, creating record', artikelNummer);
+          ctx.upsertAgenticRun.run(normalizedRunUpdate);
+        }
       }
 
       ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
-        EntityId: itemUUID,
+        EntityId: artikelNummer || itemUUID,
         Event: eventName,
         Meta: JSON.stringify({
           Status: status,

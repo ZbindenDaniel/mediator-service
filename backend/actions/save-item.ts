@@ -451,7 +451,13 @@ const action = defineHttpAction({
         const events = ctx.listEventsForItem.all(itemId);
         let agentic: AgenticRun | null = null;
         try {
-          agentic = ctx.getAgenticRun ? ((ctx.getAgenticRun.get(itemId) as AgenticRun | undefined) ?? null) : null;
+          const artikelNummer = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
+          if (!artikelNummer) {
+            console.warn('[save-item] Missing Artikel_Nummer for agentic run lookup', { itemId });
+          }
+          agentic = ctx.getAgenticRun && artikelNummer
+            ? ((ctx.getAgenticRun.get(artikelNummer) as AgenticRun | undefined) ?? null)
+            : null;
         } catch (error) {
           console.error('[save-item] Failed to load agentic run for item detail', { itemId, error });
           agentic = null;

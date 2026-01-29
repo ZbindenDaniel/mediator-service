@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED, type Item } from '../../models';
 import { getAgenticStatus, normalizeAgenticStatusUpdate } from '../agentic';
 import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
+import { parseSequentialItemUUID } from '../lib/itemIds';
 
 // TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
 // TODO(agent): Extract review-time side effects (like price defaults) into a dedicated helper to simplify reuse.
@@ -85,6 +86,41 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function resolveArtikelNummerForAgentic(
+  itemId: string,
+  ctx: { getItem?: { get: (id: string) => Item | undefined } },
+  logger: Pick<Console, 'error' | 'warn'> = console
+): string | null {
+  const trimmed = typeof itemId === 'string' ? itemId.trim() : '';
+  if (!trimmed) {
+    return null;
+  }
+
+  if (ctx.getItem?.get) {
+    try {
+      const item = ctx.getItem.get(trimmed);
+      const artikelNummer = typeof item?.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
+      if (artikelNummer) {
+        return artikelNummer;
+      }
+    } catch (error) {
+      logger.error?.('[agentic-status] Failed to resolve Artikel_Nummer from item lookup', { itemId: trimmed, error });
+    }
+  }
+
+  const parsed = parseSequentialItemUUID(trimmed);
+  if (parsed?.kind === 'artikelnummer' && parsed.artikelNummer) {
+    return parsed.artikelNummer;
+  }
+
+  if (!trimmed.startsWith('I-')) {
+    return trimmed;
+  }
+
+  logger.warn?.('[agentic-status] Missing Artikel_Nummer for agentic run lookup', { itemId: trimmed });
+  return null;
+}
+
 const action = defineHttpAction({
   key: 'agentic-status',
   label: 'Agentic status',
@@ -108,7 +144,11 @@ const action = defineHttpAction({
         return sendJson(res, 405, { error: 'Method not allowed' });
       }
       try {
-        const result = getAgenticStatus(itemId, {
+        const artikelNummer = resolveArtikelNummerForAgentic(itemId, ctx);
+        if (!artikelNummer) {
+          return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic status lookup' });
+        }
+        const result = getAgenticStatus(artikelNummer, {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
           upsertAgenticRun: ctx.upsertAgenticRun,
@@ -168,12 +208,16 @@ const action = defineHttpAction({
 
       const reviewedAt = new Date().toISOString();
       const status = decision === 'approved' ? AGENTIC_RUN_STATUS_APPROVED : AGENTIC_RUN_STATUS_REJECTED;
+      const artikelNummer = resolveArtikelNummerForAgentic(itemId, ctx);
+      if (!artikelNummer) {
+        return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic review' });
+      }
 
       try {
         if (action === 'close') {
           let run: any;
           try {
-            run = ctx.getAgenticRun.get(itemId);
+            run = ctx.getAgenticRun.get(artikelNummer);
           } catch (err) {
             console.error('Failed to load agentic run for close request', err);
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
@@ -181,7 +225,7 @@ const action = defineHttpAction({
 
           if (!run) {
             const upsertResult = ctx.upsertAgenticRun.run({
-              ItemUUID: itemId,
+              Artikel_Nummer: artikelNummer,
               SearchQuery: null,
               Status: status,
               LastModified: reviewedAt,
@@ -196,7 +240,7 @@ const action = defineHttpAction({
             }
           } else {
             const result = ctx.updateAgenticReview.run({
-              ItemUUID: itemId,
+              Artikel_Nummer: artikelNummer,
               ReviewState: decision,
               ReviewedBy: actor,
               LastModified: reviewedAt,
@@ -212,7 +256,7 @@ const action = defineHttpAction({
         } else {
           let run: any;
           try {
-            run = ctx.getAgenticRun.get(itemId);
+            run = ctx.getAgenticRun.get(artikelNummer);
           } catch (err) {
             console.error('Failed to load agentic run for review request', err);
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
@@ -222,7 +266,7 @@ const action = defineHttpAction({
           }
 
           const result = ctx.updateAgenticReview.run({
-            ItemUUID: itemId,
+            Artikel_Nummer: artikelNummer,
             ReviewState: decision,
             ReviewedBy: actor,
             LastModified: reviewedAt,
@@ -240,7 +284,7 @@ const action = defineHttpAction({
           try {
             ctx.updateAgenticRunStatus.run(
               normalizeAgenticStatusUpdate({
-                ItemUUID: itemId,
+                Artikel_Nummer: artikelNummer,
                 LastAttemptAt: null,
                 LastAttemptAtIsSet: true,
                 LastError: null,
@@ -263,7 +307,7 @@ const action = defineHttpAction({
       ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
-        EntityId: itemId,
+        EntityId: artikelNummer,
         Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
         Meta: JSON.stringify(
           action === 'close' ? { decision, reason: 'manual-close', notes } : { decision, notes }

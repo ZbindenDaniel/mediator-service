@@ -26,7 +26,7 @@ const MAX_LIMIT = 5000;
 
 const AGENTIC_COLUMNS = [
   'Id',
-  'ItemUUID',
+  'Artikel_Nummer',
   'SearchQuery',
   'Status',
   'LastModified',
@@ -346,7 +346,7 @@ const action = defineHttpAction({
       if (entity === 'agentic') {
         try {
           const rows = ctx.db.prepare(`
-            SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+            SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
                    LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
             FROM agentic_runs
             WHERE (@createdAfter IS NULL OR LastModified >= @createdAfter)

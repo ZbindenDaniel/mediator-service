@@ -11,7 +11,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const AGENTIC_FAILURE_REASON_DESCRIPTIONS: Record<string, string> = {
   'missing-search-query': 'Suchbegriff fehlt',
-  'missing-item-id': 'ItemUUID fehlt',
+  'missing-item-id': 'Artikel_Nummer fehlt',
+  'missing-artikel-nummer': 'Artikel_Nummer fehlt',
   'missing-artikelbeschreibung': 'Artikelbeschreibung fehlt',
   'agentic-start-failed': 'KI-Start fehlgeschlagen',
   'request-id-required': 'Anfrage-ID erforderlich',
@@ -98,6 +99,7 @@ export type AgenticTriggerSkippedReason =
   | 'run-url-missing'
   | 'missing-artikelbeschreibung'
   | 'missing-item-id'
+  | 'missing-artikel-nummer'
   | 'already-exists';
 
 export type AgenticTriggerFailedReason = 'response-not-ok' | 'network-error';
@@ -143,9 +145,9 @@ export async function triggerAgenticRun({
 
   const itemId = itemIdCandidate;
   if (!itemId) {
-    const message = `KI-Auslösung übersprungen (${context}): fehlende ItemUUID`;
+    const message = `KI-Auslösung übersprungen (${context}): fehlende Artikel_Nummer`;
     console.warn(message);
-    return { outcome: 'skipped', reason: 'missing-item-id', message };
+    return { outcome: 'skipped', reason: 'missing-artikel-nummer', message };
   }
 
   try {
@@ -250,7 +252,7 @@ export async function persistAgenticRunCancellation({
 }: PersistAgenticRunCancellationOptions): Promise<PersistAgenticRunCancellationResult> {
   const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmedItemId) {
-    const message = `KI-Abbruch übersprungen (${context}): fehlende ItemUUID`;
+    const message = `KI-Abbruch übersprungen (${context}): fehlende Artikel_Nummer`;
     console.warn(message);
     return { ok: false, status: 400, agentic: null, message };
   }
@@ -313,9 +315,9 @@ export async function persistAgenticRunDeletion({
 }: PersistAgenticRunDeletionOptions): Promise<PersistAgenticRunDeletionResult> {
   const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmedItemId) {
-    const message = `KI-Löschung übersprungen (${context}): fehlende ItemUUID`;
+    const message = `KI-Löschung übersprungen (${context}): fehlende Artikel_Nummer`;
     console.warn(message);
-    return { ok: false, status: 400, agentic: null, message, reason: 'missing-item-id' };
+    return { ok: false, status: 400, agentic: null, message, reason: 'missing-artikel-nummer' };
   }
 
   const sanitizedActor = actor && actor.trim() ? actor.trim() : 'system';
@@ -382,7 +384,7 @@ export async function persistAgenticRunClose({
 }: PersistAgenticRunCloseOptions): Promise<PersistAgenticRunCloseResult> {
   const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmedItemId) {
-    const message = `KI-Abschluss übersprungen (${context}): fehlende ItemUUID`;
+    const message = `KI-Abschluss übersprungen (${context}): fehlende Artikel_Nummer`;
     logger.warn?.(message);
     return { ok: false, status: 400, agentic: null, message };
   }

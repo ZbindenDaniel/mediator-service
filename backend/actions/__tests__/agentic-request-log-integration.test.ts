@@ -24,7 +24,7 @@ function createAgenticDependencies() {
   const db = new Database(':memory:');
   db.exec(`
     CREATE TABLE agentic_runs (
-      ItemUUID TEXT PRIMARY KEY,
+      Artikel_Nummer TEXT PRIMARY KEY,
       SearchQuery TEXT,
       Status TEXT,
       LastModified TEXT,
@@ -37,7 +37,7 @@ function createAgenticDependencies() {
 
   const upsertAgenticRun = db.prepare(`
     INSERT INTO agentic_runs (
-      ItemUUID,
+      Artikel_Nummer,
       SearchQuery,
       Status,
       LastModified,
@@ -47,7 +47,7 @@ function createAgenticDependencies() {
       LastReviewNotes
     )
     VALUES (
-      @ItemUUID,
+      @Artikel_Nummer,
       @SearchQuery,
       @Status,
       @LastModified,
@@ -56,7 +56,7 @@ function createAgenticDependencies() {
       @LastReviewDecision,
       @LastReviewNotes
     )
-    ON CONFLICT(ItemUUID) DO UPDATE SET
+    ON CONFLICT(Artikel_Nummer) DO UPDATE SET
       SearchQuery=excluded.SearchQuery,
       Status=excluded.Status,
       LastModified=excluded.LastModified,
@@ -75,12 +75,12 @@ function createAgenticDependencies() {
            ReviewedBy=@ReviewedBy,
            LastReviewDecision=@LastReviewDecision,
            LastReviewNotes=@LastReviewNotes
-     WHERE ItemUUID=@ItemUUID
+     WHERE Artikel_Nummer=@Artikel_Nummer
   `);
 
   return {
     db,
-    getAgenticRun: db.prepare('SELECT * FROM agentic_runs WHERE ItemUUID = ?'),
+    getAgenticRun: db.prepare('SELECT * FROM agentic_runs WHERE Artikel_Nummer = ?'),
     upsertAgenticRun,
     updateAgenticRunStatus,
     logEvent: jest.fn(),
@@ -102,7 +102,7 @@ describe('agentic request logging integration', () => {
 
     const result = await startAgenticRun(
       {
-        itemId: 'item-123',
+        itemId: 'R-123',
         searchQuery: 'example search',
         context: 'jest-test',
         request: {
@@ -116,7 +116,7 @@ describe('agentic request logging integration', () => {
     expect(result.queued).toBe(true);
     expect(result.agentic?.Status).toBe(AGENTIC_RUN_STATUS_QUEUED);
 
-    const stored = deps.getAgenticRun.get('item-123') as any;
+    const stored = deps.getAgenticRun.get('R-123') as any;
     expect(stored.Status).toBe(AGENTIC_RUN_STATUS_QUEUED);
     expect(stored.SearchQuery).toBe('example search');
 
@@ -134,7 +134,7 @@ describe('agentic request logging integration', () => {
 
     const result = await startAgenticRun(
       {
-        itemId: 'item-abc',
+        itemId: 'R-ABC',
         searchQuery: '',
         context: 'jest-failure',
         request: {
@@ -147,7 +147,7 @@ describe('agentic request logging integration', () => {
 
     expect(result.queued).toBe(false);
     expect(result.reason).toBe('missing-search-query');
-    const stored = deps.getAgenticRun.get('item-abc');
+    const stored = deps.getAgenticRun.get('R-ABC');
     expect(stored).toBeUndefined();
 
     expect(mockedDb.saveAgenticRequestPayload).toHaveBeenCalledWith('req-decline', { attempt: 'decline' });

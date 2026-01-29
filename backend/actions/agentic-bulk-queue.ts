@@ -11,7 +11,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 type AgenticQueueMode = 'all' | 'instancesOnly' | 'missing';
 
 type QueueCandidate = {
-  itemUUID: string | null;
   artikelNummer: string | null;
   referenceOnly: boolean;
 };
@@ -85,24 +84,20 @@ const action = defineHttpAction({
 
       for (const record of items) {
         try {
-          const rawItemUUID = typeof record?.ItemUUID === 'string' ? record.ItemUUID.trim() : '';
           const rawArtikelNummer = typeof (record as { Artikel_Nummer?: string | null })?.Artikel_Nummer === 'string'
             ? ((record as { Artikel_Nummer?: string | null }).Artikel_Nummer as string).trim()
             : '';
-          if (rawArtikelNummer) {
-            artikelCovered.add(rawArtikelNummer);
-          }
-          if (!rawItemUUID) {
-            console.warn('[agentic-bulk-queue] Skipping instance without ItemUUID', { record });
+          if (!rawArtikelNummer) {
+            console.warn('[agentic-bulk-queue] Skipping instance without Artikel_Nummer', { record });
             continue;
           }
-          if (seenIdentifiers.has(rawItemUUID)) {
-            console.info('[agentic-bulk-queue] Skipping duplicate instance candidate', { itemUUID: rawItemUUID });
+          artikelCovered.add(rawArtikelNummer);
+          if (seenIdentifiers.has(rawArtikelNummer)) {
+            console.info('[agentic-bulk-queue] Skipping duplicate Artikel_Nummer candidate', { artikelNummer: rawArtikelNummer });
             continue;
           }
-          seenIdentifiers.add(rawItemUUID);
+          seenIdentifiers.add(rawArtikelNummer);
           candidateList.push({
-            itemUUID: rawItemUUID || null,
             artikelNummer: rawArtikelNummer || null,
             referenceOnly: false
           });
@@ -127,7 +122,6 @@ const action = defineHttpAction({
           }
           seenIdentifiers.add(rawArtikelNummer);
           candidateList.push({
-            itemUUID: null,
             artikelNummer: rawArtikelNummer,
             referenceOnly: true
           });
@@ -157,11 +151,10 @@ const action = defineHttpAction({
         let skipped = 0;
 
         for (const record of records) {
-          const identifier = record?.itemUUID?.trim();
+          const identifier = record?.artikelNummer?.trim();
           if (!identifier) {
             skipped += 1;
-            console.warn('[agentic-bulk-queue] Skipping candidate without ItemUUID', {
-              itemUUID: record?.itemUUID ?? null,
+            console.warn('[agentic-bulk-queue] Skipping candidate without Artikel_Nummer', {
               artikelNummer: record?.artikelNummer ?? null,
               referenceOnly: record?.referenceOnly ?? false
             });
@@ -181,7 +174,7 @@ const action = defineHttpAction({
           try {
             existingRun = ctx.getAgenticRun.get(identifier) as AgenticRun | undefined;
           } catch (loadErr) {
-            console.error('[agentic-bulk-queue] Failed to load existing agentic run', { itemUUID: identifier }, loadErr);
+            console.error('[agentic-bulk-queue] Failed to load existing agentic run', { artikelNummer: identifier }, loadErr);
             throw loadErr;
           }
 
@@ -196,7 +189,7 @@ const action = defineHttpAction({
 
           const nowIso = new Date().toISOString();
           const upsertPayload = {
-            ItemUUID: identifier,
+            Artikel_Nummer: identifier,
             SearchQuery: existingRun?.SearchQuery ?? null,
             Status: 'queued',
             LastModified: nowIso,
@@ -212,7 +205,7 @@ const action = defineHttpAction({
               throw new Error('Agentic run upsert returned zero changes');
             }
           } catch (upsertErr) {
-            console.error('[agentic-bulk-queue] Failed to queue agentic run', { itemUUID: identifier }, upsertErr);
+            console.error('[agentic-bulk-queue] Failed to queue agentic run', { artikelNummer: identifier }, upsertErr);
             throw upsertErr;
           }
 

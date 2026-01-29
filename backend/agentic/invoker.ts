@@ -2,6 +2,7 @@ import type { AgenticModelInvocationInput, AgenticModelInvocationResult } from '
 import {
   db,
   getItem,
+  findByMaterial,
   getAgenticRun,
   updateAgenticRunStatus,
   upsertAgenticRun,
@@ -22,6 +23,7 @@ import { TavilySearchClient } from './tools/tavily-client';
 import type { SearchResult } from './tools/tavily-client';
 import { FlowError } from './flow/errors';
 import { handleAgenticResult, type AgenticResultPayload } from './result-handler';
+import { parseSequentialItemUUID } from '../lib/itemIds';
 
 // TODO(agent): Audit request payload merge rules whenever the AgenticTarget schema evolves.
 
@@ -179,7 +181,7 @@ export class AgenticModelInvoker {
   private chatModel?: ChatModel;
   private chatModelFactory?: ChatModelFactory;
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
-  private readonly persistAgenticRunError: (itemId: string, errorMessage: string, attemptAt?: string) => void;
+  private readonly persistAgenticRunError: (artikelNummer: string, errorMessage: string, attemptAt?: string) => void;
 
   constructor(options: AgenticModelInvokerOptions = {}) {
     this.logger = options.logger ?? console;
@@ -188,11 +190,11 @@ export class AgenticModelInvoker {
       logger: this.logger
     });
     // TODO(agentic-error-handling): Align DB error persistence with future retry scheduling metadata once available.
-    this.persistAgenticRunError = (itemId: string, errorMessage: string, attemptAt?: string) => {
+    this.persistAgenticRunError = (artikelNummer: string, errorMessage: string, attemptAt?: string) => {
       try {
-        persistAgenticRunError({ itemId, error: errorMessage, attemptAt });
+        persistAgenticRunError({ artikelNummer, error: errorMessage, attemptAt });
       } catch (err) {
-        this.logger.warn?.({ err, msg: 'failed to persist agentic run error state', itemId });
+        this.logger.warn?.({ err, msg: 'failed to persist agentic run error state', artikelNummer });
       }
     };
     this.applyAgenticResult = (payload: AgenticResultPayload) => {
@@ -323,11 +325,22 @@ export class AgenticModelInvoker {
 
   private async loadItemTarget(itemId: string): Promise<Record<string, unknown>> {
     let row: Record<string, unknown> | undefined;
-    try {
-      row = getItem.get(itemId) as Record<string, unknown> | undefined;
-    } catch (err) {
-      this.logger.error?.({ err, msg: 'failed to load item for agentic invocation', itemId });
-      throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details', 500, { cause: err });
+    const parsed = parseSequentialItemUUID(itemId);
+    if (parsed?.kind === 'artikelnummer') {
+      try {
+        row = getItem.get(itemId) as Record<string, unknown> | undefined;
+      } catch (err) {
+        this.logger.error?.({ err, msg: 'failed to load item for agentic invocation', itemId });
+        throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details', 500, { cause: err });
+      }
+    } else {
+      try {
+        const results = findByMaterial?.all ? (findByMaterial.all(itemId) as Record<string, unknown>[]) : [];
+        row = Array.isArray(results) && results.length > 0 ? results[0] : undefined;
+      } catch (err) {
+        this.logger.error?.({ err, msg: 'failed to load item for agentic invocation by Artikel_Nummer', itemId });
+        throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details', 500, { cause: err });
+      }
     }
 
     if (!row) {

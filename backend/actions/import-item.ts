@@ -21,7 +21,6 @@ import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
 import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
 import { normalizeQuality, resolveQualityFromLabel } from '../../models/quality';
-import { resolveCanonicalItemUUIDForArtikelnummer } from '../db';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -1261,92 +1260,57 @@ const action = defineHttpAction({
         });
       }
 
-      let canonicalAgenticItemId: string | null = null;
       const artikelNummerForCanonical = resolvedArtikelNummer || incomingArtikelNummer || null;
-      if (artikelNummerForCanonical) {
-        try {
-          const resolution = resolveCanonicalItemUUIDForArtikelnummer(artikelNummerForCanonical, {
-            findByMaterial: ctx.findByMaterial,
-            logger: console
-          });
-          canonicalAgenticItemId = resolution.itemUUID;
-        } catch (canonicalErr) {
-          console.error('[import-item] Failed to resolve canonical ItemUUID for agentic run', {
-            artikelNummer: artikelNummerForCanonical,
-            error: canonicalErr
-          });
-        }
-      }
-
-      if (!canonicalAgenticItemId && itemUUIDs[0]) {
-        const parsedCandidate = parseSequentialItemUUID(itemUUIDs[0]);
-        if (
-          parsedCandidate?.kind === 'artikelnummer'
-          && parsedCandidate.artikelNummer === (artikelNummerForCanonical || '')
-          && parsedCandidate.sequence === 1
-        ) {
-          canonicalAgenticItemId = itemUUIDs[0];
-          console.info('[import-item] Falling back to newly minted canonical ItemUUID for agentic run', {
-            ItemUUID: itemUUIDs[0],
-            artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null
-          });
-        }
-      }
-
-      if (!canonicalAgenticItemId) {
-        console.warn('[import-item] Failed to resolve canonical ItemUUID for agentic run seeding', {
+      const canonicalAgenticArtikelNummer =
+        typeof artikelNummerForCanonical === 'string' ? artikelNummerForCanonical.trim() : '';
+      if (!canonicalAgenticArtikelNummer) {
+        console.warn('[import-item] Missing Artikel_Nummer for agentic run seeding', {
           ItemUUID: itemUUIDs[0] ?? null,
-          artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null
+          artikelNummer: artikelNummerForCanonical ?? null
         });
       }
 
       let hasExistingAgenticRun = false;
-      if (canonicalAgenticItemId && ctx.getAgenticRun?.get) {
+      if (canonicalAgenticArtikelNummer && ctx.getAgenticRun?.get) {
         try {
-          const existingRun = ctx.getAgenticRun.get(canonicalAgenticItemId) as { Status?: string | null } | undefined;
+          const existingRun = ctx.getAgenticRun.get(canonicalAgenticArtikelNummer) as { Status?: string | null } | undefined;
           if (existingRun) {
             hasExistingAgenticRun = true;
           }
         } catch (agenticLookupErr) {
-          console.error('[import-item] Failed to load existing agentic run for canonical reference', {
-            ItemUUID: canonicalAgenticItemId,
+          console.error('[import-item] Failed to load existing agentic run for Artikel_Nummer', {
+            artikelNummer: canonicalAgenticArtikelNummer,
             error: agenticLookupErr
           });
         }
       }
-
-      const hasCanonicalInRequest =
-        Boolean(canonicalAgenticItemId) && itemUUIDs.includes(canonicalAgenticItemId || '');
       const shouldSeedAgenticRun =
         !isUpdateRequest
         && !hadExistingInstanceForArtikel
         && !hasExistingAgenticRun
-        && hasCanonicalInRequest;
+        && Boolean(canonicalAgenticArtikelNummer);
       const shouldTriggerAgenticRun = shouldSeedAgenticRun && !agenticRunManuallySkipped;
-      const agenticSeedItemId = shouldSeedAgenticRun ? canonicalAgenticItemId : null;
+      const agenticSeedArtikelNummer = shouldSeedAgenticRun ? canonicalAgenticArtikelNummer : null;
       const agenticSeedReason = isUpdateRequest
         ? 'update-request'
         : hadExistingInstanceForArtikel
           ? 'existing-instance'
           : hasExistingAgenticRun
             ? 'existing-agentic-run'
-            : !canonicalAgenticItemId
-              ? 'missing-canonical'
-              : !hasCanonicalInRequest
-                ? 'canonical-outside-request'
-                : null;
+            : !canonicalAgenticArtikelNummer
+              ? 'missing-artikel-nummer'
+              : null;
 
-      if (!agenticSeedItemId) {
+      if (!agenticSeedArtikelNummer) {
         console.info('[import-item] Agentic seed skipped for import', {
-          ItemUUID: canonicalAgenticItemId ?? itemUUIDs[0] ?? null,
-          artikelNummer: resolvedArtikelNummer ?? incomingArtikelNummer ?? null,
+          ItemUUID: itemUUIDs[0] ?? null,
+          artikelNummer: canonicalAgenticArtikelNummer || resolvedArtikelNummer || incomingArtikelNummer || null,
           reason: agenticSeedReason ?? 'unknown',
           instanceCount: itemUUIDs.length
         });
-        if (hasExistingAgenticRun && canonicalAgenticItemId) {
+        if (hasExistingAgenticRun && canonicalAgenticArtikelNummer) {
           console.info('[import-item] Agentic run skipped because canonical run already exists', {
-            ItemUUID: canonicalAgenticItemId,
-            artikelNummer: resolvedArtikelNummer ?? incomingArtikelNummer ?? null
+            artikelNummer: canonicalAgenticArtikelNummer
           });
         }
       }
@@ -1362,8 +1326,9 @@ const action = defineHttpAction({
           boxPhotoPath: string | null,
           agenticEnabled: boolean,
           manuallySkipped: boolean,
-          seedItemId: string | null
+          seedArtikelNummer: string | null
         ) => {
+          let agenticRunPersisted = false;
           if (boxId) {
             ctx.upsertBox.run({
               BoxID: boxId,
@@ -1385,7 +1350,7 @@ const action = defineHttpAction({
           try {
             for (const itemData of itemDataList) {
               ctx.persistItemWithinTransaction(itemData);
-              const shouldPersistAgenticRun = Boolean(seedItemId && itemData.ItemUUID === seedItemId);
+              const shouldPersistAgenticRun = Boolean(seedArtikelNummer && !agenticRunPersisted);
 
               let itemExists: { ItemUUID: string } | undefined;
               if (!isUpdateRequest) {
@@ -1404,11 +1369,12 @@ const action = defineHttpAction({
                 Meta: JSON.stringify({ BoxID: boxId })
               });
               if (shouldPersistAgenticRun) {
+                agenticRunPersisted = true;
                 let previousAgenticRun: { Status?: string | null } | null = null;
                 if (!manuallySkipped) {
                   try {
                     previousAgenticRun = ctx.getAgenticRun?.get
-                      ? ((ctx.getAgenticRun.get(itemData.ItemUUID) as { Status?: string | null } | undefined) ?? null)
+                      ? ((ctx.getAgenticRun.get(seedArtikelNummer as string) as { Status?: string | null } | undefined) ?? null)
                       : null;
                   } catch (agenticLookupErr) {
                     console.error('[import-item] Failed to load existing agentic run before upsert', agenticLookupErr);
@@ -1416,7 +1382,7 @@ const action = defineHttpAction({
                 }
 
                 const agenticRun = {
-                  ItemUUID: itemData.ItemUUID,
+                  Artikel_Nummer: seedArtikelNummer,
                   SearchQuery: search || null,
                   Status: status,
                   LastModified: now,
@@ -1434,7 +1400,7 @@ const action = defineHttpAction({
                 }
                 if (manuallySkipped) {
                   console.info('[import-item] Agentic run persisted as notStarted due to manual submission', {
-                    ItemUUID: itemData.ItemUUID,
+                    Artikel_Nummer: seedArtikelNummer,
                     Actor: a,
                     agenticManualFallback
                   });
@@ -1453,19 +1419,19 @@ const action = defineHttpAction({
                     ctx.logEvent({
                       Actor: a,
                       EntityType: 'Item',
-                      EntityId: itemData.ItemUUID,
+                      EntityId: seedArtikelNummer,
                       Event: 'AgenticSearchQueued',
                       Meta: JSON.stringify(agenticEventMeta)
                     });
                   } else {
                     console.info('[import-item] Skipping AgenticSearchQueued log for already queued run', {
-                      ItemUUID: itemData.ItemUUID,
+                      Artikel_Nummer: seedArtikelNummer,
                       Actor: a
                     });
                   }
                   if (!agenticEnabled) {
                     console.info('[import-item] Agentic service disabled; queued agentic run locally without remote trigger', {
-                      ItemUUID: itemData.ItemUUID,
+                      Artikel_Nummer: seedArtikelNummer,
                       Actor: a,
                       SearchQuery: search
                     });
@@ -1496,7 +1462,7 @@ const action = defineHttpAction({
         preservedBoxPhotoPath,
         Boolean(ctx.agenticServiceEnabled),
         agenticRunManuallySkipped,
-        agenticSeedItemId
+        agenticSeedArtikelNummer
       );
 
       console.info('[import-item] Persisted item instances for import', {
@@ -1510,26 +1476,28 @@ const action = defineHttpAction({
 
       if (shouldSeedAgenticRun && agenticRunManuallySkipped) {
         console.info('[import-item] Agentic trigger skipped due to manual submission status', {
-          ItemUUID: agenticSeedItemId ?? null,
+          Artikel_Nummer: agenticSeedArtikelNummer ?? null,
           actor
         });
       }
 
-      const itemIdsToTrigger = shouldTriggerAgenticRun && agenticSeedItemId ? [agenticSeedItemId] : [];
-      for (const itemId of itemIdsToTrigger) {
+      const artikelNummernToTrigger = shouldTriggerAgenticRun && agenticSeedArtikelNummer
+        ? [agenticSeedArtikelNummer]
+        : [];
+      for (const artikelNummer of artikelNummernToTrigger) {
         try {
           const persistedAgenticRun = ctx.getAgenticRun?.get
-            ? ((ctx.getAgenticRun.get(itemId) as { ItemUUID?: string; SearchQuery?: string | null } | undefined) ?? null)
+            ? ((ctx.getAgenticRun.get(artikelNummer) as { Artikel_Nummer?: string; SearchQuery?: string | null } | undefined) ?? null)
             : null;
           if (!persistedAgenticRun) {
             console.warn('[import-item] Agentic run missing immediately after import transaction', {
-              ItemUUID: itemId,
+              Artikel_Nummer: artikelNummer,
               actor,
               agenticStatus
             });
           } else if (!persistedAgenticRun.SearchQuery && agenticSearchQuery) {
             console.info('[import-item] Agentic run persisted without search query; confirming ingestion state', {
-              ItemUUID: itemId,
+              Artikel_Nummer: artikelNummer,
               actor
             });
           }
@@ -1539,13 +1507,13 @@ const action = defineHttpAction({
 
         if (ctx.agenticServiceEnabled && !agenticRunManuallySkipped) {
           const triggerPayload = {
-            itemId,
+            itemId: artikelNummer,
             artikelbeschreibung: agenticSearchQuery || data.Artikelbeschreibung || ''
           };
 
           if (!triggerPayload.artikelbeschreibung) {
             console.warn('[import-item] Agentic trigger skipped due to missing Artikelbeschreibung', {
-              ItemUUID: itemId,
+              Artikel_Nummer: artikelNummer,
               actor
             });
           } else {
