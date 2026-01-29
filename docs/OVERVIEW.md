@@ -150,6 +150,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Tuned mobile header icon sizing to 30px square tap targets with slightly reduced icon font sizes for small screens.
 - Added Suchbegriff fallback normalization in search queries, logging when empty values fall back to Artikelbeschreibung or Artikel_Nummer while keeping token-hit and exact-match scoring aligned.
 - Updated item detail instance filtering to default missing stock to 1 for Stück rows while logging before/after counts for the Vorrat table.
+- Filtered item detail instance queries to exclude zero-stock rows while logging any unexpected zero-stock entries returned for visibility.
 
 ## Documentation Map
 
