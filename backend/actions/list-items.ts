@@ -9,6 +9,7 @@ import { defineHttpAction } from './index';
 // TODO(item-entity-filter): Revisit reference union performance once catalogue browsing expands beyond the item list.
 // TODO(subcategory-filter): Confirm whether Unterkategorien_B should be matched alongside Unterkategorien_A.
 // TODO(grouped-items): Remove legacy flat items response once frontend consumes groupedItems.
+// TODO(agentic-runs): Monitor list payloads for missing Artikel_Nummer values after agentic join alignment.
 
 type ItemEntityFilter = 'all' | 'instances' | 'references';
 
@@ -106,6 +107,19 @@ const action = defineHttpAction({
         filters.entityFilter === 'instances' ? [] : ctx.listItemReferencesWithFilters.all(bindings);
       const items = [...instanceItems, ...referenceItems];
       const groupedItems = groupItemsForResponse(instanceItems, { logger: console });
+
+      try {
+        const emptyArtikel = items.filter(
+          (item: { Artikel_Nummer?: string | null }) => !item?.Artikel_Nummer || !item.Artikel_Nummer.trim()
+        );
+        if (emptyArtikel.length > 0) {
+          console.warn('list-items response includes rows with empty Artikel_Nummer', {
+            count: emptyArtikel.length
+          });
+        }
+      } catch (logError) {
+        console.warn('Failed to log empty Artikel_Nummer rows for list-items', logError);
+      }
 
       console.log('list-items', {
         count: items.length,
