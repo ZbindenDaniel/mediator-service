@@ -176,6 +176,7 @@ const action = defineHttpAction({
           continue;
         }
 
+        // TODO(csv-import): verify each archive CSV branch exits cleanly after buffering.
         if (/(^|\/)events\.csv$/.test(lowerPath)) {
           try {
             const entryStartedAt = Date.now();
@@ -194,96 +195,105 @@ const action = defineHttpAction({
             });
           } catch (bufferError) {
             console.error('[csv-import] Failed to buffer events.csv from archive', bufferError);
+            const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            const message = bufferError instanceof ZipProcessError
+              ? bufferError.message
+              : 'Unexpected error buffering events.csv from archive.';
+            return sendJson(res, status, { error: message });
+          }
+          continue;
+        }
 
-            if (/(^|\/)agentic_runs\.csv$/.test(lowerPath)) {
-              try {
-                const entryStartedAt = Date.now();
-                agenticRunsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
-                const entryDuration = Date.now() - entryStartedAt;
-                if (entryDuration > ENTRY_TIMEOUT_MS) {
-                  console.warn('[csv-import] agentic_runs.csv extraction exceeded time limit', {
-                    entryDuration,
-                    maxDuration: ENTRY_TIMEOUT_MS,
-                  });
-                  return sendJson(res, 408, { error: 'agentic_runs.csv extraction exceeded time limit.' });
-                }
-                console.info('[csv-import] Buffered agentic_runs.csv from archive', {
-                  bytesBuffered: agenticRunsBuffer?.length ?? 0,
-                  entryDuration,
-                });
-              } catch (bufferError) {
-                console.error('[csv-import] Failed to buffer agentic_runs.csv from archive', bufferError);
-                const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
-                const status = isClientZipIssue ? 400 : 500;
-                const message = bufferError instanceof ZipProcessError
-                  ? bufferError.message
-                  : 'Unexpected error buffering csv from archive.';
-                return sendJson(res, status, { error: message });
-              }
-              continue;
+        if (/(^|\/)agentic_runs\.csv$/.test(lowerPath)) {
+          try {
+            const entryStartedAt = Date.now();
+            agenticRunsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] agentic_runs.csv extraction exceeded time limit', {
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: 'agentic_runs.csv extraction exceeded time limit.' });
             }
+            console.info('[csv-import] Buffered agentic_runs.csv from archive', {
+              bytesBuffered: agenticRunsBuffer?.length ?? 0,
+              entryDuration,
+            });
+          } catch (bufferError) {
+            console.error('[csv-import] Failed to buffer agentic_runs.csv from archive', bufferError);
+            const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            const message = bufferError instanceof ZipProcessError
+              ? bufferError.message
+              : 'Unexpected error buffering csv from archive.';
+            return sendJson(res, status, { error: message });
+          }
+          continue;
+        }
 
-            if (lowerPath.endsWith('.csv') && !itemsBuffer) {
-              try {
-                const entryStartedAt = Date.now();
-                itemsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
-                const entryDuration = Date.now() - entryStartedAt;
-                if (entryDuration > ENTRY_TIMEOUT_MS) {
-                  console.warn('[csv-import] items.csv extraction exceeded time limit', {
-                    entryDuration,
-                    maxDuration: ENTRY_TIMEOUT_MS,
-                  });
-                  return sendJson(res, 408, { error: 'items.csv extraction exceeded time limit.' });
-                }
-                console.info('[csv-import] Buffered items CSV from archive', {
-                  bytesBuffered: itemsBuffer?.length ?? 0,
-                  entryDuration,
-                });
-              } catch (bufferError) {
-                console.error('[csv-import] Failed to buffer items CSV from archive', bufferError);
-                const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
-                const status = isClientZipIssue ? 400 : 500;
-                const message = bufferError instanceof ZipProcessError
-                  ? bufferError.message
-                  : 'Unexpected error buffering CSV from archive.';
-                return sendJson(res, status, { error: message });
-              }
-              continue;
+        if (lowerPath.endsWith('.csv') && !itemsBuffer) {
+          try {
+            const entryStartedAt = Date.now();
+            itemsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] items.csv extraction exceeded time limit', {
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: 'items.csv extraction exceeded time limit.' });
             }
+            console.info('[csv-import] Buffered items CSV from archive', {
+              bytesBuffered: itemsBuffer?.length ?? 0,
+              entryDuration,
+            });
+          } catch (bufferError) {
+            console.error('[csv-import] Failed to buffer items CSV from archive', bufferError);
+            const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            const message = bufferError instanceof ZipProcessError
+              ? bufferError.message
+              : 'Unexpected error buffering CSV from archive.';
+            return sendJson(res, status, { error: message });
+          }
+          continue;
+        }
 
-            if (lowerPath.startsWith('media/')) {
-              const relative = normalizedPath.slice('media/'.length);
-              const safeTarget = resolveSafePath(MEDIA_DIR, relative);
-              if (!safeTarget) {
-                console.warn('[csv-import] Skipping media entry outside MEDIA_DIR bounds', { entry: normalizedPath });
-                continue;
-              }
-              try {
-                const entryStartedAt = Date.now();
-                await fs.promises.mkdir(path.dirname(safeTarget), { recursive: true });
-                await extractZipEntryToPath(resolvedArchivePath, entryName, safeTarget, unzipOptions);
-                const entryDuration = Date.now() - entryStartedAt;
-                if (entryDuration > ENTRY_TIMEOUT_MS) {
-                  console.warn('[csv-import] Media extraction exceeded time limit', {
-                    entry: normalizedPath,
-                    entryDuration,
-                    maxDuration: ENTRY_TIMEOUT_MS,
-                  });
-                  return sendJson(res, 408, { error: `Media extraction exceeded time limit for ${normalizedPath}.` });
-                }
-                uploadContext.mediaFiles += 1;
-                console.info('[csv-import] Extracted media asset', {
-                  entry: normalizedPath,
-                  entryDuration,
-                  mediaCount: uploadContext.mediaFiles,
-                });
-              } catch (mediaError) {
-                console.error('[csv-import] Failed to persist media asset from archive', { entry: normalizedPath, mediaError });
-                const isClientZipIssue = mediaError instanceof ZipProcessError && ['password', 'timeout'].includes(mediaError.kind);
-                const status = isClientZipIssue ? 400 : 500;
-                return sendJson(res, status, { error: mediaError instanceof Error ? mediaError.message : 'Failed to extract media.' });
-              }
+        if (lowerPath.startsWith('media/')) {
+          const relative = normalizedPath.slice('media/'.length);
+          const safeTarget = resolveSafePath(MEDIA_DIR, relative);
+          if (!safeTarget) {
+            console.warn('[csv-import] Skipping media entry outside MEDIA_DIR bounds', { entry: normalizedPath });
+            continue;
+          }
+          try {
+            const entryStartedAt = Date.now();
+            await fs.promises.mkdir(path.dirname(safeTarget), { recursive: true });
+            await extractZipEntryToPath(resolvedArchivePath, entryName, safeTarget, unzipOptions);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] Media extraction exceeded time limit', {
+                entry: normalizedPath,
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: `Media extraction exceeded time limit for ${normalizedPath}.` });
             }
+            uploadContext.mediaFiles += 1;
+            console.info('[csv-import] Extracted media asset', {
+              entry: normalizedPath,
+              entryDuration,
+              mediaCount: uploadContext.mediaFiles,
+            });
+          } catch (mediaError) {
+            console.error('[csv-import] Failed to persist media asset from archive', { entry: normalizedPath, mediaError });
+            const isClientZipIssue = mediaError instanceof ZipProcessError && ['password', 'timeout'].includes(mediaError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            return sendJson(res, status, { error: mediaError instanceof Error ? mediaError.message : 'Failed to extract media.' });
+          }
+        }
           }
 
           console.info('[csv-import] Completed archive extraction pass', {
