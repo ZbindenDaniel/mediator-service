@@ -5,7 +5,7 @@ import os from 'os';
 import { defineHttpAction } from './index';
 import { ARCHIVE_DIR } from '../config';
 import { MEDIA_DIR } from '../lib/media';
-import { ingestBoxesCsv } from '../importer';
+import { ingestBoxesCsv, ingestEventsCsv } from '../importer';
 import {
   computeChecksum,
   extractZipEntryToPath,
@@ -23,6 +23,7 @@ import {
 // TODO(agent): Revisit staging and extraction thresholds once upload telemetry is available.
 // TODO(agent): Document boxes-only archive handling once importer alias fixes ship.
 // TODO(agent): Surface legacy schema detection telemetry in the CSV import handler once headers are inspected.
+// TODO(agent): Review events.csv ingestion telemetry once live import payloads are available.
 
 const STAGING_TIMEOUT_MS = 30_000;
 const ENTRY_TIMEOUT_MS = 45_000;
@@ -50,6 +51,7 @@ const action = defineHttpAction({
         duplicate: false,
         duplicateReason: '' as string | null,
         boxesProcessed: 0,
+        eventsProcessed: 0,
         mediaFiles: 0,
         message: ''
       };
@@ -126,6 +128,7 @@ const action = defineHttpAction({
 
       let itemsBuffer: Buffer | null = null;
       let boxesBuffer: Buffer | null = null;
+      let eventsBuffer: Buffer | null = null;
 
       const extractionStartedAt = Date.now();
       for (const entryName of entries) {
@@ -170,7 +173,35 @@ const action = defineHttpAction({
           continue;
         }
 
-        if (lowerPath.endsWith('.csv') && !itemsBuffer) {
+        if (/(^|\/)events\.csv$/.test(lowerPath)) {
+          try {
+            const entryStartedAt = Date.now();
+            eventsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] events.csv extraction exceeded time limit', {
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: 'events.csv extraction exceeded time limit.' });
+            }
+            console.info('[csv-import] Buffered events.csv from archive', {
+              bytesBuffered: eventsBuffer?.length ?? 0,
+              entryDuration,
+            });
+          } catch (bufferError) {
+            console.error('[csv-import] Failed to buffer events.csv from archive', bufferError);
+            const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            const message = bufferError instanceof ZipProcessError
+              ? bufferError.message
+              : 'Unexpected error buffering events.csv from archive.';
+            return sendJson(res, status, { error: message });
+          }
+          continue;
+        }
+
+        if (lowerPath.endsWith('.csv') && !itemsBuffer && !/(^|\/)events\.csv$/.test(lowerPath)) {
           try {
             const entryStartedAt = Date.now();
             itemsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
@@ -236,6 +267,7 @@ const action = defineHttpAction({
       console.info('[csv-import] Completed archive extraction pass', {
         itemsBuffered: Boolean(itemsBuffer),
         boxesBuffered: Boolean(boxesBuffer),
+        eventsBuffered: Boolean(eventsBuffer),
         mediaFiles: uploadContext.mediaFiles,
         extractionDuration: Date.now() - extractionStartedAt,
       });
@@ -254,6 +286,23 @@ const action = defineHttpAction({
           }
         } catch (boxesError) {
           console.error('[csv-import] Failed to ingest boxes.csv from archive', boxesError);
+        }
+      }
+
+      if (eventsBuffer) {
+        try {
+          const { count } = await ingestEventsCsv(eventsBuffer);
+          uploadContext.eventsProcessed = count;
+          if (!itemsBuffer && !boxesBuffer) {
+            console.info('[csv-import] Completed events-only archive ingestion', {
+              eventsProcessed: count,
+            });
+            if (!uploadContext.message) {
+              uploadContext.message = `Processed events.csv with ${count} row${count === 1 ? '' : 's'}.`;
+            }
+          }
+        } catch (eventsError) {
+          console.error('[csv-import] Failed to ingest events.csv from archive', eventsError);
         }
       }
 
@@ -302,8 +351,8 @@ const action = defineHttpAction({
         }
       }
 
-      if (!itemsBuffer && !boxesBuffer && uploadContext.mediaFiles === 0) {
-        return sendJson(res, 400, { error: 'The ZIP archive did not include items.csv, boxes.csv, or media assets.' });
+      if (!itemsBuffer && !boxesBuffer && !eventsBuffer && uploadContext.mediaFiles === 0) {
+        return sendJson(res, 400, { error: 'The ZIP archive did not include items.csv, boxes.csv, events.csv, or media assets.' });
       }
 
       return sendJson(res, uploadContext.duplicate ? 409 : 200, {

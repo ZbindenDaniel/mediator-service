@@ -170,6 +170,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Aligned list/find item projections to join agentic runs by Artikel_Nummer with default status fallbacks and empty Artikel_Nummer logging to prevent reference/instance confusion in list responses.
 - Updated item detail agentic actions to use Artikel_Nummer reference identifiers with stricter logging for failed agentic requests.
 - Gate the legacy agentic_runs reset to run only when the schema still lacks Artikel_Nummer, preventing repeat wipes after migration.
+- Added events.csv import handling alongside CSV ingestion, with per-row validation and logging to skip invalid event rows while continuing the import.
 
 ## Documentation Map
 
