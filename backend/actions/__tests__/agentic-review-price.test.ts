@@ -21,6 +21,7 @@ describe('agentic review price fallback', () => {
       Artikeltyp: 'part',
       Unterkategorien_A: 401,
       BoxID: null,
+      Location: null,
       UpdatedAt: new Date('2024-01-01T00:00:00.000Z')
     };
     const persistItem = jest.fn();
@@ -44,6 +45,7 @@ describe('agentic review price fallback', () => {
       Unterkategorien_A: 401,
       Verkaufspreis: 199.5,
       BoxID: null,
+      Location: null,
       UpdatedAt: new Date('2024-01-01T00:00:00.000Z')
     };
     const persistItem = jest.fn();

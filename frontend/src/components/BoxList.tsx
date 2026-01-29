@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import type { Box } from '../../../models/box';
 import { formatDate } from '../lib/format';
 import { logError, logger } from '../utils/logger';
-import BoxTag from './BoxTag';
+import LocationTag from './LocationTag';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 // TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
-// TODO(agent): Review BoxTag label override coverage if new box metadata fields are added.
+// TODO(agent): Review LocationTag label override coverage if new box metadata fields are added.
 // TODO(agent): Revisit box list ARIA labels if location label formatting changes.
 
 export type BoxSortKey = 'BoxID' | 'Label' | 'UpdatedAt';
@@ -167,7 +167,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                 >
                   <td className="col-box-id">{box.BoxID}</td>
                   <td className="col-location">
-                    <BoxTag
+                    <LocationTag
                       locationKey={box.LocationId}
                       labelOverride={normalizedShelfLabel || null}
                     />

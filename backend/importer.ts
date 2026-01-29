@@ -1342,7 +1342,7 @@ export async function ingestCsvFile(
         const item: Item = {
           ItemUUID: itemUUID,
           BoxID: normalizedBoxId,
-          // Location: location, // TODO: !!! Location field ingestion pending
+          Location: locationId,
           UpdatedAt: nowDate,
           Datum_erfasst: parseDatumErfasst(final['Datum erfasst']),
           Artikel_Nummer: artikelNummer,

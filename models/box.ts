@@ -3,7 +3,8 @@ export interface Box {
   BoxID: string;
   // TODO(agent): Validate LocationId/Label naming alignment once downstream clients migrate off legacy Standort mappings.
   // TODO(agent): Confirm ShelfLabel stays aligned with shelf label joins for list endpoints.
-  LocationId?: string | null;
+  // LocationId is always present (null when unset) for placement-aware clients.
+  LocationId: string | null;
   Label?: string | null;
   ShelfLabel?: string | null;
   CreatedAt?: string | null;

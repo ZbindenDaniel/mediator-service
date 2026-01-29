@@ -64,16 +64,19 @@ describe('prepareBoxesForDisplay', () => {
       {
         BoxID: 'BX-020',
         Label: 'Zimmer',
+        LocationId: null,
         UpdatedAt: '2024-05-01T08:00:00.000Z',
       },
       {
         BoxID: 'BX-019',
         Label: 'Zimmer',
+        LocationId: null,
         UpdatedAt: '2024-05-02T08:00:00.000Z',
       },
       {
         BoxID: 'BX-018',
         Label: 'Büro',
+        LocationId: null,
         UpdatedAt: '2024-05-03T08:00:00.000Z',
       },
     ];
