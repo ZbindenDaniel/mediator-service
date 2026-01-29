@@ -2,9 +2,8 @@ import React from 'react';
 import { formatShelfLabel } from '../lib/shelfLabel';
 import { logError, logger } from '../utils/logger';
 
-// TODO(agent): Confirm BoxTag presentation stays aligned with the latest location label requirements.
-// TODO(agent): Revisit BoxTag showId defaults once label coverage is validated across all box surfaces.
-// TODO(agent): Align BoxTag fallback label formatting once shelf naming conventions finalize.
+// TODO(agent): Validate BoxTag primary/secondary label layout with production shelf label data.
+// TODO(agent): Confirm BoxTag showId line ordering meets scan workflows for inventory teams.
 
 interface BoxTagProps {
   locationKey?: string | null;
@@ -26,16 +25,16 @@ function normalizeTagValue(value: string | null | undefined, context: string): s
   }
 }
 
-function resolveFallbackLabel(locationKey: string): string {
+function resolveFallbackLabel(locationKey: string): string | null {
   if (!locationKey) {
-    return '';
+    return null;
   }
 
   try {
-    return formatShelfLabel(locationKey) ?? '';
+    return formatShelfLabel(locationKey);
   } catch (error) {
     logError('Failed to format fallback shelf label for box tag', error, { locationKey });
-    return '';
+    return null;
   }
 }
 
@@ -43,7 +42,17 @@ export default function BoxTag({ locationKey, labelOverride, className, showId =
   const normalizedLocation = normalizeTagValue(locationKey, 'box location');
   const normalizedLabel = normalizeTagValue(labelOverride, 'box label override');
   const fallbackLabel = resolveFallbackLabel(normalizedLocation);
-  const displayLabel = normalizedLabel || fallbackLabel || (showId ? normalizedLocation : '');
+  const displayLabel = normalizedLabel || fallbackLabel || normalizedLocation;
+  const secondaryLabel = fallbackLabel;
+  const showRawId = Boolean(
+    showId && normalizedLocation && (displayLabel !== normalizedLocation || secondaryLabel),
+  );
+
+  if (normalizedLocation && !fallbackLabel) {
+    logger.warn('Shelf label formatter returned empty label for box tag', {
+      locationKey: normalizedLocation,
+    });
+  }
 
   if (!displayLabel) {
     logger.warn('Missing box location', { locationKey });
@@ -60,7 +69,8 @@ export default function BoxTag({ locationKey, labelOverride, className, showId =
       }}
     >
       <span>{displayLabel}</span>
-      {showId && normalizedLocation && displayLabel !== normalizedLocation ? (
+      {secondaryLabel ? <span className="muted">{secondaryLabel}</span> : null}
+      {showRawId ? (
         <span className="mono">{normalizedLocation}</span>
       ) : null}
     </span>
