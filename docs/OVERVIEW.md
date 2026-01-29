@@ -97,6 +97,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Normalized item creation quantity handling to keep Auf_Lager flowing through match selection and guard against missing payloads while clarifying bulk-vs-instance behavior in the UI.
 - Aligned agentic close availability to allow closing in any non-running state while keeping running runs locked to prevent accidental termination.
 - Migrated agentic run persistence to key off Artikel_Nummer with backfill logging and updated queue/index usage to align runs with item references.
+- Removed ItemUUID fields from import-item agentic run payloads/logs and added Artikel_Nummer-scoped error logging around agentic persistence.
 - Aligned relocation create-and-move flow with auto-print item label behavior to match creation-time printing expectations.
 - Made box detail item rows open the representative item on click/keyboard while removing the redundant details action.
 - Adjusted grouped list and box detail quantity display to use bulk Auf_Lager values for Menge items while logging parse failures.
