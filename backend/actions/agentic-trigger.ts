@@ -273,7 +273,7 @@ const action = defineHttpAction({
       }
 
       return sendJson(res, result.status || 422, {
-        error: 'Agentic trigger failed',
+        error: 'Ki Aufruf fehlgeschlagen',
         details: result.body ?? result.rawBody
       });
     } catch (err) {
@@ -282,7 +282,7 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: err.message, reason: err.reason });
       }
       console.error('[agentic-trigger] Unexpected error while triggering agentic run', err);
-      return sendJson(res, 500, { error: 'Failed to trigger agentic run' });
+      return sendJson(res, 500, { error: 'Ki Aufruf fehlgeschlagen' });
     }
   },
   view: () => '<div class="card"><p class="muted">Agentic trigger proxy API</p></div>'
