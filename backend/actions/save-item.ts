@@ -16,6 +16,7 @@ const MEDIA_PREFIX = '/media/';
 // TODO(agent): Align item instance summary fields with detail UI once instance list usage expands.
 // TODO(agent): Monitor zero-stock instance warnings to confirm detail filters stay aligned with list policy.
 // TODO(reference-only-edit): Keep edit payload guards aligned with instance/reference field boundaries.
+// TODO(suchbegriff-guard): Reconfirm Suchbegriff update guard stays aligned with import/update flows.
 // TODO(einheit-immutability): Keep Einheit immutable in edit payloads while legacy clients update.
 const ALLOWED_MEDIA_EXTENSIONS = new Set<string>([
   '.bmp',
@@ -781,6 +782,17 @@ const action = defineHttpAction({
         }
       } catch (error) {
         console.error('[save-item] Failed to load existing item reference', { itemId, artikelNummer, error });
+      }
+      const existingSuchbegriff =
+        typeof existingReference?.Suchbegriff === 'string' ? existingReference.Suchbegriff.trim() : '';
+      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Suchbegriff') && existingSuchbegriff) {
+        console.info('[save-item] Ignoring Suchbegriff update for existing reference', {
+          itemId,
+          artikelNummer,
+          existingSuchbegriff,
+          incomingSuchbegriff: referencePayload.Suchbegriff ?? null
+        });
+        delete referencePayload.Suchbegriff;
       }
       const referenceBase: ItemRef = existingReference ?? {
         Artikel_Nummer: artikelNummer,

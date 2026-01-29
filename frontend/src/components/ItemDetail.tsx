@@ -51,6 +51,7 @@ import { logger, logError } from '../utils/logger';
 import { filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
+// TODO(suchbegriff-override): Revisit Suchbegriff override logging once UI formalizes edit intent.
 // TODO(media-controls): Validate media add/remove slot mapping once details UX feedback lands.
 // TODO(touch-handlers): Validate touch navigation UX after removing root container touch bindings.
 
@@ -344,7 +345,7 @@ export function AgenticStatusCard({
       }
       return next;
     });
-  }, []);
+  }, [item, itemId]);
 
   return (
     <div className={`card agentic-status-card${isCollapsed ? ' agentic-status-card--collapsed' : ''}`}>
@@ -744,6 +745,10 @@ export default function ItemDetail({ itemId }: Props) {
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const agenticOverrideLogRef = useRef<{ itemId: string | null; active: boolean }>({
+    itemId: null,
+    active: false
+  });
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
@@ -897,6 +902,7 @@ export default function ItemDetail({ itemId }: Props) {
     try {
       setAgenticSearchTerm('');
       setAgenticSearchError(null);
+      agenticOverrideLogRef.current = { itemId, active: false };
       logger.info?.('ItemDetail: Reset agentic search term for item change', { itemId });
     } catch (error) {
       logError('ItemDetail: Failed to reset agentic search term on item change', error, { itemId });
@@ -1303,6 +1309,26 @@ export default function ItemDetail({ itemId }: Props) {
 
   const handleAgenticSearchTermChange = useCallback((value: string) => {
     try {
+      const persistedSearch = resolveAgenticSearchTerm(item);
+      const normalizedValue = value.trim();
+      const isOverrideActive =
+        Boolean(persistedSearch) && Boolean(normalizedValue) && normalizedValue !== persistedSearch;
+      const overrideState = agenticOverrideLogRef.current;
+      if (overrideState.itemId !== itemId) {
+        overrideState.itemId = itemId;
+        overrideState.active = false;
+      }
+      if (isOverrideActive && !overrideState.active) {
+        overrideState.active = true;
+        logger.info?.('ItemDetail: Using temporary Suchbegriff override for agentic run', {
+          itemId,
+          persistedSuchbegriff: persistedSearch,
+          overrideSuchbegriff: normalizedValue
+        });
+      } else if (!isOverrideActive && overrideState.active) {
+        overrideState.active = false;
+        logger.info?.('ItemDetail: Cleared temporary Suchbegriff override for agentic run', { itemId });
+      }
       setAgenticSearchTerm(value);
       if (value.trim()) {
         setAgenticSearchError(null);
@@ -1311,7 +1337,7 @@ export default function ItemDetail({ itemId }: Props) {
       console.error('ItemDetail: Failed to update agentic search term input', error);
       setAgenticError('Suchbegriff konnte nicht aktualisiert werden.');
     }
-  }, []);
+  }, [item, itemId]);
 
   const getNormalizedAgenticSearchTerm = useCallback((): string => {
     try {

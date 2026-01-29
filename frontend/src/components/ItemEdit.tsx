@@ -31,7 +31,7 @@ function stripInstanceFieldsForEdit(itemId: string, data: Partial<ItemFormPayloa
     'ShopwareVariantId',
     'ItemUUID'
   ] as const;
-  const immutableReferenceFields = ['Einheit'] as const;
+  const immutableReferenceFields = ['Einheit', 'Suchbegriff'] as const;
   const removedFields = instanceFields.filter((field) => Object.prototype.hasOwnProperty.call(data, field));
   if (removedFields.length > 0) {
     try {
