@@ -525,35 +525,45 @@ export async function performItemDetailAgenticCancel({
 }: ItemDetailAgenticCancelRequest): Promise<ItemDetailAgenticCancelResult> {
   let updatedRun: AgenticRun | null = agentic;
   let finalError: string | null = null;
+  const referenceId = agentic.Artikel_Nummer?.trim();
 
-  const persistence = await persistCancellation({
-    itemId: agentic.ItemUUID,
-    actor,
-    context: 'item detail cancel persistence'
-  });
+  let persistence: Awaited<ReturnType<typeof persistCancellation>>;
+  try {
+    persistence = await persistCancellation({
+      itemId: referenceId,
+      actor,
+      context: 'item detail cancel persistence'
+    });
+  } catch (error) {
+    logger.error?.('Agentic cancellation failed during persistence', {
+      artikelNummer: referenceId ?? null,
+      error
+    });
+    return { updatedRun: null, error: 'Ki-Abbruch konnte nicht gespeichert werden.' };
+  }
 
   if (persistence.ok) {
     if (persistence.agentic) {
       updatedRun = persistence.agentic;
     }
     logger.info?.('Persisted agentic cancellation via mediator API', {
-      itemId: agentic.ItemUUID,
+      artikelNummer: referenceId ?? null,
       status: persistence.status
     });
   } else if (persistence.status === 404) {
     finalError = 'Kein laufender Ki-Durchlauf gefunden.';
     logger.warn?.('Agentic cancellation skipped because run was not found', {
-      itemId: agentic.ItemUUID
+      artikelNummer: referenceId ?? null
     });
   } else if (persistence.status === 0) {
     finalError = 'Ki-Abbruch fehlgeschlagen.';
     logger.error?.('Agentic cancellation failed due to network error', {
-      itemId: agentic.ItemUUID
+      artikelNummer: referenceId ?? null
     });
   } else {
     finalError = 'Ki-Abbruch konnte nicht gespeichert werden.';
     logger.error?.('Agentic cancellation failed to persist via mediator API', {
-      itemId: agentic.ItemUUID,
+      artikelNummer: referenceId ?? null,
       status: persistence.status
     });
   }
@@ -704,7 +714,7 @@ function resolveAgenticSearchTerm(item: Item | null): string {
     }
   } catch (error) {
     logError('ItemDetail: Failed to resolve agentic search term', error, {
-      itemId: item?.ItemUUID ?? null
+      artikelNummer: item?.Artikel_Nummer ?? null
     });
   }
 
@@ -1813,15 +1823,16 @@ export default function ItemDetail({ itemId }: Props) {
     [itemId, load, navigate]
   );
 
+  // TODO(agentic-ref-id): Confirm Artikel_Nummer is always available for agentic detail actions.
   const refreshAgenticStatus = useCallback(
-    async (targetItemId: string): Promise<AgenticRun | null> => {
+    async (referenceId: string): Promise<AgenticRun | null> => {
       try {
-        const response = await fetch(`/api/items/${encodeURIComponent(targetItemId)}/agentic`, {
+        const response = await fetch(`/api/items/${encodeURIComponent(referenceId)}/agentic`, {
           method: 'GET',
           cache: 'reload'
         });
         if (!response.ok) {
-          console.warn('Failed to refresh agentic status', { status: response.status, targetItemId });
+          console.warn('Failed to refresh agentic status', { status: response.status, referenceId });
           return null;
         }
         const payload = await response
@@ -1834,7 +1845,7 @@ export default function ItemDetail({ itemId }: Props) {
         setAgentic(refreshedRun);
         return refreshedRun;
       } catch (error) {
-        console.error('Failed to reload agentic status', error);
+        logError('Failed to reload agentic status', error, { referenceId });
         return null;
       }
     },
@@ -1970,6 +1981,12 @@ export default function ItemDetail({ itemId }: Props) {
 
   async function handleAgenticReview(decision: 'approved' | 'rejected') {
     if (!agentic) return;
+    const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for agentic review', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für den Review.');
+      return;
+    }
     const actor = await ensureUser();
     if (!actor) {
       try {
@@ -2012,7 +2029,7 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticReviewIntent(decision);
     try {
       const res = await fetch(
-        `/api/items/${encodeURIComponent(agentic.ItemUUID)}/agentic/review`,
+        `/api/items/${encodeURIComponent(referenceId)}/agentic/review`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2024,11 +2041,11 @@ export default function ItemDetail({ itemId }: Props) {
         setAgentic(data.agentic ?? null);
         setAgenticError(null);
       } else {
-        console.error('Agentic review update failed', res.status);
+        logError('Agentic review update failed', null, { referenceId, status: res.status });
         setAgenticError('Review konnte nicht gespeichert werden.');
       }
     } catch (err) {
-      console.error('Agentic review request failed', err);
+      logError('Agentic review request failed', err, { referenceId });
       setAgenticError('Review-Anfrage fehlgeschlagen.');
     } finally {
       setAgenticReviewIntent(null);
@@ -2040,6 +2057,12 @@ export default function ItemDetail({ itemId }: Props) {
     if (!item) {
       console.warn('Agentic start requested without loaded item data');
       setAgenticError('Artikel konnte nicht geladen werden.');
+      return;
+    }
+    const referenceId = item.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for agentic start', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für den KI-Start.');
       return;
     }
 
@@ -2058,7 +2081,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const searchTerm = getNormalizedAgenticSearchTerm();
     if (!searchTerm) {
-      console.warn('Agentic start skipped due to missing or invalid search term', { itemId: item.ItemUUID });
+      console.warn('Agentic start skipped due to missing or invalid search term', { referenceId });
       setAgenticError('Ki-Lauf konnte nicht gestartet werden (fehlender Suchbegriff).');
       setAgenticSearchTerm('');
       return;
@@ -2072,7 +2095,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     try {
       const triggerResult = await triggerAgenticRun({
-        payload: { itemId: item.ItemUUID, artikelbeschreibung: searchTerm, actor },
+        payload: { itemId: referenceId, artikelbeschreibung: searchTerm, actor },
         context: 'item detail start'
       });
 
@@ -2095,7 +2118,7 @@ export default function ItemDetail({ itemId }: Props) {
 
       const refreshed = triggerResult.agentic
         ? triggerResult.agentic
-        : await refreshAgenticStatus(item.ItemUUID);
+        : await refreshAgenticStatus(referenceId);
       const nextRun = refreshed ?? agentic;
       if (nextRun) {
         setAgentic({ ...nextRun, SearchQuery: searchTerm });
@@ -2104,7 +2127,7 @@ export default function ItemDetail({ itemId }: Props) {
       }
       setAgenticError(null);
     } catch (err) {
-      console.error('Ki-Start request failed', err);
+      logError('Ki-Start request failed', err, { referenceId });
       setAgenticError('Ki-Lauf konnte nicht gestartet werden.');
     } finally {
       setAgenticActionPending(false);
@@ -2115,6 +2138,12 @@ export default function ItemDetail({ itemId }: Props) {
     if (!item) {
       console.warn('Agentic restart requested without loaded item data');
       setAgenticError('Artikel konnte nicht geladen werden.');
+      return;
+    }
+    const referenceId = item.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for agentic restart', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für den KI-Neustart.');
       return;
     }
 
@@ -2133,7 +2162,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const baseSearchTerm = getNormalizedAgenticSearchTerm();
     if (!baseSearchTerm) {
-      console.warn('Agentic restart skipped due to missing search term', { itemId: item.ItemUUID });
+      console.warn('Agentic restart skipped due to missing search term', { referenceId });
       setAgenticError('Ki-Neustart konnte nicht ausgelöst werden (fehlender Suchbegriff).');
       setAgenticSearchTerm('');
       return;
@@ -2155,7 +2184,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     try {
       const restartResponse = await fetch(
-        `/api/items/${encodeURIComponent(item.ItemUUID)}/agentic/restart`,
+        `/api/items/${encodeURIComponent(referenceId)}/agentic/restart`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2200,7 +2229,7 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
       const triggerPayload: AgenticRunTriggerPayload = {
-        itemId: refreshedRun.ItemUUID || item.ItemUUID,
+        itemId: refreshedRun.Artikel_Nummer || referenceId,
         artikelbeschreibung: searchTerm
       };
       const reviewForTrigger = {
@@ -2233,7 +2262,7 @@ export default function ItemDetail({ itemId }: Props) {
         }
         const failureReasonDescription = describeAgenticFailureReason(failureReasonCode);
         const cancelResult = await persistAgenticRunCancellation({
-          itemId: refreshedRun.ItemUUID || item.ItemUUID,
+          itemId: refreshedRun.Artikel_Nummer || referenceId,
           actor,
           context: 'item detail restart auto-cancel'
         });
@@ -2255,7 +2284,7 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
     } catch (err) {
-      console.error('Ki-Neustart request failed', err);
+      logError('Ki-Neustart request failed', err, { referenceId });
       setAgenticError('Ki-Neustart fehlgeschlagen.');
     } finally {
       setAgenticReviewIntent(null);
@@ -2267,6 +2296,12 @@ export default function ItemDetail({ itemId }: Props) {
     if (!agentic) {
       console.warn('Agentic cancel requested without run data');
       setAgenticError('Kein KI Durchlauf vorhanden.');
+      return;
+    }
+    const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for agentic cancel', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für den KI-Abbruch.');
       return;
     }
 
@@ -2300,25 +2335,31 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    console.info('Agentic action cancellation requested', agentic.ItemUUID);
+    console.info('Agentic action cancellation requested', referenceId);
 
     setAgenticActionPending(true);
     setAgenticReviewIntent(null);
     setAgenticError(null);
 
-    const { updatedRun, error: finalError } = await performItemDetailAgenticCancel({
-      agentic,
-      actor,
-      persistCancellation: persistAgenticRunCancellation,
-      logger: console
-    });
+    try {
+      const { updatedRun, error: finalError } = await performItemDetailAgenticCancel({
+        agentic,
+        actor,
+        persistCancellation: persistAgenticRunCancellation,
+        logger: console
+      });
 
-    if (updatedRun) {
-      setAgentic(updatedRun);
+      if (updatedRun) {
+        setAgentic(updatedRun);
+      }
+      setAgenticReviewIntent(null);
+      setAgenticError(finalError);
+    } catch (error) {
+      logError('ItemDetail: Agentic cancellation failed', error, { referenceId });
+      setAgenticError('Ki-Abbruch fehlgeschlagen.');
+    } finally {
+      setAgenticActionPending(false);
     }
-    setAgenticReviewIntent(null);
-    setAgenticError(finalError);
-    setAgenticActionPending(false);
   }
 
   async function handleAgenticClose() {
@@ -2327,10 +2368,16 @@ export default function ItemDetail({ itemId }: Props) {
       setAgenticError('Artikel konnte nicht geladen werden.');
       return;
     }
+    const referenceId = item.Artikel_Nummer?.trim() || agentic?.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for agentic close', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für den Abschluss.');
+      return;
+    }
 
     if (!agentic) {
       console.info('Agentic close requested without run data; upserting close record', {
-        itemId: item.ItemUUID
+        artikelNummer: referenceId
       });
     }
 
@@ -2374,9 +2421,8 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticError(null);
 
     try {
-      const itemIdForClose = agentic?.ItemUUID ?? item.ItemUUID;
       const closeResult = await persistAgenticRunClose({
-        itemId: itemIdForClose,
+        itemId: referenceId,
         actor,
         notes: noteInput,
         context: 'item detail close'
@@ -2395,7 +2441,7 @@ export default function ItemDetail({ itemId }: Props) {
         setAgenticError(closeResult.message ?? fallbackMessage);
       }
     } catch (err) {
-      console.error('Ki-Abschlussanfrage fehlgeschlagen', err);
+      logError('Ki-Abschlussanfrage fehlgeschlagen', err, { referenceId });
       setAgenticError('Ki-Suche konnte nicht abgeschlossen werden.');
     } finally {
       setAgenticActionPending(false);
@@ -2406,6 +2452,12 @@ export default function ItemDetail({ itemId }: Props) {
     if (!agentic) {
       console.warn('Agentic delete requested without run data');
       setAgenticError('Kein KI Durchlauf vorhanden.');
+      return;
+    }
+    const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for agentic delete', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für die Löschung.');
       return;
     }
 
@@ -2463,7 +2515,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     try {
       const deletionResult = await persistAgenticRunDeletion({
-        itemId: agentic.ItemUUID,
+        itemId: referenceId,
         actor,
         reason: 'User requested agentic run reset',
         context: 'item detail delete'
@@ -2472,7 +2524,7 @@ export default function ItemDetail({ itemId }: Props) {
       if (deletionResult.ok) {
         if (deletionResult.agentic) {
           console.info('Agentic run deleted; resetting state to not started', {
-            itemId: deletionResult.agentic.ItemUUID,
+            artikelNummer: deletionResult.agentic.Artikel_Nummer,
             status: deletionResult.agentic.Status
           });
         }
@@ -2485,7 +2537,7 @@ export default function ItemDetail({ itemId }: Props) {
         setAgenticError(deletionErrorMessage);
       }
     } catch (err) {
-      console.error('Ki-Lauf-Löschung fehlgeschlagen', err);
+      logError('Ki-Lauf-Löschung fehlgeschlagen', err, { referenceId });
       setAgenticError('Ki-Lauf konnte nicht gelöscht werden.');
     } finally {
       setAgenticActionPending(false);
