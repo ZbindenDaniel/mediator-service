@@ -32,6 +32,7 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 // TODO(agent): Confirm legacy Einheit normalization coverage for import-item once CSV-derived payloads are audited.
 // TODO(agent): Document ItemUUID parser expectations for Artikelnummer-based formats when adding new import clients.
 // TODO(agent): Align legacy quantity normalization rules between import-item and CSV ingestion flows.
+// TODO(suchbegriff-guard): Reconfirm Suchbegriff creation-only guard once import/update flows are consolidated.
 async function ensureUniqueItemUUID(
   candidate: string,
   ctx: any,
@@ -774,6 +775,38 @@ const action = defineHttpAction({
         artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null,
         source: 'import-item'
       });
+      let existingReferenceSuchbegriff = '';
+      let hasExistingReference = false;
+      if (resolvedArtikelNummer && ctx.getItemReference?.get) {
+        try {
+          const existingReference = ctx.getItemReference.get(resolvedArtikelNummer) as ItemRef | undefined;
+          if (existingReference) {
+            hasExistingReference = true;
+            existingReferenceSuchbegriff =
+              typeof existingReference.Suchbegriff === 'string' ? existingReference.Suchbegriff.trim() : '';
+          }
+        } catch (referenceLookupError) {
+          console.error('[import-item] Failed to load existing reference for Suchbegriff guard', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+            error: referenceLookupError
+          });
+        }
+      }
+      const shouldPersistSuchbegriff =
+        !isUpdateRequest && !isCreationByReference && !hasExistingReference;
+      if (!shouldPersistSuchbegriff && suchbegriff) {
+        console.info('[import-item] Ignoring Suchbegriff update for existing reference', {
+          ItemUUID,
+          Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+          isUpdateRequest,
+          isCreationByReference,
+          hasExistingReference
+        });
+      }
+      const suchbegriffToPersist = shouldPersistSuchbegriff
+        ? (suchbegriff || undefined)
+        : (existingReferenceSuchbegriff || undefined);
       const parsedLangtextInput = parseLangtext(langtextInput || null, {
         logger: console,
         context: 'import-item:form-langtext',
@@ -1054,7 +1087,7 @@ const action = defineHttpAction({
         Datum_erfasst: datumErfasst,
         Artikel_Nummer: resolvedArtikelNummer,
         Grafikname: firstImage || referenceDefaults?.Grafikname || '',
-        Suchbegriff: suchbegriff || undefined,
+        Suchbegriff: suchbegriffToPersist,
         Artikelbeschreibung: artikelbeschreibung,
         Auf_Lager: creationPlan.quantityPerItem,
         Verkaufspreis: verkaufspreis,
