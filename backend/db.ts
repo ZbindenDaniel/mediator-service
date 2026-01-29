@@ -935,6 +935,7 @@ ${ITEM_JOIN_WITH_BOX}
 WHERE i.ItemUUID = ?
 `);
   // TODO(agentic-instance-status): Keep agentic run joins aligned with ItemUUID-only semantics.
+  // TODO(agent): Confirm findByMaterial stock filtering stays aligned with list endpoint policy.
   findByMaterialStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
@@ -943,6 +944,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
 ${ITEM_JOIN_WITH_BOX}
 LEFT JOIN agentic_runs ar ON ar.ItemUUID = i.ItemUUID
 WHERE i.Artikel_Nummer = ?
+  AND COALESCE(i.Auf_Lager, 0) > 0
 ORDER BY i.UpdatedAt DESC
 `);
   getAdjacentItemIdsStatement = db.prepare(`

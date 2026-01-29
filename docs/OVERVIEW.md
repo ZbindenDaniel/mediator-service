@@ -146,10 +146,12 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Replaced the header back control with a home link, added mobile-only header button sizing, and logged navigation failures for the home shortcut.
 - Staged the item list Unterkategorie input so keystrokes update a draft value while Enter commits the filter with logging.
 - Included item reference Suchbegriff terms in search token-hit and exact-match scoring for refs and items to keep query behavior aligned with persisted metadata.
+- Extended item/ref search SQL to include Hersteller exact-match coverage, added Hersteller/Suchbegriff short-circuit scoring, and warned when token hits land without exact-match fields populated.
 - Tuned mobile header icon sizing to 30px square tap targets with slightly reduced icon font sizes for small screens.
 - Added Suchbegriff fallback normalization in search queries, logging when empty values fall back to Artikelbeschreibung or Artikel_Nummer while keeping token-hit and exact-match scoring aligned.
 - Updated item detail instance filtering to default missing stock to 1 for Stück rows while logging before/after counts for the Vorrat table.
 - Added BoxTag primary/secondary shelf label rendering with explicit shelf-label warnings and optional raw ID lines for showId views.
+- Filtered item detail instance queries to exclude zero-stock rows while logging any unexpected zero-stock entries returned for visibility.
 
 ## Documentation Map
 

@@ -14,6 +14,7 @@ const MEDIA_PREFIX = '/media/';
 // TODO(agent): Centralize media asset validation to avoid shipping document artifacts alongside images.
 // TODO(agent): Revisit allowed media extensions when new asset types need exporting.
 // TODO(agent): Align item instance summary fields with detail UI once instance list usage expands.
+// TODO(agent): Monitor zero-stock instance warnings to confirm detail filters stay aligned with list policy.
 // TODO(reference-only-edit): Keep edit payload guards aligned with instance/reference field boundaries.
 // TODO(einheit-immutability): Keep Einheit immutable in edit payloads while legacy clients update.
 const ALLOWED_MEDIA_EXTENSIONS = new Set<string>([
@@ -467,6 +468,7 @@ const action = defineHttpAction({
             const rawInstances = ctx.findByMaterial.all(item.Artikel_Nummer) as Item[] | undefined;
             if (Array.isArray(rawInstances)) {
               const normalizedInstances: ItemInstanceSummary[] = [];
+              let zeroStockCount = 0;
               for (const instance of rawInstances) {
                 const itemUUID =
                   typeof instance?.ItemUUID === 'string' ? instance.ItemUUID.trim() : '';
@@ -477,6 +479,10 @@ const action = defineHttpAction({
                   });
                   continue;
                 }
+                const stockValue = Number(instance?.Auf_Lager ?? 0);
+                if (!Number.isNaN(stockValue) && stockValue <= 0) {
+                  zeroStockCount += 1;
+                }
                 // TODO(agentic-instance-status): Keep instance list agentic statuses aligned with ItemUUID-based runs.
                 normalizedInstances.push({
                   ItemUUID: itemUUID,
@@ -486,6 +492,13 @@ const action = defineHttpAction({
                   BoxID: instance.BoxID ?? null,
                   UpdatedAt: instance.UpdatedAt ? String(instance.UpdatedAt) : null,
                   Datum_erfasst: instance.Datum_erfasst ? String(instance.Datum_erfasst) : null
+                });
+              }
+              if (zeroStockCount > 0) {
+                console.warn('[save-item] Instance list includes zero-stock entries', {
+                  itemId,
+                  artikelNummer: item.Artikel_Nummer,
+                  zeroStockCount
                 });
               }
               instances = normalizedInstances;

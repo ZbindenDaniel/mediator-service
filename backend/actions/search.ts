@@ -1,4 +1,5 @@
 // TODO(agent): add action tests.
+// TODO(search-hersteller): Validate Hersteller/Suchbegriff exact-match warnings once deployed.
 // TODO(search-suchbegriff): Confirm Suchbegriff search performance and add DB indexes if needed.
 // TODO(search-suchbegriff): Re-evaluate Suchbegriff fallback logging volume after monitoring search traffic.
 // TODO(agent): Review Langtext search tokenization once structured payload telemetry is available.
@@ -210,6 +211,18 @@ function computeSimilarityScore(term: string, tokens: string[], candidate: unkno
   return Math.max(baseScore, softRecall);
 }
 
+function hasExactMatchFieldValue(values: unknown[]): boolean {
+  return values.some(value => {
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value);
+    }
+    return false;
+  });
+}
+
 function parseDeepSearchParam(value: string | null): boolean {
   if (!value) {
     return true;
@@ -238,6 +251,23 @@ function scoreItem(term: string, tokens: string[], item: any): number {
     context: `item-score-${item?.ItemUUID ?? 'unknown'}`,
     itemUUID: item?.ItemUUID ?? null
   });
+  const normalizedTerm = normalize(term);
+  const normalizedSuchbegriff = normalize(suchbegriffCandidate);
+  if (normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm) {
+    console.info('[search] Suchbegriff exact match detected in item score', {
+      itemId: item?.ItemUUID ?? null,
+      artikelNummer: item?.Artikel_Nummer ?? null
+    });
+    return 1;
+  }
+  const normalizedHersteller = normalize(item?.Hersteller);
+  if (normalizedHersteller && normalizedHersteller === normalizedTerm) {
+    console.info('[search] Hersteller exact match detected in item score', {
+      itemId: item?.ItemUUID ?? null,
+      artikelNummer: item?.Artikel_Nummer ?? null
+    });
+    return 1;
+  }
   const fields = [
     item?.Artikelbeschreibung,
     item?.Kurzbeschreibung,
@@ -287,6 +317,21 @@ function scoreReference(term: string, tokens: string[], reference: any): number 
     artikelNummer: reference?.Artikel_Nummer,
     context: `ref-score-${reference?.Artikel_Nummer ?? 'unknown'}`
   });
+  const normalizedTerm = normalize(term);
+  const normalizedSuchbegriff = normalize(suchbegriffCandidate);
+  if (normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm) {
+    console.info('[search] Suchbegriff exact match detected in reference score', {
+      artikelNummer: reference?.Artikel_Nummer ?? null
+    });
+    return 1;
+  }
+  const normalizedHersteller = normalize(reference?.Hersteller);
+  if (normalizedHersteller && normalizedHersteller === normalizedTerm) {
+    console.info('[search] Hersteller exact match detected in reference score', {
+      artikelNummer: reference?.Artikel_Nummer ?? null
+    });
+    return 1;
+  }
   const fields = [
     reference?.Artikelbeschreibung,
     reference?.Kurzbeschreibung,
@@ -403,6 +448,7 @@ const action = defineHttpAction({
       lower(r.Artikel_Nummer) = ?
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
       OR lower(${suchbegriffFallbackExpr}) = ?
+      OR lower(COALESCE(r.Hersteller, '')) = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -454,7 +500,9 @@ const action = defineHttpAction({
             normalized,
             normalized,
             normalized,
+            normalized,
             // sql_score CASE exact_match params (repeat equality)
+            normalized,
             normalized,
             normalized,
             normalized,
@@ -499,6 +547,26 @@ const action = defineHttpAction({
             exemplarBoxID: exemplar_box_id ?? null,
             exemplarLocation: exemplar_location ?? null
           } as Record<string, unknown> & { Artikel_Nummer?: string };
+          const suchbegriffCheck = resolveSearchSuchbegriff(reference.Suchbegriff, {
+            artikelbeschreibung: reference.Artikelbeschreibung,
+            artikelNummer: reference.Artikel_Nummer,
+            context: `ref-exact-match-${reference.Artikel_Nummer ?? 'unknown'}`
+          });
+          if (
+            typeof token_hits === 'number' &&
+            token_hits > 0 &&
+            !hasExactMatchFieldValue([
+              reference.Artikel_Nummer,
+              reference.Artikelbeschreibung,
+              suchbegriffCheck,
+              reference.Hersteller
+            ])
+          ) {
+            console.warn('[search] Reference token hits without exact-match fields populated', {
+              artikelNummer: reference.Artikel_Nummer ?? null,
+              tokenHits: token_hits
+            });
+          }
           const key = reference.Artikel_Nummer;
           if (!key) {
             continue;
@@ -540,7 +608,7 @@ const action = defineHttpAction({
 
       const likeItem = (t: string) => {
         const p = `%${t}%`;
-        return deepSearch ? [p, p, p, p, p, p, p] as const : [p, p, p, p, p] as const;
+        return deepSearch ? [p, p, p, p, p, p, p, p] as const : [p, p, p, p, p, p] as const;
       };
       const likeBox = (t: string) => {
         const p = `%${t}%`;
@@ -562,6 +630,7 @@ const action = defineHttpAction({
       OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
       OR lower(${suchbegriffFallbackExpr}) LIKE ?
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?\n      OR lower(COALESCE(r.Langtext, '')) LIKE ?" : ''}
+      OR lower(COALESCE(r.Hersteller, '')) LIKE ?
       OR lower(i.BoxID)            LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
@@ -574,6 +643,7 @@ const action = defineHttpAction({
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
       OR lower(${suchbegriffFallbackExpr}) = ?
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) = ?\n      OR lower(COALESCE(r.Langtext, '')) = ?" : ''}
+      OR lower(COALESCE(r.Hersteller, '')) = ?
       OR lower(i.BoxID)            = ?
     ) THEN 1 ELSE 0 END
   `;
@@ -625,8 +695,8 @@ const action = defineHttpAction({
   `;
 
         itemExactParams = deepSearch
-          ? [normalized, normalized, normalized, normalized, normalized, normalized, normalized]
-          : [normalized, normalized, normalized, normalized, normalized];
+          ? [normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized]
+          : [normalized, normalized, normalized, normalized, normalized, normalized];
 
         itemParams = [
           // token_hits params
@@ -662,6 +732,35 @@ const action = defineHttpAction({
           limit: itemLimit,
           returned: rawItems.length
         });
+      }
+      for (const item of rawItems) {
+        if (typeof item?.token_hits !== 'number' || item.token_hits <= 0) {
+          continue;
+        }
+        const suchbegriffCheck = resolveSearchSuchbegriff(item?.Suchbegriff, {
+          artikelbeschreibung: item?.Artikelbeschreibung,
+          artikelNummer: item?.Artikel_Nummer,
+          context: `item-exact-match-${item?.ItemUUID ?? 'unknown'}`,
+          itemUUID: item?.ItemUUID ?? null
+        });
+        const exactMatchFields = [
+          item?.ItemUUID,
+          item?.Artikel_Nummer,
+          item?.Artikelbeschreibung,
+          suchbegriffCheck,
+          item?.Hersteller,
+          item?.BoxID
+        ];
+        if (deepSearch) {
+          exactMatchFields.push(item?.Kurzbeschreibung, item?.Langtext);
+        }
+        if (!hasExactMatchFieldValue(exactMatchFields)) {
+          console.warn('[search] Item token hits without exact-match fields populated', {
+            itemId: item?.ItemUUID ?? null,
+            artikelNummer: item?.Artikel_Nummer ?? null,
+            tokenHits: item?.token_hits ?? null
+          });
+        }
       }
 
       // ---------------- BOXES ----------------
