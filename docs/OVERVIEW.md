@@ -173,6 +173,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Gate the legacy agentic_runs reset to run only when the schema still lacks Artikel_Nummer, preventing repeat wipes after migration.
 - Added events.csv import handling alongside CSV ingestion, with per-row validation and logging to skip invalid event rows while continuing the import.
 - Replaced legacy agentic_runs resets with non-destructive warnings and a startup abort when Artikel_Nummer is missing, so manual migrations are required without deleting rows.
+- Corrected CSV archive branch flow so events, agentic runs, and items buffering close cleanly and continue as expected after each branch.
 
 ## Documentation Map
 
