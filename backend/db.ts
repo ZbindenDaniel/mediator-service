@@ -9,6 +9,7 @@ import path from 'path';
 // TODO(quality-migration): Confirm Quality defaults remain accurate once upstream ERP integration defines quality grades.
 // TODO(agent): Reconfirm recent activities search filtering once term usage is finalized.
 // TODO(agent): Review zero-stock updates for non-bulk items once list/grouping changes are finalized.
+// TODO(agent): Revisit events.csv import data validation once external event feeds land.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -2271,12 +2272,26 @@ const insertEventStatement = db.prepare(`
   INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
   VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
 `);
+const insertEventImportStatement = db.prepare(`
+  INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
+  VALUES (@CreatedAt, @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
+`);
 
 export type LogEventPayload = {
   Actor?: string | null;
   EntityType: string;
   EntityId: string;
   Event: string;
+  Meta?: string | null;
+};
+
+export type EventLogInsertPayload = {
+  CreatedAt: string;
+  Actor?: string | null;
+  EntityType: string;
+  EntityId: string;
+  Event: string;
+  Level: EventLogLevel;
   Meta?: string | null;
 };
 
@@ -2301,6 +2316,32 @@ export function logEvent(payload: LogEventPayload): void {
       level: entry.Level,
       error: err
     });
+  }
+}
+
+export function insertEventLogEntry(payload: EventLogInsertPayload): boolean {
+  const entry = {
+    CreatedAt: payload.CreatedAt,
+    Actor: payload.Actor ?? null,
+    EntityType: payload.EntityType,
+    EntityId: payload.EntityId,
+    Event: payload.Event,
+    Level: payload.Level,
+    Meta: payload.Meta ?? null
+  };
+
+  try {
+    insertEventImportStatement.run(entry);
+    return true;
+  } catch (err) {
+    console.error('[db] Failed to import event log entry', {
+      entityType: entry.EntityType,
+      entityId: entry.EntityId,
+      event: entry.Event,
+      level: entry.Level,
+      error: err
+    });
+    return false;
   }
 }
 

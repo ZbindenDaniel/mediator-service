@@ -8,6 +8,7 @@
 // TODO(agent): Revisit legacy schema detection logging once CSV partner inventory coverage expands.
 // TODO(agent): Recheck legacy quantity normalization rules once more category-based guidance is available.
 // TODO(agent): Capture legacy column mapping metrics alongside ingest summaries once schema mapping stabilizes.
+// TODO(agent): Capture events.csv import telemetry once event ingestion volumes are known.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
@@ -19,10 +20,11 @@ import {
   persistItemReference,
   upsertAgenticRun,
   findByMaterial,
-  getMaxArtikelNummer
+  getMaxArtikelNummer,
+  insertEventLogEntry
 } from './db';
 import { IMPORTER_FORCE_ZERO_STOCK } from './config';
-import { Box, Item, ItemEinheit, normalizeItemEinheit } from '../models';
+import { Box, Item, ItemEinheit, normalizeEventLogLevel, normalizeItemEinheit } from '../models';
 import { normalizeQuality, resolveQualityFromLabel } from '../models/quality';
 import { Op } from './ops/types';
 import { resolveStandortLabel, normalizeStandortCode } from './standort-label';
@@ -216,6 +218,8 @@ const KNOWN_ITEM_COLUMNS = new Set<string>([
   'exportVersion',
   'ExportVersion',
 ]);
+
+const EVENT_REQUIRED_FIELDS = ['CreatedAt', 'EntityType', 'EntityId', 'Event', 'Level'] as const;
 
 function hydratePartnerFieldAliases(row: Record<string, string>, rowNumber: number): void {
   for (const alias of PARTNER_FIELD_ALIASES) {
@@ -1389,6 +1393,129 @@ export async function ingestCsvFile(
   }
 }
 
+function normalizeEventField(value: unknown): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  try {
+    return (typeof value === 'string' ? value : String(value)).trim();
+  } catch (fieldError) {
+    console.error('[importer] Failed to normalize event field value', { value, fieldError });
+    return '';
+  }
+}
+
+function normalizeEventCreatedAt(value: string, rowNumber: number): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      console.warn('[importer] Skipping events.csv row with invalid CreatedAt', { rowNumber, value });
+      return null;
+    }
+    return value;
+  } catch (error) {
+    console.error('[importer] Failed to parse events.csv CreatedAt value', { rowNumber, value, error });
+    return null;
+  }
+}
+
+export async function ingestEventsCsv(data: Buffer | string): Promise<{ count: number; skipped: number }> {
+  console.log('[importer] Ingesting events.csv payload');
+  try {
+    const content = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+    const records = parseCsvSync(content, { columns: true, skip_empty_lines: true }) as Array<Record<string, unknown>>;
+    let count = 0;
+    let skipped = 0;
+
+    if (records.length === 0) {
+      console.info('[importer] events.csv contained zero rows');
+    }
+
+    for (const [index, record] of records.entries()) {
+      const rowNumber = index + 1;
+      try {
+        const createdAtRaw = normalizeEventField(record.CreatedAt);
+        const createdAt = normalizeEventCreatedAt(createdAtRaw, rowNumber);
+        const actor = normalizeEventField(record.Actor);
+        const entityType = normalizeEventField(record.EntityType);
+        const entityId = normalizeEventField(record.EntityId);
+        const event = normalizeEventField(record.Event);
+        const levelRaw = normalizeEventField(record.Level);
+        const meta = normalizeEventField(record.Meta);
+
+        const missingFields = EVENT_REQUIRED_FIELDS.filter((field) => {
+          if (field === 'CreatedAt') {
+            return !createdAt;
+          }
+          if (field === 'Level') {
+            return !levelRaw;
+          }
+          if (field === 'EntityType') {
+            return !entityType;
+          }
+          if (field === 'EntityId') {
+            return !entityId;
+          }
+          if (field === 'Event') {
+            return !event;
+          }
+          return false;
+        });
+
+        if (missingFields.length > 0) {
+          console.warn('[importer] Skipping events.csv row missing required fields', {
+            rowNumber,
+            missingFields,
+          });
+          skipped += 1;
+          continue;
+        }
+
+        const normalizedLevel = normalizeEventLogLevel(levelRaw);
+        if (!normalizedLevel) {
+          console.warn('[importer] Skipping events.csv row with invalid Level', {
+            rowNumber,
+            level: levelRaw,
+          });
+          skipped += 1;
+          continue;
+        }
+
+        const inserted = insertEventLogEntry({
+          CreatedAt: createdAt as string,
+          Actor: actor || null,
+          EntityType: entityType,
+          EntityId: entityId,
+          Event: event,
+          Level: normalizedLevel,
+          Meta: meta || null
+        });
+
+        if (inserted) {
+          count += 1;
+        } else {
+          skipped += 1;
+        }
+      } catch (rowError) {
+        console.error('[importer] Failed to normalize events.csv row', {
+          rowNumber,
+          error: rowError,
+        });
+        skipped += 1;
+      }
+    }
+
+    console.info('[importer] Completed events.csv ingestion', { count, skipped });
+    return { count, skipped };
+  } catch (err) {
+    console.error('[importer] Failed to ingest events CSV payload', err);
+    throw err;
+  }
+}
+
 function normalizeBoxField(value: unknown): string {
   if (value === undefined || value === null) {
     return '';
@@ -1607,4 +1734,4 @@ function readCsv(file: string): Promise<Record<string, string>[]> {
   });
 }
 
-export default { ingestCsvFile, ingestBoxesCsv, ingestAgenticRunsCsv };
+export default { ingestCsvFile, ingestBoxesCsv, ingestEventsCsv, ingestAgenticRunsCsv };
