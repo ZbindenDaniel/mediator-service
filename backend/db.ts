@@ -901,6 +901,7 @@ try {
       Grafikname,
       ImageNames,
       Artikelbeschreibung,
+      Suchbegriff,
       Verkaufspreis,
       Kurzbeschreibung,
       Langtext,
