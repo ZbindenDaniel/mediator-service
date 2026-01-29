@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ensureUser } from '../lib/user';
+import { formatShelfLabel } from '../lib/shelfLabel';
 import { logger, logError } from '../utils/logger';
 import { dialogService } from './dialog';
 
@@ -7,6 +8,7 @@ import { dialogService } from './dialog';
 // TODO(agent): Confirm relocation flows fully rely on LocationId payloads once legacy Location fields are deprecated.
 // TODO(agent): Consider sorting shelf options by parsed location/floor/shelf once labels are expanded.
 // TODO(agent): Align relocation shelf loading logs with shared telemetry once analytics are centralized.
+// TODO(agent): Validate relocation option labels against the LocationTag format once shelf labels are updated.
 
 interface Props {
   boxId: string;
@@ -20,23 +22,43 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   const [locationOptions, setLocationOptions] = useState<Array<{ id: string; label: string; sourceBoxId: string }>>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
 
-  function formatShelfLabel(locationId: string, fallbackLabel: string) {
-    const segments = locationId
-      .split('-')
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-    if (segments.length < 5 || segments[0] !== LOCATION_BOX_TYPE) {
-      logger.warn('[relocate-box] Unexpected shelf id format for label', { locationId });
-      return fallbackLabel;
+  function buildShelfSelectionLabel(locationId: string, shelfLabel: string | null, fallbackLabel: string) {
+    let parsedLabel = fallbackLabel;
+    try {
+      const segments = locationId
+        .split('-')
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+      if (segments.length < 5 || segments[0] !== LOCATION_BOX_TYPE) {
+        logger.warn('[relocate-box] Unexpected shelf id format for label', { locationId });
+      } else {
+        const shelfNumber = segments[4];
+        const formattedBase = formatShelfLabel(locationId);
+        if (formattedBase && shelfNumber) {
+          parsedLabel = `${formattedBase} · Regal ${shelfNumber}`;
+        } else if (formattedBase) {
+          parsedLabel = formattedBase;
+        } else {
+          logger.warn('[relocate-box] Missing formatted shelf label for selection', { locationId });
+        }
+      }
+    } catch (error) {
+      logError('Failed to format relocation shelf label', error, { locationId, fallbackLabel });
     }
-    const location = segments[1];
-    const floor = segments[2];
-    const shelfNumber = segments[4];
-    if (!location || !floor || !shelfNumber) {
-      logger.warn('[relocate-box] Missing shelf id segments for label', { locationId });
-      return fallbackLabel;
+
+    let normalizedShelfLabel = '';
+    try {
+      normalizedShelfLabel = shelfLabel?.trim() ?? '';
+    } catch (error) {
+      logError('Failed to normalize relocation shelf label', error, { locationId, shelfLabel });
+      normalizedShelfLabel = '';
     }
-    return `Standort ${location} · Etage ${floor} · Regal ${shelfNumber}`;
+
+    if (normalizedShelfLabel && parsedLabel && normalizedShelfLabel !== parsedLabel) {
+      return `${normalizedShelfLabel} · ${parsedLabel}`;
+    }
+
+    return normalizedShelfLabel || parsedLabel;
   }
 
   const locationLookup = useMemo(() => {
@@ -61,7 +83,14 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
             boxId,
             status: responseStatus
           });
-          return {} as { boxes?: Array<{ BoxID?: string; Label?: string | null; LocationId?: string | null }> };
+          return {} as {
+            boxes?: Array<{
+              BoxID?: string;
+              Label?: string | null;
+              LocationId?: string | null;
+              ShelfLabel?: string | null;
+            }>;
+          };
         });
 
         if (!response.ok) {
@@ -84,8 +113,12 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
               if (!locationId) {
                 return null;
               }
-              const fallbackLabel = typeof box?.Label === 'string' && box.Label.trim() ? box.Label.trim() : locationId;
-              const label = formatShelfLabel(locationId, fallbackLabel);
+              const rawBoxLabel = typeof box?.Label === 'string' && box.Label.trim() ? box.Label.trim() : '';
+              const rawShelfLabel =
+                typeof box?.ShelfLabel === 'string' && box.ShelfLabel.trim() ? box.ShelfLabel.trim() : '';
+              const shelfLabel = rawShelfLabel || rawBoxLabel || null;
+              const fallbackLabel = shelfLabel || locationId;
+              const label = buildShelfSelectionLabel(locationId, shelfLabel, fallbackLabel);
               return { id: locationId, label, sourceBoxId: fallbackId || locationId };
             })
             .filter((option): option is { id: string; label: string; sourceBoxId: string } => Boolean(option));

@@ -157,6 +157,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added Suchbegriff fallback normalization in search queries, logging when empty values fall back to Artikelbeschreibung or Artikel_Nummer while keeping token-hit and exact-match scoring aligned.
 - Updated item detail instance filtering to default missing stock to 1 for Stück rows while logging before/after counts for the Vorrat table.
 - Added BoxTag primary/secondary shelf label rendering with explicit shelf-label warnings and optional raw ID lines for showId views.
+- Updated RelocateBoxCard location selection labels to include shelf labels alongside parsed shelf formatting for relocation choices.
 - Filtered item detail instance queries to exclude zero-stock rows while logging any unexpected zero-stock entries returned for visibility.
 - Stored reference score breakdowns during ref dedupe to reuse them in top-result logging without altering the response payload.
 - Added minimal typed search score inputs for item/reference scoring to replace `any` while preserving existing response payloads.
