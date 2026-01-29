@@ -9,7 +9,6 @@ import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
-import { parseLangtext } from '../lib/langtext';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -158,30 +157,6 @@ function normalizeSearchEinheit(value: unknown, context: string): ItemEinheit {
   return DEFAULT_SEARCH_EINHEIT;
 }
 
-function normalizeLangtextValue(value: unknown, context: string): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  try {
-    const parsed = parseLangtext(value, { logger: console, context });
-    if (!parsed) {
-      return '';
-    }
-    if (typeof parsed === 'string') {
-      return parsed;
-    }
-    try {
-      return JSON.stringify(parsed);
-    } catch (error) {
-      console.error('[search] Failed to stringify Langtext payload', { context, error });
-      return '';
-    }
-  } catch (error) {
-    console.error('[search] Failed to normalize Langtext payload', { context, error });
-    return '';
-  }
-}
-
 function computeSimilarityScore(term: string, tokens: string[], candidate: unknown): number {
   const normalizedCandidate = normalize(candidate);
   if (!normalizedCandidate) return 0;
@@ -211,6 +186,7 @@ function computeSimilarityScore(term: string, tokens: string[], candidate: unkno
   return Math.max(baseScore, softRecall);
 }
 
+// TODO(search-field-scores): Review field score weighting after observing ranking feedback.
 function hasExactMatchFieldValue(values: unknown[]): boolean {
   return values.some(value => {
     if (typeof value === 'string') {
@@ -243,8 +219,27 @@ function parseDeepSearchParam(value: string | null): boolean {
   return false;
 }
 
-function scoreItem(term: string, tokens: string[], item: any): number {
-  const langtextCandidate = normalizeLangtextValue(item?.Langtext, `item-score-${item?.ItemUUID ?? 'unknown'}`);
+type ItemFieldScores = {
+  scoreSuchbegriff: number;
+  scoreHersteller: number;
+  scoreArtikelbeschreibung: number;
+  scoreArtikelNummer: number;
+  scoreItemUUID: number;
+  scoreBoxID: number;
+  bestScore: number;
+  bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'ArtikelNummer' | 'ItemUUID' | 'BoxID';
+};
+
+type ReferenceFieldScores = {
+  scoreSuchbegriff: number;
+  scoreHersteller: number;
+  scoreArtikelbeschreibung: number;
+  scoreArtikelNummer: number;
+  bestScore: number;
+  bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'ArtikelNummer';
+};
+
+function scoreItem(term: string, tokens: string[], item: any): ItemFieldScores {
   const suchbegriffCandidate = resolveSearchSuchbegriff(item?.Suchbegriff, {
     artikelbeschreibung: item?.Artikelbeschreibung,
     artikelNummer: item?.Artikel_Nummer,
@@ -253,45 +248,53 @@ function scoreItem(term: string, tokens: string[], item: any): number {
   });
   const normalizedTerm = normalize(term);
   const normalizedSuchbegriff = normalize(suchbegriffCandidate);
+  let scoreSuchbegriff = computeSimilarityScore(term, tokens, suchbegriffCandidate);
   if (normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm) {
     console.info('[search] Suchbegriff exact match detected in item score', {
       itemId: item?.ItemUUID ?? null,
       artikelNummer: item?.Artikel_Nummer ?? null
     });
-    return 1;
+    scoreSuchbegriff = 1;
   }
   const normalizedHersteller = normalize(item?.Hersteller);
+  let scoreHersteller = computeSimilarityScore(term, tokens, item?.Hersteller);
   if (normalizedHersteller && normalizedHersteller === normalizedTerm) {
     console.info('[search] Hersteller exact match detected in item score', {
       itemId: item?.ItemUUID ?? null,
       artikelNummer: item?.Artikel_Nummer ?? null
     });
-    return 1;
+    scoreHersteller = 1;
   }
-  const fields = [
-    item?.Artikelbeschreibung,
-    item?.Kurzbeschreibung,
-    suchbegriffCandidate,
-    langtextCandidate,
-    item?.Artikel_Nummer,
-    item?.Hersteller,
-    item?.Location,
-    item?.BoxID,
-    item?.ItemUUID
+
+  const scoreArtikelbeschreibung = computeSimilarityScore(term, tokens, item?.Artikelbeschreibung);
+  const scoreArtikelNummer = computeSimilarityScore(term, tokens, item?.Artikel_Nummer);
+  const scoreItemUUID = computeSimilarityScore(term, tokens, item?.ItemUUID);
+  const scoreBoxID = computeSimilarityScore(term, tokens, item?.BoxID);
+
+  const scoreEntries: Array<{ field: ItemFieldScores['bestField']; score: number }> = [
+    { field: 'Suchbegriff', score: scoreSuchbegriff },
+    { field: 'Hersteller', score: scoreHersteller },
+    { field: 'Artikelbeschreibung', score: scoreArtikelbeschreibung },
+    { field: 'ArtikelNummer', score: scoreArtikelNummer },
+    { field: 'ItemUUID', score: scoreItemUUID },
+    { field: 'BoxID', score: scoreBoxID }
   ];
 
-  let best = 0;
-  for (const field of fields) {
-    const similarity = computeSimilarityScore(term, tokens, field);
-    if (similarity > best) {
-      best = similarity;
-      if (best >= 1) {
-        break;
-      }
-    }
-  }
+  const best = scoreEntries.reduce(
+    (current, entry) => (entry.score > current.score ? entry : current),
+    scoreEntries[0]
+  );
 
-  return best;
+  return {
+    scoreSuchbegriff,
+    scoreHersteller,
+    scoreArtikelbeschreibung,
+    scoreArtikelNummer,
+    scoreItemUUID,
+    scoreBoxID,
+    bestScore: best.score,
+    bestField: best.field
+  };
 }
 
 function scoreBox(term: string, tokens: string[], box: any): number {
@@ -310,8 +313,7 @@ function scoreBox(term: string, tokens: string[], box: any): number {
   return best;
 }
 
-function scoreReference(term: string, tokens: string[], reference: any): number {
-  const langtextCandidate = {};
+function scoreReference(term: string, tokens: string[], reference: any): ReferenceFieldScores {
   const suchbegriffCandidate = resolveSearchSuchbegriff(reference?.Suchbegriff, {
     artikelbeschreibung: reference?.Artikelbeschreibung,
     artikelNummer: reference?.Artikel_Nummer,
@@ -319,40 +321,45 @@ function scoreReference(term: string, tokens: string[], reference: any): number 
   });
   const normalizedTerm = normalize(term);
   const normalizedSuchbegriff = normalize(suchbegriffCandidate);
+  let scoreSuchbegriff = computeSimilarityScore(term, tokens, suchbegriffCandidate);
   if (normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm) {
     console.info('[search] Suchbegriff exact match detected in reference score', {
       artikelNummer: reference?.Artikel_Nummer ?? null
     });
-    return 1;
+    scoreSuchbegriff = 1;
   }
   const normalizedHersteller = normalize(reference?.Hersteller);
+  let scoreHersteller = computeSimilarityScore(term, tokens, reference?.Hersteller);
   if (normalizedHersteller && normalizedHersteller === normalizedTerm) {
     console.info('[search] Hersteller exact match detected in reference score', {
       artikelNummer: reference?.Artikel_Nummer ?? null
     });
-    return 1;
+    scoreHersteller = 1;
   }
-  const fields = [
-    reference?.Artikelbeschreibung,
-    reference?.Kurzbeschreibung,
-    suchbegriffCandidate,
-    langtextCandidate,
-    reference?.Artikel_Nummer,
-    reference?.Hersteller
+
+  const scoreArtikelbeschreibung = computeSimilarityScore(term, tokens, reference?.Artikelbeschreibung);
+  const scoreArtikelNummer = computeSimilarityScore(term, tokens, reference?.Artikel_Nummer);
+
+  const scoreEntries: Array<{ field: ReferenceFieldScores['bestField']; score: number }> = [
+    { field: 'Suchbegriff', score: scoreSuchbegriff },
+    { field: 'Hersteller', score: scoreHersteller },
+    { field: 'Artikelbeschreibung', score: scoreArtikelbeschreibung },
+    { field: 'ArtikelNummer', score: scoreArtikelNummer }
   ];
 
-  let best = 0;
-  for (const field of fields) {
-    const similarity = computeSimilarityScore(term, tokens, field);
-    if (similarity > best) {
-      best = similarity;
-      if (best >= 1) {
-        break;
-      }
-    }
-  }
+  const best = scoreEntries.reduce(
+    (current, entry) => (entry.score > current.score ? entry : current),
+    scoreEntries[0]
+  );
 
-  return best;
+  return {
+    scoreSuchbegriff,
+    scoreHersteller,
+    scoreArtikelbeschreibung,
+    scoreArtikelNummer,
+    bestScore: best.score,
+    bestField: best.field
+  };
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -571,7 +578,8 @@ const action = defineHttpAction({
           if (!key) {
             continue;
           }
-          const score = scoreReference(normalized, tokens, reference);
+          const scoreBreakdown = scoreReference(normalized, tokens, reference);
+          const score = scoreBreakdown.bestScore;
           const exactValue = typeof exact_match === "number" ? exact_match : 0;
           const existing = deduped.get(key);
           if (!existing || score > existing.score || (score === existing.score && exactValue > existing.exact)) {
@@ -598,6 +606,23 @@ const action = defineHttpAction({
           "top score",
           topRefScore.toFixed(3)
         );
+
+        sorted.slice(0, 3).forEach((entry, index) => {
+          try {
+            const scoreBreakdown = scoreReference(normalized, tokens, entry.ref);
+            console.info('[search] Top reference field score', {
+              index,
+              artikelNummer: (entry.ref as Record<string, unknown>).Artikel_Nummer ?? null,
+              bestField: scoreBreakdown.bestField,
+              bestScore: scoreBreakdown.bestScore
+            });
+          } catch (error) {
+            console.error('[search] Failed to compute reference field scores for logging', {
+              index,
+              error
+            });
+          }
+        });
 
         sendJson(res, 200, {
           items: refs,
@@ -830,7 +855,8 @@ const action = defineHttpAction({
               aufLager: parsedAufLager
             });
           }
-          return { item: sanitizedItem, score: scoreItem(normalized, tokens, sanitizedItem) };
+          const scoreBreakdown = scoreItem(normalized, tokens, sanitizedItem);
+          return { item: sanitizedItem, score: scoreBreakdown.bestScore, scoreBreakdown };
         })
         .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
 
@@ -850,6 +876,24 @@ const action = defineHttpAction({
         "top score",
         topItemScore.toFixed(3)
       );
+
+      scoredItems.slice(0, 3).forEach((entry, index) => {
+        try {
+          console.info('[search] Top item field score', {
+            index,
+            itemId: entry.item.ItemUUID ?? null,
+            artikelNummer: entry.item.Artikel_Nummer ?? null,
+            bestField: entry.scoreBreakdown.bestField,
+            bestScore: entry.scoreBreakdown.bestScore
+          });
+        } catch (error) {
+          console.error('[search] Failed to log item field scores', {
+            index,
+            itemId: entry.item?.ItemUUID ?? null,
+            error
+          });
+        }
+      });
 
       sendJson(res, 200, {
         items: scoredItems.map((entry: { item: any }) => entry.item),
