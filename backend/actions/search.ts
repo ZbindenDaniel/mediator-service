@@ -241,6 +241,29 @@ type ItemFieldScores = {
     | 'BoxID';
 };
 
+// TODO(search-typing): Revisit search score input types if new search fields are introduced.
+type SearchScoreField = string | number | null | undefined;
+
+interface SearchScoreItem {
+  Artikel_Nummer?: SearchScoreField;
+  Artikelbeschreibung?: SearchScoreField;
+  Suchbegriff?: SearchScoreField;
+  Hersteller?: SearchScoreField;
+  Kurzbeschreibung?: SearchScoreField;
+  Langtext?: SearchScoreField;
+  ItemUUID?: SearchScoreField;
+  BoxID?: SearchScoreField;
+}
+
+interface SearchScoreReference {
+  Artikel_Nummer?: SearchScoreField;
+  Artikelbeschreibung?: SearchScoreField;
+  Suchbegriff?: SearchScoreField;
+  Hersteller?: SearchScoreField;
+  Kurzbeschreibung?: SearchScoreField;
+  Langtext?: SearchScoreField;
+}
+
 type ReferenceFieldScores = {
   scoreSuchbegriff: number;
   scoreHersteller: number;
@@ -252,7 +275,12 @@ type ReferenceFieldScores = {
   bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'Kurzbeschreibung' | 'Langtext' | 'ArtikelNummer';
 };
 
-function scoreItem(term: string, tokens: string[], item: any, includeDeepFields: boolean): ItemFieldScores {
+function scoreItem(
+  term: string,
+  tokens: string[],
+  item: SearchScoreItem,
+  includeDeepFields: boolean
+): ItemFieldScores {
   const suchbegriffCandidate = resolveSearchSuchbegriff(item?.Suchbegriff, {
     artikelbeschreibung: item?.Artikelbeschreibung,
     artikelNummer: item?.Artikel_Nummer,
@@ -337,7 +365,7 @@ function scoreBox(term: string, tokens: string[], box: any): number {
 function scoreReference(
   term: string,
   tokens: string[],
-  reference: any,
+  reference: SearchScoreReference,
   includeDeepFields: boolean
 ): ReferenceFieldScores {
   const suchbegriffCandidate = resolveSearchSuchbegriff(reference?.Suchbegriff, {
