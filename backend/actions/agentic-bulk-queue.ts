@@ -32,14 +32,17 @@ const action = defineHttpAction({
     }
 
     const requestUrl = new URL(req.url, PUBLIC_ORIGIN);
-    const rawMode = (requestUrl.searchParams.get('mode') || '').trim().toLowerCase();
+    const rawMode = (requestUrl.searchParams.get('mode') || '').trim();
+    const normalizedMode = rawMode.toLowerCase();
     const allowedModes: AgenticQueueMode[] = ['all', 'instancesOnly', 'missing'];
-    const mode: AgenticQueueMode | null = allowedModes.includes(rawMode as AgenticQueueMode)
-      ? (rawMode as AgenticQueueMode)
-      : null;
+    const mode: AgenticQueueMode | null = normalizedMode === 'instancesonly'
+      ? 'instancesOnly'
+      : allowedModes.includes(normalizedMode as AgenticQueueMode)
+        ? (normalizedMode as AgenticQueueMode)
+        : null;
 
     if (!mode) {
-      console.warn('[agentic-bulk-queue] Invalid mode provided', { mode: rawMode });
+      console.warn('[agentic-bulk-queue] Invalid mode provided', { mode: normalizedMode || rawMode });
       return sendJson(res, 400, { error: 'mode must be "all", "instancesOnly", or "missing"' });
     }
 
@@ -75,7 +78,7 @@ const action = defineHttpAction({
       references = [];
     }
 
-    // TODO(agent): Capture candidate derivation metrics once reference mode is promoted to production.
+    // TODO(agentic-queue): Confirm reference-only queue counts once Artikel_Nummer identifiers are fully adopted.
     let queueCandidates: QueueCandidate[] = [];
     try {
       const candidateList: QueueCandidate[] = [];
@@ -88,7 +91,6 @@ const action = defineHttpAction({
             ? ((record as { Artikel_Nummer?: string | null }).Artikel_Nummer as string).trim()
             : '';
           if (!rawArtikelNummer) {
-            console.warn('[agentic-bulk-queue] Skipping instance without Artikel_Nummer', { record });
             continue;
           }
           artikelCovered.add(rawArtikelNummer);
@@ -223,7 +225,9 @@ const action = defineHttpAction({
               })
             });
           } catch (logErr) {
-            console.error('[agentic-bulk-queue] Failed to persist log event', { itemUUID: identifier }, logErr);
+            console.error('[agentic-bulk-queue] Failed to persist log event', {
+              artikelNummer: identifier
+            }, logErr);
           }
 
           queued += 1;
