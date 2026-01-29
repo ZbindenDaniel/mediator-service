@@ -533,9 +533,10 @@ const action = defineHttpAction({
           throw error;
         }
 
+        // TODO(search-refs): Validate stored reference score breakdown logging after rollout.
         const deduped = new Map<
           string,
-          { ref: Record<string, unknown>; score: number; exact: number }
+          { ref: Record<string, unknown>; score: number; exact: number; scoreBreakdown: ReferenceFieldScores }
         >();
 
         for (const row of rawRefs) {
@@ -583,7 +584,7 @@ const action = defineHttpAction({
           const exactValue = typeof exact_match === "number" ? exact_match : 0;
           const existing = deduped.get(key);
           if (!existing || score > existing.score || (score === existing.score && exactValue > existing.exact)) {
-            deduped.set(key, { ref: reference, score, exact: exactValue });
+            deduped.set(key, { ref: reference, score, exact: exactValue, scoreBreakdown });
           }
         }
 
@@ -609,12 +610,11 @@ const action = defineHttpAction({
 
         sorted.slice(0, 3).forEach((entry, index) => {
           try {
-            const scoreBreakdown = scoreReference(normalized, tokens, entry.ref);
             console.info('[search] Top reference field score', {
               index,
               artikelNummer: (entry.ref as Record<string, unknown>).Artikel_Nummer ?? null,
-              bestField: scoreBreakdown.bestField,
-              bestScore: scoreBreakdown.bestScore
+              bestField: entry.scoreBreakdown.bestField,
+              bestScore: entry.scoreBreakdown.bestScore
             });
           } catch (error) {
             console.error('[search] Failed to compute reference field scores for logging', {

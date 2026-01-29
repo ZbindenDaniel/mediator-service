@@ -156,6 +156,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Updated item detail instance filtering to default missing stock to 1 for Stück rows while logging before/after counts for the Vorrat table.
 - Added BoxTag primary/secondary shelf label rendering with explicit shelf-label warnings and optional raw ID lines for showId views.
 - Filtered item detail instance queries to exclude zero-stock rows while logging any unexpected zero-stock entries returned for visibility.
+- Stored reference score breakdowns during ref dedupe to reuse them in top-result logging without altering the response payload.
 
 ## Documentation Map
 
