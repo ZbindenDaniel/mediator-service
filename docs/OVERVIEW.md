@@ -164,6 +164,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Refactored search field scoring into a shared helper for item/reference scoring while keeping exact-match and top-result logging structures intact.
 - Guarded Suchbegriff updates to only persist during initial reference creation, logging ignored backend updates and frontend overrides while keeping item payloads unchanged.
 - Refactored agentic bulk queue and run orchestration to key off Artikel_Nummer with reference-only coverage.
+- Aligned list/find item projections to join agentic runs by Artikel_Nummer with default status fallbacks and empty Artikel_Nummer logging to prevent reference/instance confusion in list responses.
 
 ## Documentation Map
 

@@ -102,6 +102,7 @@ export interface ItemRef {
 export type ItemReferenceEdit = ItemRef;
 
 // TODO(agent): Verify Item metadata typing whenever export/import parity requirements evolve.
+// TODO(agentic-runs): Reconfirm AgenticStatus/ReviewState remain reference-scoped when item instances are missing.
 export type Item = ItemInstance & Partial<ItemRef> & {
   AgenticStatus?: AgenticRunStatus | null;
   AgenticReviewState?: string | null;

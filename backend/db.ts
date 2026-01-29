@@ -936,6 +936,7 @@ ${ITEM_JOIN_WITH_BOX}
 WHERE i.ItemUUID = ?
 `);
   // TODO(agentic-instance-status): Keep agentic run joins aligned with Artikel_Nummer reference semantics.
+  // TODO(agentic-runs): Track empty Artikel_Nummer joins and confirm default status coverage in list/find queries.
   // TODO(agent): Confirm findByMaterial stock filtering stays aligned with list endpoint policy.
   findByMaterialStatement = db.prepare(`
 ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
@@ -943,7 +944,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
 ])}
 ${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = i.Artikel_Nummer
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
 WHERE i.Artikel_Nummer = ?
   AND COALESCE(i.Auf_Lager, 0) > 0
 ORDER BY i.UpdatedAt DESC
@@ -2637,7 +2638,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
 ])}
 ${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = i.Artikel_Nummer
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
 WHERE COALESCE(i.Auf_Lager, 0) > 0
 ORDER BY i.ItemUUID
 `);
@@ -2652,7 +2653,7 @@ ${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
   "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
 ])}
 ${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = i.Artikel_Nummer
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
   WHERE COALESCE(i.Auf_Lager, 0) > 0
 AND (
     @searchTerm IS NULL
@@ -2727,7 +2728,7 @@ FROM item_refs r
 LEFT JOIN items i ON i.Artikel_Nummer = r.Artikel_Nummer
 LEFT JOIN boxes b ON i.BoxID = b.BoxID
 LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = COALESCE(i.Artikel_Nummer, r.Artikel_Nummer)
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = COALESCE(NULLIF(i.Artikel_Nummer, ''), NULLIF(r.Artikel_Nummer, ''))
 WHERE (
   i.ItemUUID IS NULL
   OR i.ItemUUID = ''
