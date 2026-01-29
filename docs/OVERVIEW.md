@@ -166,6 +166,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Guarded Suchbegriff updates to only persist during initial reference creation, logging ignored backend updates and frontend overrides while keeping item payloads unchanged.
 - Refactored agentic bulk queue and run orchestration to key off Artikel_Nummer with reference-only coverage.
 - Aligned list/find item projections to join agentic runs by Artikel_Nummer with default status fallbacks and empty Artikel_Nummer logging to prevent reference/instance confusion in list responses.
+- Gate the legacy agentic_runs reset to run only when the schema still lacks Artikel_Nummer, preventing repeat wipes after migration.
 
 ## Documentation Map
 
