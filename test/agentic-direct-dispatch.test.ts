@@ -51,7 +51,7 @@ describe('agentic direct dispatch', () => {
   test('startAgenticRun invokes the model immediately for new runs', async () => {
     const createdRun: AgenticRun = {
       Id: 1,
-      ItemUUID: 'item-new-1',
+      Artikel_Nummer: 'item-new-1',
       SearchQuery: 'Neuer Artikel',
       Status: 'queued',
       LastModified: '2024-01-01T00:00:00.000Z',
@@ -69,7 +69,7 @@ describe('agentic direct dispatch', () => {
 
     const result = await startAgenticRun(
       {
-        itemId: createdRun.ItemUUID,
+        itemId: createdRun.Artikel_Nummer,
         searchQuery: createdRun.SearchQuery ?? '',
         actor: 'unit-test',
         context: 'direct-dispatch',
@@ -83,7 +83,7 @@ describe('agentic direct dispatch', () => {
     expect(invokeModel).toHaveBeenCalledTimes(1);
     expect(invokeModel).toHaveBeenCalledWith(
       expect.objectContaining({
-        itemId: createdRun.ItemUUID,
+        itemId: createdRun.Artikel_Nummer,
         searchQuery: createdRun.SearchQuery,
         context: 'direct-dispatch',
         requestId: 'req-start-direct',
@@ -96,14 +96,14 @@ describe('agentic direct dispatch', () => {
     );
     expect(upsertAgenticRun).toHaveBeenCalledTimes(1);
     expect(logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ Event: 'AgenticRunQueued', EntityId: createdRun.ItemUUID })
+      expect.objectContaining({ Event: 'AgenticRunQueued', EntityId: createdRun.Artikel_Nummer })
     );
   });
 
   test('startAgenticRun requeues existing runs and forwards stored review metadata', async () => {
     const existingRun: AgenticRun = {
       Id: 2,
-      ItemUUID: 'item-existing-1',
+      Artikel_Nummer: 'item-existing-1',
       SearchQuery: 'Vorhandener Artikel',
       Status: 'running',
       LastModified: '2024-01-01T12:00:00.000Z',
@@ -121,7 +121,7 @@ describe('agentic direct dispatch', () => {
 
     const result = await startAgenticRun(
       {
-        itemId: existingRun.ItemUUID,
+        itemId: existingRun.Artikel_Nummer,
         searchQuery: existingRun.SearchQuery ?? '',
         actor: 'qa.user',
         request: { id: 'req-requeue' }
@@ -143,14 +143,14 @@ describe('agentic direct dispatch', () => {
       })
     );
     expect(logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ Event: 'AgenticRunRequeued', EntityId: existingRun.ItemUUID })
+      expect.objectContaining({ Event: 'AgenticRunRequeued', EntityId: existingRun.Artikel_Nummer })
     );
   });
 
   test('auto-cancels run when asynchronous invocation reports failure', async () => {
     const existingRun: AgenticRun = {
       Id: 3,
-      ItemUUID: 'item-fail-1',
+      Artikel_Nummer: 'item-fail-1',
       SearchQuery: 'Fehlgeschlagen',
       Status: 'running',
       LastModified: '2024-01-02T10:00:00.000Z',
@@ -172,7 +172,7 @@ describe('agentic direct dispatch', () => {
 
     await startAgenticRun(
       {
-        itemId: existingRun.ItemUUID,
+        itemId: existingRun.Artikel_Nummer,
         searchQuery: existingRun.SearchQuery ?? '',
         actor: 'qa.user',
         request: { id: 'req-failure' }
@@ -187,7 +187,7 @@ describe('agentic direct dispatch', () => {
     const updateCalls = (deps.updateAgenticRunStatus.run as jest.Mock).mock.calls;
     expect(updateCalls.some((call) => call?.[0]?.Status === 'cancelled')).toBe(true);
     expect(logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ Event: 'AgenticRunCancelled', EntityId: existingRun.ItemUUID })
+      expect.objectContaining({ Event: 'AgenticRunCancelled', EntityId: existingRun.Artikel_Nummer })
     );
   });
 });

@@ -39,7 +39,7 @@ describe('resumeStaleAgenticRuns', () => {
   test('schedules stale queued runs for asynchronous invocation', async () => {
     const staleRun: AgenticRun = {
       Id: 10,
-      ItemUUID: 'resume-item-1',
+      Artikel_Nummer: 'resume-item-1',
       SearchQuery: 'Resumable Item',
       Status: 'queued',
       LastModified: '2024-01-01T00:00:00.000Z',
@@ -63,7 +63,7 @@ describe('resumeStaleAgenticRuns', () => {
     expect(invokeModel).toHaveBeenCalledTimes(1);
     expect(invokeModel).toHaveBeenCalledWith(
       expect.objectContaining({
-        itemId: staleRun.ItemUUID,
+        itemId: staleRun.Artikel_Nummer,
         searchQuery: staleRun.SearchQuery,
         context: null,
         review: null,
@@ -75,7 +75,7 @@ describe('resumeStaleAgenticRuns', () => {
   test('skips runs missing search queries and logs warning', async () => {
     const staleRun: AgenticRun = {
       Id: 11,
-      ItemUUID: 'resume-item-2',
+      Artikel_Nummer: 'resume-item-2',
       SearchQuery: '   ',
       Status: 'running',
       LastModified: '2024-01-01T01:00:00.000Z',
@@ -95,7 +95,7 @@ describe('resumeStaleAgenticRuns', () => {
     expect(result).toEqual({ resumed: 0, skipped: 1, failed: 0 });
     expect(logger.warn).toHaveBeenCalledWith(
       '[agentic-service] Skipping stale agentic run without search query',
-      expect.objectContaining({ itemId: staleRun.ItemUUID, status: staleRun.Status })
+      expect.objectContaining({ itemId: staleRun.Artikel_Nummer, status: staleRun.Status })
     );
     expect(invokeModel).not.toHaveBeenCalled();
   });

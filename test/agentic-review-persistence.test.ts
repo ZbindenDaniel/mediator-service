@@ -55,7 +55,7 @@ describe('agentic review metadata persistence', () => {
   test('direct dispatch forwards stored review metadata to the model invoker', async () => {
     const run: AgenticRun = {
       Id: 1,
-      ItemUUID: 'item-review-1',
+      Artikel_Nummer: 'item-review-1',
       SearchQuery: 'Search term',
       Status: 'queued',
       LastModified: new Date('2024-01-02T00:00:00.000Z').toISOString(),
@@ -88,7 +88,7 @@ describe('agentic review metadata persistence', () => {
 
     const result = await startAgenticRun(
       {
-        itemId: run.ItemUUID,
+        itemId: run.Artikel_Nummer,
         searchQuery: run.SearchQuery,
         actor: 'unit-test',
         request: { id: 'request-123' }
