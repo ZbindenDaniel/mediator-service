@@ -37,7 +37,6 @@ import {
   type LogEventPayload
 } from '../db';
 import { locateTranscript } from './flow/transcript';
-import { parseSequentialItemUUID } from '../lib/itemIds';
 
 export interface AgenticServiceLogger {
   info?: Console['info'];
@@ -282,38 +281,23 @@ function applyQueueUpdate(
   }
 }
 
-function resolveAgenticRunKey(
+// TODO(agentic-id-resolution): Confirm upstream callers always send Artikel_Nummer for agentic runs.
+function resolveAgenticArtikelNummer(
   itemId: string,
   logger: AgenticServiceLogger
-): string | null {
+): { artikelNummer: string | null; reason: string | null; sourceItemId: string } {
   const trimmed = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmed) {
     logger.warn?.('[agentic-service] Missing Artikel_Nummer for agentic run key resolution');
-    return null;
-  }
-
-  const parsed = parseSequentialItemUUID(trimmed);
-  if (parsed?.kind === 'artikelnummer') {
-    const artikelNummer = parsed.artikelNummer?.trim() ?? '';
-    if (!artikelNummer) {
-      logger.warn?.('[agentic-service] Parsed empty Artikel_Nummer from ItemUUID', { itemId: trimmed });
-      return null;
-    }
-    if (artikelNummer !== trimmed) {
-      logger.info?.('[agentic-service] Normalized ItemUUID to Artikel_Nummer for agentic run key', {
-        itemId: trimmed,
-        artikelNummer
-      });
-    }
-    return artikelNummer;
+    return { artikelNummer: null, reason: 'missing-item-id', sourceItemId: '' };
   }
 
   if (trimmed.startsWith('I-')) {
-    logger.warn?.('[agentic-service] Unable to resolve Artikel_Nummer from ItemUUID', { itemId: trimmed });
-    return null;
+    logger.warn?.('[agentic-service] Agentic run expects Artikel_Nummer, received ItemUUID', { itemId: trimmed });
+    return { artikelNummer: null, reason: 'invalid-item-id', sourceItemId: trimmed };
   }
 
-  return trimmed;
+  return { artikelNummer: trimmed, reason: null, sourceItemId: trimmed };
 }
 
 // TODO(agentic-review-state): Align review state semantics with upstream contract once schema is formalized.
@@ -785,12 +769,18 @@ export async function startAgenticRun(
     return { agentic: null, queued: false, created: false, reason: 'missing-item-id' };
   }
 
-  const artikelNummer = resolveAgenticRunKey(itemId, logger);
-  if (!artikelNummer) {
-    logger.warn?.('[agentic-service] startAgenticRun missing Artikel_Nummer', { itemId, context: input.context ?? null });
-    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
-    return { agentic: null, queued: false, created: false, reason: 'missing-artikel-nummer' };
+  const resolved = resolveAgenticArtikelNummer(itemId, logger);
+  if (!resolved.artikelNummer) {
+    const reason = resolved.reason ?? 'missing-artikel-nummer';
+    logger.warn?.('[agentic-service] startAgenticRun failed to resolve Artikel_Nummer', {
+      itemId,
+      reason,
+      context: input.context ?? null
+    });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, reason, logger);
+    return { agentic: null, queued: false, created: false, reason };
   }
+  const artikelNummer = resolved.artikelNummer;
 
   const existing = fetchAgenticRun(artikelNummer, deps, logger);
   if (existing) {
@@ -868,12 +858,14 @@ export async function cancelAgenticRun(
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-item-id', logger);
     return { cancelled: false, agentic: null, reason: 'missing-item-id' };
   }
-  const artikelNummer = resolveAgenticRunKey(itemId, logger);
-  if (!artikelNummer) {
-    logger.warn?.('[agentic-service] cancelAgenticRun missing Artikel_Nummer', { itemId });
-    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
-    return { cancelled: false, agentic: null, reason: 'missing-artikel-nummer' };
+  const resolved = resolveAgenticArtikelNummer(itemId, logger);
+  if (!resolved.artikelNummer) {
+    const reason = resolved.reason ?? 'missing-artikel-nummer';
+    logger.warn?.('[agentic-service] cancelAgenticRun failed to resolve Artikel_Nummer', { itemId, reason });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, reason, logger);
+    return { cancelled: false, agentic: null, reason };
   }
+  const artikelNummer = resolved.artikelNummer;
 
   const actor = (input.actor || '').trim();
   const cancellationReason = input.reason && input.reason.trim()
@@ -933,17 +925,25 @@ export async function cancelAgenticRun(
       throw new Error('Failed to cancel agentic run');
     }
 
-    deps.logEvent({
-      Actor: actor,
-      EntityType: 'Item',
-      EntityId: artikelNummer,
-      Event: 'AgenticRunCancelled',
-      Meta: JSON.stringify({
-        previousStatus: existing.Status ?? null,
-        cancelledAt: nowIso,
-        reason: cancellationReason ?? null
-      })
-    });
+    try {
+      deps.logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: artikelNummer,
+        Event: 'AgenticRunCancelled',
+        Meta: JSON.stringify({
+          previousStatus: existing.Status ?? null,
+          cancelledAt: nowIso,
+          reason: cancellationReason ?? null
+        })
+      });
+    } catch (err) {
+      logger.error?.('[agentic-service] Failed to record agentic cancel event', {
+        artikelNummer,
+        error: toErrorMessage(err)
+      });
+      throw err;
+    }
   });
 
   try {
@@ -996,12 +996,14 @@ export async function deleteAgenticRun(
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-item-id', logger);
     return { deleted: false, agentic: null, reason: 'missing-item-id' };
   }
-  const artikelNummer = resolveAgenticRunKey(itemId, logger);
-  if (!artikelNummer) {
-    logger.warn?.('[agentic-service] deleteAgenticRun missing Artikel_Nummer', { itemId });
-    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
-    return { deleted: false, agentic: null, reason: 'missing-artikel-nummer' };
+  const resolved = resolveAgenticArtikelNummer(itemId, logger);
+  if (!resolved.artikelNummer) {
+    const reason = resolved.reason ?? 'missing-artikel-nummer';
+    logger.warn?.('[agentic-service] deleteAgenticRun failed to resolve Artikel_Nummer', { itemId, reason });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, reason, logger);
+    return { deleted: false, agentic: null, reason };
   }
+  const artikelNummer = resolved.artikelNummer;
 
   const actor = (input.actor || '').trim();
   if (!actor) {
@@ -1050,17 +1052,25 @@ export async function deleteAgenticRun(
       throw new Error('Failed to recreate agentic run after deletion');
     }
 
-    deps.logEvent({
-      Actor: actor,
-      EntityType: 'Item',
-      EntityId: artikelNummer,
-      Event: 'AgenticRunReset',
-      Meta: JSON.stringify({
-        previousStatus: existing.Status ?? null,
-        reason: deletionReason,
-        resetAt: nowIso
-      })
-    });
+    try {
+      deps.logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: artikelNummer,
+        Event: 'AgenticRunReset',
+        Meta: JSON.stringify({
+          previousStatus: existing.Status ?? null,
+          reason: deletionReason,
+          resetAt: nowIso
+        })
+      });
+    } catch (err) {
+      logger.error?.('[agentic-service] Failed to record agentic reset event', {
+        artikelNummer,
+        error: toErrorMessage(err)
+      });
+      throw err;
+    }
   });
 
   try {
@@ -1094,12 +1104,18 @@ export async function restartAgenticRun(
     return { agentic: null, queued: false, created: false, reason: 'missing-item-id' };
   }
 
-  const artikelNummer = resolveAgenticRunKey(itemId, logger);
-  if (!artikelNummer) {
-    logger.warn?.('[agentic-service] restartAgenticRun missing Artikel_Nummer', { itemId, context: input.context ?? null });
-    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
-    return { agentic: null, queued: false, created: false, reason: 'missing-artikel-nummer' };
+  const resolved = resolveAgenticArtikelNummer(itemId, logger);
+  if (!resolved.artikelNummer) {
+    const reason = resolved.reason ?? 'missing-artikel-nummer';
+    logger.warn?.('[agentic-service] restartAgenticRun failed to resolve Artikel_Nummer', {
+      itemId,
+      reason,
+      context: input.context ?? null
+    });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, reason, logger);
+    return { agentic: null, queued: false, created: false, reason };
   }
+  const artikelNummer = resolved.artikelNummer;
 
   const existing = fetchAgenticRun(artikelNummer, deps, logger);
   const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
@@ -1158,20 +1174,28 @@ export async function restartAgenticRun(
       });
     }
 
-    deps.logEvent({
-      Actor: actor,
-      EntityType: 'Item',
-      EntityId: artikelNummer,
-      Event: 'AgenticRunRestarted',
-      Meta: JSON.stringify({
-        previousStatus: input.previousStatus ?? existing?.Status ?? null,
-        searchQuery,
-        context,
-        lastReviewDecision: review?.decision ?? null,
-        lastReviewNotes: review?.notes ?? null,
-        lastReviewActor: review?.reviewedBy ?? null
-      })
-    });
+    try {
+      deps.logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: artikelNummer,
+        Event: 'AgenticRunRestarted',
+        Meta: JSON.stringify({
+          previousStatus: input.previousStatus ?? existing?.Status ?? null,
+          searchQuery,
+          context,
+          lastReviewDecision: review?.decision ?? null,
+          lastReviewNotes: review?.notes ?? null,
+          lastReviewActor: review?.reviewedBy ?? null
+        })
+      });
+    } catch (err) {
+      logger.error?.('[agentic-service] Failed to record agentic restart event', {
+        artikelNummer,
+        error: toErrorMessage(err)
+      });
+      throw err;
+    }
   });
 
   try {
@@ -1385,13 +1409,16 @@ export function getAgenticStatus(
     return { agentic: null };
   }
 
-  const artikelNummer = resolveAgenticRunKey(trimmed, logger);
-  if (!artikelNummer) {
-    logger.warn?.('[agentic-service] getAgenticStatus missing Artikel_Nummer', { itemId: trimmed });
+  const resolved = resolveAgenticArtikelNummer(trimmed, logger);
+  if (!resolved.artikelNummer) {
+    logger.warn?.('[agentic-service] getAgenticStatus failed to resolve Artikel_Nummer', {
+      itemId: trimmed,
+      reason: resolved.reason ?? 'missing-artikel-nummer'
+    });
     return { agentic: null };
   }
 
-  return { agentic: fetchAgenticRun(artikelNummer, deps, logger) };
+  return { agentic: fetchAgenticRun(resolved.artikelNummer, deps, logger) };
 }
 
 export function checkAgenticHealth(

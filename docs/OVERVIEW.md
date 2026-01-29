@@ -163,6 +163,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added minimal typed search score inputs for item/reference scoring to replace `any` while preserving existing response payloads.
 - Refactored search field scoring into a shared helper for item/reference scoring while keeping exact-match and top-result logging structures intact.
 - Guarded Suchbegriff updates to only persist during initial reference creation, logging ignored backend updates and frontend overrides while keeping item payloads unchanged.
+- Refactored agentic bulk queue and run orchestration to key off Artikel_Nummer with reference-only coverage.
 
 ## Documentation Map
 
