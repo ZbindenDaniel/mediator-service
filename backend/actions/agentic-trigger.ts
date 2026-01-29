@@ -4,7 +4,6 @@ import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
 import type { AgenticRunReviewMetadata } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 import { parseSequentialItemUUID } from '../lib/itemIds';
-import { resolveCanonicalItemUUIDForArtikelnummer } from '../db';
 
 // TODO(agentic-start-flow): Extract shared agentic start/restart validation once UI start flows stabilize.
 
@@ -100,42 +99,34 @@ export async function forwardAgenticTrigger(
   const { context = 'server', logger = console, service: serviceDeps } = options;
 
   const { artikelbeschreibung, itemId } = buildAgenticRunRequestBody(payload);
-  let canonicalItemId = itemId;
+  let artikelNummer = itemId.trim();
   const parsedItemId = parseSequentialItemUUID(itemId);
-  if (!parsedItemId || parsedItemId.kind !== 'artikelnummer') {
-    logger.warn?.('[agentic-trigger] Unable to resolve canonical ItemUUID for trigger payload', {
+  if (parsedItemId?.kind === 'artikelnummer' && parsedItemId.artikelNummer) {
+    artikelNummer = parsedItemId.artikelNummer;
+  } else if (itemId.startsWith('I-')) {
+    logger.warn?.('[agentic-trigger] Unable to resolve Artikel_Nummer for trigger payload', {
       itemId,
       context
     });
-  } else if (serviceDeps?.findByMaterial) {
-    try {
-      const resolution = resolveCanonicalItemUUIDForArtikelnummer(parsedItemId.artikelNummer, {
-        findByMaterial: serviceDeps.findByMaterial,
-        logger
-      });
-      if (resolution.itemUUID) {
-        if (resolution.itemUUID !== itemId) {
-          logger.info?.('[agentic-trigger] Normalized agentic ItemUUID to canonical reference instance', {
-            itemId,
-            canonicalItemUUID: resolution.itemUUID
-          });
-        }
-        canonicalItemId = resolution.itemUUID;
-      } else {
-        logger.warn?.('[agentic-trigger] Failed to resolve canonical ItemUUID for reference', {
-          itemId,
-          artikelNummer: parsedItemId.artikelNummer
-        });
-      }
-    } catch (err) {
-      logger.error?.('[agentic-trigger] Failed to resolve canonical ItemUUID for reference', {
-        itemId,
-        artikelNummer: parsedItemId.artikelNummer,
-        error: err instanceof Error ? err.message : err
-      });
-    }
+    return {
+      ok: false,
+      status: 400,
+      body: { error: 'missing-artikel-nummer' },
+      rawBody: null
+    };
   }
-  const requestContext = resolveAgenticRequestContext(payload, canonicalItemId);
+
+  if (!artikelNummer) {
+    logger.warn?.('[agentic-trigger] Empty Artikel_Nummer for trigger payload', { itemId, context });
+    return {
+      ok: false,
+      status: 400,
+      body: { error: 'missing-artikel-nummer' },
+      rawBody: null
+    };
+  }
+
+  const requestContext = resolveAgenticRequestContext(payload, artikelNummer);
   const actor = typeof payload.actor === 'string' && payload.actor.trim() ? payload.actor.trim() : null;
   const review = normalizeReviewMetadata(payload.review);
   if (!serviceDeps) {
@@ -145,7 +136,7 @@ export async function forwardAgenticTrigger(
   try {
     const result = await startAgenticRun(
       {
-        itemId: canonicalItemId,
+        itemId: artikelNummer,
         searchQuery: artikelbeschreibung,
         actor,
         review,

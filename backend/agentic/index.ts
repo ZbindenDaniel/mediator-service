@@ -33,7 +33,6 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
   updateQueuedAgenticRunQueueState,
-  resolveCanonicalItemUUIDForArtikelnummer,
   type AgenticRunQueueUpdate,
   type LogEventPayload
 } from '../db';
@@ -107,7 +106,7 @@ const AGENTIC_STATUS_UPDATE_FLAGS: AgenticRunStatusFlag[] = [
 ];
 
 const SELECT_STALE_AGENTIC_RUNS_SQL = `
-  SELECT Id, ItemUUID, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+  SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
     FROM agentic_runs
    WHERE Status IN ('queued', 'running')
@@ -251,15 +250,6 @@ function resolveLogger(deps: AgenticServiceDependencies): AgenticServiceLogger {
   return deps.logger ?? console;
 }
 
-// TODO(agentic-logger-adapter): Consolidate logger adapters between agentic and DB helpers.
-function toConsoleLogger(logger: AgenticServiceLogger): Pick<Console, 'info' | 'warn' | 'error'> {
-  return {
-    info: logger.info ?? console.info.bind(console),
-    warn: logger.warn ?? console.warn.bind(console),
-    error: logger.error ?? console.error.bind(console)
-  };
-}
-
 function resolveNow(deps: AgenticServiceDependencies): Date {
   const nowFactory = deps.now;
   try {
@@ -286,10 +276,44 @@ function applyQueueUpdate(
     updateQueueState(update);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to persist queue metadata update', {
-      itemId: update.ItemUUID,
+      artikelNummer: update.Artikel_Nummer,
       error: toErrorMessage(err)
     });
   }
+}
+
+function resolveAgenticRunKey(
+  itemId: string,
+  logger: AgenticServiceLogger
+): string | null {
+  const trimmed = typeof itemId === 'string' ? itemId.trim() : '';
+  if (!trimmed) {
+    logger.warn?.('[agentic-service] Missing Artikel_Nummer for agentic run key resolution');
+    return null;
+  }
+
+  const parsed = parseSequentialItemUUID(trimmed);
+  if (parsed?.kind === 'artikelnummer') {
+    const artikelNummer = parsed.artikelNummer?.trim() ?? '';
+    if (!artikelNummer) {
+      logger.warn?.('[agentic-service] Parsed empty Artikel_Nummer from ItemUUID', { itemId: trimmed });
+      return null;
+    }
+    if (artikelNummer !== trimmed) {
+      logger.info?.('[agentic-service] Normalized ItemUUID to Artikel_Nummer for agentic run key', {
+        itemId: trimmed,
+        artikelNummer
+      });
+    }
+    return artikelNummer;
+  }
+
+  if (trimmed.startsWith('I-')) {
+    logger.warn?.('[agentic-service] Unable to resolve Artikel_Nummer from ItemUUID', { itemId: trimmed });
+    return null;
+  }
+
+  return trimmed;
 }
 
 // TODO(agentic-review-state): Align review state semantics with upstream contract once schema is formalized.
@@ -404,53 +428,9 @@ function fetchAgenticRun(
   }
 }
 
-function resolveCanonicalItemIdForAgentic(
-  itemId: string,
-  deps: AgenticServiceDependencies,
-  logger: AgenticServiceLogger
-): string {
-  const parsed = parseSequentialItemUUID(itemId);
-  if (!parsed || parsed.kind !== 'artikelnummer') {
-    logger.warn?.('[agentic-service] Unable to resolve canonical ItemUUID for non-artikelnummer item id', {
-      itemId
-    });
-    return itemId;
-  }
-
-  try {
-    const resolution = resolveCanonicalItemUUIDForArtikelnummer(parsed.artikelNummer, {
-      findByMaterial: deps.findByMaterial,
-      logger: toConsoleLogger(logger)
-    });
-    if (!resolution.itemUUID) {
-      logger.warn?.('[agentic-service] Failed to resolve canonical ItemUUID for reference', {
-        itemId,
-        artikelNummer: parsed.artikelNummer
-      });
-      return itemId;
-    }
-
-    if (resolution.itemUUID !== itemId) {
-      logger.info?.('[agentic-service] Normalized agentic ItemUUID to canonical reference instance', {
-        itemId,
-        canonicalItemUUID: resolution.itemUUID
-      });
-    }
-
-    return resolution.itemUUID;
-  } catch (err) {
-    logger.error?.('[agentic-service] Failed to resolve canonical ItemUUID for reference', {
-      itemId,
-      artikelNummer: parsed.artikelNummer,
-      error: err instanceof Error ? err.message : err
-    });
-    return itemId;
-  }
-}
-
 function persistQueuedRun(
   payload: {
-    itemId: string;
+    artikelNummer: string;
     searchQuery: string;
     actor: string | null;
     context: string | null;
@@ -468,7 +448,7 @@ function persistQueuedRun(
 
   try {
     deps.upsertAgenticRun.run({
-      ItemUUID: payload.itemId,
+      Artikel_Nummer: payload.artikelNummer,
       SearchQuery: payload.searchQuery,
       Status: AGENTIC_RUN_STATUS_QUEUED,
       LastModified: now,
@@ -479,7 +459,7 @@ function persistQueuedRun(
     });
   } catch (err) {
     logger.error?.('[agentic-service] Failed to upsert agentic run during queue', {
-      itemId: payload.itemId,
+      artikelNummer: payload.artikelNummer,
       error: err instanceof Error ? err.message : err
     });
     throw err;
@@ -489,7 +469,7 @@ function persistQueuedRun(
     deps.logEvent({
       Actor: payload.actor,
       EntityType: 'Item',
-      EntityId: payload.itemId,
+      EntityId: payload.artikelNummer,
       Event: payload.created ? 'AgenticRunQueued' : 'AgenticRunRequeued',
       Meta: JSON.stringify({
         searchQuery: payload.searchQuery,
@@ -498,18 +478,18 @@ function persistQueuedRun(
     });
   } catch (err) {
     logger.warn?.('[agentic-service] Failed to persist agentic queue event', {
-      itemId: payload.itemId,
+      artikelNummer: payload.artikelNummer,
       error: err instanceof Error ? err.message : err
     });
   }
 
-  return fetchAgenticRun(payload.itemId, deps, logger);
+  return fetchAgenticRun(payload.artikelNummer, deps, logger);
 }
 
 // TODO(agent): Verify requestId forwarding into background invocations when telemetry hooks evolve.
 // TODO(agentic-retries): Centralize retry bookkeeping/backoff settings once queue orchestration solidifies.
 interface BackgroundInvocationPayload {
-  itemId: string;
+  artikelNummer: string;
   searchQuery: string;
   context: string | null;
   review: AgenticRunReviewMetadata | null;
@@ -537,10 +517,10 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     let existingRun: AgenticRun | null = null;
 
     try {
-      existingRun = fetchAgenticRun(payload.itemId, deps, logger);
+      existingRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
     } catch (err) {
       logger.error?.('[agentic-service] Failed to load existing run before invocation', {
-        itemId: payload.itemId,
+        artikelNummer: payload.artikelNummer,
         context: payload.context,
         error: toErrorMessage(err)
       });
@@ -550,7 +530,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     const attemptTimestamp = nowIso;
 
     applyQueueUpdate(deps, logger, {
-      ItemUUID: payload.itemId,
+      Artikel_Nummer: payload.artikelNummer,
       Status: AGENTIC_RUN_STATUS_RUNNING,
       LastModified: nowIso,
       RetryCount: nextRetryCount,
@@ -562,7 +542,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     try {
       const updateResult = deps.updateAgenticRunStatus.run(
         normalizeAgenticStatusUpdate({
-          ItemUUID: payload.itemId,
+          Artikel_Nummer: payload.artikelNummer,
           Status: AGENTIC_RUN_STATUS_RUNNING,
           SearchQuery: payload.searchQuery,
           LastModified: nowIso,
@@ -586,18 +566,18 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
 
       if (!updateResult?.changes) {
         logger.warn?.('[agentic-service] Agentic run mark-running updated zero rows', {
-          itemId: payload.itemId
+          artikelNummer: payload.artikelNummer
         });
       } else {
         logger.info?.('[agentic-service] Agentic run marked running prior to invocation', {
-          itemId: payload.itemId,
+          artikelNummer: payload.artikelNummer,
           context: payload.context
         });
       }
     } catch (err) {
       const errorMessage = toErrorMessage(err);
       logger.error?.('[agentic-service] Failed to mark agentic run running prior to invocation', {
-        itemId: payload.itemId,
+        artikelNummer: payload.artikelNummer,
         context: payload.context,
         error: errorMessage
       });
@@ -622,10 +602,10 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
       try {
         let existingRun: AgenticRun | null = null;
         try {
-          existingRun = fetchAgenticRun(payload.itemId, deps, logger);
+          existingRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
         } catch (loadErr) {
           logger.error?.('[agentic-service] Failed to load run during auto-cancel', {
-            itemId: payload.itemId,
+            artikelNummer: payload.artikelNummer,
             reason,
             error: toErrorMessage(loadErr)
           });
@@ -640,7 +620,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         const lastError = message ?? reason;
 
         applyQueueUpdate(deps, logger, {
-          ItemUUID: payload.itemId,
+          Artikel_Nummer: payload.artikelNummer,
           Status: AGENTIC_RUN_STATUS_CANCELLED,
           LastModified: cancelTimestamp,
           RetryCount: retryCount,
@@ -652,7 +632,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         try {
           const updateResult = deps.updateAgenticRunStatus.run(
             normalizeAgenticStatusUpdate({
-              ItemUUID: payload.itemId,
+              Artikel_Nummer: payload.artikelNummer,
               Status: AGENTIC_RUN_STATUS_CANCELLED,
               SearchQuery: searchQuery,
               LastModified: cancelTimestamp,
@@ -676,18 +656,18 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
 
           if (!updateResult?.changes) {
             logger.warn?.('[agentic-service] Auto-cancel updated zero rows after failure', {
-              itemId: payload.itemId,
+              artikelNummer: payload.artikelNummer,
               reason
             });
           } else {
             logger.info?.('[agentic-service] Agentic run auto-cancelled after failure', {
-              itemId: payload.itemId,
+              artikelNummer: payload.artikelNummer,
               reason
             });
           }
         } catch (updateErr) {
           logger.error?.('[agentic-service] Failed to auto-cancel agentic run after failure', {
-            itemId: payload.itemId,
+            artikelNummer: payload.artikelNummer,
             reason,
             error: toErrorMessage(updateErr)
           });
@@ -697,7 +677,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
           deps.logEvent({
             Actor: 'agentic-service',
             EntityType: 'Item',
-            EntityId: payload.itemId,
+            EntityId: payload.artikelNummer,
             Event: 'AgenticRunCancelled',
             Meta: JSON.stringify({
               previousStatus: existingRun?.Status ?? null,
@@ -708,14 +688,14 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
           });
         } catch (eventErr) {
           logger.error?.('[agentic-service] Failed to record auto-cancel event after failure', {
-            itemId: payload.itemId,
+            artikelNummer: payload.artikelNummer,
             reason,
             error: toErrorMessage(eventErr)
           });
         }
       } catch (err) {
         logger.error?.('[agentic-service] Auto-cancel workflow threw after failure', {
-          itemId: payload.itemId,
+          artikelNummer: payload.artikelNummer,
           reason,
           error: toErrorMessage(err)
         });
@@ -724,7 +704,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
 
     try {
       const result = await invokeModel({
-        itemId: payload.itemId,
+        itemId: payload.artikelNummer,
         searchQuery: payload.searchQuery,
         context: payload.context,
         review: payload.review,
@@ -733,7 +713,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
       if (!result?.ok) {
         const failureMessage = typeof result?.message === 'string' ? result.message : null;
         logger.error?.('[agentic-service] Model invocation returned failure result', {
-          itemId: payload.itemId,
+          artikelNummer: payload.artikelNummer,
           context: payload.context,
           error: failureMessage
         });
@@ -746,13 +726,13 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         return;
       }
       logger.info?.('[agentic-service] Model invocation dispatched asynchronously', {
-        itemId: payload.itemId,
+        artikelNummer: payload.artikelNummer,
         context: payload.context
       });
     } catch (err) {
       const errorMessage = toErrorMessage(err);
       logger.error?.('[agentic-service] Model invocation failed during asynchronous dispatch', {
-        itemId: payload.itemId,
+        artikelNummer: payload.artikelNummer,
         context: payload.context,
         error: errorMessage
       });
@@ -772,7 +752,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
   } catch (err) {
     const errorMessage = toErrorMessage(err);
     logger.error?.('[agentic-service] Failed to schedule asynchronous model invocation', {
-      itemId: payload.itemId,
+      artikelNummer: payload.artikelNummer,
       context: payload.context,
       error: errorMessage
     });
@@ -805,11 +785,17 @@ export async function startAgenticRun(
     return { agentic: null, queued: false, created: false, reason: 'missing-item-id' };
   }
 
-  const canonicalItemId = resolveCanonicalItemIdForAgentic(itemId, deps, logger);
-  const existing = fetchAgenticRun(canonicalItemId, deps, logger);
+  const artikelNummer = resolveAgenticRunKey(itemId, logger);
+  if (!artikelNummer) {
+    logger.warn?.('[agentic-service] startAgenticRun missing Artikel_Nummer', { itemId, context: input.context ?? null });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
+    return { agentic: null, queued: false, created: false, reason: 'missing-artikel-nummer' };
+  }
+
+  const existing = fetchAgenticRun(artikelNummer, deps, logger);
   if (existing) {
     logger.info?.('[agentic-service] Skipping agentic run creation because canonical run already exists', {
-      itemId: canonicalItemId,
+      artikelNummer,
       context: input.context ?? null
     });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'already-exists', logger);
@@ -819,7 +805,7 @@ export async function startAgenticRun(
   const searchQuery = (input.searchQuery || '').trim();
   if (!searchQuery) {
     logger.warn?.('[agentic-service] startAgenticRun missing search query', {
-      itemId: canonicalItemId,
+      artikelNummer,
       context: input.context ?? null
     });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-search-query', logger);
@@ -831,7 +817,7 @@ export async function startAgenticRun(
     recordRequestLogStart(request, searchQuery, logger);
     const agentic = persistQueuedRun(
       {
-        itemId: canonicalItemId,
+        artikelNummer,
         searchQuery,
         actor: input.actor?.trim() || null,
         context: input.context?.trim() || null,
@@ -848,7 +834,7 @@ export async function startAgenticRun(
     });
 
     scheduleAgenticModelInvocation({
-      itemId: canonicalItemId,
+      artikelNummer,
       searchQuery,
       context: input.context?.trim() || null,
       review,
@@ -858,7 +844,7 @@ export async function startAgenticRun(
     });
 
     logger.info?.('[agentic-service] Agentic run queued for asynchronous execution', {
-      itemId: canonicalItemId,
+      artikelNummer,
       context: input.context ?? null
     });
     return { agentic, queued: true, created: true };
@@ -882,6 +868,12 @@ export async function cancelAgenticRun(
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-item-id', logger);
     return { cancelled: false, agentic: null, reason: 'missing-item-id' };
   }
+  const artikelNummer = resolveAgenticRunKey(itemId, logger);
+  if (!artikelNummer) {
+    logger.warn?.('[agentic-service] cancelAgenticRun missing Artikel_Nummer', { itemId });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
+    return { cancelled: false, agentic: null, reason: 'missing-artikel-nummer' };
+  }
 
   const actor = (input.actor || '').trim();
   const cancellationReason = input.reason && input.reason.trim()
@@ -890,9 +882,9 @@ export async function cancelAgenticRun(
       ? `Cancelled by ${actor}`
       : 'Agentic run cancelled';
 
-  const existing = fetchAgenticRun(itemId, deps, logger);
+  const existing = fetchAgenticRun(artikelNummer, deps, logger);
   if (!existing) {
-    logger.warn?.('[agentic-service] cancelAgenticRun attempted without existing run', { itemId });
+    logger.warn?.('[agentic-service] cancelAgenticRun attempted without existing run', { artikelNummer });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-found', logger);
     return { cancelled: false, agentic: null, reason: 'not-found' };
   }
@@ -905,7 +897,7 @@ export async function cancelAgenticRun(
     const lastError = (cancellationReason || existing.LastError) ?? null;
 
     applyQueueUpdate(deps, logger, {
-      ItemUUID: itemId,
+      Artikel_Nummer: artikelNummer,
       Status: AGENTIC_RUN_STATUS_CANCELLED,
       LastModified: nowIso,
       RetryCount: retryCount,
@@ -916,7 +908,7 @@ export async function cancelAgenticRun(
 
     const updateResult = deps.updateAgenticRunStatus.run(
       normalizeAgenticStatusUpdate({
-        ItemUUID: itemId,
+        Artikel_Nummer: artikelNummer,
         Status: AGENTIC_RUN_STATUS_CANCELLED,
         SearchQuery: existing.SearchQuery ?? null,
         LastModified: nowIso,
@@ -944,7 +936,7 @@ export async function cancelAgenticRun(
     deps.logEvent({
       Actor: actor,
       EntityType: 'Item',
-      EntityId: itemId,
+      EntityId: artikelNummer,
       Event: 'AgenticRunCancelled',
       Meta: JSON.stringify({
         previousStatus: existing.Status ?? null,
@@ -959,7 +951,7 @@ export async function cancelAgenticRun(
     finalizeRequestLog(request, REQUEST_STATUS_CANCELLED, null, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to cancel agentic run', {
-      itemId,
+      artikelNummer,
       error: err instanceof Error ? err.message : err
     });
     finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
@@ -968,7 +960,7 @@ export async function cancelAgenticRun(
 
   try {
     await appendOutcomeTranscriptSection(
-      itemId,
+      artikelNummer,
       'Agentic run cancelled',
       {
         status: existing.Status ?? null,
@@ -980,12 +972,12 @@ export async function cancelAgenticRun(
     );
   } catch (err) {
     logger.warn?.('[agentic-service] Failed to record cancellation transcript note', {
-      itemId,
+      artikelNummer,
       error: err instanceof Error ? err.message : err
     });
   }
 
-  const refreshed = fetchAgenticRun(itemId, deps, logger);
+  const refreshed = fetchAgenticRun(artikelNummer, deps, logger);
   return { cancelled: true, agentic: refreshed };
 }
 
@@ -1004,41 +996,47 @@ export async function deleteAgenticRun(
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-item-id', logger);
     return { deleted: false, agentic: null, reason: 'missing-item-id' };
   }
+  const artikelNummer = resolveAgenticRunKey(itemId, logger);
+  if (!artikelNummer) {
+    logger.warn?.('[agentic-service] deleteAgenticRun missing Artikel_Nummer', { itemId });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
+    return { deleted: false, agentic: null, reason: 'missing-artikel-nummer' };
+  }
 
   const actor = (input.actor || '').trim();
   if (!actor) {
-    logger.warn?.('[agentic-service] deleteAgenticRun missing actor', { itemId });
+    logger.warn?.('[agentic-service] deleteAgenticRun missing actor', { artikelNummer });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-actor', logger);
     return { deleted: false, agentic: null, reason: 'missing-actor' };
   }
 
-  const existing = fetchAgenticRun(itemId, deps, logger);
+  const existing = fetchAgenticRun(artikelNummer, deps, logger);
   if (!existing) {
-    logger.warn?.('[agentic-service] deleteAgenticRun attempted without existing run', { itemId });
+    logger.warn?.('[agentic-service] deleteAgenticRun attempted without existing run', { artikelNummer });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-found', logger);
     return { deleted: false, agentic: null, reason: 'not-found' };
   }
 
   const normalizedStatus = normalizeAgenticRunStatus(existing.Status);
   if (normalizedStatus === AGENTIC_RUN_STATUS_NOT_STARTED) {
-    logger.info?.('[agentic-service] deleteAgenticRun skipped because run is not started', { itemId });
+    logger.info?.('[agentic-service] deleteAgenticRun skipped because run is not started', { artikelNummer });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-started', logger);
     return { deleted: false, agentic: existing, reason: 'not-started' };
   }
 
   const nowIso = resolveNow(deps).toISOString();
   const deletionReason = input.reason && input.reason.trim() ? input.reason.trim() : null;
-  const deleteStatement = deps.db.prepare('DELETE FROM agentic_runs WHERE ItemUUID = ?');
+  const deleteStatement = deps.db.prepare('DELETE FROM agentic_runs WHERE Artikel_Nummer = ?');
 
   recordRequestLogStart(request, existing.SearchQuery ?? null, logger);
   const txn = deps.db.transaction(() => {
-    const deleteResult = deleteStatement.run(itemId);
+    const deleteResult = deleteStatement.run(artikelNummer);
     if (!deleteResult?.changes) {
       throw new Error('Failed to delete agentic run');
     }
 
     const insertResult = deps.upsertAgenticRun.run({
-      ItemUUID: itemId,
+      Artikel_Nummer: artikelNummer,
       SearchQuery: existing.SearchQuery ?? null,
       Status: AGENTIC_RUN_STATUS_NOT_STARTED,
       LastModified: nowIso,
@@ -1055,7 +1053,7 @@ export async function deleteAgenticRun(
     deps.logEvent({
       Actor: actor,
       EntityType: 'Item',
-      EntityId: itemId,
+      EntityId: artikelNummer,
       Event: 'AgenticRunReset',
       Meta: JSON.stringify({
         previousStatus: existing.Status ?? null,
@@ -1070,14 +1068,14 @@ export async function deleteAgenticRun(
     finalizeRequestLog(request, REQUEST_STATUS_SUCCESS, null, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to delete agentic run', {
-      itemId,
+      artikelNummer,
       error: err instanceof Error ? err.message : err
     });
     finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
     throw err;
   }
 
-  const refreshed = fetchAgenticRun(itemId, deps, logger);
+  const refreshed = fetchAgenticRun(artikelNummer, deps, logger);
   return { deleted: true, agentic: refreshed };
 }
 
@@ -1096,12 +1094,18 @@ export async function restartAgenticRun(
     return { agentic: null, queued: false, created: false, reason: 'missing-item-id' };
   }
 
-  const canonicalItemId = resolveCanonicalItemIdForAgentic(itemId, deps, logger);
-  const existing = fetchAgenticRun(canonicalItemId, deps, logger);
+  const artikelNummer = resolveAgenticRunKey(itemId, logger);
+  if (!artikelNummer) {
+    logger.warn?.('[agentic-service] restartAgenticRun missing Artikel_Nummer', { itemId, context: input.context ?? null });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-artikel-nummer', logger);
+    return { agentic: null, queued: false, created: false, reason: 'missing-artikel-nummer' };
+  }
+
+  const existing = fetchAgenticRun(artikelNummer, deps, logger);
   const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
   if (!searchQuery) {
     logger.warn?.('[agentic-service] restartAgenticRun missing search query', {
-      itemId: canonicalItemId,
+      artikelNummer,
       context: input.context ?? null
     });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-search-query', logger);
@@ -1117,7 +1121,7 @@ export async function restartAgenticRun(
     if (existing) {
       const updateResult = deps.updateAgenticRunStatus.run(
         normalizeAgenticStatusUpdate({
-          ItemUUID: canonicalItemId,
+          Artikel_Nummer: artikelNummer,
           Status: AGENTIC_RUN_STATUS_QUEUED,
           SearchQuery: searchQuery,
           LastModified: nowIso,
@@ -1143,7 +1147,7 @@ export async function restartAgenticRun(
       }
     } else {
       deps.upsertAgenticRun.run({
-        ItemUUID: canonicalItemId,
+        Artikel_Nummer: artikelNummer,
         SearchQuery: searchQuery,
         Status: AGENTIC_RUN_STATUS_QUEUED,
         LastModified: nowIso,
@@ -1157,7 +1161,7 @@ export async function restartAgenticRun(
     deps.logEvent({
       Actor: actor,
       EntityType: 'Item',
-      EntityId: canonicalItemId,
+      EntityId: artikelNummer,
       Event: 'AgenticRunRestarted',
       Meta: JSON.stringify({
         previousStatus: input.previousStatus ?? existing?.Status ?? null,
@@ -1174,14 +1178,14 @@ export async function restartAgenticRun(
     txn();
   } catch (err) {
     logger.error?.('[agentic-service] Failed to restart agentic run', {
-      itemId: canonicalItemId,
+      artikelNummer,
       error: err instanceof Error ? err.message : err
     });
     finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
     throw err;
   }
 
-  const refreshed = fetchAgenticRun(canonicalItemId, deps, logger);
+  const refreshed = fetchAgenticRun(artikelNummer, deps, logger);
 
   recordAgenticRequestLogUpdate(request, AGENTIC_RUN_STATUS_QUEUED, {
     searchQuery,
@@ -1189,7 +1193,7 @@ export async function restartAgenticRun(
   });
 
   scheduleAgenticModelInvocation({
-    itemId: canonicalItemId,
+    artikelNummer,
     searchQuery,
     context,
     review,
@@ -1199,7 +1203,7 @@ export async function restartAgenticRun(
   });
 
   logger.info?.('[agentic-service] Agentic run restart queued for asynchronous execution', {
-    itemId: canonicalItemId,
+    artikelNummer,
     context
   });
 
@@ -1265,7 +1269,7 @@ export async function resumeStaleAgenticRuns(
     if (!searchQuery) {
       skipped += 1;
       logger.warn?.('[agentic-service] Skipping stale agentic run without search query', {
-        itemId: run.ItemUUID,
+        artikelNummer: run.Artikel_Nummer,
         status: run.Status
       });
       continue;
@@ -1273,7 +1277,7 @@ export async function resumeStaleAgenticRuns(
 
     try {
       scheduleAgenticModelInvocation({
-        itemId: run.ItemUUID,
+        artikelNummer: run.Artikel_Nummer,
         searchQuery,
         context: null,
         review: resolveReviewFromPersistedRun(run),
@@ -1285,7 +1289,7 @@ export async function resumeStaleAgenticRuns(
     } catch (err) {
       failed += 1;
       logger.error?.('[agentic-service] Failed to schedule stale agentic run during resume', {
-        itemId: run.ItemUUID,
+        artikelNummer: run.Artikel_Nummer,
         status: run.Status,
         error: toErrorMessage(err)
       });
@@ -1381,7 +1385,13 @@ export function getAgenticStatus(
     return { agentic: null };
   }
 
-  return { agentic: fetchAgenticRun(trimmed, deps, logger) };
+  const artikelNummer = resolveAgenticRunKey(trimmed, logger);
+  if (!artikelNummer) {
+    logger.warn?.('[agentic-service] getAgenticStatus missing Artikel_Nummer', { itemId: trimmed });
+    return { agentic: null };
+  }
+
+  return { agentic: fetchAgenticRun(artikelNummer, deps, logger) };
 }
 
 export function checkAgenticHealth(

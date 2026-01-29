@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_FAILED } from '../../models';
-import type { AgenticRun } from '../../models';
+import type { AgenticRun, Item } from '../../models';
+import { parseSequentialItemUUID } from '../lib/itemIds';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -19,6 +20,40 @@ function readRequestBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+function resolveArtikelNummerForAgentic(
+  itemId: string,
+  ctx: { getItem?: { get: (id: string) => Item | undefined } }
+): string | null {
+  const trimmed = typeof itemId === 'string' ? itemId.trim() : '';
+  if (!trimmed) {
+    return null;
+  }
+
+  if (ctx.getItem?.get) {
+    try {
+      const item = ctx.getItem.get(trimmed);
+      const artikelNummer = typeof item?.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
+      if (artikelNummer) {
+        return artikelNummer;
+      }
+    } catch (err) {
+      console.error('Failed to resolve Artikel_Nummer for agentic trigger failure', err);
+    }
+  }
+
+  const parsed = parseSequentialItemUUID(trimmed);
+  if (parsed?.kind === 'artikelnummer' && parsed.artikelNummer) {
+    return parsed.artikelNummer;
+  }
+
+  if (!trimmed.startsWith('I-')) {
+    return trimmed;
+  }
+
+  console.warn('Agentic trigger failure missing Artikel_Nummer for item id', { itemId: trimmed });
+  return null;
+}
+
 const action = defineHttpAction({
   key: 'agentic-trigger-failure',
   label: 'Agentic trigger failure',
@@ -33,6 +68,11 @@ const action = defineHttpAction({
       if (!itemId) {
         console.warn('Agentic trigger failure called without item id');
         return sendJson(res, 400, { error: 'Invalid item id' });
+      }
+      const artikelNummer = resolveArtikelNummerForAgentic(itemId, ctx);
+      if (!artikelNummer) {
+        console.warn('Agentic trigger failure missing Artikel_Nummer', { itemId });
+        return sendJson(res, 400, { error: 'Missing Artikel_Nummer' });
       }
 
       let parsedBody: any = {};
@@ -93,12 +133,12 @@ const action = defineHttpAction({
       const nowIso = failedAt || new Date().toISOString();
       let existingRun: AgenticRun | null = null;
       try {
-        existingRun = ctx.getAgenticRun.get(itemId) || null;
+        existingRun = ctx.getAgenticRun.get(artikelNummer) || null;
       } catch (loadErr) {
         console.error('Failed to load existing agentic run for trigger failure metadata', loadErr);
       }
       const runUpdate = {
-        ItemUUID: itemId,
+        Artikel_Nummer: artikelNummer,
         Status: AGENTIC_RUN_STATUS_FAILED,
         SearchQuery: searchTerm,
         LastModified: nowIso,
@@ -123,14 +163,14 @@ const action = defineHttpAction({
       try {
         const updateResult = ctx.updateAgenticRunStatus.run(runUpdate);
         if (!updateResult?.changes) {
-          console.warn('Agentic run missing during failure update, creating new record', itemId);
+          console.warn('Agentic run missing during failure update, creating new record', artikelNummer);
           ctx.upsertAgenticRun.run({
             ...runUpdate,
           });
         }
       } catch (updateErr) {
         console.error('Failed to update agentic run after trigger failure', {
-          itemId,
+          artikelNummer,
           path: url,
           error: updateErr
         });
@@ -140,7 +180,7 @@ const action = defineHttpAction({
       ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
-        EntityId: itemId,
+        EntityId: artikelNummer,
         Event: 'AgenticTriggerFailed',
         Meta: JSON.stringify({
           context: contextLabel,
@@ -153,7 +193,7 @@ const action = defineHttpAction({
 
       let updatedRun: any = null;
       try {
-        updatedRun = ctx.getAgenticRun.get(itemId) || null;
+        updatedRun = ctx.getAgenticRun.get(artikelNummer) || null;
       } catch (loadErr) {
         console.error('Failed to load updated agentic run after failure', loadErr);
       }

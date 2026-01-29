@@ -1,6 +1,7 @@
+// TODO(agentic-run-schema): Review any remaining ItemUUID-based agentic UI payloads after reference-key migration.
 export interface AgenticRun {
   Id: number;
-  ItemUUID: string;
+  Artikel_Nummer: string;
   SearchQuery: string | null;
   Status: string;
   LastModified: string;
@@ -14,4 +15,3 @@ export interface AgenticRun {
   LastAttemptAt: string | null;
   TranscriptUrl?: string | null;
 }
-

@@ -31,13 +31,16 @@ describe('agentic-bulk-queue action', () => {
   }
 
   it('skips items with existing runs when mode is missing', async () => {
-    const items = [{ ItemUUID: 'item-1' }, { ItemUUID: 'item-2' }];
+    const items = [
+      { ItemUUID: 'item-1', Artikel_Nummer: 'R-001' },
+      { ItemUUID: 'item-2', Artikel_Nummer: 'R-002' }
+    ];
     const references: Array<{ Artikel_Nummer?: string }> = [];
     const ctx = {
       listItems: { all: jest.fn(() => items) },
       listItemReferences: { all: jest.fn(() => references) },
       getAgenticRun: {
-        get: jest.fn((id: string) => (id === 'item-1' ? { ItemUUID: id, Status: 'completed', SearchQuery: 'foo' } : undefined))
+        get: jest.fn((id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'completed', SearchQuery: 'foo' } : undefined))
       },
       upsertAgenticRun: {
         run: jest.fn(() => ({ changes: 1 }))
@@ -58,24 +61,27 @@ describe('agentic-bulk-queue action', () => {
     expect(ctx.getAgenticRun.get).toHaveBeenCalledTimes(2);
     expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(1);
     expect(ctx.upsertAgenticRun.run).toHaveBeenCalledWith(
-      expect.objectContaining({ ItemUUID: 'item-2', Status: 'queued', ReviewState: 'not_required' })
+      expect.objectContaining({ Artikel_Nummer: 'R-002', Status: 'queued', ReviewState: 'not_required' })
     );
     expect(ctx.logEvent).toHaveBeenCalledTimes(1);
     expect(ctx.logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ EntityId: 'item-2', Actor: 'tester', Event: 'AgenticSearchQueued' })
+      expect.objectContaining({ EntityId: 'R-002', Actor: 'tester', Event: 'AgenticSearchQueued' })
     );
     expect(getStatus()).toBe(200);
     expect(getBody()).toEqual(expect.objectContaining({ queued: 1, skipped: 1, mode: 'missing', total: 2 }));
   });
 
   it('queues all items when mode is all even if runs exist', async () => {
-    const items = [{ ItemUUID: 'item-1' }, { ItemUUID: 'item-2' }];
+    const items = [
+      { ItemUUID: 'item-1', Artikel_Nummer: 'R-001' },
+      { ItemUUID: 'item-2', Artikel_Nummer: 'R-002' }
+    ];
     const references: Array<{ Artikel_Nummer?: string }> = [];
     const ctx = {
       listItems: { all: jest.fn(() => items) },
       listItemReferences: { all: jest.fn(() => references) },
       getAgenticRun: {
-        get: jest.fn(() => ({ ItemUUID: 'item-1', Status: 'completed', SearchQuery: 'foo' }))
+        get: jest.fn(() => ({ Artikel_Nummer: 'R-001', Status: 'completed', SearchQuery: 'foo' }))
       },
       upsertAgenticRun: {
         run: jest.fn(() => ({ changes: 1 }))
@@ -131,7 +137,7 @@ describe('agentic-bulk-queue action', () => {
       listItems: { all: jest.fn(() => []) },
       listItemReferences: { all: jest.fn(() => references) },
       getAgenticRun: {
-        get: jest.fn((id: string) => (id === 'R-001' ? { ItemUUID: id, Status: 'queued' } : undefined))
+        get: jest.fn((id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'queued' } : undefined))
       },
       upsertAgenticRun: { run: jest.fn(() => ({ changes: 1 })) },
       logEvent: jest.fn(),
@@ -145,10 +151,10 @@ describe('agentic-bulk-queue action', () => {
 
     await action.handle(req, res, ctx);
 
-    expect(ctx.getAgenticRun.get).not.toHaveBeenCalled();
-    expect(ctx.upsertAgenticRun.run).not.toHaveBeenCalled();
-    expect(ctx.logEvent).not.toHaveBeenCalled();
+    expect(ctx.getAgenticRun.get).toHaveBeenCalledTimes(2);
+    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(1);
+    expect(ctx.logEvent).toHaveBeenCalledTimes(1);
     expect(getStatus()).toBe(200);
-    expect(getBody()).toEqual(expect.objectContaining({ queued: 0, skipped: 2, total: 2 }));
+    expect(getBody()).toEqual(expect.objectContaining({ queued: 1, skipped: 1, total: 2 }));
   });
 });

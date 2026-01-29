@@ -107,7 +107,7 @@ describe('AgenticModelInvoker request payload merging', () => {
     const getAgenticRequestLog = jest.fn(() => ({ PayloadJson: JSON.stringify(requestPayload) }));
     const getItem = {
       get: jest.fn(() => ({
-        ItemUUID: 'item-merge-1',
+        ItemUUID: 'I-123-0001',
         Artikelbeschreibung: '',
         Verkaufspreis: 125,
         Kurzbeschreibung: 'Base Short',
@@ -161,7 +161,7 @@ describe('AgenticModelInvoker request payload merging', () => {
       const invoker = new AgenticModelInvoker({ logger });
 
       const result = await invoker.invoke({
-        itemId: 'item-merge-1',
+        itemId: 'I-123-0001',
         searchQuery: 'Lookup Query',
         context: 'unit-test',
         review: null,
@@ -192,7 +192,7 @@ describe('AgenticModelInvoker request payload merging', () => {
     const getAgenticRequestLog = jest.fn(() => ({ PayloadJson: JSON.stringify(requestPayload) }));
     const getItem = {
       get: jest.fn(() => ({
-        ItemUUID: 'item-merge-2',
+        ItemUUID: 'I-456-0001',
         Artikelbeschreibung: 'Base Description',
         Verkaufspreis: 220,
         Kurzbeschreibung: 'Base Short',
@@ -246,7 +246,7 @@ describe('AgenticModelInvoker request payload merging', () => {
       const invoker = new AgenticModelInvoker({ logger });
 
       const result = await invoker.invoke({
-        itemId: 'item-merge-2',
+        itemId: 'I-456-0001',
         searchQuery: 'Langtext Override Query',
         context: 'unit-test',
         review: null,
