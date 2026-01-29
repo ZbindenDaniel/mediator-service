@@ -345,7 +345,7 @@ export function AgenticStatusCard({
       }
       return next;
     });
-  }, [item, itemId]);
+  }, []);
 
   return (
     <div className={`card agentic-status-card${isCollapsed ? ' agentic-status-card--collapsed' : ''}`}>

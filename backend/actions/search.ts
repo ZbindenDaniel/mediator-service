@@ -343,7 +343,7 @@ function scoreItem(
     artikelbeschreibung: item?.Artikelbeschreibung,
     artikelNummer: item?.Artikel_Nummer,
     context: `item-score-${item?.ItemUUID ?? 'unknown'}`,
-    itemUUID: item?.ItemUUID ?? null
+    itemUUID: typeof item?.ItemUUID === 'string' ? item.ItemUUID : undefined
   });
   const normalizedTerm = normalize(term);
   const normalizedSuchbegriff = normalize(suchbegriffCandidate);
@@ -881,7 +881,7 @@ const action = defineHttpAction({
           artikelbeschreibung: item?.Artikelbeschreibung,
           artikelNummer: item?.Artikel_Nummer,
           context: `item-exact-match-${item?.ItemUUID ?? 'unknown'}`,
-          itemUUID: item?.ItemUUID ?? null
+          itemUUID: typeof item?.ItemUUID === 'string' ? item.ItemUUID : null
         });
         const exactMatchFields = [
           item?.ItemUUID,

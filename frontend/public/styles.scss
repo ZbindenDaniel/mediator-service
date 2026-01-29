@@ -417,7 +417,6 @@ div {
 }
 
 .search-results-row {
-    display: grid;
     grid-template-columns: 140px minmax(0, 1fr) 180px;
     gap: 12px;
     align-items: center;
@@ -1395,7 +1394,7 @@ button:focus {
     .item-list th,
     .item-list td {
         padding: 6px 4px;
-        font-size: 0.85rem;
+        font-size: 12px;
     }
 }
 
@@ -1420,8 +1419,8 @@ button:focus {
 
     .box-list th,
     .box-list td {
-        padding: 6px 4px;
-        font-size: 0.85rem;
+        padding: 6px 0px;
+        font-size: 10px;
     }
 }
 
@@ -1843,6 +1842,7 @@ button:focus {
 }
 
 .box-detail-summary-column {
+    max-width: 93vw;
     display: flex;
     flex-direction: column;
     gap: 16px;
