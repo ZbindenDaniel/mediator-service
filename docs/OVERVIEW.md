@@ -82,6 +82,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added instance-scoped search limits for add-item workflows to return more item rows while logging truncation for debugging.
 - Added item list sorting by entry date (“Erfasst am”) using `Datum_erfasst` with UpdatedAt fallbacks and logging for invalid timestamps.
 - Enabled deep search defaults for Kurzbeschreibung/Langtext matching while keeping the flag available for API callers.
+- Included Kurzbeschreibung/Langtext in field-level search ranking when deep search is enabled, keeping payloads unchanged.
 - Hid quantity details for non-bulk items in the detail view while logging invalid Einheit values to avoid confusion around instance counts.
 - Swapped the recent activities card to a semantic table layout with reusable list styling for easier scanning.
 - Split item detail metadata into reference/instance cards and surfaced additional instance metadata alongside a separate instances table card.

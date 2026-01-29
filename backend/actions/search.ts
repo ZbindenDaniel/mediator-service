@@ -4,6 +4,7 @@
 // TODO(search-suchbegriff): Re-evaluate Suchbegriff fallback logging volume after monitoring search traffic.
 // TODO(agent): Review Langtext search tokenization once structured payload telemetry is available.
 // TODO(deep-search): Confirm default deep search behavior once product guidance is finalized.
+// TODO(search-deep-fields): Validate Kurzbeschreibung/Langtext weighting after ranking feedback.
 import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
@@ -223,23 +224,35 @@ type ItemFieldScores = {
   scoreSuchbegriff: number;
   scoreHersteller: number;
   scoreArtikelbeschreibung: number;
+  scoreKurzbeschreibung: number;
+  scoreLangtext: number;
   scoreArtikelNummer: number;
   scoreItemUUID: number;
   scoreBoxID: number;
   bestScore: number;
-  bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'ArtikelNummer' | 'ItemUUID' | 'BoxID';
+  bestField:
+    | 'Suchbegriff'
+    | 'Hersteller'
+    | 'Artikelbeschreibung'
+    | 'Kurzbeschreibung'
+    | 'Langtext'
+    | 'ArtikelNummer'
+    | 'ItemUUID'
+    | 'BoxID';
 };
 
 type ReferenceFieldScores = {
   scoreSuchbegriff: number;
   scoreHersteller: number;
   scoreArtikelbeschreibung: number;
+  scoreKurzbeschreibung: number;
+  scoreLangtext: number;
   scoreArtikelNummer: number;
   bestScore: number;
-  bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'ArtikelNummer';
+  bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'Kurzbeschreibung' | 'Langtext' | 'ArtikelNummer';
 };
 
-function scoreItem(term: string, tokens: string[], item: any): ItemFieldScores {
+function scoreItem(term: string, tokens: string[], item: any, includeDeepFields: boolean): ItemFieldScores {
   const suchbegriffCandidate = resolveSearchSuchbegriff(item?.Suchbegriff, {
     artikelbeschreibung: item?.Artikelbeschreibung,
     artikelNummer: item?.Artikel_Nummer,
@@ -267,6 +280,10 @@ function scoreItem(term: string, tokens: string[], item: any): ItemFieldScores {
   }
 
   const scoreArtikelbeschreibung = computeSimilarityScore(term, tokens, item?.Artikelbeschreibung);
+  const scoreKurzbeschreibung = includeDeepFields
+    ? computeSimilarityScore(term, tokens, item?.Kurzbeschreibung)
+    : 0;
+  const scoreLangtext = includeDeepFields ? computeSimilarityScore(term, tokens, item?.Langtext) : 0;
   const scoreArtikelNummer = computeSimilarityScore(term, tokens, item?.Artikel_Nummer);
   const scoreItemUUID = computeSimilarityScore(term, tokens, item?.ItemUUID);
   const scoreBoxID = computeSimilarityScore(term, tokens, item?.BoxID);
@@ -275,6 +292,8 @@ function scoreItem(term: string, tokens: string[], item: any): ItemFieldScores {
     { field: 'Suchbegriff', score: scoreSuchbegriff },
     { field: 'Hersteller', score: scoreHersteller },
     { field: 'Artikelbeschreibung', score: scoreArtikelbeschreibung },
+    { field: 'Kurzbeschreibung', score: scoreKurzbeschreibung },
+    { field: 'Langtext', score: scoreLangtext },
     { field: 'ArtikelNummer', score: scoreArtikelNummer },
     { field: 'ItemUUID', score: scoreItemUUID },
     { field: 'BoxID', score: scoreBoxID }
@@ -289,6 +308,8 @@ function scoreItem(term: string, tokens: string[], item: any): ItemFieldScores {
     scoreSuchbegriff,
     scoreHersteller,
     scoreArtikelbeschreibung,
+    scoreKurzbeschreibung,
+    scoreLangtext,
     scoreArtikelNummer,
     scoreItemUUID,
     scoreBoxID,
@@ -313,7 +334,12 @@ function scoreBox(term: string, tokens: string[], box: any): number {
   return best;
 }
 
-function scoreReference(term: string, tokens: string[], reference: any): ReferenceFieldScores {
+function scoreReference(
+  term: string,
+  tokens: string[],
+  reference: any,
+  includeDeepFields: boolean
+): ReferenceFieldScores {
   const suchbegriffCandidate = resolveSearchSuchbegriff(reference?.Suchbegriff, {
     artikelbeschreibung: reference?.Artikelbeschreibung,
     artikelNummer: reference?.Artikel_Nummer,
@@ -338,12 +364,18 @@ function scoreReference(term: string, tokens: string[], reference: any): Referen
   }
 
   const scoreArtikelbeschreibung = computeSimilarityScore(term, tokens, reference?.Artikelbeschreibung);
+  const scoreKurzbeschreibung = includeDeepFields
+    ? computeSimilarityScore(term, tokens, reference?.Kurzbeschreibung)
+    : 0;
+  const scoreLangtext = includeDeepFields ? computeSimilarityScore(term, tokens, reference?.Langtext) : 0;
   const scoreArtikelNummer = computeSimilarityScore(term, tokens, reference?.Artikel_Nummer);
 
   const scoreEntries: Array<{ field: ReferenceFieldScores['bestField']; score: number }> = [
     { field: 'Suchbegriff', score: scoreSuchbegriff },
     { field: 'Hersteller', score: scoreHersteller },
     { field: 'Artikelbeschreibung', score: scoreArtikelbeschreibung },
+    { field: 'Kurzbeschreibung', score: scoreKurzbeschreibung },
+    { field: 'Langtext', score: scoreLangtext },
     { field: 'ArtikelNummer', score: scoreArtikelNummer }
   ];
 
@@ -356,6 +388,8 @@ function scoreReference(term: string, tokens: string[], reference: any): Referen
     scoreSuchbegriff,
     scoreHersteller,
     scoreArtikelbeschreibung,
+    scoreKurzbeschreibung,
+    scoreLangtext,
     scoreArtikelNummer,
     bestScore: best.score,
     bestField: best.field
@@ -579,7 +613,7 @@ const action = defineHttpAction({
           if (!key) {
             continue;
           }
-          const scoreBreakdown = scoreReference(normalized, tokens, reference);
+          const scoreBreakdown = scoreReference(normalized, tokens, reference, deepSearch);
           const score = scoreBreakdown.bestScore;
           const exactValue = typeof exact_match === "number" ? exact_match : 0;
           const existing = deduped.get(key);
@@ -610,6 +644,7 @@ const action = defineHttpAction({
 
         sorted.slice(0, 3).forEach((entry, index) => {
           try {
+            const scoreBreakdown = scoreReference(normalized, tokens, entry.ref, deepSearch);
             console.info('[search] Top reference field score', {
               index,
               artikelNummer: (entry.ref as Record<string, unknown>).Artikel_Nummer ?? null,
@@ -855,7 +890,7 @@ const action = defineHttpAction({
               aufLager: parsedAufLager
             });
           }
-          const scoreBreakdown = scoreItem(normalized, tokens, sanitizedItem);
+          const scoreBreakdown = scoreItem(normalized, tokens, sanitizedItem, deepSearch);
           return { item: sanitizedItem, score: scoreBreakdown.bestScore, scoreBreakdown };
         })
         .sort((a: { score: number }, b: { score: number }) => b.score - a.score);
