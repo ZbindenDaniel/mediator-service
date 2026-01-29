@@ -1115,6 +1115,7 @@ const action = defineHttpAction({
         ...persistenceMetadata
       };
 
+      // TODO(agentic-ref-id): Keep agentic run handling keyed solely off Artikel_Nummer.
       // TODO(agentic-triggering): Confirm agentic seed rules for multi-instance creation once UX clarifies intent.
       const agenticSearchQuery = normalizeSearchTermInput(
         (p.get('agenticSearch') || suchbegriff || data.Artikelbeschreibung || '') as string,
@@ -1265,7 +1266,6 @@ const action = defineHttpAction({
         typeof artikelNummerForCanonical === 'string' ? artikelNummerForCanonical.trim() : '';
       if (!canonicalAgenticArtikelNummer) {
         console.warn('[import-item] Missing Artikel_Nummer for agentic run seeding', {
-          ItemUUID: itemUUIDs[0] ?? null,
           artikelNummer: artikelNummerForCanonical ?? null
         });
       }
@@ -1303,7 +1303,6 @@ const action = defineHttpAction({
 
       if (!agenticSeedArtikelNummer) {
         console.info('[import-item] Agentic seed skipped for import', {
-          ItemUUID: itemUUIDs[0] ?? null,
           artikelNummer: canonicalAgenticArtikelNummer || resolvedArtikelNummer || incomingArtikelNummer || null,
           reason: agenticSeedReason ?? 'unknown',
           instanceCount: itemUUIDs.length
@@ -1395,7 +1394,10 @@ const action = defineHttpAction({
                 try {
                   ctx.upsertAgenticRun.run(agenticRun);
                 } catch (agenticPersistErr) {
-                  console.error('[import-item] Failed to upsert agentic run during import transaction', agenticPersistErr);
+                  console.error('[import-item] Failed to upsert agentic run during import transaction', {
+                    Artikel_Nummer: seedArtikelNummer,
+                    error: agenticPersistErr
+                  });
                   throw agenticPersistErr;
                 }
                 if (manuallySkipped) {
@@ -1416,13 +1418,21 @@ const action = defineHttpAction({
                     !previousAgenticRun || previousStatus !== AGENTIC_RUN_STATUS_QUEUED;
 
                   if (shouldEmitAgenticQueuedEvent) {
-                    ctx.logEvent({
-                      Actor: a,
-                      EntityType: 'Item',
-                      EntityId: seedArtikelNummer,
-                      Event: 'AgenticSearchQueued',
-                      Meta: JSON.stringify(agenticEventMeta)
-                    });
+                    try {
+                      ctx.logEvent({
+                        Actor: a,
+                        EntityType: 'Item',
+                        EntityId: seedArtikelNummer,
+                        Event: 'AgenticSearchQueued',
+                        Meta: JSON.stringify(agenticEventMeta)
+                      });
+                    } catch (logEventError) {
+                      console.error('[import-item] Failed to log AgenticSearchQueued event', {
+                        Artikel_Nummer: seedArtikelNummer,
+                        Actor: a,
+                        error: logEventError
+                      });
+                    }
                   } else {
                     console.info('[import-item] Skipping AgenticSearchQueued log for already queued run', {
                       Artikel_Nummer: seedArtikelNummer,
@@ -1452,18 +1462,28 @@ const action = defineHttpAction({
         ItemUUID: uuid,
         Auf_Lager: creationPlan.quantityPerItem
       }));
-      txn(
-        BoxID,
-        itemDataList,
-        actor,
-        agenticSearchQuery,
-        agenticStatus,
-        boxLocationIdToPersist,
-        preservedBoxPhotoPath,
-        Boolean(ctx.agenticServiceEnabled),
-        agenticRunManuallySkipped,
-        agenticSeedArtikelNummer
-      );
+      try {
+        txn(
+          BoxID,
+          itemDataList,
+          actor,
+          agenticSearchQuery,
+          agenticStatus,
+          boxLocationIdToPersist,
+          preservedBoxPhotoPath,
+          Boolean(ctx.agenticServiceEnabled),
+          agenticRunManuallySkipped,
+          agenticSeedArtikelNummer
+        );
+      } catch (transactionError) {
+        const artikelNummerForLog =
+          agenticSeedArtikelNummer || canonicalAgenticArtikelNummer || resolvedArtikelNummer || incomingArtikelNummer || null;
+        console.error('[import-item] Failed to persist import transaction', {
+          Artikel_Nummer: artikelNummerForLog,
+          error: transactionError
+        });
+        return sendJson(res, 500, { error: 'Failed to persist item import transaction' });
+      }
 
       console.info('[import-item] Persisted item instances for import', {
         mode: creationPlan.mode,
@@ -1537,7 +1557,7 @@ const action = defineHttpAction({
                 .then((result) => {
                   if (!result.ok) {
                     console.error('[import-item] Agentic trigger response indicated failure', {
-                      ItemUUID: itemId,
+                      Artikel_Nummer: artikelNummer,
                       status: result.status,
                       details: result.body ?? result.rawBody
                     });
@@ -1552,12 +1572,12 @@ const action = defineHttpAction({
           }
         } else if (ctx.agenticServiceEnabled && agenticRunManuallySkipped) {
           console.info('[import-item] Agentic trigger skipped due to manual submission status', {
-            ItemUUID: itemId,
+            Artikel_Nummer: artikelNummer,
             actor
           });
         } else {
           console.info('[import-item] Agentic service disabled; queued agentic run locally and skipped remote trigger dispatch', {
-            ItemUUID: itemId,
+            Artikel_Nummer: artikelNummer,
             actor,
             agenticSearchQuery
           });
