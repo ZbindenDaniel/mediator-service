@@ -11,12 +11,12 @@ import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { logger, logError } from '../utils/logger';
-import BoxTag from './BoxTag';
+import LocationTag from './LocationTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
 
-// TODO(agent): Verify the BoxTag rendering still aligns with the detailed box metadata layout.
+// TODO(agent): Verify the LocationTag rendering still aligns with the detailed box metadata layout.
 // TODO(agent): Confirm location tags remain navigable only when LocationId is valid and link targets are encoded correctly.
 // TODO(agent): Audit box label fallbacks here if backend label fields change.
 // TODO(agent): Confirm shelf box lists align with relocation rules before expanding shelf detail UI.
@@ -625,10 +625,10 @@ export default function BoxDetail({ boxId }: Props) {
                               to={`/boxes/${encodeURIComponent(normalizedLocationId)}`}
                               aria-label="Zum Regal"
                             >
-                              <BoxTag locationKey={box.LocationId} labelOverride={box.Label} />
+                              <LocationTag locationKey={box.LocationId} labelOverride={box.Label} />
                             </Link>
                           ) : (
-                            <BoxTag locationKey={box.LocationId} labelOverride={box.Label} />
+                            <LocationTag locationKey={box.LocationId} labelOverride={box.Label} />
                           )}
                         </td>
                       </tr>
@@ -809,7 +809,7 @@ export default function BoxDetail({ boxId }: Props) {
                         <Link to={`/boxes/${encodeURIComponent(containedBox.BoxID)}`} className="linkcard">
                           <div className="mono">{containedBox.BoxID}</div>
                           <div>
-                            <BoxTag
+                            <LocationTag
                               locationKey={containedBox.LocationId}
                               labelOverride={containedBox.Label}
                             />

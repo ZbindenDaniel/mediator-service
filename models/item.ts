@@ -48,7 +48,8 @@ export interface ItemInstance {
   ItemUUID: string;
   Artikel_Nummer?: string | null;
   BoxID: string | null;
-  Location?: string | null;
+  // Item instances always include Location (null when unset) to keep placement contracts consistent.
+  Location: string | null;
   // TODO(agent): Confirm ShelfLabel is provided for list responses once shelf joins ship everywhere.
   ShelfLabel?: string | null;
   UpdatedAt: Date;

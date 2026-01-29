@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import type { Item } from '../../../models';
 import { Link } from 'react-router-dom';
-import BoxTag from './BoxTag';
+import LocationTag from './LocationTag';
 
-// TODO(agent): Double-check that the simplified BoxTag output matches the search results layout expectations.
+// TODO(agent): Double-check that the simplified LocationTag output matches the search results layout expectations.
 // TODO(navigation): Review header navigation labels before adding new search shortcuts here.
 // TODO(deep-search): Add an explicit deep-search toggle to this card when UX copy is ready.
 // TODO(agent): Confirm box search rows still prefer label overrides over IDs once API fields expand.
@@ -61,7 +61,7 @@ export default function SearchCard() {
                 <Link to={`/boxes/${encodeURIComponent(res.id)}`}>Behälter: {res.id}</Link>
               </div>
               <div className="muted">
-                <BoxTag locationKey={res.locationId} labelOverride={res.label} />
+                <LocationTag locationKey={res.locationId} labelOverride={res.label} />
               </div>
               <div />
             </div>

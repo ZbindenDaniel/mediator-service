@@ -53,7 +53,7 @@ Goal: address recent UX regressions and workflow bugs while keeping changes mini
 
 Planned fixes (confirm order before implementation):
 
-1) **Box location labels** – show shelf/box labels (not IDs) in BoxList and other label surfaces that currently prefer raw LocationId. Reason: improve readability for warehouse operators. Files: `frontend/src/components/BoxList.tsx`, `frontend/src/components/BoxTag.tsx`, `frontend/src/components/BoxDetail.tsx`, `frontend/src/components/RecentBoxesCard.tsx`, `frontend/src/components/SearchCard.tsx`.
+1) **Box location labels** – show shelf/box labels (not IDs) in BoxList and other label surfaces that currently prefer raw LocationId. Reason: improve readability for warehouse operators. Files: `frontend/src/components/BoxList.tsx`, `frontend/src/components/LocationTag.tsx`, `frontend/src/components/BoxDetail.tsx`, `frontend/src/components/RecentBoxesCard.tsx`, `frontend/src/components/SearchCard.tsx`.
 
 2) **Item list category filter submit-on-enter** – stage Unterkategorie input and apply only on Enter (like search). Reason: avoid filter churn on every keystroke. Files: `frontend/src/components/ItemListPage.tsx`, `frontend/src/lib/itemListFiltersStorage.ts`.
 

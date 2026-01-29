@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
-import BoxTag from './BoxTag';
+import type { Item } from '../../../models';
+import LocationTag from './LocationTag';
 import QualityBadge from './QualityBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import type { GroupedItemDisplay } from '../lib/itemGrouping';
@@ -26,6 +27,8 @@ interface Props {
   allVisibleSelected: boolean;
   someVisibleSelected: boolean;
 }
+
+type ItemLocationSource = Pick<Item, 'ItemUUID' | 'BoxID' | 'Location' | 'ShelfLabel'>;
 
 function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
@@ -58,24 +61,6 @@ function resolveDisplayCount(group: GroupedItemDisplay): number {
       isBulk: group.isBulk
     });
     return group.summary.count;
-  }
-}
-
-// TODO(agent): Revisit shelf label normalization once shelf labels are editable in list payloads.
-function normalizeLabelValue(
-  value: string | null | undefined,
-  context: string,
-  itemId?: string | null
-): string {
-  if (value == null) {
-    return '';
-  }
-
-  try {
-    return value.trim();
-  } catch (error) {
-    logError(`Failed to normalize ${context}`, error, { value, itemId });
-    return '';
   }
 }
 
@@ -151,7 +136,7 @@ export default function ItemList({
               .filter((itemId): itemId is string => Boolean(itemId));
             let boxId: string | undefined;
             let shelfId: string | undefined;
-            let shelfLabel: string | undefined;
+            const representativeItemId = group.summary.representativeItemId ?? representative?.ItemUUID ?? null;
 
             try {
               if (typeof group.summary.BoxID === 'string') {
@@ -189,17 +174,6 @@ export default function ItemList({
               });
             }
 
-            const rawShelfLabel = typeof group.summary.ShelfLabel === 'string'
-              ? group.summary.ShelfLabel
-              : (typeof representative?.ShelfLabel === 'string' ? representative.ShelfLabel : null);
-            shelfLabel = normalizeLabelValue(rawShelfLabel, 'item shelf label', group.summary.representativeItemId);
-            if (shelfId && !shelfLabel) {
-              logger.warn('Missing shelf label for item list row', {
-                itemId: group.summary.representativeItemId,
-                shelfId
-              });
-            }
-
             const boxLinkTarget = boxId ? `/boxes/${encodeURIComponent(boxId)}` : null;
             const shelfLinkTarget = shelfId ? `/boxes/${encodeURIComponent(shelfId)}` : null;
             const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => selectedItemIds.has(itemId));
@@ -208,6 +182,14 @@ export default function ItemList({
             const checkboxLabel = `Artikelgruppe ${representativeLabel} auswählen`;
             const rowLabel = `Details für ${representativeLabel} öffnen`;
             const countValue = resolveDisplayCount(group);
+            const locationItem: ItemLocationSource | null = representativeItemId
+              ? {
+                  ItemUUID: representativeItemId,
+                  BoxID: boxId ?? representative?.BoxID ?? null,
+                  Location: shelfId ?? representative?.Location ?? null,
+                  ShelfLabel: group.summary.ShelfLabel ?? representative?.ShelfLabel ?? null,
+                }
+              : null;
             const subcategoryValue = group.summary.Category
               ?? (typeof representative?.Unterkategorien_A === 'number'
                 ? String(representative.Unterkategorien_A)
@@ -282,10 +264,10 @@ export default function ItemList({
                 <td className="col-location">
                   {shelfId && shelfLinkTarget ? (
                     <Link to={shelfLinkTarget}>
-                      <BoxTag locationKey={shelfId} labelOverride={shelfLabel || null} />
+                      <LocationTag item={locationItem} itemId={representativeItemId} />
                     </Link>
                   ) : (
-                    <span>—</span>
+                    <LocationTag item={locationItem} itemId={representativeItemId} />
                   )}
                 </td>
                 <td className="col-agentic optional-column">{agenticLabel}</td>
