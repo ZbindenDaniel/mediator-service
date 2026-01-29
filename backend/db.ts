@@ -1123,6 +1123,7 @@ export function persistItem(item: Item): void {
 
 // TODO(agentic-run-migration): Drop legacy ItemUUID columns from agentic_runs once all deployments are rebuilt.
 // TODO(agentic-run-reset-once): Remove legacy reset gate once all deployments have moved to reference-scoped runs.
+// TODO(agentic-run-legacy): Remove legacy schema warnings once agentic_runs migrations are completed.
 export function ensureAgenticRunSchema(database: Database.Database = db): void {
   const createAgenticRunsSql = `
 CREATE TABLE IF NOT EXISTS agentic_runs (
@@ -1153,17 +1154,16 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
     const columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
     const hasArtikelNummer = columns.some((entry) => entry.name === 'Artikel_Nummer');
     if (!hasArtikelNummer) {
-      const result = database.prepare('DELETE FROM agentic_runs').run();
-      if ((result?.changes ?? 0) > 0) {
-        console.warn('[db] Cleared legacy agentic_runs rows during schema migration', { cleared: result.changes });
-      } else {
-        console.info('[db] No legacy agentic_runs rows to clear during schema migration');
-      }
+      console.warn('[db] Legacy agentic_runs schema detected; Artikel_Nummer column is missing.');
+      console.warn('[db] agentic_runs is legacy and must be migrated manually; no rows will be deleted.');
+      const legacySchemaError = new Error('Legacy agentic_runs schema requires manual migration before startup.');
+      console.error('[db] Refusing to proceed with legacy agentic_runs schema.', { error: legacySchemaError });
+      throw legacySchemaError;
     } else {
       console.info('[db] Skipping legacy agentic_runs reset; schema already reference-scoped.');
     }
   } catch (err) {
-    console.error('Failed to clear legacy agentic_runs rows during schema migration', err);
+    console.error('Failed to validate legacy agentic_runs schema handling', err);
     throw err;
   }
 

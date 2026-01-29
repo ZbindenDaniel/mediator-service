@@ -148,6 +148,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Removed the unconditional touch start/end bindings from the item detail container to prevent global swipe handling by default.
 - Updated UI labels and agentic prompt guidance to surface “Spezifikationen” while keeping the Langtext payload key unchanged for schema compatibility.
 - Added a unified /api/export/data action that can bundle items, boxes, agentic runs, and labeled events into a single archive or JSON payload with filterable query parameters.
+- Added agentic_runs.csv ingestion with Artikel_Nummer validation, row-level logging, and archive handling for agentic run restores.
 - Added optional shelf label/notes inputs for shelf creation and shelf detail editing while keeping relocation shelf lookups unfiltered by category.
 - Reset item detail agentic search terms on item changes and hydrate them from persisted Suchbegriff values after item load.
 - Replaced the header back control with a home link, added mobile-only header button sizing, and logged navigation failures for the home shortcut.
@@ -171,6 +172,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Updated item detail agentic actions to use Artikel_Nummer reference identifiers with stricter logging for failed agentic requests.
 - Gate the legacy agentic_runs reset to run only when the schema still lacks Artikel_Nummer, preventing repeat wipes after migration.
 - Added events.csv import handling alongside CSV ingestion, with per-row validation and logging to skip invalid event rows while continuing the import.
+- Replaced legacy agentic_runs resets with non-destructive warnings and a startup abort when Artikel_Nummer is missing, so manual migrations are required without deleting rows.
 
 ## Documentation Map
 

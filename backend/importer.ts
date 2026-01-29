@@ -1,4 +1,5 @@
 // TODO(agent): Verify Langtext helper logging during CSV ingestion before enforcing structured payloads.
+// TODO(agent): Confirm agentic_runs.csv header expectations once import partner coverage is finalized.
 // TODO(agent): Reconfirm ItemUUID prefix expectations with current CSV partner guidance.
 // TODO(agent): Keep importer box persistence in sync with schema changes (PhotoPath, future metadata).
 // TODO(agent): Monitor Grafikname multi-image normalization so downstream exporters can drop legacy fallbacks.
@@ -17,6 +18,7 @@ import {
   persistItem,
   queueLabel,
   persistItemReference,
+  upsertAgenticRun,
   findByMaterial,
   getMaxArtikelNummer,
   insertEventLogEntry
@@ -1627,6 +1629,91 @@ export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: nu
   }
 }
 
+function normalizeAgenticRunField(value: unknown): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  try {
+    return (typeof value === 'string' ? value : String(value)).trim();
+  } catch (fieldError) {
+    console.error('[importer] Failed to normalize agentic run field', { value, fieldError });
+    return '';
+  }
+}
+
+export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ count: number }> {
+  console.log('[importer] Ingesting agentic_runs.csv payload');
+  const now = new Date().toISOString();
+  try {
+    const content = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+    const records = parseCsvSync(content, { columns: true, skip_empty_lines: true }) as Array<Record<string, unknown>>;
+    let count = 0;
+
+    if (records.length === 0) {
+      console.info('[importer] agentic_runs.csv contained zero rows');
+    }
+
+    for (const [index, record] of records.entries()) {
+      const rowNumber = index + 1;
+      try {
+        const artikelNummer = normalizeAgenticRunField(record.Artikel_Nummer);
+        if (!artikelNummer) {
+          console.warn('[importer] Skipping agentic_runs row without Artikel_Nummer', { rowNumber });
+          continue;
+        }
+
+        const status = normalizeAgenticRunField(record.Status);
+        if (!status) {
+          console.warn('[importer] agentic_runs row missing Status; defaulting to notStarted', {
+            rowNumber,
+            artikelNummer,
+          });
+        }
+        const lastModified = normalizeAgenticRunField(record.LastModified);
+        if (!lastModified) {
+          console.warn('[importer] agentic_runs row missing LastModified; defaulting to now', {
+            rowNumber,
+            artikelNummer,
+          });
+        }
+        const reviewState = normalizeAgenticRunField(record.ReviewState) || 'not_required';
+
+        const run = {
+          Artikel_Nummer: artikelNummer,
+          SearchQuery: normalizeAgenticRunField(record.SearchQuery) || null,
+          Status: status || 'notStarted',
+          LastModified: lastModified || now,
+          ReviewState: reviewState,
+          ReviewedBy: normalizeAgenticRunField(record.ReviewedBy) || null,
+          LastReviewDecision: normalizeAgenticRunField(record.LastReviewDecision) || null,
+          LastReviewNotes: normalizeAgenticRunField(record.LastReviewNotes) || null,
+        };
+
+        try {
+          upsertAgenticRun.run(run);
+          count++;
+        } catch (upsertError) {
+          console.error('[importer] Failed to upsert agentic run from agentic_runs row', {
+            rowNumber,
+            artikelNummer,
+            error: upsertError,
+          });
+        }
+      } catch (rowError) {
+        console.error('[importer] Failed to parse agentic_runs row', {
+          rowNumber,
+          error: rowError,
+        });
+      }
+    }
+
+    return { count };
+  } catch (err) {
+    console.error('[importer] Failed to ingest agentic_runs CSV payload', err);
+    throw err;
+  }
+}
+
 function normalize(r: Record<string, unknown>): Record<string, string> {
   const o: Record<string, string> = {};
   for (const k of Object.keys(r)) o[k] = String(r[k] ?? '').trim();
@@ -1647,4 +1734,4 @@ function readCsv(file: string): Promise<Record<string, string>[]> {
   });
 }
 
-export default { ingestCsvFile, ingestBoxesCsv, ingestEventsCsv };
+export default { ingestCsvFile, ingestBoxesCsv, ingestEventsCsv, ingestAgenticRunsCsv };
