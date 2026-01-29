@@ -1120,7 +1120,8 @@ export function persistItem(item: Item): void {
   }
 }
 
-// TODO(agentic-run-migration): Drop legacy ItemUUID columns from agentic_runs once all deployments backfill Artikel_Nummer.
+// TODO(agentic-run-migration): Drop legacy ItemUUID columns from agentic_runs once all deployments are rebuilt.
+// TODO(agentic-run-reset-once): Remove legacy reset gate once all deployments have moved to reference-scoped runs.
 export function ensureAgenticRunSchema(database: Database.Database = db): void {
   const createAgenticRunsSql = `
 CREATE TABLE IF NOT EXISTS agentic_runs (
@@ -1139,13 +1140,29 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
   LastAttemptAt TEXT,
   FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE CASCADE ON UPDATE CASCADE
 );
-
-CREATE INDEX IF NOT EXISTS idx_agentic_runs_artikel_nummer ON agentic_runs(Artikel_Nummer);
 `;
   try {
     database.exec(createAgenticRunsSql);
   } catch (err) {
     console.error('Failed to ensure agentic_runs schema', err);
+    throw err;
+  }
+
+  try {
+    const columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
+    const hasArtikelNummer = columns.some((entry) => entry.name === 'Artikel_Nummer');
+    if (!hasArtikelNummer) {
+      const result = database.prepare('DELETE FROM agentic_runs').run();
+      if ((result?.changes ?? 0) > 0) {
+        console.warn('[db] Cleared legacy agentic_runs rows during schema migration', { cleared: result.changes });
+      } else {
+        console.info('[db] No legacy agentic_runs rows to clear during schema migration');
+      }
+    } else {
+      console.info('[db] Skipping legacy agentic_runs reset; schema already reference-scoped.');
+    }
+  } catch (err) {
+    console.error('Failed to clear legacy agentic_runs rows during schema migration', err);
     throw err;
   }
 
@@ -1184,62 +1201,7 @@ function ensureAgenticRunReferenceKeyColumns(database: Database.Database = db): 
   }
 
   if (!hasItemUUID) {
-    if (!hasArtikelNummer) {
-      console.warn('[db] Agentic run backfill skipped because Artikel_Nummer was just added without ItemUUID support');
-    }
     return;
-  }
-
-  try {
-    const totalCount = Number(
-      (database.prepare(`SELECT COUNT(*) as count FROM agentic_runs`).get() as { count?: number })?.count ?? 0
-    );
-    const missingBefore = Number(
-      (database.prepare(
-        `SELECT COUNT(*) as count FROM agentic_runs WHERE Artikel_Nummer IS NULL OR TRIM(Artikel_Nummer) = ''`
-      ).get() as { count?: number })?.count ?? 0
-    );
-    const emptyItemUUID = Number(
-      (database.prepare(
-        `SELECT COUNT(*) as count FROM agentic_runs WHERE ItemUUID IS NULL OR TRIM(ItemUUID) = ''`
-      ).get() as { count?: number })?.count ?? 0
-    );
-
-    const result = database.prepare(
-      `UPDATE agentic_runs
-          SET Artikel_Nummer = (
-            SELECT items.Artikel_Nummer
-              FROM items
-             WHERE items.ItemUUID = agentic_runs.ItemUUID
-          )
-        WHERE (Artikel_Nummer IS NULL OR TRIM(Artikel_Nummer) = '')
-          AND ItemUUID IS NOT NULL
-          AND TRIM(ItemUUID) <> ''
-          AND EXISTS (
-            SELECT 1
-              FROM items
-             WHERE items.ItemUUID = agentic_runs.ItemUUID
-               AND items.Artikel_Nummer IS NOT NULL
-               AND TRIM(items.Artikel_Nummer) <> ''
-          )`
-    ).run();
-
-    const missingAfter = Number(
-      (database.prepare(
-        `SELECT COUNT(*) as count FROM agentic_runs WHERE Artikel_Nummer IS NULL OR TRIM(Artikel_Nummer) = ''`
-      ).get() as { count?: number })?.count ?? 0
-    );
-
-    console.info('[db] Backfilled agentic_runs Artikel_Nummer values', {
-      totalCount,
-      missingBefore,
-      migratedCount: result?.changes ?? 0,
-      missingAfter,
-      emptyItemUUID
-    });
-  } catch (err) {
-    console.error('Failed to backfill agentic_runs Artikel_Nummer values', err);
-    throw err;
   }
 }
 
