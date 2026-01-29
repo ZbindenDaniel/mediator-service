@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 - Replaced BoxTag with a new LocationTag that resolves item locations through direct shelf placements or box/shelf lookups, with guarded logging and fallbacks for missing Standort data.
+- Added Auf_Lager to item instance summaries with warnings for missing/non-numeric stock and hid the withdraw action for out-of-stock instance detail views while keeping navigation intact.
 - Added shelf label projections for box/item list payloads and updated list rendering to prefer shelf labels with logging when labels are missing.
 - Centralized BoxTag label fallbacks to prefer editable labels with normalization logging and shelf-label formatting only when no label is present, keeping IDs hidden by default across box surfaces.
 - Refreshed item detail removal to reload item payloads after successful withdrawals, with logging for reload failures.
