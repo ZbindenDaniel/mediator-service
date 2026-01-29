@@ -462,6 +462,7 @@ const action = defineHttpAction({
           Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse'),
           Quality: resolveItemQualityValue(item.Quality, 'fetchResponse')
         };
+        // TODO(stock-visibility): Verify Auf_Lager instance summary data feeds withdrawal availability.
         let instances: ItemInstanceSummary[] = [];
         try {
           if (item.Artikel_Nummer && ctx.findByMaterial?.all) {
@@ -479,8 +480,37 @@ const action = defineHttpAction({
                   });
                   continue;
                 }
-                const stockValue = Number(instance?.Auf_Lager ?? 0);
-                if (!Number.isNaN(stockValue) && stockValue <= 0) {
+                let parsedStock: number | null = null;
+                try {
+                  const rawStock = instance?.Auf_Lager ?? null;
+                  if (rawStock === null || rawStock === undefined) {
+                    console.warn('[save-item] Missing Auf_Lager in instance list', {
+                      itemId,
+                      artikelNummer: item.Artikel_Nummer,
+                      itemUUID
+                    });
+                  } else {
+                    parsedStock = typeof rawStock === 'number' ? rawStock : Number(rawStock);
+                    if (Number.isNaN(parsedStock)) {
+                      console.warn('[save-item] Non-numeric Auf_Lager in instance list', {
+                        itemId,
+                        artikelNummer: item.Artikel_Nummer,
+                        itemUUID,
+                        provided: rawStock
+                      });
+                      parsedStock = null;
+                    }
+                  }
+                } catch (error) {
+                  console.error('[save-item] Failed to parse Auf_Lager in instance list', {
+                    itemId,
+                    artikelNummer: item.Artikel_Nummer,
+                    itemUUID,
+                    error
+                  });
+                  parsedStock = null;
+                }
+                if (parsedStock !== null && parsedStock <= 0) {
                   zeroStockCount += 1;
                 }
                 // TODO(agentic-instance-status): Keep instance list agentic statuses aligned with ItemUUID-based runs.
@@ -488,6 +518,7 @@ const action = defineHttpAction({
                   ItemUUID: itemUUID,
                   AgenticStatus: instance.AgenticStatus ?? null,
                   Quality: resolveItemQualityValue(instance.Quality, 'fetchInstance'),
+                  Auf_Lager: instance.Auf_Lager ?? null,
                   Location: instance.Location ?? null,
                   BoxID: instance.BoxID ?? null,
                   UpdatedAt: instance.UpdatedAt ? String(instance.UpdatedAt) : null,
