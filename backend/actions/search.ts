@@ -5,6 +5,7 @@
 // TODO(agent): Review Langtext search tokenization once structured payload telemetry is available.
 // TODO(deep-search): Confirm default deep search behavior once product guidance is finalized.
 // TODO(search-deep-fields): Validate Kurzbeschreibung/Langtext weighting after ranking feedback.
+// TODO(search-helper): Verify helper scoring parity after rollout.
 import type { IncomingMessage, ServerResponse } from 'http';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
@@ -187,6 +188,63 @@ function computeSimilarityScore(term: string, tokens: string[], candidate: unkno
   return Math.max(baseScore, softRecall);
 }
 
+type FieldScoreEntry<FieldName extends string> = {
+  fieldName: FieldName;
+  value: unknown;
+  exactMatchValue?: unknown;
+};
+
+type FieldScoreSummary<FieldName extends string> = {
+  fieldScores: Record<FieldName, number>;
+  bestField: FieldName;
+  bestScore: number;
+};
+
+function scoreFieldEntries<FieldName extends string>(
+  term: string,
+  tokens: string[],
+  fields: Array<FieldScoreEntry<FieldName>>
+): FieldScoreSummary<FieldName> {
+  const fieldScores = {} as Record<FieldName, number>;
+  if (!fields.length) {
+    console.error('[search] No fields provided for scoring', { term });
+    return {
+      fieldScores,
+      bestField: '' as FieldName,
+      bestScore: 0
+    };
+  }
+
+  let bestField = fields[0].fieldName;
+  let bestScore = 0;
+  const normalizedTerm = normalize(term);
+
+  for (const field of fields) {
+    try {
+      let score = computeSimilarityScore(term, tokens, field.value);
+      if (field.exactMatchValue !== undefined) {
+        const normalizedExact = normalize(field.exactMatchValue);
+        if (normalizedExact && normalizedExact === normalizedTerm) {
+          score = 1;
+        }
+      }
+      fieldScores[field.fieldName] = score;
+      if (score > bestScore) {
+        bestScore = score;
+        bestField = field.fieldName;
+      }
+    } catch (error) {
+      console.error('[search] Failed to score field entry', {
+        fieldName: field.fieldName,
+        error
+      });
+      fieldScores[field.fieldName] = 0;
+    }
+  }
+
+  return { fieldScores, bestField, bestScore };
+}
+
 // TODO(search-field-scores): Review field score weighting after observing ranking feedback.
 function hasExactMatchFieldValue(values: unknown[]): boolean {
   return values.some(value => {
@@ -261,60 +319,56 @@ function scoreItem(term: string, tokens: string[], item: any, includeDeepFields:
   });
   const normalizedTerm = normalize(term);
   const normalizedSuchbegriff = normalize(suchbegriffCandidate);
-  let scoreSuchbegriff = computeSimilarityScore(term, tokens, suchbegriffCandidate);
-  if (normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm) {
+  const isSuchbegriffExact = normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm;
+  if (isSuchbegriffExact) {
     console.info('[search] Suchbegriff exact match detected in item score', {
       itemId: item?.ItemUUID ?? null,
       artikelNummer: item?.Artikel_Nummer ?? null
     });
-    scoreSuchbegriff = 1;
   }
   const normalizedHersteller = normalize(item?.Hersteller);
-  let scoreHersteller = computeSimilarityScore(term, tokens, item?.Hersteller);
-  if (normalizedHersteller && normalizedHersteller === normalizedTerm) {
+  const isHerstellerExact = normalizedHersteller && normalizedHersteller === normalizedTerm;
+  if (isHerstellerExact) {
     console.info('[search] Hersteller exact match detected in item score', {
       itemId: item?.ItemUUID ?? null,
       artikelNummer: item?.Artikel_Nummer ?? null
     });
-    scoreHersteller = 1;
   }
 
-  const scoreArtikelbeschreibung = computeSimilarityScore(term, tokens, item?.Artikelbeschreibung);
-  const scoreKurzbeschreibung = includeDeepFields
-    ? computeSimilarityScore(term, tokens, item?.Kurzbeschreibung)
-    : 0;
-  const scoreLangtext = includeDeepFields ? computeSimilarityScore(term, tokens, item?.Langtext) : 0;
-  const scoreArtikelNummer = computeSimilarityScore(term, tokens, item?.Artikel_Nummer);
-  const scoreItemUUID = computeSimilarityScore(term, tokens, item?.ItemUUID);
-  const scoreBoxID = computeSimilarityScore(term, tokens, item?.BoxID);
-
-  const scoreEntries: Array<{ field: ItemFieldScores['bestField']; score: number }> = [
-    { field: 'Suchbegriff', score: scoreSuchbegriff },
-    { field: 'Hersteller', score: scoreHersteller },
-    { field: 'Artikelbeschreibung', score: scoreArtikelbeschreibung },
-    { field: 'Kurzbeschreibung', score: scoreKurzbeschreibung },
-    { field: 'Langtext', score: scoreLangtext },
-    { field: 'ArtikelNummer', score: scoreArtikelNummer },
-    { field: 'ItemUUID', score: scoreItemUUID },
-    { field: 'BoxID', score: scoreBoxID }
-  ];
-
-  const best = scoreEntries.reduce(
-    (current, entry) => (entry.score > current.score ? entry : current),
-    scoreEntries[0]
+  const { fieldScores, bestField, bestScore } = scoreFieldEntries<ItemFieldScores['bestField']>(
+    term,
+    tokens,
+    [
+      {
+        fieldName: 'Suchbegriff',
+        value: suchbegriffCandidate,
+        exactMatchValue: isSuchbegriffExact ? suchbegriffCandidate : undefined
+      },
+      {
+        fieldName: 'Hersteller',
+        value: item?.Hersteller,
+        exactMatchValue: isHerstellerExact ? item?.Hersteller : undefined
+      },
+      { fieldName: 'Artikelbeschreibung', value: item?.Artikelbeschreibung },
+      { fieldName: 'Kurzbeschreibung', value: includeDeepFields ? item?.Kurzbeschreibung : null },
+      { fieldName: 'Langtext', value: includeDeepFields ? item?.Langtext : null },
+      { fieldName: 'ArtikelNummer', value: item?.Artikel_Nummer },
+      { fieldName: 'ItemUUID', value: item?.ItemUUID },
+      { fieldName: 'BoxID', value: item?.BoxID }
+    ]
   );
 
   return {
-    scoreSuchbegriff,
-    scoreHersteller,
-    scoreArtikelbeschreibung,
-    scoreKurzbeschreibung,
-    scoreLangtext,
-    scoreArtikelNummer,
-    scoreItemUUID,
-    scoreBoxID,
-    bestScore: best.score,
-    bestField: best.field
+    scoreSuchbegriff: fieldScores.Suchbegriff,
+    scoreHersteller: fieldScores.Hersteller,
+    scoreArtikelbeschreibung: fieldScores.Artikelbeschreibung,
+    scoreKurzbeschreibung: fieldScores.Kurzbeschreibung,
+    scoreLangtext: fieldScores.Langtext,
+    scoreArtikelNummer: fieldScores.ArtikelNummer,
+    scoreItemUUID: fieldScores.ItemUUID,
+    scoreBoxID: fieldScores.BoxID,
+    bestScore,
+    bestField
   };
 }
 
@@ -347,52 +401,50 @@ function scoreReference(
   });
   const normalizedTerm = normalize(term);
   const normalizedSuchbegriff = normalize(suchbegriffCandidate);
-  let scoreSuchbegriff = computeSimilarityScore(term, tokens, suchbegriffCandidate);
-  if (normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm) {
+  const isSuchbegriffExact = normalizedSuchbegriff && normalizedSuchbegriff === normalizedTerm;
+  if (isSuchbegriffExact) {
     console.info('[search] Suchbegriff exact match detected in reference score', {
       artikelNummer: reference?.Artikel_Nummer ?? null
     });
-    scoreSuchbegriff = 1;
   }
   const normalizedHersteller = normalize(reference?.Hersteller);
-  let scoreHersteller = computeSimilarityScore(term, tokens, reference?.Hersteller);
-  if (normalizedHersteller && normalizedHersteller === normalizedTerm) {
+  const isHerstellerExact = normalizedHersteller && normalizedHersteller === normalizedTerm;
+  if (isHerstellerExact) {
     console.info('[search] Hersteller exact match detected in reference score', {
       artikelNummer: reference?.Artikel_Nummer ?? null
     });
-    scoreHersteller = 1;
   }
 
-  const scoreArtikelbeschreibung = computeSimilarityScore(term, tokens, reference?.Artikelbeschreibung);
-  const scoreKurzbeschreibung = includeDeepFields
-    ? computeSimilarityScore(term, tokens, reference?.Kurzbeschreibung)
-    : 0;
-  const scoreLangtext = includeDeepFields ? computeSimilarityScore(term, tokens, reference?.Langtext) : 0;
-  const scoreArtikelNummer = computeSimilarityScore(term, tokens, reference?.Artikel_Nummer);
-
-  const scoreEntries: Array<{ field: ReferenceFieldScores['bestField']; score: number }> = [
-    { field: 'Suchbegriff', score: scoreSuchbegriff },
-    { field: 'Hersteller', score: scoreHersteller },
-    { field: 'Artikelbeschreibung', score: scoreArtikelbeschreibung },
-    { field: 'Kurzbeschreibung', score: scoreKurzbeschreibung },
-    { field: 'Langtext', score: scoreLangtext },
-    { field: 'ArtikelNummer', score: scoreArtikelNummer }
-  ];
-
-  const best = scoreEntries.reduce(
-    (current, entry) => (entry.score > current.score ? entry : current),
-    scoreEntries[0]
+  const { fieldScores, bestField, bestScore } = scoreFieldEntries<ReferenceFieldScores['bestField']>(
+    term,
+    tokens,
+    [
+      {
+        fieldName: 'Suchbegriff',
+        value: suchbegriffCandidate,
+        exactMatchValue: isSuchbegriffExact ? suchbegriffCandidate : undefined
+      },
+      {
+        fieldName: 'Hersteller',
+        value: reference?.Hersteller,
+        exactMatchValue: isHerstellerExact ? reference?.Hersteller : undefined
+      },
+      { fieldName: 'Artikelbeschreibung', value: reference?.Artikelbeschreibung },
+      { fieldName: 'Kurzbeschreibung', value: includeDeepFields ? reference?.Kurzbeschreibung : null },
+      { fieldName: 'Langtext', value: includeDeepFields ? reference?.Langtext : null },
+      { fieldName: 'ArtikelNummer', value: reference?.Artikel_Nummer }
+    ]
   );
 
   return {
-    scoreSuchbegriff,
-    scoreHersteller,
-    scoreArtikelbeschreibung,
-    scoreKurzbeschreibung,
-    scoreLangtext,
-    scoreArtikelNummer,
-    bestScore: best.score,
-    bestField: best.field
+    scoreSuchbegriff: fieldScores.Suchbegriff,
+    scoreHersteller: fieldScores.Hersteller,
+    scoreArtikelbeschreibung: fieldScores.Artikelbeschreibung,
+    scoreKurzbeschreibung: fieldScores.Kurzbeschreibung,
+    scoreLangtext: fieldScores.Langtext,
+    scoreArtikelNummer: fieldScores.ArtikelNummer,
+    bestScore,
+    bestField
   };
 }
 
