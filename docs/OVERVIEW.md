@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Normalized export image path serialization to strip `/media/` prefixes so CSV outputs align with WebDAV storage layouts.
 - Replaced BoxTag with a new LocationTag that resolves item locations through direct shelf placements or box/shelf lookups, with guarded logging and fallbacks for missing Standort data.
 - Added Auf_Lager to item instance summaries with warnings for missing/non-numeric stock and hid the withdraw action for out-of-stock instance detail views while keeping navigation intact.
 - Added shelf label projections for box/item list payloads and updated list rendering to prefer shelf labels with logging when labels are missing.

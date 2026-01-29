@@ -122,9 +122,52 @@ const categoryLabelFallbackWarnings = new Set<string>();
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const MEDIA_PREFIX = '/media/';
+// TODO(export-items): Confirm export path normalization remains aligned with WebDAV storage conventions.
 // TODO(export-items-grouping): Confirm whether grouped exports should omit the ItemUUID column entirely once consumers allow it.
 // TODO(export-items-grouping): Validate export consumers accept ItemUUID column removal when grouping merges rows.
 // TODO(export-items-mode): Confirm default export mode expectations with ERP/backup consumers.
+
+let hasLoggedMediaPrefixStrip = false;
+
+function stripMediaPrefixForExport(
+  asset: string,
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): string {
+  if (!asset.startsWith(MEDIA_PREFIX)) {
+    return asset;
+  }
+
+  const stripped = asset.slice(MEDIA_PREFIX.length);
+  if (!hasLoggedMediaPrefixStrip) {
+    try {
+      logger.info?.('[export-items] Stripping /media/ prefix from export image paths to match WebDAV storage.', {
+        example: asset,
+      });
+      hasLoggedMediaPrefixStrip = true;
+    } catch (logError) {
+      console.error('[export-items] Failed to log media prefix stripping for export.', { logError });
+    }
+  }
+
+  return stripped;
+}
+
+function normalizeMediaListForExport(
+  assets: string[],
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): string[] {
+  return assets.map((asset) => stripMediaPrefixForExport(asset, logger));
+}
+
+function normalizeMediaStringForExport(
+  value: string,
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): string {
+  return value
+    .split('|')
+    .map((entry) => stripMediaPrefixForExport(entry, logger))
+    .join('|');
+}
 
 type ExportMode = 'backup' | 'erp';
 const EXPORT_MODES = new Set<ExportMode>(['backup', 'erp']);
@@ -563,14 +606,14 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
 
     if (!itemUUID) {
       console.warn('[export-items] Missing ItemUUID for media enumeration, falling back to original Grafikname.');
-      return fallbackValue;
+      return typeof fallbackValue === 'string' ? normalizeMediaStringForExport(fallbackValue) : fallbackValue;
     }
 
     try {
       const mediaAssets = collectMediaAssets(itemUUID, grafikname, artikelNummer);
       const filteredMediaAssets = filterExistingMediaAssets(mediaAssets);
       if (Array.isArray(filteredMediaAssets) && filteredMediaAssets.length > 0) {
-        return filteredMediaAssets.join('|');
+        return normalizeMediaListForExport(filteredMediaAssets).join('|');
       }
       if (mediaAssets.length > 0 && filteredMediaAssets.length === 0) {
         console.info('[export-items] Media assets skipped after filtering; falling back to Grafikname.', {
@@ -590,7 +633,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
         error
       });
     }
-    return fallbackValue;
+    return typeof fallbackValue === 'string' ? normalizeMediaStringForExport(fallbackValue) : fallbackValue;
   }
 
   if (metadataColumnSet.has(column)) {
@@ -619,7 +662,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     }
     const existingMediaAssets = filterExistingMediaAssets(mediaAssets);
     if (existingMediaAssets.length > 0) {
-      return existingMediaAssets.join('|');
+      return normalizeMediaListForExport(existingMediaAssets).join('|');
     }
     if (mediaAssets.length > 0 && existingMediaAssets.length === 0) {
       console.info('[export-items] Media assets skipped after filtering existing files; using metadata fallbacks.', {
@@ -635,7 +678,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
           itemUUID,
           artikelNummer,
         });
-        return storedList;
+        return normalizeMediaStringForExport(storedList);
       }
     } catch (fallbackError) {
       console.error('[export-items] Failed to read ImageNames metadata fallback for CSV export.', {
@@ -644,7 +687,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
         error: fallbackError,
       });
     }
-    return canonicalGrafikname;
+    return normalizeMediaStringForExport(canonicalGrafikname);
   }
 
   if (field === 'Langtext') {
