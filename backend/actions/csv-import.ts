@@ -5,7 +5,7 @@ import os from 'os';
 import { defineHttpAction } from './index';
 import { ARCHIVE_DIR } from '../config';
 import { MEDIA_DIR } from '../lib/media';
-import { ingestBoxesCsv } from '../importer';
+import { ingestAgenticRunsCsv, ingestBoxesCsv } from '../importer';
 import {
   computeChecksum,
   extractZipEntryToPath,
@@ -23,6 +23,7 @@ import {
 // TODO(agent): Revisit staging and extraction thresholds once upload telemetry is available.
 // TODO(agent): Document boxes-only archive handling once importer alias fixes ship.
 // TODO(agent): Surface legacy schema detection telemetry in the CSV import handler once headers are inspected.
+// TODO(agent): Capture agentic_runs.csv archive ingestion telemetry once CSV imports include agentic runs.
 
 const STAGING_TIMEOUT_MS = 30_000;
 const ENTRY_TIMEOUT_MS = 45_000;
@@ -50,6 +51,7 @@ const action = defineHttpAction({
         duplicate: false,
         duplicateReason: '' as string | null,
         boxesProcessed: 0,
+        agenticRunsProcessed: 0,
         mediaFiles: 0,
         message: ''
       };
@@ -126,6 +128,7 @@ const action = defineHttpAction({
 
       let itemsBuffer: Buffer | null = null;
       let boxesBuffer: Buffer | null = null;
+      let agenticRunsBuffer: Buffer | null = null;
 
       const extractionStartedAt = Date.now();
       for (const entryName of entries) {
@@ -165,6 +168,34 @@ const action = defineHttpAction({
             const message = bufferError instanceof ZipProcessError
               ? bufferError.message
               : 'Unexpected error buffering boxes.csv from archive.';
+            return sendJson(res, status, { error: message });
+          }
+          continue;
+        }
+
+        if (/(^|\/)agentic_runs\.csv$/.test(lowerPath)) {
+          try {
+            const entryStartedAt = Date.now();
+            agenticRunsBuffer = await readZipEntry(resolvedArchivePath, entryName, unzipOptions);
+            const entryDuration = Date.now() - entryStartedAt;
+            if (entryDuration > ENTRY_TIMEOUT_MS) {
+              console.warn('[csv-import] agentic_runs.csv extraction exceeded time limit', {
+                entryDuration,
+                maxDuration: ENTRY_TIMEOUT_MS,
+              });
+              return sendJson(res, 408, { error: 'agentic_runs.csv extraction exceeded time limit.' });
+            }
+            console.info('[csv-import] Buffered agentic_runs.csv from archive', {
+              bytesBuffered: agenticRunsBuffer?.length ?? 0,
+              entryDuration,
+            });
+          } catch (bufferError) {
+            console.error('[csv-import] Failed to buffer agentic_runs.csv from archive', bufferError);
+            const isClientZipIssue = bufferError instanceof ZipProcessError && ['password', 'timeout'].includes(bufferError.kind);
+            const status = isClientZipIssue ? 400 : 500;
+            const message = bufferError instanceof ZipProcessError
+              ? bufferError.message
+              : 'Unexpected error buffering agentic_runs.csv from archive.';
             return sendJson(res, status, { error: message });
           }
           continue;
@@ -236,6 +267,7 @@ const action = defineHttpAction({
       console.info('[csv-import] Completed archive extraction pass', {
         itemsBuffered: Boolean(itemsBuffer),
         boxesBuffered: Boolean(boxesBuffer),
+        agenticBuffered: Boolean(agenticRunsBuffer),
         mediaFiles: uploadContext.mediaFiles,
         extractionDuration: Date.now() - extractionStartedAt,
       });
@@ -254,6 +286,18 @@ const action = defineHttpAction({
           }
         } catch (boxesError) {
           console.error('[csv-import] Failed to ingest boxes.csv from archive', boxesError);
+        }
+      }
+
+      if (agenticRunsBuffer) {
+        try {
+          const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
+          uploadContext.agenticRunsProcessed = count;
+          console.info('[csv-import] Completed agentic_runs.csv ingestion', {
+            rowsProcessed: count,
+          });
+        } catch (agenticError) {
+          console.error('[csv-import] Failed to ingest agentic_runs.csv from archive', agenticError);
         }
       }
 
