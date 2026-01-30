@@ -4,9 +4,10 @@ import {
   getItem,
   findByMaterial,
   getAgenticRun,
+  getItemReference,
   updateAgenticRunStatus,
   upsertAgenticRun,
-  persistItemWithinTransaction,
+  persistItemReference,
   logEvent,
   getAgenticRequestLog,
   persistAgenticRunError,
@@ -204,13 +205,13 @@ export class AgenticModelInvoker {
     this.applyAgenticResult = (payload: AgenticResultPayload) => {
       try {
         handleAgenticResult(
-          { itemId: payload.itemId, payload },
+          { artikelNummer: payload.artikelNummer ?? '', payload },
           {
             ctx: {
               db,
-              getItem,
+              getItemReference,
               getAgenticRun,
-              persistItemWithinTransaction,
+              persistItemReference,
               updateAgenticRunStatus,
               upsertAgenticRun,
               logEvent,
@@ -223,7 +224,7 @@ export class AgenticModelInvoker {
         this.logger.error?.({
           err,
           msg: 'agentic result handler failed during in-process dispatch',
-          itemId: payload.itemId
+          artikelNummer: payload.artikelNummer ?? null
         });
         throw err;
       }

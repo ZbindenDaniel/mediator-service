@@ -19,13 +19,10 @@ describe('agentic result handler integration', () => {
   });
 
   test('handleAgenticResult keeps supervisor approvals pending for user review', () => {
-    const existingItem = {
-      ItemUUID: 'item-123',
+    const existingReference = {
       Artikel_Nummer: 'R-100',
       Artikelbeschreibung: 'Example item',
-      Datum_erfasst: '2024-01-01T00:00:00.000Z',
-      Veröffentlicht_Status: 'no',
-      UpdatedAt: '2024-01-01T00:00:00.000Z'
+      Veröffentlicht_Status: 'no'
     };
     const existingRun: AgenticRun = {
       Id: 1,
@@ -44,7 +41,7 @@ describe('agentic result handler integration', () => {
     };
     const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
     const requestLog: AgenticRequestLog = {
-      UUID: 'item-123',
+      UUID: 'R-100',
       Search: 'example search',
       Status: AGENTIC_RUN_STATUS_QUEUED,
       Error: null,
@@ -55,10 +52,10 @@ describe('agentic result handler integration', () => {
       PayloadJson: null
     };
 
-    const items = new Map<string, any>([[existingItem.ItemUUID, existingItem]]);
+    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
     const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
     const logEvent = jest.fn();
-    const persistItemWithinTransaction = jest.fn();
+    const persistItemReference = jest.fn();
     const updateAgenticRunStatus = {
       run: jest.fn((update: Record<string, unknown>) => {
         const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
@@ -73,9 +70,10 @@ describe('agentic result handler integration', () => {
 
     const result = handleAgenticResult(
       {
-        itemId: 'item-123',
+        artikelNummer: 'R-100',
         payload: {
-          item: { Artikelbeschreibung: 'Example item', searchQuery: 'example search' },
+          artikelNummer: 'R-100',
+          item: { Artikelbeschreibung: 'Example item', Artikel_Nummer: 'R-100', searchQuery: 'example search' },
           status: 'completed',
           summary: 'done',
           reviewDecision: 'approved',
@@ -89,9 +87,9 @@ describe('agentic result handler integration', () => {
             transaction: <T extends (...args: any[]) => any>(fn: T) =>
               (...args: Parameters<T>): ReturnType<T> => fn(...args)
           },
-          getItem: { get: (id: string) => items.get(id) },
+          getItemReference: { get: (id: string) => references.get(id) },
           getAgenticRun: { get: (id: string) => runs.get(id) },
-          persistItemWithinTransaction,
+          persistItemReference,
           updateAgenticRunStatus,
           upsertAgenticRun: { run: jest.fn() },
           logEvent,
@@ -105,14 +103,14 @@ describe('agentic result handler integration', () => {
     expect(updateAgenticRunStatus.run).toHaveBeenCalledWith(
       expect.objectContaining({ Artikel_Nummer: 'R-100', Status: AGENTIC_RUN_STATUS_REVIEW })
     );
-    expect(persistItemWithinTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({ ItemUUID: 'item-123' })
+    expect(persistItemReference).toHaveBeenCalledWith(
+      expect.objectContaining({ Artikel_Nummer: 'R-100' })
     );
     expect(logEvent).toHaveBeenCalledWith(
       expect.objectContaining({ EntityId: 'R-100', Event: 'AgenticResultReceived' })
     );
     expect(recordAgenticRequestLogUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'item-123' }),
+      expect.objectContaining({ id: 'R-100' }),
       AGENTIC_RUN_STATUS_REVIEW,
       expect.objectContaining({ searchQuery: 'example search' })
     );

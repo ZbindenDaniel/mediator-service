@@ -16,7 +16,7 @@ import {
   type AgenticRun,
   type AgenticRequestContext,
   type AgenticRequestLog,
-  type Item
+  type ItemRef
 } from '../../models';
 import {
   appendOutcomeTranscriptSection,
@@ -25,8 +25,10 @@ import {
 } from '../agentic';
 import { resolveAgenticRequestContext } from '../actions/agentic-request-context';
 
+// TODO(agentic-result-payload): Drop legacy itemUUid/itemId result identifiers once all clients send artikelNummer only.
 export interface AgenticResultPayload extends Record<string, unknown> {
-  itemId: string;
+  artikelNummer?: string;
+  Artikel_Nummer?: string;
   status: string;
   error: string | null;
   needsReview: boolean;
@@ -49,9 +51,9 @@ export interface AgenticResultHandlerContext {
   db: {
     transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>) => ReturnType<T>;
   };
-  getItem: { get: (itemId: string) => Item | undefined };
-  getAgenticRun: { get: (itemId: string) => AgenticRun | undefined };
-  persistItemWithinTransaction: (item: Item) => void;
+  getItemReference: { get: (artikelNummer: string) => ItemRef | undefined };
+  getAgenticRun: { get: (artikelNummer: string) => AgenticRun | undefined };
+  persistItemReference: (item: ItemRef) => void;
   updateAgenticRunStatus: { run: (update: Record<string, unknown>) => { changes?: number } };
   upsertAgenticRun: { run: (update: Record<string, unknown>) => unknown };
   logEvent: (event: {
@@ -65,7 +67,7 @@ export interface AgenticResultHandlerContext {
 }
 
 export interface AgenticResultHandlerInput {
-  itemId: string;
+  artikelNummer: string;
   payload: AgenticResultPayload | Record<string, unknown> | null | undefined;
 }
 
@@ -100,17 +102,15 @@ export class AgenticResultProcessingError extends Error {
   }
 }
 
-function toIsoString(value: unknown): string | null {
-  if (!value) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString();
-    }
+function toTrimmedString(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value !== 'string') {
     return null;
   }
-  return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function normalizePublishedStatus(value: unknown): string {
@@ -121,6 +121,52 @@ function normalizePublishedStatus(value: unknown): string {
     return ['yes', 'ja', 'true', '1'].includes(value.trim().toLowerCase()) ? 'yes' : 'no';
   }
   return 'no';
+}
+
+function resolvePayloadArtikelNummer(payload: Record<string, unknown>): string | null {
+  const itemPayload = payload.item;
+  const candidates: Array<unknown> = [
+    payload.artikelNummer,
+    payload.Artikel_Nummer,
+    payload.Artikelnummer,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).Artikel_Nummer : null,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).artikelNummer : null,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).Artikelnummer : null
+  ];
+
+  for (const candidate of candidates) {
+    const resolved = toTrimmedString(candidate);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
+function resolveLegacyItemId(payload: Record<string, unknown>): string | null {
+  const itemPayload = payload.item;
+  const candidates: Array<unknown> = [
+    payload.itemId,
+    payload.itemID,
+    payload.itemUUid,
+    payload.itemUuid,
+    payload.itemUUID,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemId : null,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemID : null,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemUUid : null,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemUuid : null,
+    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemUUID : null
+  ];
+
+  for (const candidate of candidates) {
+    const resolved = toTrimmedString(candidate);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
 }
 
 function loadAgenticRequestLog(
@@ -166,20 +212,57 @@ export function handleAgenticResult(
   input: AgenticResultHandlerInput,
   deps: AgenticResultHandlerDependencies
 ): AgenticResultHandlerSuccess {
+  // TODO(agentic-result-handler): Remove instance-based result handling once all callers only send artikelNummer.
   const logger = deps.logger ?? console;
   const { ctx } = deps;
-  const itemId = input.itemId?.trim() ?? '';
-  if (!itemId) {
-    logger.error?.('Agentic result missing item id');
-    throw new AgenticResultProcessingError('invalid-item-id', 400, { error: 'Invalid item id' }, null);
+  const payload = (input.payload ?? {}) as Record<string, unknown>;
+  if (!payload || typeof payload !== 'object') {
+    logger.warn?.('Agentic result missing payload object');
+    throw new AgenticResultProcessingError('payload-required', 400, { error: 'Payload is required' }, null);
   }
 
-  const payload = (input.payload ?? {}) as Record<string, unknown>;
-  const requestContext = resolveAgenticRequestContext(payload, itemId);
+  const inputArtikelNummer = input.artikelNummer?.trim() ?? '';
+  const payloadArtikelNummer = resolvePayloadArtikelNummer(payload);
+  const artikelNummer = payloadArtikelNummer ?? inputArtikelNummer;
+  if (!artikelNummer) {
+    logger.error?.('Agentic result missing Artikel_Nummer');
+    throw new AgenticResultProcessingError('invalid-artikel-nummer', 400, { error: 'Artikel_Nummer is required' }, null);
+  }
+  if (inputArtikelNummer && payloadArtikelNummer && inputArtikelNummer !== payloadArtikelNummer) {
+    logger.warn?.('Agentic result Artikel_Nummer mismatch', {
+      artikelNummer: inputArtikelNummer,
+      payloadArtikelNummer
+    });
+    throw new AgenticResultProcessingError(
+      'artikel-nummer-mismatch',
+      400,
+      { error: 'Artikel_Nummer mismatch' },
+      null
+    );
+  }
+
+  const requestContext = resolveAgenticRequestContext(payload, artikelNummer);
+  const legacyItemId = resolveLegacyItemId(payload);
+  if (legacyItemId) {
+    logger.warn?.('Agentic result rejected due to legacy item id field', {
+      artikelNummer,
+      legacyItemId
+    });
+    recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+      error: 'legacy-item-id',
+      logger
+    });
+    throw new AgenticResultProcessingError(
+      'legacy-item-id',
+      400,
+      { error: 'Legacy item id not supported' },
+      requestContext
+    );
+  }
   const requestId = requestContext?.id?.trim() ?? '';
 
   if (!requestId) {
-    logger.warn?.('Agentic result rejected due to missing request id', { itemId });
+    logger.warn?.('Agentic result rejected due to missing request id', { artikelNummer });
     recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
       error: 'request-id-required',
       logger
@@ -203,7 +286,7 @@ export function handleAgenticResult(
   }
 
   if (!requestLog) {
-    logger.warn?.('Agentic result rejected due to unknown request id', { itemId, requestId });
+    logger.warn?.('Agentic result rejected due to unknown request id', { artikelNummer, requestId });
     recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
       error: 'request-log-not-found',
       logger
@@ -214,17 +297,6 @@ export function handleAgenticResult(
   let searchQueryForLog: string | null = null;
   if (requestLog.Search && requestLog.Search.trim()) {
     searchQueryForLog = requestLog.Search.trim();
-  }
-
-  if (!payload || typeof payload !== 'object') {
-    logger.warn?.('Agentic result missing payload object');
-    recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
-      error: 'payload-required',
-      markRunning: true,
-      searchQuery: searchQueryForLog,
-      logger
-    });
-    throw new AgenticResultProcessingError('payload-required', 400, { error: 'Payload is required' }, requestContext);
   }
 
   const initialSearch = resolveInitialSearch(payload, requestLog);
@@ -258,7 +330,7 @@ export function handleAgenticResult(
     normalizedDecision === 'approved' && (!normalizedReviewer || normalizedReviewer.includes('supervisor'));
   if (supervisorAttemptedApproval) {
     logger.info?.('Supervisor approval requires manual user confirmation', {
-      itemId,
+      artikelNummer,
       reviewedBy: reviewedByInput ?? null
     });
     normalizedDecision = null;
@@ -292,7 +364,7 @@ export function handleAgenticResult(
 
   const txn = ctx.db.transaction(
     (
-      itemUUID: string,
+      artikelNummerInput: string,
       agenticPayload: any,
       status: string,
       now: string,
@@ -302,22 +374,33 @@ export function handleAgenticResult(
       actor: string,
       review: { ReviewedBy: string | null; Decision: string | null; Notes: string | null }
     ) => {
-      const existingItem = ctx.getItem.get(itemUUID);
-      if (!existingItem) {
-        throw new Error('Item not found');
+      let existingReference: ItemRef | null = null;
+      try {
+        existingReference = ctx.getItemReference.get(artikelNummerInput) ?? null;
+      } catch (err) {
+        logger.error?.('Agentic result failed to load item reference', {
+          artikelNummer: artikelNummerInput,
+          error: err instanceof Error ? err.message : err
+        });
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+      if (!existingReference) {
+        throw new Error('Item reference not found');
       }
 
-      const artikelNummer = typeof existingItem.Artikel_Nummer === 'string' ? existingItem.Artikel_Nummer.trim() : '';
-      if (!artikelNummer) {
-        logger.warn?.('Agentic result missing Artikel_Nummer for run update', { itemUUID });
+      let existingRun: AgenticRun | undefined;
+      try {
+        existingRun = ctx.getAgenticRun.get(artikelNummerInput) as AgenticRun | undefined;
+      } catch (err) {
+        logger.error?.('Agentic result failed to load agentic run', {
+          artikelNummer: artikelNummerInput,
+          error: err instanceof Error ? err.message : err
+        });
+        throw err instanceof Error ? err : new Error(String(err));
       }
-
-      const existingRun = artikelNummer
-        ? (ctx.getAgenticRun.get(artikelNummer) as AgenticRun | undefined)
-        : undefined;
       const shouldPersistItemUpdate = status !== AGENTIC_RUN_STATUS_REJECTED;
       if (shouldPersistItemUpdate) {
-        const merged: Record<string, any> = { ...existingItem };
+        const merged: Record<string, any> = { ...existingReference };
         let mappedLegacyPrice = false;
         if (agenticPayload && typeof agenticPayload === 'object') {
           for (const [key, value] of Object.entries(agenticPayload)) {
@@ -334,25 +417,17 @@ export function handleAgenticResult(
           }
         }
 
-        merged.ItemUUID = itemUUID;
-        merged.UpdatedAt = now;
+        merged.Artikel_Nummer = artikelNummerInput;
+        merged.Veröffentlicht_Status = normalizePublishedStatus(merged.Veröffentlicht_Status);
         if (mappedLegacyPrice) {
-          logger?.info?.({ msg: 'mapped legacy Marktpreis to Verkaufspreis', itemId: itemUUID });
+          logger?.info?.({ msg: 'mapped legacy Marktpreis to Verkaufspreis', artikelNummer: artikelNummerInput });
         }
 
-        const mergedDatum = toIsoString(merged.Datum_erfasst);
-        const itemPayload: Item = {
-          ...(merged as Item),
-          UpdatedAt: new Date(now),
-          Datum_erfasst: mergedDatum ? new Date(mergedDatum) : undefined,
-          Veröffentlicht_Status: normalizePublishedStatus(merged.Veröffentlicht_Status) === 'yes'
-        };
-
-        ctx.persistItemWithinTransaction(itemPayload);
+        ctx.persistItemReference(merged as ItemRef);
       } else {
         logger?.info?.({
           msg: 'skipping item update for non-approved agentic run',
-          itemId,
+          artikelNummer: artikelNummerInput,
           reviewDecision: review.Decision ?? null,
           status
         });
@@ -382,11 +457,14 @@ export function handleAgenticResult(
           : existingRun?.SearchQuery ?? null;
       searchQueryForLog = searchQueryUpdate;
 
-      if (!artikelNummer) {
-        logger.warn?.('Agentic result skipped run update without Artikel_Nummer', { itemUUID, status });
+      if (!artikelNummerInput) {
+        logger.warn?.('Agentic result skipped run update without Artikel_Nummer', {
+          artikelNummer: artikelNummerInput,
+          status
+        });
       } else {
         const runUpdate = {
-          Artikel_Nummer: artikelNummer,
+          Artikel_Nummer: artikelNummerInput,
           SearchQuery: searchQueryUpdate,
           Status: status,
           LastModified: now,
@@ -413,7 +491,7 @@ export function handleAgenticResult(
 
         const updateResult = ctx.updateAgenticRunStatus.run(normalizedRunUpdate);
         if (!updateResult?.changes) {
-          logger.warn?.('Agentic run missing on status update, creating record', artikelNummer);
+          logger.warn?.('Agentic run missing on status update, creating record', artikelNummerInput);
           ctx.upsertAgenticRun.run(normalizedRunUpdate);
         }
       }
@@ -421,7 +499,7 @@ export function handleAgenticResult(
       ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
-        EntityId: artikelNummer || itemUUID,
+        EntityId: artikelNummerInput,
         Event: eventName,
         Meta: JSON.stringify({
           Status: status,
@@ -439,7 +517,7 @@ export function handleAgenticResult(
 
   try {
     txn(
-      itemId,
+      artikelNummer,
       payload.item,
       statusForPersistence,
       nowIso,
@@ -456,12 +534,25 @@ export function handleAgenticResult(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === 'Item not found') {
-      logger.error?.('Agentic result item not found', itemId);
+      logger.error?.('Agentic result item not found', artikelNummer);
       recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
         error: 'item-not-found',
         logger
       });
       throw new AgenticResultProcessingError('item-not-found', 404, { error: 'Item not found' }, requestContext);
+    }
+    if (message === 'Item reference not found') {
+      logger.error?.('Agentic result item reference not found', artikelNummer);
+      recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
+        error: 'item-reference-not-found',
+        logger
+      });
+      throw new AgenticResultProcessingError(
+        'item-reference-not-found',
+        404,
+        { error: 'Item reference not found' },
+        requestContext
+      );
     }
 
     logger.error?.('Agentic result transaction failed', err);
@@ -513,7 +604,7 @@ export function handleAgenticResult(
   };
 
   void appendOutcomeTranscriptSection(
-    itemId,
+    artikelNummer,
     'Agentic run outcome',
     transcriptRequest,
     transcriptResponse,
@@ -522,7 +613,7 @@ export function handleAgenticResult(
     logger?.warn?.({
       err,
       msg: 'failed to append agentic outcome transcript section',
-      itemId,
+      artikelNummer,
       status: statusForPersistence
     });
   });
@@ -539,9 +630,10 @@ export function createAgenticResultHandler(
   ctx: AgenticResultHandlerContext,
   logger?: AgenticResultLogger
 ): (payload: AgenticResultPayload) => AgenticResultHandlerSuccess {
-  return (payload) =>
-    handleAgenticResult(
-      { itemId: payload.itemId, payload },
-      { ctx, logger }
-    );
+  return (payload) => {
+    const payloadArtikelNummer =
+      (payload.artikelNummer ?? payload.Artikel_Nummer ?? (payload.item as Record<string, unknown>)?.Artikel_Nummer) ||
+      '';
+    return handleAgenticResult({ artikelNummer: payloadArtikelNummer, payload }, { ctx, logger });
+  };
 }
