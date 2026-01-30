@@ -1,8 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_FAILED } from '../../models';
-import type { AgenticRun, Item } from '../../models';
-import { parseSequentialItemUUID } from '../lib/itemIds';
+import type { AgenticRun } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -20,56 +19,60 @@ function readRequestBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function resolveArtikelNummerForAgentic(
-  itemId: string,
-  ctx: { getItem?: { get: (id: string) => Item | undefined } }
-): string | null {
+function parseAgenticTriggerFailureRoute(path: string): { itemId: string; legacyRoute: boolean } | null {
+  const legacyMatch = path.match(/^\/api\/items\/([^/]+)\/agentic\/trigger-failure$/);
+  if (legacyMatch) {
+    return { itemId: decodeURIComponent(legacyMatch[1]), legacyRoute: true };
+  }
+  const refMatch = path.match(/^\/api\/item-refs\/([^/]+)\/agentic\/trigger-failure$/);
+  if (refMatch) {
+    return { itemId: decodeURIComponent(refMatch[1]), legacyRoute: false };
+  }
+  return null;
+}
+
+function resolveArtikelNummerForAgentic(itemId: string, legacyRoute: boolean): string | null {
   const trimmed = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmed) {
     return null;
   }
-
-  if (ctx.getItem?.get) {
-    try {
-      const item = ctx.getItem.get(trimmed);
-      const artikelNummer = typeof item?.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
-      if (artikelNummer) {
-        return artikelNummer;
-      }
-    } catch (err) {
-      console.error('Failed to resolve Artikel_Nummer for agentic trigger failure', err);
-    }
+  if (trimmed.startsWith('I-')) {
+    console.warn('[agentic-trigger-failure] Rejecting ItemUUID for agentic trigger failure', {
+      itemId: trimmed,
+      legacyRoute
+    });
+    return null;
   }
-
-  const parsed = parseSequentialItemUUID(trimmed);
-  if (parsed?.kind === 'artikelnummer' && parsed.artikelNummer) {
-    return parsed.artikelNummer;
-  }
-
-  if (!trimmed.startsWith('I-')) {
-    return trimmed;
-  }
-
-  console.warn('Agentic trigger failure missing Artikel_Nummer for item id', { itemId: trimmed });
-  return null;
+  return trimmed;
 }
 
 const action = defineHttpAction({
   key: 'agentic-trigger-failure',
   label: 'Agentic trigger failure',
   appliesTo: (entity) => entity.type === 'Item',
-  matches: (path, method) => method === 'POST' && /^\/api\/items\/[^/]+\/agentic\/trigger-failure$/.test(path),
+  matches: (path, method) =>
+    method === 'POST'
+    && (
+      /^\/api\/items\/[^/]+\/agentic\/trigger-failure$/.test(path)
+      || /^\/api\/item-refs\/[^/]+\/agentic\/trigger-failure$/.test(path)
+    ),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const url = req.url || '';
-      const match = url.match(/^\/api\/items\/([^/]+)\/agentic\/trigger-failure$/);
-      const itemId = match ? decodeURIComponent(match[1]) : '';
+      const route = parseAgenticTriggerFailureRoute(url);
+      const itemId = route?.itemId ? route.itemId.trim() : '';
 
       if (!itemId) {
         console.warn('Agentic trigger failure called without item id');
         return sendJson(res, 400, { error: 'Invalid item id' });
       }
-      const artikelNummer = resolveArtikelNummerForAgentic(itemId, ctx);
+      if (route?.legacyRoute) {
+        console.warn('[agentic-trigger-failure] Legacy /api/items route used for trigger failure', {
+          itemId,
+          path: url
+        });
+      }
+      const artikelNummer = resolveArtikelNummerForAgentic(itemId, Boolean(route?.legacyRoute));
       if (!artikelNummer) {
         console.warn('Agentic trigger failure missing Artikel_Nummer', { itemId });
         return sendJson(res, 400, { error: 'Missing Artikel_Nummer' });

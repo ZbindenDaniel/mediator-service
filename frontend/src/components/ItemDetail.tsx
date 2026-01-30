@@ -34,6 +34,7 @@ import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
+  buildAgenticItemRefPath,
   describeAgenticFailureReason,
   extractAgenticFailureReason,
   persistAgenticRunClose,
@@ -1827,7 +1828,7 @@ export default function ItemDetail({ itemId }: Props) {
   const refreshAgenticStatus = useCallback(
     async (referenceId: string): Promise<AgenticRun | null> => {
       try {
-        const response = await fetch(`/api/items/${encodeURIComponent(referenceId)}/agentic`, {
+        const response = await fetch(buildAgenticItemRefPath(referenceId), {
           method: 'GET',
           cache: 'reload'
         });
@@ -2028,14 +2029,11 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticError(null);
     setAgenticReviewIntent(decision);
     try {
-      const res = await fetch(
-        `/api/items/${encodeURIComponent(referenceId)}/agentic/review`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor, decision, notes: noteInput })
-        }
-      );
+      const res = await fetch(buildAgenticItemRefPath(referenceId, 'review'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor, decision, notes: noteInput })
+      });
       if (res.ok) {
         const data = await res.json();
         setAgentic(data.agentic ?? null);
@@ -2183,14 +2181,11 @@ export default function ItemDetail({ itemId }: Props) {
     setAgenticReviewIntent(null);
 
     try {
-      const restartResponse = await fetch(
-        `/api/items/${encodeURIComponent(referenceId)}/agentic/restart`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(restartRequestPayload)
-        }
-      );
+      const restartResponse = await fetch(buildAgenticItemRefPath(referenceId, 'restart'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(restartRequestPayload)
+      });
 
       if (!restartResponse.ok) {
         console.error('Agentic restart failed', restartResponse.status);

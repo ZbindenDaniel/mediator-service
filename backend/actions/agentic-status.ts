@@ -99,10 +99,10 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-// TODO(agentic-status-ref-id): Treat route IDs as reference Artikelnummer; remove ItemUUID fallbacks once consumers migrate.
+// TODO(agentic-status-ref-id): Remove legacy /api/items route once all callers use Artikelnummer-specific paths.
 function resolveArtikelNummerForAgentic(
   itemId: string,
-  logger: Pick<Console, 'error' | 'warn'> = console
+  options: { logger?: Pick<Console, 'error' | 'warn'>; legacyRoute?: boolean } = {}
 ): string | null {
   const trimmed = typeof itemId === 'string' ? itemId.trim() : '';
   if (!trimmed) {
@@ -110,8 +110,9 @@ function resolveArtikelNummerForAgentic(
   }
 
   if (trimmed.startsWith('I-')) {
-    logger.warn?.('[agentic-status] Received ItemUUID where Artikelnummer is expected for agentic run lookup', {
-      artikelNummer: trimmed
+    options.logger?.warn?.('[agentic-status] Rejecting ItemUUID for agentic route', {
+      artikelNummer: trimmed,
+      legacyRoute: Boolean(options.legacyRoute)
     });
     return null;
   }
@@ -119,23 +120,55 @@ function resolveArtikelNummerForAgentic(
   return trimmed;
 }
 
+function parseAgenticStatusRoute(path: string): { itemId: string; action: string | null; legacyRoute: boolean } | null {
+  const legacyMatch = path.match(/^\/api\/items\/([^/]+)\/agentic(?:\/(review|close))?$/);
+  if (legacyMatch) {
+    return {
+      itemId: decodeURIComponent(legacyMatch[1]),
+      action: legacyMatch[2] ?? null,
+      legacyRoute: true
+    };
+  }
+
+  const refMatch = path.match(/^\/api\/item-refs\/([^/]+)\/agentic(?:\/(review|close))?$/);
+  if (refMatch) {
+    return {
+      itemId: decodeURIComponent(refMatch[1]),
+      action: refMatch[2] ?? null,
+      legacyRoute: false
+    };
+  }
+
+  return null;
+}
+
 const action = defineHttpAction({
   key: 'agentic-status',
   label: 'Agentic status',
   appliesTo: (entity) => entity.type === 'Item',
   matches: (path, method) => {
-    // TODO(agentic-status-ref-id): Confirm new Artikelnummer-specific routes before removing legacy /api/items/:id/agentic.
-    if (method === 'GET') return /^\/api\/items\/[^/]+\/agentic$/.test(path);
-    if (method === 'POST') return /^\/api\/items\/[^/]+\/agentic\/(review|close)$/.test(path);
+    if (method === 'GET') {
+      return /^\/api\/items\/[^/]+\/agentic$/.test(path) || /^\/api\/item-refs\/[^/]+\/agentic$/.test(path);
+    }
+    if (method === 'POST') {
+      return /^\/api\/items\/[^/]+\/agentic\/(review|close)$/.test(path)
+        || /^\/api\/item-refs\/[^/]+\/agentic\/(review|close)$/.test(path);
+    }
     return false;
   },
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     const url = req.url || '';
-    const match = url.match(/^\/api\/items\/([^/]+)\/agentic(?:\/(review|close))?$/);
-    const itemId = match ? decodeURIComponent(match[1]) : '';
-    const action = match && match[2] ? match[2] : null;
+    const route = parseAgenticStatusRoute(url);
+    const itemId = route?.itemId ?? '';
+    const action = route?.action ?? null;
     if (!itemId) {
       return sendJson(res, 400, { error: 'Invalid item id' });
+    }
+    if (route?.legacyRoute) {
+      console.warn('[agentic-status] Legacy /api/items route used for agentic status', {
+        itemId,
+        path: url
+      });
     }
 
     if (req.method === 'GET') {
@@ -143,7 +176,10 @@ const action = defineHttpAction({
         return sendJson(res, 405, { error: 'Method not allowed' });
       }
       try {
-        const artikelNummer = resolveArtikelNummerForAgentic(itemId);
+        const artikelNummer = resolveArtikelNummerForAgentic(itemId, {
+          logger: console,
+          legacyRoute: route?.legacyRoute
+        });
         if (!artikelNummer) {
           return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic status lookup' });
         }
@@ -208,7 +244,10 @@ const action = defineHttpAction({
 
       const reviewedAt = new Date().toISOString();
       const status = decision === 'approved' ? AGENTIC_RUN_STATUS_APPROVED : AGENTIC_RUN_STATUS_REJECTED;
-      const artikelNummer = resolveArtikelNummerForAgentic(itemId);
+      const artikelNummer = resolveArtikelNummerForAgentic(itemId, {
+        logger: console,
+        legacyRoute: route?.legacyRoute
+      });
       if (!artikelNummer) {
         return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic review' });
       }

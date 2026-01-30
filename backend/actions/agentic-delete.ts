@@ -8,22 +8,46 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function parseAgenticDeleteRoute(path: string): { itemId: string; legacyRoute: boolean } | null {
+  const legacyMatch = path.match(/^\/api\/items\/([^/]+)\/agentic\/delete$/);
+  if (legacyMatch) {
+    return { itemId: decodeURIComponent(legacyMatch[1]), legacyRoute: true };
+  }
+  const refMatch = path.match(/^\/api\/item-refs\/([^/]+)\/agentic\/delete$/);
+  if (refMatch) {
+    return { itemId: decodeURIComponent(refMatch[1]), legacyRoute: false };
+  }
+  return null;
+}
+
 const action = defineHttpAction({
   key: 'agentic-delete',
   label: 'Agentic delete',
   appliesTo: (entity) => entity.type === 'Item',
-  matches: (path, method) => method === 'POST' && /^\/api\/items\/[^/]+\/agentic\/delete$/.test(path),
+  matches: (path, method) =>
+    method === 'POST'
+    && (
+      /^\/api\/items\/[^/]+\/agentic\/delete$/.test(path)
+      || /^\/api\/item-refs\/[^/]+\/agentic\/delete$/.test(path)
+    ),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     if (!req.url) {
       console.warn('Agentic delete called without URL');
       return sendJson(res, 400, { error: 'Invalid request' });
     }
 
-    const match = req.url.match(/^\/api\/items\/([^/]+)\/agentic\/delete$/);
-    const itemId = match ? decodeURIComponent(match[1]) : '';
+    const route = parseAgenticDeleteRoute(req.url);
+    const itemId = route?.itemId ? route.itemId.trim() : '';
     if (!itemId) {
       console.warn('Agentic delete missing item id');
       return sendJson(res, 400, { error: 'Invalid item id' });
+    }
+    if (route?.legacyRoute) {
+      console.warn('[agentic-delete] Legacy /api/items route used for delete', { itemId, path: req.url });
+    }
+    if (itemId.startsWith('I-')) {
+      console.warn('[agentic-delete] Rejecting ItemUUID for agentic delete', { itemId, legacyRoute: route?.legacyRoute });
+      return sendJson(res, 400, { error: 'ItemUUID not supported for agentic delete' });
     }
 
     let rawBody = '';
