@@ -59,6 +59,7 @@ const action = defineHttpAction({
         {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
+          getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,
           updateAgenticRunStatus: ctx.updateAgenticRunStatus,
           logEvent: ctx.logEvent,

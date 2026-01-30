@@ -151,6 +151,7 @@ const action = defineHttpAction({
         const result = getAgenticStatus(artikelNummer, {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
+          getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,
           updateAgenticRunStatus: ctx.updateAgenticRunStatus,
           logEvent: ctx.logEvent,
@@ -326,6 +327,7 @@ const action = defineHttpAction({
         const result = getAgenticStatus(itemId, {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
+          getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,
           updateAgenticRunStatus: ctx.updateAgenticRunStatus,
           logEvent: ctx.logEvent,

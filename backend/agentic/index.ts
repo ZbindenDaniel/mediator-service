@@ -51,6 +51,7 @@ export type AgenticModelInvokerFn = (
 export interface AgenticServiceDependencies {
   db: Database.Database;
   getAgenticRun: Database.Statement;
+  getItemReference: Database.Statement;
   upsertAgenticRun: Database.Statement;
   updateAgenticRunStatus: Database.Statement;
   updateQueuedAgenticRunQueueState?: (update: AgenticRunQueueUpdate) => void;
@@ -282,6 +283,7 @@ function applyQueueUpdate(
 }
 
 // TODO(agentic-id-resolution): Confirm upstream callers always send Artikel_Nummer for agentic runs.
+// TODO(agentic-run-fk-preflight): Revisit the reference preflight once agentic runs can target instance rows.
 function resolveAgenticArtikelNummer(
   itemId: string,
   logger: AgenticServiceLogger
@@ -298,6 +300,35 @@ function resolveAgenticArtikelNummer(
   }
 
   return { artikelNummer: trimmed, reason: null, sourceItemId: trimmed };
+}
+
+function hasAgenticReference(
+  artikelNummer: string,
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger,
+  context: string | null,
+  source: string
+): boolean {
+  try {
+    const referenceRow = deps.getItemReference.get(artikelNummer) as { Artikel_Nummer?: string } | undefined;
+    if (!referenceRow) {
+      logger.warn?.('[agentic-service] Missing item reference for agentic run', {
+        artikelNummer,
+        context,
+        source
+      });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to verify item reference for agentic run', {
+      artikelNummer,
+      context,
+      source,
+      error: toErrorMessage(err)
+    });
+    throw err;
+  }
 }
 
 // TODO(agentic-review-state): Align review state semantics with upstream contract once schema is formalized.
@@ -749,7 +780,14 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
 }
 
 function validateDependencies(deps: AgenticServiceDependencies): void {
-  if (!deps?.db || !deps.getAgenticRun || !deps.upsertAgenticRun || !deps.updateAgenticRunStatus || !deps.logEvent) {
+  if (
+    !deps?.db ||
+    !deps.getAgenticRun ||
+    !deps.getItemReference ||
+    !deps.upsertAgenticRun ||
+    !deps.updateAgenticRunStatus ||
+    !deps.logEvent
+  ) {
     throw new Error('Agentic service dependencies are incomplete');
   }
 }
@@ -781,6 +819,11 @@ export async function startAgenticRun(
     return { agentic: null, queued: false, created: false, reason };
   }
   const artikelNummer = resolved.artikelNummer;
+  logger.info?.('[agentic-service] Resolved Artikel_Nummer for agentic run start', {
+    itemId: resolved.sourceItemId,
+    artikelNummer,
+    context: input.context ?? null
+  });
 
   const existing = fetchAgenticRun(artikelNummer, deps, logger);
   if (existing) {
@@ -800,6 +843,11 @@ export async function startAgenticRun(
     });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-search-query', logger);
     return { agentic: null, queued: false, created: false, reason: 'missing-search-query' };
+  }
+
+  if (!hasAgenticReference(artikelNummer, deps, logger, input.context ?? null, 'startAgenticRun')) {
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-reference', logger);
+    return { agentic: null, queued: false, created: false, reason: 'missing-reference' };
   }
 
   const review = normalizeReviewMetadata(input.review ?? null, null, logger);
@@ -1116,6 +1164,11 @@ export async function restartAgenticRun(
     return { agentic: null, queued: false, created: false, reason };
   }
   const artikelNummer = resolved.artikelNummer;
+  logger.info?.('[agentic-service] Resolved Artikel_Nummer for agentic run restart', {
+    itemId: resolved.sourceItemId,
+    artikelNummer,
+    context: input.context ?? null
+  });
 
   const existing = fetchAgenticRun(artikelNummer, deps, logger);
   const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
@@ -1126,6 +1179,11 @@ export async function restartAgenticRun(
     });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-search-query', logger);
     return { agentic: existing, queued: false, created: !existing, reason: 'missing-search-query' };
+  }
+
+  if (!hasAgenticReference(artikelNummer, deps, logger, input.context ?? null, 'restartAgenticRun')) {
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-reference', logger);
+    return { agentic: existing, queued: false, created: false, reason: 'missing-reference' };
   }
 
   const review = normalizeReviewMetadata(input.review ?? null, existing, logger);

@@ -497,6 +497,7 @@ function createAgenticServiceDependencies(
   return {
     db,
     getAgenticRun,
+    getItemReference,
     upsertAgenticRun,
     updateAgenticRunStatus,
     updateQueuedAgenticRunQueueState,
