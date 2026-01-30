@@ -73,16 +73,6 @@ const optionalTrimmedNote = z
   }, z.string().min(1))
   .optional();
 
-// TODO(migration): Remove itemUUid schema guard once instance identifiers are fully retired.
-const legacyItemUUid = z.any().optional().superRefine((value, ctx) => {
-  if (value !== undefined && value !== null) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Use Artikelnummer (Artikel_Nummer) instead of itemUUid'
-    });
-  }
-});
-
 // LangtextPayload values remain JSON-first: the UI renders slots from the curated metaDataKeys list, so we accept
 // either that structured object or the legacy string fallback and rely on parseLangtext to normalize. Keep this in
 // sync with models/item.ts and the frontend editor in frontend/src/components/forms/itemFormShared.tsx when updating
@@ -138,8 +128,6 @@ export const TargetSchema = z
 
 export const AgentOutputSchema = TargetSchema.extend({
   Artikel_Nummer: z.string().min(1, 'Artikelnummer is required').optional(),
-  // TODO(migration): Remove legacy itemUUid guard once callers stop sending instance IDs.
-  itemUUid: legacyItemUUid,
   __searchQueries: z.array(z.string().min(1).max(512)).max(
     Math.max(1, Math.floor(searchLimits.maxAgentQueriesPerRequest))
   ).optional(),
