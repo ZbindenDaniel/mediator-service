@@ -5,6 +5,7 @@ import {
   type AgenticTriggerFailureReporter
 } from '../frontend/src/components/ItemCreate';
 
+// TODO: ensure agentic trigger tests consistently use Artikelnummer identifiers.
 describe('handleAgenticRunTrigger', () => {
   async function runWithLog(context: string, fn: () => Promise<void>) {
     try {
@@ -41,7 +42,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         context: 'test-triggered',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -81,7 +82,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         context: 'test-skipped',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -98,14 +99,14 @@ describe('handleAgenticRunTrigger', () => {
       });
       expect(triggerArgs.payload).not.toHaveProperty('item');
       expect(reportFailure).toHaveBeenCalledWith({
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         search: 'Beispiel Artikel',
         context: 'test-skipped',
         responseBody: 'Trigger skipped',
         error: 'missing-artikel-nummer'
       });
       expect(alertFn).toHaveBeenCalledWith('Trigger skipped');
-      expect(onSkipped).toHaveBeenCalledWith('uuid-123');
+      expect(onSkipped).toHaveBeenCalledWith('123456');
       expect(logger.info).toHaveBeenCalledWith('Agentic trigger result', {
         context: 'test-skipped',
         outcome: 'skipped',
@@ -130,7 +131,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         context: 'test-failed',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -146,7 +147,7 @@ describe('handleAgenticRunTrigger', () => {
       });
       expect(triggerArgs.payload).not.toHaveProperty('item');
       expect(reportFailure).toHaveBeenCalledWith({
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         search: 'Agentic Artikel',
         context: 'test-failed',
         status: 500,
@@ -206,7 +207,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         context: 'test-report-failure',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -238,7 +239,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         context: 'test-alert-failure',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -263,7 +264,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         context: 'test-trigger-exception',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -273,7 +274,7 @@ describe('handleAgenticRunTrigger', () => {
 
       expect(logger.error).toHaveBeenCalledWith('Failed to trigger agentic run', expect.any(Error));
       expect(reportFailure).toHaveBeenCalledWith({
-        itemId: 'uuid-123',
+        artikelNummer: '123456',
         search: 'Beispiel Artikel',
         context: 'test-trigger-exception',
         error: expect.any(Error)
