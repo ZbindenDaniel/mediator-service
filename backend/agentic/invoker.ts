@@ -59,9 +59,13 @@ function buildTargetFromRow(
   row: Record<string, unknown>,
   logger: AgenticModelInvokerLogger | undefined
 ): Record<string, unknown> {
+  const artikelNummer = normalizeString(row.Artikel_Nummer ?? row.artikelNummer ?? row.Artikelnummer);
+  if (!artikelNummer) {
+    logger?.warn?.({ msg: 'agentic target missing Artikel_Nummer in row payload' });
+  }
 
   return {
-    itemUUid: normalizeString(row.ItemUUID),
+    Artikel_Nummer: artikelNummer,
     Artikelbeschreibung: normalizeString(row.Artikelbeschreibung),
     Verkaufspreis: normalizeNullableNumber(row.Verkaufspreis),
     Kurzbeschreibung: normalizeString(row.Kurzbeschreibung),
@@ -75,7 +79,7 @@ function buildTargetFromRow(
 }
 
 const TARGET_FIELD_KEYS: Array<keyof AgenticTarget> = [
-  'itemUUid',
+  'Artikel_Nummer',
   'Artikelbeschreibung',
   'Verkaufspreis',
   'Kurzbeschreibung',
@@ -88,7 +92,7 @@ const TARGET_FIELD_KEYS: Array<keyof AgenticTarget> = [
 ];
 
 const TARGET_FIELD_SET = new Set<string>(TARGET_FIELD_KEYS);
-const EXTRA_TARGET_KEYS = new Set(['__locked', 'Artikel_Nummer']);
+const EXTRA_TARGET_KEYS = new Set(['__locked']);
 
 const TARGET_KEY_ALIASES: Record<string, string> = {
   artikelbeschreibung: 'Artikelbeschreibung',
@@ -159,7 +163,7 @@ function extractTargetOverrides(payload: unknown): Record<string, unknown> {
       }
 
       const normalizedKey = normalizeOverrideKey(rawKey);
-      if (!normalizedKey || normalizedKey === 'itemUUid') {
+      if (!normalizedKey || normalizedKey === 'Artikel_Nummer') {
         continue;
       }
 
@@ -398,14 +402,14 @@ export class AgenticModelInvoker {
           msg: 'discarded langtext override due to failed serialization',
           requestId: sanitizedRequestId,
           artikelNummer: artikelNummerOverride ?? undefined,
-          itemUUID: typeof target.itemUUid === 'string' ? target.itemUUid : undefined
+          artikelNummerTarget: typeof target.Artikel_Nummer === 'string' ? target.Artikel_Nummer : undefined
         });
         delete sanitizedOverrides.Langtext;
       }
     }
 
     const merged: Record<string, unknown> = { ...target, ...sanitizedOverrides };
-    merged.itemUUid = target.itemUUid;
+    merged.Artikel_Nummer = target.Artikel_Nummer;
 
     if (typeof merged.Artikelbeschreibung === 'string') {
       const trimmed = merged.Artikelbeschreibung.trim();

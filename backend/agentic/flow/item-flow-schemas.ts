@@ -107,7 +107,7 @@ const AgentSourceSchema = z
 
 export const TargetSchema = z
   .object({
-    itemUUid: z.string(),
+    Artikel_Nummer: z.string(),
     Artikelbeschreibung: z.string(),
     Verkaufspreis: localizedNumber,
     Kurzbeschreibung: z.string(),
@@ -127,7 +127,7 @@ export const TargetSchema = z
   .strict();
 
 export const AgentOutputSchema = TargetSchema.extend({
-  itemUUid: z.string().optional(),
+  Artikel_Nummer: z.string().optional(),
   __searchQueries: z.array(z.string().min(1).max(512)).max(
     Math.max(1, Math.floor(searchLimits.maxAgentQueriesPerRequest))
   ).optional(),
@@ -141,7 +141,7 @@ export const ShopwareDecisionSchema = z
     isMatch: z.boolean(),
     confidence: z.number().min(0).max(1),
     matchedProductId: z.string().min(1).optional(),
-    target: TargetSchema.partial({ itemUUid: true }).optional()
+    target: TargetSchema.partial({ Artikel_Nummer: true }).optional()
   })
   .superRefine((data, ctx) => {
     if (data.isMatch) {

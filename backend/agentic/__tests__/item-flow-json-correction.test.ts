@@ -5,7 +5,7 @@ import { runExtractionAttempts } from '../flow/item-flow-extraction';
 
 // TODO(agent): Extend Langtext defaults once schema scaffolding captures additional structured hints.
 const buildTarget = (): AgenticTarget => ({
-  itemUUid: 'item-1',
+  Artikel_Nummer: 'item-1',
   Artikelbeschreibung: 'Widget',
   Verkaufspreis: null,
   Kurzbeschreibung: 'Short description',
@@ -25,12 +25,12 @@ describe('runExtractionAttempts JSON correction', () => {
   it('repairs invalid extractor JSON without altering payload fields', async () => {
     const target = buildTarget();
     const invalidExtraction =
-      '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":null,"Kurzbeschreibung":"Short description",' +
+      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":null,"Kurzbeschreibung":"Short description",' +
       '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
       '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,' +
       '"Unterkategorien_B":null this is incomplete';
     const correctedExtraction =
-      '{"itemUUid":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":null,"Kurzbeschreibung":"Short description",' +
+      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":null,"Kurzbeschreibung":"Short description",' +
       '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
       '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":null,"Unterkategorien_A":null,"Hauptkategorien_B":null,' +
       '"Unterkategorien_B":null}';
@@ -52,7 +52,7 @@ describe('runExtractionAttempts JSON correction', () => {
       llm,
       correctionModel: correctionLlm,
       logger: console,
-      itemId: target.itemUUid,
+      itemId: target.Artikel_Nummer,
       maxAttempts: 1,
       searchContexts: [],
       aggregatedSources: [],

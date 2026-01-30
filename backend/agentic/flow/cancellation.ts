@@ -137,7 +137,7 @@ export function requestCancellation(
     return {
       ok: false,
       status: 'INVALID_ID',
-      message: 'Cancellation requires a valid itemUUid',
+      message: 'Cancellation requires a valid Artikel_Nummer',
       outcome: null
     };
   }
@@ -167,7 +167,7 @@ export function requestCancellation(
     return {
       ok: false,
       status: 'NOT_FOUND',
-      message: 'No in-flight run exists for the provided itemUUid.',
+      message: 'No in-flight run exists for the provided Artikel_Nummer.',
       outcome: null
     };
   }

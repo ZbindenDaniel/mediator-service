@@ -118,7 +118,7 @@ export async function resolveShopwareMatch({
       logger?.warn?.({ msg: 'shopware decision referenced unknown product id', matchedProductId: decision.matchedProductId, itemId });
     }
 
-    const finalData = { ...normalizedTarget, ...decision.target, itemUUid: normalizedTarget.itemUUid };
+    const finalData = { ...normalizedTarget, ...decision.target, Artikel_Nummer: normalizedTarget.Artikel_Nummer };
     const sources = [
       {
         title: matchedProduct.name || 'Shopware product',
