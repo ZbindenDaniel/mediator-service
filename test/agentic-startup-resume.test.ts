@@ -30,7 +30,8 @@ describe('resumeStaleAgenticRuns', () => {
       logEvent: jest.fn(),
       invokeModel,
       logger,
-      now: () => new Date('2024-01-01T00:00:00.000Z')
+      now: () => new Date('2024-01-01T00:00:00.000Z'),
+      getItemReference: undefined
     };
 
     return { deps, invokeModel, logger, prepareMock, statementMock };
@@ -116,7 +117,8 @@ describe('resumeStaleAgenticRuns', () => {
       logEvent: jest.fn(),
       invokeModel: jest.fn(),
       logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-      now: () => new Date('2024-01-01T00:00:00.000Z')
+      now: () => new Date('2024-01-01T00:00:00.000Z'),
+      getItemReference: undefined
     };
 
     const result = await resumeStaleAgenticRuns(deps);

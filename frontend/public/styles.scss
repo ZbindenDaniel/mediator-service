@@ -173,6 +173,7 @@ textarea {
 
 // TODO(mobile-header): Confirm small-screen header title hiding matches UX expectations.
 @media (max-width: 600px) {
+
     // Mobile-only: hide header title while keeping icons visible.
     .header #homelink,
     .header h1 {
@@ -260,6 +261,7 @@ textarea {
     margin-top: 0.75rem;
     width: 100%;
 }
+
 .item-media-gallery--stacked {
     flex-direction: column;
     flex-wrap: nowrap;
@@ -498,6 +500,7 @@ div {
 }
 
 @media (max-width: 600px) {
+
     // TODO(mobile-stock-table): Reconfirm overflow guard once item detail layout is re-reviewed.
     .item-detail__stock-table {
         overflow-x: auto;
@@ -912,6 +915,10 @@ button:focus {
     // max-width: 460px;
     justify-content: space-between;
     flex-direction: column;
+
+    select {
+        max-width: 100%;
+    }
 }
 
 .top-row {

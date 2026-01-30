@@ -72,7 +72,7 @@ function buildTranscriptHeader(itemId: string, updatedAtIso: string): string {
     '<head>',
     '  <meta charset="utf-8" />',
     `  <meta name="last-updated" content="${escapeHtml(updatedAtIso)}" />`,
-    '  <title>Agentisches Protokoll</title>',
+    '  <title>KI Protokoll</title>',
     '  <style>',
     '    :root { color-scheme: only light; }',
     '    body { font-family: Arial, sans-serif; margin: 0; background: #f9fafb; color: #0f172a; }',

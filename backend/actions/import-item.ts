@@ -1551,7 +1551,8 @@ const action = defineHttpAction({
                   findByMaterial: ctx.findByMaterial,
                   logger: console,
                   now: () => new Date(),
-                  invokeModel: ctx.agenticInvokeModel
+                  invokeModel: ctx.agenticInvokeModel,
+                  getItemReference: undefined
                 }
               })
                 .then((result) => {

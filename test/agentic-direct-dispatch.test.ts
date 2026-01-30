@@ -42,7 +42,8 @@ describe('agentic direct dispatch', () => {
       logEvent: logEvent as unknown as (payload: any) => void,
       invokeModel,
       logger,
-      now: () => new Date('2024-01-01T00:00:00.000Z')
+      now: () => new Date('2024-01-01T00:00:00.000Z'),
+      getItemReference: undefined
     };
 
     return { deps, invokeModel, upsertAgenticRun, logEvent, getAgenticRun, logger };
