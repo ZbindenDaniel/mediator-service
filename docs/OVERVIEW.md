@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Updated import-item agentic trigger payloads to use canonical Artikelnummer fields only and warn before dispatching when Artikel_Nummer is missing.
 - Added Artikelnummer-specific `/api/item-refs/:artikelNummer/agentic` routes with legacy `/api/items` shim logging and ItemUUID rejection, and updated frontend agentic callers to use the new item-ref endpoints.
 - Result ingestion now requires Artikel_Nummer in payloads, warns on legacy instance-id fields, and aligns the shared agentic result payload model with the Artikelnummer-only contract.
 - Removed the legacy itemUUid guard from agentic target schemas, enforced Artikel_Nummer as the sole required identifier, and logged legacy identifier sightings alongside schema validation issue paths for migration visibility.

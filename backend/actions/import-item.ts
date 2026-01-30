@@ -14,7 +14,7 @@ import {
 import type { AgenticRunStatus } from '../../models';
 import { defineHttpAction } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
-import { forwardAgenticTrigger } from './agentic-trigger';
+import { forwardAgenticTrigger, type AgenticRunTriggerPayload } from './agentic-trigger';
 import { parseSequentialItemUUID } from '../lib/itemIds';
 import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
@@ -1526,8 +1526,18 @@ const action = defineHttpAction({
         }
 
         if (ctx.agenticServiceEnabled && !agenticRunManuallySkipped) {
-          const triggerPayload = {
-            itemId: artikelNummer,
+          // TODO(agent): Validate the agentic trigger payload stays aligned with AgenticRunTriggerPayload fields.
+          const resolvedTriggerArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+          if (!resolvedTriggerArtikelNummer) {
+            console.warn('[import-item] Agentic trigger skipped due to missing Artikel_Nummer', {
+              Artikel_Nummer: artikelNummer ?? null,
+              actor
+            });
+            continue;
+          }
+
+          const triggerPayload: AgenticRunTriggerPayload = {
+            artikelNummer: resolvedTriggerArtikelNummer,
             artikelbeschreibung: agenticSearchQuery || data.Artikelbeschreibung || ''
           };
 
