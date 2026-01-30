@@ -258,13 +258,27 @@ async function handleCsv(absPath: string): Promise<void> {
   }
 }
 
+// TODO(agent): Confirm watcher skip logging for deferred agentic_runs CSV files remains aligned with inbox conventions.
+function handleCsvWatcherEvent(filePath: string, event: 'add' | 'change'): void {
+  if (filePath.endsWith('.agentic_runs.csv')) {
+    console.info('[watcher] Skipping deferred agentic_runs.csv file', {
+      event,
+      file: filePath
+    });
+    return;
+  }
+  if (filePath.endsWith('.csv')) {
+    handleCsv(filePath);
+  }
+}
+
 chokidar
   .watch(INBOX_DIR, {
     ignoreInitial: false,
     awaitWriteFinish: { stabilityThreshold: 250 }
   })
-  .on('add', (p: string) => p.endsWith('.csv') && handleCsv(p))
-  .on('change', (p: string) => p.endsWith('.csv') && handleCsv(p));
+  .on('add', (p: string) => handleCsvWatcherEvent(p, 'add'))
+  .on('change', (p: string) => handleCsvWatcherEvent(p, 'change'));
 
 // TODO(agent): Consolidate item quantity parsing helpers across print flows once shared utilities exist.
 function resolveEinheit(value: unknown, itemId: string): ItemEinheit | null {
