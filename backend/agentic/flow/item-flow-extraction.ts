@@ -58,6 +58,8 @@ const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
 const MAX_LOG_DEPTH = 2;
+// TODO(migration): Remove legacy identifier logging/stripping once all agent outputs are Artikel_Nummer-only.
+const LEGACY_IDENTIFIER_KEYS = ['itemUUid', 'itemId', 'id'] as const;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
 const NULL_TARGET_TEMPLATE = Object.freeze(
   Object.keys(TargetSchema.shape).reduce<Record<string, null>>((acc, key) => {
@@ -159,6 +161,35 @@ function sanitizeForLog(value: unknown, depth = 0): unknown {
     return result;
   }
   return truncateForLog(String(value));
+}
+
+function extractLegacyIdentifiers(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  const legacyIdentifiers: Record<string, unknown> = {};
+  const record = value as Record<string, unknown>;
+  for (const key of LEGACY_IDENTIFIER_KEYS) {
+    if (key in record) {
+      const candidate = record[key];
+      if (candidate !== undefined && candidate !== null && candidate !== '') {
+        legacyIdentifiers[key] = candidate;
+      }
+    }
+  }
+  return legacyIdentifiers;
+}
+
+function stripLegacyIdentifiers(value: unknown): void {
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of LEGACY_IDENTIFIER_KEYS) {
+    if (key in record) {
+      delete record[key];
+    }
+  }
 }
 
 export async function runExtractionAttempts({
@@ -618,9 +649,27 @@ export async function runExtractionAttempts({
       }
     }
 
+    const legacyIdentifiers = extractLegacyIdentifiers(parsed);
+    if (Object.keys(legacyIdentifiers).length > 0) {
+      logger?.warn?.({
+        msg: 'legacy identifiers found in extraction payload',
+        attempt,
+        itemId,
+        legacyIdentifiers: sanitizeForLog(legacyIdentifiers)
+      });
+    }
+
     const agentParsed = AgentOutputSchema.safeParse(parsed);
     if (!agentParsed.success) {
-      logger?.warn?.({ msg: 'schema validation failed', attempt, issues: agentParsed.error.issues, itemId });
+      const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
+      logger?.warn?.({
+        msg: 'schema validation failed',
+        attempt,
+        issues: agentParsed.error.issues,
+        issuePaths,
+        itemId,
+        legacyIdentifiers: sanitizeForLog(legacyIdentifiers)
+      });
       lastValidated = null;
       lastSupervision = `Schema validation failed: ${JSON.stringify(agentParsed.error.issues)}`;
       lastValidationIssues = agentParsed.error.issues;
@@ -637,7 +686,9 @@ export async function runExtractionAttempts({
       continue;
     }
 
-    const { __searchQueries, ...candidateData } = agentParsed.data;
+    const parsedData = agentParsed.data as AgenticOutput & Record<string, unknown>;
+    stripLegacyIdentifiers(parsedData);
+    const { __searchQueries, ...candidateData } = parsedData;
     logger?.debug?.({
       msg: 'candidate data parsed',
       attempt,
