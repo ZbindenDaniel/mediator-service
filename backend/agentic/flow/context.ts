@@ -27,7 +27,7 @@ function resolveItemId(
         : '';
   const legacyItemUUid = typeof candidate?.itemUUid === 'string' ? candidate.itemUUid.trim() : '';
   if (legacyItemUUid) {
-    logger?.warn?.({ msg: 'legacy itemUUid supplied in target; prefer Artikel_Nummer', itemUUid: legacyItemUUid });
+    logger?.warn?.({ msg: 'legacy itemUUid supplied in target; prefer Artikelnummer', itemUUid: legacyItemUUid });
   }
   const itemId = typeof providedId === 'string' && providedId.trim().length ? providedId.trim() : targetId;
   return { itemId, targetId, legacyItemUUid };
@@ -77,8 +77,8 @@ export function prepareItemContext(input: RunItemFlowInput, logger: ItemFlowLogg
   const { itemId, targetId } = resolveItemId(input.target, input.id, logger);
 
   if (!itemId) {
-    const err = new FlowError('INVALID_TARGET', 'Target requires a non-empty "Artikel_Nummer"', 400);
-    logger.error?.({ err, msg: 'target missing Artikel_Nummer' });
+    const err = new FlowError('INVALID_TARGET', 'Target requires a non-empty Artikelnummer ("Artikel_Nummer")', 400);
+    logger.error?.({ err, msg: 'target missing Artikelnummer' });
     throw err;
   }
 
