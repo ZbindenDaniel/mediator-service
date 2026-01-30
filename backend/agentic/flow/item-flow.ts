@@ -53,7 +53,7 @@ export interface RunItemFlowInput {
 }
 
 function buildCallbackPayload({
-  itemId,
+  artikelNummer,
   itemData,
   searchQuery,
   status,
@@ -66,7 +66,7 @@ function buildCallbackPayload({
   sources,
   actor
 }: {
-  itemId: string;
+  artikelNummer: string;
   itemData: AgenticTarget;
   searchQuery: string;
   status?: string;
@@ -90,7 +90,7 @@ function buildCallbackPayload({
 
   const itemPayload: Record<string, unknown> & { Artikel_Nummer: string } = {
     ...(itemData ?? {}),
-    Artikel_Nummer: itemId,
+    Artikel_Nummer: artikelNummer,
     searchQuery
   };
 
@@ -99,7 +99,7 @@ function buildCallbackPayload({
   }
 
   return {
-    itemId,
+    artikelNummer,
     status: resolvedStatus,
     error: resolvedError,
     needsReview: resolvedNeedsReview,
@@ -188,7 +188,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     if (shopwareShortcut) {
       const payload = buildCallbackPayload({
-        itemId,
+        artikelNummer: itemId,
         itemData: shopwareShortcut.finalData,
         searchQuery: searchTerm,
         status: 'completed',
@@ -202,7 +202,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       });
 
       await dispatchAgenticResult({
-        itemId,
+        artikelNummer: itemId,
         payload,
         logger,
         saveRequestPayload: deps.saveRequestPayload,
@@ -306,7 +306,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     const finalData: AgenticTarget = { ...target, ...extractionResult.data, Artikel_Nummer: itemId };
 
     const payload = buildCallbackPayload({
-      itemId,
+      artikelNummer: itemId,
       itemData: finalData,
       searchQuery: searchTerm,
       status: extractionResult.success ? 'completed' : 'needs_review',
@@ -322,7 +322,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     });
 
     await dispatchAgenticResult({
-      itemId,
+      artikelNummer: itemId,
       payload,
       logger,
       saveRequestPayload: deps.saveRequestPayload,
