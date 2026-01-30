@@ -1,5 +1,6 @@
 import { forwardAgenticTrigger } from '../agentic-trigger';
 import { startAgenticRun } from '../../agentic';
+import type { AgenticRunTriggerPayload } from '../agentic-trigger';
 import type { AgenticRunReviewMetadata } from '../../../models';
 
 jest.mock('../../agentic', () => ({
@@ -18,22 +19,22 @@ describe('forwardAgenticTrigger review metadata', () => {
       error: jest.fn()
     };
 
-    await forwardAgenticTrigger(
-      {
-        artikelbeschreibung: 'Review Artikel',
-        itemId: 'item-review',
-        review: {
-          decision: '  approve  ',
-          notes: undefined,
-          reviewedBy: '   '
-        }
-      },
-      {
-        context: 'unit-test',
-        logger,
-        service: { logger } as any
+    // TODO(agent): verify agentic trigger payloads use artikelNummer identifiers.
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'Review Artikel',
+      artikelNummer: 'item-review',
+      review: {
+        decision: '  approve  ',
+        notes: undefined,
+        reviewedBy: '   '
       }
-    );
+    };
+
+    await forwardAgenticTrigger(payload, {
+      context: 'unit-test',
+      logger,
+      service: { logger } as any
+    });
 
     const expectedReview: AgenticRunReviewMetadata = {
       decision: 'approve',
@@ -58,18 +59,18 @@ describe('forwardAgenticTrigger review metadata', () => {
       error: jest.fn()
     };
 
-    await forwardAgenticTrigger(
-      {
-        artikelbeschreibung: 'Actor Artikel',
-        itemId: 'item-audit',
-        actor: 'alice'
-      },
-      {
-        context: 'unit-test',
-        logger,
-        service: { logger } as any
-      }
-    );
+    // TODO(agent): verify agentic trigger payloads use artikelNummer identifiers.
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'Actor Artikel',
+      artikelNummer: 'item-audit',
+      actor: 'alice'
+    };
+
+    await forwardAgenticTrigger(payload, {
+      context: 'unit-test',
+      logger,
+      service: { logger } as any
+    });
 
     const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
     expect(mockedStartAgenticRun).toHaveBeenCalledWith(
