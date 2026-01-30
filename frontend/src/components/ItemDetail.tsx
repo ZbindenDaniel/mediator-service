@@ -2095,7 +2095,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     try {
       const triggerResult = await triggerAgenticRun({
-        payload: { itemId: referenceId, artikelbeschreibung: searchTerm, actor },
+        payload: { artikelNummer: referenceId, artikelbeschreibung: searchTerm, actor },
         context: 'item detail start'
       });
 
@@ -2229,7 +2229,7 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
       const triggerPayload: AgenticRunTriggerPayload = {
-        itemId: refreshedRun.Artikel_Nummer || referenceId,
+        artikelNummer: refreshedRun.Artikel_Nummer || referenceId,
         artikelbeschreibung: searchTerm
       };
       const reviewForTrigger = {

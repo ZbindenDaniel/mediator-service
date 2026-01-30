@@ -75,6 +75,7 @@ export type AgenticTriggerFailureReporter = (args: AgenticTriggerFailureReportAr
 
 export interface AgenticTriggerHandlerOptions {
   agenticPayload: AgenticRunTriggerPayload;
+  itemId?: string | null;
   context: string;
   triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
   reportFailure: AgenticTriggerFailureReporter;
@@ -85,6 +86,7 @@ export interface AgenticTriggerHandlerOptions {
 
 export async function handleAgenticRunTrigger({
   agenticPayload,
+  itemId,
   context,
   triggerAgenticRunRequest,
   reportFailure,
@@ -92,10 +94,7 @@ export async function handleAgenticRunTrigger({
   logger = console,
   onSkipped
 }: AgenticTriggerHandlerOptions): Promise<void> {
-  const trimmedItemId =
-    typeof agenticPayload.itemId === 'string' && agenticPayload.itemId.trim()
-      ? agenticPayload.itemId.trim()
-      : '';
+  const trimmedItemId = typeof itemId === 'string' && itemId.trim() ? itemId.trim() : '';
   const searchTerm = agenticPayload.artikelbeschreibung ?? '';
 
   try {
@@ -198,6 +197,7 @@ export async function handleAgenticRunTrigger({
 
 export interface AgenticTriggerInvocationOptions {
   agenticPayload: AgenticRunTriggerPayload;
+  itemId?: string | null;
   context: string;
   shouldUseAgenticForm: boolean;
   backendDispatched?: boolean;
@@ -211,6 +211,7 @@ export interface AgenticTriggerInvocationOptions {
 
 export function maybeTriggerAgenticRun({
   agenticPayload,
+  itemId,
   context,
   shouldUseAgenticForm,
   backendDispatched = false,
@@ -235,6 +236,7 @@ export function maybeTriggerAgenticRun({
     logger.info?.('Scheduling asynchronous agentic trigger', { context });
     const triggerPromise = handleTrigger({
       agenticPayload,
+      itemId,
       context,
       triggerAgenticRunRequest,
       reportFailure,
@@ -916,10 +918,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
   function triggerAgenticRun(
     agenticPayload: AgenticRunTriggerPayload,
     context: string,
+    itemId?: string | null,
     options: { backendDispatched?: boolean } = {}
   ) {
     maybeTriggerAgenticRun({
       agenticPayload,
+      itemId,
       context,
       shouldUseAgenticForm,
       backendDispatched: options.backendDispatched,
@@ -1128,8 +1132,27 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
           backendDispatched
         });
       } else {
+        let artikelNummer: string | null = null;
+        try {
+          const rawArtikelNummer = createdItem?.Artikel_Nummer ?? submissionData.Artikel_Nummer;
+          if (typeof rawArtikelNummer === 'string') {
+            const trimmedArtikelNummer = rawArtikelNummer.trim();
+            artikelNummer = trimmedArtikelNummer ? trimmedArtikelNummer : null;
+          }
+        } catch (normalizationError) {
+          console.warn('Failed to normalize Artikel_Nummer for agentic trigger', normalizationError);
+        }
+
+        if (!artikelNummer) {
+          console.warn('Skipping agentic trigger after item creation: missing Artikel_Nummer', {
+            itemId: createdItem?.ItemUUID,
+            context
+          });
+          return;
+        }
+
         const agenticPayload: AgenticRunTriggerPayload = {
-          itemId: createdItem?.ItemUUID,
+          artikelNummer,
           artikelbeschreibung: searchText
         };
 
@@ -1139,7 +1162,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
             backendDispatched,
             hasSearchText: Boolean(agenticPayload.artikelbeschreibung)
           });
-          triggerAgenticRun(agenticPayload, context, { backendDispatched });
+          triggerAgenticRun(agenticPayload, context, createdItem?.ItemUUID ?? null, { backendDispatched });
         } catch (triggerErr) {
           console.error('Failed to schedule agentic trigger after item creation', triggerErr);
         }

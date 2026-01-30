@@ -5,6 +5,7 @@ import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { dialogService } from './dialog';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { ensureUser } from '../lib/user';
+import { logger } from '../utils/logger';
 
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
@@ -306,6 +307,7 @@ export default function BulkItemActionBar({
     }
 
     setFeedback(null);
+    // TODO(agentic-bulk): Ensure bulk agentic triggers only use Artikel_Nummer once list payloads always include it.
     const itemMap = new Map<string, Item>();
     selectedItems.forEach((item) => {
       if (item?.ItemUUID) {
@@ -370,6 +372,27 @@ export default function BulkItemActionBar({
           continue;
         }
 
+        let artikelNummer: string | null = null;
+        try {
+          if (typeof detail?.Artikel_Nummer === 'string') {
+            const trimmedArtikelNummer = detail.Artikel_Nummer.trim();
+            artikelNummer = trimmedArtikelNummer ? trimmedArtikelNummer : null;
+          }
+        } catch (normalizationError) {
+          logger.warn?.('Bulk agentic Artikel_Nummer normalization failed', {
+            itemId,
+            error: normalizationError
+          });
+        }
+
+        if (!artikelNummer) {
+          logger.warn?.('Bulk agentic skipped: Artikel_Nummer missing', {
+            itemId
+          });
+          failures.push(`${itemId}: fehlende Artikel_Nummer`);
+          continue;
+        }
+
         try {
           const response = await fetch('/api/agentic/run', {
             method: 'POST',
@@ -377,7 +400,7 @@ export default function BulkItemActionBar({
             body: JSON.stringify({
               context: 'item-list-bulk',
               payload: {
-                itemId,
+                artikelNummer,
                 artikelbeschreibung
               }
             })

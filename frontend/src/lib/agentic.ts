@@ -11,7 +11,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const AGENTIC_FAILURE_REASON_DESCRIPTIONS: Record<string, string> = {
   'missing-search-query': 'Suchbegriff fehlt',
-  'missing-item-id': 'Artikel_Nummer fehlt',
   'missing-artikel-nummer': 'Artikel_Nummer fehlt',
   'missing-artikelbeschreibung': 'Artikelbeschreibung fehlt',
   'agentic-start-failed': 'KI-Start fehlgeschlagen',
@@ -66,13 +65,8 @@ function formatAgenticFailureMessage(base: string, reasonDescription: string | n
 }
 
 export interface AgenticRunTriggerPayload {
-  itemId?: string | null;
+  artikelNummer?: string | null;
   artikelbeschreibung?: string | null;
-  /**
-   * @deprecated Temporary support for legacy payloads while the UI transitions to the
-   *             new agent service contract.
-  */
-  id?: string | null;
   /**
    * @deprecated Temporary support for legacy payloads while the UI transitions to the
    *             new agent service contract.
@@ -98,7 +92,6 @@ export interface AgenticRunTriggerOptions {
 export type AgenticTriggerSkippedReason =
   | 'run-url-missing'
   | 'missing-artikelbeschreibung'
-  | 'missing-item-id'
   | 'missing-artikel-nummer'
   | 'already-exists';
 
@@ -123,12 +116,10 @@ export async function triggerAgenticRun({
 }: AgenticRunTriggerOptions): Promise<AgenticTriggerResult> {
   const runUrl = typeof endpoint === 'string' && endpoint.trim() ? endpoint.trim() : DEFAULT_AGENTIC_RUN_ENDPOINT;
 
-  const itemIdCandidate =
-    typeof payload.itemId === 'string' && payload.itemId.trim()
-      ? payload.itemId.trim()
-      : typeof payload.id === 'string' && payload.id.trim()
-        ? payload.id.trim()
-        : '';
+  const artikelNummerCandidate =
+    typeof payload.artikelNummer === 'string' && payload.artikelNummer.trim()
+      ? payload.artikelNummer.trim()
+      : '';
 
   const artikelbeschreibungCandidate =
     typeof payload.artikelbeschreibung === 'string' && payload.artikelbeschreibung.trim()
@@ -143,8 +134,8 @@ export async function triggerAgenticRun({
     return { outcome: 'skipped', reason: 'missing-artikelbeschreibung', message };
   }
 
-  const itemId = itemIdCandidate;
-  if (!itemId) {
+  const artikelNummer = artikelNummerCandidate;
+  if (!artikelNummer) {
     const message = `KI-Auslösung übersprungen (${context}): fehlende Artikel_Nummer`;
     console.warn(message);
     return { outcome: 'skipped', reason: 'missing-artikel-nummer', message };
@@ -153,7 +144,7 @@ export async function triggerAgenticRun({
   try {
     const optionalPayload: Record<string, unknown> = {};
     Object.entries(payload).forEach(([key, value]) => {
-      if (key === 'artikelbeschreibung' || key === 'itemId') {
+      if (key === 'artikelbeschreibung' || key === 'artikelNummer') {
         return;
       }
       if (value === undefined || value === null) {
@@ -164,7 +155,7 @@ export async function triggerAgenticRun({
 
     const backendPayload: AgenticRunTriggerPayload = {
       artikelbeschreibung: artikelbeschreibungCandidate,
-      itemId,
+      artikelNummer,
       ...optionalPayload
     };
 
