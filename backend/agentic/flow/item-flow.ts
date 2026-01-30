@@ -52,6 +52,23 @@ export interface RunItemFlowInput {
   cancellationSignal?: AbortSignal | null;
 }
 
+// TODO(agent): Revisit target guard expectations once agentic callers provide strict typing.
+const coerceTargetRecord = (
+  target: unknown,
+  logger: ItemFlowLogger,
+  context: string
+): Record<string, unknown> | null => {
+  if (target && typeof target === 'object' && !Array.isArray(target)) {
+    return target as Record<string, unknown>;
+  }
+  logger.warn?.({
+    msg: 'item flow target is not an object',
+    context,
+    targetType: typeof target
+  });
+  return null;
+};
+
 function buildCallbackPayload({
   artikelNummer,
   itemData,
@@ -115,14 +132,13 @@ function buildCallbackPayload({
 export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDependencies): Promise<AgenticResultPayload> {
   const logger = deps.logger ?? console;
   let resolvedItemId: string | null = null;
+  const fallbackTarget = coerceTargetRecord(input.target, logger, 'runItemFlow');
   const fallbackItemId =
-    input.target && typeof input.target === 'object'
-      ? typeof (input.target as Record<string, unknown>).Artikel_Nummer === 'string'
-        ? (input.target as Record<string, unknown>).Artikel_Nummer.trim()
-        : typeof (input.target as Record<string, unknown>).artikelNummer === 'string'
-          ? (input.target as Record<string, unknown>).artikelNummer.trim()
-          : null
-      : null;
+    fallbackTarget && typeof fallbackTarget.Artikel_Nummer === 'string'
+      ? fallbackTarget.Artikel_Nummer.trim()
+      : fallbackTarget && typeof fallbackTarget.artikelNummer === 'string'
+        ? fallbackTarget.artikelNummer.trim()
+        : null;
   const reviewerNotes = typeof input.reviewNotes === 'string' && input.reviewNotes.trim().length
     ? input.reviewNotes.trim()
     : null;
