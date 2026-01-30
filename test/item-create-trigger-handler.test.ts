@@ -25,7 +25,7 @@ describe('handleAgenticRunTrigger', () => {
 
   function createPayload(overrides: Partial<AgenticRunTriggerPayload> = {}): AgenticRunTriggerPayload {
     return {
-      itemId: 'uuid-123',
+      artikelNummer: '123456',
       artikelbeschreibung: 'Beispiel Artikel',
       ...overrides
     };
@@ -41,6 +41,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
+        itemId: 'uuid-123',
         context: 'test-triggered',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -54,7 +55,7 @@ describe('handleAgenticRunTrigger', () => {
       const [[triggerArgs]] = triggerRequest.mock.calls;
       expect(triggerArgs.payload).toEqual({
         artikelbeschreibung: 'Beispiel Artikel',
-        itemId: 'uuid-123'
+        artikelNummer: '123456'
       });
       expect(triggerArgs.payload).not.toHaveProperty('item');
       expect(reportFailure).not.toHaveBeenCalled();
@@ -72,7 +73,7 @@ describe('handleAgenticRunTrigger', () => {
       const logger = createLoggerMock();
       const triggerRequest = jest
         .fn()
-        .mockResolvedValue({ outcome: 'skipped', reason: 'missing-item-id', message: 'Trigger skipped' });
+        .mockResolvedValue({ outcome: 'skipped', reason: 'missing-artikel-nummer', message: 'Trigger skipped' });
       const reportFailure: AgenticTriggerFailureReporter = jest.fn().mockResolvedValue(undefined);
       const alertFn = jest.fn().mockResolvedValue(undefined);
       const onSkipped = jest.fn();
@@ -80,6 +81,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
+        itemId: 'uuid-123',
         context: 'test-skipped',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -92,7 +94,7 @@ describe('handleAgenticRunTrigger', () => {
       const [[triggerArgs]] = triggerRequest.mock.calls;
       expect(triggerArgs.payload).toEqual({
         artikelbeschreibung: 'Beispiel Artikel',
-        itemId: 'uuid-123'
+        artikelNummer: '123456'
       });
       expect(triggerArgs.payload).not.toHaveProperty('item');
       expect(reportFailure).toHaveBeenCalledWith({
@@ -100,7 +102,7 @@ describe('handleAgenticRunTrigger', () => {
         search: 'Beispiel Artikel',
         context: 'test-skipped',
         responseBody: 'Trigger skipped',
-        error: 'missing-item-id'
+        error: 'missing-artikel-nummer'
       });
       expect(alertFn).toHaveBeenCalledWith('Trigger skipped');
       expect(onSkipped).toHaveBeenCalledWith('uuid-123');
@@ -128,6 +130,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
+        itemId: 'uuid-123',
         context: 'test-failed',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -139,7 +142,7 @@ describe('handleAgenticRunTrigger', () => {
       const [[triggerArgs]] = triggerRequest.mock.calls;
       expect(triggerArgs.payload).toEqual({
         artikelbeschreibung: 'Agentic Artikel',
-        itemId: 'uuid-123'
+        artikelNummer: '123456'
       });
       expect(triggerArgs.payload).not.toHaveProperty('item');
       expect(reportFailure).toHaveBeenCalledWith({
@@ -164,12 +167,12 @@ describe('handleAgenticRunTrigger', () => {
       const logger = createLoggerMock();
       const triggerRequest = jest.fn().mockResolvedValue({
         outcome: 'skipped',
-        reason: 'missing-item-id',
+        reason: 'missing-artikel-nummer',
         message: 'Trigger skipped'
       });
       const reportFailure: AgenticTriggerFailureReporter = jest.fn().mockResolvedValue(undefined);
       const alertFn = jest.fn().mockResolvedValue(undefined);
-      const payload = createPayload({ itemId: '   ' });
+      const payload = createPayload({ artikelNummer: '   ' });
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
@@ -184,7 +187,7 @@ describe('handleAgenticRunTrigger', () => {
       expect(alertFn).toHaveBeenCalledWith('Trigger skipped');
       expect(logger.warn).toHaveBeenCalledWith('Agentic trigger skipped without ItemUUID', {
         context: 'test-skipped-empty-id',
-        reason: 'missing-item-id'
+        reason: 'missing-artikel-nummer'
       });
     });
   });
@@ -194,7 +197,7 @@ describe('handleAgenticRunTrigger', () => {
       const logger = createLoggerMock();
       const triggerRequest = jest.fn().mockResolvedValue({
         outcome: 'skipped',
-        reason: 'missing-item-id',
+        reason: 'missing-artikel-nummer',
         message: 'Trigger skipped'
       });
       const reportFailure: AgenticTriggerFailureReporter = jest.fn().mockRejectedValue(new Error('report failed'));
@@ -203,6 +206,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
+        itemId: 'uuid-123',
         context: 'test-report-failure',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -234,6 +238,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
+        itemId: 'uuid-123',
         context: 'test-alert-failure',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,
@@ -258,6 +263,7 @@ describe('handleAgenticRunTrigger', () => {
 
       await handleAgenticRunTrigger({
         agenticPayload: payload,
+        itemId: 'uuid-123',
         context: 'test-trigger-exception',
         triggerAgenticRunRequest: triggerRequest,
         reportFailure,

@@ -3,14 +3,11 @@ import { defineHttpAction } from './index';
 import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
 import type { AgenticRunReviewMetadata } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
-import { parseSequentialItemUUID } from '../lib/itemIds';
-
 // TODO(agentic-start-flow): Extract shared agentic start/restart validation once UI start flows stabilize.
 
 export interface AgenticRunTriggerPayload {
-  itemId?: string | null;
+  artikelNummer?: string | null;
   artikelbeschreibung?: string | null;
-  id?: string | null;
   search?: string | null;
   actor?: string | null;
   review?: {
@@ -21,7 +18,9 @@ export interface AgenticRunTriggerPayload {
   [key: string]: unknown;
 }
 
-export type AgenticTriggerSkippedReason = 'missing-artikelbeschreibung' | 'missing-item-id';
+export type AgenticTriggerSkippedReason =
+  | 'missing-artikelbeschreibung'
+  | 'missing-artikel-nummer';
 
 export class AgenticTriggerValidationError extends Error {
   public readonly reason: AgenticTriggerSkippedReason;
@@ -46,10 +45,15 @@ export interface ForwardAgenticTriggerOptions {
   service?: AgenticServiceDependencies;
 }
 
+// TODO(agentic-trigger): Keep payloads Artikel_Nummer-only once upstream callers stop sending instance IDs.
 export function buildAgenticRunRequestBody(payload: AgenticRunTriggerPayload) {
   const optionalPayload: Record<string, unknown> = {};
   Object.entries(payload).forEach(([key, value]) => {
-    if (key === 'artikelbeschreibung' || key === 'itemId' || key === 'id' || key === 'search') {
+    if (
+      key === 'artikelbeschreibung'
+      || key === 'artikelNummer'
+      || key === 'search'
+    ) {
       return;
     }
     if (value === undefined || value === null) {
@@ -71,24 +75,33 @@ export function buildAgenticRunRequestBody(payload: AgenticRunTriggerPayload) {
     );
   }
 
-  const itemIdCandidate =
-    typeof payload.itemId === 'string' && payload.itemId.trim()
-      ? payload.itemId.trim()
-      : typeof payload.id === 'string' && payload.id.trim()
-        ? payload.id.trim()
-        : '';
-  if (!itemIdCandidate) {
-    throw new AgenticTriggerValidationError('Agentic trigger payload requires itemId', 'missing-item-id');
+  let resolvedArtikelNummer = '';
+  try {
+    if (typeof payload.artikelNummer === 'string' && payload.artikelNummer.trim()) {
+      resolvedArtikelNummer = payload.artikelNummer.trim();
+    }
+  } catch (err) {
+    throw new AgenticTriggerValidationError(
+      'Agentic trigger payload contains invalid Artikel_Nummer',
+      'missing-artikel-nummer'
+    );
+  }
+
+  if (!resolvedArtikelNummer) {
+    throw new AgenticTriggerValidationError(
+      'Agentic trigger payload requires Artikel_Nummer',
+      'missing-artikel-nummer'
+    );
   }
 
   return {
     requestBody: {
       Artikelbeschreibung: artikelbeschreibungCandidate,
-      itemUUid: itemIdCandidate,
+      artikelNummer: resolvedArtikelNummer,
       ...optionalPayload
     },
     artikelbeschreibung: artikelbeschreibungCandidate,
-    itemId: itemIdCandidate
+    artikelNummer: resolvedArtikelNummer
   };
 }
 
@@ -98,26 +111,9 @@ export async function forwardAgenticTrigger(
 ): Promise<AgenticTriggerForwardResult> {
   const { context = 'server', logger = console, service: serviceDeps } = options;
 
-  const { artikelbeschreibung, itemId } = buildAgenticRunRequestBody(payload);
-  let artikelNummer = itemId.trim();
-  const parsedItemId = parseSequentialItemUUID(itemId);
-  if (parsedItemId?.kind === 'artikelnummer' && parsedItemId.artikelNummer) {
-    artikelNummer = parsedItemId.artikelNummer;
-  } else if (itemId.startsWith('I-')) {
-    logger.warn?.('[agentic-trigger] Unable to resolve Artikel_Nummer for trigger payload', {
-      itemId,
-      context
-    });
-    return {
-      ok: false,
-      status: 400,
-      body: { error: 'missing-artikel-nummer' },
-      rawBody: null
-    };
-  }
-
+  const { artikelbeschreibung, artikelNummer } = buildAgenticRunRequestBody(payload);
   if (!artikelNummer) {
-    logger.warn?.('[agentic-trigger] Empty Artikel_Nummer for trigger payload', { itemId, context });
+    logger.warn?.('[agentic-trigger] Empty Artikel_Nummer for trigger payload', { context });
     return {
       ok: false,
       status: 400,
@@ -126,8 +122,7 @@ export async function forwardAgenticTrigger(
     };
   }
 
-  logger.info?.('[agentic-trigger] Resolved Artikel_Nummer for agentic trigger', {
-    itemId,
+  logger.info?.('[agentic-trigger] Using Artikel_Nummer for agentic trigger', {
     artikelNummer,
     context
   });
@@ -158,7 +153,7 @@ export async function forwardAgenticTrigger(
     if (!result.queued) {
       logger.warn?.('[agentic-trigger] Agentic run start declined', {
         context,
-        itemId,
+        artikelNummer,
         reason: result.reason
       });
       return {
@@ -169,7 +164,7 @@ export async function forwardAgenticTrigger(
       };
     }
 
-    logger.info?.('[agentic-trigger] Agentic run queued locally', { context, itemId });
+    logger.info?.('[agentic-trigger] Agentic run queued locally', { context, artikelNummer });
     return {
       ok: true,
       status: 202,
