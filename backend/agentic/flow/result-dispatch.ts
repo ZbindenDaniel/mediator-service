@@ -3,18 +3,18 @@ import type { AgenticResultPayload } from '../result-handler';
 import type { ItemFlowLogger } from './item-flow';
 
 export interface DispatchAgenticResultOptions {
-  itemId: string;
+  artikelNummer: string;
   payload: AgenticResultPayload;
   logger?: ItemFlowLogger;
-  saveRequestPayload: (itemId: string, payload: unknown) => Promise<void> | void;
+  saveRequestPayload: (artikelNummer: string, payload: unknown) => Promise<void> | void;
   applyAgenticResult?: (payload: AgenticResultPayload) => Promise<void> | void;
-  markNotificationSuccess: (itemId: string) => Promise<void> | void;
-  markNotificationFailure: (itemId: string, errorMessage: string) => Promise<void> | void;
+  markNotificationSuccess: (artikelNummer: string) => Promise<void> | void;
+  markNotificationFailure: (artikelNummer: string, errorMessage: string) => Promise<void> | void;
   checkCancellation?: () => void;
 }
 
 export async function dispatchAgenticResult({
-  itemId,
+  artikelNummer,
   payload,
   logger,
   saveRequestPayload,
@@ -24,9 +24,9 @@ export async function dispatchAgenticResult({
   checkCancellation
 }: DispatchAgenticResultOptions): Promise<void> {
   try {
-    await saveRequestPayload(itemId, payload);
+    await saveRequestPayload(artikelNummer, payload);
   } catch (err) {
-    logger?.error?.({ err, msg: 'failed to persist request payload', itemId });
+    logger?.error?.({ err, msg: 'failed to persist request payload', artikelNummer });
     throw err;
   }
 
@@ -38,16 +38,16 @@ export async function dispatchAgenticResult({
 
     await applyAgenticResult(payload);
     checkCancellation?.();
-    await markNotificationSuccess(itemId);
+    await markNotificationSuccess(artikelNummer);
   } catch (err) {
-    logger?.error?.({ err, msg: 'agentic result dispatch failed', itemId });
+    logger?.error?.({ err, msg: 'agentic result dispatch failed', artikelNummer });
     try {
       await markNotificationFailure(
-        itemId,
+        artikelNummer,
         err instanceof Error ? err.message : 'agentic result dispatch failed'
       );
     } catch (notificationErr) {
-      logger?.error?.({ err: notificationErr, msg: 'failed to mark notification failure', itemId });
+      logger?.error?.({ err: notificationErr, msg: 'failed to mark notification failure', artikelNummer });
     }
     throw err;
   }
