@@ -31,7 +31,7 @@ import {
   IMPORTER_FORCE_ZERO_STOCK
 } from './config';
 import type { ShopwareConfig } from './config';
-import { ingestCsvFile, type IngestCsvFileOptions } from './importer';
+import { ingestAgenticRunsCsv, ingestCsvFile, type IngestCsvFileOptions } from './importer';
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import { ItemEinheit, normalizeItemEinheit } from '../models';
 import {
@@ -177,6 +177,7 @@ try {
   console.error('Failed to initialise directories', err);
 }
 
+// TODO(agent): Revisit deferred agentic_runs cleanup once CSV processing failures are tracked.
 async function handleCsv(absPath: string): Promise<void> {
   const pendingOptions = pendingCsvIngestionOptions.get(absPath);
   const zeroStock = pendingOptions?.zeroStock ?? IMPORTER_FORCE_ZERO_STOCK;
@@ -214,6 +215,34 @@ async function handleCsv(absPath: string): Promise<void> {
       console.error('[watcher] Failed to evaluate duplicate CSV upload', absPath, duplicateError);
     }
     const { count, boxes } = await ingestCsvFile(absPath, { zeroStock });
+    const deferredAgenticRunsPath = `${absPath}.agentic_runs.csv`;
+    if (fs.existsSync(deferredAgenticRunsPath)) {
+      console.info('[watcher] Found deferred agentic_runs.csv for inbox CSV', {
+        file: deferredAgenticRunsPath,
+      });
+      try {
+        const deferredBuffer = fs.readFileSync(deferredAgenticRunsPath);
+        const { count: agenticCount } = await ingestAgenticRunsCsv(deferredBuffer);
+        console.info('[watcher] Completed deferred agentic_runs.csv ingestion', {
+          rowsProcessed: agenticCount,
+          file: deferredAgenticRunsPath,
+        });
+      } catch (agenticError) {
+        console.error('[watcher] Failed deferred agentic_runs.csv ingestion', {
+          file: deferredAgenticRunsPath,
+          error: agenticError,
+        });
+      } finally {
+        try {
+          fs.rmSync(deferredAgenticRunsPath, { force: true });
+        } catch (cleanupError) {
+          console.error('[watcher] Failed to remove deferred agentic_runs.csv', {
+            file: deferredAgenticRunsPath,
+            error: cleanupError,
+          });
+        }
+      }
+    }
     const archived = path.join(
       ARCHIVE_DIR,
       path.basename(absPath).replace(/\.csv$/i, `.${Date.now()}.csv`)

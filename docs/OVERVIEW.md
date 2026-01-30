@@ -175,6 +175,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Replaced legacy agentic_runs resets with non-destructive warnings and a startup abort when Artikel_Nummer is missing, so manual migrations are required without deleting rows.
 - Corrected CSV archive branch flow so events, agentic runs, and items buffering close cleanly and continue as expected after each branch.
 - Resolved a csv-import merge conflict so per-CSV branches close cleanly with explicit continuations and stable cleanup logging.
+- Deferred agentic_runs.csv ingestion until after inbox items ingestion completes, with watcher logging and non-blocking error handling.
 
 ## Documentation Map
 
