@@ -126,6 +126,12 @@ export async function forwardAgenticTrigger(
     };
   }
 
+  logger.info?.('[agentic-trigger] Resolved Artikel_Nummer for agentic trigger', {
+    itemId,
+    artikelNummer,
+    context
+  });
+
   const requestContext = resolveAgenticRequestContext(payload, artikelNummer);
   const actor = typeof payload.actor === 'string' && payload.actor.trim() ? payload.actor.trim() : null;
   const review = normalizeReviewMetadata(payload.review);
@@ -254,6 +260,7 @@ const action = defineHttpAction({
         service: {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
+          getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,
           updateAgenticRunStatus: ctx.updateAgenticRunStatus,
           logEvent: ctx.logEvent,

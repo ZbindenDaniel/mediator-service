@@ -20,11 +20,12 @@ type AgenticBulkQueueResult = {
   skipped: number;
 };
 
-const action = defineHttpAction({
+  const action = defineHttpAction({
   key: 'agentic-bulk-queue',
   label: 'Agentic bulk queue',
   appliesTo: () => false,
   matches: (path, method) => path === '/api/agentic/queue' && method === 'POST',
+  // TODO(agentic-run-fk-preflight): Expand reference preflight coverage if additional bulk queue entrypoints are added.
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     if (!req.url) {
       console.warn('[agentic-bulk-queue] Request missing URL reference');
@@ -163,6 +164,33 @@ const action = defineHttpAction({
             continue;
           }
 
+          if (!ctx.getItemReference?.get) {
+            console.warn('[agentic-bulk-queue] Missing getItemReference helper for agentic reference preflight', {
+              artikelNummer: identifier,
+              context: 'item-list-bulk'
+            });
+          } else {
+            try {
+              const referenceRow = ctx.getItemReference.get(identifier);
+              if (!referenceRow) {
+                skipped += 1;
+                console.warn('[agentic-bulk-queue] Skipping agentic run without item reference', {
+                  artikelNummer: identifier,
+                  context: 'item-list-bulk'
+                });
+                continue;
+              }
+            } catch (lookupErr) {
+              skipped += 1;
+              console.error('[agentic-bulk-queue] Failed to verify item reference for agentic run', {
+                artikelNummer: identifier,
+                context: 'item-list-bulk',
+                error: lookupErr instanceof Error ? lookupErr.message : lookupErr
+              });
+              continue;
+            }
+          }
+
           if (options.mode === 'instancesOnly' && record.referenceOnly) {
             skipped += 1;
             console.info('[agentic-bulk-queue] Skipping reference-only candidate due to instancesOnly mode', {
@@ -207,8 +235,9 @@ const action = defineHttpAction({
               throw new Error('Agentic run upsert returned zero changes');
             }
           } catch (upsertErr) {
+            skipped += 1;
             console.error('[agentic-bulk-queue] Failed to queue agentic run', { artikelNummer: identifier }, upsertErr);
-            throw upsertErr;
+            continue;
           }
 
           try {

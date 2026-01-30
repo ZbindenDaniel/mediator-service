@@ -39,6 +39,9 @@ describe('agentic-bulk-queue action', () => {
     const ctx = {
       listItems: { all: jest.fn(() => items) },
       listItemReferences: { all: jest.fn(() => references) },
+      getItemReference: {
+        get: jest.fn((id: string) => ({ Artikel_Nummer: id }))
+      },
       getAgenticRun: {
         get: jest.fn((id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'completed', SearchQuery: 'foo' } : undefined))
       },
@@ -80,6 +83,9 @@ describe('agentic-bulk-queue action', () => {
     const ctx = {
       listItems: { all: jest.fn(() => items) },
       listItemReferences: { all: jest.fn(() => references) },
+      getItemReference: {
+        get: jest.fn((id: string) => ({ Artikel_Nummer: id }))
+      },
       getAgenticRun: {
         get: jest.fn(() => ({ Artikel_Nummer: 'R-001', Status: 'completed', SearchQuery: 'foo' }))
       },
@@ -111,6 +117,9 @@ describe('agentic-bulk-queue action', () => {
     const ctx = {
       listItems: { all: jest.fn(() => []) },
       listItemReferences: { all: jest.fn(() => references) },
+      getItemReference: {
+        get: jest.fn((id: string) => ({ Artikel_Nummer: id }))
+      },
       getAgenticRun: { get: jest.fn(() => undefined) },
       upsertAgenticRun: { run: jest.fn(() => ({ changes: 1 })) },
       logEvent: jest.fn(),
@@ -136,6 +145,9 @@ describe('agentic-bulk-queue action', () => {
     const ctx = {
       listItems: { all: jest.fn(() => []) },
       listItemReferences: { all: jest.fn(() => references) },
+      getItemReference: {
+        get: jest.fn((id: string) => ({ Artikel_Nummer: id }))
+      },
       getAgenticRun: {
         get: jest.fn((id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'queued' } : undefined))
       },

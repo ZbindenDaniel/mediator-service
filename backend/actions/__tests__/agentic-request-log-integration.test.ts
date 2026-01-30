@@ -23,6 +23,9 @@ type AgenticDbMocks = jest.Mocked<typeof agenticDb>;
 function createAgenticDependencies() {
   const db = new Database(':memory:');
   db.exec(`
+    CREATE TABLE item_refs (
+      Artikel_Nummer TEXT PRIMARY KEY
+    );
     CREATE TABLE agentic_runs (
       Artikel_Nummer TEXT PRIMARY KEY,
       SearchQuery TEXT,
@@ -34,6 +37,8 @@ function createAgenticDependencies() {
       LastReviewNotes TEXT
     );
   `);
+  db.prepare('INSERT INTO item_refs (Artikel_Nummer) VALUES (?)').run('R-123');
+  db.prepare('INSERT INTO item_refs (Artikel_Nummer) VALUES (?)').run('R-ABC');
 
   const upsertAgenticRun = db.prepare(`
     INSERT INTO agentic_runs (
@@ -78,9 +83,12 @@ function createAgenticDependencies() {
      WHERE Artikel_Nummer=@Artikel_Nummer
   `);
 
+  const getItemReference = db.prepare('SELECT Artikel_Nummer FROM item_refs WHERE Artikel_Nummer = ?');
+
   return {
     db,
     getAgenticRun: db.prepare('SELECT * FROM agentic_runs WHERE Artikel_Nummer = ?'),
+    getItemReference,
     upsertAgenticRun,
     updateAgenticRunStatus,
     logEvent: jest.fn(),

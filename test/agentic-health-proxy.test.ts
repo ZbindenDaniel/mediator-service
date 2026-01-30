@@ -37,6 +37,7 @@ function createAgenticContext(database: Database.Database) {
   return {
     db: database,
     getAgenticRun: database.prepare('SELECT * FROM agentic_runs WHERE ItemUUID = ?'),
+    getItemReference: noopStatement,
     upsertAgenticRun: noopStatement,
     updateAgenticRunStatus: noopStatement,
     logEvent: jest.fn(),
@@ -121,6 +122,7 @@ describe('checkAgenticHealth', () => {
         }
       } as unknown as Database.Database,
       getAgenticRun: { get: jest.fn() },
+      getItemReference: { get: jest.fn() },
       upsertAgenticRun: { run: jest.fn() },
       updateAgenticRunStatus: { run: jest.fn() },
       logEvent: jest.fn(),
