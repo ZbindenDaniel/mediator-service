@@ -12,28 +12,35 @@ export interface PreparedItemContext {
   cancellationSignal: AbortSignal | null;
 }
 
-// TODO(migration): remove legacy itemUUid inputs once all callers send Artikel_Nummer only.
+// TODO(agent): Consider enforcing Artikel_Nummer formatting rules once identifier standards are finalized.
 function resolveItemId(
   target: unknown,
-  providedId: string | undefined | null,
   logger?: ItemFlowLogger
-): { itemId: string; targetId: string; legacyItemUUid: string } {
+): { itemId: string; targetId: string } {
   const candidate = target && typeof target === 'object' ? (target as Record<string, unknown>) : null;
-  const targetId =
-    typeof candidate?.Artikel_Nummer === 'string'
-      ? candidate.Artikel_Nummer.trim()
-      : typeof candidate?.artikelNummer === 'string'
-        ? candidate.artikelNummer.trim()
-        : '';
-  const legacyItemUUid = typeof candidate?.itemUUid === 'string' ? candidate.itemUUid.trim() : '';
-  if (legacyItemUUid) {
-    logger?.warn?.({ msg: 'legacy itemUUid supplied in target; prefer Artikelnummer', itemUUid: legacyItemUUid });
+  const rawArtikelNummer = candidate?.Artikel_Nummer ?? candidate?.artikelNummer;
+  const targetId = typeof rawArtikelNummer === 'string' ? rawArtikelNummer.trim() : '';
+
+  if (!targetId) {
+    const reason =
+      rawArtikelNummer === undefined || rawArtikelNummer === null
+        ? 'missing'
+        : typeof rawArtikelNummer === 'string'
+          ? 'empty'
+          : `invalid-${typeof rawArtikelNummer}`;
+    const err = new FlowError(
+      'INVALID_TARGET',
+      'Target requires a non-empty Artikelnummer ("Artikel_Nummer" or "artikelNummer")',
+      400
+    );
+    logger?.error?.({ err, msg: 'target missing or invalid Artikelnummer', reason, target });
+    throw err;
   }
-  const itemId = typeof providedId === 'string' && providedId.trim().length ? providedId.trim() : targetId;
-  return { itemId, targetId, legacyItemUUid };
+
+  return { itemId: targetId, targetId };
 }
 
-// TODO(migration): remove itemUUid normalization once callers migrate to Artikel_Nummer.
+// TODO(agent): Revisit normalization after broader target schema validation refactor.
 function normalizeTarget(target: unknown, itemId: string): AgenticTarget {
   const candidate = (target && typeof target === 'object' ? target : {}) as Partial<AgenticTarget> &
     Record<string, unknown>;
@@ -74,13 +81,7 @@ function normalizeTarget(target: unknown, itemId: string): AgenticTarget {
 }
 
 export function prepareItemContext(input: RunItemFlowInput, logger: ItemFlowLogger): PreparedItemContext {
-  const { itemId, targetId } = resolveItemId(input.target, input.id, logger);
-
-  if (!itemId) {
-    const err = new FlowError('INVALID_TARGET', 'Target requires a non-empty Artikelnummer ("Artikel_Nummer")', 400);
-    logger.error?.({ err, msg: 'target missing Artikelnummer' });
-    throw err;
-  }
+  const { itemId, targetId } = resolveItemId(input.target, logger);
 
   // TODO: streamline validation once broader target normalization is refactored.
   let normalizedTarget: AgenticTarget;

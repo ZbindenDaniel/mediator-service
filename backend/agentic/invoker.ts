@@ -473,6 +473,26 @@ export class AgenticModelInvoker {
       }
 
       let target = await this.loadItemTarget(trimmedItemId);
+      // TODO(agent): Confirm target Artikel_Nummer normalization rules once identifier formatting is centralized.
+      try {
+        const existingArtikelNummer =
+          typeof target.Artikel_Nummer === 'string' ? target.Artikel_Nummer.trim() : null;
+        if (existingArtikelNummer && existingArtikelNummer !== trimmedItemId) {
+          this.logger.warn?.({
+            msg: 'agentic invocation target Artikel_Nummer mismatch; overwriting with request id',
+            itemId: trimmedItemId,
+            existingArtikelNummer
+          });
+        }
+        target.Artikel_Nummer = trimmedItemId;
+      } catch (err) {
+        this.logger.warn?.({
+          err,
+          msg: 'failed to normalize target Artikel_Nummer for agentic invocation',
+          itemId: trimmedItemId
+        });
+        target.Artikel_Nummer = trimmedItemId;
+      }
       if (!target.Artikelbeschreibung && input.searchQuery) {
         target.Artikelbeschreibung = input.searchQuery;
       }
@@ -483,7 +503,6 @@ export class AgenticModelInvoker {
       const payload = await runItemFlow(
         {
           target,
-          id: trimmedItemId,
           search: input.searchQuery ?? null,
           reviewNotes: normalizedReviewNotes,
           skipSearch

@@ -44,7 +44,7 @@ export interface ItemFlowDependencies {
 
 export interface RunItemFlowInput {
   target: unknown;
-  id?: string | null;
+  // TODO(agent): Align RunItemFlowInput with stronger target typing once downstream callers are updated.
   search?: string | null;
   reviewNotes?: string | null;
   skipSearch?: boolean;
@@ -115,6 +115,14 @@ function buildCallbackPayload({
 export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDependencies): Promise<AgenticResultPayload> {
   const logger = deps.logger ?? console;
   let resolvedItemId: string | null = null;
+  const fallbackItemId =
+    input.target && typeof input.target === 'object'
+      ? typeof (input.target as Record<string, unknown>).Artikel_Nummer === 'string'
+        ? (input.target as Record<string, unknown>).Artikel_Nummer.trim()
+        : typeof (input.target as Record<string, unknown>).artikelNummer === 'string'
+          ? (input.target as Record<string, unknown>).artikelNummer.trim()
+          : null
+      : null;
   const reviewerNotes = typeof input.reviewNotes === 'string' && input.reviewNotes.trim().length
     ? input.reviewNotes.trim()
     : null;
@@ -335,7 +343,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     return payload;
   } catch (err) {
     const log = deps.logger ?? console;
-    const itemId = resolvedItemId ?? (typeof input.id === 'string' ? input.id : null);
+    const itemId = resolvedItemId ?? fallbackItemId;
     const failureMessage = err instanceof Error ? err.message : 'Unexpected failure';
 
     if (itemId && !(err instanceof FlowError && err.code === 'RUN_CANCELLED')) {
@@ -354,7 +362,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       const flowLog: Record<string, unknown> = {
         err,
         code: err.code,
-        itemId: resolvedItemId ?? input.id ?? null
+        itemId: resolvedItemId ?? fallbackItemId ?? null
       };
 
       if (err.code === 'INVALID_JSON' && err.context) {
@@ -373,7 +381,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       }
       throw err;
     }
-    log.error?.({ err, itemId: resolvedItemId ?? input.id ?? null });
+    log.error?.({ err, itemId: resolvedItemId ?? fallbackItemId ?? null });
     throw new FlowError('INTERNAL_ERROR', 'Unexpected failure', 500, { cause: err });
   }
 }
