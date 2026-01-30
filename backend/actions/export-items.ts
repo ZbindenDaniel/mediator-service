@@ -30,12 +30,14 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 // TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
 // TODO(agent): Mirror header label updates in importer alias definitions to avoid ingest/export drift.
 // TODO(agent): Harden exporter media listings against document artifacts slipping into partner feeds.
+// TODO(suchbegriff-export): Keep Suchbegriff export headers aligned with importer column aliases.
 const columnDescriptors = [
   { key: 'partnumber', header: 'Artikel-Nummer', field: 'Artikel_Nummer' },
   { key: 'type_and_classific', header: 'Artikeltyp', field: 'Artikeltyp' },
   { key: 'entrydate', header: 'CreatedAt', field: 'Datum_erfasst' },
   { key: 'image_names', header: 'Grafikname(n)', field: 'Grafikname' },
   { key: 'description', header: 'Artikelbeschreibung', field: 'Artikelbeschreibung' },
+  { key: 'suchbegriff', header: 'Suchbegriff', field: 'Suchbegriff' },
   { key: 'notes', header: 'Kurzbeschreibung', field: 'Kurzbeschreibung' },
   { key: 'longdescription', header: 'Langtext', field: 'Langtext' },
   { key: 'manufacturer', header: 'Hersteller', field: 'Hersteller' },
