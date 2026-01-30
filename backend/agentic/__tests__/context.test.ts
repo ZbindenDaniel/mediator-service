@@ -32,4 +32,29 @@ describe('prepareItemContext locked field normalization', () => {
     expect((context.target as unknown as { __locked?: unknown[] }).__locked).toEqual(['Artikel_Nummer']);
     expect(logger.error).not.toHaveBeenCalled();
   });
+
+  it('throws when target Artikelnummer is missing', async () => {
+    const logger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn()
+    };
+
+    const { prepareItemContext } = await import('../flow/context');
+
+    expect(() =>
+      prepareItemContext(
+        {
+          target: {
+            Artikelbeschreibung: 'Missing Artikelnummer'
+          }
+        },
+        logger
+      )
+    ).toThrow('Artikelnummer');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ msg: 'target missing or invalid Artikelnummer' })
+    );
+  });
 });
