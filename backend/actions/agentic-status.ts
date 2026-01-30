@@ -1,83 +1,96 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED, type Item } from '../../models';
+import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED, type ItemRef } from '../../models';
 import { getAgenticStatus, normalizeAgenticStatusUpdate } from '../agentic';
 import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
-import { parseSequentialItemUUID } from '../lib/itemIds';
 
 // TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
 // TODO(agent): Extract review-time side effects (like price defaults) into a dedicated helper to simplify reuse.
 // TODO(agentic-review-close): Add focused tests for the manual agentic review close endpoint.
 // TODO(agentic-close-not-started): Validate close flow for not-started runs after import/export restores.
 
+// TODO(agentic-review-ref): Confirm reference-only price fallback once review flows stop expecting instance payloads.
 export function applyPriceFallbackAfterReview(
-  itemId: string,
+  artikelNummer: string,
   ctx: {
-    getItem: { get: (id: string) => Item | undefined };
-    persistItem?: (item: Item) => void;
-    persistItemWithinTransaction?: (item: Item) => void;
+    getItemReference: { get: (id: string) => ItemRef | undefined };
+    persistItemReference?: (ref: ItemRef) => void;
   },
   logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
 ): void {
-  let item: Item | undefined;
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmedArtikelNummer) {
+    logger.warn?.('[agentic-review] Missing Artikelnummer for price fallback');
+    return;
+  }
+
+  let reference: ItemRef | undefined;
   try {
-    item = ctx.getItem.get(itemId);
+    reference = ctx.getItemReference.get(trimmedArtikelNummer);
   } catch (error) {
-    logger.error?.('[agentic-review] Failed to load item for price lookup', { itemId, error });
+    logger.error?.('[agentic-review] Failed to load reference for Artikelnummer price lookup', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
     return;
   }
 
-  if (!item) {
-    logger.warn?.('[agentic-review] Item not found for price fallback', { itemId });
+  if (!reference) {
+    logger.warn?.('[agentic-review] Artikelnummer reference not found for price fallback', {
+      artikelNummer: trimmedArtikelNummer
+    });
     return;
   }
 
-  if (typeof item.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis)) {
-    logger.debug?.('[agentic-review] Skipping price fallback because item already has a price', {
-      itemId,
-      verkaufspreis: item.Verkaufspreis
+  if (typeof reference.Verkaufspreis === 'number' && Number.isFinite(reference.Verkaufspreis)) {
+    logger.debug?.('[agentic-review] Skipping price fallback because Artikelnummer already has a price', {
+      artikelNummer: reference.Artikel_Nummer ?? trimmedArtikelNummer,
+      verkaufspreis: reference.Verkaufspreis
     });
     return;
   }
 
   const fallbackPrice = resolvePriceByCategoryAndType(
     {
-      hauptkategorien: [item.Hauptkategorien_A, item.Hauptkategorien_B],
-      unterkategorien: [item.Unterkategorien_A, item.Unterkategorien_B],
-      artikeltyp: item.Artikeltyp
+      hauptkategorien: [reference.Hauptkategorien_A, reference.Hauptkategorien_B],
+      unterkategorien: [reference.Unterkategorien_A, reference.Unterkategorien_B],
+      artikeltyp: reference.Artikeltyp
     },
     logger
   );
 
   if (fallbackPrice === null) {
-    logger.info?.('[agentic-review] No fallback price resolved during review completion', {
-      itemId,
-      hauptkategorien: [item.Hauptkategorien_A, item.Hauptkategorien_B],
-      unterkategorien: [item.Unterkategorien_A, item.Unterkategorien_B],
-      artikeltyp: item.Artikeltyp ?? null
+    logger.info?.('[agentic-review] No fallback price resolved during Artikelnummer review completion', {
+      artikelNummer: reference.Artikel_Nummer ?? trimmedArtikelNummer,
+      hauptkategorien: [reference.Hauptkategorien_A, reference.Hauptkategorien_B],
+      unterkategorien: [reference.Unterkategorien_A, reference.Unterkategorien_B],
+      artikeltyp: reference.Artikeltyp ?? null
     });
     return;
   }
 
-  const persistItem = ctx.persistItem ?? ctx.persistItemWithinTransaction;
-  if (typeof persistItem !== 'function') {
-    logger.error?.('[agentic-review] Persistence helper unavailable; cannot apply fallback price', { itemId });
+  if (typeof ctx.persistItemReference !== 'function') {
+    logger.error?.('[agentic-review] Persistence helper unavailable; cannot apply fallback price', {
+      artikelNummer: reference.Artikel_Nummer ?? trimmedArtikelNummer
+    });
     return;
   }
 
   try {
-    const updatedItem: Item = {
-      ...item,
-      Verkaufspreis: fallbackPrice,
-      UpdatedAt: new Date()
+    const updatedReference: ItemRef = {
+      ...reference,
+      Verkaufspreis: fallbackPrice
     };
-    persistItem(updatedItem);
-    logger.info?.('[agentic-review] Applied fallback sale price after review', {
-      itemId,
+    ctx.persistItemReference(updatedReference);
+    logger.info?.('[agentic-review] Applied fallback sale price after Artikelnummer review', {
+      artikelNummer: reference.Artikel_Nummer ?? trimmedArtikelNummer,
       appliedPrice: fallbackPrice
     });
   } catch (error) {
-    logger.error?.('[agentic-review] Failed to persist fallback sale price after review', { itemId, error });
+    logger.error?.('[agentic-review] Failed to persist fallback sale price after review', {
+      artikelNummer: reference.Artikel_Nummer ?? trimmedArtikelNummer,
+      error
+    });
   }
 }
 
@@ -86,9 +99,9 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// TODO(agentic-status-ref-id): Treat route IDs as reference Artikelnummer; remove ItemUUID fallbacks once consumers migrate.
 function resolveArtikelNummerForAgentic(
   itemId: string,
-  ctx: { getItem?: { get: (id: string) => Item | undefined } },
   logger: Pick<Console, 'error' | 'warn'> = console
 ): string | null {
   const trimmed = typeof itemId === 'string' ? itemId.trim() : '';
@@ -96,29 +109,14 @@ function resolveArtikelNummerForAgentic(
     return null;
   }
 
-  if (ctx.getItem?.get) {
-    try {
-      const item = ctx.getItem.get(trimmed);
-      const artikelNummer = typeof item?.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
-      if (artikelNummer) {
-        return artikelNummer;
-      }
-    } catch (error) {
-      logger.error?.('[agentic-status] Failed to resolve Artikel_Nummer from item lookup', { itemId: trimmed, error });
-    }
+  if (trimmed.startsWith('I-')) {
+    logger.warn?.('[agentic-status] Received ItemUUID where Artikelnummer is expected for agentic run lookup', {
+      artikelNummer: trimmed
+    });
+    return null;
   }
 
-  const parsed = parseSequentialItemUUID(trimmed);
-  if (parsed?.kind === 'artikelnummer' && parsed.artikelNummer) {
-    return parsed.artikelNummer;
-  }
-
-  if (!trimmed.startsWith('I-')) {
-    return trimmed;
-  }
-
-  logger.warn?.('[agentic-status] Missing Artikel_Nummer for agentic run lookup', { itemId: trimmed });
-  return null;
+  return trimmed;
 }
 
 const action = defineHttpAction({
@@ -126,6 +124,7 @@ const action = defineHttpAction({
   label: 'Agentic status',
   appliesTo: (entity) => entity.type === 'Item',
   matches: (path, method) => {
+    // TODO(agentic-status-ref-id): Confirm new Artikelnummer-specific routes before removing legacy /api/items/:id/agentic.
     if (method === 'GET') return /^\/api\/items\/[^/]+\/agentic$/.test(path);
     if (method === 'POST') return /^\/api\/items\/[^/]+\/agentic\/(review|close)$/.test(path);
     return false;
@@ -144,7 +143,7 @@ const action = defineHttpAction({
         return sendJson(res, 405, { error: 'Method not allowed' });
       }
       try {
-        const artikelNummer = resolveArtikelNummerForAgentic(itemId, ctx);
+        const artikelNummer = resolveArtikelNummerForAgentic(itemId);
         if (!artikelNummer) {
           return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic status lookup' });
         }
@@ -165,7 +164,7 @@ const action = defineHttpAction({
         };
         return sendJson(res, 200, payload);
       } catch (err) {
-        console.error('Fetch agentic status failed', err);
+        console.error('Fetch agentic status failed for Artikelnummer', err);
         return sendJson(res, 500, { error: (err as Error).message });
       }
     }
@@ -179,7 +178,7 @@ const action = defineHttpAction({
       try {
         for await (const chunk of req) raw += chunk;
       } catch (err) {
-        console.error('Failed to read agentic review request body', err);
+        console.error('Failed to read agentic review request body for Artikelnummer', err);
         return sendJson(res, 400, { error: 'Invalid request body' });
       }
 
@@ -187,7 +186,7 @@ const action = defineHttpAction({
       try {
         data = raw ? JSON.parse(raw) : {};
       } catch (err) {
-        console.error('Failed to parse agentic review payload', err);
+        console.error('Failed to parse agentic review payload for Artikelnummer', err);
         return sendJson(res, 400, { error: 'Invalid JSON body' });
       }
 
@@ -209,7 +208,7 @@ const action = defineHttpAction({
 
       const reviewedAt = new Date().toISOString();
       const status = decision === 'approved' ? AGENTIC_RUN_STATUS_APPROVED : AGENTIC_RUN_STATUS_REJECTED;
-      const artikelNummer = resolveArtikelNummerForAgentic(itemId, ctx);
+      const artikelNummer = resolveArtikelNummerForAgentic(itemId);
       if (!artikelNummer) {
         return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic review' });
       }
@@ -220,7 +219,7 @@ const action = defineHttpAction({
           try {
             run = ctx.getAgenticRun.get(artikelNummer);
           } catch (err) {
-            console.error('Failed to load agentic run for close request', err);
+            console.error('Failed to load agentic run for close request Artikelnummer', { artikelNummer, err });
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
           }
 
@@ -236,7 +235,7 @@ const action = defineHttpAction({
               LastReviewNotes: notes || null
             });
             if (!upsertResult || upsertResult.changes === 0) {
-              console.error('Agentic close upsert had no effect for', itemId);
+              console.error('Agentic close upsert had no effect for Artikelnummer', artikelNummer);
               return sendJson(res, 500, { error: 'Failed to update review state' });
             }
           } else {
@@ -250,7 +249,7 @@ const action = defineHttpAction({
               LastReviewNotes: notes || null
             });
             if (!result || result.changes === 0) {
-              console.error('Agentic review update had no effect for', itemId);
+              console.error('Agentic review update had no effect for Artikelnummer', artikelNummer);
               return sendJson(res, 500, { error: 'Failed to update review state' });
             }
           }
@@ -259,7 +258,7 @@ const action = defineHttpAction({
           try {
             run = ctx.getAgenticRun.get(artikelNummer);
           } catch (err) {
-            console.error('Failed to load agentic run for review request', err);
+            console.error('Failed to load agentic run for review request Artikelnummer', { artikelNummer, err });
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
           }
           if (!run) {
@@ -276,7 +275,7 @@ const action = defineHttpAction({
             LastReviewNotes: notes || null
           });
           if (!result || result.changes === 0) {
-            console.error('Agentic review update had no effect for', itemId);
+            console.error('Agentic review update had no effect for Artikelnummer', artikelNummer);
             return sendJson(res, 500, { error: 'Failed to update review state' });
           }
         }
@@ -297,11 +296,11 @@ const action = defineHttpAction({
               })
             );
           } catch (clearErr) {
-            console.error('Failed to clear agentic run data after rejection', clearErr);
+            console.error('Failed to clear agentic run data after rejection for Artikelnummer', clearErr);
           }
         }
       } catch (err) {
-        console.error('Failed to update agentic review', err);
+        console.error('Failed to update agentic review for Artikelnummer', err);
         return sendJson(res, 500, { error: (err as Error).message });
       }
 
@@ -317,14 +316,14 @@ const action = defineHttpAction({
 
       if (decision === 'approved') {
         try {
-          applyPriceFallbackAfterReview(itemId, ctx, console);
+          applyPriceFallbackAfterReview(artikelNummer, ctx, console);
         } catch (err) {
-          console.error('Failed to apply fallback sale price after review', err);
+          console.error('Failed to apply fallback sale price after review for Artikelnummer', err);
         }
       }
 
       try {
-        const result = getAgenticStatus(itemId, {
+        const result = getAgenticStatus(artikelNummer, {
           db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
@@ -336,11 +335,11 @@ const action = defineHttpAction({
         });
         return sendJson(res, 200, { agentic: result.agentic });
       } catch (err) {
-        console.error('Failed to load updated agentic status', err);
+        console.error('Failed to load updated agentic status for Artikelnummer', err);
         return sendJson(res, 500, { error: (err as Error).message });
       }
     } catch (err) {
-      console.error('Agentic review handling failed', err);
+      console.error('Agentic review handling failed for Artikelnummer', err);
       return sendJson(res, 500, { error: (err as Error).message });
     }
   },

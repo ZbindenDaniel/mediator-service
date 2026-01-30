@@ -182,6 +182,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Deferred agentic_runs.csv ingestion until after inbox items ingestion completes, with watcher logging and non-blocking error handling.
 - Skipped deferred agentic_runs.csv watcher events so only inbox item CSVs trigger ingestion while keeping deferred processing logged after ingest.
 - Added agentic run reference preflight checks for bulk queue and start/restart flows to skip missing item_refs rows with structured warnings, and logged resolved Artikel_Nummer keys in trigger flows.
+- Treated agentic status route IDs as Artikel_Nummer identifiers with Artikelnummer-first logging while keeping agentic payloads unchanged.
 
 ## Documentation Map
 
