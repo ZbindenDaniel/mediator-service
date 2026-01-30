@@ -22,7 +22,7 @@ describe('collectSearchContexts planner coordination', () => {
       logger,
       itemId: 'item-planner-skip',
       target: {
-        itemUUid: 'item-planner-skip',
+        Artikel_Nummer: 'item-planner-skip',
         Artikelbeschreibung: 'Laborgerät 2000'
       },
       reviewNotes: 'Reviewer requested no external lookup',
@@ -68,7 +68,7 @@ describe('collectSearchContexts planner coordination', () => {
       logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
       itemId: 'item-planner-custom',
       target: {
-        itemUUid: 'item-planner-custom',
+        Artikel_Nummer: 'item-planner-custom',
         Artikelbeschreibung: 'Laborgerät 3000',
         Hersteller: 'Acme Instruments'
       },

@@ -88,9 +88,9 @@ function buildCallbackPayload({
   const resolvedActor = actor ?? agentActorId;
   const resolvedError = resolvedNeedsReview ? (error ?? 'Manual review required') : error ?? null;
 
-  const itemPayload: Record<string, unknown> & { itemUUid: string } = {
+  const itemPayload: Record<string, unknown> & { Artikel_Nummer: string } = {
     ...(itemData ?? {}),
-    itemUUid: itemId,
+    Artikel_Nummer: itemId,
     searchQuery
   };
 
@@ -303,7 +303,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
-    const finalData: AgenticTarget = { ...target, ...extractionResult.data, itemUUid: itemId };
+    const finalData: AgenticTarget = { ...target, ...extractionResult.data, Artikel_Nummer: itemId };
 
     const payload = buildCallbackPayload({
       itemId,

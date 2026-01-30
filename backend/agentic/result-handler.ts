@@ -35,7 +35,7 @@ export interface AgenticResultPayload extends Record<string, unknown> {
   reviewNotes: string | null;
   reviewedBy: string | null;
   actor: string;
-  item: Record<string, unknown> & { itemUUid: string };
+  item: Record<string, unknown> & { Artikel_Nummer: string };
 }
 
 export interface AgenticResultLogger {

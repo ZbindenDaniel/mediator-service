@@ -197,7 +197,7 @@ export async function runExtractionAttempts({
   let lastInvalidJsonPlaceholderIssues: string[] = [];
 
   let attempt = 1;
-  const { itemUUid: _promptHiddenItemId, ...promptFacingTarget } = target;
+  const { Artikel_Nummer: _promptHiddenItemId, ...promptFacingTarget } = target;
   // TODO(agent): Keep prompt-facing target redactions aligned with fields hidden from agents.
   const sanitizedTargetPreview = sanitizeForLog(promptFacingTarget);
   let serializedTargetSnapshot = '';

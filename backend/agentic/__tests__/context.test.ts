@@ -19,7 +19,6 @@ describe('prepareItemContext locked field normalization', () => {
     const context = prepareItemContext(
       {
         target: {
-          itemUUid: 'item-locked-description',
           Artikelbeschreibung: 'Locked Artikel',
           __locked: ['Artikelbeschreibung', 'Artikel_Nummer'],
           Artikel_Nummer: 'LOCK-1001'
