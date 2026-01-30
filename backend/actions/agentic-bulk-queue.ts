@@ -8,7 +8,8 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-type AgenticQueueMode = 'all' | 'instancesOnly' | 'missing';
+// TODO(agentic-queue): Remove any lingering instance-based queue callers now that bulk queueing is reference-only.
+type AgenticQueueMode = 'all' | 'missing';
 
 type QueueCandidate = {
   artikelNummer: string | null;
@@ -35,16 +36,14 @@ type AgenticBulkQueueResult = {
     const requestUrl = new URL(req.url, PUBLIC_ORIGIN);
     const rawMode = (requestUrl.searchParams.get('mode') || '').trim();
     const normalizedMode = rawMode.toLowerCase();
-    const allowedModes: AgenticQueueMode[] = ['all', 'instancesOnly', 'missing'];
-    const mode: AgenticQueueMode | null = normalizedMode === 'instancesonly'
-      ? 'instancesOnly'
-      : allowedModes.includes(normalizedMode as AgenticQueueMode)
-        ? (normalizedMode as AgenticQueueMode)
-        : null;
+    const allowedModes: AgenticQueueMode[] = ['all', 'missing'];
+    const mode: AgenticQueueMode | null = allowedModes.includes(normalizedMode as AgenticQueueMode)
+      ? (normalizedMode as AgenticQueueMode)
+      : null;
 
     if (!mode) {
       console.warn('[agentic-bulk-queue] Invalid mode provided', { mode: normalizedMode || rawMode });
-      return sendJson(res, 400, { error: 'mode must be "all", "instancesOnly", or "missing"' });
+      return sendJson(res, 400, { error: 'mode must be "all" or "missing"' });
     }
 
     const actor = (requestUrl.searchParams.get('actor') || '').trim();
@@ -53,14 +52,7 @@ type AgenticBulkQueueResult = {
       return sendJson(res, 400, { error: 'actor is required' });
     }
 
-    let items: Array<{ ItemUUID?: string; Artikel_Nummer?: string | null }> = [];
-    try {
-      items = ctx.listItems.all();
-    } catch (err) {
-      console.error('[agentic-bulk-queue] Failed to load items for queue operation', err);
-      return sendJson(res, 500, { error: 'Failed to load items' });
-    }
-
+    // TODO(agentic-queue): Drop any remaining instance-list dependencies now that queueing is reference-first.
     let references: Array<{ Artikel_Nummer?: string | null }> = [];
     try {
       if (ctx.listItemReferences?.all) {
@@ -71,10 +63,6 @@ type AgenticBulkQueueResult = {
       return sendJson(res, 500, { error: 'Failed to load item references' });
     }
 
-    if (!Array.isArray(items)) {
-      items = [];
-    }
-
     if (!Array.isArray(references)) {
       references = [];
     }
@@ -83,31 +71,7 @@ type AgenticBulkQueueResult = {
     let queueCandidates: QueueCandidate[] = [];
     try {
       const candidateList: QueueCandidate[] = [];
-      const artikelCovered = new Set<string>();
       const seenIdentifiers = new Set<string>();
-
-      for (const record of items) {
-        try {
-          const rawArtikelNummer = typeof (record as { Artikel_Nummer?: string | null })?.Artikel_Nummer === 'string'
-            ? ((record as { Artikel_Nummer?: string | null }).Artikel_Nummer as string).trim()
-            : '';
-          if (!rawArtikelNummer) {
-            continue;
-          }
-          artikelCovered.add(rawArtikelNummer);
-          if (seenIdentifiers.has(rawArtikelNummer)) {
-            console.info('[agentic-bulk-queue] Skipping duplicate Artikel_Nummer candidate', { artikelNummer: rawArtikelNummer });
-            continue;
-          }
-          seenIdentifiers.add(rawArtikelNummer);
-          candidateList.push({
-            artikelNummer: rawArtikelNummer || null,
-            referenceOnly: false
-          });
-        } catch (candidateErr) {
-          console.error('[agentic-bulk-queue] Failed to derive queue candidate from item', { record }, candidateErr);
-        }
-      }
 
       // TODO(agentic-instance-id): Revisit reference-only queue support if instance-less agentic runs return.
       for (const reference of references) {
@@ -115,9 +79,6 @@ type AgenticBulkQueueResult = {
           const rawArtikelNummer = typeof reference?.Artikel_Nummer === 'string' ? reference.Artikel_Nummer.trim() : '';
           if (!rawArtikelNummer) {
             console.warn('[agentic-bulk-queue] Skipping reference without Artikel_Nummer', { reference });
-            continue;
-          }
-          if (artikelCovered.has(rawArtikelNummer)) {
             continue;
           }
           if (seenIdentifiers.has(rawArtikelNummer)) {
@@ -142,11 +103,15 @@ type AgenticBulkQueueResult = {
     if (!Array.isArray(queueCandidates) || queueCandidates.length === 0) {
       console.info('[agentic-bulk-queue] No queue candidates available for bulk queue', {
         mode,
-        instances: items.length,
         references: references.length
       });
       return sendJson(res, 200, { ok: true, mode, total: 0, queued: 0, skipped: 0 });
     }
+
+    console.info('[agentic-bulk-queue] Starting reference-only bulk queue', {
+      mode,
+      references: references.length
+    });
 
     const queueTransaction = ctx.db.transaction(
       (records: QueueCandidate[], options: { mode: AgenticQueueMode; actor: string }): AgenticBulkQueueResult => {
@@ -189,15 +154,6 @@ type AgenticBulkQueueResult = {
               });
               continue;
             }
-          }
-
-          if (options.mode === 'instancesOnly' && record.referenceOnly) {
-            skipped += 1;
-            console.info('[agentic-bulk-queue] Skipping reference-only candidate due to instancesOnly mode', {
-              identifier,
-              artikelNummer: record.artikelNummer
-            });
-            continue;
           }
 
           let existingRun: AgenticRun | undefined;
@@ -280,7 +236,6 @@ type AgenticBulkQueueResult = {
       total,
       queued: result.queued,
       skipped: result.skipped,
-      instances: items.length,
       references: references.length
     });
 
