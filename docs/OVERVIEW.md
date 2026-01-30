@@ -177,6 +177,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Corrected CSV archive branch flow so events, agentic runs, and items buffering close cleanly and continue as expected after each branch.
 - Resolved a csv-import merge conflict so per-CSV branches close cleanly with explicit continuations and stable cleanup logging.
 - Deferred agentic_runs.csv ingestion until after inbox items ingestion completes, with watcher logging and non-blocking error handling.
+- Skipped deferred agentic_runs.csv watcher events so only inbox item CSVs trigger ingestion while keeping deferred processing logged after ingest.
 
 ## Documentation Map
 
