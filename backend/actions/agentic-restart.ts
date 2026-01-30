@@ -8,22 +8,46 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function parseAgenticRestartRoute(path: string): { itemId: string; legacyRoute: boolean } | null {
+  const legacyMatch = path.match(/^\/api\/items\/([^/]+)\/agentic\/restart$/);
+  if (legacyMatch) {
+    return { itemId: decodeURIComponent(legacyMatch[1]), legacyRoute: true };
+  }
+  const refMatch = path.match(/^\/api\/item-refs\/([^/]+)\/agentic\/restart$/);
+  if (refMatch) {
+    return { itemId: decodeURIComponent(refMatch[1]), legacyRoute: false };
+  }
+  return null;
+}
+
 const action = defineHttpAction({
   key: 'agentic-restart',
   label: 'Agentic restart',
   appliesTo: (entity) => entity.type === 'Item',
-  matches: (path, method) => method === 'POST' && /^\/api\/items\/[^/]+\/agentic\/restart$/.test(path),
+  matches: (path, method) =>
+    method === 'POST'
+    && (
+      /^\/api\/items\/[^/]+\/agentic\/restart$/.test(path)
+      || /^\/api\/item-refs\/[^/]+\/agentic\/restart$/.test(path)
+    ),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     if (!req.url) {
       console.warn('Agentic restart called without URL');
       return sendJson(res, 400, { error: 'Invalid request' });
     }
 
-    const match = req.url.match(/^\/api\/items\/([^/]+)\/agentic\/restart$/);
-    const itemId = match ? decodeURIComponent(match[1]) : '';
+    const route = parseAgenticRestartRoute(req.url);
+    const itemId = route?.itemId ? route.itemId.trim() : '';
     if (!itemId) {
       console.warn('Agentic restart missing item id');
       return sendJson(res, 400, { error: 'Invalid item id' });
+    }
+    if (route?.legacyRoute) {
+      console.warn('[agentic-restart] Legacy /api/items route used for restart', { itemId, path: req.url });
+    }
+    if (itemId.startsWith('I-')) {
+      console.warn('[agentic-restart] Rejecting ItemUUID for agentic restart', { itemId, legacyRoute: route?.legacyRoute });
+      return sendJson(res, 400, { error: 'ItemUUID not supported for agentic restart' });
     }
 
     let rawBody = '';

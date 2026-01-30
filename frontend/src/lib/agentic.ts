@@ -442,3 +442,10 @@ export async function persistAgenticRunClose({
     return { ok: false, status: 0, agentic: null, message };
   }
 }
+
+export function buildAgenticItemRefPath(artikelNummer: string, action?: string | null): string {
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  const basePath = `/api/item-refs/${encodeURIComponent(trimmedArtikelNummer)}/agentic`;
+  const normalizedAction = typeof action === 'string' ? action.trim() : '';
+  return normalizedAction ? `${basePath}/${normalizedAction}` : basePath;
+}

@@ -8,7 +8,7 @@ import {
   ItemEinheit
 } from '../../../models';
 import { ensureUser } from '../lib/user';
-import { triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
+import { buildAgenticItemRefPath, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
@@ -63,7 +63,7 @@ export async function fetchAgenticHealthProxy(
 }
 
 export interface AgenticTriggerFailureReportArgs {
-  itemId: string;
+  artikelNummer: string;
   search: string;
   context: string;
   status?: number;
@@ -75,18 +75,18 @@ export type AgenticTriggerFailureReporter = (args: AgenticTriggerFailureReportAr
 
 export interface AgenticTriggerHandlerOptions {
   agenticPayload: AgenticRunTriggerPayload;
-  itemId?: string | null;
+  artikelNummer?: string | null;
   context: string;
   triggerAgenticRunRequest: typeof triggerAgenticRunRequest;
   reportFailure: AgenticTriggerFailureReporter;
   alertFn: (message: string) => Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
-  onSkipped?: (itemId: string) => void;
+  onSkipped?: (artikelNummer: string) => void;
 }
 
 export async function handleAgenticRunTrigger({
   agenticPayload,
-  itemId,
+  artikelNummer,
   context,
   triggerAgenticRunRequest,
   reportFailure,
@@ -94,7 +94,9 @@ export async function handleAgenticRunTrigger({
   logger = console,
   onSkipped
 }: AgenticTriggerHandlerOptions): Promise<void> {
-  const trimmedItemId = typeof itemId === 'string' && itemId.trim() ? itemId.trim() : '';
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' && artikelNummer.trim()
+    ? artikelNummer.trim()
+    : '';
   const searchTerm = agenticPayload.artikelbeschreibung ?? '';
 
   try {
@@ -117,20 +119,20 @@ export async function handleAgenticRunTrigger({
       if (isAlreadyQueued) {
         logger.info?.('Agentic trigger skipped because run already exists', {
           context,
-          itemId: trimmedItemId,
+          artikelNummer: trimmedArtikelNummer,
           reason: result.reason,
           status
         });
-        if (trimmedItemId) {
-          onSkipped?.(trimmedItemId);
+        if (trimmedArtikelNummer) {
+          onSkipped?.(trimmedArtikelNummer);
         }
         return;
       }
 
-      if (trimmedItemId) {
+      if (trimmedArtikelNummer) {
         try {
           await reportFailure({
-            itemId: trimmedItemId,
+            artikelNummer: trimmedArtikelNummer,
             search: searchTerm,
             context,
             responseBody: result.message,
@@ -139,9 +141,9 @@ export async function handleAgenticRunTrigger({
         } catch (failureErr) {
           logger.error?.('Failed to report skipped agentic trigger', failureErr);
         }
-        onSkipped?.(trimmedItemId);
+        onSkipped?.(trimmedArtikelNummer);
       } else {
-        logger.warn?.('Agentic trigger skipped without ItemUUID', { context, reason: result.reason });
+        logger.warn?.('Agentic trigger skipped without Artikel_Nummer', { context, reason: result.reason });
       }
 
       if (result.message) {
@@ -154,10 +156,10 @@ export async function handleAgenticRunTrigger({
       return;
     }
 
-    if (trimmedItemId) {
+    if (trimmedArtikelNummer) {
       try {
         await reportFailure({
-          itemId: trimmedItemId,
+          artikelNummer: trimmedArtikelNummer,
           search: searchTerm,
           context,
           status: result.status,
@@ -168,7 +170,7 @@ export async function handleAgenticRunTrigger({
         logger.error?.('Failed to report agentic trigger failure outcome', failureErr);
       }
     } else {
-      logger.warn?.('Agentic trigger failed without ItemUUID', { context, reason: result.reason });
+      logger.warn?.('Agentic trigger failed without Artikel_Nummer', { context, reason: result.reason });
     }
 
     if (result.message) {
@@ -180,10 +182,10 @@ export async function handleAgenticRunTrigger({
     }
   } catch (err) {
     logger.error?.('Failed to trigger agentic run', err);
-    if (trimmedItemId) {
+    if (trimmedArtikelNummer) {
       try {
         await reportFailure({
-          itemId: trimmedItemId,
+          artikelNummer: trimmedArtikelNummer,
           search: searchTerm,
           context,
           error: err
@@ -197,7 +199,7 @@ export async function handleAgenticRunTrigger({
 
 export interface AgenticTriggerInvocationOptions {
   agenticPayload: AgenticRunTriggerPayload;
-  itemId?: string | null;
+  artikelNummer?: string | null;
   context: string;
   shouldUseAgenticForm: boolean;
   backendDispatched?: boolean;
@@ -205,13 +207,13 @@ export interface AgenticTriggerInvocationOptions {
   reportFailure: AgenticTriggerFailureReporter;
   alertFn: (message: string) => Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
-  onSkipped?: (itemId: string) => void;
+  onSkipped?: (artikelNummer: string) => void;
   handleTrigger?: typeof handleAgenticRunTrigger;
 }
 
 export function maybeTriggerAgenticRun({
   agenticPayload,
-  itemId,
+  artikelNummer,
   context,
   shouldUseAgenticForm,
   backendDispatched = false,
@@ -236,7 +238,7 @@ export function maybeTriggerAgenticRun({
     logger.info?.('Scheduling asynchronous agentic trigger', { context });
     const triggerPromise = handleTrigger({
       agenticPayload,
-      itemId,
+      artikelNummer,
       context,
       triggerAgenticRunRequest,
       reportFailure,
@@ -782,14 +784,15 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
   );
 
   async function reportAgenticTriggerFailure({
-    itemId,
+    artikelNummer,
     search,
     context,
     status,
     responseBody,
     error
   }: AgenticTriggerFailureReportArgs) {
-    if (!itemId) {
+    const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+    if (!trimmedArtikelNummer) {
       return;
     }
 
@@ -833,7 +836,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
     }
 
     try {
-      const failureUrl = `/api/items/${encodeURIComponent(itemId)}/agentic/trigger-failure`;
+      const failureUrl = buildAgenticItemRefPath(trimmedArtikelNummer, 'trigger-failure');
       const res = await fetch(failureUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -851,7 +854,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         const updatedRun = body?.agentic ?? null;
         if (updatedRun) {
           setDraft((prev) =>
-            prev.ItemUUID === itemId
+            prev.Artikel_Nummer?.trim() === trimmedArtikelNummer
               ? {
                   ...prev,
                   agenticStatus: undefined,
@@ -862,7 +865,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
           );
         } else {
           setDraft((prev) =>
-            prev.ItemUUID === itemId
+            prev.Artikel_Nummer?.trim() === trimmedArtikelNummer
               ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
               : prev
           );
@@ -870,7 +873,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
       } else {
         console.error('Agentic failure reporting endpoint returned non-OK status', res.status);
         setDraft((prev) =>
-          prev.ItemUUID === itemId
+          prev.Artikel_Nummer?.trim() === trimmedArtikelNummer
             ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
             : prev
         );
@@ -878,14 +881,14 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
     } catch (failureErr) {
       console.error('Failed to report agentic trigger failure', failureErr);
       setDraft((prev) =>
-        prev.ItemUUID === itemId
+        prev.Artikel_Nummer?.trim() === trimmedArtikelNummer
           ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
           : prev
       );
     }
 
     try {
-      const refreshUrl = `/api/items/${encodeURIComponent(itemId)}/agentic`;
+      const refreshUrl = buildAgenticItemRefPath(trimmedArtikelNummer);
       const refreshRes = await fetch(refreshUrl, { method: 'GET', cache: 'reload' });
       if (refreshRes.ok) {
         const refreshed = await refreshRes
@@ -897,7 +900,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         const refreshedRun = refreshed?.agentic ?? null;
         if (refreshedRun) {
           setDraft((prev) =>
-            prev.ItemUUID === itemId
+            prev.Artikel_Nummer?.trim() === trimmedArtikelNummer
               ? {
                   ...prev,
                   agenticStatus: undefined,
@@ -918,12 +921,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
   function triggerAgenticRun(
     agenticPayload: AgenticRunTriggerPayload,
     context: string,
-    itemId?: string | null,
+    artikelNummer?: string | null,
     options: { backendDispatched?: boolean } = {}
   ) {
     maybeTriggerAgenticRun({
       agenticPayload,
-      itemId,
+      artikelNummer,
       context,
       shouldUseAgenticForm,
       backendDispatched: options.backendDispatched,
@@ -931,9 +934,9 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
       reportFailure: reportAgenticTriggerFailure,
       alertFn: showAgenticAlert,
       logger: console,
-      onSkipped: (itemId) => {
+      onSkipped: (skippedArtikelNummer) => {
         setDraft((prev) =>
-          prev.ItemUUID === itemId
+          prev.Artikel_Nummer?.trim() === skippedArtikelNummer
             ? { ...prev, agenticStatus: undefined, agenticManualFallback: undefined }
             : prev
         );
@@ -1162,7 +1165,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
             backendDispatched,
             hasSearchText: Boolean(agenticPayload.artikelbeschreibung)
           });
-          triggerAgenticRun(agenticPayload, context, createdItem?.ItemUUID ?? null, { backendDispatched });
+          triggerAgenticRun(agenticPayload, context, artikelNummer, { backendDispatched });
         } catch (triggerErr) {
           console.error('Failed to schedule agentic trigger after item creation', triggerErr);
         }

@@ -8,22 +8,46 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function parseAgenticCancelRoute(path: string): { itemId: string; legacyRoute: boolean } | null {
+  const legacyMatch = path.match(/^\/api\/items\/([^/]+)\/agentic\/cancel$/);
+  if (legacyMatch) {
+    return { itemId: decodeURIComponent(legacyMatch[1]), legacyRoute: true };
+  }
+  const refMatch = path.match(/^\/api\/item-refs\/([^/]+)\/agentic\/cancel$/);
+  if (refMatch) {
+    return { itemId: decodeURIComponent(refMatch[1]), legacyRoute: false };
+  }
+  return null;
+}
+
 const action = defineHttpAction({
   key: 'agentic-cancel',
   label: 'Agentic cancel',
   appliesTo: (entity) => entity.type === 'Item',
-  matches: (path, method) => method === 'POST' && /^\/api\/items\/[^/]+\/agentic\/cancel$/.test(path),
+  matches: (path, method) =>
+    method === 'POST'
+    && (
+      /^\/api\/items\/[^/]+\/agentic\/cancel$/.test(path)
+      || /^\/api\/item-refs\/[^/]+\/agentic\/cancel$/.test(path)
+    ),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     if (!req.url) {
       console.warn('Agentic cancel called without URL');
       return sendJson(res, 400, { error: 'Invalid request' });
     }
 
-    const match = req.url.match(/^\/api\/items\/([^/]+)\/agentic\/cancel$/);
-    const itemId = match ? decodeURIComponent(match[1]) : '';
+    const route = parseAgenticCancelRoute(req.url);
+    const itemId = route?.itemId ? route.itemId.trim() : '';
     if (!itemId) {
       console.warn('Agentic cancel missing item id');
       return sendJson(res, 400, { error: 'Invalid item id' });
+    }
+    if (route?.legacyRoute) {
+      console.warn('[agentic-cancel] Legacy /api/items route used for cancel', { itemId, path: req.url });
+    }
+    if (itemId.startsWith('I-')) {
+      console.warn('[agentic-cancel] Rejecting ItemUUID for agentic cancel', { itemId, legacyRoute: route?.legacyRoute });
+      return sendJson(res, 400, { error: 'ItemUUID not supported for agentic cancel' });
     }
 
     let rawBody = '';
