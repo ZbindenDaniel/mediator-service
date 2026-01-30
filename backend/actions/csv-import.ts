@@ -26,6 +26,7 @@ import { Entity } from 'models';
 // TODO(agent): Surface legacy schema detection telemetry in the CSV import handler once headers are inspected.
 // TODO(agent): Review events.csv ingestion telemetry once live import payloads are available.
 // TODO(agent): Capture agentic_runs.csv archive ingestion telemetry once CSV imports include agentic runs.
+// TODO(agent): Confirm deferred agentic_runs.csv staging cleanup when inbox ingestion fails.
 
 const STAGING_TIMEOUT_MS = 30_000;
 const ENTRY_TIMEOUT_MS = 45_000;
@@ -340,18 +341,6 @@ const action = defineHttpAction({
         }
       }
 
-      if (agenticRunsBuffer) {
-        try {
-          const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
-          uploadContext.agenticRunsProcessed = count;
-          console.info('[csv-import] Completed agentic_runs.csv ingestion', {
-            rowsProcessed: count,
-          });
-        } catch (agenticError) {
-          console.error('[csv-import] Failed to ingest agentic_runs.csv from archive', agenticError);
-        }
-      }
-
       if (itemsBuffer) {
         const checksum = computeChecksum(itemsBuffer);
         const duplicate = findArchiveDuplicate(ARCHIVE_DIR, normalizedCsvName, checksum);
@@ -366,6 +355,17 @@ const action = defineHttpAction({
             normalizedCsvName,
             duplicate,
           });
+          if (agenticRunsBuffer) {
+            try {
+              const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
+              uploadContext.agenticRunsProcessed = count;
+              console.info('[csv-import] Completed agentic_runs.csv ingestion for duplicate items payload', {
+                rowsProcessed: count,
+              });
+            } catch (agenticError) {
+              console.error('[csv-import] Failed to ingest agentic_runs.csv for duplicate items payload', agenticError);
+            }
+          }
         } else {
           const tmpPath = path.join(ctx.INBOX_DIR, `${Date.now()}_${normalizedCsvName}`);
           if (zeroStockRequested && typeof ctx?.registerCsvIngestionOptions === 'function') {
@@ -383,6 +383,17 @@ const action = defineHttpAction({
             fs.writeFileSync(tmpPath, itemsBuffer);
             uploadContext.queuedCsv = path.basename(tmpPath);
             uploadContext.message = `Saved to inbox as ${path.basename(tmpPath)}`;
+            if (agenticRunsBuffer) {
+              const deferredAgenticRunsPath = `${tmpPath}.agentic_runs.csv`;
+              try {
+                fs.writeFileSync(deferredAgenticRunsPath, agenticRunsBuffer);
+                console.info('[csv-import] Deferred agentic_runs.csv ingestion until inbox CSV is processed', {
+                  deferredPath: deferredAgenticRunsPath,
+                });
+              } catch (agenticWriteError) {
+                console.error('[csv-import] Failed to stage deferred agentic_runs.csv ingestion', agenticWriteError);
+              }
+            }
           } catch (e) {
             console.error('CSV write failed', e);
             if (zeroStockRequested && typeof ctx?.clearCsvIngestionOptions === 'function') {
@@ -394,6 +405,18 @@ const action = defineHttpAction({
             }
             return sendJson(res, 500, { error: (e as Error).message });
           }
+        }
+      }
+
+      if (!itemsBuffer && agenticRunsBuffer) {
+        try {
+          const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
+          uploadContext.agenticRunsProcessed = count;
+          console.info('[csv-import] Completed agentic_runs.csv ingestion', {
+            rowsProcessed: count,
+          });
+        } catch (agenticError) {
+          console.error('[csv-import] Failed to ingest agentic_runs.csv from archive', agenticError);
         }
       }
 
