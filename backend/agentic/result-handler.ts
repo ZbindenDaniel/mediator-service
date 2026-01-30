@@ -13,6 +13,7 @@ import {
   AGENTIC_RUN_STATUS_RUNNING,
   AGENTIC_RUN_STATUS_REVIEW,
   normalizeAgenticRunStatus,
+  type AgenticResultPayload,
   type AgenticRun,
   type AgenticRequestContext,
   type AgenticRequestLog,
@@ -25,20 +26,7 @@ import {
 } from '../agentic';
 import { resolveAgenticRequestContext } from '../actions/agentic-request-context';
 
-// TODO(agentic-result-payload): Drop legacy itemUUid/itemId result identifiers once all clients send artikelNummer only.
-export interface AgenticResultPayload extends Record<string, unknown> {
-  artikelNummer?: string;
-  Artikel_Nummer?: string;
-  status: string;
-  error: string | null;
-  needsReview: boolean;
-  summary: string;
-  reviewDecision: string | null;
-  reviewNotes: string | null;
-  reviewedBy: string | null;
-  actor: string;
-  item: Record<string, unknown> & { Artikel_Nummer: string };
-}
+export type { AgenticResultPayload };
 
 export interface AgenticResultLogger {
   error?: Console['error'];
@@ -144,29 +132,21 @@ function resolvePayloadArtikelNummer(payload: Record<string, unknown>): string |
   return null;
 }
 
-function resolveLegacyItemId(payload: Record<string, unknown>): string | null {
+function collectLegacyIdentifierKeys(payload: Record<string, unknown>): string[] {
   const itemPayload = payload.item;
-  const candidates: Array<unknown> = [
-    payload.itemId,
-    payload.itemID,
-    payload.itemUUid,
-    payload.itemUuid,
-    payload.itemUUID,
-    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemId : null,
-    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemID : null,
-    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemUUid : null,
-    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemUuid : null,
-    typeof itemPayload === 'object' && itemPayload ? (itemPayload as Record<string, unknown>).itemUUID : null
-  ];
+  const keys = new Set<string>();
+  const legacyKeys = ['itemId', 'itemID', 'itemUUid', 'itemUuid', 'itemUUID'];
 
-  for (const candidate of candidates) {
-    const resolved = toTrimmedString(candidate);
-    if (resolved) {
-      return resolved;
+  for (const legacyKey of legacyKeys) {
+    if (Object.prototype.hasOwnProperty.call(payload, legacyKey)) {
+      keys.add(legacyKey);
+    }
+    if (typeof itemPayload === 'object' && itemPayload && Object.prototype.hasOwnProperty.call(itemPayload, legacyKey)) {
+      keys.add(`item.${legacyKey}`);
     }
   }
 
-  return null;
+  return Array.from(keys);
 }
 
 function loadAgenticRequestLog(
@@ -212,7 +192,6 @@ export function handleAgenticResult(
   input: AgenticResultHandlerInput,
   deps: AgenticResultHandlerDependencies
 ): AgenticResultHandlerSuccess {
-  // TODO(agentic-result-handler): Remove instance-based result handling once all callers only send artikelNummer.
   const logger = deps.logger ?? console;
   const { ctx } = deps;
   const payload = (input.payload ?? {}) as Record<string, unknown>;
@@ -223,10 +202,23 @@ export function handleAgenticResult(
 
   const inputArtikelNummer = input.artikelNummer?.trim() ?? '';
   const payloadArtikelNummer = resolvePayloadArtikelNummer(payload);
-  const artikelNummer = payloadArtikelNummer ?? inputArtikelNummer;
+  const legacyIdentifierKeys = collectLegacyIdentifierKeys(payload);
+  if (legacyIdentifierKeys.length) {
+    // TODO(agentic-result-legacy): Remove legacy identifier warnings once upstream clients migrate fully.
+    logger.warn?.('Agentic result payload includes legacy item id fields', {
+      artikelNummer: payloadArtikelNummer ?? inputArtikelNummer ?? null,
+      legacyIdentifierKeys
+    });
+  }
+  const artikelNummer = payloadArtikelNummer ?? '';
   if (!artikelNummer) {
-    logger.error?.('Agentic result missing Artikel_Nummer');
-    throw new AgenticResultProcessingError('invalid-artikel-nummer', 400, { error: 'Artikel_Nummer is required' }, null);
+    logger.error?.('Agentic result missing Artikel_Nummer in payload', { legacyIdentifierKeys });
+    throw new AgenticResultProcessingError(
+      'invalid-artikel-nummer',
+      400,
+      { error: 'Artikel_Nummer is required in payload' },
+      null
+    );
   }
   if (inputArtikelNummer && payloadArtikelNummer && inputArtikelNummer !== payloadArtikelNummer) {
     logger.warn?.('Agentic result Artikel_Nummer mismatch', {
@@ -242,23 +234,6 @@ export function handleAgenticResult(
   }
 
   const requestContext = resolveAgenticRequestContext(payload, artikelNummer);
-  const legacyItemId = resolveLegacyItemId(payload);
-  if (legacyItemId) {
-    logger.warn?.('Agentic result rejected due to legacy item id field', {
-      artikelNummer,
-      legacyItemId
-    });
-    recordAgenticRequestLogUpdate(requestContext, AGENTIC_RUN_STATUS_FAILED, {
-      error: 'legacy-item-id',
-      logger
-    });
-    throw new AgenticResultProcessingError(
-      'legacy-item-id',
-      400,
-      { error: 'Legacy item id not supported' },
-      requestContext
-    );
-  }
   const requestId = requestContext?.id?.trim() ?? '';
 
   if (!requestId) {
@@ -631,9 +606,7 @@ export function createAgenticResultHandler(
   logger?: AgenticResultLogger
 ): (payload: AgenticResultPayload) => AgenticResultHandlerSuccess {
   return (payload) => {
-    const payloadArtikelNummer =
-      (payload.artikelNummer ?? payload.Artikel_Nummer ?? (payload.item as Record<string, unknown>)?.Artikel_Nummer) ||
-      '';
+    const payloadArtikelNummer = resolvePayloadArtikelNummer(payload as Record<string, unknown>) ?? '';
     return handleAgenticResult({ artikelNummer: payloadArtikelNummer, payload }, { ctx, logger });
   };
 }

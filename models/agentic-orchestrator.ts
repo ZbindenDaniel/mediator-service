@@ -94,3 +94,17 @@ export interface AgenticModelInvocationResult {
   message?: string | null;
 }
 
+// TODO(agentic-result-payload): keep result payload contract aligned with Artikel_Nummer-only ingestion.
+export interface AgenticResultPayload extends Record<string, unknown> {
+  artikelNummer?: string;
+  Artikel_Nummer?: string;
+  status: string;
+  error: string | null;
+  needsReview: boolean;
+  summary: string;
+  reviewDecision: string | null;
+  reviewNotes: string | null;
+  reviewedBy: string | null;
+  actor: string;
+  item: Record<string, unknown> & { Artikel_Nummer?: string };
+}
