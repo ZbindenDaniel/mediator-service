@@ -158,6 +158,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Tuned mobile header icon sizing to 30px square tap targets with slightly reduced icon font sizes for small screens.
 - Added Suchbegriff to item reference lookups so save-item edits retain the persisted search term when edit payloads omit it.
 - Added Suchbegriff fallback normalization in search queries, logging when empty values fall back to Artikelbeschreibung or Artikel_Nummer while keeping token-hit and exact-match scoring aligned.
+- Added Suchbegriff to CSV export/import flows with Artikelbeschreibung fallback normalization and row-level logging to keep imports resilient.
 - Updated item detail instance filtering to default missing stock to 1 for Stück rows while logging before/after counts for the Vorrat table.
 - Added BoxTag primary/secondary shelf label rendering with explicit shelf-label warnings and optional raw ID lines for showId views.
 - Updated RelocateBoxCard location selection labels to include shelf labels alongside parsed shelf formatting for relocation choices.

@@ -9,6 +9,7 @@
 // TODO(agent): Recheck legacy quantity normalization rules once more category-based guidance is available.
 // TODO(agent): Capture legacy column mapping metrics alongside ingest summaries once schema mapping stabilizes.
 // TODO(agent): Capture events.csv import telemetry once event ingestion volumes are known.
+// TODO(suchbegriff-import): Confirm Suchbegriff fallback normalization aligns with search-term defaults.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
@@ -97,6 +98,7 @@ const PARTNER_FIELD_ALIASES: readonly PartnerFieldAlias[] = Object.freeze([
   { source: 'partnumber', target: 'Artikel-Nummer' },
   { source: 'image_names', target: 'Grafikname(n)' },
   { source: 'description', target: 'Artikelbeschreibung' },
+  { source: 'suchbegriff', target: 'Suchbegriff' },
   { source: 'notes', target: 'Kurzbeschreibung' },
   { source: 'longdescription', target: 'Langtext' },
   { source: 'manufacturer', target: 'Hersteller' },
@@ -134,6 +136,7 @@ const LEGACY_BULK_CATEGORY_PREFIXES = Object.freeze([110]);
 const KNOWN_ITEM_COLUMNS = new Set<string>([
   'Artikel-Nummer',
   'Artikelbeschreibung',
+  'Suchbegriff',
   'Kurzbeschreibung',
   'Langtext',
   'Hersteller',
@@ -183,6 +186,7 @@ const KNOWN_ITEM_COLUMNS = new Set<string>([
   'partnumber',
   'image_names',
   'description',
+  'suchbegriff',
   'notes',
   'longdescription',
   'manufacturer',
@@ -509,6 +513,33 @@ export function parseImageNames(
       });
     }
     return [];
+  }
+}
+
+function resolveSuchbegriffValue(
+  rawValue: unknown,
+  artikelbeschreibung: string,
+  context: { rowNumber: number; artikelNummer: string | null; itemUUID: string | null }
+): string {
+  try {
+    const normalized = typeof rawValue === 'string' ? rawValue.trim() : '';
+    const fallback = typeof artikelbeschreibung === 'string' ? artikelbeschreibung.trim() : '';
+    if (!normalized && fallback) {
+      console.info('[importer] Defaulted Suchbegriff to Artikelbeschreibung for CSV row', {
+        rowNumber: context.rowNumber,
+        artikelNummer: context.artikelNummer,
+        itemUUID: context.itemUUID,
+      });
+    }
+    return normalized || fallback;
+  } catch (error) {
+    console.error('[importer] Failed to normalize Suchbegriff for CSV row; falling back to Artikelbeschreibung', {
+      rowNumber: context.rowNumber,
+      artikelNummer: context.artikelNummer,
+      itemUUID: context.itemUUID,
+      error,
+    });
+    return typeof artikelbeschreibung === 'string' ? artikelbeschreibung : '';
   }
 }
 
@@ -1106,6 +1137,12 @@ export async function ingestCsvFile(
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
       const csvItemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
+      const suchbegriff = resolveSuchbegriffValue(final['Suchbegriff'], artikelbeschreibung, {
+        rowNumber,
+        artikelNummer: artikelNummer || null,
+        itemUUID: csvItemUUID || null,
+      });
+      final.Suchbegriff = suchbegriff;
       const sanitizedLangtextValue = sanitizeLangtextCsvValue(final['Langtext'], {
         rowNumber,
         artikelNummer: artikelNummer || null,
@@ -1221,6 +1258,7 @@ export async function ingestCsvFile(
           try {
             persistItemReference({
               Artikel_Nummer: artikelNummer,
+              Suchbegriff: suchbegriff,
               Grafikname: grafikname,
               Artikelbeschreibung: artikelbeschreibung,
               Verkaufspreis: verkaufspreis,
@@ -1352,6 +1390,7 @@ export async function ingestCsvFile(
           UpdatedAt: nowDate,
           Datum_erfasst: parseDatumErfasst(final['Datum erfasst']),
           Artikel_Nummer: artikelNummer,
+          Suchbegriff: suchbegriff,
           Grafikname: grafikname,
           Artikelbeschreibung: artikelbeschreibung,
           Auf_Lager: instancePlan.quantityPerItem,
