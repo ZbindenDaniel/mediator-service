@@ -59,8 +59,8 @@ export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
     ShopwareProductId: { note: 'Shopware parent product id' }
   },
   items: {
-    ItemUUID: { note: 'Instance identifier' },
-    Artikel_Nummer: { note: 'Linked SKU reference', aliases: ['SKU'] },
+    // TODO(agentic-schema): Keep ItemUUID out of prompt schema guidance while reference-only identifiers are required.
+    Artikel_Nummer: { note: 'Primary reference identifier (Artikelnummer) for instance rows', aliases: ['SKU'] },
     BoxID: { note: 'Storage box id' },
     Location: { note: 'Free-form storage location' },
     UpdatedAt: { note: 'Last update timestamp' },
@@ -180,7 +180,19 @@ function formatSchemaTables(tables: SchemaTable[], logger?: ItemFlowLogger): str
   return tables
     .map((table) => {
       const missingNotes: string[] = [];
-      const annotatedColumns = table.columns.map((column) => {
+      const filteredColumns =
+        table.name === 'items'
+          ? table.columns.filter((column) => !column.trim().startsWith('ItemUUID'))
+          : table.columns;
+
+      if (table.name === 'items' && filteredColumns.length !== table.columns.length) {
+        logger?.info?.({
+          msg: 'chat prompt schema filtered to omit instance identifiers',
+          removedColumns: ['ItemUUID']
+        });
+      }
+
+      const annotatedColumns = filteredColumns.map((column) => {
         const { rendered, name, foundNote } = annotateColumn(column, table.name, logger);
         if (!foundNote && name) {
           missingNotes.push(name);

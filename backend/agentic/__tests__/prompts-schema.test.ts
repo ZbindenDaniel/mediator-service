@@ -46,7 +46,9 @@ describe('prompt schema column annotations', () => {
     const itemsSql = extractSchemaSql(source, 'CREATE_ITEMS_SQL');
 
     const itemRefsColumns = parseTableColumns(itemRefsSql, 'item_refs');
-    const itemColumns = parseTableColumns(itemsSql, 'items');
+    // TODO(agentic-schema): Drop ItemUUID omissions once the DB schema removes instance identifiers from prompts.
+    const omittedItemColumns = new Set(['ItemUUID']);
+    const itemColumns = parseTableColumns(itemsSql, 'items').filter((column) => !omittedItemColumns.has(column));
 
     const checkCoverage = (tableName: 'item_refs' | 'items', columns: string[]) => {
       for (const column of columns) {
