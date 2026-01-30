@@ -98,10 +98,23 @@ export async function forwardAgenticTrigger(
 ): Promise<AgenticTriggerForwardResult> {
   const { context = 'server', logger = console, service: serviceDeps } = options;
 
-  const { artikelbeschreibung, artikelNummer } = buildAgenticRunRequestBody(payload);
+  let artikelbeschreibung = '';
+  let artikelNummer = '';
+  try {
+    ({ artikelbeschreibung, artikelNummer } = buildAgenticRunRequestBody(payload));
+  } catch (err) {
+    if (err instanceof AgenticTriggerValidationError) {
+      logger.warn?.('[agentic-trigger] Validation failed before dispatch', {
+        context,
+        reason: err.reason,
+        message: err.message
+      });
+    }
+    throw err;
+  }
   if (!artikelNummer) {
     throw new AgenticTriggerValidationError(
-      'Agentic trigger payload requires Artikel_Nummer',
+      'Agentic trigger payload requires an Artikelnummer',
       'missing-artikel-nummer'
     );
   }
