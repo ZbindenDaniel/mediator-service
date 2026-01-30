@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Removed legacy itemId/id parsing from agentic trigger handling so Artikel_Nummer is the only accepted run identifier.
 - Removed instance-based modes from agentic bulk queueing so reference-only queueing is the canonical path with refreshed logging.
 - Removed ItemUUID-based agentic trigger payload IDs so Artikel_Nummer is the sole agentic run identifier.
 - Split search scoring into field-level scores (Suchbegriff, Hersteller, Artikelbeschreibung, Artikel_Nummer, ItemUUID, BoxID) with best-field logging for top results while keeping response payloads stable.

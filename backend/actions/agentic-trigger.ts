@@ -6,7 +6,8 @@ import { resolveAgenticRequestContext } from './agentic-request-context';
 // TODO(agentic-start-flow): Extract shared agentic start/restart validation once UI start flows stabilize.
 
 export interface AgenticRunTriggerPayload {
-  artikelNummer?: string | null;
+  // TODO(agentic-trigger-input): Reconfirm all callers send artikelNummer-only payloads post-migration.
+  artikelNummer: string | null;
   artikelbeschreibung?: string | null;
   search?: string | null;
   actor?: string | null;
@@ -53,6 +54,9 @@ export function buildAgenticRunRequestBody(payload: AgenticRunTriggerPayload) {
       key === 'artikelbeschreibung'
       || key === 'artikelNummer'
       || key === 'search'
+      || key === 'itemId'
+      || key === 'id'
+      || key === 'itemUUid'
     ) {
       return;
     }
@@ -75,29 +79,12 @@ export function buildAgenticRunRequestBody(payload: AgenticRunTriggerPayload) {
     );
   }
 
-  let resolvedArtikelNummer = '';
-  try {
-    if (typeof payload.artikelNummer === 'string' && payload.artikelNummer.trim()) {
-      resolvedArtikelNummer = payload.artikelNummer.trim();
-    }
-  } catch (err) {
-    throw new AgenticTriggerValidationError(
-      'Agentic trigger payload contains invalid Artikel_Nummer',
-      'missing-artikel-nummer'
-    );
-  }
-
-  if (!resolvedArtikelNummer) {
-    throw new AgenticTriggerValidationError(
-      'Agentic trigger payload requires Artikel_Nummer',
-      'missing-artikel-nummer'
-    );
-  }
+  const resolvedArtikelNummer =
+    typeof payload.artikelNummer === 'string' ? payload.artikelNummer.trim() : '';
 
   return {
     requestBody: {
       Artikelbeschreibung: artikelbeschreibungCandidate,
-      artikelNummer: resolvedArtikelNummer,
       ...optionalPayload
     },
     artikelbeschreibung: artikelbeschreibungCandidate,
@@ -113,13 +100,10 @@ export async function forwardAgenticTrigger(
 
   const { artikelbeschreibung, artikelNummer } = buildAgenticRunRequestBody(payload);
   if (!artikelNummer) {
-    logger.warn?.('[agentic-trigger] Empty Artikel_Nummer for trigger payload', { context });
-    return {
-      ok: false,
-      status: 400,
-      body: { error: 'missing-artikel-nummer' },
-      rawBody: null
-    };
+    throw new AgenticTriggerValidationError(
+      'Agentic trigger payload requires Artikel_Nummer',
+      'missing-artikel-nummer'
+    );
   }
 
   logger.info?.('[agentic-trigger] Using Artikel_Nummer for agentic trigger', {
@@ -164,7 +148,10 @@ export async function forwardAgenticTrigger(
       };
     }
 
-    logger.info?.('[agentic-trigger] Agentic run queued locally', { context, artikelNummer });
+    logger.info?.('[agentic-trigger] Agentic run queued locally', {
+      context,
+      artikelNummer
+    });
     return {
       ok: true,
       status: 202,

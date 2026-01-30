@@ -65,7 +65,7 @@ function formatAgenticFailureMessage(base: string, reasonDescription: string | n
 }
 
 export interface AgenticRunTriggerPayload {
-  artikelNummer?: string | null;
+  artikelNummer: string | null;
   artikelbeschreibung?: string | null;
   /**
    * @deprecated Temporary support for legacy payloads while the UI transitions to the
