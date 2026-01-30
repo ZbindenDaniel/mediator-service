@@ -530,7 +530,7 @@ export async function performItemDetailAgenticCancel({
   let persistence: Awaited<ReturnType<typeof persistCancellation>>;
   try {
     persistence = await persistCancellation({
-      itemId: referenceId,
+      artikelNummer: referenceId,
       actor,
       context: 'item detail cancel persistence'
     });
@@ -2262,7 +2262,7 @@ export default function ItemDetail({ itemId }: Props) {
         }
         const failureReasonDescription = describeAgenticFailureReason(failureReasonCode);
         const cancelResult = await persistAgenticRunCancellation({
-          itemId: refreshedRun.Artikel_Nummer || referenceId,
+          artikelNummer: refreshedRun.Artikel_Nummer || referenceId,
           actor,
           context: 'item detail restart auto-cancel'
         });
@@ -2422,7 +2422,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     try {
       const closeResult = await persistAgenticRunClose({
-        itemId: referenceId,
+        artikelNummer: referenceId,
         actor,
         notes: noteInput,
         context: 'item detail close'
@@ -2515,7 +2515,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     try {
       const deletionResult = await persistAgenticRunDeletion({
-        itemId: referenceId,
+        artikelNummer: referenceId,
         actor,
         reason: 'User requested agentic run reset',
         context: 'item detail delete'

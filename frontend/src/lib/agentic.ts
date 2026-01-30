@@ -224,7 +224,7 @@ export async function triggerAgenticRun({
 }
 
 export interface PersistAgenticRunCancellationOptions {
-  itemId: string | null | undefined;
+  artikelNummer: string | null | undefined;
   actor?: string | null;
   context: string;
 }
@@ -237,25 +237,34 @@ export interface PersistAgenticRunCancellationResult {
 }
 
 export async function persistAgenticRunCancellation({
-  itemId,
+  artikelNummer,
   actor,
   context
 }: PersistAgenticRunCancellationOptions): Promise<PersistAgenticRunCancellationResult> {
-  const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
-  if (!trimmedItemId) {
+  // TODO(agentic-endpoint-migration): Remove legacy ID guard once all callers pass Artikel_Nummer.
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmedArtikelNummer) {
     const message = `KI-Abbruch übersprungen (${context}): fehlende Artikel_Nummer`;
-    console.warn(message);
+    logger.warn?.(message, { artikelNummer });
+    return { ok: false, status: 400, agentic: null, message };
+  }
+  if (trimmedArtikelNummer.startsWith('I-') || !/^\d+$/.test(trimmedArtikelNummer)) {
+    const message = `KI-Abbruch übersprungen (${context}): ungültige Artikel_Nummer`;
+    logger.warn?.(message, { artikelNummer: trimmedArtikelNummer });
     return { ok: false, status: 400, agentic: null, message };
   }
 
   const sanitizedActor = actor && actor.trim() ? actor.trim() : 'system';
 
   try {
-    const response = await fetch(`/api/items/${encodeURIComponent(trimmedItemId)}/agentic/cancel`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor: sanitizedActor })
-    });
+    const response = await fetch(
+      `/api/item-refs/${encodeURIComponent(trimmedArtikelNummer)}/agentic/cancel`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: sanitizedActor })
+      }
+    );
 
     if (!response.ok) {
       const isNotFound = response.status === 404;
@@ -284,7 +293,7 @@ export async function persistAgenticRunCancellation({
 }
 
 export interface PersistAgenticRunDeletionOptions {
-  itemId: string | null | undefined;
+  artikelNummer: string | null | undefined;
   actor?: string | null;
   reason?: string | null;
   context: string;
@@ -299,15 +308,21 @@ export interface PersistAgenticRunDeletionResult {
 }
 
 export async function persistAgenticRunDeletion({
-  itemId,
+  artikelNummer,
   actor,
   reason,
   context
 }: PersistAgenticRunDeletionOptions): Promise<PersistAgenticRunDeletionResult> {
-  const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
-  if (!trimmedItemId) {
+  // TODO(agentic-endpoint-migration): Remove legacy ID guard once all callers pass Artikel_Nummer.
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmedArtikelNummer) {
     const message = `KI-Löschung übersprungen (${context}): fehlende Artikel_Nummer`;
-    console.warn(message);
+    logger.warn?.(message, { artikelNummer });
+    return { ok: false, status: 400, agentic: null, message, reason: 'missing-artikel-nummer' };
+  }
+  if (trimmedArtikelNummer.startsWith('I-') || !/^\d+$/.test(trimmedArtikelNummer)) {
+    const message = `KI-Löschung übersprungen (${context}): ungültige Artikel_Nummer`;
+    logger.warn?.(message, { artikelNummer: trimmedArtikelNummer });
     return { ok: false, status: 400, agentic: null, message, reason: 'missing-artikel-nummer' };
   }
 
@@ -315,11 +330,14 @@ export async function persistAgenticRunDeletion({
   const sanitizedReason = reason && reason.trim() ? reason.trim() : null;
 
   try {
-    const response = await fetch(`/api/items/${encodeURIComponent(trimmedItemId)}/agentic/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor: sanitizedActor, reason: sanitizedReason })
-    });
+    const response = await fetch(
+      `/api/item-refs/${encodeURIComponent(trimmedArtikelNummer)}/agentic/delete`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: sanitizedActor, reason: sanitizedReason })
+      }
+    );
 
     if (!response.ok) {
       const isNotFound = response.status === 404;
@@ -354,7 +372,7 @@ export async function persistAgenticRunDeletion({
 }
 
 export interface PersistAgenticRunCloseOptions {
-  itemId: string | null | undefined;
+  artikelNummer: string | null | undefined;
   actor?: string | null;
   notes?: string | null;
   context: string;
@@ -368,15 +386,21 @@ export interface PersistAgenticRunCloseResult {
 }
 
 export async function persistAgenticRunClose({
-  itemId,
+  artikelNummer,
   actor,
   notes,
   context
 }: PersistAgenticRunCloseOptions): Promise<PersistAgenticRunCloseResult> {
-  const trimmedItemId = typeof itemId === 'string' ? itemId.trim() : '';
-  if (!trimmedItemId) {
+  // TODO(agentic-endpoint-migration): Remove legacy ID guard once all callers pass Artikel_Nummer.
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmedArtikelNummer) {
     const message = `KI-Abschluss übersprungen (${context}): fehlende Artikel_Nummer`;
-    logger.warn?.(message);
+    logger.warn?.(message, { artikelNummer });
+    return { ok: false, status: 400, agentic: null, message };
+  }
+  if (trimmedArtikelNummer.startsWith('I-') || !/^\d+$/.test(trimmedArtikelNummer)) {
+    const message = `KI-Abschluss übersprungen (${context}): ungültige Artikel_Nummer`;
+    logger.warn?.(message, { artikelNummer: trimmedArtikelNummer });
     return { ok: false, status: 400, agentic: null, message };
   }
 
@@ -384,11 +408,14 @@ export async function persistAgenticRunClose({
   const sanitizedNotes = notes && notes.trim() ? notes.trim() : null;
 
   try {
-    const response = await fetch(`/api/items/${encodeURIComponent(trimmedItemId)}/agentic/close`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor: sanitizedActor, notes: sanitizedNotes })
-    });
+    const response = await fetch(
+      `/api/item-refs/${encodeURIComponent(trimmedArtikelNummer)}/agentic/close`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: sanitizedActor, notes: sanitizedNotes })
+      }
+    );
 
     if (!response.ok) {
       const isNotFound = response.status === 404;
