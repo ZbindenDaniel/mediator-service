@@ -152,6 +152,7 @@ export function collectMediaAssets(
   primary?: string | null,
   artikelNummer?: string | null
 ): string[] {
+  // TODO(media-filtering): Keep legacy folder filtering aligned with Artikel_Nummer rules.
   const assets: string[] = [];
   const seen = new Set<string>();
   const trimmedPrimary = typeof primary === 'string' ? primary.trim() : '';
@@ -171,16 +172,34 @@ export function collectMediaAssets(
   try {
     const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
     const foldersToScan = mediaFolder === itemId ? [mediaFolder] : [mediaFolder, itemId];
+    const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+    const formattedArtikelNummer =
+      trimmedArtikelNummer ? formatArtikelNummerForMedia(trimmedArtikelNummer, console) : null;
+    const artikelPrefixes = new Set<string>();
+    if (trimmedArtikelNummer) {
+      artikelPrefixes.add(trimmedArtikelNummer);
+    }
+    if (formattedArtikelNummer && formattedArtikelNummer !== trimmedArtikelNummer) {
+      artikelPrefixes.add(formattedArtikelNummer);
+    }
     for (const folder of foldersToScan) {
       const dir = path.join(MEDIA_DIR, folder);
       if (!fs.existsSync(dir)) {
         continue;
       }
-      const stat = fs.statSync(dir);
-      if (!stat.isDirectory()) {
+      let entries: string[] = [];
+      try {
+        const stat = fs.statSync(dir);
+        if (!stat.isDirectory()) {
+          continue;
+        }
+        entries = fs.readdirSync(dir).sort();
+      } catch (error) {
+        console.error('[save-item] Failed to read media directory', { itemId, folder, dir, error });
         continue;
       }
-      const entries = fs.readdirSync(dir).sort();
+      const shouldFilterByArtikel =
+        artikelPrefixes.size > 0 && mediaFolder !== itemId && folder === itemId;
       const mediaEntries = entries.filter((entry) => {
         const resolvedPath = `${MEDIA_PREFIX}${folder}/${entry}`;
         if (!isAllowedMediaAsset(entry)) {
@@ -189,6 +208,20 @@ export function collectMediaAssets(
             entry: resolvedPath,
           });
           return false;
+        }
+        if (shouldFilterByArtikel) {
+          const baseName = path.posix.basename(entry);
+          const matchesArtikel = Array.from(artikelPrefixes).some((prefix) =>
+            baseName.startsWith(prefix)
+          );
+          if (!matchesArtikel) {
+            console.info('[save-item] Skipping legacy media asset for different Artikel_Nummer', {
+              itemId,
+              entry: resolvedPath,
+              artikelNummer: trimmedArtikelNummer || null
+            });
+            return false;
+          }
         }
         return true;
       });
@@ -203,6 +236,12 @@ export function collectMediaAssets(
   } catch (err) {
     console.error('Failed to enumerate media assets', { itemId, error: err });
   }
+
+  console.info('[save-item] Collected media assets', {
+    itemId,
+    artikelNummer: artikelNummer ?? null,
+    count: assets.length
+  });
 
   return assets;
 }
@@ -608,11 +647,36 @@ const action = defineHttpAction({
           });
         }
         const itemWithCategories = { ...sanitizedItem, ...normalisedCategories };
-        const responseItem =
-          normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
-            ? { ...itemWithCategories, Grafikname: normalisedGrafikname }
-            : itemWithCategories;
-        return sendJson(res, 200, { item: responseItem, reference, box, events, agentic, media, instances });
+        let responsePayload: {
+          item: Item;
+          reference: ItemRef | null;
+          box: unknown;
+          events: unknown;
+          agentic: AgenticRun | null;
+          media: string[];
+          instances: ItemInstanceSummary[];
+        };
+        try {
+          const responseItem =
+            normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
+              ? { ...itemWithCategories, Grafikname: normalisedGrafikname }
+              : itemWithCategories;
+          responsePayload = { item: responseItem, reference, box, events, agentic, media, instances };
+        } catch (error) {
+          console.error('[save-item] Failed to construct item detail response payload', {
+            itemId,
+            error
+          });
+          return sendJson(res, 500, { error: 'Failed to construct item response' });
+        }
+        console.info('[save-item] Prepared item detail response', {
+          itemId,
+          mediaCount: media.length,
+          hasReference: Boolean(reference),
+          hasAgentic: Boolean(agentic),
+          instanceCount: instances.length
+        });
+        return sendJson(res, 200, responsePayload);
       } catch (err) {
         console.error('Fetch item failed', err);
         return sendJson(res, 500, { error: (err as Error).message });
@@ -911,7 +975,13 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: 'Failed to persist item reference' });
       }
       const media = collectMediaAssets(itemId, normalisedGrafikname, reference.Artikel_Nummer);
-      sendJson(res, 200, { ok: true, media });
+      const responseBody = { ok: true, media };
+      console.info('[save-item] Prepared item update response', {
+        itemId,
+        artikelNummer,
+        mediaCount: media.length
+      });
+      sendJson(res, 200, responseBody);
     } catch (err) {
       console.error('Save item failed', err);
       sendJson(res, 500, { error: (err as Error).message });
