@@ -486,7 +486,7 @@ describe('move-box action note updates', () => {
     }
 
     expect(getStatus()).toBe(200);
-    expect(JSON.parse(getBody())).toEqual({ ok: true });
+    expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null });
 
     expect((updated as any)?.Location ?? null).toBeNull();
     expect(updated?.LocationId ?? null).toBeNull();
@@ -516,7 +516,7 @@ describe('move-box action note updates', () => {
     }
 
     expect(getStatus()).toBe(200);
-    expect(JSON.parse(getBody())).toEqual({ ok: true });
+    expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null });
 
     expect(updated?.LocationId ?? '').toBe('B-02-03');
     expect((updated as any)?.Location ?? null).toBeNull();

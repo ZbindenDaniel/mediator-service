@@ -206,6 +206,8 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Treated agentic status route IDs as Artikel_Nummer identifiers with Artikelnummer-first logging while keeping agentic payloads unchanged.
 - Added a guarded item flow target helper that logs non-object inputs and safely narrows Artikelnummer access for agentic runs.
 - Added runtime-path logging for agentic health/resume flows and aligned resume test expectations with Artikel_Nummer log keys.
+- Filtered legacy item media selection to respect Artikel_Nummer prefixes, added media/response logging for save-item payloads, and aligned box move response tests with the photoPath contract.
+- Extended the test harness with Jest-style matcher helpers (any, length/property checks, isolateModules, one-shot mock returns) and guarded matcher registration logging for clearer test diagnostics.
 
 ## Documentation Map
 

@@ -4,6 +4,7 @@ const Module = require('module');
 
 // TODO: Extend this harness with additional Jest-compatible utilities as more
 //       matcher coverage is required by future test suites.
+// TODO(agent): Re-validate FAILING_TEST entries after matcher additions settle.
 // TODO(agent): Map out module mocking cleanup strategies if we broaden the Jest surface further.
 // TODO(agent): Keep module alias resolution in sync with TypeScript path mappings to avoid drift during test loads.
 
@@ -211,6 +212,8 @@ function ensureMock(received, matcherName) {
 }
 
 const objectContainingTag = Symbol('objectContaining');
+const anyTag = Symbol('any');
+let loggedMatcherRegistration = false;
 
 function logUnexpectedMatcherError(name, error) {
   if (!(error instanceof assert.AssertionError)) {
@@ -229,6 +232,17 @@ function isObjectContaining(value) {
   return Boolean(value && value[objectContainingTag]);
 }
 
+function createAny(constructor) {
+  return {
+    [anyTag]: true,
+    constructor
+  };
+}
+
+function isAny(value) {
+  return Boolean(value && value[anyTag]);
+}
+
 function isPlainObject(value) {
   if (!value || typeof value !== 'object') {
     return false;
@@ -238,6 +252,28 @@ function isPlainObject(value) {
 }
 
 function matchExpected(received, expected) {
+  if (isAny(expected)) {
+    const constructor = expected.constructor;
+    if (constructor === String) {
+      return typeof received === 'string' || received instanceof String;
+    }
+    if (constructor === Number) {
+      return typeof received === 'number' || received instanceof Number;
+    }
+    if (constructor === Boolean) {
+      return typeof received === 'boolean' || received instanceof Boolean;
+    }
+    if (constructor === Function) {
+      return typeof received === 'function';
+    }
+    if (constructor === Object) {
+      return typeof received === 'object' && received !== null;
+    }
+    if (constructor === Array) {
+      return Array.isArray(received);
+    }
+    return received instanceof constructor;
+  }
   if (isObjectContaining(expected)) {
     return matchObjectContaining(received, expected.sample);
   }
@@ -320,22 +356,42 @@ function assertThrowsMatch(received, expected) {
   }
 }
 
+function normalizePropertyPath(pathInput) {
+  if (Array.isArray(pathInput)) {
+    return pathInput.map((segment) => String(segment));
+  }
+  if (typeof pathInput === 'string') {
+    return pathInput.split('.').filter((segment) => segment.length > 0);
+  }
+  throw new TypeError('toHaveProperty expects a string or array path');
+}
+
+function resolvePropertyTarget(received, pathInput) {
+  const pathSegments = normalizePropertyPath(pathInput);
+  let target = received;
+  for (const segment of pathSegments) {
+    if (!target || (typeof target !== 'object' && typeof target !== 'function')) {
+      return { exists: false, value: undefined };
+    }
+    if (!Object.prototype.hasOwnProperty.call(target, segment)) {
+      return { exists: false, value: undefined };
+    }
+    target = target[segment];
+  }
+  return { exists: true, value: target };
+}
+
 // TODO(agent): Revisit matcher parity once additional Jest-specific expectations are required.
 function createMatchers() {
-  return {
+  const matchers = {
     toBe(received, expected) {
       assert.strictEqual(received, expected);
     },
     toEqual(received, expected) {
-      try {
-        if (!matchExpected(received, expected)) {
-          throw new assert.AssertionError({
-            message: `Expected ${safeStringify(received)} to equal ${safeStringify(expected)}`
-          });
-        }
-      } catch (error) {
-        logUnexpectedMatcherError('toEqual', error);
-        throw error;
+      if (!matchExpected(received, expected)) {
+        throw new assert.AssertionError({
+          message: `Expected ${safeStringify(received)} to equal ${safeStringify(expected)}`
+        });
       }
     },
     toMatch(received, regex) {
@@ -349,6 +405,35 @@ function createMatchers() {
       if (!(received > expected)) {
         throw new assert.AssertionError({
           message: `Expected ${received} to be greater than ${expected}`
+        });
+      }
+    },
+    toHaveLength(received, expected) {
+      if (typeof expected !== 'number') {
+        throw new TypeError(`Expected length matcher to receive a number, got ${typeof expected}`);
+      }
+      if (received == null) {
+        throw new TypeError(`Expected value to have length ${expected}, but received ${received}`);
+      }
+      const length = received.length;
+      if (typeof length !== 'number') {
+        throw new TypeError(`Expected value to have a length property, but received ${typeof received}`);
+      }
+      assert.strictEqual(length, expected, `Expected length ${expected} but received ${length}`);
+    },
+    toHaveProperty(received, pathInput, expectedValue) {
+      if (received == null || (typeof received !== 'object' && typeof received !== 'function')) {
+        throw new TypeError(`Expected an object to check property ${safeStringify(pathInput)}`);
+      }
+      const resolved = resolvePropertyTarget(received, pathInput);
+      if (!resolved.exists) {
+        throw new assert.AssertionError({
+          message: `Expected object to have property ${safeStringify(pathInput)}`
+        });
+      }
+      if (arguments.length >= 3 && !matchExpected(resolved.value, expectedValue)) {
+        throw new assert.AssertionError({
+          message: `Expected property ${safeStringify(pathInput)} to equal ${safeStringify(expectedValue)}`
         });
       }
     },
@@ -385,44 +470,32 @@ function createMatchers() {
     },
     toHaveBeenCalledTimes(received, expected) {
       const mock = ensureMock(received, 'toHaveBeenCalledTimes');
-      try {
-        assert.strictEqual(mock.calls.length, expected, `Expected mock to have been called ${expected} times`);
-      } catch (error) {
-        logUnexpectedMatcherError('toHaveBeenCalledTimes', error);
-        throw error;
-      }
+      assert.strictEqual(mock.calls.length, expected, `Expected mock to have been called ${expected} times`);
     },
     toHaveBeenCalledWith(received, ...expectedArgs) {
       const mock = ensureMock(received, 'toHaveBeenCalledWith');
-      try {
-        const found = mock.calls.some((call) => matchExpected(call, expectedArgs));
-        if (!found) {
-          throw new assert.AssertionError({
-            message: `Expected mock to have been called with ${safeStringify(expectedArgs)}, but calls were ${safeStringify(mock.calls)}`
-          });
-        }
-      } catch (error) {
-        logUnexpectedMatcherError('toHaveBeenCalledWith', error);
-        throw error;
+      const found = mock.calls.some((call) => matchExpected(call, expectedArgs));
+      if (!found) {
+        throw new assert.AssertionError({
+          message: `Expected mock to have been called with ${safeStringify(expectedArgs)}, but calls were ${safeStringify(mock.calls)}`
+        });
       }
     },
     toThrow(received, expected) {
-      try {
-        assertThrowsMatch(received, expected);
-      } catch (error) {
-        logUnexpectedMatcherError('toThrow', error);
-        throw error;
-      }
+      assertThrowsMatch(received, expected);
     },
     toThrowError(received, expected) {
-      try {
-        assertThrowsMatch(received, expected);
-      } catch (error) {
-        logUnexpectedMatcherError('toThrowError', error);
-        throw error;
-      }
+      assertThrowsMatch(received, expected);
     }
   };
+  if (!loggedMatcherRegistration) {
+    loggedMatcherRegistration = true;
+    const matcherNames = Object.keys(matchers);
+    const helperNames = ['objectContaining', 'any'];
+    console.log(`[harness] Registered matchers: ${matcherNames.join(', ')}`);
+    console.log(`[harness] Matcher helpers enabled: ${helperNames.join(', ')}`);
+  }
+  return matchers;
 }
 
 function expect(received) {
@@ -431,12 +504,23 @@ function expect(received) {
   const notExpectation = {};
 
   for (const [name, matcher] of Object.entries(matchers)) {
-    expectation[name] = (...args) => matcher(received, ...args);
+    expectation[name] = (...args) => {
+      try {
+        return matcher(received, ...args);
+      } catch (error) {
+        logUnexpectedMatcherError(name, error);
+        throw error;
+      }
+    };
     notExpectation[name] = (...args) => {
       try {
         matcher(received, ...args);
       } catch (error) {
-        return;
+        if (error instanceof assert.AssertionError) {
+          return;
+        }
+        logUnexpectedMatcherError(`not.${name}`, error);
+        throw error;
       }
       throw new assert.AssertionError({
         message: `Expected value ${safeStringify(received)} to not satisfy matcher ${name}`
@@ -455,20 +539,29 @@ expect.objectContaining = (sample) => {
   return createObjectContaining(sample);
 };
 
+expect.any = (constructor) => {
+  if (typeof constructor !== 'function') {
+    throw new TypeError('any expects a constructor function');
+  }
+  return createAny(constructor);
+};
+
 function createMockFunction(implementation = () => undefined, restoreCallback = null) {
   const state = {
     implementation,
     defaultImplementation: implementation,
     calls: [],
     instances: [],
-    results: []
+    results: [],
+    onceQueue: []
   };
 
   const mockFn = function mockFunction(...args) {
     state.calls.push(args);
     state.instances.push(this);
     try {
-      const result = state.implementation.apply(this, args);
+      const impl = state.onceQueue.length > 0 ? state.onceQueue.shift() : state.implementation;
+      const result = impl.apply(this, args);
       state.results.push({ type: 'return', value: result });
       return result;
     } catch (error) {
@@ -487,8 +580,21 @@ function createMockFunction(implementation = () => undefined, restoreCallback = 
     return mockFn;
   };
 
+  mockFn.mockImplementationOnce = (fn) => {
+    if (typeof fn !== 'function') {
+      throw new TypeError('mockImplementationOnce expects a function');
+    }
+    state.onceQueue.push(fn);
+    return mockFn;
+  };
+
   mockFn.mockReturnValue = (value) => {
     state.implementation = () => value;
+    return mockFn;
+  };
+
+  mockFn.mockReturnValueOnce = (value) => {
+    state.onceQueue.push(() => value);
     return mockFn;
   };
 
@@ -506,6 +612,7 @@ function createMockFunction(implementation = () => undefined, restoreCallback = 
     state.calls.length = 0;
     state.instances.length = 0;
     state.results.length = 0;
+    state.onceQueue.length = 0;
     return mockFn;
   };
 
@@ -626,6 +733,25 @@ const jestApi = {
     }
     for (const entry of new Set(mockRegistry.values())) {
       entry.instance = null;
+    }
+  },
+  isolateModules(callback) {
+    const cachedEntries = new Map(Object.entries(require.cache));
+    try {
+      for (const key of Object.keys(require.cache)) {
+        delete require.cache[key];
+      }
+      return callback();
+    } catch (error) {
+      console.error('[harness] isolateModules callback failed', error);
+      throw error;
+    } finally {
+      for (const key of Object.keys(require.cache)) {
+        delete require.cache[key];
+      }
+      for (const [key, value] of cachedEntries.entries()) {
+        require.cache[key] = value;
+      }
     }
   },
   isolateModulesAsync: async (callback) => {
