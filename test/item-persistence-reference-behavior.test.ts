@@ -4,6 +4,7 @@ import { ItemEinheit } from '../models';
 
 const TEST_DB_FILE = path.join(__dirname, 'item-persistence-reference-behavior.sqlite');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
+// TODO(agent): Revisit test DB cleanup once shared test helpers are available.
 
 function removeTestDatabase(): void {
   for (const suffix of ['', '-wal', '-shm']) {
@@ -18,7 +19,7 @@ removeTestDatabase();
 process.env.DB_PATH = TEST_DB_FILE;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { db, persistItemWithinTransaction } = require('../backend/db');
+const { closeDatabase, db, persistItemWithinTransaction } = require('../backend/db');
 
 const selectReference = db.prepare(
   `SELECT Artikel_Nummer, Artikelbeschreibung, Kurzbeschreibung, Langtext, Hersteller, Verkaufspreis, Einheit, Shopartikel, Quality
@@ -27,7 +28,11 @@ const selectReference = db.prepare(
 const selectInstance = db.prepare('SELECT Artikel_Nummer, Quality FROM items WHERE ItemUUID = ?');
 
 function clearDatabase(): void {
-  db.exec('DELETE FROM events; DELETE FROM item_refs; DELETE FROM items; DELETE FROM boxes; DELETE FROM label_queue;');
+  try {
+    db.exec('DELETE FROM events; DELETE FROM item_refs; DELETE FROM items; DELETE FROM boxes; DELETE FROM label_queue;');
+  } catch (error) {
+    console.error('[item-persistence-reference-behavior.test] Failed to clear database', error);
+  }
 }
 
 describe('item persistence reference behavior', () => {
@@ -37,7 +42,7 @@ describe('item persistence reference behavior', () => {
 
   afterAll(() => {
     try {
-      db.close();
+      closeDatabase({ reason: 'item-persistence-reference-behavior.test cleanup', suppressErrors: true });
     } catch (error) {
       console.warn('[item-persistence-reference-behavior.test] Failed to close database', error);
     }

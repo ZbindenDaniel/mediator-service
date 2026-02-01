@@ -1,6 +1,7 @@
 # FAILING_TESTS
 
 - [ ] TODO(agent): Re-run matcher-related failures after harness updates to confirm coverage improvements.
+- [x] TODO: tests fail fast when better-sqlite3 is missing — updated test runner preflight and harness messaging.
 
 Checklist of failing tests from `npm test` with a likely failure reason based on the first error message reported.
 
