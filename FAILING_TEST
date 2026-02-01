@@ -32,9 +32,9 @@ Checklist of failing tests from `npm test` with a likely failure reason based on
 - [ ] TODO: schedules stale queued runs for asynchronous invocation — possible reason: TypeError: (0 , agentic_1.resumeStaleAgenticRuns) is not a function
 - [ ] TODO: skips runs missing search queries and logs warning — possible reason: TypeError: (0 , agentic_1.resumeStaleAgenticRuns) is not a function
 - [ ] TODO: reports failure when database query throws — possible reason: TypeError: (0 , agentic_1.resumeStaleAgenticRuns) is not a function
-- [ ] TODO: updates notes without requiring location — possible reason: AssertionError [ERR_ASSERTION]: Expected {"ok":true,"photoPath":null} to equal {"ok":true}
-- [ ] TODO: moves box placement when location provided — possible reason: AssertionError [ERR_ASSERTION]: Expected {"ok":true,"photoPath":null} to equal {"ok":true}
-- [ ] TODO: filters gallery assets to the current artikel number when available — possible reason: AssertionError [ERR_ASSERTION]: Expected value ["/media/collect-media-existing/07075-1.jpg","/media/collect-media-existing/07074-1.jpg","/media/collect-media-existing/07074-2.jpg","/media/collect-media-existing/07075-2.jpg"] to not satisfy matcher toContain
+- [x] TODO: updates notes without requiring location — possible reason: AssertionError [ERR_ASSERTION]: Expected {"ok":true,"photoPath":null} to equal {"ok":true}
+- [x] TODO: moves box placement when location provided — possible reason: AssertionError [ERR_ASSERTION]: Expected {"ok":true,"photoPath":null} to equal {"ok":true}
+- [x] TODO: filters gallery assets to the current artikel number when available — possible reason: AssertionError [ERR_ASSERTION]: Expected value ["/media/collect-media-existing/07075-1.jpg","/media/collect-media-existing/07074-1.jpg","/media/collect-media-existing/07074-2.jpg","/media/collect-media-existing/07075-2.jpg"] to not satisfy matcher toContain
 - [ ] TODO: rejects re-importing the same CSV once archived — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: ingests multiple date formats and normalizes to ISO strings — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
 - [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting

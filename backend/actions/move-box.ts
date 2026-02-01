@@ -8,6 +8,7 @@ import { MEDIA_DIR } from '../lib/media';
 const BOX_MEDIA_PREFIX = '/media/';
 const BOX_MEDIA_FOLDER = 'boxes';
 // TODO(agent): Confirm label preservation remains intact for note-only updates after label input removal.
+// TODO(move-box-response): Reconfirm photoPath response payload contract with tests and frontend.
 
 function sanitizeBoxMediaSegment(segment: string): string {
   return segment.replace(/[^a-zA-Z0-9_-]/g, '_');
