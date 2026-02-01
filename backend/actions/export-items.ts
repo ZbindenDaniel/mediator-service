@@ -25,12 +25,13 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// TODO(agent): Confirm Suchbegriff column expectations before adjusting export schema for tests.
 // TODO(agent): Keep exporter metadata parity intact when partner CSV specs change.
 // TODO(agent): Remove ImageNames fallback once disk-backed assets are guaranteed for exports.
 // TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
 // TODO(agent): Mirror header label updates in importer alias definitions to avoid ingest/export drift.
 // TODO(agent): Harden exporter media listings against document artifacts slipping into partner feeds.
-// TODO(suchbegriff-export): Keep Suchbegriff export headers aligned with importer column aliases.
+// TODO(agent): Confirm Suchbegriff export coverage once downstream consumers require it again.
 const columnDescriptors = [
   { key: 'partnumber', header: 'Artikel-Nummer', field: 'Artikel_Nummer' },
   { key: 'type_and_classific', header: 'Artikeltyp', field: 'Artikeltyp' },
@@ -594,6 +595,8 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
       console.info('[export-items] Agentic review gate suppressed published status during export.', {
         agenticStatus,
         itemUUID,
+        storedPublished,
+        gatedPublished
       });
     }
 
@@ -918,6 +921,19 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
       } catch (logError) {
         logger.error?.('[export-items] Failed to log grouped export column adjustment.', logError);
       }
+    }
+
+    try {
+      const schemaHeaders = exportColumns.map((column) => columnHeaderMap.get(column) ?? column);
+      logger.info?.('[export-items] Export schema selected for CSV output.', {
+        exportMode,
+        groupingActive,
+        columnCount: exportColumns.length,
+        columns: exportColumns,
+        headers: schemaHeaders
+      });
+    } catch (logError) {
+      logger.error?.('[export-items] Failed to log export schema selection.', logError);
     }
 
     const { csv } = serializeItemsToCsv(groupedRows, exportColumns);

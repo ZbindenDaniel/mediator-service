@@ -2,6 +2,7 @@
 import { serializeItemsToCsv } from '../export-items';
 
 describe('export-items category serialization', () => {
+  // TODO(agent): Validate header ordering expectations for Suchbegriff once CSV consumers finalize schema.
   test('maps numeric categories to canonical label names for CSV output', () => {
     const rows = [
       {
@@ -43,6 +44,7 @@ describe('export-items category serialization', () => {
       'CreatedAt',
       'Grafikname(n)',
       'Artikelbeschreibung',
+      'Suchbegriff',
       'Kurzbeschreibung',
       'Langtext',
       'Hersteller',
@@ -202,7 +204,7 @@ describe('export-items published status gating', () => {
     const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticStatus: 'reviewed' }]);
     const [, dataLine] = csv.split('\n');
     const values = dataLine.split(',');
-    const publishedIndex = 14;
+    const publishedIndex = 15;
     expect(values[publishedIndex]).toBe('true');
   });
 
@@ -212,7 +214,7 @@ describe('export-items published status gating', () => {
     const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticStatus: 'inProgress' }]);
     const [, dataLine] = csv.split('\n');
     const values = dataLine.split(',');
-    const publishedIndex = 14;
+    const publishedIndex = 15;
 
     expect(values[publishedIndex]).toBe('false');
     expect(logSpy).toHaveBeenCalledWith(
@@ -227,7 +229,7 @@ describe('export-items published status gating', () => {
     const { csv } = serializeItemsToCsv([{ ...baseRow, Veröffentlicht_Status: false, AgenticStatus: 'notStarted' }]);
     const [, dataLine] = csv.split('\n');
     const values = dataLine.split(',');
-    const publishedIndex = 14;
+    const publishedIndex = 15;
 
     expect(values[publishedIndex]).toBe('false');
   });
