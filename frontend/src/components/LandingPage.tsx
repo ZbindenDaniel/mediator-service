@@ -121,24 +121,26 @@ export default function LandingPage() {
           health={health}
           className="stats-card"
         />
-     {/*
-        <div className="card" id="qr-scan-card">
-          <Link className="linkcard" to="/scan">
-            <div>
-              <h2>QR-Scanner</h2>
-              <p className="muted">QR-Codes von Behältern scannen und Details sofort anzeigen</p>
-            </div>
-          </Link>
-        </div>
+        {/* TODO(qr-scan-card): Reconfirm placement once HTTPS QR scanning is verified in production. */}
+        {/*
+          <div className="card" id="qr-scan-card">
+            <Link className="linkcard" to="/scan">
+              <div>
+                <h2>QR-Scanner</h2>
+                <p className="muted">QR-Codes von Behältern scannen und Details sofort anzeigen</p>
+              </div>
+            </Link>
+          </div>
+        */}
+        {/* TODO(chat-card): Confirm that chat entry should stay visible alongside overview cards. */}
         <div className="card" id="chat-card">
           <Link className="linkcard" to="/chat">
             <div>
               <h2>Chat</h2>
               <p className="muted">Mit dem Agenten sprechen und vorgeschlagene SQLite-Queries ansehen</p>
             </div>
-              </Link>
+          </Link>
         </div>
-              */}
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
         <div className="grid-span-2">
           <RecentEventsCard events={previewEvents}></RecentEventsCard>
