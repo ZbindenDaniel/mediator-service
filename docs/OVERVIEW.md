@@ -208,6 +208,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added runtime-path logging for agentic health/resume flows and aligned resume test expectations with Artikel_Nummer log keys.
 - Filtered legacy item media selection to respect Artikel_Nummer prefixes, added media/response logging for save-item payloads, and aligned box move response tests with the photoPath contract.
 - Extended the test harness with Jest-style matcher helpers (any, length/property checks, isolateModules, one-shot mock returns) and guarded matcher registration logging for clearer test diagnostics.
+- Normalized Artikel_Nummer handling during CSV ingestion so invalid values are logged early, minting failures are isolated per row, and ItemUUID generation falls back safely without aborting the entire import.
 
 ## Documentation Map
 
