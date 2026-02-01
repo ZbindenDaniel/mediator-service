@@ -10,6 +10,7 @@ import { filterVisibleEvents } from '../utils/eventLogTopics';
 // TODO(navigation): Validate header navigation coverage before reintroducing card-level links.
 // TODO(agent): Confirm Artikelbezeichnung data coverage for activity rows without item references.
 // TODO(labeling): Reconfirm the activities table header labels against product terminology.
+// TODO(events): Reconfirm ItemUUID validation rules for activity links once backend emits canonical identifiers.
 
 interface ResolvedEventLink {
   path: string;
@@ -43,9 +44,29 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
 
     if (event.EntityType === 'Item') {
       if (event.EntityId) {
+        const rawEntityId = event.EntityId.trim();
+        if (!rawEntityId) {
+          console.warn('RecentEventsCard: Missing EntityId for Item event, falling back to /items.', event);
+          return {
+            path: '/items',
+            ariaSuffix: 'Artikelliste',
+          };
+        }
+        const matchesItemUUID =
+          rawEntityId.startsWith('I-') &&
+          (/^I-[^-]+-\d{4}$/.test(rawEntityId) || /^I-\d{6}-\d{4}$/.test(rawEntityId));
+        const resolvedItemId = matchesItemUUID ? rawEntityId : `I-${rawEntityId}-0001`;
+
+        if (!matchesItemUUID) {
+          console.warn('RecentEventsCard: EntityId did not match ItemUUID; using fallback instance link.', {
+            entityId: event.EntityId,
+            resolvedItemId,
+          });
+        }
+
         return {
-          path: `/items/${encodeURIComponent(event.EntityId)}`,
-          ariaSuffix: `Artikel ${event.EntityId}`,
+          path: `/items/${encodeURIComponent(resolvedItemId)}`,
+          ariaSuffix: `Artikel ${resolvedItemId}`,
         };
       }
 
