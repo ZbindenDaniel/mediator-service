@@ -519,6 +519,46 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
   const { deps, logger } = payload;
   const invokeModel = deps.invokeModel;
   if (!invokeModel) {
+    // TODO(agentic-scheduler): Record missing invoker metadata so stalled runs surface in ops dashboards.
+    const nowIso = resolveNow(deps).toISOString();
+    let existingRun: AgenticRun | null = null;
+
+    try {
+      existingRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
+    } catch (err) {
+      logger.error?.('[agentic-service] Failed to load existing run after missing invoker', {
+        artikelNummer: payload.artikelNummer,
+        context: payload.context,
+        error: toErrorMessage(err)
+      });
+    }
+    logger.warn?.('[agentic-service] Agentic model invocation unavailable; run will remain queued', {
+      artikelNummer: payload.artikelNummer,
+      context: payload.context
+    });
+
+    const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
+    if (!updateQueueState) {
+      return;
+    }
+
+    try {
+      updateQueueState({
+        Artikel_Nummer: payload.artikelNummer,
+        Status: AGENTIC_RUN_STATUS_QUEUED,
+        LastModified: nowIso,
+        RetryCount: existingRun?.RetryCount ?? 0,
+        NextRetryAt: existingRun?.NextRetryAt ?? null,
+        LastError: 'Agentic model invocation unavailable',
+        LastAttemptAt: nowIso
+      });
+    } catch (err) {
+      logger.error?.('[agentic-service] Failed to update queued run after missing invoker', {
+        artikelNummer: payload.artikelNummer,
+        context: payload.context,
+        error: toErrorMessage(err)
+      });
+    }
     return;
   }
 
