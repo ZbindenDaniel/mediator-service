@@ -1,5 +1,7 @@
 # FAILING_TESTS
 
+- [ ] TODO(agent): Re-run matcher-related failures after harness updates to confirm coverage improvements.
+
 Checklist of failing tests from `npm test` with a likely failure reason based on the first error message reported.
 
 - [ ] TODO: startAgenticRun validation failure records declined request without creating run — possible reason: AssertionError [ERR_ASSERTION]: Expected value undefined to not satisfy matcher toHaveBeenCalled
@@ -7,22 +9,22 @@ Checklist of failing tests from `npm test` with a likely failure reason based on
 - [ ] TODO: preserves published status when agentic status is reviewed — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: drops published status when agentic status is not reviewed — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: keeps unpublished rows unaffected by agentic status gating — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-- [ ] TODO: adds normalized quality label to Langtext payload for json export format — possible reason: TypeError: jest.isolateModules is not a function
-- [ ] TODO: adds normalized quality label to Langtext payload for markdown export format — possible reason: TypeError: jest.isolateModules is not a function
-- [ ] TODO: adds normalized quality label to Langtext payload for html export format — possible reason: TypeError: jest.isolateModules is not a function
-- [ ] TODO: does not mutate the original Langtext payload during enrichment — possible reason: TypeError: jest.isolateModules is not a function
-- [ ] TODO: normalizes optional review metadata fields to string or null — possible reason: TypeError: expect.any is not a function
-- [ ] TODO: forwards actor to agentic start for auditing — possible reason: TypeError: expect.any is not a function
-- [ ] TODO: imports an item from a reference payload — possible reason: TypeError: jest.fn(...).mockReturnValueOnce is not a function
-- [ ] TODO: filters shelf boxes by category — possible reason: TypeError: expect(...).toHaveLength is not a function
-- [ ] TODO: returns grouped and raw item data — possible reason: TypeError: expect(...).toHaveLength is not a function
-- [ ] TODO: returns reference results when scope=refs — possible reason: TypeError: expect(...).toHaveLength is not a function
-- [ ] TODO: loads both agentic run event names and labels output with event type — possible reason: TypeError: expect(...).toHaveLength is not a function
-- [ ] TODO: filterSearchResults removes items that already have a box when hidePlaced is true — possible reason: TypeError: expect(...).toHaveLength is not a function
-- [ ] TODO: filterSearchResults keeps all results when hidePlaced is false — possible reason: TypeError: expect(...).toHaveLength is not a function
-- [ ] TODO: startAgenticRun invokes the model immediately for new runs — possible reason: TypeError: getAgenticRun.mockImplementationOnce is not a function
-- [ ] TODO: startAgenticRun requeues existing runs and forwards stored review metadata — possible reason: TypeError: getAgenticRun.mockImplementationOnce is not a function
-- [ ] TODO: auto-cancels run when asynchronous invocation reports failure — possible reason: TypeError: getAgenticRun.mockImplementationOnce is not a function
+- [ ] TODO: adds normalized quality label to Langtext payload for json export format — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: adds normalized quality label to Langtext payload for markdown export format — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: adds normalized quality label to Langtext payload for html export format — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: does not mutate the original Langtext payload during enrichment — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: normalizes optional review metadata fields to string or null — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: forwards actor to agentic start for auditing — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: imports an item from a reference payload — possible reason: matcher coverage added for mockReturnValueOnce; re-run to confirm.
+- [ ] TODO: filters shelf boxes by category — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: returns grouped and raw item data — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: returns reference results when scope=refs — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: loads both agentic run event names and labels output with event type — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: filterSearchResults removes items that already have a box when hidePlaced is true — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: filterSearchResults keeps all results when hidePlaced is false — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: startAgenticRun invokes the model immediately for new runs — possible reason: matcher coverage added for mockImplementationOnce; re-run to confirm.
+- [ ] TODO: startAgenticRun requeues existing runs and forwards stored review metadata — possible reason: matcher coverage added for mockImplementationOnce; re-run to confirm.
+- [ ] TODO: auto-cancels run when asynchronous invocation reports failure — possible reason: matcher coverage added for mockImplementationOnce; re-run to confirm.
 - [ ] TODO: responds with aggregated queue metrics from the in-process orchestrator — possible reason: Unknown failure (no error line captured after the failure marker).
 - [ ] TODO: returns failure payload and logs when the database query throws — possible reason: TypeError: (0 , agentic_1.checkAgenticHealth) is not a function
 - [ ] TODO: ensureAgenticRunSchema adds review columns and backfills decisions — possible reason: Error: Legacy agentic_runs schema requires manual migration before startup.
@@ -62,12 +64,12 @@ Checklist of failing tests from `npm test` with a likely failure reason based on
 - [ ] TODO: logs a warning and starts a new sequence when the latest ItemUUID is not sequential — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: persists and retrieves category metadata via ItemUUID fallback — possible reason: AssertionError [ERR_ASSERTION]: Expected value undefined to not satisfy matcher toThrow
 - [ ] TODO: returns numeric category codes after create and update — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-- [ ] TODO: handles triggered outcome without reporting failures or alerts — possible reason: TypeError: expect(...).not.toHaveProperty is not a function
-- [ ] TODO: handles skipped outcome by reporting the skip and alerting the user — possible reason: TypeError: expect(...).not.toHaveProperty is not a function
-- [ ] TODO: handles failed outcome by reporting failure and alerting the user — possible reason: TypeError: expect(...).not.toHaveProperty is not a function
+- [ ] TODO: handles triggered outcome without reporting failures or alerts — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
+- [ ] TODO: handles skipped outcome by reporting the skip and alerting the user — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
+- [ ] TODO: handles failed outcome by reporting failure and alerting the user — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
 - [ ] TODO: logs when a skipped outcome lacks an ItemUUID — possible reason: AssertionError [ERR_ASSERTION]: Expected mock to have been called with ["Agentic trigger skipped without ItemUUID",{"context":"test-skipped-empty-id","reason":"missing-artikel-nummer"}], but calls were [["Agentic trigger skipped without Artikel_Nummer",{"context":"test-skipped-empty-id","reason":"missing-artikel-nummer"}]]
-- [ ] TODO: logs when reporting failures throws — possible reason: TypeError: expect.any is not a function
-- [ ] TODO: logs when alerting fails after a failed trigger — possible reason: TypeError: expect.any is not a function
-- [ ] TODO: logs when agentic trigger throws unexpectedly — possible reason: TypeError: expect.any is not a function
-- [ ] TODO: logs when async agentic trigger rejects — possible reason: TypeError: expect.any is not a function
-- [ ] TODO: logs when starting agentic trigger throws synchronously — possible reason: TypeError: expect.any is not a function
+- [ ] TODO: logs when reporting failures throws — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when alerting fails after a failed trigger — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when agentic trigger throws unexpectedly — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when async agentic trigger rejects — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when starting agentic trigger throws synchronously — possible reason: matcher coverage added for expect.any; re-run to confirm.
