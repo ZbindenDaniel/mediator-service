@@ -8,6 +8,7 @@ import { normalizeQuality } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
+import { attachTranscriptReference } from '../agentic';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -15,6 +16,7 @@ const MEDIA_PREFIX = '/media/';
 // TODO(agent): Revisit allowed media extensions when new asset types need exporting.
 // TODO(agent): Align item instance summary fields with detail UI once instance list usage expands.
 // TODO(agent): Monitor zero-stock instance warnings to confirm detail filters stay aligned with list policy.
+// TODO(agentic-transcript-save-item): Keep transcript attachment aligned with agentic service helper.
 // TODO(reference-only-edit): Keep edit payload guards aligned with instance/reference field boundaries.
 // TODO(suchbegriff-guard): Reconfirm Suchbegriff update guard stays aligned with import/update flows.
 // TODO(einheit-immutability): Keep Einheit immutable in edit payloads while legacy clients update.
@@ -450,14 +452,26 @@ const action = defineHttpAction({
         const box = ctx.getBox.get(item.BoxID);
         const events = ctx.listEventsForItem.all(itemId);
         let agentic: AgenticRun | null = null;
+        let agenticArtikelNummer = '';
         try {
-          const artikelNummer = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
-          if (!artikelNummer) {
+          agenticArtikelNummer = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
+          if (!agenticArtikelNummer) {
             console.warn('[save-item] Missing Artikel_Nummer for agentic run lookup', { itemId });
           }
-          agentic = ctx.getAgenticRun && artikelNummer
-            ? ((ctx.getAgenticRun.get(artikelNummer) as AgenticRun | undefined) ?? null)
+          agentic = ctx.getAgenticRun && agenticArtikelNummer
+            ? ((ctx.getAgenticRun.get(agenticArtikelNummer) as AgenticRun | undefined) ?? null)
             : null;
+          if (agentic) {
+            try {
+              agentic = attachTranscriptReference(agentic, agenticArtikelNummer, console);
+            } catch (error) {
+              console.error('[save-item] Failed to attach transcript reference to agentic run', {
+                itemId,
+                artikelNummer: agenticArtikelNummer,
+                error
+              });
+            }
+          }
         } catch (error) {
           console.error('[save-item] Failed to load agentic run for item detail', { itemId, error });
           agentic = null;

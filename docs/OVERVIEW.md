@@ -27,6 +27,10 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 - Standardized the agentic queued status label copy to use “Wartet” across shared status labels and the item detail view.
+- Adjusted box detail shelf layouts so the Behälter card spans both columns and the print label action sits under the summary card for better alignment with Regal-Details.
+- Updated recent activity item event links to resolve non-ItemUUID identifiers into instance-style ItemUUIDs (I-...-0001) so item detail pages load reliably.
+- Skipped redundant agentic restart triggers when the restart endpoint already queues a run, and treated already-exists responses as no-op successes with updated logging.
+- Added transcript attachment for item detail agentic runs using the shared helper, with guarded logging for lookup failures.
 - Updated item-create agentic trigger tests to use Artikelnummer identifiers in handler options and assertions to match current validation/logging contracts.
 - Updated import-item agentic trigger payloads to use canonical Artikelnummer fields only and warn before dispatching when Artikel_Nummer is missing.
 - Added Artikelnummer-specific `/api/item-refs/:artikelNummer/agentic` routes with legacy `/api/items` shim logging and ItemUUID rejection, and updated frontend agentic callers to use the new item-ref endpoints.
