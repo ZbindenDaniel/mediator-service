@@ -1,6 +1,7 @@
 # FAILING_TESTS
 
 - [ ] TODO(agent): Re-run matcher-related failures after harness updates to confirm coverage improvements.
+- [x] TODO: tests fail fast when better-sqlite3 is missing — updated test runner preflight and harness messaging.
 
 Checklist of failing tests from `npm test` with a likely failure reason based on the first error message reported.
 
@@ -36,21 +37,21 @@ Checklist of failing tests from `npm test` with a likely failure reason based on
 - [x] TODO: moves box placement when location provided — possible reason: AssertionError [ERR_ASSERTION]: Expected {"ok":true,"photoPath":null} to equal {"ok":true}
 - [x] TODO: filters gallery assets to the current artikel number when available — possible reason: AssertionError [ERR_ASSERTION]: Expected value ["/media/collect-media-existing/07075-1.jpg","/media/collect-media-existing/07074-1.jpg","/media/collect-media-existing/07074-2.jpg","/media/collect-media-existing/07075-2.jpg"] to not satisfy matcher toContain
 - [ ] TODO: rejects re-importing the same CSV once archived — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-- [ ] TODO: ingests multiple date formats and normalizes to ISO strings — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: normalizes comma decimals and thousand separators across numeric fields — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: persists Datum_erfasst from insertdateset-driven Kivitendo exports — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: maps and updates rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: ingests relaxed header variant with insertdate fallback — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: maintains deterministic identifiers when only insertdate is provided across re-imports — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: ingests multiple date formats and normalizes to ISO strings — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: normalizes comma decimals and thousand separators across numeric fields — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: persists Datum_erfasst from insertdateset-driven Kivitendo exports — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: maps and updates rows on re-import — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: ingests relaxed header variant with insertdate fallback — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: maintains deterministic identifiers when only insertdate is provided across re-imports — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
 - [ ] TODO: mints Artikelnummer when CSV row omits identifier — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: persists multi-image metadata and exporter fallback — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: persists multi-image metadata and exporter fallback — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
 - [ ] TODO: exports inherited box Standort when item omits Location — possible reason: RangeError: Missing named parameter "PhotoPath"
-- [ ] TODO: persists rows when only onhand quantity is provided — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: legacy schema updates existing rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: Produkt schema maps and updates rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: Produkt schema drops stale note fragments between imports — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: persists rows when only onhand quantity is provided — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: legacy schema updates existing rows on re-import — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: Produkt schema maps and updates rows on re-import — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: Produkt schema drops stale note fragments between imports — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
 - [ ] TODO: allows forcing zero stock ingestion via options — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: persists derived Standort label for boxes and keeps item location code — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: appends metadata columns so importer round-trips retain placement context — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
