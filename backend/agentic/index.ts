@@ -1187,11 +1187,27 @@ export async function restartAgenticRun(
     return { agentic: existing, queued: false, created: false, reason: 'missing-reference' };
   }
 
-  const review = normalizeReviewMetadata(input.review ?? null, existing, logger);
+  // TODO(agentic-restart): Keep review metadata reset aligned with queued restart behavior.
+  const hasReviewPayload = input.review != null;
+  const review = hasReviewPayload ? normalizeReviewMetadata(input.review ?? null, existing, logger) : null;
   const nowIso = resolveNow(deps).toISOString();
   const actor = input.actor?.trim() || null;
   const context = input.context?.trim() || null;
+  const shouldClearReviewMetadata = !hasReviewPayload;
+  const reviewState = shouldClearReviewMetadata
+    ? 'not_required'
+    : review?.state ?? existing?.ReviewState ?? 'not_required';
+  const reviewedBy = shouldClearReviewMetadata ? null : review?.reviewedBy ?? existing?.ReviewedBy ?? null;
+  const lastReviewDecision = shouldClearReviewMetadata ? null : review?.decision ?? null;
+  const lastReviewNotes = shouldClearReviewMetadata ? null : review?.notes ?? null;
   recordRequestLogStart(request, searchQuery, logger);
+
+  if (shouldClearReviewMetadata) {
+    logger.info?.('[agentic-service] Clearing review metadata for queued restart', {
+      artikelNummer,
+      context
+    });
+  }
   const txn = deps.db.transaction(() => {
     if (existing) {
       const updateResult = deps.updateAgenticRunStatus.run(
@@ -1200,12 +1216,12 @@ export async function restartAgenticRun(
           Status: AGENTIC_RUN_STATUS_QUEUED,
           SearchQuery: searchQuery,
           LastModified: nowIso,
-          ReviewState: review?.state ?? existing?.ReviewState ?? 'not_required',
-          ReviewedBy: review?.reviewedBy ?? existing?.ReviewedBy ?? null,
+          ReviewState: reviewState,
+          ReviewedBy: reviewedBy,
           ReviewedByIsSet: true,
-          LastReviewDecision: review?.decision ?? null,
+          LastReviewDecision: lastReviewDecision,
           LastReviewDecisionIsSet: true,
-          LastReviewNotes: review?.notes ?? null,
+          LastReviewNotes: lastReviewNotes,
           LastReviewNotesIsSet: true,
           RetryCount: 0,
           RetryCountIsSet: true,
@@ -1226,10 +1242,10 @@ export async function restartAgenticRun(
         SearchQuery: searchQuery,
         Status: AGENTIC_RUN_STATUS_QUEUED,
         LastModified: nowIso,
-        ReviewState: review?.state ?? existing != null ? existing!.ReviewState : 'not_required',
-        ReviewedBy: review?.reviewedBy ?? existing != null ? existing!.ReviewedBy : null,
-        LastReviewDecision: review?.decision ?? null,
-        LastReviewNotes: review?.notes ?? null
+        ReviewState: reviewState,
+        ReviewedBy: reviewedBy,
+        LastReviewDecision: lastReviewDecision,
+        LastReviewNotes: lastReviewNotes
       });
     }
 
