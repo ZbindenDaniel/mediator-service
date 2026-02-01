@@ -34,6 +34,7 @@ type GroupItemsOptions = {
 // TODO(agent): Revisit grouped quantity semantics if mixed Einheit payloads appear in a single grouping bucket.
 // TODO(bulk-grouping): Validate bulk ItemUUID-based grouping once backend grouped payloads are aligned.
 // TODO(bulk-quantity-display): Confirm bulk grouping keys and displayCount stay aligned with backend payload updates.
+// TODO(non-canonical-representatives): Review aggregated representative logging once production volume increases.
 function normalizeString(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -412,16 +413,41 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
     });
   }
 
-  for (const group of grouped.values()) {
-    if (group.summary.representativeItemId && !isCanonicalInstance(group.summary.representativeItemId)) {
-      logger.info?.(`[${logContext}] Falling back to non-canonical representative`, {
-        representativeItemId: group.summary.representativeItemId,
-        artikelNumber: group.summary.Artikel_Nummer ?? null,
-        quality: group.summary.Quality ?? null,
-        boxId: group.summary.BoxID ?? null,
-        location: group.summary.Location ?? null
-      });
+  let nonCanonicalRepresentativeCount = 0;
+  const nonCanonicalRepresentativeSamples: Array<{
+    representativeItemId: string | null;
+    artikelNumber: string | null;
+    quality: number | null;
+    boxId: string | null;
+    location: string | null;
+  }> = [];
+
+  try {
+    for (const group of grouped.values()) {
+      if (group.summary.representativeItemId && !isCanonicalInstance(group.summary.representativeItemId)) {
+        nonCanonicalRepresentativeCount += 1;
+        if (nonCanonicalRepresentativeSamples.length < 5) {
+          nonCanonicalRepresentativeSamples.push({
+            representativeItemId: group.summary.representativeItemId,
+            artikelNumber: group.summary.Artikel_Nummer ?? null,
+            quality: group.summary.Quality ?? null,
+            boxId: group.summary.BoxID ?? null,
+            location: group.summary.Location ?? null
+          });
+        }
+      }
     }
+  } catch (error) {
+    logError(`[${logContext}] Failed to aggregate non-canonical representatives`, error, {
+      groupCount: grouped.size
+    });
+  }
+
+  if (nonCanonicalRepresentativeCount > 0) {
+    logger.info?.(`[${logContext}] Non-canonical representatives detected`, {
+      nonCanonicalRepresentativeCount,
+      sampleItems: nonCanonicalRepresentativeSamples
+    });
   }
 
   return Array.from(grouped.values());
