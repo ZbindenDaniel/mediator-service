@@ -7,6 +7,7 @@ const Module = require('module');
 // TODO(agent): Re-validate FAILING_TEST entries after matcher additions settle.
 // TODO(agent): Map out module mocking cleanup strategies if we broaden the Jest surface further.
 // TODO(agent): Keep module alias resolution in sync with TypeScript path mappings to avoid drift during test loads.
+// TODO(agent): Confirm native module error messaging remains helpful as the test harness grows.
 
 const originalLoad = Module._load;
 const originalResolveFilename = Module._resolveFilename;
@@ -136,7 +137,17 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (mockEntry) {
     return instantiateMock(mockEntry, request);
   }
-  return originalLoad(request, parent, isMain);
+  try {
+    return originalLoad(request, parent, isMain);
+  } catch (error) {
+    if (request === 'better-sqlite3' && error && error.code === 'MODULE_NOT_FOUND') {
+      console.error(
+        '[harness] Native module missing: better-sqlite3. Install dependencies or rebuild before running DB-backed tests.',
+        error
+      );
+    }
+    throw error;
+  }
 };
 
 function createSuite(name, parent = null) {
