@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Kept Suchbegriff in export CSV headers, updated export tests, and expanded export schema/published gating logging for clearer diagnostics.
 - Documented the current failing test list in `FAILING_TEST` for triage and batching.
 - Logged missing agentic model invocations and persisted queue metadata (LastError/LastAttemptAt) so stalled runs surface with context for operators.
 - Cleared review metadata when restarting agentic runs without explicit review payloads so queued status stays authoritative in the UI.
