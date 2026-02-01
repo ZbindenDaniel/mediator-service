@@ -55,6 +55,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(suchbegriff-override): Revisit Suchbegriff override logging once UI formalizes edit intent.
 // TODO(media-controls): Validate media add/remove slot mapping once details UX feedback lands.
 // TODO(touch-handlers): Validate touch navigation UX after removing root container touch bindings.
+// TODO(agentic-restart-queue): Confirm restart responses include queued metadata for UI sync.
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
@@ -2187,20 +2188,28 @@ export default function ItemDetail({ itemId }: Props) {
         body: JSON.stringify(restartRequestPayload)
       });
 
+      let body: any = null;
+      try {
+        body = await restartResponse.json();
+      } catch (err) {
+        console.error('Failed to parse agentic restart response', err);
+      }
+
+      const refreshedRun: AgenticRun | null = body?.agentic ?? null;
+      const restartReason =
+        typeof body?.reason === 'string' ? body.reason.trim().toLowerCase() : '';
+
       if (!restartResponse.ok) {
+        if (restartReason === 'already-exists' && refreshedRun) {
+          logger.info?.('Agentic restart queued; no start needed.', { referenceId });
+          setAgentic({ ...refreshedRun, SearchQuery: baseSearchTerm });
+          setAgenticError(null);
+          return;
+        }
         console.error('Agentic restart failed', restartResponse.status);
         setAgenticError('Ki-Neustart fehlgeschlagen.');
         return;
       }
-
-      const body = await restartResponse
-        .json()
-        .catch((err) => {
-          console.error('Failed to parse agentic restart response', err);
-          return null;
-        });
-
-      const refreshedRun: AgenticRun | null = body?.agentic ?? null;
       if (refreshedRun) {
         setAgentic({ ...refreshedRun, SearchQuery: baseSearchTerm });
       } else {
@@ -2210,6 +2219,11 @@ export default function ItemDetail({ itemId }: Props) {
       if (!refreshedRun) {
         console.warn('Agentic restart succeeded without returning a run');
         setAgenticError('Ki-Neustart lieferte keine Daten.');
+        return;
+      }
+
+      if (normalizeAgenticRunStatus(refreshedRun.Status) === AGENTIC_RUN_STATUS_QUEUED) {
+        logger.info?.('Agentic restart queued; no start needed.', { referenceId });
         return;
       }
 
@@ -2244,6 +2258,10 @@ export default function ItemDetail({ itemId }: Props) {
         context: 'item detail restart'
       });
       if (triggerResult.outcome !== 'triggered') {
+        if (triggerResult.outcome === 'skipped' && triggerResult.reason === 'already-exists') {
+          logger.info?.('Agentic restart already exists; no start needed.', { referenceId });
+          return;
+        }
         console.warn('Agentic restart did not trigger run; auto-cancelling', triggerResult);
         let failureReasonCode: string | null = null;
         if (triggerResult.outcome === 'skipped') {

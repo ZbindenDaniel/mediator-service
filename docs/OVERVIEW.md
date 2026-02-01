@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Skipped redundant agentic restart triggers when the restart endpoint already queues a run, and treated already-exists responses as no-op successes with updated logging.
 - Added transcript attachment for item detail agentic runs using the shared helper, with guarded logging for lookup failures.
 - Updated item-create agentic trigger tests to use Artikelnummer identifiers in handler options and assertions to match current validation/logging contracts.
 - Updated import-item agentic trigger payloads to use canonical Artikelnummer fields only and warn before dispatching when Artikel_Nummer is missing.
