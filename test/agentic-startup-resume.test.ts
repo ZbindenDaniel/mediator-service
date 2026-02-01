@@ -7,6 +7,7 @@ import {
 import type { AgenticRun } from '../models';
 
 // TODO(agentic-resume): Extend coverage when persisted request context becomes available.
+// TODO(agentic-resume-logging): Add assertions for resume path selection logging if external orchestrator is added.
 
 describe('resumeStaleAgenticRuns', () => {
   function createDependencies(runs: AgenticRun[], overrides: Partial<{ invokeResult: { ok: boolean } }> = {}) {
@@ -96,7 +97,7 @@ describe('resumeStaleAgenticRuns', () => {
     expect(result).toEqual({ resumed: 0, skipped: 1, failed: 0 });
     expect(logger.warn).toHaveBeenCalledWith(
       '[agentic-service] Skipping stale agentic run without search query',
-      expect.objectContaining({ itemId: staleRun.Artikel_Nummer, status: staleRun.Status })
+      expect.objectContaining({ artikelNummer: staleRun.Artikel_Nummer, status: staleRun.Status })
     );
     expect(invokeModel).not.toHaveBeenCalled();
   });
