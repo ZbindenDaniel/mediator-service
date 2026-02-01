@@ -376,7 +376,8 @@ function normalizeReviewMetadata(
   };
 }
 
-function attachTranscriptReference(
+// TODO(agentic-transcript-shared): Consider moving transcript attachment to a shared helper module.
+export function attachTranscriptReference(
   agenticRun: AgenticRun | null,
   itemId: string,
   logger: AgenticServiceLogger
