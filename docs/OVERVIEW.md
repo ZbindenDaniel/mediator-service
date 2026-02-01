@@ -27,6 +27,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 - Added guarded box upsert handling that logs missing named parameters and refreshed the CSV Standort fallback fixture to include PhotoPath for export coverage.
+- Kept Suchbegriff in export CSV headers, updated export tests, and expanded export schema/published gating logging for clearer diagnostics.
+- Added test-runner preflight checks and DB lifecycle logging so missing native SQLite modules fail fast with clear diagnostics and cleanup is consistently logged.
 - Documented the current failing test list in `FAILING_TEST` for triage and batching.
 - Logged missing agentic model invocations and persisted queue metadata (LastError/LastAttemptAt) so stalled runs surface with context for operators.
 - Cleared review metadata when restarting agentic runs without explicit review payloads so queued status stays authoritative in the UI.
@@ -209,6 +211,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added runtime-path logging for agentic health/resume flows and aligned resume test expectations with Artikel_Nummer log keys.
 - Filtered legacy item media selection to respect Artikel_Nummer prefixes, added media/response logging for save-item payloads, and aligned box move response tests with the photoPath contract.
 - Extended the test harness with Jest-style matcher helpers (any, length/property checks, isolateModules, one-shot mock returns) and guarded matcher registration logging for clearer test diagnostics.
+- Normalized Artikel_Nummer handling during CSV ingestion so invalid values are logged early, minting failures are isolated per row, and ItemUUID generation falls back safely without aborting the entire import.
 
 ## Documentation Map
 

@@ -10,6 +10,7 @@ import path from 'path';
 // TODO(agent): Reconfirm recent activities search filtering once term usage is finalized.
 // TODO(agent): Review zero-stock updates for non-bulk items once list/grouping changes are finalized.
 // TODO(agent): Revisit events.csv import data validation once external event feeds land.
+// TODO(agent): Validate DB lifecycle logging once we add test-only database adapters.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -39,12 +40,15 @@ import { resolveStandortLabel } from './standort-label';
 import { parseSequentialItemUUID } from './lib/itemIds';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const dbLogContext = { path: DB_PATH };
 let db: Database.Database;
+console.info('[db] Opening database connection', dbLogContext);
 try {
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
+  console.info('[db] Database connection ready', dbLogContext);
 } catch (err) {
-  console.error('Failed to initialize database', err);
+  console.error('[db] Failed to initialize database', err);
   throw err;
 }
 
@@ -1169,6 +1173,20 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
 
   ensureAgenticRunReferenceKeyColumns(database);
   ensureAgenticRunQueueColumns(database);
+}
+
+export function closeDatabase(options: { reason?: string; suppressErrors?: boolean } = {}): void {
+  const { reason, suppressErrors = false } = options;
+  console.info('[db] Closing database connection', { ...dbLogContext, reason: reason ?? null });
+  try {
+    db.close();
+    console.info('[db] Database connection closed', { ...dbLogContext, reason: reason ?? null });
+  } catch (error) {
+    console.error('[db] Failed to close database connection', { ...dbLogContext, reason: reason ?? null, error });
+    if (!suppressErrors) {
+      throw error;
+    }
+  }
 }
 
 function ensureAgenticRunReferenceKeyColumns(database: Database.Database = db): void {
