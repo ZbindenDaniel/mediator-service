@@ -46,7 +46,7 @@ Checklist of failing tests from `npm test` with a likely failure reason based on
 - [ ] TODO: mints Artikelnummer when CSV row omits identifier — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
 - [ ] TODO: persists multi-image metadata and exporter fallback — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
-- [ ] TODO: exports inherited box Standort when item omits Location — possible reason: RangeError: Missing named parameter "PhotoPath"
+- [x] TODO: exports inherited box Standort when item omits Location — possible reason: fixed missing PhotoPath binding in box fixture
 - [ ] TODO: persists rows when only onhand quantity is provided — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
 - [ ] TODO: legacy schema updates existing rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
 - [ ] TODO: Produkt schema maps and updates rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting

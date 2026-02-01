@@ -38,6 +38,7 @@ import {
   db,
   getItem,
   upsertBox,
+  runUpsertBox,
   persistItem,
   persistItemInstance,
   persistItemReference,
@@ -414,6 +415,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 type ActionContext = {
   db: typeof db;
   upsertBox: typeof upsertBox;
+  runUpsertBox: typeof runUpsertBox;
   persistItem: typeof persistItem;
   persistItemInstance: typeof persistItemInstance;
   persistItemReference: typeof persistItemReference;
@@ -680,6 +682,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         await action.handle?.(req, res, {
           db,
           upsertBox,
+          runUpsertBox,
           persistItem,
           persistItemInstance,
           persistItemReference,

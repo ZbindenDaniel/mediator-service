@@ -15,7 +15,7 @@ import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
 import { parse as parseCsvSync } from 'csv-parse/sync';
 import {
-  upsertBox,
+  runUpsertBox,
   persistItem,
   queueLabel,
   persistItemReference,
@@ -1113,7 +1113,7 @@ export async function ingestCsvFile(
           PlacedAt: placedAt,
           UpdatedAt: now,
         };
-        upsertBox.run(box);
+        runUpsertBox(box);
       }
       const rawArtikelNummer = final['Artikel-Nummer'];
       let artikelNummer = typeof rawArtikelNummer === 'string' ? rawArtikelNummer.trim() : '';
@@ -1644,7 +1644,7 @@ export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: nu
         };
 
         try {
-          upsertBox.run(box);
+          runUpsertBox(box);
           count++;
         } catch (upsertError) {
           console.error('[importer] Failed to upsert box from boxes.csv row', {
