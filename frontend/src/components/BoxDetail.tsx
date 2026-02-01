@@ -28,6 +28,7 @@ import QualityBadge from './QualityBadge';
 // TODO(agent): Add shared focus styling for clickable table rows once global table styles support it.
 // TODO(bulk-display): Validate displayCount fallback logic for Menge rows after backend grouping changes.
 // TODO(box-detail-layout): Validate box detail summary grid alignment across breakpoints.
+// TODO(box-detail-layout): Confirm print label placement still aligns with shelf detail card height in the summary grid.
 // TODO(agent): Reassess shelf label/notes editing once shelf tagging conventions stabilize.
 // TODO(mobile-box-detail): Keep box detail container width constrained to the viewport on small screens.
 
@@ -647,6 +648,8 @@ export default function BoxDetail({ boxId }: Props) {
                   </div>
                 </div>
 
+                <PrintLabelButton boxId={box.BoxID} />
+
                 {isBoxRelocatable ? (
                   <RelocateBoxCard
                     boxId={box.BoxID}
@@ -794,13 +797,11 @@ export default function BoxDetail({ boxId }: Props) {
                     </form>
                   </div>
                 ) : null}
-
-                <PrintLabelButton boxId={box.BoxID} />
               </div>
             </div>
 
             {isShelf ? (
-              <div className="card">
+              <div className="card grid-span-2">
                 <h3>Behälter</h3>
                 <div className="item-cards">
                   {containedBoxes.length ? (

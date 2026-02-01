@@ -1842,6 +1842,7 @@ button:focus {
 }
 
 // TODO(ui-grid): Validate box detail summary grid alignment once responsive refinements land.
+// TODO(box-detail-layout): Recheck box detail summary spacing after shelf card width adjustments.
 .box-detail-summary-grid {
     display: grid;
     grid-template-columns: 1fr;
