@@ -32,6 +32,7 @@ import {
   saveAgenticRequestPayload,
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
+  fetchQueuedAgenticRuns,
   updateQueuedAgenticRunQueueState,
   type AgenticRunQueueUpdate,
   type LogEventPayload
@@ -778,6 +779,105 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
       logger
     });
   }
+}
+
+// TODO(agentic-queue-dispatch): Add queue-level metrics once dispatch cadence is in production.
+export function dispatchQueuedAgenticRuns(
+  deps: AgenticServiceDependencies,
+  { limit }: { limit?: number } = {}
+): { scheduled: number; skipped: number; failed: number } {
+  validateDependencies(deps);
+  const logger = resolveLogger(deps);
+  const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
+  let queuedRuns: AgenticRun[] = [];
+
+  try {
+    queuedRuns = fetchQueuedAgenticRuns(effectiveLimit);
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
+      error: toErrorMessage(err),
+      limit: effectiveLimit
+    });
+    return { scheduled: 0, skipped: 0, failed: 0 };
+  }
+
+  let scheduled = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const run of queuedRuns) {
+    const artikelNummer = (run.Artikel_Nummer || '').trim();
+    const searchQuery = (run.SearchQuery || '').trim();
+
+    if (!artikelNummer) {
+      skipped += 1;
+      logger.warn?.('[agentic-service] Skipping queued agentic run without Artikel_Nummer', {
+        runId: run.Id
+      });
+      continue;
+    }
+
+    if (!searchQuery) {
+      skipped += 1;
+      const nowIso = resolveNow(deps).toISOString();
+      const retryCount = run.RetryCount ?? 0;
+      const lastAttemptAt = run.LastAttemptAt ?? nowIso;
+      const lastError = 'missing-search-query';
+
+      logger.warn?.('[agentic-service] Skipping queued agentic run with empty search query', {
+        artikelNummer,
+        runId: run.Id
+      });
+
+      applyQueueUpdate(deps, logger, {
+        Artikel_Nummer: artikelNummer,
+        Status: AGENTIC_RUN_STATUS_FAILED,
+        LastModified: nowIso,
+        RetryCount: retryCount,
+        NextRetryAt: null,
+        LastError: lastError,
+        LastAttemptAt: lastAttemptAt
+      });
+      continue;
+    }
+
+    try {
+      scheduleAgenticModelInvocation({
+        artikelNummer,
+        searchQuery,
+        context: null,
+        review: null,
+        request: null,
+        deps,
+        logger
+      });
+      scheduled += 1;
+    } catch (err) {
+      failed += 1;
+      const errorMessage = toErrorMessage(err);
+      logger.error?.('[agentic-service] Failed to schedule queued agentic run', {
+        artikelNummer,
+        runId: run.Id,
+        error: errorMessage
+      });
+
+      const nowIso = resolveNow(deps).toISOString();
+      const retryCount = run.RetryCount ?? 0;
+      const lastAttemptAt = run.LastAttemptAt ?? nowIso;
+
+      applyQueueUpdate(deps, logger, {
+        Artikel_Nummer: artikelNummer,
+        Status: AGENTIC_RUN_STATUS_FAILED,
+        LastModified: nowIso,
+        RetryCount: retryCount,
+        NextRetryAt: null,
+        LastError: errorMessage,
+        LastAttemptAt: lastAttemptAt
+      });
+    }
+  }
+
+  return { scheduled, skipped, failed };
 }
 
 function validateDependencies(deps: AgenticServiceDependencies): void {

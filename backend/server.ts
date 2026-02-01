@@ -8,7 +8,7 @@ import { loadActions } from './actions';
 import { MEDIA_DIR } from './lib/media';
 
 export { MEDIA_DIR } from './lib/media';
-import { resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
+import { dispatchQueuedAgenticRuns, resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
 // TODO(agent): Verify recent activities term helper wiring in the action context.
 // TODO(agent): Audit Langtext response serialization once structured payload adoption completes.
 // TODO(agent): Revisit inbox watcher patterns once ZIP uploads introduce mixed payload sequencing.
@@ -511,9 +511,24 @@ function createAgenticServiceDependencies(
 
 if (agenticServiceEnabled) {
   console.info('[server] In-process agentic orchestrator active; agentic runs dispatch immediately.');
+  // TODO(agentic-queue-dispatch): Revisit dispatch cadence once agentic queue volume increases.
+  const agenticQueueDispatchIntervalMs = 5000;
+  const agenticQueueDispatchLimit = 5;
+  const agenticQueueDependencies = createAgenticServiceDependencies();
+  const dispatchQueuedRuns = () => {
+    try {
+      const summary = dispatchQueuedAgenticRuns(agenticQueueDependencies, { limit: agenticQueueDispatchLimit });
+      if (summary.scheduled || summary.skipped || summary.failed) {
+        console.info('[agentic-service] Queued agentic run dispatch summary', summary);
+      }
+    } catch (err) {
+      console.error('[agentic-service] Failed to dispatch queued agentic runs', err);
+    }
+  };
+  setInterval(dispatchQueuedRuns, agenticQueueDispatchIntervalMs);
   void (async () => {
     try {
-      const result = await resumeStaleAgenticRuns(createAgenticServiceDependencies());
+      const result = await resumeStaleAgenticRuns(agenticQueueDependencies);
       console.info('[agentic-service] Startup stale run resume summary', result);
     } catch (err) {
       console.error('[agentic-service] Failed to resume stale agentic runs on startup', err);
