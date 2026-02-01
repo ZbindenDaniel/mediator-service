@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Cleared review metadata when restarting agentic runs without explicit review payloads so queued status stays authoritative in the UI.
 - Added a queued agentic run dispatcher that skips empty search queries with queue error updates and runs on a lightweight server interval for retries.
 - Standardized the agentic queued status label copy to use “Wartet” across shared status labels and the item detail view.
 - Adjusted box detail shelf layouts so the Behälter card spans both columns and the print label action sits under the summary card for better alignment with Regal-Details.
