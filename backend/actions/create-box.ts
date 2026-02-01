@@ -230,7 +230,7 @@ const action = defineHttpAction({
                 continue;
               }
 
-              ctx.upsertBox.run({
+              ctx.runUpsertBox({
                 BoxID: candidate,
                 LocationId: candidate,
                 Label: payload.label,
@@ -307,7 +307,7 @@ const action = defineHttpAction({
               continue;
             }
 
-            ctx.upsertBox.run({
+            ctx.runUpsertBox({
               BoxID: candidate,
               // TODO(agent): Capture an initial Label once box creation collects placement context.
               LocationId: null,

@@ -45,13 +45,13 @@ Checklist of failing tests from `npm test` with a likely failure reason based on
 - [ ] TODO: ingests relaxed header variant with insertdate fallback — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
 - [ ] TODO: maintains deterministic identifiers when only insertdate is provided across re-imports — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
 - [ ] TODO: mints Artikelnummer when CSV row omits identifier — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
-- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
-- [ ] TODO: persists multi-image metadata and exporter fallback — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
-- [ ] TODO: exports inherited box Standort when item omits Location — possible reason: RangeError: Missing named parameter "PhotoPath"
-- [ ] TODO: persists rows when only onhand quantity is provided — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
-- [ ] TODO: legacy schema updates existing rows on re-import — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
-- [ ] TODO: Produkt schema maps and updates rows on re-import — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
-- [ ] TODO: Produkt schema drops stale note fragments between imports — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: persists multi-image metadata and exporter fallback — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [x] TODO: exports inherited box Standort when item omits Location — possible reason: fixed missing PhotoPath binding in box fixture
+- [ ] TODO: persists rows when only onhand quantity is provided — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: legacy schema updates existing rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: Produkt schema maps and updates rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: Produkt schema drops stale note fragments between imports — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
 - [ ] TODO: allows forcing zero stock ingestion via options — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: persists derived Standort label for boxes and keeps item location code — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
 - [ ] TODO: appends metadata columns so importer round-trips retain placement context — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:

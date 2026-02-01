@@ -1329,7 +1329,7 @@ const action = defineHttpAction({
         ) => {
           let agenticRunPersisted = false;
           if (boxId) {
-            ctx.upsertBox.run({
+            ctx.runUpsertBox({
               BoxID: boxId,
               LocationId: boxLocation,
               Label: boxLabelToPersist,
