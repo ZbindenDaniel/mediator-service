@@ -132,8 +132,8 @@ export default function LandingPage() {
             </Link>
           </div>
         */}
-        {/* TODO(chat-card): Confirm that chat entry should stay visible alongside overview cards. */}
-        <div className="card" id="chat-card">
+        {/* TODO(chat-card): Confirm chat entry visibility should remain mobile-only. */}
+        <div className="card mobile-only" id="chat-card">
           <Link className="linkcard" to="/chat">
             <div>
               <h2>Chat</h2>
