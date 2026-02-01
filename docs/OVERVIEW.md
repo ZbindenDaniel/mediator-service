@@ -42,6 +42,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - Split search scoring into field-level scores (Suchbegriff, Hersteller, Artikelbeschreibung, Artikel_Nummer, ItemUUID, BoxID) with best-field logging for top results while keeping response payloads stable.
 - Normalized export image path serialization to strip `/media/` prefixes so CSV outputs align with WebDAV storage layouts.
 - Replaced BoxTag with a new LocationTag that resolves item locations through direct shelf placements or box/shelf lookups, with guarded logging and fallbacks for missing Standort data.
+- Adjusted LocationTag to suppress duplicate secondary labels when fallback labels match the primary display output.
 - Added Auf_Lager to item instance summaries with warnings for missing/non-numeric stock and hid the withdraw action for out-of-stock instance detail views while keeping navigation intact.
 - Added shelf label projections for box/item list payloads and updated list rendering to prefer shelf labels with logging when labels are missing.
 - Centralized BoxTag label fallbacks to prefer editable labels with normalization logging and shelf-label formatting only when no label is present, keeping IDs hidden by default across box surfaces.

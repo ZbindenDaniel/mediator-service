@@ -23,6 +23,7 @@ interface ResolvedLocation {
   status: 'loading' | 'resolved' | 'missing';
 }
 
+// TODO(agent): Confirm secondary labels only render when fallback differs from the primary display label.
 function normalizeTagValue(
   value: string | null | undefined,
   context: string,
@@ -63,7 +64,7 @@ function buildLocationDisplay(
   const normalizedLabel = normalizeTagValue(labelOverride, `${context} label override`, itemId);
   const fallbackLabel = resolveFallbackLabel(normalizedLocation, context, itemId);
   const displayLabel = normalizedLabel || fallbackLabel || normalizedLocation || null;
-  const secondaryLabel = fallbackLabel;
+  const secondaryLabel = fallbackLabel && fallbackLabel !== displayLabel ? fallbackLabel : null;
 
   if (normalizedLocation && !fallbackLabel) {
     logger.warn('Shelf label formatter returned empty label for location tag', {
