@@ -8,6 +8,7 @@ import RelocateItemCard from './RelocateItemCard';
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
 // TODO(agentic-close): Confirm close action copy and upsert payload once backend wiring lands.
 // TODO(agentic-edit-lock): Confirm messaging for edit restrictions while agentic runs are active.
+// TODO(agentic-status-labels): Keep queued label aligned with shared status labels.
 import type { Item, EventLog, AgenticRun, ItemDetailResponse, ItemInstanceSummary } from '../../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
@@ -572,6 +573,7 @@ export async function performItemDetailAgenticCancel({
   return { updatedRun, error: finalError };
 }
 
+// TODO(agentic-status-labels): Reuse shared agentic status labels in detail display.
 export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDisplay {
   if (!run) {
     return {
