@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Logged debug-only prompt segment size metrics (reviewer notes, aggregated search, target snapshots, retry sections) with guarded logging in agentic item extraction.
+- Reactivated the landing page Chat card and scoped it to mobile-only visibility while keeping a note to recheck QR scanning card placement.
 - Added guarded box upsert handling that logs missing named parameters and refreshed the CSV Standort fallback fixture to include PhotoPath for export coverage.
 - Kept Suchbegriff in export CSV headers, updated export tests, and expanded export schema/published gating logging for clearer diagnostics.
 - Added test-runner preflight checks and DB lifecycle logging so missing native SQLite modules fail fast with clear diagnostics and cleanup is consistently logged.
@@ -214,6 +216,7 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Normalized Artikel_Nummer handling during CSV ingestion so invalid values are logged early, minting failures are isolated per row, and ItemUUID generation falls back safely without aborting the entire import.
 - Condensed agentic extraction prompt assembly to remove duplicated context blocks, tightened search request guidance, and logged prompt lengths to track size reductions.
 - Shortened the extraction system prompt content and retry labels by compressing the extract prompt template and retry guidance further.
+- Truncated agentic extraction search requests before schema validation so extra queries are logged and discarded instead of failing item flows.
 
 ## Documentation Map
 

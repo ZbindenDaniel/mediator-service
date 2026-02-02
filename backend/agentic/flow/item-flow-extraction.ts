@@ -126,6 +126,7 @@ function truncateForLog(value: string, maxLength = MAX_LOG_STRING_LENGTH): strin
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
 }
 
+// TODO(agent): Simplify search query handling once prompt guidance is revisited.
 function sanitizeForLog(value: unknown, depth = 0): unknown {
   if (value == null) {
     return value;
@@ -246,6 +247,7 @@ export async function runExtractionAttempts({
     : 1;
   // TODO(agent): Cache pricing stage output per attempt to avoid redundant LLM calls during retries.
   // TODO(agent): Review search request limit telemetry after env overrides roll out.
+  // TODO(agent): Add alerting thresholds for prompt segment sizes as prompts evolve.
   try {
     logger?.info?.({
       msg: 'resolved agent search request limit',
@@ -313,8 +315,29 @@ export async function runExtractionAttempts({
       reviewerInstructionBlock = '';
     }
 
+    // TODO: possible merge issue
     const formattedSources = attempt > 1 ? formatSourcesForRetry(aggregatedSources, logger) : [];
     const contextSections = [];
+    const reviewerNotesLineCount = sanitizedReviewerNotes ? sanitizedReviewerNotes.split('\n').length : 0;
+    const aggregatedSearchLineCount = aggregatedSearchText ? aggregatedSearchText.split('\n').length : 0;
+    const targetSnapshotLineCount = trimmedTargetSnapshot ? trimmedTargetSnapshot.split('\n').length : 0;
+    try {
+      logger?.debug?.({
+        msg: 'prompt segment size metrics',
+        attempt,
+        itemId,
+        reviewerNotesLength: sanitizedReviewerNotes.length,
+        reviewerNotesLineCount,
+        aggregatedSearchLength: aggregatedSearchText.length,
+        aggregatedSearchLineCount,
+        targetSnapshotLength: trimmedTargetSnapshot.length,
+        targetSnapshotLineCount
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId });
+    }
+
+    const initialSections = ['Aggregated search context:', aggregatedSearchText, searchRequestHint];
     if (reviewerInstructionBlock) {
       contextSections.push(reviewerInstructionBlock);
     }
@@ -355,6 +378,22 @@ export async function runExtractionAttempts({
             parseErrorPreview: sanitizeForLog(parseErrorHint)
           });
         }
+      }
+      if (reviewerInstructionBlock) {
+        retrySections.splice(1, 0, reviewerInstructionBlock);
+      }
+      const retrySectionLengths = retrySections.map((section) => section.length);
+      try {
+        logger?.debug?.({
+          msg: 'retry prompt section size metrics',
+          attempt,
+          itemId,
+          retrySectionsCount: retrySections.length,
+          retrySectionLengths,
+          retrySectionsLength: retrySectionLengths.reduce((total, length) => total + length, 0)
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to log retry prompt size metrics', attempt, itemId });
       }
       userContent = [retrySections.join('\n\n'), baseUserContent].join('\n\n');
     }
@@ -670,7 +709,29 @@ export async function runExtractionAttempts({
       });
     }
 
-    const agentParsed = AgentOutputSchema.safeParse(parsed);
+    let normalizedParsed = parsed as unknown;
+    const parsedRecord = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    const rawQueries = parsedRecord?.__searchQueries;
+    if (Array.isArray(rawQueries) && rawQueries.length > searchesPerRequestLimit) {
+      const resolvedLimit = Number.isFinite(searchesPerRequestLimit) && searchesPerRequestLimit > 0
+        ? Math.floor(searchesPerRequestLimit)
+        : 1;
+      const truncatedQueries = rawQueries.slice(0, resolvedLimit);
+      normalizedParsed = { ...parsedRecord, __searchQueries: truncatedQueries };
+      try {
+        logger?.warn?.({
+          msg: 'truncating agent search queries before schema validation',
+          itemId,
+          attempt,
+          requestedCount: rawQueries.length,
+          allowedCount: resolvedLimit,
+          truncatedQueriesPreview: sanitizeForLog(truncatedQueries)
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to log search query truncation', itemId, attempt });
+      }
+    }
+    const agentParsed = AgentOutputSchema.safeParse(normalizedParsed);
     if (!agentParsed.success) {
       const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
       logger?.warn?.({

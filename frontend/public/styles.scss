@@ -69,6 +69,14 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
+// a:visited,
+// a:link {
+//   color: seagreen;
+// }
+// a:hover {
+//   color: darkgreen;
+// }
+
 .visually-hidden {
     position: absolute;
     width: 1px;
@@ -1841,6 +1849,11 @@ button:focus {
     flex-direction: column;
 }
 
+// TODO(mobile-only): Confirm the breakpoint for hiding mobile-only cards remains aligned with layout guidance.
+.mobile-only {
+    display: block;
+}
+
 // TODO(ui-grid): Validate box detail summary grid alignment once responsive refinements land.
 // TODO(box-detail-layout): Recheck box detail summary spacing after shelf card width adjustments.
 .box-detail-summary-grid {
@@ -1860,6 +1873,10 @@ button:focus {
     .landing-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr))
+    }
+
+    .mobile-only {
+        display: none;
     }
 }
 
