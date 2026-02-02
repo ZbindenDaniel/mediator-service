@@ -1407,7 +1407,7 @@ function extractMissingNamedParams(sql: string, bindings: Record<string, unknown
 }
 
 export function runUpsertBox(box: Box, logger: Pick<Console, 'error' | 'warn'> = console): boolean {
-  const missingParams = extractMissingNamedParams(upsertBox.source || '', box as Record<string, unknown>);
+  const missingParams = extractMissingNamedParams(upsertBox.source || '', box as unknown as Record<string, unknown>);
   if (missingParams.length > 0) {
     try {
       logger.warn?.('[db:upsertBox] Missing named parameters detected before execution', {
