@@ -58,6 +58,7 @@ const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
 const MAX_LOG_DEPTH = 2;
+const MAX_RETRY_SUMMARY_LENGTH = 260;
 // TODO(migration): Remove legacy identifier logging/stripping once all agent outputs are Artikel_Nummer-only.
 const LEGACY_IDENTIFIER_KEYS = ['itemUUid', 'itemId', 'id'] as const;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
@@ -123,6 +124,10 @@ function withNoToolCallInstruction(messages: Array<{ role: string; content: unkn
 }
 
 function truncateForLog(value: string, maxLength = MAX_LOG_STRING_LENGTH): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+function truncateForPrompt(value: string, maxLength = MAX_RETRY_SUMMARY_LENGTH): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
 }
 
@@ -267,6 +272,7 @@ export async function runExtractionAttempts({
     searchRequestCycles = 0;
   };
 
+  // TODO(agent): Keep retry metadata summaries compact as prompt guidance evolves.
   while (attempt <= maxAttempts) {
     logger?.debug?.({ msg: 'extraction attempt', attempt, itemId });
 
@@ -350,38 +356,27 @@ export async function runExtractionAttempts({
     let userContent = baseUserContent;
 
     if (attempt > 1) {
-      const retrySections = [
-        'Retry after supervisor/validation feedback.',
-        `Supervisor:\n${lastSupervision || 'None'}`,
-        'Raw output:',
-        lastRaw ? lastRaw : 'None'
-      ];
+      const retrySummaryLines: string[] = ['Retry summary (compact):'];
+      const supervisionSummary = truncateForPrompt(lastSupervision?.trim?.() ?? 'None');
+      retrySummaryLines.push(`Supervisor: ${supervisionSummary || 'None'}`);
+      const validationSummaryParts: string[] = [];
       if (lastValidationIssues === 'INVALID_JSON') {
-        const sanitizedPayload = lastInvalidJsonPayload?.sanitizedPayload?.trim();
-        const parseErrorHint = lastInvalidJsonErrorHint.trim();
-        const invalidJsonGuidance: string[] = [];
-        if (sanitizedPayload) {
-          invalidJsonGuidance.push('Sanitized JSON from last attempt:', sanitizedPayload);
+        const parseErrorHint = truncateForPrompt(lastInvalidJsonErrorHint.trim() || 'Invalid JSON output.');
+        validationSummaryParts.push(`Invalid JSON (${parseErrorHint}).`);
+        if (lastInvalidJsonPlaceholderIssues.length) {
+          const placeholderSummary = truncateForPrompt(lastInvalidJsonPlaceholderIssues.join(', '));
+          validationSummaryParts.push(`Placeholders: ${placeholderSummary}.`);
         }
-        if (parseErrorHint) {
-          invalidJsonGuidance.push(`Parse hint: ${parseErrorHint}`);
-        }
-        if (invalidJsonGuidance.length) {
-          retrySections.splice(2, 0, invalidJsonGuidance.join('\n'));
-          logger?.info?.({
-            msg: 'added invalid json guidance to retry prompt',
-            attempt,
-            itemId,
-            hasSanitizedPayload: Boolean(sanitizedPayload),
-            hasParseErrorHint: Boolean(parseErrorHint),
-            sanitizedPayloadPreview: sanitizeForLog(sanitizedPayload),
-            parseErrorPreview: sanitizeForLog(parseErrorHint)
-          });
-        }
+      } else if (Array.isArray(lastValidationIssues)) {
+        const issueSummary = truncateForPrompt(JSON.stringify(lastValidationIssues));
+        validationSummaryParts.push(`Schema issues: ${issueSummary}.`);
+      } else if (lastValidationIssues) {
+        validationSummaryParts.push(`Validation: ${truncateForPrompt(String(lastValidationIssues))}.`);
       }
-      if (reviewerInstructionBlock) {
-        retrySections.splice(1, 0, reviewerInstructionBlock);
+      if (validationSummaryParts.length) {
+        retrySummaryLines.push(`Error hint: ${validationSummaryParts.join(' ')}`);
       }
+      const retrySections = [retrySummaryLines.join('\n')];
       const retrySectionLengths = retrySections.map((section) => section.length);
       try {
         logger?.debug?.({
@@ -427,7 +422,7 @@ export async function runExtractionAttempts({
         itemId,
         systemLength: systemPrompt.length,
         userLength: userContent.length,
-        totalLength: systemPrompt.length + userContent.length
+        promptLength: systemPrompt.length + userContent.length
       });
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to log extraction prompt length', attempt, itemId });
