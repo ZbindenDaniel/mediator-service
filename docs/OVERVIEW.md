@@ -214,6 +214,8 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Filtered legacy item media selection to respect Artikel_Nummer prefixes, added media/response logging for save-item payloads, and aligned box move response tests with the photoPath contract.
 - Extended the test harness with Jest-style matcher helpers (any, length/property checks, isolateModules, one-shot mock returns) and guarded matcher registration logging for clearer test diagnostics.
 - Normalized Artikel_Nummer handling during CSV ingestion so invalid values are logged early, minting failures are isolated per row, and ItemUUID generation falls back safely without aborting the entire import.
+- Condensed agentic extraction prompt assembly to remove duplicated context blocks, tightened search request guidance, and logged prompt lengths to track size reductions.
+- Shortened the extraction system prompt content and retry labels by compressing the extract prompt template and retry guidance further.
 - Truncated agentic extraction search requests before schema validation so extra queries are logged and discarded instead of failing item flows.
 
 ## Documentation Map
