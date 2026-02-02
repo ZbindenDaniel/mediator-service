@@ -246,6 +246,7 @@ export async function runExtractionAttempts({
     : 1;
   // TODO(agent): Cache pricing stage output per attempt to avoid redundant LLM calls during retries.
   // TODO(agent): Review search request limit telemetry after env overrides roll out.
+  // TODO(agent): Add alerting thresholds for prompt segment sizes as prompts evolve.
   try {
     logger?.info?.({
       msg: 'resolved agent search request limit',
@@ -311,6 +312,25 @@ export async function runExtractionAttempts({
       reviewerInstructionBlock = '';
     }
 
+    const reviewerNotesLineCount = sanitizedReviewerNotes ? sanitizedReviewerNotes.split('\n').length : 0;
+    const aggregatedSearchLineCount = aggregatedSearchText ? aggregatedSearchText.split('\n').length : 0;
+    const targetSnapshotLineCount = trimmedTargetSnapshot ? trimmedTargetSnapshot.split('\n').length : 0;
+    try {
+      logger?.debug?.({
+        msg: 'prompt segment size metrics',
+        attempt,
+        itemId,
+        reviewerNotesLength: sanitizedReviewerNotes.length,
+        reviewerNotesLineCount,
+        aggregatedSearchLength: aggregatedSearchText.length,
+        aggregatedSearchLineCount,
+        targetSnapshotLength: trimmedTargetSnapshot.length,
+        targetSnapshotLineCount
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId });
+    }
+
     const initialSections = ['Aggregated search context:', aggregatedSearchText, searchRequestHint];
     if (reviewerInstructionBlock) {
       initialSections.unshift(reviewerInstructionBlock);
@@ -358,6 +378,19 @@ export async function runExtractionAttempts({
       }
       if (reviewerInstructionBlock) {
         retrySections.splice(1, 0, reviewerInstructionBlock);
+      }
+      const retrySectionLengths = retrySections.map((section) => section.length);
+      try {
+        logger?.debug?.({
+          msg: 'retry prompt section size metrics',
+          attempt,
+          itemId,
+          retrySectionsCount: retrySections.length,
+          retrySectionLengths,
+          retrySectionsLength: retrySectionLengths.reduce((total, length) => total + length, 0)
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to log retry prompt size metrics', attempt, itemId });
       }
       userContent = retrySections.join('\n\n');
     }
