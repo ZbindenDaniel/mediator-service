@@ -1,5 +1,6 @@
 // TODO(agent): Monitor the impact of enriched item metadata on search heuristics and adjust weighting when planner feedback is available.
 // TODO(agent): Revisit the hard cap on generated search plans once telemetry confirms the typical query volume per item.
+// TODO(agent): Review aggregated search text sanitization thresholds once search quality metrics are available.
 import { z } from 'zod';
 import type { SearchResult } from '../tools/tavily-client';
 import { RateLimitError } from '../tools/tavily-client';
@@ -464,10 +465,77 @@ export async function collectSearchContexts({
     }
   };
 
-  const buildAggregatedSearchText = () =>
-    searchContexts
-      .map((ctx, index) => [`Search query ${index + 1}: ${ctx.query}`, ctx.text].join('\n'))
+  const buildAggregatedSearchText = () => {
+    const maxParagraphsPerSource = 2;
+    const urlRegex = /https?:\/\/\S+/gi;
+    const separatorRegex = /^([-=*_])\1{2,}$/;
+
+    const sanitizeSourceText = (rawText: string, query: string, sourceIndex: number): string => {
+      try {
+        if (!rawText || !rawText.trim()) {
+          return rawText;
+        }
+        const paragraphs = rawText.split(/\n\s*\n/);
+        const sanitizedParagraphs: string[] = [];
+
+        for (const paragraph of paragraphs) {
+          if (sanitizedParagraphs.length >= maxParagraphsPerSource) {
+            break;
+          }
+          const cleanedLines = paragraph
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+            .filter((line) => !separatorRegex.test(line))
+            .filter((line) => {
+              const urlMatches = line.match(urlRegex);
+              if (!urlMatches) {
+                return true;
+              }
+              if (urlMatches.length >= 2) {
+                return false;
+              }
+              return !(urlMatches.length === 1 && line.length > 80);
+            });
+
+          const collapsed = cleanedLines.join(' ').replace(/\s+/g, ' ').trim();
+          if (collapsed) {
+            sanitizedParagraphs.push(collapsed);
+          }
+        }
+
+        const sanitizedText = sanitizedParagraphs.join('\n\n');
+        const originalLength = rawText.length;
+        const sanitizedLength = sanitizedText.length;
+        if (originalLength > 0 && sanitizedLength > 0) {
+          const removalRatio = (originalLength - sanitizedLength) / originalLength;
+          if (removalRatio > 0.3) {
+            logger?.warn?.({
+              msg: 'aggregated search text sanitized heavily',
+              itemId,
+              sourceIndex,
+              searchQuery: query,
+              originalLength,
+              sanitizedLength,
+              removalRatio: Number(removalRatio.toFixed(3))
+            });
+          }
+        }
+
+        return sanitizedText || rawText;
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to sanitize aggregated search text', itemId, sourceIndex, searchQuery: query });
+        return rawText;
+      }
+    };
+
+    return searchContexts
+      .map((ctx, index) => {
+        const sanitizedText = sanitizeSourceText(ctx.text, ctx.query, index);
+        return [`Search query ${index + 1}: ${ctx.query}`, sanitizedText].join('\n');
+      })
       .join('\n\n-----\n\n');
+  };
 
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
 
