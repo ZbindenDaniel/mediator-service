@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Condensed agentic extraction retry metadata into compact summaries and kept prompt-length debug logging guarded per attempt.
 - Logged debug-only prompt segment size metrics (reviewer notes, aggregated search, target snapshots, retry sections) with guarded logging in agentic item extraction.
 - Reactivated the landing page Chat card and scoped it to mobile-only visibility while keeping a note to recheck QR scanning card placement.
 - Added guarded box upsert handling that logs missing named parameters and refreshed the CSV Standort fallback fixture to include PhotoPath for export coverage.
