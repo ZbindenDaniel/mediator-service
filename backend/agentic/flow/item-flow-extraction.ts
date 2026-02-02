@@ -126,6 +126,7 @@ function truncateForLog(value: string, maxLength = MAX_LOG_STRING_LENGTH): strin
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
 }
 
+// TODO(agent): Simplify search query handling once prompt guidance is revisited.
 function sanitizeForLog(value: unknown, depth = 0): unknown {
   if (value == null) {
     return value;
@@ -692,7 +693,29 @@ export async function runExtractionAttempts({
       });
     }
 
-    const agentParsed = AgentOutputSchema.safeParse(parsed);
+    let normalizedParsed = parsed as unknown;
+    const parsedRecord = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    const rawQueries = parsedRecord?.__searchQueries;
+    if (Array.isArray(rawQueries) && rawQueries.length > searchesPerRequestLimit) {
+      const resolvedLimit = Number.isFinite(searchesPerRequestLimit) && searchesPerRequestLimit > 0
+        ? Math.floor(searchesPerRequestLimit)
+        : 1;
+      const truncatedQueries = rawQueries.slice(0, resolvedLimit);
+      normalizedParsed = { ...parsedRecord, __searchQueries: truncatedQueries };
+      try {
+        logger?.warn?.({
+          msg: 'truncating agent search queries before schema validation',
+          itemId,
+          attempt,
+          requestedCount: rawQueries.length,
+          allowedCount: resolvedLimit,
+          truncatedQueriesPreview: sanitizeForLog(truncatedQueries)
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to log search query truncation', itemId, attempt });
+      }
+    }
+    const agentParsed = AgentOutputSchema.safeParse(normalizedParsed);
     if (!agentParsed.success) {
       const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
       logger?.warn?.({
