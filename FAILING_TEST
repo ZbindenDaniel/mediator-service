@@ -2,6 +2,7 @@
 
 - [ ] TODO(agent): Re-run matcher-related failures after harness updates to confirm coverage improvements.
 - [x] TODO: tests fail fast when better-sqlite3 is missing — updated test runner preflight and harness messaging.
+- [ ] TODO: stabilize better-sqlite3 native module availability for tests (build step or mock fallback) to avoid MODULE_NOT_FOUND cascading failures.
 
 Checklist of failing tests from `npm test` with a likely failure reason based on the first error message reported.
 
@@ -69,8 +70,10 @@ Checklist of failing tests from `npm test` with a likely failure reason based on
 - [ ] TODO: handles skipped outcome by reporting the skip and alerting the user — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
 - [ ] TODO: handles failed outcome by reporting failure and alerting the user — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
 - [ ] TODO: logs when a skipped outcome lacks an ItemUUID — possible reason: AssertionError [ERR_ASSERTION]: Expected mock to have been called with ["Agentic trigger skipped without ItemUUID",{"context":"test-skipped-empty-id","reason":"missing-artikel-nummer"}], but calls were [["Agentic trigger skipped without Artikel_Nummer",{"context":"test-skipped-empty-id","reason":"missing-artikel-nummer"}]]
+- [ ] TODO: fix ItemUUID vs Artikel_Nummer log expectation drift in item-create-trigger-handler tests — possible reason: log copy now references Artikel_Nummer while test still expects ItemUUID.
 - [ ] TODO: logs when reporting failures throws — possible reason: matcher coverage added for expect.any; re-run to confirm.
 - [ ] TODO: logs when alerting fails after a failed trigger — possible reason: matcher coverage added for expect.any; re-run to confirm.
 - [ ] TODO: logs when agentic trigger throws unexpectedly — possible reason: matcher coverage added for expect.any; re-run to confirm.
 - [ ] TODO: logs when async agentic trigger rejects — possible reason: matcher coverage added for expect.any; re-run to confirm.
 - [ ] TODO: logs when starting agentic trigger throws synchronously — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: address database connection lifecycle in item-persistence-reference-behavior/langtext-contract tests (connection closed before clear/persist) — possible reason: TypeError: The database connection is not open.

@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Captured the latest `npm test` failures (native better-sqlite3 module missing, ItemUUID vs Artikel_Nummer log assertion drift, and closed DB connections in persistence tests) and noted them for follow-up in `FAILING_TEST`/`docs/AGENT.md`.
 - Added guarded box upsert handling that logs missing named parameters and refreshed the CSV Standort fallback fixture to include PhotoPath for export coverage.
 - Kept Suchbegriff in export CSV headers, updated export tests, and expanded export schema/published gating logging for clearer diagnostics.
 - Added test-runner preflight checks and DB lifecycle logging so missing native SQLite modules fail fast with clear diagnostics and cleanup is consistently logged.

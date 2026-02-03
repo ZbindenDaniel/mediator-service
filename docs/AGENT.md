@@ -40,6 +40,15 @@ These planning responses should be explicit enough that another developer can im
 
 ## Planned Work Log
 
+### Stabilize test harness + align log expectations (planned)
+**Goal & motivation:** Restore a reliable test baseline by eliminating cascading native-module failures and aligning log assertions with current Artikel_Nummer messaging so we can focus on real regressions and improve coverage.
+
+**Implementation plan (minimal diff):**
+1. Add TODO notes before changes in `test/harness.js`, `scripts/run-tests.js`, and `backend/db.ts` to highlight the specific native-module resolution paths and DB lifecycle hooks we need to touch, then ensure missing `better-sqlite3` either triggers a clear early exit or an explicit mock path (no new runtime dependencies).
+2. Update `test/item-create-trigger-handler.test.ts` to expect the new “Artikel_Nummer” log copy, keeping assertions scoped and aligned with existing logging utilities.
+3. Audit `test/item-persistence-reference-behavior.test.ts` and `test/langtext-contract.test.ts` to confirm database connections are opened before `clearDatabase` and closed once per suite, with added logging/try-catch in cleanup helpers to avoid silent failures.
+4. Re-run `npm test` to confirm the harness no longer collapses into MODULE_NOT_FOUND errors and that updated expectations reflect current behaviour.
+
 ### Handle agentic trigger already-exists skip (in progress)
 **Goal & motivation:** Avoid surfacing redundant failure alerts when a run is already queued, while keeping the frontend change minimal and aligned with the existing error contract.
 
