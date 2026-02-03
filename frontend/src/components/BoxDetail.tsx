@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
@@ -83,10 +83,12 @@ export default function BoxDetail({ boxId }: Props) {
   const [photoRemoved, setPhotoRemoved] = useState(false);
   const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
+  const [qrReturnPayload, setQrReturnPayload] = useState<{ id: string; rawPayload?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
@@ -115,6 +117,34 @@ export default function BoxDetail({ boxId }: Props) {
       logError('Failed to navigate to item detail from box detail row', error, { boxId, itemId, source });
     }
   }, [boxId, navigate]);
+
+  useEffect(() => {
+    if (!location.state || typeof location.state !== 'object') {
+      return;
+    }
+    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown } };
+    if (!state.qrReturn) {
+      return;
+    }
+    try {
+      const id = typeof state.qrReturn.id === 'string' ? state.qrReturn.id.trim() : '';
+      if (!id) {
+        logger.warn?.('BoxDetail: ignoring QR return payload with empty id', { boxId, qrReturn: state.qrReturn });
+        return;
+      }
+      const rawPayload = typeof state.qrReturn.rawPayload === 'string' ? state.qrReturn.rawPayload : undefined;
+      setQrReturnPayload({ id, rawPayload });
+      setShowAdd(true);
+      logger.info?.('BoxDetail: received QR return payload', { boxId, id });
+      try {
+        navigate(location.pathname, { replace: true, state: {} });
+      } catch (error) {
+        logError('BoxDetail: failed to clear QR return location state', error, { boxId, id });
+      }
+    } catch (error) {
+      logError('BoxDetail: failed to process QR return payload', error, { boxId });
+    }
+  }, [boxId, location.pathname, location.state, navigate]);
 
   async function handleDeleteBox() {
     if (!box) return;
@@ -945,8 +975,15 @@ export default function BoxDetail({ boxId }: Props) {
                 {showAdd && (
                   <AddItemToBoxDialog
                     boxId={boxId}
-                    onAdded={() => { void load({ showSpinner: false }); }}
-                    onClose={() => setShowAdd(false)}
+                    onAdded={() => {
+                      setQrReturnPayload(null);
+                      void load({ showSpinner: false });
+                    }}
+                    onClose={() => {
+                      setShowAdd(false);
+                      setQrReturnPayload(null);
+                    }}
+                    qrReturnPayload={qrReturnPayload}
                   />
                 )}
               </div>
