@@ -27,6 +27,14 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 - Added Docker Compose logging configuration defaults with size/retention options for core services to prepare for log rotation policies.
+- Sanitized aggregated search context text to trim URL-heavy lines, collapse whitespace, and log large truncations while keeping search schemas unchanged.
+- Condensed agentic extraction retry metadata into compact summaries and kept prompt-length debug logging guarded per attempt.
+- Logged debug-only prompt segment size metrics (reviewer notes, aggregated search, target snapshots, retry sections) with guarded logging in agentic item extraction.
+- Reactivated the landing page Chat card and scoped it to mobile-only visibility while keeping a note to recheck QR scanning card placement.
+- Added guarded box upsert handling that logs missing named parameters and refreshed the CSV Standort fallback fixture to include PhotoPath for export coverage.
+- Kept Suchbegriff in export CSV headers, updated export tests, and expanded export schema/published gating logging for clearer diagnostics.
+- Added test-runner preflight checks and DB lifecycle logging so missing native SQLite modules fail fast with clear diagnostics and cleanup is consistently logged.
+- Documented the current failing test list in `FAILING_TEST` for triage and batching.
 - Logged missing agentic model invocations and persisted queue metadata (LastError/LastAttemptAt) so stalled runs surface with context for operators.
 - Cleared review metadata when restarting agentic runs without explicit review payloads so queued status stays authoritative in the UI.
 - Added a queued agentic run dispatcher that skips empty search queries with queue error updates and runs on a lightweight server interval for retries.
@@ -205,6 +213,13 @@ TODO(export-docs): keep backup-vs-ERP export language aligned with grouped ItemU
 - Added agentic run reference preflight checks for bulk queue and start/restart flows to skip missing item_refs rows with structured warnings, and logged resolved Artikel_Nummer keys in trigger flows.
 - Treated agentic status route IDs as Artikel_Nummer identifiers with Artikelnummer-first logging while keeping agentic payloads unchanged.
 - Added a guarded item flow target helper that logs non-object inputs and safely narrows Artikelnummer access for agentic runs.
+- Added runtime-path logging for agentic health/resume flows and aligned resume test expectations with Artikel_Nummer log keys.
+- Filtered legacy item media selection to respect Artikel_Nummer prefixes, added media/response logging for save-item payloads, and aligned box move response tests with the photoPath contract.
+- Extended the test harness with Jest-style matcher helpers (any, length/property checks, isolateModules, one-shot mock returns) and guarded matcher registration logging for clearer test diagnostics.
+- Normalized Artikel_Nummer handling during CSV ingestion so invalid values are logged early, minting failures are isolated per row, and ItemUUID generation falls back safely without aborting the entire import.
+- Condensed agentic extraction prompt assembly to remove duplicated context blocks, tightened search request guidance, and logged prompt lengths to track size reductions.
+- Shortened the extraction system prompt content and retry labels by compressing the extract prompt template and retry guidance further.
+- Truncated agentic extraction search requests before schema validation so extra queries are logged and discarded instead of failing item flows.
 
 ## Documentation Map
 

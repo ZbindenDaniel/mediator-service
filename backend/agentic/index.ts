@@ -1473,11 +1473,16 @@ function resolveReviewFromPersistedRun(run: AgenticRun | null): AgenticRunReview
 }
 
 // TODO(agentic-resume): Persist request context metadata to forward during resume once storage exists.
+// TODO(agentic-resume-logging): Revisit resume path logging once external orchestration replaces in-process dispatch.
 export async function resumeStaleAgenticRuns(
   deps: AgenticServiceDependencies
 ): Promise<AgenticRunResumeResult> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
+
+  logger.info?.('[agentic-service] Evaluating stale agentic run resume path', {
+    invoker: deps.invokeModel ? 'available' : 'missing'
+  });
 
   let staleRuns: AgenticRun[] = [];
   try {
@@ -1515,6 +1520,11 @@ export async function resumeStaleAgenticRuns(
     }
 
     try {
+      logger.info?.('[agentic-service] Scheduling stale agentic run for resume', {
+        artikelNummer: run.Artikel_Nummer,
+        status: run.Status,
+        invoker: deps.invokeModel ? 'available' : 'missing'
+      });
       scheduleAgenticModelInvocation({
         artikelNummer: run.Artikel_Nummer,
         searchQuery,
@@ -1646,6 +1656,10 @@ export function checkAgenticHealth(
   persistRequestPayloadSnapshot(request, logger);
 
   try {
+    logger.info?.('[agentic-service] Running agentic health check via in-process store', {
+      requestId: request?.id ?? null,
+      requestLogged: Boolean(request)
+    });
     recordRequestLogStart(request, null, logger);
     const statement = deps.db.prepare(
       `SELECT Status as status, COUNT(*) as count, MAX(LastModified) as lastModified

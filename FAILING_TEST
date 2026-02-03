@@ -1,0 +1,76 @@
+# FAILING_TESTS
+
+- [ ] TODO(agent): Re-run matcher-related failures after harness updates to confirm coverage improvements.
+- [x] TODO: tests fail fast when better-sqlite3 is missing — updated test runner preflight and harness messaging.
+
+Checklist of failing tests from `npm test` with a likely failure reason based on the first error message reported.
+
+- [ ] TODO: startAgenticRun validation failure records declined request without creating run — possible reason: AssertionError [ERR_ASSERTION]: Expected value undefined to not satisfy matcher toHaveBeenCalled
+- [x] TODO: maps numeric categories to canonical label names for CSV output — possible reason: AssertionError [ERR_ASSERTION]: Expected ["Artikel-Nummer","Artikeltyp","CreatedAt","Grafikname(n)","Artikelbeschreibung","Suchbegriff","Kurzbeschreibung","Langtext","Hersteller","Länge(mm)","Breite(mm)","Höhe(mm)","Gewicht(kg)","Verkaufspreis","Auf Lager","Veröffentlicht_Status","Shopartikel","Einheit","EAN","Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)","Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)","Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)","Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)","ItemUUID","BoxID","Location","Label","UpdatedAt"] to equal ["Artikel-Nummer","Artikeltyp","CreatedAt","Grafikname(n)","Artikelbeschreibung","Kurzbeschreibung","Langtext","Hersteller","Länge(mm)","Breite(mm)","Höhe(mm)","Gewicht(kg)","Verkaufspreis","Auf Lager","Veröffentlicht_Status","Shopartikel","Einheit","EAN","Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)","Unterkategorien_A_(entsprechen_den_Kategorien_im_Shop)","Hauptkategorien_B_(entsprechen_den_Kategorien_im_Shop)","Unterkategorien_B_(entsprechen_den_Kategorien_im_Shop)","ItemUUID","BoxID","Location","Label","UpdatedAt"]
+- [x] TODO: preserves published status when agentic status is reviewed — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [x] TODO: drops published status when agentic status is not reviewed — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [x] TODO: keeps unpublished rows unaffected by agentic status gating — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: adds normalized quality label to Langtext payload for json export format — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: adds normalized quality label to Langtext payload for markdown export format — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: adds normalized quality label to Langtext payload for html export format — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: does not mutate the original Langtext payload during enrichment — possible reason: matcher coverage added for jest.isolateModules; re-run to confirm.
+- [ ] TODO: normalizes optional review metadata fields to string or null — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: forwards actor to agentic start for auditing — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: imports an item from a reference payload — possible reason: matcher coverage added for mockReturnValueOnce; re-run to confirm.
+- [ ] TODO: filters shelf boxes by category — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: returns grouped and raw item data — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: returns reference results when scope=refs — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: loads both agentic run event names and labels output with event type — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: filterSearchResults removes items that already have a box when hidePlaced is true — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: filterSearchResults keeps all results when hidePlaced is false — possible reason: matcher coverage added for toHaveLength; re-run to confirm.
+- [ ] TODO: startAgenticRun invokes the model immediately for new runs — possible reason: matcher coverage added for mockImplementationOnce; re-run to confirm.
+- [ ] TODO: startAgenticRun requeues existing runs and forwards stored review metadata — possible reason: matcher coverage added for mockImplementationOnce; re-run to confirm.
+- [ ] TODO: auto-cancels run when asynchronous invocation reports failure — possible reason: matcher coverage added for mockImplementationOnce; re-run to confirm.
+- [ ] TODO: responds with aggregated queue metrics from the in-process orchestrator — possible reason: Unknown failure (no error line captured after the failure marker).
+- [ ] TODO: returns failure payload and logs when the database query throws — possible reason: TypeError: (0 , agentic_1.checkAgenticHealth) is not a function
+- [ ] TODO: ensureAgenticRunSchema adds review columns and backfills decisions — possible reason: Error: Legacy agentic_runs schema requires manual migration before startup.
+- [ ] TODO: direct dispatch forwards stored review metadata to the model invoker — possible reason: AssertionError [ERR_ASSERTION]: Expected mock to have been called 1 times
+- [ ] TODO: schedules stale queued runs for asynchronous invocation — possible reason: TypeError: (0 , agentic_1.resumeStaleAgenticRuns) is not a function
+- [ ] TODO: skips runs missing search queries and logs warning — possible reason: TypeError: (0 , agentic_1.resumeStaleAgenticRuns) is not a function
+- [ ] TODO: reports failure when database query throws — possible reason: TypeError: (0 , agentic_1.resumeStaleAgenticRuns) is not a function
+- [x] TODO: updates notes without requiring location — possible reason: AssertionError [ERR_ASSERTION]: Expected {"ok":true,"photoPath":null} to equal {"ok":true}
+- [x] TODO: moves box placement when location provided — possible reason: AssertionError [ERR_ASSERTION]: Expected {"ok":true,"photoPath":null} to equal {"ok":true}
+- [x] TODO: filters gallery assets to the current artikel number when available — possible reason: AssertionError [ERR_ASSERTION]: Expected value ["/media/collect-media-existing/07075-1.jpg","/media/collect-media-existing/07074-1.jpg","/media/collect-media-existing/07074-2.jpg","/media/collect-media-existing/07075-2.jpg"] to not satisfy matcher toContain
+- [ ] TODO: rejects re-importing the same CSV once archived — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: ingests multiple date formats and normalizes to ISO strings — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: normalizes comma decimals and thousand separators across numeric fields — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: persists Datum_erfasst from insertdateset-driven Kivitendo exports — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: maps and updates rows on re-import — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: ingests relaxed header variant with insertdate fallback — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: maintains deterministic identifiers when only insertdate is provided across re-imports — possible reason: Pending re-run after Artikel_Nummer normalization guards ItemUUID minting.
+- [ ] TODO: mints Artikelnummer when CSV row omits identifier — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: hydrates Datum_erfasst from insertdate alias when normalized column is missing — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: persists multi-image metadata and exporter fallback — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [x] TODO: exports inherited box Standort when item omits Location — possible reason: fixed missing PhotoPath binding in box fixture
+- [ ] TODO: persists rows when only onhand quantity is provided — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: legacy schema updates existing rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: Produkt schema maps and updates rows on re-import — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: Produkt schema drops stale note fragments between imports — possible reason: Error: Invalid Artikel_Nummer for ItemUUID minting
+- [ ] TODO: allows forcing zero stock ingestion via options — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: persists derived Standort label for boxes and keeps item location code — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: appends metadata columns so importer round-trips retain placement context — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: mode=erp groups rows and omits ItemUUID column — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: partner CSV exports can be re-imported without losing descriptive metadata — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: image_names column enumerates stored media assets when multiple files exist — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: image_names column excludes non-image assets when media directories are mixed — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: mints the first identifier when no prior ItemUUID exists for an Artikel_Nummer — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: increments the sequence when a prior ItemUUID exists for the same Artikel_Nummer — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: resets the sequence when the latest stored ItemUUID belongs to a different Artikel_Nummer — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: logs a warning and starts a new sequence when the latest ItemUUID is not sequential — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: persists and retrieves category metadata via ItemUUID fallback — possible reason: AssertionError [ERR_ASSERTION]: Expected value undefined to not satisfy matcher toThrow
+- [ ] TODO: returns numeric category codes after create and update — possible reason: AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+- [ ] TODO: handles triggered outcome without reporting failures or alerts — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
+- [ ] TODO: handles skipped outcome by reporting the skip and alerting the user — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
+- [ ] TODO: handles failed outcome by reporting failure and alerting the user — possible reason: matcher coverage added for toHaveProperty; re-run to confirm.
+- [ ] TODO: logs when a skipped outcome lacks an ItemUUID — possible reason: AssertionError [ERR_ASSERTION]: Expected mock to have been called with ["Agentic trigger skipped without ItemUUID",{"context":"test-skipped-empty-id","reason":"missing-artikel-nummer"}], but calls were [["Agentic trigger skipped without Artikel_Nummer",{"context":"test-skipped-empty-id","reason":"missing-artikel-nummer"}]]
+- [ ] TODO: logs when reporting failures throws — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when alerting fails after a failed trigger — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when agentic trigger throws unexpectedly — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when async agentic trigger rejects — possible reason: matcher coverage added for expect.any; re-run to confirm.
+- [ ] TODO: logs when starting agentic trigger throws synchronously — possible reason: matcher coverage added for expect.any; re-run to confirm.

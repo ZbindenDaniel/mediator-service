@@ -10,6 +10,7 @@ import path from 'path';
 // TODO(agent): Reconfirm recent activities search filtering once term usage is finalized.
 // TODO(agent): Review zero-stock updates for non-bulk items once list/grouping changes are finalized.
 // TODO(agent): Revisit events.csv import data validation once external event feeds land.
+// TODO(agent): Validate DB lifecycle logging once we add test-only database adapters.
 import { DB_PATH } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
@@ -39,12 +40,15 @@ import { resolveStandortLabel } from './standort-label';
 import { parseSequentialItemUUID } from './lib/itemIds';
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const dbLogContext = { path: DB_PATH };
 let db: Database.Database;
+console.info('[db] Opening database connection', dbLogContext);
 try {
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
+  console.info('[db] Database connection ready', dbLogContext);
 } catch (err) {
-  console.error('Failed to initialize database', err);
+  console.error('[db] Failed to initialize database', err);
   throw err;
 }
 
@@ -1171,6 +1175,20 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
   ensureAgenticRunQueueColumns(database);
 }
 
+export function closeDatabase(options: { reason?: string; suppressErrors?: boolean } = {}): void {
+  const { reason, suppressErrors = false } = options;
+  console.info('[db] Closing database connection', { ...dbLogContext, reason: reason ?? null });
+  try {
+    db.close();
+    console.info('[db] Database connection closed', { ...dbLogContext, reason: reason ?? null });
+  } catch (error) {
+    console.error('[db] Failed to close database connection', { ...dbLogContext, reason: reason ?? null, error });
+    if (!suppressErrors) {
+      throw error;
+    }
+  }
+}
+
 function ensureAgenticRunReferenceKeyColumns(database: Database.Database = db): void {
   let columns: Array<{ name: string }> = [];
   try {
@@ -1350,6 +1368,7 @@ ensureAgenticRequestLogSchema(db);
 
 export { db };
 
+// TODO(agent): Keep named-parameter binding guards aligned with upsertBox schema changes.
 export const upsertBox = db.prepare(
   `
       INSERT INTO boxes (BoxID, LocationId, Label, CreatedAt, Notes, PhotoPath, PlacedBy, PlacedAt, UpdatedAt)
@@ -1365,6 +1384,56 @@ export const upsertBox = db.prepare(
       UpdatedAt=excluded.UpdatedAt
   `
 );
+
+function extractMissingNamedParams(sql: string, bindings: Record<string, unknown>): string[] {
+  const missing: string[] = [];
+  if (!sql) {
+    return missing;
+  }
+  const seen = new Set<string>();
+  const regex = /@([A-Za-z0-9_]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(sql))) {
+    const name = match[1];
+    if (seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    if (!Object.prototype.hasOwnProperty.call(bindings, name)) {
+      missing.push(name);
+    }
+  }
+  return missing;
+}
+
+export function runUpsertBox(box: Box, logger: Pick<Console, 'error' | 'warn'> = console): boolean {
+  const missingParams = extractMissingNamedParams(upsertBox.source || '', box as unknown as Record<string, unknown>);
+  if (missingParams.length > 0) {
+    try {
+      logger.warn?.('[db:upsertBox] Missing named parameters detected before execution', {
+        missingParams,
+        provided: Object.keys(box)
+      });
+    } catch (logError) {
+      console.error('[db:upsertBox] Failed to log missing parameter warning', logError);
+    }
+  }
+
+  try {
+    upsertBox.run(box);
+    return true;
+  } catch (error) {
+    if (error instanceof RangeError && /Missing named parameter/i.test(error.message)) {
+      logger.error?.('[db:upsertBox] Missing named parameter error during execution', {
+        error: error.message,
+        missingParams
+      });
+      return false;
+    }
+    logger.error?.('[db:upsertBox] Failed to upsert box', { error });
+    throw error;
+  }
+}
 
 export const queueLabel = db.prepare(`INSERT INTO label_queue (ItemUUID, CreatedAt) VALUES (?, datetime('now'))`);
 export const getItem = wrapLangtextAwareStatement(getItemStatement, 'db:getItem');

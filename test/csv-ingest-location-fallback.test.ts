@@ -18,7 +18,7 @@ removeTestDatabase();
 process.env.DB_PATH = TEST_DB_FILE;
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { db, listItemsForExport, upsertBox } = require('../backend/db');
+const { db, listItemsForExport, runUpsertBox } = require('../backend/db');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { ingestCsvFile } = require('../backend/importer');
 
@@ -69,12 +69,14 @@ describe('CSV ingestion Standort fallback', () => {
     const nowIso = new Date().toISOString();
 
     try {
-      upsertBox.run({
+      // TODO(agent): Keep box fixture fields aligned with boxes schema (PhotoPath, placement metadata).
+      runUpsertBox({
         BoxID: boxId,
         LocationId: boxLocation,
         Label: boxLabel,
         CreatedAt: nowIso,
         Notes: null,
+        PhotoPath: null,
         PlacedBy: null,
         PlacedAt: null,
         UpdatedAt: nowIso,

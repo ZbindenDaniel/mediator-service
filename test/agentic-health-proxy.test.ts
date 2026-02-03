@@ -5,6 +5,8 @@ import { checkAgenticHealth } from '../backend/agentic';
 import { ensureAgenticRunSchema } from '../backend/db';
 import { AGENTIC_RUN_STATUS_QUEUED, AGENTIC_RUN_STATUS_RUNNING } from '../models';
 
+// TODO(agentic-health-logging): Assert runtime path selection logs when logger wiring is updated.
+
 function createMockResponse() {
   let statusCode = 0;
   let headers: Record<string, string> = {};

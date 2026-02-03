@@ -10,12 +10,13 @@
 // TODO(agent): Capture legacy column mapping metrics alongside ingest summaries once schema mapping stabilizes.
 // TODO(agent): Capture events.csv import telemetry once event ingestion volumes are known.
 // TODO(suchbegriff-import): Confirm Suchbegriff fallback normalization aligns with search-term defaults.
+// TODO(agent): Confirm Artikel_Nummer normalization rules (e.g., hyphen handling) with CSV partners.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
 import { parse as parseCsvSync } from 'csv-parse/sync';
 import {
-  upsertBox,
+  runUpsertBox,
   persistItem,
   queueLabel,
   persistItemReference,
@@ -795,6 +796,39 @@ function mintArtikelItemIdentifier(
   return `${prefix}${normalizedArtikelNummer}-${sequenceSegment}`;
 }
 
+type ArtikelNummerNormalizationStatus = 'ok' | 'missing' | 'invalid';
+
+type ArtikelNummerNormalizationResult = {
+  value: string;
+  mintableValue: string | null;
+  status: ArtikelNummerNormalizationStatus;
+};
+
+function normalizeArtikelNummerValue(rawValue: unknown, rowNumber: number): ArtikelNummerNormalizationResult {
+  const rawText =
+    rawValue === undefined || rawValue === null ? '' : typeof rawValue === 'string' ? rawValue : String(rawValue);
+  const trimmed = rawText.trim();
+  if (!trimmed) {
+    return { value: '', mintableValue: null, status: 'missing' };
+  }
+  const compacted = trimmed.replace(/\s+/g, '');
+  if (compacted !== trimmed) {
+    console.info('[importer] Normalized whitespace in Artikel_Nummer', {
+      rowNumber,
+      original: trimmed,
+      normalized: compacted,
+    });
+  }
+  if (compacted.includes('-')) {
+    console.warn('[importer] Invalid Artikel_Nummer format detected in CSV row', {
+      rowNumber,
+      artikelNummer: compacted,
+    });
+    return { value: compacted, mintableValue: null, status: 'invalid' };
+  }
+  return { value: compacted, mintableValue: compacted, status: 'ok' };
+}
+
 // TODO(agent): Replace sequential Artikel_Nummer minting with DB-backed counters when ingestion concurrency grows.
 type ArtikelNummerMintState = {
   baseValue: number;
@@ -1113,13 +1147,18 @@ export async function ingestCsvFile(
           PlacedAt: placedAt,
           UpdatedAt: now,
         };
-        upsertBox.run(box);
+        runUpsertBox(box);
       }
       const rawArtikelNummer = final['Artikel-Nummer'];
-      let artikelNummer = typeof rawArtikelNummer === 'string' ? rawArtikelNummer.trim() : '';
+      const artikelNummerNormalization = normalizeArtikelNummerValue(rawArtikelNummer, rowNumber);
+      let artikelNummer = artikelNummerNormalization.value;
+      let artikelNummerForMinting = artikelNummerNormalization.mintableValue;
+      let artikelNummerStatus = artikelNummerNormalization.status;
       if (!artikelNummer) {
         try {
           artikelNummer = mintArtikelNummerFromState(artikelNummerMintState);
+          artikelNummerForMinting = artikelNummer;
+          artikelNummerStatus = 'ok';
           final['Artikel-Nummer'] = artikelNummer;
           console.log('[importer] Minted Artikel_Nummer for CSV row', {
             rowNumber,
@@ -1130,8 +1169,10 @@ export async function ingestCsvFile(
             rowNumber,
             mintError,
           });
-          throw mintError;
+          continue;
         }
+      } else {
+        final['Artikel-Nummer'] = artikelNummer;
       }
       const grafikname = grafiknameCanonical;
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
@@ -1319,13 +1360,15 @@ export async function ingestCsvFile(
 
       if (!baseItemUUID) {
         try {
-          if (!artikelNummer) {
-            console.warn('[importer] Falling back to date-based ItemUUID minting due to missing Artikel_Nummer', {
+          if (!artikelNummerForMinting) {
+            console.warn('[importer] Falling back to date-based ItemUUID minting due to missing/invalid Artikel_Nummer', {
               rowNumber,
+              artikelNummer: artikelNummer || null,
+              status: artikelNummerStatus,
             });
             baseItemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
           } else {
-            baseItemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummer, itemSequenceByArtikelNummer);
+            baseItemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummerForMinting, itemSequenceByArtikelNummer);
           }
           console.log('[importer] Minted ItemUUID for CSV row', {
             rowNumber,
@@ -1337,9 +1380,10 @@ export async function ingestCsvFile(
           console.error('[importer] Failed to mint ItemUUID for CSV row', {
             rowNumber,
             artikelNummer: artikelNummer || null,
+            status: artikelNummerStatus,
             error,
           });
-          throw error;
+          continue;
         }
       } else if (final.itemUUID !== baseItemUUID) {
         final.itemUUID = baseItemUUID;
@@ -1353,18 +1397,21 @@ export async function ingestCsvFile(
         });
       }
 
+      let skipRemainingInstances = false;
       for (let instanceIndex = 0; instanceIndex < instancePlan.instanceCount; instanceIndex += 1) {
         let itemUUID = baseItemUUID;
         if (instanceIndex > 0) {
           try {
-            if (!artikelNummer) {
-              console.warn('[importer] Falling back to date-based ItemUUID minting due to missing Artikel_Nummer', {
+            if (!artikelNummerForMinting) {
+              console.warn('[importer] Falling back to date-based ItemUUID minting due to missing/invalid Artikel_Nummer', {
                 rowNumber,
                 instanceIndex: instanceIndex + 1,
+                artikelNummer: artikelNummer || null,
+                status: artikelNummerStatus,
               });
               itemUUID = mintSequentialIdentifier(ITEM_ID_PREFIX, identifierDate, itemSequenceByDate);
             } else {
-              itemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummer, itemSequenceByArtikelNummer);
+              itemUUID = mintArtikelItemIdentifier(ITEM_ID_PREFIX, artikelNummerForMinting, itemSequenceByArtikelNummer);
             }
             console.log('[importer] Minted ItemUUID for split item instance', {
               rowNumber,
@@ -1377,9 +1424,11 @@ export async function ingestCsvFile(
               rowNumber,
               artikelNummer: artikelNummer || null,
               instanceIndex: instanceIndex + 1,
+              status: artikelNummerStatus,
               error,
             });
-            throw error;
+            skipRemainingInstances = true;
+            break;
           }
         }
 
@@ -1422,6 +1471,13 @@ export async function ingestCsvFile(
           boxesTouched.add(normalizedBoxId);
         }
         count++;
+      }
+      if (skipRemainingInstances) {
+        console.warn('[importer] Skipping remaining item instances after ItemUUID mint failure', {
+          rowNumber,
+          artikelNummer: artikelNummer || null,
+        });
+        continue;
       }
     }
 
@@ -1644,7 +1700,7 @@ export async function ingestBoxesCsv(data: Buffer | string): Promise<{ count: nu
         };
 
         try {
-          upsertBox.run(box);
+          runUpsertBox(box);
           count++;
         } catch (upsertError) {
           console.error('[importer] Failed to upsert box from boxes.csv row', {

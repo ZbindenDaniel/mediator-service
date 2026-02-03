@@ -59,9 +59,7 @@ describe('import-item action', () => {
       },
       persistItemWithinTransaction: jest.fn(),
       logEvent: jest.fn(),
-      upsertBox: {
-        run: jest.fn()
-      },
+      runUpsertBox: jest.fn(),
       agenticServiceEnabled: false
     };
 
