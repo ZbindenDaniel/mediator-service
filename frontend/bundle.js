@@ -1,4 +1,3 @@
-// TODO(frontend-bundle): Confirm public asset copy covers QR icon updates.
 async function bundle() {
   try {
     const { build } = require('esbuild');
@@ -7,7 +6,10 @@ async function bundle() {
       bundle: true,
       outfile: 'frontend/public/bundle.js',
       sourcemap: true,
-      logLevel: 'info'
+      logLevel: 'info',
+      loader: {
+        '.svg': 'file'
+      }
     });
     console.log('Bundled frontend to frontend/public/bundle.js');
   } catch (err) {

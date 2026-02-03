@@ -12,7 +12,6 @@ import { logError, logger } from '../utils/logger';
 // TODO(qr-search): Validate QR return handling after relocating the scan entry into this card.
 // TODO(qr-search): Confirm direct QR search navigation aligns with the intended item/box prefixes.
 // TODO(qr-search): Reconfirm "Suchen" button placement once scan-in-input UX feedback is captured.
-// TODO(qr-search): Validate itemUUID extraction from QR return payloads for direct navigation.
 
 type SearchResult =
   | { type: 'box'; id: string; locationId?: string | null; label?: string | null }

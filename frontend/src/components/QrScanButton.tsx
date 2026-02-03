@@ -1,6 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { logError, logger } from '../utils/logger';
+import qrIcon from '../assets/qrIcon.svg';
+
+// TODO(qr-scan-button): Validate QR icon sizing with the circular button in every card layout.
+// TODO(qr-scan-button): Confirm button contrast when rendered inside text inputs.
 
 // TODO(qr-scan-button): Validate QR icon sizing with the circular button in every card layout.
 // TODO(qr-scan-button): Confirm button contrast when rendered inside text inputs.
