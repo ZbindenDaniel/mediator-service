@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { GoQrCode } from 'react-icons/go';
+import { GoDeviceCameraVideo } from 'react-icons/go';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { logError, logger } from '../utils/logger';
 
@@ -46,7 +46,7 @@ export default function QrScanButton({
 
   return (
     <button className={['btn', className].filter(Boolean).join(' ')} onClick={handleClick} type="button">
-      <GoQrCode />
+      <GoDeviceCameraVideo />
       <span>{label}</span>
     </button>
   );

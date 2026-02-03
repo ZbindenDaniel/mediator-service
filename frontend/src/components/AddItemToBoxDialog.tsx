@@ -73,7 +73,7 @@ export async function confirmItemRelocationIfNecessary(item: Item, targetBoxId: 
   });
 }
 
-export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
+export default function AddItemToBoxDialog({ boxId, onAdded, onClose, qrReturnPayload }: Props) {
   const searchLimit = 50;
   const searchScope = 'instances';
   const [query, setQuery] = useState('');
