@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { dialogService } from './dialog';
 import { DialogButtons, DialogContent, DialogOverlay } from './dialog/presentational';
 import { GoSearch } from 'react-icons/go';
+import QrScanButton from './QrScanButton';
 
 // TODO: Evaluate migrating this dialog into the shared dialog queue for automated focus management.
 // TODO(deep-search): Add an opt-in toggle so users can choose deep search in this dialog.
@@ -243,6 +244,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
           >
             <GoSearch />
           </button>
+          <QrScanButton onBeforeNavigate={handleDismiss} />
         </div>
         <div className="add-item-dialog__filters">
           <label htmlFor="hide-placed-items-toggle" className="add-item-dialog__filter-option">
