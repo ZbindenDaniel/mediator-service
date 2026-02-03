@@ -1,5 +1,6 @@
 version: '3.9'
 
+# TODO(log-rotation): Add centralized log rotation settings once shared logging policy is defined.
 services:
   # TODO(database-migration): Replace the transient Postgres bootstrap once production settings are finalised.
   postgres:
@@ -17,6 +18,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
   
   pgadmin:
@@ -28,6 +34,11 @@ services:
       - "5050:80"
     depends_on:
       - postgres
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   mediator:
     image: ghcr.io/zbindendaniel/mediator-service:2.0
@@ -46,6 +57,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 # TODO(ingress-auth): Keep the proxy configuration aligned with docs/setup.md and secrets rotation steps.
   proxy:
@@ -64,6 +80,11 @@ services:
         target: /etc/nginx/secrets/htpasswd
     depends_on:
       - mediator
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     restart: unless-stopped
 
 volumes:

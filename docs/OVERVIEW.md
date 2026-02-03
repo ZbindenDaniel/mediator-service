@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Added Docker Compose logging configuration defaults with size/retention options for core services to prepare for log rotation policies.
 - Logged missing agentic model invocations and persisted queue metadata (LastError/LastAttemptAt) so stalled runs surface with context for operators.
 - Cleared review metadata when restarting agentic runs without explicit review payloads so queued status stays authoritative in the UI.
 - Added a queued agentic run dispatcher that skips empty search queries with queue error updates and runs on a lightweight server interval for retries.
