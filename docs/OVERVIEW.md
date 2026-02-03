@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Captured the latest `npm test` failures (native better-sqlite3 module missing, ItemUUID vs Artikel_Nummer log assertion drift, and closed DB connections in persistence tests) and noted them for follow-up in `FAILING_TEST`/`docs/AGENT.md`.
 - Added Docker Compose logging configuration defaults with size/retention options for core services to prepare for log rotation policies.
 - Sanitized aggregated search context text to trim URL-heavy lines, collapse whitespace, and log large truncations while keeping search schemas unchanged.
 - Condensed agentic extraction retry metadata into compact summaries and kept prompt-length debug logging guarded per attempt.
