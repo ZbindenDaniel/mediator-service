@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Item } from '../../../models';
 import { ensureUser } from '../lib/user';
-import { logger } from '../utils/logger';
+import { logError, logger } from '../utils/logger';
 import { dialogService } from './dialog';
 import { DialogButtons, DialogContent, DialogOverlay } from './dialog/presentational';
 import { GoSearch } from 'react-icons/go';
@@ -14,6 +14,7 @@ interface Props {
   boxId: string;
   onAdded: () => void;
   onClose: () => void;
+  qrReturnPayload?: { id: string; rawPayload?: string } | null;
 }
 
 export const SEARCH_PROMPT_MESSAGE = 'Gib einen Suchbegriff ein, um Artikel zu finden.';
@@ -78,6 +79,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Item[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const qrPrefillRef = useRef(false);
   // TODO: Persist filter preferences for the add-item dialog per user session to reduce repetitive toggling.
   const [hidePlaced, setHidePlaced] = useState(true);
 
@@ -143,28 +145,29 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
     }
   }, []);
 
-  async function runSearch() {
-    const term = query.trim();
+  const runSearch = useCallback(async (term: string, source: 'manual' | 'qr-return') => {
+    const trimmed = term.trim();
     setResults([]);
-    if (!term) {
+    if (!trimmed) {
       setHasSearched(false);
       return;
     }
     setHasSearched(true);
     try {
       logger.info('AddItemToBoxDialog: running search', {
-        term,
+        term: trimmed,
         limit: searchLimit,
-        scope: searchScope
+        scope: searchScope,
+        source
       });
       const params = new URLSearchParams({
-        term,
+        term: trimmed,
         limit: String(searchLimit),
         scope: searchScope
       });
       const r = await fetch(`/api/search?${params.toString()}`);
       if (!r.ok) {
-        console.error('search failed', r.status);
+        logError('AddItemToBoxDialog: search request failed', new Error(`HTTP ${r.status}`), { status: r.status });
         return;
       }
       const data = await r.json();
@@ -172,9 +175,31 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
       console.log('AddItemToBoxDialog: raw search results received', { total: items.length });
       setResults(items);
     } catch (err) {
-      console.error('search failed', err);
+      logError('AddItemToBoxDialog: search failed', err);
     }
-  }
+  }, [searchLimit, searchScope]);
+
+  useEffect(() => {
+    if (qrPrefillRef.current) {
+      return;
+    }
+    if (!qrReturnPayload || typeof qrReturnPayload.id !== 'string') {
+      return;
+    }
+    const trimmed = qrReturnPayload.id.trim();
+    if (!trimmed) {
+      logger.warn?.('AddItemToBoxDialog: ignoring empty QR return id', { qrReturnPayload });
+      return;
+    }
+    try {
+      qrPrefillRef.current = true;
+      logger.info?.('AddItemToBoxDialog: prefilling from QR return payload', { id: trimmed });
+      setQuery(trimmed);
+      void runSearch(trimmed, 'qr-return');
+    } catch (error) {
+      logError('AddItemToBoxDialog: failed to apply QR return payload', error, { id: trimmed });
+    }
+  }, [qrReturnPayload, runSearch]);
 
   async function addToBox(item: Item) {
     const actor = await ensureUser();
@@ -230,7 +255,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') {
-                runSearch();
+                void runSearch(query, 'manual');
               }
             }}
             autoFocus
@@ -238,7 +263,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose }: Props) {
           />
           <button
             className="btn"
-            onClick={runSearch}
+            onClick={() => { void runSearch(query, 'manual'); }}
             type="button"
             disabled={!query.trim()}
           >
