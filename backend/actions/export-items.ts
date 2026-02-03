@@ -4,9 +4,10 @@ import os from 'os';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
+import { PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
+import type { LangtextExportFormat } from '../lib/langtext';
 import { parseLangtext, serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
 import { defineHttpAction } from './index';
@@ -104,6 +105,7 @@ const boxColumns = [
 
 // TODO(agent): Replace CSV-specific Langtext serialization once exports move to typed clients.
 // TODO(langtext-export): Align CSV Langtext serialization with downstream channel requirements when available.
+// TODO(export-items-langtext-mode): Confirm ERP markdown Langtext output with downstream importers after go-live.
 
 const metadataColumnSet = new Set<ExportColumn>(metadataColumns as readonly ExportColumn[]);
 const categoryFieldTypes: Record<string, CategoryFieldType> = {
@@ -561,7 +563,29 @@ function logMissingMetadataValue(
 }
 
 // TODO(agent): Revisit CSV media derivation when asset manifests are queryable via API.
-function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown>): unknown {
+function resolveLangtextExportFormat(
+  exportMode: ExportMode,
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): LangtextExportFormat {
+  try {
+    if (exportMode === 'erp') {
+      return 'markdown';
+    }
+    return 'json';
+  } catch (error) {
+    logger.error?.('[export-items] Failed to resolve Langtext export format from mode; defaulting to JSON.', {
+      exportMode,
+      error
+    });
+    return 'json';
+  }
+}
+
+function resolveExportValue(
+  column: ExportColumn,
+  rawRow: Record<string, unknown>,
+  langtextFormat: LangtextExportFormat
+): unknown {
   const field = fieldMap[column];
   if (!field) {
     if (!missingFieldWarnings.has(column)) {
@@ -699,7 +723,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
     const helperContext = {
       logger: console,
-      context: `export-items:Langtext:${LANGTEXT_EXPORT_FORMAT}`,
+      context: `export-items:Langtext:${langtextFormat}`,
       artikelNummer,
       itemUUID
     } as const;
@@ -737,7 +761,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
     })();
 
     try {
-      const serialized = serializeLangtextForExport(langtextValueForExport, LANGTEXT_EXPORT_FORMAT, helperContext);
+      const serialized = serializeLangtextForExport(langtextValueForExport, langtextFormat, helperContext);
       if (serialized !== null && serialized !== undefined) {
         return serialized;
       }
@@ -747,11 +771,11 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
         {
           artikelNummer,
           itemUUID,
-          format: LANGTEXT_EXPORT_FORMAT
+          format: langtextFormat
         }
       );
 
-      if (LANGTEXT_EXPORT_FORMAT !== 'json') {
+      if (langtextFormat !== 'json') {
         const fallbackSerialized = serializeLangtextForExport(value, 'json', {
           ...helperContext,
           context: 'export-items:Langtext:fallback-json'
@@ -761,7 +785,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
           console.warn('[export-items] Falling back to JSON Langtext serialization for export.', {
             artikelNummer,
             itemUUID,
-            format: LANGTEXT_EXPORT_FORMAT
+            format: langtextFormat
           });
           return fallbackSerialized;
         }
@@ -770,7 +794,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
       console.error('[export-items] Failed to serialize Langtext payload for export; attempting JSON fallback.', {
         artikelNummer,
         itemUUID,
-        format: LANGTEXT_EXPORT_FORMAT,
+        format: langtextFormat,
         error
       });
     }
@@ -781,7 +805,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
       console.error('[export-items] JSON fallback failed for Langtext payload; exporting empty string.', {
         artikelNummer,
         itemUUID,
-        format: LANGTEXT_EXPORT_FORMAT,
+        format: langtextFormat,
         error: fallbackError
       });
       return '';
@@ -813,13 +837,16 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
 
 export function serializeItemsToCsv(
   rows: Record<string, unknown>[],
-  exportColumns: readonly ExportColumn[] = columns
+  exportColumns: readonly ExportColumn[] = columns,
+  options: { exportMode?: ExportMode; logger?: Pick<Console, 'error' | 'info' | 'warn'> } = {}
 ): { csv: string; columns: readonly ExportColumn[] } {
   const header = exportColumns.map((column) => columnHeaderMap.get(column) ?? column).join(',');
+  const exportMode = options.exportMode ?? 'backup';
+  const langtextFormat = resolveLangtextExportFormat(exportMode, options.logger);
   const lines = rows.map((row: any) =>
     exportColumns
       .map((column: ExportColumn) => {
-        const resolvedValue = resolveExportValue(column, row);
+        const resolvedValue = resolveExportValue(column, row, langtextFormat);
         return toCsvValue(resolvedValue);
       })
       .join(',')
@@ -936,7 +963,7 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
       logger.error?.('[export-items] Failed to log export schema selection.', logError);
     }
 
-    const { csv } = serializeItemsToCsv(groupedRows, exportColumns);
+    const { csv } = serializeItemsToCsv(groupedRows, exportColumns, { exportMode, logger });
     const boxesCsv = serializeBoxes(options.boxes ?? []);
     const itemsPath = path.join(tempDir, 'items.csv');
     const boxesPath = path.join(tempDir, 'boxes.csv');
