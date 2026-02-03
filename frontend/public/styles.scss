@@ -1854,6 +1854,10 @@ button:focus {
     display: block;
 }
 
+.desktop-only {
+    display: none;
+}
+
 // TODO(ui-grid): Validate box detail summary grid alignment once responsive refinements land.
 // TODO(box-detail-layout): Recheck box detail summary spacing after shelf card width adjustments.
 .box-detail-summary-grid {
@@ -1877,6 +1881,10 @@ button:focus {
 
     .mobile-only {
         display: none;
+    }
+
+    .desktop-only {
+        display: block;
     }
 }
 

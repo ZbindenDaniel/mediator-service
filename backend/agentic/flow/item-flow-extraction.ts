@@ -323,7 +323,7 @@ export async function runExtractionAttempts({
 
     // TODO: possible merge issue
     const formattedSources = attempt > 1 ? formatSourcesForRetry(aggregatedSources, logger) : [];
-    const contextSections = [];
+    const contextSections: string[] = [];
     const reviewerNotesLineCount = sanitizedReviewerNotes ? sanitizedReviewerNotes.split('\n').length : 0;
     const aggregatedSearchLineCount = aggregatedSearchText ? aggregatedSearchText.split('\n').length : 0;
     const targetSnapshotLineCount = trimmedTargetSnapshot ? trimmedTargetSnapshot.split('\n').length : 0;

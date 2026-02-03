@@ -34,7 +34,7 @@ export default function QrScannerPage() {
   const [target, setTarget] = useState<QrTarget | null>(null);
   const [rawContent, setRawContent] = useState('');
   const [showRawDetails, setShowRawDetails] = useState(false);
-  const [logError, setLogError] = useState<string | null>(null);
+  const [logErrorMessage, setLogErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = (() => {
@@ -99,10 +99,10 @@ export default function QrScannerPage() {
         const text = await res.text().catch(() => '');
         throw new Error(text || `HTTP ${res.status}`);
       }
-      setLogError(null);
+      setLogErrorMessage(null);
     } catch (err) {
       logError('Failed to log QR scan', err);
-      setLogError('Scan konnte nicht protokolliert werden. Bitte später erneut versuchen.');
+      setLogErrorMessage('Scan konnte nicht protokolliert werden. Bitte später erneut versuchen.');
     }
   }, []);
 
@@ -179,7 +179,7 @@ export default function QrScannerPage() {
     setPayload(null);
     setTarget(null);
     setRawContent('');
-    setLogError(null);
+    setLogErrorMessage(null);
     setShowRawDetails(false);
     setStatus('scanning');
     setMessage('Kamera wird initialisiert… Bitte Zugriff erlauben.');
@@ -277,7 +277,7 @@ export default function QrScannerPage() {
           <video ref={videoRef} className="qr-video" autoPlay playsInline muted />
         </div>
         <p className={`status ${status}`}>{message}</p>
-        {logError && <p className="error">{logError}</p>}
+        {logErrorMessage && <p className="error">{logErrorMessage}</p>}
         {payload ? (
           <div className="result">
             <h2>{target?.label ?? 'Scan'} {payload.id}</h2>

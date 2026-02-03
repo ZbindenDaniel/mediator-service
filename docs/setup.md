@@ -37,6 +37,9 @@ The public ingress is now handled by the `proxy` service, which terminates TLS, 
 3. Start the stack with `docker compose up -d` and verify traffic is served through `https://<host>` only.
 4. Review proxy access/error logs in the `nginx-logs` volume (`/var/log/nginx/access.log` and `/var/log/nginx/error.log`) for authentication visibility.
 
+sudo openssl req -x509 -nodes -days 365   -newkey rsa:2048   -keyout secrets/tls/tls.key   -out secrets/tls/tls.crt   -subj "/CN=192.168.10.202"
+
+
 ### Credential rotation
 
 1. Replace `./secrets/htpasswd` with the new credentials.
