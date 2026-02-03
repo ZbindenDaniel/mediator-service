@@ -6,8 +6,6 @@ import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { LANGTEXT_EXPORT_FORMAT, PUBLIC_ORIGIN } from '../config';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
-import type { LangtextPayload } from '../../models';
-import { describeQuality } from '../../models/quality';
 import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
 import { parseLangtext, serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
@@ -29,6 +27,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 // TODO(agent): Keep exporter metadata parity intact when partner CSV specs change.
 // TODO(agent): Remove ImageNames fallback once disk-backed assets are guaranteed for exports.
 // TODO(export-items): Keep this header order in sync with partner CSV specs tracked in docs when they change.
+// TODO(export-items): Confirm ERP export headers for Auf_Lager/Einheit remain aligned with downstream consumers.
 // TODO(agent): Mirror header label updates in importer alias definitions to avoid ingest/export drift.
 // TODO(agent): Harden exporter media listings against document artifacts slipping into partner feeds.
 // TODO(agent): Confirm Suchbegriff export coverage once downstream consumers require it again.
@@ -47,7 +46,7 @@ const columnDescriptors = [
   { key: 'height_mm', header: 'Höhe(mm)', field: 'Höhe_mm' },
   { key: 'weight_kg', header: 'Gewicht(kg)', field: 'Gewicht_kg' },
   { key: 'sellprice', header: 'Verkaufspreis', field: 'Verkaufspreis' },
-  { key: 'onhand', header: 'Auf Lager', field: 'Auf_Lager' },
+  { key: 'onhand', header: 'Auf_Lager', field: 'Auf_Lager' },
   { key: 'published_status', header: 'Veröffentlicht_Status', field: 'Veröffentlicht_Status' },
   { key: 'shoparticle', header: 'Shopartikel', field: 'Shopartikel' },
   { key: 'unit', header: 'Einheit', field: 'Einheit' },
@@ -705,25 +704,26 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
       itemUUID
     } as const;
 
-    // TODO(agent): Externalize Langtext quality localization once export consumers define translation needs.
+    // TODO(export-items): Re-enable Langtext quality enrichment once downstream consumers want it again.
     const langtextValueForExport = (() => {
       try {
         const parsedLangtext = parseLangtext(value, helperContext);
         if (parsedLangtext && typeof parsedLangtext !== 'string') {
-          try {
-            const { label } = describeQuality((rawRow as Record<string, unknown>).Quality);
-            const enriched: LangtextPayload = { ...parsedLangtext, Qualität: label };
-            return enriched;
-          } catch (qualityError) {
-            console.warn(
-              '[export-items] Unable to resolve quality for Langtext enrichment; exporting original payload.',
-              {
-                artikelNummer,
-                itemUUID,
-                error: qualityError
-              }
-            );
-          }
+          // NOTE: Quality export disabled for now. Keep this block commented so it can be reactivated when needed.
+          // try {
+          //   const { label } = describeQuality((rawRow as Record<string, unknown>).Quality);
+          //   const enriched: LangtextPayload = { ...parsedLangtext, Qualität: label };
+          //   return enriched;
+          // } catch (qualityError) {
+          //   console.warn(
+          //     '[export-items] Unable to resolve quality for Langtext enrichment; exporting original payload.',
+          //     {
+          //       artikelNummer,
+          //       itemUUID,
+          //       error: qualityError
+          //     }
+          //   );
+          // }
         }
       } catch (parsingError) {
         console.error('[export-items] Failed to parse Langtext for quality enrichment during export.', {
@@ -794,7 +794,7 @@ function resolveExportValue(column: ExportColumn, rawRow: Record<string, unknown
   try {
     const normalized = normalizeItemEinheit(value);
     if (normalized) {
-      return normalized;
+      return normalized === ItemEinheit.Stk ? 'Stck' : normalized;
     }
     if (typeof value === 'string' && value.trim().length > 0) {
       console.warn('[export-items] Invalid Einheit value encountered during export, falling back to default.', {
