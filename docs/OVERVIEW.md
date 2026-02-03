@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Added QR scan return-to handling so scans can route back to box add-item dialogs with validated payloads and logging.
 - Updated export CSV headers to use Auf_Lager, adjusted Einheit export to Stck, and disabled Langtext quality enrichment for now to align with ERP expectations.
 - Routed QR scans to resolve item vs box detail destinations based on QR prefixes (I-/B-/S-) with frontend logging and fallback messaging for invalid codes.
 - Captured the latest `npm test` failures (native better-sqlite3 module missing, ItemUUID vs Artikel_Nummer log assertion drift, and closed DB connections in persistence tests) and noted them for follow-up in `FAILING_TEST`/`docs/AGENT.md`.

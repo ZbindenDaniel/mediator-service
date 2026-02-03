@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { logError, logger } from '../utils/logger';
 
 type BarcodeDetectionResult = { rawValue?: string; format?: string };
@@ -36,6 +36,29 @@ export default function QrScannerPage() {
   const [showRawDetails, setShowRawDetails] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = (() => {
+    try {
+      const stateReturnTo = (location.state as { returnTo?: unknown } | null)?.returnTo;
+      const queryReturnTo = new URLSearchParams(location.search).get('returnTo');
+      const rawReturnTo = typeof stateReturnTo === 'string' ? stateReturnTo : queryReturnTo;
+      if (!rawReturnTo) {
+        return '';
+      }
+      const trimmed = rawReturnTo.trim();
+      if (!trimmed) {
+        return '';
+      }
+      if (!trimmed.startsWith('/')) {
+        logger.warn?.('Ignoring invalid QR returnTo value', { returnTo: trimmed });
+        return '';
+      }
+      return trimmed;
+    } catch (error) {
+      logError('Failed to parse QR returnTo value', error);
+      return '';
+    }
+  })();
 
   // TODO(qr-scan-routing): Revisit S- routing if a dedicated shelf detail route is added.
   const stopCamera = useCallback(() => {
@@ -103,6 +126,15 @@ export default function QrScannerPage() {
     }
   }, [navigate]);
 
+  const navigateToReturn = useCallback((path: string, payloadData: { id: string; rawPayload: string }) => {
+    try {
+      navigate(path, { state: { qrReturn: payloadData } });
+    } catch (err) {
+      logError('Return navigation after QR scan failed', err, { qrId: payloadData.id, path });
+      setMessage('Navigation fehlgeschlagen. Bitte Seite manuell öffnen.');
+    }
+  }, [navigate]);
+
   const handleDecoded = useCallback(async (raw: string) => {
     setRawContent(raw);
     try {
@@ -115,12 +147,21 @@ export default function QrScannerPage() {
         throw new Error('QR-Code enthält keine gültige "id".');
       }
       const normalized: BoxQrPayload = { ...(data as Record<string, unknown>), id };
-      const nextTarget = resolveTarget(id);
+      const minimalReturnPayload = { id, rawPayload: raw };
       setPayload(normalized);
-      setTarget(nextTarget);
       setStatus('success');
-      setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
       stopCamera();
+      if (returnTo) {
+        setTarget(null);
+        setMessage('QR-Code erkannt. Rückkehr läuft…');
+        logger.info?.('QR scan resolved for return navigation', { id, returnTo });
+        await logScan(normalized);
+        navigateToReturn(returnTo, minimalReturnPayload);
+        return;
+      }
+      const nextTarget = resolveTarget(id);
+      setTarget(nextTarget);
+      setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
       logger.info?.('QR scan resolved', { id, path: nextTarget.path });
       await logScan(normalized);
       navigateToTarget(nextTarget);
@@ -131,7 +172,7 @@ export default function QrScannerPage() {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Unbekannter Fehler beim Lesen des QR-Codes.');
     }
-  }, [logScan, navigateToTarget, resolveTarget, stopCamera]);
+  }, [logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, stopCamera]);
 
   const startScanner = useCallback(async () => {
     stopCamera();
