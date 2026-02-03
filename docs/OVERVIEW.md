@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- Moved the QR scan entry into the landing search card with return-to handling and removed the legacy landing QR card block.
 - Added QR scan return handling to the box relocation card so shelf/box scans preselect relocation targets with validation and logging.
 - Added a reusable QR scan button and exposed it in the add-to-box dialog so users can jump to the scanner and return to their workflow.
 - Added QR scan return-to handling so scans can route back to box add-item dialogs with validated payloads and logging.
