@@ -730,14 +730,32 @@ div {
     gap: 20px;
 }
 
+// TODO(add-item-dialog): Validate QR button positioning inside the add-item dialog search input.
 .add-item-dialog__search {
     display: flex;
     gap: 8px;
     align-items: center;
 }
 
-.add-item-dialog__search input {
+.add-item-dialog__search-field {
+    position: relative;
     flex: 1;
+}
+
+.add-item-dialog__search-input {
+    width: 100%;
+    padding-right: 52px;
+}
+
+.add-item-dialog__search-qr {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.add-item-dialog__search-submit {
+    flex: 0 0 auto;
 }
 
 .add-item-dialog__results {
@@ -927,6 +945,76 @@ button:focus {
     select {
         max-width: 100%;
     }
+}
+
+// TODO(qr-scan-button): Reconfirm search row spacing once the QR scan button is validated on narrow screens.
+// TODO(qr-scan-button): Verify QR button hit target inside the input wrapper on touch devices.
+.search-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--pad);
+}
+
+.search-input-row {
+    display: flex;
+    align-items: center;
+}
+
+.search-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.search-input {
+    width: 100%;
+    padding-right: 52px;
+}
+
+.search-input-qr {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.search-submit {
+    width: 100%;
+}
+
+.relocate-input-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+
+    select {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+}
+
+.relocate-qr {
+    flex: 0 0 auto;
+}
+
+.relocate-submit-row {
+    width: 100%;
+}
+
+.qr-scan-button {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+}
+
+.qr-scan-button__icon {
+    width: 18px;
+    height: 18px;
+    display: block;
 }
 
 .top-row {

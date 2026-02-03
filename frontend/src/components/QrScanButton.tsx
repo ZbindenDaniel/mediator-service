@@ -1,7 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
-import { GoDeviceCameraVideo } from 'react-icons/go';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { logError, logger } from '../utils/logger';
+
+// TODO(qr-scan-button): Validate QR icon sizing with the circular button in every card layout.
+// TODO(qr-scan-button): Confirm button contrast when rendered inside text inputs.
+// TODO(qr-scan-button): Validate public asset loading for the QR icon in production builds.
 
 interface QrScanButtonProps {
   returnTo?: string;
@@ -45,9 +48,14 @@ export default function QrScanButton({
   }, [navigate, onBeforeNavigate, resolvedReturnTo, scanHref]);
 
   return (
-    <button className={['btn', className].filter(Boolean).join(' ')} onClick={handleClick} type="button">
-      <GoDeviceCameraVideo />
-      <span>{label}</span>
+    <button
+      aria-label={label}
+      className={['btn', 'qr-scan-button', className].filter(Boolean).join(' ')}
+      onClick={handleClick}
+      type="button"
+    >
+      <img className="qr-scan-button__icon" src="/qrIcon.svg" alt="" aria-hidden="true" />
+      <span className="visually-hidden">{label}</span>
     </button>
   );
 }
