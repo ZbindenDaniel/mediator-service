@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { logError, logger } from '../utils/logger';
 
 type BarcodeDetectionResult = { rawValue?: string; format?: string };
 
@@ -16,6 +17,12 @@ type BoxQrPayload = {
 
 type ScanStatus = 'idle' | 'scanning' | 'success' | 'error';
 
+type QrTarget = {
+  id: string;
+  label: string;
+  path: string;
+};
+
 export default function QrScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -24,11 +31,13 @@ export default function QrScannerPage() {
   const [status, setStatus] = useState<ScanStatus>('idle');
   const [message, setMessage] = useState('Kamera wird vorbereitet…');
   const [payload, setPayload] = useState<BoxQrPayload | null>(null);
+  const [target, setTarget] = useState<QrTarget | null>(null);
   const [rawContent, setRawContent] = useState('');
   const [showRawDetails, setShowRawDetails] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // TODO(qr-scan-routing): Revisit S- routing if a dedicated shelf detail route is added.
   const stopCamera = useCallback(() => {
     if (detectionTimerRef.current !== null) {
       window.clearInterval(detectionTimerRef.current);
@@ -40,7 +49,7 @@ export default function QrScannerPage() {
         try {
           track.stop();
         } catch (err) {
-          console.error('Failed to stop media track', err);
+          logError('Failed to stop media track', err);
         }
       });
       streamRef.current = null;
@@ -69,10 +78,30 @@ export default function QrScannerPage() {
       }
       setLogError(null);
     } catch (err) {
-      console.error('Failed to log QR scan', err);
+      logError('Failed to log QR scan', err);
       setLogError('Scan konnte nicht protokolliert werden. Bitte später erneut versuchen.');
     }
   }, []);
+
+  const resolveTarget = useCallback((qrId: string): QrTarget => {
+    const prefix = qrId.slice(0, 2).toUpperCase();
+    if (prefix === 'I-') {
+      return { id: qrId, label: 'Artikel', path: `/items/${encodeURIComponent(qrId)}` };
+    }
+    if (prefix === 'B-' || prefix === 'S-') {
+      return { id: qrId, label: 'Behälter', path: `/boxes/${encodeURIComponent(qrId)}` };
+    }
+    throw new Error(`Unbekannter QR-Code-Typ: ${qrId}`);
+  }, []);
+
+  const navigateToTarget = useCallback((nextTarget: QrTarget) => {
+    try {
+      navigate(nextTarget.path);
+    } catch (err) {
+      logError('Navigation after QR scan failed', err, { qrId: nextTarget.id, path: nextTarget.path });
+      setMessage('Navigation fehlgeschlagen. Bitte Seite manuell öffnen.');
+    }
+  }, [navigate]);
 
   const handleDecoded = useCallback(async (raw: string) => {
     setRawContent(raw);
@@ -86,22 +115,28 @@ export default function QrScannerPage() {
         throw new Error('QR-Code enthält keine gültige "id".');
       }
       const normalized: BoxQrPayload = { ...(data as Record<string, unknown>), id };
+      const nextTarget = resolveTarget(id);
       setPayload(normalized);
+      setTarget(nextTarget);
       setStatus('success');
-      setMessage('Scan erfolgreich.');
+      setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
       stopCamera();
+      logger.info?.('QR scan resolved', { id, path: nextTarget.path });
       await logScan(normalized);
+      navigateToTarget(nextTarget);
     } catch (err) {
-      console.error('QR payload validation failed', err);
+      logError('QR payload validation failed', err);
       stopCamera();
+      setTarget(null);
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Unbekannter Fehler beim Lesen des QR-Codes.');
     }
-  }, [logScan, stopCamera]);
+  }, [logScan, navigateToTarget, resolveTarget, stopCamera]);
 
   const startScanner = useCallback(async () => {
     stopCamera();
     setPayload(null);
+    setTarget(null);
     setRawContent('');
     setLogError(null);
     setShowRawDetails(false);
@@ -135,7 +170,7 @@ export default function QrScannerPage() {
         try {
           await videoRef.current.play();
         } catch (err) {
-          console.error('Failed to start video playback', err);
+          logError('Failed to start video playback', err);
         }
       }
 
@@ -155,14 +190,14 @@ export default function QrScannerPage() {
             await handleDecoded(first.rawValue);
           }
         } catch (err) {
-          console.error('QR detection error', err);
+          logError('QR detection error', err);
           stopCamera();
           setStatus('error');
           setMessage('Fehler beim Lesen des QR-Codes. Bitte erneut versuchen.');
         }
       }, 400);
     } catch (err) {
-      console.error('QR scanner initialisation failed', err);
+      logError('QR scanner initialisation failed', err);
       stopCamera();
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Kamera konnte nicht gestartet werden.');
@@ -181,16 +216,11 @@ export default function QrScannerPage() {
   }, [startScanner]);
 
   const handleNavigate = useCallback(() => {
-    if (!payload) {
+    if (!target) {
       return;
     }
-    try {
-      navigate(`/boxes/${encodeURIComponent(payload.id)}`);
-    } catch (err) {
-      console.error('Navigation to box failed', err);
-      setMessage('Navigation fehlgeschlagen. Bitte Seite manuell öffnen.');
-    }
-  }, [navigate, payload]);
+    navigateToTarget(target);
+  }, [navigateToTarget, target]);
 
   const handleRawToggle = useCallback((event: React.SyntheticEvent<HTMLDetailsElement>) => {
     setShowRawDetails(event.currentTarget.open);
@@ -209,14 +239,14 @@ export default function QrScannerPage() {
         {logError && <p className="error">{logError}</p>}
         {payload ? (
           <div className="result">
-            <h2>Behälter {payload.id}</h2>
+            <h2>{target?.label ?? 'Scan'} {payload.id}</h2>
             <p className="result-meta">
               {additionalFieldCount > 0
                 ? `Der QR-Code enthält ${additionalFieldCount} weitere ${additionalFieldCount === 1 ? 'Feld' : 'Felder'}.`
                 : 'Der QR-Code enthält keine weiteren Felder.'}
             </p>
             <div className="actions">
-              <button type="button" onClick={handleNavigate}>Behälter öffnen</button>
+              {target && <button type="button" onClick={handleNavigate}>{target.label} öffnen</button>}
               <button type="button" onClick={handleRetry}>Nochmal scannen</button>
             </div>
           </div>
