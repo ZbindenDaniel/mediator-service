@@ -63,12 +63,6 @@ Example mounted WebDAV path: `/mnt/webdav/media` (Linux) or `/Volumes/webdav/med
 | `EVENT_LOG_LEVELS` | All levels | Comma-separated allow list of event log levels. |
 | `EVENT_LOG_TOPICS` | All topics | Comma-separated allow list of event topics. |
 
-## Langtext export
-
-| Variable | Default / Example | Notes |
-| --- | --- | --- |
-| `LANGTEXT_EXPORT_FORMAT` | `json` | Export format for Langtext (`json`, `markdown`, `html`). |
-
 ## Importer and ERP integration
 
 | Variable | Default / Example | Notes |

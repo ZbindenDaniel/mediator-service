@@ -266,34 +266,25 @@ describe('export-items Langtext quality enrichment', () => {
     UpdatedAt: '2024-02-02T00:00:00.000Z'
   };
 
-  const serializeForFormat = (format: string): string => {
-    const previousFormat = process.env.LANGTEXT_EXPORT_FORMAT;
-    process.env.LANGTEXT_EXPORT_FORMAT = format;
+  const serializeForMode = (mode: 'backup' | 'erp'): string => {
     let dataLine = '';
 
     jest.isolateModules(() => {
       // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
       const { serializeItemsToCsv } = require('../export-items');
-      const { csv } = serializeItemsToCsv([{ ...baseRow }]);
+      const { csv } = serializeItemsToCsv([{ ...baseRow }], undefined, { exportMode: mode });
       [, dataLine] = csv.split('\n');
     });
-
-    if (previousFormat === undefined) {
-      delete process.env.LANGTEXT_EXPORT_FORMAT;
-    } else {
-      process.env.LANGTEXT_EXPORT_FORMAT = previousFormat;
-    }
 
     return dataLine;
   };
 
-  for (const [format, snippet] of [
-    ['json', 'Qualität'],
-    ['markdown', '**Qualität** Gut'],
-    ['html', '<strong>Qualität</strong> Gut']
+  for (const [mode, snippet] of [
+    ['backup', 'Qualität'],
+    ['erp', '**Qualität** Gut']
   ] as const) {
-    test(`adds normalized quality label to Langtext payload for ${format} export format`, () => {
-      const dataLine = serializeForFormat(format);
+    test(`adds normalized quality label to Langtext payload for ${mode} export mode`, () => {
+      const dataLine = serializeForMode(mode);
       expect(dataLine).toContain(snippet);
       expect(dataLine).toContain('Gut');
     });

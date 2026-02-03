@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import type { LangtextExportFormat } from './lib/langtext';
 
 const ENV_FILE_PATH = path.resolve(process.cwd(), '.env');
 
@@ -55,7 +54,6 @@ if (!envLoaded) {
 }
 
 // TODO(agentic-config): Replace ad-hoc parsing with a shared zod schema that also validates agentic settings.
-// TODO(langtext-export-config): Extend Langtext export format handling once UI level preferences are introduced.
 // TODO(agent): Capture ERP sync configuration in a typed schema once integration stabilizes.
 
 export const HTTP_PORT = parseInt(process.env.HTTP_PORT || '8080', 10);
@@ -219,21 +217,6 @@ export const HOSTNAME = PUBLIC_ORIGIN;
 export const BASE_QR_URL = resolveBaseUrl(process.env.BASE_QR_URL, '/qr');
 export const BASE_UI_URL = resolveBaseUrl(process.env.BASE_UI_URL, '/ui');
 
-const LANGTEXT_EXPORT_FORMAT_VALUES: ReadonlySet<LangtextExportFormat> = new Set(['json', 'markdown', 'html']);
-const rawLangtextExportFormat = (process.env.LANGTEXT_EXPORT_FORMAT || '').trim().toLowerCase();
-let resolvedLangtextExportFormat: LangtextExportFormat = 'json';
-
-if (rawLangtextExportFormat) {
-  if (LANGTEXT_EXPORT_FORMAT_VALUES.has(rawLangtextExportFormat as LangtextExportFormat)) {
-    resolvedLangtextExportFormat = rawLangtextExportFormat as LangtextExportFormat;
-  } else {
-    console.warn(
-      `[config] Unrecognized LANGTEXT_EXPORT_FORMAT value "${rawLangtextExportFormat}" supplied; defaulting to json.`
-    );
-  }
-}
-
-export const LANGTEXT_EXPORT_FORMAT: LangtextExportFormat = resolvedLangtextExportFormat;
 
 const SHOPWARE_ENABLE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const rawShopwareEnabled = (process.env.SHOPWARE_SYNC_ENABLED || process.env.SHOPWARE_QUEUE_ENABLED || '').trim().toLowerCase();
