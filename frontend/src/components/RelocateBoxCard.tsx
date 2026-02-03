@@ -12,6 +12,7 @@ import QrScanButton from './QrScanButton';
 // TODO(agent): Align relocation shelf loading logs with shared telemetry once analytics are centralized.
 // TODO(agent): Validate relocation option labels against the LocationTag format once shelf labels are updated.
 // TODO(qr-relocate): Confirm QR relocation scans map cleanly to shelf options during onsite validation.
+// TODO(relocate-layout): Reconfirm relocation input + QR alignment with updated search card patterns.
 
 interface Props {
   boxId: string;
@@ -309,7 +310,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
               Neuer Ort
             </label>
           </div>
-          <div className='row' style={{ gap: '8px', flexWrap: 'wrap' }}>
+          <div className="row relocate-input-row">
             <select
               value={selectedLocation}
               onChange={e => setSelectedLocation(e.target.value)}
@@ -326,14 +327,14 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
               ))}
             </select>
             <QrScanButton
-              className="secondary"
+              className="secondary relocate-qr"
               label="Standort scannen"
               returnTo={location.pathname}
               onBeforeNavigate={() => setStatus('')}
             />
-           </div>
+          </div>
 
-          <div className='row'>
+          <div className="row relocate-submit-row">
             <button type="submit">Verschieben</button>
           </div>
 

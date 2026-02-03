@@ -61,6 +61,7 @@ export default function QrScannerPage() {
   })();
 
   // TODO(qr-scan-routing): Revisit S- routing if a dedicated shelf detail route is added.
+  // TODO(qr-scan-routing): Confirm itemUUID return payloads are still needed after QR schema consolidation.
   const stopCamera = useCallback(() => {
     if (detectionTimerRef.current !== null) {
       window.clearInterval(detectionTimerRef.current);
@@ -147,7 +148,12 @@ export default function QrScannerPage() {
         throw new Error('QR-Code enthält keine gültige "id".');
       }
       const normalized: BoxQrPayload = { ...(data as Record<string, unknown>), id };
-      const minimalReturnPayload = { id, rawPayload: raw };
+      const itemUUID = typeof (data as { itemUUID?: unknown }).itemUUID === 'string'
+        ? (data as { itemUUID?: string })?.itemUUID?.trim()
+        : typeof (data as { ItemUUID?: unknown }).ItemUUID === 'string'
+          ? (data as { ItemUUID?: string })?.ItemUUID?.trim()
+          : '';
+      const minimalReturnPayload = { id, rawPayload: raw, itemUUID: itemUUID || undefined };
       setPayload(normalized);
       setStatus('success');
       stopCamera();

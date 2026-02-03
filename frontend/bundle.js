@@ -1,4 +1,3 @@
-// TODO(frontend-bundle): Confirm svg loader strategy matches runtime asset expectations.
 async function bundle() {
   try {
     const { build } = require('esbuild');

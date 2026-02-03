@@ -81,6 +81,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose, qrReturnPa
   const [hasSearched, setHasSearched] = useState(false);
   const qrPrefillRef = useRef(false);
   // TODO: Persist filter preferences for the add-item dialog per user session to reduce repetitive toggling.
+  // TODO(add-item-dialog): Reconfirm search input QR placement once mobile usability feedback lands.
   const [hidePlaced, setHidePlaced] = useState(true);
 
   const filteredResults = useMemo(() => filterSearchResults(results, hidePlaced), [results, hidePlaced]);
@@ -249,27 +250,30 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose, qrReturnPa
         message="Suche nach einem Artikel, um ihn in den Behälter zu legen."
       >
         <div className="add-item-dialog__search">
-          <input
-            id='item-search-input'
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                void runSearch(query, 'manual');
-              }
-            }}
-            autoFocus
-            aria-label="Artikel suchen"
-          />
+          <div className="add-item-dialog__search-field">
+            <input
+              id="item-search-input"
+              className="add-item-dialog__search-input"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  void runSearch(query, 'manual');
+                }
+              }}
+              autoFocus
+              aria-label="Artikel suchen"
+            />
+            <QrScanButton className="add-item-dialog__search-qr" onBeforeNavigate={handleDismiss} />
+          </div>
           <button
-            className="btn"
+            className="btn desktop-only add-item-dialog__search-submit"
             onClick={() => { void runSearch(query, 'manual'); }}
             type="button"
             disabled={!query.trim()}
           >
             <GoSearch />
           </button>
-          <QrScanButton onBeforeNavigate={handleDismiss} />
         </div>
         <div className="add-item-dialog__filters">
           <label htmlFor="hide-placed-items-toggle" className="add-item-dialog__filter-option">

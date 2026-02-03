@@ -6,6 +6,10 @@ import qrIcon from '../assets/qrIcon.svg';
 // TODO(qr-scan-button): Validate QR icon sizing with the circular button in every card layout.
 // TODO(qr-scan-button): Confirm button contrast when rendered inside text inputs.
 
+// TODO(qr-scan-button): Validate QR icon sizing with the circular button in every card layout.
+// TODO(qr-scan-button): Confirm button contrast when rendered inside text inputs.
+// TODO(qr-scan-button): Validate public asset loading for the QR icon in production builds.
+
 interface QrScanButtonProps {
   returnTo?: string;
   onBeforeNavigate?: () => void;
@@ -54,7 +58,7 @@ export default function QrScanButton({
       onClick={handleClick}
       type="button"
     >
-      <img className="qr-scan-button__icon" src={qrIcon} alt="" aria-hidden="true" />
+      <img className="qr-scan-button__icon" src="/qrIcon.svg" alt="" aria-hidden="true" />
       <span className="visually-hidden">{label}</span>
     </button>
   );

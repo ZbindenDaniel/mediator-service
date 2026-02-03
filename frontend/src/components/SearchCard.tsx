@@ -39,6 +39,34 @@ export default function SearchCard() {
     return null;
   }, []);
 
+  const resolveQrReturnTarget = useCallback((qrReturn: { id?: unknown; rawPayload?: unknown; itemUUID?: unknown }) => {
+    const rawItemUUID = typeof qrReturn.itemUUID === 'string' ? qrReturn.itemUUID.trim() : '';
+    if (rawItemUUID) {
+      return { id: rawItemUUID, path: `/items/${encodeURIComponent(rawItemUUID)}` };
+    }
+    const rawPayload = typeof qrReturn.rawPayload === 'string' ? qrReturn.rawPayload : '';
+    if (rawPayload) {
+      try {
+        const parsed = JSON.parse(rawPayload) as { itemUUID?: unknown; ItemUUID?: unknown };
+        const payloadItemUUID = typeof parsed.itemUUID === 'string'
+          ? parsed.itemUUID.trim()
+          : typeof parsed.ItemUUID === 'string'
+            ? parsed.ItemUUID.trim()
+            : '';
+        if (payloadItemUUID) {
+          return { id: payloadItemUUID, path: `/items/${encodeURIComponent(payloadItemUUID)}` };
+        }
+      } catch (error) {
+        logError('SearchCard: failed to parse QR return payload for itemUUID', error);
+      }
+    }
+    const id = typeof qrReturn.id === 'string' ? qrReturn.id.trim() : '';
+    if (!id) {
+      return null;
+    }
+    return resolveDirectTarget(id);
+  }, [resolveDirectTarget]);
+
   const runFind = useCallback(async (term?: string, source: 'manual' | 'qr-return' = 'manual') => {
     const v = (term ?? query).trim();
     setResults([]);
@@ -82,28 +110,43 @@ export default function SearchCard() {
     if (!location.state || typeof location.state !== 'object') {
       return;
     }
-    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown } };
+    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown; itemUUID?: unknown } };
     if (!state.qrReturn) {
       return;
     }
     try {
-      const id = typeof state.qrReturn.id === 'string' ? state.qrReturn.id.trim() : '';
-      if (!id) {
+      const directTarget = resolveQrReturnTarget(state.qrReturn);
+      if (directTarget) {
+        logger.info?.('SearchCard: navigating from QR return payload', { id: directTarget.id, path: directTarget.path });
+        try {
+          navigate(directTarget.path);
+        } catch (error) {
+          logError('SearchCard: failed to navigate from QR return payload', error, { id: directTarget.id, path: directTarget.path });
+        }
+        try {
+          navigate(location.pathname, { replace: true, state: {} });
+        } catch (error) {
+          logError('SearchCard: failed to clear QR return location state', error, { id: directTarget.id });
+        }
+        return;
+      }
+      const fallbackId = typeof state.qrReturn.id === 'string' ? state.qrReturn.id.trim() : '';
+      if (!fallbackId) {
         logger.warn?.('SearchCard: ignoring QR return payload with empty id', { qrReturn: state.qrReturn });
         return;
       }
-      setQuery(id);
-      logger.info?.('SearchCard: received QR return payload', { id });
-      void runFind(id, 'qr-return');
+      setQuery(fallbackId);
+      logger.info?.('SearchCard: received QR return payload', { id: fallbackId });
+      void runFind(fallbackId, 'qr-return');
       try {
         navigate(location.pathname, { replace: true, state: {} });
       } catch (error) {
-        logError('SearchCard: failed to clear QR return location state', error, { id });
+        logError('SearchCard: failed to clear QR return location state', error, { id: fallbackId });
       }
     } catch (error) {
       logError('SearchCard: failed to process QR return payload', error);
     }
-  }, [location.pathname, location.state, navigate, runFind]);
+  }, [location.pathname, location.state, navigate, resolveQrReturnTarget, runFind]);
 
   return (
     <div className="card" id="find">
