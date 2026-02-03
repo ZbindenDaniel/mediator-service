@@ -54,13 +54,13 @@ async function renderLabel(
   outPath: string,
   logger: Console
 ): Promise<string> {
-  const qrPayload = { ...payload, template };
+  const qrPayload = { id: payload.id, type: payload.type, materialNumber: payload.materialNumber };
   const qrDataUri = await makeQrDataUrl(qrPayload, logger);
 
   try {
     await renderLabelTemplate({
       template,
-      payload: { ...qrPayload, qrPayload, qrDataUri },
+      payload: { ...qrPayload, ...payload, qrDataUri },
       outPath,
       logger
     });

@@ -112,14 +112,16 @@ export default function LandingPage() {
       <h1>Übersicht</h1>
       <div className="grid landing-grid">
         {/* TODO(overview-layout): Reconfirm stats placement after Erfassen card order update. */}
-        <CreateItemCard />
+        <div className="desktop-only">
+          <CreateItemCard />
+        </div>
         <SearchCard />
         <StatsCard
           counts={overview?.counts}
           printerOk={printerOk}
           printerReason={printerReason}
           health={health}
-          className="stats-card"
+          className="stats-card desktop-only"
         />
         {/* TODO(qr-scan-card): Reconfirm placement once HTTPS QR scanning is verified in production. */}
         {/*
@@ -133,19 +135,31 @@ export default function LandingPage() {
           </div>
         */}
         {/* TODO(chat-card): Confirm chat entry visibility should remain mobile-only. */}
-        <div className="card mobile-only" id="chat-card">
+        <div className="card mobile-only" id="qr-card">
+          <Link className="linkcard" to="/scan">
+            <div>
+              <h2>QR-Scanner</h2>
+              <p className="muted">QR-Codes von Behältern scannen und Details sofort anzeigen</p>
+            </div>
+          </Link>        </div>
+        {/* <div className="card mobile-only" id="chat-card">
           <Link className="linkcard" to="/chat">
             <div>
               <h2>Chat</h2>
               <p className="muted">Mit dem Agenten sprechen und vorgeschlagene SQLite-Queries ansehen</p>
             </div>
           </Link>
-        </div>
+        </div> */}
+
         <RecentBoxesCard boxes={overview?.recentBoxes || []} />
+
         <div className="grid-span-2">
           <RecentEventsCard events={previewEvents}></RecentEventsCard>
         </div>
-        <ImportCard />
+
+        <div className='desktop-only'>
+          <ImportCard />
+        </div>
       </div>
     </div>
   );
