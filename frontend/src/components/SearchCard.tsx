@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Item } from '../../../models';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import LocationTag from './LocationTag';
+import QrScanButton from './QrScanButton';
+import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Double-check that the simplified LocationTag output matches the search results layout expectations.
 // TODO(navigation): Review header navigation labels before adding new search shortcuts here.
 // TODO(deep-search): Add an explicit deep-search toggle to this card when UX copy is ready.
 // TODO(agent): Confirm box search rows still prefer label overrides over IDs once API fields expand.
+// TODO(qr-search): Validate QR return handling after relocating the scan entry into this card.
 
 type SearchResult =
   | { type: 'box'; id: string; locationId?: string | null; label?: string | null }
@@ -15,28 +18,65 @@ type SearchResult =
 export default function SearchCard() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const qrReturnTo = useMemo(() => `${location.pathname}${location.search}#find`, [location.pathname, location.search]);
 
-  async function runFind() {
-    const v = query.trim();
+  const runFind = useCallback(async (term?: string, source: 'manual' | 'qr-return' = 'manual') => {
+    const v = (term ?? query).trim();
     setResults([]);
-    if (!v) return;
+    if (!v) {
+      logger.warn?.('Search query is empty', { source });
+      return;
+    }
     try {
       const r = await fetch('/api/search?term=' + encodeURIComponent(v));
       if (!r.ok) {
-        console.error('Search HTTP error', r.status);
+        logger.error?.('Search HTTP error', { status: r.status, source });
         return;
       }
       const data = await r.json();
-      console.log('Search data', data);
+      logger.info?.('Search data', { source, data });
       const next: SearchResult[] = [];
       (data.items || []).forEach((it: Item) => next.push({ type: 'item', item: it }));
       (data.boxes || []).forEach((b: any) => next.push({ type: 'box', id: b.BoxID, locationId: b.LocationId, label: b.Label }));
-      console.log('Search returned', (data.items || []).length, 'items', (data.boxes || []).length, 'behälter');
+      logger.info?.('Search returned', {
+        source,
+        items: (data.items || []).length,
+        boxes: (data.boxes || []).length
+      });
       setResults(next);
     } catch (err) {
-      console.error('Search failed', err);
+      logError('Search failed', err, { source, query: v });
     }
-  }
+  }, [query]);
+
+  useEffect(() => {
+    if (!location.state || typeof location.state !== 'object') {
+      return;
+    }
+    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown } };
+    if (!state.qrReturn) {
+      return;
+    }
+    try {
+      const id = typeof state.qrReturn.id === 'string' ? state.qrReturn.id.trim() : '';
+      if (!id) {
+        logger.warn?.('SearchCard: ignoring QR return payload with empty id', { qrReturn: state.qrReturn });
+        return;
+      }
+      setQuery(id);
+      logger.info?.('SearchCard: received QR return payload', { id });
+      void runFind(id, 'qr-return');
+      try {
+        navigate(location.pathname, { replace: true, state: {} });
+      } catch (error) {
+        logError('SearchCard: failed to clear QR return location state', error, { id });
+      }
+    } catch (error) {
+      logError('SearchCard: failed to process QR return payload', error);
+    }
+  }, [location.pathname, location.state, navigate, runFind]);
 
   return (
     <div className="card" id="find">
@@ -48,10 +88,11 @@ export default function SearchCard() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="z.B. Lenovo x230, B-151025, Brother, 07045"
-          onKeyDown={e => { if (e.key === 'Enter') runFind(); }}
+          onKeyDown={e => { if (e.key === 'Enter') void runFind(); }}
           autoFocus
         />
-        <button className="btn" onClick={runFind}>Suchen</button>
+        <button className="btn" onClick={() => { void runFind(); }}>Suchen</button>
+        <QrScanButton label="QR" returnTo={qrReturnTo} />
       </div>
       <div className="list search-results" style={{ marginTop: '10px' }}>
         {results.map((res, idx) =>

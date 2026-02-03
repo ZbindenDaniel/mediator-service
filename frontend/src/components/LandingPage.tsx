@@ -113,6 +113,7 @@ export default function LandingPage() {
       <div className="grid landing-grid">
         {/* TODO(overview-layout): Reconfirm stats placement after Erfassen card order update. */}
         <CreateItemCard />
+        {/* TODO(qr-search): Validate search card layout after QR scan button relocation. */}
         <SearchCard />
         <StatsCard
           counts={overview?.counts}
@@ -121,17 +122,6 @@ export default function LandingPage() {
           health={health}
           className="stats-card"
         />
-        {/* TODO(qr-scan-card): Reconfirm placement once HTTPS QR scanning is verified in production. */}
-        {/*
-          <div className="card" id="qr-scan-card">
-            <Link className="linkcard" to="/scan">
-              <div>
-                <h2>QR-Scanner</h2>
-                <p className="muted">QR-Codes von Behältern scannen und Details sofort anzeigen</p>
-              </div>
-            </Link>
-          </div>
-        */}
         {/* TODO(chat-card): Confirm chat entry visibility should remain mobile-only. */}
         <div className="card mobile-only" id="chat-card">
           <Link className="linkcard" to="/chat">
