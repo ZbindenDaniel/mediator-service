@@ -91,3 +91,7 @@ sudo ufw allow 443
 ## registry
 
 - If the personal access token expires, regenerate it and login again to the registry: echo THE_NEW_PAT | sudo docker login ghcr.io -u ZbindenDaniel --password-stdin
+
+# Data recovery
+
+user@roti-fabrik ~> sudo cp -r /var/lib/docker/volumes/mediator-data/_data mediator/_data/

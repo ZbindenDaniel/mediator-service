@@ -1479,11 +1479,9 @@ export async function resumeStaleAgenticRuns(
 ): Promise<AgenticRunResumeResult> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
-  const queueUpdater = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
 
   logger.info?.('[agentic-service] Evaluating stale agentic run resume path', {
-    invoker: deps.invokeModel ? 'available' : 'missing',
-    queueUpdater: queueUpdater ? 'available' : 'missing'
+    invoker: deps.invokeModel ? 'available' : 'missing'
   });
 
   let staleRuns: AgenticRun[] = [];

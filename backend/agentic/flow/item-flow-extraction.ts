@@ -58,6 +58,7 @@ const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
 const MAX_LOG_DEPTH = 2;
+const MAX_RETRY_SUMMARY_LENGTH = 260;
 // TODO(migration): Remove legacy identifier logging/stripping once all agent outputs are Artikel_Nummer-only.
 const LEGACY_IDENTIFIER_KEYS = ['itemUUid', 'itemId', 'id'] as const;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
@@ -126,6 +127,11 @@ function truncateForLog(value: string, maxLength = MAX_LOG_STRING_LENGTH): strin
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
 }
 
+function truncateForPrompt(value: string, maxLength = MAX_RETRY_SUMMARY_LENGTH): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+// TODO(agent): Simplify search query handling once prompt guidance is revisited.
 function sanitizeForLog(value: unknown, depth = 0): unknown {
   if (value == null) {
     return value;
@@ -246,6 +252,7 @@ export async function runExtractionAttempts({
     : 1;
   // TODO(agent): Cache pricing stage output per attempt to avoid redundant LLM calls during retries.
   // TODO(agent): Review search request limit telemetry after env overrides roll out.
+  // TODO(agent): Add alerting thresholds for prompt segment sizes as prompts evolve.
   try {
     logger?.info?.({
       msg: 'resolved agent search request limit',
@@ -265,9 +272,12 @@ export async function runExtractionAttempts({
     searchRequestCycles = 0;
   };
 
+  // TODO(agent): Keep retry metadata summaries compact as prompt guidance evolves.
   while (attempt <= maxAttempts) {
     logger?.debug?.({ msg: 'extraction attempt', attempt, itemId });
 
+    // TODO(agent): Re-check prompt context assembly for further reductions after reviewer feedback.
+    // TODO(agent): Re-evaluate prompt length logging thresholds once prompt compression stabilizes.
     let aggregatedSearchText = '';
     try {
       aggregatedSearchText = buildAggregatedSearchText();
@@ -281,10 +291,10 @@ export async function runExtractionAttempts({
     }
 
     let searchRequestHint = searchesPerRequestLimit === 1
-      ? 'If you still require specific information, request up to one additional search by including a "__searchQueries" array in your JSON output.'
-      : `If you still require specific information, request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array in your JSON output.`;
+      ? 'Need more info? Add one "__searchQueries" entry.'
+      : `Need more info? Add up to ${searchesPerRequestLimit} "__searchQueries" entries.`;
     if (searchSkipped) {
-      searchRequestHint = `${searchRequestHint} Only trigger a new search if the reviewer notes demand it.`;
+      searchRequestHint = `${searchRequestHint} Only request searches if reviewer notes require it.`;
     }
 
     let reviewerInstructionBlock = '';
@@ -294,10 +304,10 @@ export async function runExtractionAttempts({
         instructionLines.push(sanitizedReviewerNotes);
       }
       if (searchSkipped) {
-        instructionLines.push('Search was skipped per reviewer request. Minimize new search requests.');
+        instructionLines.push('Search skipped per reviewer request. Minimize new searches.');
       }
       if (instructionLines.length > 0) {
-        reviewerInstructionBlock = ['Reviewer instructions:', ...instructionLines].join('\n');
+        reviewerInstructionBlock = ['Reviewer:', ...instructionLines].join('\n');
         logger?.info?.({
           msg: 'appended reviewer instructions to extraction prompt',
           attempt,
@@ -311,55 +321,76 @@ export async function runExtractionAttempts({
       reviewerInstructionBlock = '';
     }
 
-    const initialSections = ['Aggregated search context:', aggregatedSearchText, searchRequestHint];
-    if (reviewerInstructionBlock) {
-      initialSections.unshift(reviewerInstructionBlock);
+    // TODO: possible merge issue
+    const formattedSources = attempt > 1 ? formatSourcesForRetry(aggregatedSources, logger) : [];
+    const contextSections = [];
+    const reviewerNotesLineCount = sanitizedReviewerNotes ? sanitizedReviewerNotes.split('\n').length : 0;
+    const aggregatedSearchLineCount = aggregatedSearchText ? aggregatedSearchText.split('\n').length : 0;
+    const targetSnapshotLineCount = trimmedTargetSnapshot ? trimmedTargetSnapshot.split('\n').length : 0;
+    try {
+      logger?.debug?.({
+        msg: 'prompt segment size metrics',
+        attempt,
+        itemId,
+        reviewerNotesLength: sanitizedReviewerNotes.length,
+        reviewerNotesLineCount,
+        aggregatedSearchLength: aggregatedSearchText.length,
+        aggregatedSearchLineCount,
+        targetSnapshotLength: trimmedTargetSnapshot.length,
+        targetSnapshotLineCount
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId });
     }
 
-    let userContent = initialSections.join('\n\n');
+    const initialSections = ['Aggregated search context:', aggregatedSearchText, searchRequestHint];
+    if (reviewerInstructionBlock) {
+      contextSections.push(reviewerInstructionBlock);
+    }
+    if (formattedSources.length > 0) {
+      contextSections.push(['Sources:', formattedSources.join('\n')].join('\n'));
+    }
+    contextSections.push('Search context:', aggregatedSearchText || 'None.');
+    contextSections.push(searchRequestHint);
+    const baseUserContent = contextSections.join('\n\n');
+    let userContent = baseUserContent;
 
     if (attempt > 1) {
-      const formattedSources = formatSourcesForRetry(aggregatedSources, logger);
-      const retrySections = [
-        'Previous attempt failed or supervisor indicated issues.',
-        `Supervisor feedback:\n${lastSupervision || 'None'}`,
-        'Previous extraction raw output:',
-        lastRaw ? lastRaw : 'None',
-        'Sources:',
-        formattedSources.join('\n'),
-        'Aggregated search context:',
-        aggregatedSearchText,
-        searchesPerRequestLimit === 1
-          ? 'Reminder: request at most one additional search by including a "__searchQueries" array when vital information is missing.'
-          : `Reminder: request up to ${searchesPerRequestLimit} additional searches by including a "__searchQueries" array when vital information is missing.`
-      ];
+      const retrySummaryLines: string[] = ['Retry summary (compact):'];
+      const supervisionSummary = truncateForPrompt(lastSupervision?.trim?.() ?? 'None');
+      retrySummaryLines.push(`Supervisor: ${supervisionSummary || 'None'}`);
+      const validationSummaryParts: string[] = [];
       if (lastValidationIssues === 'INVALID_JSON') {
-        const sanitizedPayload = lastInvalidJsonPayload?.sanitizedPayload?.trim();
-        const parseErrorHint = lastInvalidJsonErrorHint.trim();
-        const invalidJsonGuidance: string[] = [];
-        if (sanitizedPayload) {
-          invalidJsonGuidance.push('Sanitized JSON captured from the last attempt:', sanitizedPayload);
+        const parseErrorHint = truncateForPrompt(lastInvalidJsonErrorHint.trim() || 'Invalid JSON output.');
+        validationSummaryParts.push(`Invalid JSON (${parseErrorHint}).`);
+        if (lastInvalidJsonPlaceholderIssues.length) {
+          const placeholderSummary = truncateForPrompt(lastInvalidJsonPlaceholderIssues.join(', '));
+          validationSummaryParts.push(`Placeholders: ${placeholderSummary}.`);
         }
-        if (parseErrorHint) {
-          invalidJsonGuidance.push(`Parse hint: ${parseErrorHint}`);
-        }
-        if (invalidJsonGuidance.length) {
-          retrySections.splice(2, 0, invalidJsonGuidance.join('\n'));
-          logger?.info?.({
-            msg: 'added invalid json guidance to retry prompt',
-            attempt,
-            itemId,
-            hasSanitizedPayload: Boolean(sanitizedPayload),
-            hasParseErrorHint: Boolean(parseErrorHint),
-            sanitizedPayloadPreview: sanitizeForLog(sanitizedPayload),
-            parseErrorPreview: sanitizeForLog(parseErrorHint)
-          });
-        }
+      } else if (Array.isArray(lastValidationIssues)) {
+        const issueSummary = truncateForPrompt(JSON.stringify(lastValidationIssues));
+        validationSummaryParts.push(`Schema issues: ${issueSummary}.`);
+      } else if (lastValidationIssues) {
+        validationSummaryParts.push(`Validation: ${truncateForPrompt(String(lastValidationIssues))}.`);
       }
-      if (reviewerInstructionBlock) {
-        retrySections.splice(1, 0, reviewerInstructionBlock);
+      if (validationSummaryParts.length) {
+        retrySummaryLines.push(`Error hint: ${validationSummaryParts.join(' ')}`);
       }
-      userContent = retrySections.join('\n\n');
+      const retrySections = [retrySummaryLines.join('\n')];
+      const retrySectionLengths = retrySections.map((section) => section.length);
+      try {
+        logger?.debug?.({
+          msg: 'retry prompt section size metrics',
+          attempt,
+          itemId,
+          retrySectionsCount: retrySections.length,
+          retrySectionLengths,
+          retrySectionsLength: retrySectionLengths.reduce((total, length) => total + length, 0)
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to log retry prompt size metrics', attempt, itemId });
+      }
+      userContent = [retrySections.join('\n\n'), baseUserContent].join('\n\n');
     }
 
     if (trimmedTargetSnapshot) {
@@ -383,8 +414,22 @@ export async function runExtractionAttempts({
       });
     }
 
+    const systemPrompt = `${extractPrompt}\nTarget format:\n${targetFormat}`;
+    try {
+      logger?.debug?.({
+        msg: 'extraction prompt length',
+        attempt,
+        itemId,
+        systemLength: systemPrompt.length,
+        userLength: userContent.length,
+        promptLength: systemPrompt.length + userContent.length
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log extraction prompt length', attempt, itemId });
+    }
+
     const extractionMessages = [
-      { role: 'system', content: `${extractPrompt}\nTargetformat:\n${targetFormat}` },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent }
     ];
     let extractRes;
@@ -659,7 +704,29 @@ export async function runExtractionAttempts({
       });
     }
 
-    const agentParsed = AgentOutputSchema.safeParse(parsed);
+    let normalizedParsed = parsed as unknown;
+    const parsedRecord = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    const rawQueries = parsedRecord?.__searchQueries;
+    if (Array.isArray(rawQueries) && rawQueries.length > searchesPerRequestLimit) {
+      const resolvedLimit = Number.isFinite(searchesPerRequestLimit) && searchesPerRequestLimit > 0
+        ? Math.floor(searchesPerRequestLimit)
+        : 1;
+      const truncatedQueries = rawQueries.slice(0, resolvedLimit);
+      normalizedParsed = { ...parsedRecord, __searchQueries: truncatedQueries };
+      try {
+        logger?.warn?.({
+          msg: 'truncating agent search queries before schema validation',
+          itemId,
+          attempt,
+          requestedCount: rawQueries.length,
+          allowedCount: resolvedLimit,
+          truncatedQueriesPreview: sanitizeForLog(truncatedQueries)
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to log search query truncation', itemId, attempt });
+      }
+    }
+    const agentParsed = AgentOutputSchema.safeParse(normalizedParsed);
     if (!agentParsed.success) {
       const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
       logger?.warn?.({
