@@ -1,14 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ensureUser } from '../lib/user';
 import { formatShelfLabel } from '../lib/shelfLabel';
 import { logger, logError } from '../utils/logger';
 import { dialogService } from './dialog';
+import QrScanButton from './QrScanButton';
 
 // TODO(agent): Extend relocation picker to support searching/filtering when location lists grow larger.
 // TODO(agent): Confirm relocation flows fully rely on LocationId payloads once legacy Location fields are deprecated.
 // TODO(agent): Consider sorting shelf options by parsed location/floor/shelf once labels are expanded.
 // TODO(agent): Align relocation shelf loading logs with shared telemetry once analytics are centralized.
 // TODO(agent): Validate relocation option labels against the LocationTag format once shelf labels are updated.
+// TODO(qr-relocate): Confirm QR relocation scans map cleanly to shelf options during onsite validation.
 
 interface Props {
   boxId: string;
@@ -21,6 +24,9 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   const [status, setStatus] = useState('');
   const [locationOptions, setLocationOptions] = useState<Array<{ id: string; label: string; sourceBoxId: string }>>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  const qrReturnHandledRef = useRef<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   function buildShelfSelectionLabel(locationId: string, shelfLabel: string | null, fallbackLabel: string) {
     let parsedLabel = fallbackLabel;
@@ -64,6 +70,131 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   const locationLookup = useMemo(() => {
     return new Map(locationOptions.map((option) => [option.id, option]));
   }, [locationOptions]);
+  const locationLookupBySource = useMemo(() => {
+    return new Map(locationOptions.map((option) => [option.sourceBoxId, option]));
+  }, [locationOptions]);
+
+  const submitRelocation = useCallback(
+    async (locationOption: { id: string; label: string; sourceBoxId: string }, source: 'manual' | 'qr-return') => {
+      const actor = await ensureUser();
+      if (!actor) {
+        logger.info('Relocate box aborted: missing username.', { source });
+        try {
+          await dialogService.alert({
+            title: 'Aktion nicht möglich',
+            message: 'Bitte zuerst oben den Benutzer setzen.'
+          });
+        } catch (error) {
+          logError('Failed to display missing user alert for box relocation', error, { boxId, source });
+        }
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ LocationId: locationOption.id, actor })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setStatus('Behälter verschoben');
+          onMoved?.();
+        } else {
+          setStatus('Fehler: ' + (data.error || res.status));
+        }
+        logger.info('relocate box', {
+          status: res.status,
+          locationId: locationOption.id,
+          sourceBoxId: locationOption.sourceBoxId,
+          boxId,
+          source
+        });
+      } catch (err) {
+        logError('Relocate box failed', err, { boxId, source });
+        setStatus('Verschieben fehlgeschlagen');
+      }
+    },
+    [boxId, onMoved]
+  );
+
+  const handleQrReturnSelection = useCallback(
+    (scannedId: string, rawPayload?: string) => {
+      const trimmedId = scannedId.trim();
+      if (!trimmedId) {
+        logger.warn?.('RelocateBoxCard: ignoring empty QR return id', { boxId, scannedId });
+        return;
+      }
+      const prefix = trimmedId.slice(0, 2).toUpperCase();
+      if (prefix !== 'S-' && prefix !== 'B-') {
+        logger.warn?.('RelocateBoxCard: ignoring QR return id without shelf/box prefix', { boxId, scannedId });
+        return;
+      }
+
+      let locationOption: { id: string; label: string; sourceBoxId: string } | undefined;
+      try {
+        locationOption = locationLookup.get(trimmedId) ?? locationLookupBySource.get(trimmedId);
+      } catch (error) {
+        logError('RelocateBoxCard: failed to resolve QR relocation selection', error, { boxId, scannedId: trimmedId });
+        return;
+      }
+
+      if (!locationOption) {
+        logger.warn('RelocateBoxCard: scanned location not found in relocation options', { boxId, scannedId: trimmedId });
+        return;
+      }
+
+      setSelectedLocation(locationOption.id);
+      setStatus('Standort aus QR-Code übernommen');
+      logger.info('RelocateBoxCard: QR return mapped to relocation option', {
+        boxId,
+        scannedId: trimmedId,
+        locationId: locationOption.id,
+        sourceBoxId: locationOption.sourceBoxId,
+        rawPayload
+      });
+
+      const shouldAutoSubmit = locationOptions.length === 1;
+      if (shouldAutoSubmit) {
+        void submitRelocation(locationOption, 'qr-return');
+      }
+    },
+    [boxId, locationLookup, locationLookupBySource, locationOptions.length, submitRelocation]
+  );
+
+  useEffect(() => {
+    if (!location.state || typeof location.state !== 'object') {
+      return;
+    }
+    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown } };
+    if (!state.qrReturn) {
+      return;
+    }
+    if (isLoadingLocations) {
+      logger.info?.('RelocateBoxCard: deferring QR return handling until locations finish loading', { boxId });
+      return;
+    }
+    try {
+      const id = typeof state.qrReturn.id === 'string' ? state.qrReturn.id.trim() : '';
+      if (!id) {
+        logger.warn?.('RelocateBoxCard: ignoring QR return payload with empty id', { boxId, qrReturn: state.qrReturn });
+        return;
+      }
+      if (qrReturnHandledRef.current === id) {
+        return;
+      }
+      const rawPayload = typeof state.qrReturn.rawPayload === 'string' ? state.qrReturn.rawPayload : undefined;
+      handleQrReturnSelection(id, rawPayload);
+      qrReturnHandledRef.current = id;
+      try {
+        navigate(location.pathname, { replace: true, state: {} });
+      } catch (error) {
+        logError('RelocateBoxCard: failed to clear QR return location state', error, { boxId, id });
+      }
+    } catch (error) {
+      logError('RelocateBoxCard: failed to process QR return payload', error, { boxId });
+    }
+  }, [boxId, handleQrReturnSelection, isLoadingLocations, location.pathname, location.state, navigate]);
 
   useEffect(() => {
     let isMounted = true;
@@ -165,44 +296,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
       setStatus('Bitte einen Standort wählen');
       return;
     }
-
-    const actor = await ensureUser();
-    if (!actor) {
-      logger.info('Relocate box aborted: missing username.');
-      try {
-        await dialogService.alert({
-          title: 'Aktion nicht möglich',
-          message: 'Bitte zuerst oben den Benutzer setzen.'
-        });
-      } catch (error) {
-        logError('Failed to display missing user alert for box relocation', error, { boxId });
-      }
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/boxes/${encodeURIComponent(boxId)}/move`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ LocationId: locationOption.id, actor })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setStatus('Behälter verschoben');
-        onMoved?.();
-      } else {
-        setStatus('Fehler: ' + (data.error || res.status));
-      }
-      logger.info('relocate box', {
-        status: res.status,
-        locationId: locationOption.id,
-        sourceBoxId: locationOption.sourceBoxId,
-        boxId
-      });
-    } catch (err) {
-      logError('Relocate box failed', err, { boxId });
-      setStatus('Verschieben fehlgeschlagen');
-    }
+    await submitRelocation(locationOption, 'manual');
   }
 
   return (
@@ -231,6 +325,12 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
                 </option>
               ))}
             </select>
+            <QrScanButton
+              className="secondary"
+              label="Standort scannen"
+              returnTo={location.pathname}
+              onBeforeNavigate={() => setStatus('')}
+            />
            </div>
 
           <div className='row'>

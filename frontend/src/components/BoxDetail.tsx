@@ -31,6 +31,7 @@ import QualityBadge from './QualityBadge';
 // TODO(box-detail-layout): Confirm print label placement still aligns with shelf detail card height in the summary grid.
 // TODO(agent): Reassess shelf label/notes editing once shelf tagging conventions stabilize.
 // TODO(mobile-box-detail): Keep box detail container width constrained to the viewport on small screens.
+// TODO(qr-relocate): Coordinate QR return handling between add-item and relocation flows to avoid routing conflicts.
 
 interface Props {
   boxId: string;
@@ -130,6 +131,16 @@ export default function BoxDetail({ boxId }: Props) {
       const id = typeof state.qrReturn.id === 'string' ? state.qrReturn.id.trim() : '';
       if (!id) {
         logger.warn?.('BoxDetail: ignoring QR return payload with empty id', { boxId, qrReturn: state.qrReturn });
+        return;
+      }
+      const prefix = id.slice(0, 2).toUpperCase();
+      if (prefix !== 'I-') {
+        logger.info?.('BoxDetail: ignoring QR return payload without item prefix', { boxId, id });
+        try {
+          navigate(location.pathname, { replace: true, state: {} });
+        } catch (error) {
+          logError('BoxDetail: failed to clear QR return location state', error, { boxId, id });
+        }
         return;
       }
       const rawPayload = typeof state.qrReturn.rawPayload === 'string' ? state.qrReturn.rawPayload : undefined;
