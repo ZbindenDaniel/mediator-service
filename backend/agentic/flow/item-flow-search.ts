@@ -12,6 +12,7 @@ import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { ChatModel } from './item-flow-extraction';
 import type { AgenticTarget } from './item-flow-schemas';
+import { appendTranscriptSection, type AgentTranscriptWriter } from './transcript';
 
 export interface SearchInvokerMetadata {
   context?: string;
@@ -39,6 +40,7 @@ export interface CollectSearchContextOptions {
   plannerDecision?: PlannerDecision | null;
   missingSchemaFields?: string[];
   reviewerSkip?: boolean;
+  transcriptWriter?: AgentTranscriptWriter | null;
 }
 
 export interface SearchContext {
@@ -81,6 +83,8 @@ export interface PlannerDecision {
   shouldSearch: boolean;
   plans: SearchPlan[];
 }
+
+const MAX_SEARCH_TRANSCRIPT_SECTION_LENGTH = 250_000;
 
 interface PlannerInvocationOptions {
   llm: ChatModel;
@@ -438,6 +442,79 @@ function resolveTarget(
   return null;
 }
 
+type SearchTranscriptSource = {
+  title?: string;
+  url?: string;
+  description?: string;
+  content?: string;
+};
+
+function buildSearchTranscriptSection(
+  plan: SearchPlan,
+  metadata: SearchInvokerMetadata,
+  sources: SearchSource[],
+  searchText: string,
+  logger: Partial<Pick<Console, LoggerMethods>> | undefined,
+  itemId: string,
+  requestIndex: number
+): {
+  requestPayload: Record<string, unknown>;
+  responseBody: string;
+} {
+  const normalizedSources: SearchTranscriptSource[] = sources.map((source = {}) => ({
+    title: typeof source.title === 'string' ? source.title : undefined,
+    url: typeof source.url === 'string' ? source.url : undefined,
+    description: typeof source.description === 'string' ? source.description : undefined,
+    content: typeof source.content === 'string' ? source.content : undefined
+  }));
+
+  const requestPayload: Record<string, unknown> = {
+    query: plan.query,
+    metadata,
+    sourceCount: normalizedSources.length,
+    sources: normalizedSources,
+    truncated: false
+  };
+  let responseBody = searchText;
+
+  const measureLength = () => JSON.stringify({ requestPayload, responseBody }).length;
+  const beforeLength = measureLength();
+
+  if (beforeLength > MAX_SEARCH_TRANSCRIPT_SECTION_LENGTH) {
+    requestPayload.truncated = true;
+
+    const compactSources: SearchTranscriptSource[] = normalizedSources.map((source) => ({
+      title: source.title ? source.title.slice(0, 500) : undefined,
+      url: source.url ? source.url.slice(0, 1_000) : undefined,
+      description: source.description ? source.description.slice(0, 2_000) : undefined,
+      content: source.content ? source.content.slice(0, 4_000) : undefined
+    }));
+
+    requestPayload.sources = compactSources;
+    const remainingBudget = Math.max(8_000, MAX_SEARCH_TRANSCRIPT_SECTION_LENGTH - JSON.stringify(requestPayload).length);
+    responseBody = responseBody.slice(0, remainingBudget);
+
+    const afterLength = measureLength();
+    try {
+      logger?.warn?.({
+        msg: 'search transcript section truncated',
+        itemId,
+        requestIndex,
+        beforeLength,
+        afterLength,
+        limit: MAX_SEARCH_TRANSCRIPT_SECTION_LENGTH
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log search transcript truncation', itemId, requestIndex });
+    }
+  }
+
+  return {
+    requestPayload,
+    responseBody
+  };
+}
+
 export async function collectSearchContexts({
   searchTerm,
   searchInvoker,
@@ -448,7 +525,8 @@ export async function collectSearchContexts({
   shouldSearch,
   plannerDecision,
   missingSchemaFields: providedMissingFields,
-  reviewerSkip
+  reviewerSkip,
+  transcriptWriter
 }: CollectSearchContextOptions): Promise<CollectSearchContextsResult> {
   const resolvedMaxPlans = Number.isFinite(searchLimits.maxPlans) && searchLimits.maxPlans > 0
     ? Math.floor(searchLimits.maxPlans)
@@ -674,6 +752,30 @@ export async function collectSearchContexts({
       searchContexts.push({ query: plan.query, text: searchText, sources });
       recordSources(sources);
       logger?.info?.({ msg: 'search complete', count: sources.length, itemId, requestIndex: index });
+
+      try {
+        const { requestPayload, responseBody } = buildSearchTranscriptSection(
+          plan,
+          metadata,
+          sources,
+          searchText,
+          logger,
+          itemId,
+          index
+        );
+
+        await appendTranscriptSection(
+          transcriptWriter,
+          `search-context-${index + 1}`,
+          requestPayload,
+          responseBody,
+          logger,
+          itemId
+        );
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to append search transcript section', itemId, requestIndex: index });
+      }
+
       if (index === 0) {
         const truncatedText = typeof searchText === 'string'
           ? `${searchText.slice(0, 500)}${searchText.length > 500 ? '…' : ''}`

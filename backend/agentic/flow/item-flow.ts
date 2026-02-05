@@ -296,7 +296,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       shouldSearch: finalShouldSearch,
       plannerDecision,
       missingSchemaFields,
-      reviewerSkip: skipSearch
+      reviewerSkip: skipSearch,
+      transcriptWriter
     });
 
     checkCancellation();
