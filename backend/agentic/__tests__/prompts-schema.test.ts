@@ -62,3 +62,17 @@ describe('prompt schema column annotations', () => {
     checkCoverage('items', itemColumns);
   });
 });
+
+
+describe('extraction prompt guidance', () => {
+  it('retains canonical Spezifikationen guidance and compact quality examples', () => {
+    const extractPromptPath = path.resolve(__dirname, '../prompts/extract.md');
+    const extractPrompt = fs.readFileSync(extractPromptPath, 'utf8');
+
+    expect(extractPrompt).toContain('For LLM output, use `Spezifikationen` as the meaningful specs field name.');
+    expect(extractPrompt).toContain('Anti-pattern: Never return placeholder-only `Spezifikationen`');
+    expect(extractPrompt).toContain('Quality `Spezifikationen` object:');
+    expect(extractPrompt).toContain('Leave numeric fields null when missing:');
+    expect(extractPrompt).toContain('Add `__searchQueries` only if unresolved details block required fields:');
+  });
+});
