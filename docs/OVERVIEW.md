@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
 - **QR scan & navigation polish**: streamlined the landing scan entry, return-to flows, and destination routing for item/box/shelf scans with validation/logging baked in.
+- **QR scan callback routing**: added a callback-driven scan mode for search-triggered scans so QR results navigate directly to item/box detail pages while keeping return navigation for relocation flows.
 - **Agentic pipeline & identifiers**: consolidated around Artikel_Nummer-only identifiers, tightened run orchestration/queueing, and added logging to make migrations and recovery safer.
 - **Imports/exports & data contracts**: grouped export modes for ERP vs backup, normalized CSV headers and media paths, and strengthened import validation with clearer diagnostics.
 - **UI layout & media/printing**: refined item/box detail layouts, media handling, and print label flows while keeping responsive behaviors consistent.

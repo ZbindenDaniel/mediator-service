@@ -22,6 +22,7 @@ export default function SearchCard() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
+  // TODO(qr-search): Confirm callback-driven QR navigation continues to bypass search state safely.
   const qrReturnTo = useMemo(() => `${location.pathname}${location.search}#find`, [location.pathname, location.search]);
 
   const resolveDirectTarget = useCallback((term: string) => {
@@ -164,7 +165,12 @@ export default function SearchCard() {
               onKeyDown={e => { if (e.key === 'Enter') void runFind(); }}
               autoFocus
             />
-            <QrScanButton className="search-input-qr" label="QR scannen" returnTo={qrReturnTo} />
+            <QrScanButton
+              className="search-input-qr"
+              label="QR scannen"
+              returnTo={qrReturnTo}
+              callback="NavigateToEntity"
+            />
           </div>
         </div>
         <button className="btn search-submit" onClick={() => { void runFind(); }}>Suchen</button>

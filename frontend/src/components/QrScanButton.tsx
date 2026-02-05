@@ -12,6 +12,7 @@ import qrIcon from '../assets/qrIcon.svg';
 
 interface QrScanButtonProps {
   returnTo?: string;
+  callback?: string;
   onBeforeNavigate?: () => void;
   className?: string;
   label?: string;
@@ -19,6 +20,7 @@ interface QrScanButtonProps {
 
 export default function QrScanButton({
   returnTo,
+  callback,
   onBeforeNavigate,
   className,
   label = 'QR scannen'
@@ -32,9 +34,12 @@ export default function QrScanButton({
     if (resolvedReturnTo) {
       params.set('returnTo', resolvedReturnTo);
     }
+    if (callback) {
+      params.set('callback', callback);
+    }
     const query = params.toString();
     return query ? `/scan?${query}` : '/scan';
-  }, [resolvedReturnTo]);
+  }, [callback, resolvedReturnTo]);
 
   const handleClick = useCallback(() => {
     try {
@@ -44,12 +49,12 @@ export default function QrScanButton({
     }
 
     try {
-      logger.info('QrScanButton: opening QR scanner', { returnTo: resolvedReturnTo });
+      logger.info('QrScanButton: opening QR scanner', { returnTo: resolvedReturnTo, callback });
       navigate(scanHref);
     } catch (error) {
-      logError('Failed to open QR scanner', error, { returnTo: resolvedReturnTo, scanHref });
+      logError('Failed to open QR scanner', error, { returnTo: resolvedReturnTo, callback, scanHref });
     }
-  }, [navigate, onBeforeNavigate, resolvedReturnTo, scanHref]);
+  }, [callback, navigate, onBeforeNavigate, resolvedReturnTo, scanHref]);
 
   return (
     <button
