@@ -33,6 +33,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - **Imports/exports & data contracts**: grouped export modes for ERP vs backup, normalized CSV headers and media paths, and strengthened import validation with clearer diagnostics.
 - **UI layout & media/printing**: refined item/box detail layouts, media handling, and print label flows while keeping responsive behaviors consistent.
 - **Ops/testing guardrails**: captured failing test notes, improved test harness diagnostics, and documented logging/infra updates for smoother operations.
+- **Agentic search sanitization tuning**: preserved spec-like lines (dimensions, weights, power/voltage, price/model hints) during source cleanup and added focused tests/logging to improve missing-schema recovery without broad prompt growth.
 
 Detailed progress notes have been moved to `docs/RECENT_HIGHLIGHTS.md`.
 
