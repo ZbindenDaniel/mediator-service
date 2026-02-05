@@ -94,4 +94,73 @@ describe('collectSearchContexts planner coordination', () => {
     expect(result.searchContexts).toHaveLength(3);
     expect(result.aggregatedSources).toHaveLength(3);
   });
+
+  it('retains missing-field and locked-field plans when max plan limit truncates merged plans', async () => {
+    const calls: Array<{ query: string; metadata: unknown }> = [];
+    const searchInvoker: SearchInvoker = jest.fn(async (query, _limit, metadata) => {
+      calls.push({ query, metadata });
+      return {
+        text: `Result for ${query}`,
+        sources: []
+      };
+    });
+
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+
+    const plannerDecision: PlannerDecision = {
+      shouldSearch: true,
+      plans: [
+        {
+          query: 'Plan targeting missing fields',
+          metadata: { context: 'planner', plannerSource: 'test', missingFields: ['Verkaufspreis'] }
+        },
+        {
+          query: 'Generic planner follow-up',
+          metadata: { context: 'planner', plannerSource: 'test' }
+        }
+      ]
+    };
+
+    await collectSearchContexts({
+      searchTerm: 'Laborgerät 4000',
+      searchInvoker,
+      logger,
+      itemId: 'item-planner-limit-priority',
+      target: {
+        Artikel_Nummer: 'item-planner-limit-priority',
+        Artikelbeschreibung: 'Laborgerät 4000',
+        Hersteller: 'Acme Instruments',
+        Kurzbeschreibung: 'Profi Testsystem',
+        Seriennummer: 'SN-4000-XYZ',
+        __locked: ['Seriennummer']
+      },
+      shouldSearch: true,
+      plannerDecision
+    });
+
+    expect(searchInvoker).toHaveBeenCalledTimes(3);
+    expect(calls.map((entry) => entry.query)).toEqual([
+      'Plan targeting missing fields',
+      'Gerätedaten Laborgerät 4000 Seriennummer:SN-4000-XYZ',
+      'Gerätedaten Acme Instruments Laborgerät 4000'
+    ]);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        msg: 'search plan limit applied',
+        truncatedPlans: expect.arrayContaining(['Gerätedaten Laborgerät 4000']),
+        truncatedPlanMetadata: expect.arrayContaining([
+          expect.objectContaining({
+            query: 'Generic planner follow-up'
+          })
+        ])
+      })
+    );
+  });
+
 });
