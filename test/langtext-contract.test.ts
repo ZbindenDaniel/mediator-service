@@ -49,10 +49,14 @@ describe('Langtext contract alignment', () => {
     }
   });
 
-  test('list APIs surface parsed Langtext payloads', () => {
+  test('list APIs surface parsed Langtext payloads including string arrays', () => {
     const itemUUID = 'LANGTEXT-ITEM-001';
     const artikelNummer = 'LANGTEXT-ART-001';
-    const langtextPayload = { de: 'Beschreibung', en: 'Description' };
+    const langtextPayload = {
+      de: 'Beschreibung',
+      en: 'Description',
+      Ports: ['USB-C', 'HDMI']
+    };
 
     persistItem({
       ItemUUID: itemUUID,

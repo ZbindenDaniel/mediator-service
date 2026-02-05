@@ -14,6 +14,7 @@ export interface LangtextHelperContext {
 const LOG_NAMESPACE = '[langtext]';
 
 // TODO(agent): Expand malformed Langtext JSON detection to cover nested structures.
+// TODO(langtext-contract): Remove mixed payload support once all Langtext specs are normalized at input boundaries.
 
 function resolveLogger(logger?: LangtextLogger): LangtextLogger {
   return logger ?? console;
@@ -67,26 +68,57 @@ function sanitizePayload(
   context: LangtextHelperContext,
   logger: LangtextLogger
 ): LangtextPayload | null {
-  const result: Record<string, string> = {};
-  let discarded = false;
+  const result: LangtextPayload = {};
 
   for (const [key, raw] of Object.entries(value)) {
     if (typeof key !== 'string' || !key) {
-      discarded = true;
+      log(logger, 'warn', 'Dropping Langtext payload entry with invalid key', {
+        ...context,
+        entryKey: key
+      });
       continue;
     }
+
     if (typeof raw === 'string') {
       result[key] = raw;
       continue;
     }
-    if (raw === null || raw === undefined) {
+
+    if (Array.isArray(raw)) {
+      const preservedValues = raw.filter((entry): entry is string => typeof entry === 'string');
+      if (preservedValues.length === raw.length) {
+        result[key] = preservedValues;
+      } else {
+        log(logger, 'warn', 'Dropping non-string values from Langtext array payload entry', {
+          ...context,
+          key,
+          droppedCount: raw.length - preservedValues.length,
+          originalLength: raw.length
+        });
+        if (preservedValues.length > 0) {
+          result[key] = preservedValues;
+        }
+      }
       continue;
     }
+
+    if (raw === null || raw === undefined) {
+      log(logger, 'debug', 'Dropping nullish Langtext payload value', {
+        ...context,
+        key
+      });
+      continue;
+    }
+
     try {
-      result[key] = String(raw);
-      discarded = true;
+      const coercedValue = String(raw);
+      result[key] = coercedValue;
+      log(logger, 'warn', 'Coerced non-string Langtext payload value to string', {
+        ...context,
+        key,
+        valueType: typeof raw
+      });
     } catch (err) {
-      discarded = true;
       log(logger, 'warn', 'Failed to coerce Langtext payload value to string', {
         ...context,
         key,
@@ -96,13 +128,7 @@ function sanitizePayload(
     }
   }
 
-  if (discarded) {
-    log(logger, 'debug', 'Discarded non-string Langtext payload entries during sanitization', {
-      ...context
-    });
-  }
-
-  return Object.keys(result).length > 0 ? (result as LangtextPayload) : null;
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 export function parseLangtext(
@@ -232,6 +258,13 @@ export function stringifyLangtext(value: unknown, context: LangtextHelperContext
   }
 }
 
+function normalizePayloadValue(rawValue: string | string[]): string {
+  if (Array.isArray(rawValue)) {
+    return rawValue.join('\n');
+  }
+  return rawValue;
+}
+
 function formatMarkdownFromPayload(
   payload: LangtextPayload,
   context: Record<string, unknown>,
@@ -249,7 +282,7 @@ function formatMarkdownFromPayload(
       continue;
     }
 
-    const normalizedValue = rawValue.replace(/\r\n/g, '\n');
+    const normalizedValue = normalizePayloadValue(rawValue).replace(/\r\n/g, '\n');
     const trimmedValue = normalizedValue.trim();
     if (!trimmedValue) {
       lines.push(`- **${key}**`);
@@ -292,7 +325,7 @@ function formatHtmlFromPayload(
       continue;
     }
 
-    const normalizedValue = rawValue.replace(/\r\n/g, '\n');
+    const normalizedValue = normalizePayloadValue(rawValue).replace(/\r\n/g, '\n');
     const trimmedValue = normalizedValue.trim();
     const escapedKey = escapeHtml(key);
     if (!trimmedValue) {
