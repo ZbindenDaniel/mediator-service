@@ -29,6 +29,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
 - **QR scan & navigation polish**: streamlined the landing scan entry, return-to flows, and destination routing for item/box/shelf scans with validation/logging baked in.
 - **QR scan callback routing**: added a callback-driven scan mode for search-triggered scans so QR results navigate directly to item/box detail pages while keeping return navigation for relocation flows.
+- **QR scan intent handoff contract**: added optional `intent` metadata (`add-item`, `relocate-box`, `shelf-add-box`) across scanner entry/return flows so box-detail and relocation handlers can avoid cross-flow payload consumption with legacy fallback logging.
 - **QR return ownership fix**: box detail now leaves non-item (`S-`/`B-`) QR return payloads for relocation handlers while adding explicit consume/ignore telemetry and safer state-clearing error logging.
 - **Agentic pipeline & identifiers**: consolidated around Artikel_Nummer-only identifiers, tightened run orchestration/queueing, and added logging to make migrations and recovery safer.
 - **Agentic search evidence limit alignment**: restored the default extraction follow-up search allowance to three queries, added truncation telemetry with requested-vs-effective limits, and refreshed focused limit tests.

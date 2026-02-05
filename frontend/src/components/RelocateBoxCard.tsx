@@ -12,6 +12,7 @@ import QrScanButton from './QrScanButton';
 // TODO(agent): Align relocation shelf loading logs with shared telemetry once analytics are centralized.
 // TODO(agent): Validate relocation option labels against the LocationTag format once shelf labels are updated.
 // TODO(qr-relocate): Confirm QR relocation scans map cleanly to shelf options during onsite validation.
+// TODO(qr-relocate-intent): Consider extracting QR return intent guards into a shared helper if more cards consume qrReturn.
 // TODO(qr-relocate): Add scanner intent metadata so relocation can assert ownership before consuming shared qrReturn state.
 // TODO(relocate-layout): Reconfirm relocation input + QR alignment with updated search card patterns.
 
@@ -121,13 +122,14 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
   );
 
   const handleQrReturnSelection = useCallback(
-    (scannedId: string, rawPayload?: string) => {
+    (scannedId: string, rawPayload?: string, intent?: 'add-item' | 'relocate-box' | 'shelf-add-box') => {
       const trimmedId = scannedId.trim();
       if (!trimmedId) {
         logger.warn?.('RelocateBoxCard: ignoring empty QR return id', { boxId, scannedId });
         return;
       }
       const prefix = trimmedId.slice(0, 2).toUpperCase();
+      logger.info?.('RelocateBoxCard: evaluating QR return payload', { boxId, scannedId: trimmedId, prefix, intent: intent ?? 'legacy-none' });
       if (prefix !== 'S-' && prefix !== 'B-') {
         logger.warn?.('RelocateBoxCard: ignoring QR return id without shelf/box prefix', { boxId, scannedId });
         return;
@@ -153,7 +155,8 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
         scannedId: trimmedId,
         locationId: locationOption.id,
         sourceBoxId: locationOption.sourceBoxId,
-        rawPayload
+        rawPayload,
+        intent: intent ?? 'legacy-none'
       });
 
       const shouldAutoSubmit = locationOptions.length === 1;
@@ -168,7 +171,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
     if (!location.state || typeof location.state !== 'object') {
       return;
     }
-    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown } };
+    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown; intent?: unknown } };
     if (!state.qrReturn) {
       return;
     }
@@ -186,13 +189,20 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
         return;
       }
       const rawPayload = typeof state.qrReturn.rawPayload === 'string' ? state.qrReturn.rawPayload : undefined;
-      logger.info?.('RelocateBoxCard: received QR return payload after parent render', {
-        boxId,
-        id,
-        locationOptionsCount: locationOptions.length,
-        isLoadingLocations
-      });
-      handleQrReturnSelection(id, rawPayload);
+      const rawIntent = typeof state.qrReturn.intent === 'string' ? state.qrReturn.intent.trim() : '';
+      const intent = rawIntent === 'add-item' || rawIntent === 'relocate-box' || rawIntent === 'shelf-add-box'
+        ? rawIntent
+        : undefined;
+      if (intent && intent !== 'relocate-box') {
+        logger.info?.('RelocateBoxCard: ignoring QR return payload for non-relocate intent', { boxId, id, intent });
+        try {
+          navigate(location.pathname, { replace: true, state: {} });
+        } catch (error) {
+          logError('RelocateBoxCard: failed to clear QR return location state after intent mismatch', error, { boxId, id, intent });
+        }
+        return;
+      }
+      handleQrReturnSelection(id, rawPayload, intent);
       qrReturnHandledRef.current = id;
       try {
         navigate(location.pathname, { replace: true, state: {} });
@@ -337,6 +347,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
               className="secondary relocate-qr"
               label="Standort scannen"
               returnTo={location.pathname}
+              scanIntent="relocate-box"
               onBeforeNavigate={() => setStatus('')}
             />
           </div>

@@ -24,6 +24,7 @@ type QrTarget = {
 };
 
 type QrCallback = 'NavigateToEntity';
+type QrScanIntent = 'add-item' | 'relocate-box' | 'shelf-add-box';
 
 export default function QrScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -62,6 +63,7 @@ export default function QrScannerPage() {
     }
   })();
   // TODO(qr-callback): Add callback schema validation in a shared QR navigation helper if more callback types are introduced.
+  // TODO(qr-intent): Move QR intent parsing into shared helper once more scan flows are introduced.
   const callback = (() => {
     try {
       const stateCallback = (location.state as { callback?: unknown } | null)?.callback;
@@ -81,6 +83,30 @@ export default function QrScannerPage() {
       return null;
     } catch (error) {
       logError('Failed to parse QR callback value', error);
+      return null;
+    }
+  })();
+
+
+  const intent = (() => {
+    try {
+      const stateIntent = (location.state as { intent?: unknown } | null)?.intent;
+      const queryIntent = new URLSearchParams(location.search).get('intent');
+      const rawIntent = typeof stateIntent === 'string' ? stateIntent : queryIntent;
+      if (!rawIntent) {
+        return null;
+      }
+      const trimmed = rawIntent.trim();
+      if (!trimmed) {
+        return null;
+      }
+      if (trimmed === 'add-item' || trimmed === 'relocate-box' || trimmed === 'shelf-add-box') {
+        return trimmed as QrScanIntent;
+      }
+      logger.warn?.('Ignoring invalid QR intent value', { intent: trimmed });
+      return null;
+    } catch (error) {
+      logError('Failed to parse QR intent value', error);
       return null;
     }
   })();
@@ -152,7 +178,7 @@ export default function QrScannerPage() {
     }
   }, [navigate]);
 
-  const navigateToReturn = useCallback((path: string, payloadData: { id: string; rawPayload: string }) => {
+  const navigateToReturn = useCallback((path: string, payloadData: { id: string; rawPayload: string; intent?: QrScanIntent }) => {
     try {
       navigate(path, { state: { qrReturn: payloadData } });
     } catch (err) {
@@ -178,7 +204,7 @@ export default function QrScannerPage() {
         : typeof (data as { ItemUUID?: unknown }).ItemUUID === 'string'
           ? (data as { ItemUUID?: string })?.ItemUUID?.trim()
           : '';
-      const minimalReturnPayload = { id, rawPayload: raw, itemUUID: itemUUID || undefined };
+      const minimalReturnPayload = { id, rawPayload: raw, itemUUID: itemUUID || undefined, intent: intent ?? undefined };
       setPayload(normalized);
       setStatus('success');
       stopCamera();
@@ -187,14 +213,14 @@ export default function QrScannerPage() {
           const nextTarget = resolveTarget(id);
           setTarget(nextTarget);
           setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
-          logger.info?.('QR scan resolved via callback navigation', { id, callback, path: nextTarget.path, returnTo });
+          logger.info?.('QR scan resolved via callback navigation', { id, callback, path: nextTarget.path, returnTo, intent, prefix: id.slice(0, 2).toUpperCase() });
           await logScan(normalized);
           navigateToTarget(nextTarget);
           return;
         }
         setTarget(null);
         setMessage('QR-Code erkannt. Rückkehr läuft…');
-        logger.info?.('QR scan resolved for return navigation', { id, returnTo, callback });
+        logger.info?.('QR scan resolved for return navigation', { id, returnTo, callback, intent, prefix: id.slice(0, 2).toUpperCase() });
         await logScan(normalized);
         navigateToReturn(returnTo, minimalReturnPayload);
         return;
@@ -202,7 +228,7 @@ export default function QrScannerPage() {
       const nextTarget = resolveTarget(id);
       setTarget(nextTarget);
       setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
-      logger.info?.('QR scan resolved', { id, path: nextTarget.path });
+      logger.info?.('QR scan resolved', { id, path: nextTarget.path, intent, prefix: id.slice(0, 2).toUpperCase() });
       await logScan(normalized);
       navigateToTarget(nextTarget);
     } catch (err) {
@@ -212,7 +238,7 @@ export default function QrScannerPage() {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Unbekannter Fehler beim Lesen des QR-Codes.');
     }
-  }, [callback, logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, stopCamera]);
+  }, [callback, intent, logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, stopCamera]);
 
   const startScanner = useCallback(async () => {
     stopCamera();
