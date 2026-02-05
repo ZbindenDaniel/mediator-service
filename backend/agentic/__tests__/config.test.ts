@@ -27,7 +27,9 @@ describe('agentic config environment resolution', () => {
     'SHOPWARE_API_TOKEN',
     'SHOPWARE_ACCESS_TOKEN',
     'SHOPWARE_SALES_CHANNEL',
-    'SHOPWARE_SALES_CHANNEL_ID'
+    'SHOPWARE_SALES_CHANNEL_ID',
+    'AGENTIC_SEARCH_MAX_AGENT_QUERIES_PER_REQUEST',
+    'SEARCH_MAX_AGENT_QUERIES_PER_REQUEST'
   ];
 
   const loadConfig = () => {
@@ -104,6 +106,13 @@ describe('agentic config environment resolution', () => {
     const { modelConfig } = loadConfig();
 
     expect((modelConfig as AgenticModelConfig).provider).toBe('ollama');
+  });
+
+
+  it('defaults SEARCH_MAX_AGENT_QUERIES_PER_REQUEST to 3 when unset', () => {
+    const { searchLimits } = loadConfig();
+
+    expect(searchLimits.maxAgentQueriesPerRequest).toBe(3);
   });
 
   it('throws a descriptive error when the provider value is invalid', () => {
