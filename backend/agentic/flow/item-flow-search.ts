@@ -120,6 +120,50 @@ function dedupeSearchPlans(plans: SearchPlan[]): SearchPlan[] {
   return Array.from(uniqueQueries.values());
 }
 
+function hasNonEmptyStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.some((entry) => typeof entry === 'string' && entry.trim().length > 0);
+}
+
+function resolvePlanPriority(plan: SearchPlan): number {
+  const context = typeof plan.metadata?.context === 'string' ? plan.metadata.context : '';
+  if (hasNonEmptyStringArray(plan.metadata?.missingFields)) {
+    return 0;
+  }
+  if (context === 'locked_fields_enriched') {
+    return 1;
+  }
+  if (context === 'manufacturer_enriched' || context === 'short_description_enriched') {
+    return 2;
+  }
+  return 3;
+}
+
+function summarizePlanMetadata(plan: SearchPlan): Record<string, unknown> {
+  const context = typeof plan.metadata?.context === 'string' ? plan.metadata.context : 'unknown';
+  return {
+    query: truncateValue(plan.query, 160),
+    context,
+    missingFields: hasNonEmptyStringArray(plan.metadata?.missingFields)
+      ? (plan.metadata?.missingFields as string[]).slice(0, 6)
+      : [],
+    lockedFields: hasNonEmptyStringArray(plan.metadata?.lockedFields)
+      ? (plan.metadata?.lockedFields as string[]).slice(0, 6)
+      : []
+  };
+}
+
+function rankPlansForLimit(plans: SearchPlan[]): SearchPlan[] {
+  return plans
+    .map((plan, index) => ({ plan, index, priority: resolvePlanPriority(plan) }))
+    .sort((left, right) => {
+      if (left.priority !== right.priority) {
+        return left.priority - right.priority;
+      }
+      return left.index - right.index;
+    })
+    .map((entry) => entry.plan);
+}
+
 export function identifyMissingSchemaFields(target: AgenticTarget | Record<string, unknown> | null): string[] {
   if (!target) {
     return [...TRACKED_SCHEMA_FIELDS];
@@ -586,16 +630,19 @@ export async function collectSearchContexts({
   }
 
   searchPlans = dedupeSearchPlans(searchPlans);
-  const limitedPlans = searchPlans.slice(0, resolvedMaxPlans);
+  const rankedPlans = searchPlans.length > resolvedMaxPlans ? rankPlansForLimit(searchPlans) : searchPlans;
+  const limitedPlans = rankedPlans.slice(0, resolvedMaxPlans);
 
-  if (searchPlans.length > resolvedMaxPlans) {
+  if (rankedPlans.length > resolvedMaxPlans) {
     try {
+      const droppedPlans = rankedPlans.slice(resolvedMaxPlans);
       logger?.warn?.({
         msg: 'search plan limit applied',
         itemId,
-        requestedPlans: searchPlans.length,
+        requestedPlans: rankedPlans.length,
         limit: resolvedMaxPlans,
-        truncatedPlans: searchPlans.slice(resolvedMaxPlans).map((plan) => plan.query)
+        truncatedPlans: droppedPlans.map((plan) => plan.query),
+        truncatedPlanMetadata: droppedPlans.map((plan) => summarizePlanMetadata(plan))
       });
     } catch (err) {
       logger?.error?.({ err, msg: 'failed to log search plan truncation', itemId });
