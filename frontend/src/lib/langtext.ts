@@ -1,5 +1,6 @@
 // TODO(langtext-observability): Capture additional metadata for downstream JSON editors once the
 // parser stabilizes around sanitized payload handling and logging.
+// TODO(langtext-contract): Remove legacy string coercion once all callers emit string/string[] payload values.
 export interface LangtextEntry {
   key: string;
   value: string;
@@ -10,7 +11,7 @@ export type LangtextParseResult =
       kind: 'json';
       mode: 'json';
       entries: LangtextEntry[];
-      rawObject: Record<string, string>;
+      rawObject: Record<string, string | string[]>;
     }
   | {
       kind: 'text';
@@ -24,13 +25,38 @@ function normaliseLangtextObject(
   logger: Pick<Console, 'warn' | 'error'>
 ): LangtextParseResult {
   const entries: LangtextEntry[] = [];
-  const rawObject: Record<string, string> = {};
+  const rawObject: Record<string, string | string[]> = {};
 
   for (const key of Object.keys(source)) {
     const value = source[key];
     if (typeof value === 'string') {
       entries.push({ key, value });
       rawObject[key] = value;
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      const preserved = value.filter((entry): entry is string => typeof entry === 'string');
+      if (preserved.length !== value.length) {
+        logger.warn?.('Langtext entry array contained non-string values, dropping invalid values', {
+          key,
+          droppedCount: value.length - preserved.length,
+          originalLength: value.length
+        });
+      }
+      if (preserved.length === 0) {
+        logger.warn?.('Langtext entry array had no string values after normalization, coercing to empty string', { key });
+        entries.push({ key, value: '' });
+        rawObject[key] = '';
+      } else {
+        const joinedValue = preserved.join('\n');
+        logger.warn?.('Langtext array value converted to newline-delimited editor string', {
+          key,
+          count: preserved.length
+        });
+        entries.push({ key, value: joinedValue });
+        rawObject[key] = preserved;
+      }
       continue;
     }
 

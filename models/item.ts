@@ -66,7 +66,9 @@ export interface ItemInstance {
   Quality?: QualityValue;
 }
 
-export type LangtextPayload = Record<string, string>;
+// TODO(langtext-contract): Remove legacy string fallback from ItemRef.Langtext once all callers consume structured payloads.
+export type LangtextPayloadValue = string | string[];
+export type LangtextPayload = Record<string, LangtextPayloadValue>;
 
 export interface ItemRef {
   Artikel_Nummer: string;
