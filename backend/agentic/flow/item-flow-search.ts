@@ -1,6 +1,7 @@
 // TODO(agent): Monitor the impact of enriched item metadata on search heuristics and adjust weighting when planner feedback is available.
 // TODO(agent): Revisit the hard cap on generated search plans once telemetry confirms the typical query volume per item.
 // TODO(agent): Review aggregated search text sanitization thresholds once search quality metrics are available.
+// TODO(agent): Monitor spec-line preservation rates and tune heuristics against false positives once telemetry matures.
 import { z } from 'zod';
 import type { SearchResult } from '../tools/tavily-client';
 import { RateLimitError } from '../tools/tavily-client';
@@ -510,9 +511,11 @@ export async function collectSearchContexts({
   };
 
   const buildAggregatedSearchText = () => {
-    const maxParagraphsPerSource = 2;
+    const maxParagraphsPerSource = 3;
     const urlRegex = /https?:\/\/\S+/gi;
     const separatorRegex = /^([-=*_])\1{2,}$/;
+    const specLikeLineRegex =
+      /\b(artikel|preis|price|modell?|model|\d+(?:[.,]\d+)?\s?(?:mm|cm|kg|g|w|kw|v)|[a-z]{1,4}[\-_/]?\d{2,}[a-z0-9\-_/]*)\b/i;
 
     const sanitizeSourceText = (rawText: string, query: string, sourceIndex: number): string => {
       try {
@@ -521,6 +524,9 @@ export async function collectSearchContexts({
         }
         const paragraphs = rawText.split(/\n\s*\n/);
         const sanitizedParagraphs: string[] = [];
+        let preservedSpecLineCount = 0;
+
+        const isSpecLikeLine = (line: string): boolean => specLikeLineRegex.test(line);
 
         for (const paragraph of paragraphs) {
           if (sanitizedParagraphs.length >= maxParagraphsPerSource) {
@@ -536,10 +542,18 @@ export async function collectSearchContexts({
               if (!urlMatches) {
                 return true;
               }
+              const isSpecLike = isSpecLikeLine(line);
               if (urlMatches.length >= 2) {
-                return false;
+                if (isSpecLike) {
+                  preservedSpecLineCount += 1;
+                }
+                return isSpecLike;
               }
-              return !(urlMatches.length === 1 && line.length > 80);
+              const shouldDropSingleUrlLine = urlMatches.length === 1 && line.length > 80;
+              if (shouldDropSingleUrlLine && isSpecLike) {
+                preservedSpecLineCount += 1;
+              }
+              return !(shouldDropSingleUrlLine && !isSpecLike);
             });
 
           const collapsed = cleanedLines.join(' ').replace(/\s+/g, ' ').trim();
@@ -561,7 +575,8 @@ export async function collectSearchContexts({
               searchQuery: query,
               originalLength,
               sanitizedLength,
-              removalRatio: Number(removalRatio.toFixed(3))
+              removalRatio: Number(removalRatio.toFixed(3)),
+              preservedSpecLineCount
             });
           }
         }
