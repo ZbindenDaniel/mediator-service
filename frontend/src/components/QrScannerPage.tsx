@@ -23,6 +23,8 @@ type QrTarget = {
   path: string;
 };
 
+type QrCallback = 'NavigateToEntity';
+
 export default function QrScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -57,6 +59,29 @@ export default function QrScannerPage() {
     } catch (error) {
       logError('Failed to parse QR returnTo value', error);
       return '';
+    }
+  })();
+  // TODO(qr-callback): Add callback schema validation in a shared QR navigation helper if more callback types are introduced.
+  const callback = (() => {
+    try {
+      const stateCallback = (location.state as { callback?: unknown } | null)?.callback;
+      const queryCallback = new URLSearchParams(location.search).get('callback');
+      const rawCallback = typeof stateCallback === 'string' ? stateCallback : queryCallback;
+      if (!rawCallback) {
+        return null;
+      }
+      const trimmed = rawCallback.trim();
+      if (!trimmed) {
+        return null;
+      }
+      if (trimmed === 'NavigateToEntity') {
+        return trimmed as QrCallback;
+      }
+      logger.warn?.('Ignoring invalid QR callback value', { callback: trimmed });
+      return null;
+    } catch (error) {
+      logError('Failed to parse QR callback value', error);
+      return null;
     }
   })();
 
@@ -158,9 +183,18 @@ export default function QrScannerPage() {
       setStatus('success');
       stopCamera();
       if (returnTo) {
+        if (callback === 'NavigateToEntity') {
+          const nextTarget = resolveTarget(id);
+          setTarget(nextTarget);
+          setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
+          logger.info?.('QR scan resolved via callback navigation', { id, callback, path: nextTarget.path, returnTo });
+          await logScan(normalized);
+          navigateToTarget(nextTarget);
+          return;
+        }
         setTarget(null);
         setMessage('QR-Code erkannt. Rückkehr läuft…');
-        logger.info?.('QR scan resolved for return navigation', { id, returnTo });
+        logger.info?.('QR scan resolved for return navigation', { id, returnTo, callback });
         await logScan(normalized);
         navigateToReturn(returnTo, minimalReturnPayload);
         return;
@@ -178,7 +212,7 @@ export default function QrScannerPage() {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Unbekannter Fehler beim Lesen des QR-Codes.');
     }
-  }, [logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, stopCamera]);
+  }, [callback, logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, stopCamera]);
 
   const startScanner = useCallback(async () => {
     stopCamera();

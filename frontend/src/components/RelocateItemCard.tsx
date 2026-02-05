@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { GoLinkExternal } from 'react-icons/go';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { dialogService } from './dialog';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
+import QrScanButton from './QrScanButton';
 // TODO(agent): Remove hardcoded relocation defaults once backend exposes canonical location metadata endpoints.
 
 interface Props {
@@ -19,6 +20,8 @@ interface RelocateOptions {
 
 // TODO(agent): Confirm backend analytics don't require the default-location relocation flow.
 export default function RelocateItemCard({ itemId, onRelocated }: Props) {
+  // TODO(qr-relocate-item): Validate scanned box id prefill against relocation suggestion ranking.
+  const location = useLocation();
   const [boxId, setBoxId] = useState('');
   const [status, setStatus] = useState('');
   const [boxLink, setBoxLink] = useState('');
@@ -250,7 +253,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
         <div className="row">
           <label htmlFor="relocate-target-box">Ziel wählen</label>
         </div>
-        <div className="row">
+        <div className="row relocate-input-row">
           <BoxSearchInput
             id="relocate-target-box"
             value={boxId}
@@ -258,6 +261,12 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
             onSuggestionSelected={setSelectedSuggestion}
             placeholder="Box-ID oder Standort suchen"
             disabled={isSubmitting}
+          />
+          <QrScanButton
+            className="secondary relocate-qr"
+            label="Zielbehälter scannen"
+            returnTo={location.pathname}
+            onBeforeNavigate={() => setStatus('')}
           />
         </div>
 
