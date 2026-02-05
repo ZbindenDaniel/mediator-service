@@ -42,6 +42,26 @@ function normalizePriceValue(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
+function mapLangtextToSpezifikationenForLlm(
+  payload: AgenticOutput,
+  { itemId, logger }: { itemId: string; logger?: ExtractionLogger }
+): Record<string, unknown> {
+  try {
+    const record = payload as unknown as Record<string, unknown>;
+    if (!('Langtext' in record)) {
+      return record;
+    }
+    const remapped: Record<string, unknown> = { ...record, Spezifikationen: record.Langtext };
+    delete remapped.Langtext;
+    logger?.debug?.({ msg: 'mapped Langtext to Spezifikationen for pricing payload', itemId });
+    return remapped;
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to map Langtext to Spezifikationen for pricing payload', itemId });
+    return payload as unknown as Record<string, unknown>;
+  }
+}
+
 export function isUsablePrice(value: unknown): boolean {
   const normalized = normalizePriceValue(value);
   return typeof normalized === 'number' && Number.isFinite(normalized) && normalized > 0;
@@ -84,8 +104,9 @@ export async function runPricingStage({
     instructions.searchSummary = searchSummary.trim();
   }
 
+  const llmCandidate = mapLangtextToSpezifikationenForLlm(candidate, { itemId, logger });
   const payloadForPricing: Record<string, unknown> = {
-    item: candidate,
+    item: llmCandidate,
     ...(Object.keys(instructions).length > 0 ? { instructions } : {})
   };
 
@@ -95,7 +116,7 @@ export async function runPricingStage({
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to serialize pricing payload', itemId });
     try {
-      userPayload = JSON.stringify({ item: candidate }, null, 2);
+      userPayload = JSON.stringify({ item: llmCandidate }, null, 2);
     } catch (fallbackErr) {
       logger?.error?.({ err: fallbackErr, msg: 'pricing payload serialization failed', itemId });
       return null;

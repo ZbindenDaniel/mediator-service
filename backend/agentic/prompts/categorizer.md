@@ -7,7 +7,7 @@
 <rules>
   - Do **not** alter or infer any fields beyond the four category codes.
   - Always analyse the provided item JSON and prefer explicit signals (names, specs, usage) when selecting categories.
-  - Treat Spezifikationen (Langtext) as supporting context when deciding categories.
+  - Treat Spezifikationen as supporting context when deciding categories.
   - Reviewer notes take priority. Follow any reviewer instructions about focus areas or constraints before applying other rules.
   - The taxonomy reference supplied alongside the conversation is authoritative. Use it to map descriptions to valid codes.
   - Preserve locked values. If the payload includes a "__locked" array listing category fields, keep their existing values.
@@ -25,7 +25,7 @@ Input:
       "Artikelbeschreibung": "Corsair Hydro Series H60 (CWCH60)",
     "Verkaufspreis": 0,
     "Kurzbeschreibung": "Der Corsair Hydro Series H60 (CWCH60) ist eine hochleistungsfähige All-in-One-Wasserkühlungslösung für CPU-Kühler. Mit einem Mikro-Kanal-Kühlkörper und einer kompakten 120 mm Radiatorgröße bietet er eine effiziente Kühlung für verschiedene CPU-Sockel, ideal für Gamer und PC-Enthusiasten.",
-    "Langtext": {
+    "Spezifikationen": {
       "Modell": "CWCH60",
       "Typ": "All-in-One Liquid Kühler",
       "Radiatorgröße": "120 mm",

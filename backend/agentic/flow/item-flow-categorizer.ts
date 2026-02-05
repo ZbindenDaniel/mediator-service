@@ -62,6 +62,26 @@ function isFieldLocked(candidate: AgenticOutput, field: string): boolean {
   return locked.includes(field);
 }
 
+// TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
+function mapLangtextToSpezifikationenForLlm(
+  payload: AgenticOutput,
+  { itemId, logger }: { itemId: string; logger?: ExtractionLogger }
+): Record<string, unknown> {
+  try {
+    const record = payload as unknown as Record<string, unknown>;
+    if (!('Langtext' in record)) {
+      return record;
+    }
+    const remapped: Record<string, unknown> = { ...record, Spezifikationen: record.Langtext };
+    delete remapped.Langtext;
+    logger?.debug?.({ msg: 'mapped Langtext to Spezifikationen for categorizer payload', itemId });
+    return remapped;
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to map Langtext to Spezifikationen for categorizer payload', itemId });
+    return payload as unknown as Record<string, unknown>;
+  }
+}
+
 function extractNumericCode(value: unknown): number | null | undefined {
   if (value == null) {
     return null;
@@ -113,7 +133,8 @@ export async function runCategorizerStage({
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
   const searchSkipped = Boolean(skipSearch);
 
-  let payloadForCategorizer: Record<string, unknown> = { item: candidate };
+  const llmCandidate = mapLangtextToSpezifikationenForLlm(candidate, { itemId, logger });
+  let payloadForCategorizer: Record<string, unknown> = { item: llmCandidate };
   try {
     const instructions: Record<string, unknown> = {};
     if (sanitizedReviewerNotes) {
@@ -133,7 +154,7 @@ export async function runCategorizerStage({
     }
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to append reviewer instructions to categorizer payload', itemId });
-    payloadForCategorizer = { item: candidate };
+    payloadForCategorizer = { item: llmCandidate };
   }
 
   let userPayload = '';
@@ -142,7 +163,7 @@ export async function runCategorizerStage({
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to serialize categorizer payload', itemId });
     try {
-      userPayload = JSON.stringify({ item: candidate }, null, 2);
+      userPayload = JSON.stringify({ item: llmCandidate }, null, 2);
     } catch (fallbackErr) {
       logger?.error?.({ err: fallbackErr, msg: 'categorizer payload serialization fallback failed', itemId });
       throw new FlowError('CATEGORIZER_PAYLOAD_SERIALIZATION_FAILED', 'Failed to serialize categorizer payload', 500, {
