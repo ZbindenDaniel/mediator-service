@@ -569,7 +569,7 @@ function resolveLangtextExportFormat(
 ): LangtextExportFormat {
   try {
     if (exportMode === 'erp') {
-      return 'markdown';
+      return 'html';
     }
     return 'json';
   } catch (error) {

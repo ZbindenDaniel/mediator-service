@@ -655,6 +655,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       }
     }
 
+    // assests
+    if(url.pathname.startsWith('/assets/') && req.method === 'GET') {
+      const p = path.join(PUBLIC_DIR, url.pathname.slice('/assets/'.length));
+      try {
+        if (!p.startsWith(PUBLIC_DIR)) throw new Error('bad path');
+        const data = fs.readFileSync(p);
+        const ext = path.extname(p).toLowerCase();
+        const ct = ext === '.png'
+          ? 'image/png'
+          : ext === '.jpg' || ext === '.jpeg'
+            ? 'image/jpeg'
+            : ext === '.svg'
+              ? 'image/svg+xml'
+              : 'application/octet-stream';
+        res.writeHead(200, { 'Content-Type': ct });
+        return res.end(data);
+      } catch (err) {
+        console.error('Failed to serve asset', err);
+        res.writeHead(404); return res.end('Not found');
+      }
+    }
+
     if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
@@ -666,6 +688,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         res.writeHead(404); return res.end('Not found');
       }
     }
+
 
     // Remaining request handling delegated to actions
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));

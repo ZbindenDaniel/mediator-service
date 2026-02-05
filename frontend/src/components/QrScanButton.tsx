@@ -63,7 +63,7 @@ export default function QrScanButton({
       onClick={handleClick}
       type="button"
     >
-      <img className="qr-scan-button__icon" src="/qrIcon.svg" alt="" aria-hidden="true" />
+      <img className="qr-scan-button__icon" src="/assets/qrIcon.svg" alt="" aria-hidden="true" />
       <span className="visually-hidden">{label}</span>
     </button>
   );
