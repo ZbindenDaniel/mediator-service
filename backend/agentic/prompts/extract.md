@@ -9,7 +9,10 @@
 </task>
 <rules>
   - Output must match <output_format> exactly.
-  - Use only schema-approved keys; extra keys only under Spezifikationen.
+  - Use only schema-approved keys.
+  - For LLM output, use `Spezifikationen` as the meaningful specs field name.
+  - `Spezifikationen` is mapped back to the internal application field `Langtext` after parsing.
+  - Avoid emitting `Langtext` in extraction output unless explicitly requested.
   - Never omit required keys; use defaults (empty string/null).
   - Field notes:
     - Artikelbeschreibung: Correct to the precise product name stated in sources.

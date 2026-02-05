@@ -1,8 +1,9 @@
+// NOTE: LLM-facing key uses "Spezifikationen" and is remapped to internal "Langtext" after parsing.
 {
  "Artikelbeschreibung": "",
  "Verkaufspreis": null,
  "Kurzbeschreibung": "",
- "Langtext": {
+ "Spezifikationen": {
   "Veröffentlicht": "",
   "Stromversorgung": ""
  },

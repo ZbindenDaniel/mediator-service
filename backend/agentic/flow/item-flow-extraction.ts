@@ -198,6 +198,61 @@ function stripLegacyIdentifiers(value: unknown): void {
   }
 }
 
+// TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
+function mapLangtextToSpezifikationenForLlm(
+  payload: unknown,
+  { itemId, logger, context }: { itemId: string; logger?: ExtractionLogger; context: string }
+): unknown {
+  try {
+    if (!payload || typeof payload !== 'object') {
+      return payload;
+    }
+    const record = payload as Record<string, unknown>;
+    if (!('Langtext' in record)) {
+      return payload;
+    }
+    const remapped = { ...record, Spezifikationen: record.Langtext };
+    delete (remapped as Record<string, unknown>).Langtext;
+    logger?.debug?.({ msg: 'mapped Langtext to Spezifikationen for llm payload', itemId, context });
+    return remapped;
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to map Langtext to Spezifikationen for llm payload', itemId, context });
+    return payload;
+  }
+}
+
+// TODO(agent): Remove Spezifikationen alias remap once prompt compliance is stable across providers.
+function normalizeLangtextAlias(
+  payload: unknown,
+  { itemId, attempt, logger }: { itemId: string; attempt: number; logger?: ExtractionLogger }
+): unknown {
+  try {
+    if (!payload || typeof payload !== 'object') {
+      return payload;
+    }
+    const record = payload as Record<string, unknown>;
+    const hasLangtext = 'Langtext' in record && record.Langtext !== null && record.Langtext !== undefined && record.Langtext !== '';
+    if (!hasLangtext && 'Spezifikationen' in record && record.Spezifikationen !== null && record.Spezifikationen !== undefined && record.Spezifikationen !== '') {
+      const remapped = { ...record, Langtext: record.Spezifikationen };
+      logger?.warn?.({
+        msg: 'remapping Spezifikationen alias to Langtext before schema validation',
+        itemId,
+        attempt
+      });
+      return remapped;
+    }
+    return payload;
+  } catch (err) {
+    logger?.warn?.({
+      err,
+      msg: 'failed to normalize Spezifikationen alias before schema validation',
+      itemId,
+      attempt
+    });
+    return payload;
+  }
+}
+
 export async function runExtractionAttempts({
   llm,
   correctionModel,
@@ -234,7 +289,8 @@ export async function runExtractionAttempts({
   let lastInvalidJsonPlaceholderIssues: string[] = [];
 
   let attempt = 1;
-  const { Artikel_Nummer: _promptHiddenItemId, ...promptFacingTarget } = target;
+  const { Artikel_Nummer: _promptHiddenItemId, ...promptFacingTargetRaw } = target;
+  const promptFacingTarget = mapLangtextToSpezifikationenForLlm(promptFacingTargetRaw, { itemId, logger, context: 'extraction-target-snapshot' }) as Record<string, unknown>;
   // TODO(agent): Keep prompt-facing target redactions aligned with fields hidden from agents.
   const sanitizedTargetPreview = sanitizeForLog(promptFacingTarget);
   let serializedTargetSnapshot = '';
@@ -704,8 +760,8 @@ export async function runExtractionAttempts({
       });
     }
 
-    let normalizedParsed = parsed as unknown;
-    const parsedRecord = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    let normalizedParsed = normalizeLangtextAlias(parsed as unknown, { itemId, attempt, logger });
+    const parsedRecord = normalizedParsed && typeof normalizedParsed === 'object' ? (normalizedParsed as Record<string, unknown>) : null;
     const rawQueries = parsedRecord?.__searchQueries;
     if (Array.isArray(rawQueries) && rawQueries.length > searchesPerRequestLimit) {
       const resolvedLimit = Number.isFinite(searchesPerRequestLimit) && searchesPerRequestLimit > 0
@@ -919,7 +975,12 @@ export async function runExtractionAttempts({
     logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
     let supervisorUserContent = '';
     try {
-      supervisorUserContent = JSON.stringify(pricedValidated.data);
+      const supervisorPayload = mapLangtextToSpezifikationenForLlm(pricedValidated.data, {
+        itemId,
+        logger,
+        context: 'supervisor'
+      });
+      supervisorUserContent = JSON.stringify(supervisorPayload);
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to serialize supervisor payload', attempt, itemId });
       supervisorUserContent = String(pricedValidated.data);
