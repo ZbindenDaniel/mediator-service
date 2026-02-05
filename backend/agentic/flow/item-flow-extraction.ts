@@ -718,6 +718,8 @@ export async function runExtractionAttempts({
           msg: 'truncating agent search queries before schema validation',
           itemId,
           attempt,
+          configuredLimit: maxAgentSearchesPerRequest,
+          effectiveLimit: resolvedLimit,
           requestedCount: rawQueries.length,
           allowedCount: resolvedLimit,
           truncatedQueriesPreview: sanitizeForLog(truncatedQueries)

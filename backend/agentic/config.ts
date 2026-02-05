@@ -199,7 +199,7 @@ const resolvedOpenAiModel = parsedEnv.OPENAI_MODEL ?? parsedEnv.MODEL_NAME;
 const resolvedOpenAiKey = parsedEnv.OPENAI_API_KEY ?? parsedEnv.MODEL_API_KEY;
 // TODO(agent): Validate configured search limits against production runbooks once env overrides are available.
 const resolvedSearchMaxPlans = parsedEnv.SEARCH_MAX_PLANS ?? 3;
-const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 1;
+const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 3;
 
 export const modelConfig: AgenticModelConfig = {
   provider: parsedEnv.MODEL_PROVIDER,

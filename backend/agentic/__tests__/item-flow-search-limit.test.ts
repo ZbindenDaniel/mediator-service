@@ -1,37 +1,61 @@
-// import { jest } from '@jest/globals';
-// import { collectSearchContexts } from '../flow/item-flow-search';
+import fs from 'fs';
+import path from 'path';
+import { searchLimits } from '../config';
+import { AgentOutputSchema, type AgenticTarget } from '../flow/item-flow-schemas';
 
-// describe('collectSearchContexts search plan limiting', () => {
-//   test('limits search invocations to the configured maximum', async () => {
-//     const searchInvoker = jest.fn().mockResolvedValue({ text: 'result', sources: [] });
-//     const logger = {
-//       info: jest.fn(),
-//       warn: jest.fn(),
-//       error: jest.fn()
-//     };
+// TODO(agent): Add runtime integration coverage for multi-attempt truncation once extraction harness fixtures are stable.
+const buildTarget = (): AgenticTarget => ({
+  Artikel_Nummer: 'item-1',
+  Artikelbeschreibung: 'Widget',
+  Verkaufspreis: null,
+  Kurzbeschreibung: 'Short description',
+  Langtext: { Veröffentlicht: '', Stromversorgung: '' },
+  Hersteller: 'Acme',
+  Länge_mm: null,
+  Breite_mm: null,
+  Höhe_mm: null,
+  Gewicht_kg: null,
+  Hauptkategorien_A: null,
+  Unterkategorien_A: null,
+  Hauptkategorien_B: null,
+  Unterkategorien_B: null
+});
 
-//     const target = {
-//       Hersteller: 'Acme',
-//       Kurzbeschreibung: 'Widget 3000',
-//       Artikelbeschreibung: 'Detailed info about the widget',
-//       __locked: ['Artikelbeschreibung']
-//     };
+describe('item flow search query limits', () => {
+  it('default configuration permits up to 3 agent follow-up queries', () => {
+    expect(searchLimits.maxAgentQueriesPerRequest).toBe(3);
 
-//     const result = await collectSearchContexts({
-//       searchTerm: 'Widget 3000',
-//       searchInvoker,
-//       logger,
-//       itemId: 'item-123',
-//       target
-//     });
+    const withinLimit = AgentOutputSchema.safeParse({
+      ...buildTarget(),
+      __searchQueries: ['q1', 'q2', 'q3']
+    });
 
-//     expect(searchInvoker).toHaveBeenCalledTimes(3);
-//     expect(result.searchContexts).toHaveLength(3);
-//     expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({
-//       msg: 'search plan limit applied',
-//       itemId: 'item-123',
-//       limit: 3
-//     }));
-//     expect(logger.error).not.toHaveBeenCalled();
-//   });
-// });
+    expect(withinLimit.success).toBe(true);
+  });
+
+  it('enforces truncation boundary semantics by rejecting only above configured schema limit', () => {
+    const atLimit = AgentOutputSchema.safeParse({
+      ...buildTarget(),
+      __searchQueries: ['q1', 'q2', 'q3']
+    });
+    const aboveLimit = AgentOutputSchema.safeParse({
+      ...buildTarget(),
+      __searchQueries: ['q1', 'q2', 'q3', 'q4']
+    });
+
+    expect(atLimit.success).toBe(true);
+    expect(aboveLimit.success).toBe(false);
+  });
+
+  it('logs truncation with requested and allowed counts in extraction guard payload', () => {
+    const extractionFlowPath = path.resolve(__dirname, '../flow/item-flow-extraction.ts');
+    const extractionFlowSource = fs.readFileSync(extractionFlowPath, 'utf8');
+
+    expect(extractionFlowSource).toContain("msg: 'truncating agent search queries before schema validation'");
+    expect(extractionFlowSource).toContain('requestedCount: rawQueries.length');
+    expect(extractionFlowSource).toContain('allowedCount: resolvedLimit');
+    expect(extractionFlowSource).toContain('configuredLimit: maxAgentSearchesPerRequest');
+    expect(extractionFlowSource).toContain('effectiveLimit: resolvedLimit');
+    expect(extractionFlowSource).toContain('itemId');
+  });
+});
