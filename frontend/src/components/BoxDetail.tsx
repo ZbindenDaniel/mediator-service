@@ -84,7 +84,7 @@ export default function BoxDetail({ boxId }: Props) {
   const [photoRemoved, setPhotoRemoved] = useState(false);
   const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
-  const [qrReturnPayload, setQrReturnPayload] = useState<{ id: string; rawPayload?: string } | null>(null);
+  const [qrReturnPayload, setQrReturnPayload] = useState<{ id: string; rawPayload?: string; intent?: 'add-item' | 'relocate-box' | 'shelf-add-box' } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
@@ -123,7 +123,7 @@ export default function BoxDetail({ boxId }: Props) {
     if (!location.state || typeof location.state !== 'object') {
       return;
     }
-    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown } };
+    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown; intent?: unknown } };
     if (!state.qrReturn) {
       return;
     }
@@ -133,9 +133,21 @@ export default function BoxDetail({ boxId }: Props) {
         logger.warn?.('BoxDetail: ignoring QR return payload with empty id', { boxId, qrReturn: state.qrReturn });
         return;
       }
+      const rawIntent = typeof state.qrReturn.intent === 'string' ? state.qrReturn.intent.trim() : '';
+      const intent = rawIntent === 'add-item' || rawIntent === 'relocate-box' || rawIntent === 'shelf-add-box'
+        ? rawIntent
+        : undefined;
       const prefix = id.slice(0, 2).toUpperCase();
-      if (prefix !== 'I-') {
-        logger.info?.('BoxDetail: ignoring QR return payload without item prefix', { boxId, id });
+      const shouldOpenAddItem = prefix === 'I-' && (intent === undefined || intent === 'add-item');
+      logger.info?.('BoxDetail: evaluating QR return payload', {
+        boxId,
+        id,
+        prefix,
+        intent: intent ?? 'legacy-none',
+        shouldOpenAddItem
+      });
+      if (!shouldOpenAddItem) {
+        logger.info?.('BoxDetail: ignoring QR return payload for add-item dialog', { boxId, id, prefix, intent: intent ?? 'legacy-none' });
         try {
           navigate(location.pathname, { replace: true, state: {} });
         } catch (error) {
@@ -144,9 +156,9 @@ export default function BoxDetail({ boxId }: Props) {
         return;
       }
       const rawPayload = typeof state.qrReturn.rawPayload === 'string' ? state.qrReturn.rawPayload : undefined;
-      setQrReturnPayload({ id, rawPayload });
+      setQrReturnPayload({ id, rawPayload, intent });
       setShowAdd(true);
-      logger.info?.('BoxDetail: received QR return payload', { boxId, id });
+      logger.info?.('BoxDetail: received QR return payload for add-item dialog', { boxId, id, prefix, intent: intent ?? 'legacy-none' });
       try {
         navigate(location.pathname, { replace: true, state: {} });
       } catch (error) {
