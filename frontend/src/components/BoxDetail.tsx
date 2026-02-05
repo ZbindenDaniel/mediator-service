@@ -31,7 +31,7 @@ import QualityBadge from './QualityBadge';
 // TODO(box-detail-layout): Confirm print label placement still aligns with shelf detail card height in the summary grid.
 // TODO(agent): Reassess shelf label/notes editing once shelf tagging conventions stabilize.
 // TODO(mobile-box-detail): Keep box detail container width constrained to the viewport on small screens.
-// TODO(qr-relocate): Coordinate QR return handling between add-item and relocation flows to avoid routing conflicts.
+// TODO(qr-relocate): Add explicit QR return intents in scanner navigation state once relocation/add-item ownership is fully formalized.
 
 interface Props {
   boxId: string;

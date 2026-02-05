@@ -13,6 +13,7 @@ import QrScanButton from './QrScanButton';
 // TODO(agent): Validate relocation option labels against the LocationTag format once shelf labels are updated.
 // TODO(qr-relocate): Confirm QR relocation scans map cleanly to shelf options during onsite validation.
 // TODO(qr-relocate-intent): Consider extracting QR return intent guards into a shared helper if more cards consume qrReturn.
+// TODO(qr-relocate): Add scanner intent metadata so relocation can assert ownership before consuming shared qrReturn state.
 // TODO(relocate-layout): Reconfirm relocation input + QR alignment with updated search card patterns.
 
 interface Props {
