@@ -165,7 +165,12 @@
         }
         try {
           const shelfId = payload.shelfId || payload.id || '';
-          const category = payload.categoryLabel || payload.category || payload.labelText || '';
+          const label = payload.labelText || payload.label || '';
+          const notes = payload.notes || payload.description || '';
+          const category = [label, notes].filter((segment) => typeof segment === 'string' && segment.trim()).join(' · ')
+            || payload.categoryLabel
+            || payload.category
+            || '';
           if (shelfIdEl && shelfId) shelfIdEl.textContent = `${shelfId}`;
           if (categoryEl && category) categoryEl.textContent = `${category}`;
           if (labelEl) labelEl.hidden = false;

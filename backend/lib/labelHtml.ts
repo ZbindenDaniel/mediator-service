@@ -133,6 +133,7 @@ export interface ShelfLabelPayload {
   id: string;
   shelfId?: string | null;
   labelText?: string | null;
+  notes?: string | null;
   category: string | null;
   categoryLabel?: string | null;
   location?: string | null;

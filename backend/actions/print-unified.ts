@@ -249,6 +249,7 @@ function buildShelfLabelPayload(box: Box): ShelfLabelPayload {
     id: box.BoxID,
     shelfId: box.BoxID,
     labelText: box.Label?.trim() || null,
+    notes: box.Notes?.trim() || null,
     category: shelfCategory.label ?? null,
     categoryLabel: shelfCategory.label ?? null,
     location: shelfSegments?.location ?? null,
