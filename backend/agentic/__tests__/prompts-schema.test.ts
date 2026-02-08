@@ -67,6 +67,7 @@ describe('prompt schema column annotations', () => {
 
 describe('extraction prompt guidance', () => {
   it('retains canonical Spezifikationen guidance and compact quality examples', () => {
+    // TODO(agentic-prompts): Add coverage for other prompt files if guidance expands beyond extract.md.
     const extractPromptPath = path.resolve(__dirname, '../prompts/extract.md');
     const extractPrompt = fs.readFileSync(extractPromptPath, 'utf8');
 

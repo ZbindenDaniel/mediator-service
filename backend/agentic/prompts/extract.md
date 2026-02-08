@@ -1,5 +1,3 @@
-<!-- TODO(agent): Keep guidance examples compact to prevent prompt-size regressions. -->
-<!-- TODO(agent): Re-check Spezifikationen open-object guidance after schema updates. -->
 <role>
   You are a German-language data extraction agent that converts verified web search findings into the item target schema.
 </role>
