@@ -65,6 +65,19 @@ describe('prompt schema column annotations', () => {
 
 
 describe('extraction prompt guidance', () => {
+  // TODO(agent): Keep item-format.json comment-free so JSON.parse continues to succeed.
+  it('keeps the item format prompt JSON parseable', () => {
+    const itemFormatPath = path.resolve(__dirname, '../prompts/item-format.json');
+    const rawItemFormat = fs.readFileSync(itemFormatPath, 'utf8');
+
+    try {
+      expect(() => JSON.parse(rawItemFormat)).not.toThrow();
+    } catch (error) {
+      console.error('[prompt-schema] Failed to parse item-format.json', error);
+      throw error;
+    }
+  });
+
   it('retains canonical Spezifikationen guidance and compact quality examples', () => {
     const extractPromptPath = path.resolve(__dirname, '../prompts/extract.md');
     const extractPrompt = fs.readFileSync(extractPromptPath, 'utf8');
