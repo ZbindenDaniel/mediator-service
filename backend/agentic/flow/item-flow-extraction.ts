@@ -784,6 +784,28 @@ export async function runExtractionAttempts({
         logger?.warn?.({ err, msg: 'failed to log search query truncation', itemId, attempt });
       }
     }
+    // TODO(agent): Confirm extraction telemetry keeps Langtext/Spezifikationen key counts aligned after schema shifts.
+    try {
+      const langtextCandidate = parsedRecord?.Langtext;
+      const spezifikationenCandidate = parsedRecord?.Spezifikationen;
+      const isSpecObject = (candidate: unknown): candidate is Record<string, unknown> => (
+        Boolean(candidate) && typeof candidate === 'object' && !Array.isArray(candidate)
+      );
+      const hasLangtextObject = isSpecObject(langtextCandidate);
+      const hasSpezifikationenObject = isSpecObject(spezifikationenCandidate);
+      const effectiveSpecs = hasLangtextObject ? langtextCandidate : (hasSpezifikationenObject ? spezifikationenCandidate : null);
+      const specKeyCount = effectiveSpecs ? Object.keys(effectiveSpecs).length : 0;
+      logger?.info?.({
+        msg: 'extraction spec telemetry',
+        itemId,
+        attempt,
+        specKeyCount,
+        hasLangtextObject,
+        hasSpezifikationenObject
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to compute extraction spec telemetry', itemId, attempt });
+    }
     const agentParsed = AgentOutputSchema.safeParse(normalizedParsed);
     if (!agentParsed.success) {
       const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
