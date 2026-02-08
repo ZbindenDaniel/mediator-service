@@ -1,4 +1,5 @@
 // TODO(agent): Re-run schema coverage checks when columns change.
+// TODO(agentic-prompts): Keep open-object Spezifikationen wording aligned with extract.md.
 import fs from 'fs';
 import path from 'path';
 
@@ -70,7 +71,9 @@ describe('extraction prompt guidance', () => {
     const extractPrompt = fs.readFileSync(extractPromptPath, 'utf8');
 
     expect(extractPrompt).toContain('For LLM output, use `Spezifikationen` as the meaningful specs field name.');
+    expect(extractPrompt).toContain('Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays.');
     expect(extractPrompt).toContain('Anti-pattern: Never return placeholder-only `Spezifikationen`');
+    expect(extractPrompt).toContain('Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.');
     expect(extractPrompt).toContain('Quality `Spezifikationen` object:');
     expect(extractPrompt).toContain('Leave numeric fields null when missing:');
     expect(extractPrompt).toContain('Add `__searchQueries` only if unresolved details block required fields:');
