@@ -12,7 +12,7 @@
   - Output must match <output_format> exactly.
   - Use only schema-approved keys.
   - For LLM output, use `Spezifikationen` as the meaningful specs field name.
-  - `Spezifikationen` is mapped back to the internal application field `Langtext` after parsing.
+  - Note: The LLM-facing key remains `Spezifikationen` and is remapped to internal `Langtext` after parsing.
   - Avoid emitting `Langtext` in extraction output unless explicitly requested.
   - Never omit required keys; use defaults (empty string/null).
   - Field notes:

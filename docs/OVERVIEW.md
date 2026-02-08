@@ -39,6 +39,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - **Agentic search sanitization tuning**: preserved spec-like lines (dimensions, weights, power/voltage, price/model hints) during source cleanup and added focused tests/logging to improve missing-schema recovery without broad prompt growth.
 - **Agentic Spezifikationen prompt alignment**: switched LLM-facing prompt/schema wording to `Spezifikationen` while keeping internal `Langtext` contracts, added guarded key remapping around item-flow LLM payloads, and refreshed focused extraction tests for Spezifikationen-to-Langtext normalization behavior.
 - **Langtext value contract hardening**: standardized structured `Langtext` payloads to support `string` + `string[]` values end-to-end, added parser normalization telemetry for dropped/converted values, and expanded focused contract/parse tests to prevent drift across backend/frontend helpers.
+- **Agentic prompt format determinism**: removed non-JSON comment noise from item-format prompt fixtures, documented the Spezifikationen/Langtext mapping in prompt prose, and added parseability coverage in schema tests.
 
 Detailed progress notes have been moved to `docs/RECENT_HIGHLIGHTS.md`.
 
