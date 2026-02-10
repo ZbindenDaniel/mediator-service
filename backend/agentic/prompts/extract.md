@@ -19,13 +19,14 @@
     - Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.
     - Numeric fields: extract only when present; otherwise keep defaults.
     - Hersteller: Copy from sources or keep provided value.
-    - reviewNotes: Treat as guidance; do not rewrite.
+    - reviewNotes: Treat as guidance.
   - Compact examples:
-    - Quality `Spezifikationen` object: `{"Displaygröße":"15,6\"","RAM":["16 GB DDR5","2x SO-DIMM"],"Anschlüsse":["USB-C 3.2","HDMI 2.1"]}`
+    - "Spezifikationen": `{"Displaygröße":"15,6\"","RAM":["DDR5"],"Anschlüsse":["USB-C 3.2","HDMI 2.1"]}`
     - Leave numeric fields null when missing: `{"Gewicht":null,"Tiefe":null}`
+- format mm values with half milmeter steps (i.e. '13.5', '132')
     - Add `__searchQueries` only if unresolved details block required fields: `{"__searchQueries":["<Modellname> Datenblatt Gewicht kg"]}`
   - Search policy:
-    - You do not perform searches. You may include "__searchQueries" (max 3) only when vital details remain unresolved.
+    - You do not perform searches. You may include "__searchQueries" only when vital details remain unresolved.
     - Each query must be precise enough to recover the missing schema data.
   - Respond with JSON only after verifying it matches the schema.
 </rules>
