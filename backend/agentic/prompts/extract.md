@@ -10,14 +10,11 @@
 <rules>
   - Output must match <output_format> exactly.
   - Use only schema-approved keys.
-  - For LLM output, use `Spezifikationen` as the meaningful specs field name.
-  - Note: The LLM-facing key remains `Spezifikationen` and is remapped to internal `Langtext` after parsing.
-  - Avoid emitting `Langtext` in extraction output unless explicitly requested.
-  - Never omit required keys; use defaults (empty string/null).
+  - Focus on already present keys in 'Spezifikationen'; add additional spec'-fields found in the search.
   - Field notes:
-    - Artikelbeschreibung: Correct to the precise product name stated in sources.
+    - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
     - Kurzbeschreibung: One concise paragraph; bullets only if they clarify.
-    - Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays.
+    - Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays of strings.
     - Anti-pattern: Never return placeholder-only `Spezifikationen` (e.g., `{"Feature": "N/A"}`) when sources contain concrete technical specs.
     - Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.
     - Numeric fields: extract only when present; otherwise keep defaults.
