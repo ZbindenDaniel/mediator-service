@@ -1516,22 +1516,33 @@ export function resolveCanonicalItemUUIDForArtikelnummer(
 }
 // TODO(agent): Revisit list box queries once typed/location filters are stabilized for UI consumers.
 // TODO(agent): Confirm shelf label projection stays aligned with BoxList rendering.
+// TODO(agent): Validate list box aggregate fields remain aligned with Box model contracts after query changes.
 const listBoxesStatement = db.prepare(`
   SELECT
     b.*,
-    shelf.Label AS ShelfLabel
+    shelf.Label AS ShelfLabel,
+    COUNT(i.ItemUUID) AS ItemCount,
+    COALESCE(SUM(COALESCE(i.Auf_Lager, 0) * COALESCE(r.Gewicht_kg, 0)), 0) AS TotalWeightKg
   FROM boxes b
   LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
+  LEFT JOIN items i ON i.BoxID = b.BoxID
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+  GROUP BY b.BoxID
   ORDER BY b.BoxID
 `);
 const listBoxesByTypeStatement = db.prepare(
   `
     SELECT
       b.*,
-      shelf.Label AS ShelfLabel
+      shelf.Label AS ShelfLabel,
+      COUNT(i.ItemUUID) AS ItemCount,
+      COALESCE(SUM(COALESCE(i.Auf_Lager, 0) * COALESCE(r.Gewicht_kg, 0)), 0) AS TotalWeightKg
     FROM boxes b
     LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
+    LEFT JOIN items i ON i.BoxID = b.BoxID
+    LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
     WHERE SUBSTR(b.BoxID, 1, 1) = @type
+    GROUP BY b.BoxID
     ORDER BY b.BoxID
   `
 );

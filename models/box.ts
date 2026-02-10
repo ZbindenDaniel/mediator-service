@@ -14,4 +14,8 @@ export interface Box {
   // TODO(agent): Evaluate whether multiple box photos should be supported once UX requirements expand beyond a single preview.
   PhotoPath?: string | null;
   UpdatedAt: string;
+  // Optional aggregate count projected by list queries for box list summaries.
+  ItemCount?: number | null;
+  // Optional aggregate weight (kg) projected by list queries for box list summaries.
+  TotalWeightKg?: number | null;
 }
