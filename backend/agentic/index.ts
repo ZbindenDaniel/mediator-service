@@ -22,6 +22,7 @@ import {
   type AgenticModelInvocationResult,
   type AgenticRequestContext,
   type AgenticHealthOptions,
+  type AgenticRunReviewHistoryEntry,
   normalizeAgenticRunStatus
 } from '../../models';
 // TODO(agentic-run-delete): Confirm deletion flows preserve observability requirements as APIs evolve.
@@ -34,6 +35,7 @@ import {
   markAgenticRequestNotificationFailure,
   fetchQueuedAgenticRuns,
   updateQueuedAgenticRunQueueState,
+  listAgenticRunReviewHistory,
   type AgenticRunQueueUpdate,
   type LogEventPayload
 } from '../db';
@@ -1574,14 +1576,29 @@ export function resumeAgenticRun(
   return restartAgenticRun(input, deps);
 }
 
-function resolveReviewFromPersistedRun(run: AgenticRun | null): AgenticRunReviewMetadata | null {
-  if (!run) {
-    return null;
-  }
+export function mapReviewHistoryForAggregation(
+  history: AgenticRunReviewHistoryEntry[]
+): AgenticRunReviewMetadata[] {
+  return history.map((entry) => ({
+    decision: entry.ReviewDecision ?? null,
+    information_present: null,
+    missing_spec: [],
+    bad_format: null,
+    wrong_information: null,
+    wrong_physical_dimensions: null,
+    notes: entry.ReviewNotes ?? null,
+    reviewedBy: entry.ReviewedBy ?? null
+  }));
+}
 
-  const decision = run.LastReviewDecision ?? null;
-  const notes = run.LastReviewNotes ?? null;
-  const reviewedBy = run.ReviewedBy ?? null;
+function resolveReviewFromPersistedRun(
+  run: AgenticRun | null,
+  history: AgenticRunReviewHistoryEntry[] = []
+): AgenticRunReviewMetadata | null {
+  const latestHistory = history.length > 0 ? history[history.length - 1] : null;
+  const decision = latestHistory?.ReviewDecision ?? run?.LastReviewDecision ?? null;
+  const notes = latestHistory?.ReviewNotes ?? run?.LastReviewNotes ?? null;
+  const reviewedBy = latestHistory?.ReviewedBy ?? run?.ReviewedBy ?? null;
 
   if (!decision && !notes && !reviewedBy) {
     return null;
@@ -1652,11 +1669,21 @@ export async function resumeStaleAgenticRuns(
         status: run.Status,
         invoker: deps.invokeModel ? 'available' : 'missing'
       });
+      let reviewHistory: AgenticRunReviewHistoryEntry[] = [];
+      try {
+        reviewHistory = listAgenticRunReviewHistory(run.Artikel_Nummer);
+      } catch (historyErr) {
+        logger.warn?.('[agentic-service] Failed to load review history during stale run resume', {
+          artikelNummer: run.Artikel_Nummer,
+          error: toErrorMessage(historyErr)
+        });
+      }
+
       scheduleAgenticModelInvocation({
         artikelNummer: run.Artikel_Nummer,
         searchQuery,
         context: null,
-        review: resolveReviewFromPersistedRun(run),
+        review: resolveReviewFromPersistedRun(run, reviewHistory),
         request: null,
         deps,
         logger

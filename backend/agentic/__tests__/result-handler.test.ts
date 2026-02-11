@@ -1,18 +1,26 @@
 import { jest } from '@jest/globals';
 import {
+  AGENTIC_RUN_STATUS_APPROVED,
   AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_REJECTED,
   AGENTIC_RUN_STATUS_REVIEW,
   type AgenticRun,
   type AgenticRequestLog
 } from '../../../models';
 
-jest.mock('../index', () => ({
-  recordAgenticRequestLogUpdate: jest.fn()
-}));
+jest.mock('../index', () => {
+  const actual = jest.requireActual<typeof import('../index')>('../index');
+  return {
+    ...actual,
+    appendOutcomeTranscriptSection: jest.fn(async () => undefined),
+    recordAgenticRequestLogUpdate: jest.fn()
+  };
+});
 
 const mockAgenticModule = jest.requireMock<typeof import('../index')>('../index');
 const { recordAgenticRequestLogUpdate } = mockAgenticModule;
 
+// TODO(agentic-review-history-tests): Extend coverage if review-history writes include additional reviewer signals.
 describe('agentic result handler integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -56,6 +64,7 @@ describe('agentic result handler integration', () => {
     const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
     const logEvent = jest.fn();
     const persistItemReference = jest.fn();
+    const insertAgenticRunReviewHistoryEntry = { run: jest.fn() };
     const updateAgenticRunStatus = {
       run: jest.fn((update: Record<string, unknown>) => {
         const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
@@ -92,6 +101,7 @@ describe('agentic result handler integration', () => {
           persistItemReference,
           updateAgenticRunStatus,
           upsertAgenticRun: { run: jest.fn() },
+          insertAgenticRunReviewHistoryEntry,
           logEvent,
           getAgenticRequestLog: () => requestLog
         },
@@ -109,10 +119,118 @@ describe('agentic result handler integration', () => {
     expect(logEvent).toHaveBeenCalledWith(
       expect.objectContaining({ EntityId: 'R-100', Event: 'AgenticResultReceived' })
     );
+    expect(insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'R-100',
+        Status: AGENTIC_RUN_STATUS_REVIEW,
+        ReviewState: 'pending'
+      })
+    );
     expect(recordAgenticRequestLogUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'R-100' }),
       AGENTIC_RUN_STATUS_REVIEW,
       expect.objectContaining({ searchQuery: 'example search' })
     );
   });
+
+  test('retains multiple review events and keeps latest run state', () => {
+    const existingReference = { Artikel_Nummer: 'R-200', Artikelbeschreibung: 'Item', Veröffentlicht_Status: 'no' };
+    const existingRun: AgenticRun = {
+      Id: 2,
+      Artikel_Nummer: 'R-200',
+      SearchQuery: 'search',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
+      LastModified: '2024-01-01T00:00:00.000Z',
+      ReviewState: 'not_required',
+      ReviewedBy: null,
+      LastReviewDecision: null,
+      LastReviewNotes: null,
+      RetryCount: 0,
+      NextRetryAt: null,
+      LastError: null,
+      LastAttemptAt: null
+    };
+    const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
+    const requestLog: AgenticRequestLog = {
+      UUID: 'R-200',
+      Search: 'search',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
+      Error: null,
+      CreatedAt: nowIso,
+      UpdatedAt: nowIso,
+      NotifiedAt: null,
+      LastNotificationError: null,
+      PayloadJson: null
+    };
+
+    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
+    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
+    const reviewHistory: Array<Record<string, unknown>> = [];
+    const updateAgenticRunStatus = {
+      run: jest.fn((update: Record<string, unknown>) => {
+        const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
+        runs.set(update.Artikel_Nummer as string, merged);
+        return { changes: 1 };
+      })
+    };
+
+    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>('../result-handler');
+
+    const baseCtx = {
+      db: { transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>): ReturnType<T> => fn(...args) },
+      getItemReference: { get: (id: string) => references.get(id) },
+      getAgenticRun: { get: (id: string) => runs.get(id) },
+      persistItemReference: jest.fn(),
+      updateAgenticRunStatus,
+      upsertAgenticRun: { run: jest.fn() },
+      insertAgenticRunReviewHistoryEntry: { run: jest.fn((entry: Record<string, unknown>) => reviewHistory.push(entry)) },
+      logEvent: jest.fn(),
+      getAgenticRequestLog: () => requestLog
+    };
+
+    handleAgenticResult(
+      {
+        artikelNummer: 'R-200',
+        payload: {
+          artikelNummer: 'R-200',
+          item: { Artikel_Nummer: 'R-200', searchQuery: 'search' },
+          status: 'review',
+          reviewDecision: 'rejected',
+          reviewNotes: 'missing dimensions',
+          reviewedBy: 'reviewer-a',
+          needsReview: true
+        }
+      },
+      { ctx: baseCtx, logger: console }
+    );
+
+    handleAgenticResult(
+      {
+        artikelNummer: 'R-200',
+        payload: {
+          artikelNummer: 'R-200',
+          item: { Artikel_Nummer: 'R-200', searchQuery: 'search' },
+          status: 'completed',
+          reviewDecision: 'approved',
+          reviewNotes: 'looks good now',
+          reviewedBy: 'reviewer-b',
+          needsReview: false
+        }
+      },
+      { ctx: baseCtx, logger: console }
+    );
+
+    expect(reviewHistory).toHaveLength(2);
+    expect(reviewHistory[0]).toEqual(expect.objectContaining({ Status: AGENTIC_RUN_STATUS_REJECTED }));
+    expect(reviewHistory[1]).toEqual(expect.objectContaining({ Status: AGENTIC_RUN_STATUS_APPROVED }));
+    expect(runs.get('R-200')).toEqual(
+      expect.objectContaining({
+        Status: AGENTIC_RUN_STATUS_APPROVED,
+        LastReviewDecision: 'approved',
+        LastReviewNotes: 'looks good now',
+        ReviewedBy: 'reviewer-b'
+      })
+    );
+  });
+
 });

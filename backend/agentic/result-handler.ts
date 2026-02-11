@@ -2,6 +2,7 @@
  * TODO(agentic-result-handler): consider extracting shared validation helpers
  * if additional result endpoints are introduced.
  * TODO(agentic-transcript-notes): Ensure terminal agentic runs record a transcript note summarizing the outcome for reviewers.
+ * TODO(agentic-review-history): Evaluate retention window once downstream aggregation pipelines confirm read cadence.
  */
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
@@ -44,6 +45,7 @@ export interface AgenticResultHandlerContext {
   persistItemReference: (item: ItemRef) => void;
   updateAgenticRunStatus: { run: (update: Record<string, unknown>) => { changes?: number } };
   upsertAgenticRun: { run: (update: Record<string, unknown>) => unknown };
+  insertAgenticRunReviewHistoryEntry?: { run: (entry: Record<string, unknown>) => unknown };
   logEvent: (event: {
     Actor: string;
     EntityType: string;
@@ -468,6 +470,27 @@ export function handleAgenticResult(
         if (!updateResult?.changes) {
           logger.warn?.('Agentic run missing on status update, creating record', artikelNummerInput);
           ctx.upsertAgenticRun.run(normalizedRunUpdate);
+        }
+
+        if (ctx.insertAgenticRunReviewHistoryEntry?.run) {
+          try {
+            ctx.insertAgenticRunReviewHistoryEntry.run({
+              Artikel_Nummer: artikelNummerInput,
+              Status: status,
+              ReviewState: effectiveReviewState,
+              ReviewDecision: normalizedReviewDecision,
+              ReviewNotes: normalizedReviewNotes,
+              ReviewedBy: effectiveReviewedBy,
+              RecordedAt: now
+            });
+          } catch (err) {
+            logger.warn?.('Agentic result failed to persist review history entry', {
+              artikelNummer: artikelNummerInput,
+              status,
+              reviewState: effectiveReviewState,
+              error: err instanceof Error ? err.message : err
+            });
+          }
         }
       }
 

@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
 - **Agentic review signal contract hardening**: aligned frontend/backend review metadata with deterministic boolean/null signals, added capped+deduped `missing_spec` normalization, and covered malformed/legacy payload paths with focused tests and sanitized logging.
+- **Agentic review history retention**: added append-only persistence for per-run review events while keeping latest review fields on `agentic_runs`, with non-blocking history-write logging and focused handler/aggregation tests.
 - **Agentic extraction prompt guardrails**: clarified that `Spezifikationen` is an open object for additional evidence-backed keys and tightened anti-placeholder guidance with matching tests to boost technical detail capture.
 - **QR scan & navigation polish**: streamlined the landing scan entry, return-to flows, and destination routing for item/box/shelf scans with validation/logging baked in.
 - **QR scan callback routing**: added a callback-driven scan mode for search-triggered scans so QR results navigate directly to item/box detail pages while keeping return navigation for relocation flows.

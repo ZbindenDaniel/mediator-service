@@ -7,6 +7,7 @@ import {
   getItemReference,
   updateAgenticRunStatus,
   upsertAgenticRun,
+  insertAgenticRunReviewHistoryEntry,
   persistItemReference,
   logEvent,
   getAgenticRequestLog,
@@ -214,6 +215,7 @@ export class AgenticModelInvoker {
               persistItemReference,
               updateAgenticRunStatus,
               upsertAgenticRun,
+              insertAgenticRunReviewHistoryEntry,
               logEvent,
               getAgenticRequestLog
             },

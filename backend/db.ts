@@ -19,6 +19,7 @@ import type {
   ShopwareSyncQueueStatus
 } from './shopware/queueTypes';
 import {
+  AgenticRunReviewHistoryEntry,
   AgenticRequestLog,
   AgenticRequestLogUpsert,
   AgenticRequestNotification,
@@ -1305,6 +1306,33 @@ CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_notification_pending
   WHERE Status = 'SUCCESS' AND NotifiedAt IS NULL;
 `;
 
+
+const CREATE_AGENTIC_RUN_REVIEW_HISTORY_SQL = `
+CREATE TABLE IF NOT EXISTS agentic_run_review_history (
+  Id INTEGER PRIMARY KEY AUTOINCREMENT,
+  Artikel_Nummer TEXT NOT NULL,
+  Status TEXT NOT NULL,
+  ReviewState TEXT NOT NULL,
+  ReviewDecision TEXT,
+  ReviewNotes TEXT,
+  ReviewedBy TEXT,
+  RecordedAt TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_run_review_history_artikel_nummer_recorded_at
+  ON agentic_run_review_history (Artikel_Nummer, RecordedAt, Id);
+`;
+
+function ensureAgenticRunReviewHistorySchema(database: Database.Database = db): void {
+  try {
+    database.exec(CREATE_AGENTIC_RUN_REVIEW_HISTORY_SQL);
+  } catch (err) {
+    console.error('Failed to ensure agentic_run_review_history schema', err);
+    throw err;
+  }
+}
+
 function ensureAgenticRequestLogSchema(database: Database.Database = db): void {
   try {
     database.exec(CREATE_AGENTIC_REQUEST_LOGS_SQL);
@@ -1364,6 +1392,7 @@ function ensureAgenticRequestLogColumns(database: Database.Database = db): void 
   }
 }
 
+ensureAgenticRunReviewHistorySchema(db);
 ensureAgenticRequestLogSchema(db);
 
 export { db };
@@ -1977,6 +2006,46 @@ export const updateAgenticRunStatus = db.prepare(
      WHERE Artikel_Nummer=@Artikel_Nummer
   `
 );
+
+
+export const insertAgenticRunReviewHistoryEntry = db.prepare(
+  `
+    INSERT INTO agentic_run_review_history (
+      Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewedBy, RecordedAt
+    )
+    VALUES (
+      @Artikel_Nummer, @Status, @ReviewState, @ReviewDecision, @ReviewNotes, @ReviewedBy, @RecordedAt
+    )
+  `
+);
+
+const selectAgenticRunReviewHistoryByArtikelNummer = db.prepare(
+  `
+    SELECT Id, Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewedBy, RecordedAt
+      FROM agentic_run_review_history
+     WHERE Artikel_Nummer = @Artikel_Nummer
+     ORDER BY datetime(RecordedAt) ASC, Id ASC
+  `
+);
+
+export function listAgenticRunReviewHistory(artikelNummer: string): AgenticRunReviewHistoryEntry[] {
+  const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalizedArtikelNummer) {
+    return [];
+  }
+
+  try {
+    return selectAgenticRunReviewHistoryByArtikelNummer.all({
+      Artikel_Nummer: normalizedArtikelNummer
+    }) as AgenticRunReviewHistoryEntry[];
+  } catch (err) {
+    console.error('[db] Failed to list agentic run review history', {
+      artikelNummer: normalizedArtikelNummer,
+      error: err
+    });
+    throw err;
+  }
+}
 
 export function persistAgenticRunError(params: {
   artikelNummer: string;
