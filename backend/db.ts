@@ -1315,6 +1315,7 @@ CREATE TABLE IF NOT EXISTS agentic_run_review_history (
   ReviewState TEXT NOT NULL,
   ReviewDecision TEXT,
   ReviewNotes TEXT,
+  ReviewMetadata TEXT,
   ReviewedBy TEXT,
   RecordedAt TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE CASCADE ON UPDATE CASCADE
@@ -1332,6 +1333,36 @@ function ensureAgenticRunReviewHistorySchema(database: Database.Database = db): 
     throw err;
   }
 }
+
+function ensureAgenticRunReviewHistoryColumns(database: Database.Database = db): void {
+  let columns: Array<{ name: string }> = [];
+  try {
+    columns = database.prepare(`PRAGMA table_info(agentic_run_review_history)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect agentic_run_review_history schema for missing columns', err);
+    throw err;
+  }
+
+  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
+  const alterations: Array<{ name: string; sql: string }> = [];
+  if (!hasColumn('ReviewMetadata')) {
+    alterations.push({
+      name: 'ReviewMetadata',
+      sql: 'ALTER TABLE agentic_run_review_history ADD COLUMN ReviewMetadata TEXT'
+    });
+  }
+
+  for (const { name, sql } of alterations) {
+    try {
+      database.prepare(sql).run();
+      console.info('[db] Added missing agentic_run_review_history column', name);
+    } catch (err) {
+      console.error('Failed to add agentic_run_review_history column', name, err);
+      throw err;
+    }
+  }
+}
+
 
 function ensureAgenticRequestLogSchema(database: Database.Database = db): void {
   try {
@@ -1393,6 +1424,7 @@ function ensureAgenticRequestLogColumns(database: Database.Database = db): void 
 }
 
 ensureAgenticRunReviewHistorySchema(db);
+ensureAgenticRunReviewHistoryColumns(db);
 ensureAgenticRequestLogSchema(db);
 
 export { db };
@@ -2011,20 +2043,36 @@ export const updateAgenticRunStatus = db.prepare(
 export const insertAgenticRunReviewHistoryEntry = db.prepare(
   `
     INSERT INTO agentic_run_review_history (
-      Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewedBy, RecordedAt
+      Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewMetadata, ReviewedBy, RecordedAt
     )
     VALUES (
-      @Artikel_Nummer, @Status, @ReviewState, @ReviewDecision, @ReviewNotes, @ReviewedBy, @RecordedAt
+      @Artikel_Nummer, @Status, @ReviewState, @ReviewDecision, @ReviewNotes, @ReviewMetadata, @ReviewedBy, @RecordedAt
     )
   `
 );
 
 const selectAgenticRunReviewHistoryByArtikelNummer = db.prepare(
   `
-    SELECT Id, Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewedBy, RecordedAt
+    SELECT Id, Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewMetadata, ReviewedBy, RecordedAt
       FROM agentic_run_review_history
      WHERE Artikel_Nummer = @Artikel_Nummer
      ORDER BY datetime(RecordedAt) ASC, Id ASC
+  `
+);
+
+
+const selectRecentAgenticRunReviewHistoryBySubcategory = db.prepare(
+  `
+    SELECT h.Id, h.Artikel_Nummer, h.Status, h.ReviewState, h.ReviewDecision, h.ReviewNotes, h.ReviewMetadata, h.ReviewedBy, h.RecordedAt
+      FROM agentic_run_review_history h
+      JOIN item_refs r ON r.Artikel_Nummer = h.Artikel_Nummer
+     WHERE CAST(r.Unterkategorien_A AS INTEGER) = @Subcategory
+       AND (
+         LOWER(COALESCE(h.ReviewState, '')) IN ('approved', 'rejected')
+         OR COALESCE(TRIM(h.ReviewDecision), '') <> ''
+       )
+     ORDER BY datetime(h.RecordedAt) DESC, h.Id DESC
+     LIMIT @Limit
   `
 );
 
@@ -2041,6 +2089,32 @@ export function listAgenticRunReviewHistory(artikelNummer: string): AgenticRunRe
   } catch (err) {
     console.error('[db] Failed to list agentic run review history', {
       artikelNummer: normalizedArtikelNummer,
+      error: err
+    });
+    throw err;
+  }
+}
+
+
+export function listRecentAgenticRunReviewHistoryBySubcategory(
+  subcategory: number,
+  limit = 10
+): AgenticRunReviewHistoryEntry[] {
+  const normalizedSubcategory = Number.isInteger(subcategory) ? subcategory : Number.parseInt(String(subcategory), 10);
+  const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
+  if (!Number.isInteger(normalizedSubcategory) || normalizedSubcategory <= 0) {
+    return [];
+  }
+
+  try {
+    return selectRecentAgenticRunReviewHistoryBySubcategory.all({
+      Subcategory: normalizedSubcategory,
+      Limit: normalizedLimit
+    }) as AgenticRunReviewHistoryEntry[];
+  } catch (err) {
+    console.error('[db] Failed to list recent agentic run review history by subcategory', {
+      subcategory: normalizedSubcategory,
+      limit: normalizedLimit,
       error: err
     });
     throw err;
