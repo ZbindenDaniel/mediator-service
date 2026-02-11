@@ -113,6 +113,44 @@ function normalizePublishedStatus(value: unknown): string {
   return 'no';
 }
 
+
+function normalizeReviewMetadataForHistory(
+  payload: Record<string, unknown>,
+  logger?: AgenticResultLogger
+): string | null {
+  try {
+    const reviewCandidate = payload.review;
+    const reviewObject =
+      typeof reviewCandidate === 'object' && reviewCandidate
+        ? (reviewCandidate as Record<string, unknown>)
+        : null;
+
+    const resolved = {
+      information_present:
+        reviewObject?.information_present ??
+        payload.information_present ??
+        payload.informationPresent ??
+        null,
+      missing_spec: reviewObject?.missing_spec ?? payload.missing_spec ?? payload.missingSpec ?? [],
+      bad_format: reviewObject?.bad_format ?? payload.bad_format ?? payload.badFormat ?? null,
+      wrong_information:
+        reviewObject?.wrong_information ?? payload.wrong_information ?? payload.wrongInformation ?? null,
+      wrong_physical_dimensions:
+        reviewObject?.wrong_physical_dimensions ??
+        payload.wrong_physical_dimensions ??
+        payload.wrongPhysicalDimensions ??
+        null
+    };
+
+    return JSON.stringify(resolved);
+  } catch (err) {
+    logger?.warn?.('Agentic result failed to normalize review metadata for history persistence', {
+      error: err instanceof Error ? err.message : err
+    });
+    return null;
+  }
+}
+
 function resolvePayloadArtikelNummer(payload: Record<string, unknown>): string | null {
   const itemPayload = payload.item;
   const candidates: Array<unknown> = [
@@ -297,6 +335,7 @@ export function handleAgenticResult(
     typeof payload.reviewNotes === 'string' && payload.reviewNotes.trim() ? payload.reviewNotes.trim() : null;
   const reviewedByInput = typeof payload.reviewedBy === 'string' && payload.reviewedBy.trim() ? payload.reviewedBy.trim() : null;
   const agenticActor = typeof payload.actor === 'string' && payload.actor ? payload.actor : 'agentic-service';
+  const reviewMetadataJson = normalizeReviewMetadataForHistory(payload, logger);
 
   let statusForPersistence = normalizedIncomingStatus;
   let reviewDecisionForPersistence = reviewDecisionInputRaw;
@@ -480,6 +519,7 @@ export function handleAgenticResult(
               ReviewState: effectiveReviewState,
               ReviewDecision: normalizedReviewDecision,
               ReviewNotes: normalizedReviewNotes,
+              ReviewMetadata: reviewMetadataJson,
               ReviewedBy: effectiveReviewedBy,
               RecordedAt: now
             });

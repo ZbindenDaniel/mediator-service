@@ -1579,16 +1579,28 @@ export function resumeAgenticRun(
 export function mapReviewHistoryForAggregation(
   history: AgenticRunReviewHistoryEntry[]
 ): AgenticRunReviewMetadata[] {
-  return history.map((entry) => ({
-    decision: entry.ReviewDecision ?? null,
-    information_present: null,
-    missing_spec: [],
-    bad_format: null,
-    wrong_information: null,
-    wrong_physical_dimensions: null,
-    notes: entry.ReviewNotes ?? null,
-    reviewedBy: entry.ReviewedBy ?? null
-  }));
+  return history.map((entry) => {
+    let parsedMetadata: Record<string, unknown> = {};
+    try {
+      parsedMetadata =
+        typeof entry.ReviewMetadata === 'string' && entry.ReviewMetadata.trim()
+          ? (JSON.parse(entry.ReviewMetadata) as Record<string, unknown>)
+          : {};
+    } catch {
+      parsedMetadata = {};
+    }
+
+    return {
+      decision: entry.ReviewDecision ?? null,
+      information_present: normalizeNullableBoolean(parsedMetadata.information_present),
+      missing_spec: normalizeMissingSpec(parsedMetadata.missing_spec),
+      bad_format: normalizeNullableBoolean(parsedMetadata.bad_format),
+      wrong_information: normalizeNullableBoolean(parsedMetadata.wrong_information),
+      wrong_physical_dimensions: normalizeNullableBoolean(parsedMetadata.wrong_physical_dimensions),
+      notes: entry.ReviewNotes ?? null,
+      reviewedBy: entry.ReviewedBy ?? null
+    };
+  });
 }
 
 function resolveReviewFromPersistedRun(

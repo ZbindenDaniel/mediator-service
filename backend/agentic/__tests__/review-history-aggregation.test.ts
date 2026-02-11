@@ -12,6 +12,13 @@ describe('agentic review history aggregation source', () => {
         ReviewState: 'rejected',
         ReviewDecision: 'rejected',
         ReviewNotes: 'missing dimensions',
+        ReviewMetadata: JSON.stringify({
+          information_present: false,
+          bad_format: true,
+          wrong_information: true,
+          wrong_physical_dimensions: false,
+          missing_spec: ['Breite', 'Höhe']
+        }),
         ReviewedBy: 'reviewer-a',
         RecordedAt: '2024-01-01T00:00:00.000Z'
       },
@@ -22,6 +29,7 @@ describe('agentic review history aggregation source', () => {
         ReviewState: 'approved',
         ReviewDecision: 'approved',
         ReviewNotes: 'resolved after retry',
+        ReviewMetadata: null,
         ReviewedBy: 'reviewer-b',
         RecordedAt: '2024-01-01T01:00:00.000Z'
       }
@@ -35,7 +43,11 @@ describe('agentic review history aggregation source', () => {
         decision: 'rejected',
         notes: 'missing dimensions',
         reviewedBy: 'reviewer-a',
-        missing_spec: []
+        information_present: false,
+        bad_format: true,
+        wrong_information: true,
+        wrong_physical_dimensions: false,
+        missing_spec: ['Breite', 'Höhe']
       }),
       expect.objectContaining({
         decision: 'approved',

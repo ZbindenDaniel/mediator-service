@@ -5,7 +5,7 @@ export interface AgenticRunReviewHistoryEntry {
   ReviewState: string;
   ReviewDecision: string | null;
   ReviewNotes: string | null;
+  ReviewMetadata: string | null;
   ReviewedBy: string | null;
   RecordedAt: string;
 }
-
