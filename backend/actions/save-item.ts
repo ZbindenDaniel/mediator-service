@@ -3,12 +3,14 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
-import type { AgenticRun, Item, ItemInstanceSummary, ItemRef } from '../../models';
+import type { AgenticRun, Item, ItemDetailResponse, ItemInstanceSummary, ItemRef } from '../../models';
 import { normalizeQuality } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
 import { generateShopwareCorrelationId } from '../db';
 import { attachTranscriptReference } from '../agentic';
+import { loadSubcategoryReviewAutomationSignals } from '../agentic/review-automation-signals';
+import { listRecentAgenticRunReviewHistoryBySubcategory } from '../db';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -647,12 +649,61 @@ const action = defineHttpAction({
           });
         }
         const itemWithCategories = { ...sanitizedItem, ...normalisedCategories };
+        // TODO(agentic-card-metrics): Keep agent card metrics payload lean while preserving denominator context.
+        let agenticReviewAutomation: ItemDetailResponse['agenticReviewAutomation'] = null;
+        try {
+          const aggregatedSignals = loadSubcategoryReviewAutomationSignals(item.Artikel_Nummer ?? '', {
+            getItemReference: ctx.getItemReference,
+            listRecentReviewHistoryBySubcategory: listRecentAgenticRunReviewHistoryBySubcategory,
+            logger: console
+          });
+          agenticReviewAutomation = {
+            sampleSize: aggregatedSignals.sampleSize,
+            sampleTarget: aggregatedSignals.sampleTarget,
+            lowConfidence: aggregatedSignals.lowConfidence,
+            metrics: {
+              bad_format_true: {
+                count: aggregatedSignals.badFormatTrueCount,
+                pct: aggregatedSignals.badFormatTruePct
+              },
+              wrong_information_true: {
+                count: aggregatedSignals.wrongInformationTrueCount,
+                pct: aggregatedSignals.wrongInformationTruePct
+              },
+              wrong_physical_dimensions_true: {
+                count: aggregatedSignals.wrongPhysicalDimensionsTrueCount,
+                pct: aggregatedSignals.wrongPhysicalDimensionsTruePct
+              },
+              information_present_false: {
+                count: aggregatedSignals.informationPresentFalseCount,
+                pct: aggregatedSignals.informationPresentFalsePct
+              }
+            },
+            missingSpecTopKeys: aggregatedSignals.missingSpecTopKeys,
+            triggerStates: {
+              bad_format_trigger: aggregatedSignals.bad_format_trigger,
+              wrong_information_trigger: aggregatedSignals.wrong_information_trigger,
+              wrong_physical_dimensions_trigger: aggregatedSignals.wrong_physical_dimensions_trigger,
+              missing_spec_trigger: aggregatedSignals.missing_spec_trigger,
+              information_present_low_trigger: aggregatedSignals.information_present_low_trigger
+            }
+          };
+        } catch (error) {
+          console.error('[save-item] Failed to load review automation metrics for detail payload', {
+            itemId,
+            artikelNummer: item.Artikel_Nummer ?? null,
+            error
+          });
+          agenticReviewAutomation = null;
+        }
+
         let responsePayload: {
           item: Item;
           reference: ItemRef | null;
           box: unknown;
           events: unknown;
           agentic: AgenticRun | null;
+          agenticReviewAutomation: ItemDetailResponse['agenticReviewAutomation'];
           media: string[];
           instances: ItemInstanceSummary[];
         };
@@ -661,7 +712,16 @@ const action = defineHttpAction({
             normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
               ? { ...itemWithCategories, Grafikname: normalisedGrafikname }
               : itemWithCategories;
-          responsePayload = { item: responseItem, reference, box, events, agentic, media, instances };
+          responsePayload = {
+            item: responseItem,
+            reference,
+            box,
+            events,
+            agentic,
+            agenticReviewAutomation,
+            media,
+            instances
+          };
         } catch (error) {
           console.error('[save-item] Failed to construct item detail response payload', {
             itemId,
@@ -674,6 +734,7 @@ const action = defineHttpAction({
           mediaCount: media.length,
           hasReference: Boolean(reference),
           hasAgentic: Boolean(agentic),
+          hasReviewAutomation: Boolean(agenticReviewAutomation),
           instanceCount: instances.length
         });
         return sendJson(res, 200, responsePayload);

@@ -9,6 +9,31 @@ import type { EventLog } from './event-log';
 import type { Item, ItemRef } from './item';
 import type { QualityValue } from './quality';
 
+export interface ItemDetailReviewAutomationMetric {
+  count: number;
+  pct: number;
+}
+
+export interface ItemDetailReviewAutomationSignal {
+  sampleSize: number;
+  sampleTarget: number;
+  lowConfidence: boolean;
+  metrics: {
+    bad_format_true: ItemDetailReviewAutomationMetric;
+    wrong_information_true: ItemDetailReviewAutomationMetric;
+    wrong_physical_dimensions_true: ItemDetailReviewAutomationMetric;
+    information_present_false: ItemDetailReviewAutomationMetric;
+  };
+  missingSpecTopKeys: Array<{ key: string; count: number; pct: number }>;
+  triggerStates: {
+    bad_format_trigger: boolean;
+    wrong_information_trigger: boolean;
+    wrong_physical_dimensions_trigger: boolean;
+    missing_spec_trigger: boolean;
+    information_present_low_trigger: boolean;
+  };
+}
+
 export interface ItemInstanceSummary {
   ItemUUID: string;
   AgenticStatus?: AgenticRunStatus | null;
@@ -29,6 +54,7 @@ export interface ItemDetailResponse {
   box: Box | null;
   events: EventLog[];
   agentic: AgenticRun | null;
+  agenticReviewAutomation: ItemDetailReviewAutomationSignal | null;
   media: string[];
   instances: ItemInstanceSummary[];
 }
