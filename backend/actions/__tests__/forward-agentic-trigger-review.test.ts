@@ -38,6 +38,11 @@ describe('forwardAgenticTrigger review metadata', () => {
 
     const expectedReview: AgenticRunReviewMetadata = {
       decision: 'approve',
+      information_present: null,
+      missing_spec: [],
+      bad_format: null,
+      wrong_information: null,
+      wrong_physical_dimensions: null,
       notes: null,
       reviewedBy: null
     };

@@ -13,6 +13,11 @@ export interface AgenticRunTriggerPayload {
   actor?: string | null;
   review?: {
     decision?: string | null;
+    information_present?: boolean | string | number | null;
+    missing_spec?: unknown;
+    bad_format?: boolean | string | number | null;
+    wrong_information?: boolean | string | number | null;
+    wrong_physical_dimensions?: boolean | string | number | null;
     notes?: string | null;
     reviewedBy?: string | null;
   } | null;
@@ -201,8 +206,47 @@ function normalizeReviewMetadata(
     return trimmed ? trimmed : null;
   };
 
+  const normalizeNullableBoolean = (value: unknown): boolean | null => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      if (value === 1) {
+        return true;
+      }
+      if (value === 0) {
+        return false;
+      }
+      return null;
+    }
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'n'].includes(normalized)) {
+      return false;
+    }
+    return null;
+  };
+
+  const missingSpec = Array.isArray(review.missing_spec)
+    ? review.missing_spec.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim()).filter(Boolean)
+    : [];
+
   return {
     decision: normalizeField(review.decision),
+    information_present: normalizeNullableBoolean(review.information_present),
+    missing_spec: missingSpec,
+    bad_format: normalizeNullableBoolean(review.bad_format),
+    wrong_information: normalizeNullableBoolean(review.wrong_information),
+    wrong_physical_dimensions: normalizeNullableBoolean(review.wrong_physical_dimensions),
     notes: normalizeField(review.notes),
     reviewedBy: normalizeField(review.reviewedBy)
   };

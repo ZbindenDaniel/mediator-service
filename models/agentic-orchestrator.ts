@@ -4,6 +4,12 @@ import type { AgenticRun } from './agentic-run';
 
 export interface AgenticRunReviewMetadata {
   decision: string | null;
+  // TODO(agentic-review-contract): Keep frontend/backend review signal fields aligned when contract evolves.
+  information_present: boolean | null;
+  missing_spec: string[];
+  bad_format: boolean | null;
+  wrong_information: boolean | null;
+  wrong_physical_dimensions: boolean | null;
   notes: string | null;
   reviewedBy: string | null;
 }
