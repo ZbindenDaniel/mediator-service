@@ -8,6 +8,7 @@ export * from './label-job';
 export * from './event-log';
 export * from './entity';
 export * from './agentic-run';
+export * from './agentic-run-review-history';
 export * from './agentic-request-log';
 export * from './agentic-statuses';
 export * from './agentic-orchestrator';
