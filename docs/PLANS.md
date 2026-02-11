@@ -2,78 +2,21 @@
 
 This document tracks active planning items and near-term opportunities. Keep the overview lean by updating detailed plans here.
 
-## Multi-step Plan: Item Instance = 1
+## Multi-step Plan: Agentic review learning loop
 
-Goal: treat item instances as a single canonical record so inventory, exports, and agentic flows converge on the same source of truth while keeping UI workflows simple. Reason: reduce duplicate state, minimize incidental data divergence, and keep changes minimal by adapting existing structures instead of adding new ones.
+Goal: convert review feedback into structured, reusable signals that improve run quality over time for each application instance. Reason: reduce repeated reviewer corrections, keep prompt updates evidence-based, and minimize code additions by extending existing agentic metadata and prompt assembly structures.
 
-Checklist (re-check and update this planning doc before starting each subsequent task in the sequence):
+Checklist (execute one step at a time; update this section before each subsequent task):
 
-- [x] **Grouping rules** – normalized grouping to prefer ItemUUID sequence `1` as the representative instance (fallbacks log when no canonical record is present) while keeping group keys unchanged. Reason: ensure consistent grouping across ingestion, UI, and print flows without expanding schemas.
-- [ ] **Export updates** – update CSV/ZIP export mapping to emit instance `1` data and confirm partner column ordering remains stable; verify any data structure fields used by export. Clarify export modes: backup exports stay instanzscharf (with ItemUUIDs per instance), while ERP exports are grouped and intentionally leave ItemUUIDs blank because grouped rows are not instance-specific. Reason: keep external integrations aligned while minimizing downstream churn.
-TODO(export-docs): keep export mode wording aligned with backup vs. ERP grouping rules and blank ItemUUID handling.
-- [ ] **Agentic ref changes** – adjust agentic reference lookups to resolve instance `1` and log fallbacks; validate that any model/schema changes in `models/` and `backend/src/models/` stay in sync. Reason: keep agentic enrichment and approvals anchored to the canonical record.
-- [ ] **Printing rules** – align label/print payloads with instance `1` identifiers and ensure existing templates stay unchanged unless required. Reason: preserve print layout stability while avoiding duplicate labels.
-- [x] **UI grouping** – update UI list/detail grouping to surface instance `1` (ItemUUID suffix `-0001`, parsed from the trailing `-####` sequence) as the primary record with minimal UI changes; confirm user-facing labels stay consistent. Done: `frontend/src/lib/itemGrouping.ts` drives grouping and is consumed by `frontend/src/components/ItemList.tsx` + `frontend/src/components/BoxDetail.tsx`. Note: this is a canonical display update only; export, agentic, and printing flows remain pending. Reason: keep operator workflows stable while collapsing duplicates. TODO(ui-grouping-doc): keep this checklist aligned with grouped UI usage.
-- [ ] **Legacy import compatibility** – confirm the importer can accept current-system exports without data loss, documenting any mapping or transform steps and double-checking impacted data structures. Reason: enable migration of existing data while keeping changes scoped to current behavior.
+- [ ] **TODO markers in touched files** – add/update TODO comments in `models/agentic.ts`, `backend/agentic/index.ts`, `backend/agentic/invoker.ts`, `backend/agentic/flow/item-flow.ts`, and the review UI component before behavior changes. Reason: keep scope explicit and avoid hidden follow-up work.
+- [ ] **Structured review contract** – extend shared review metadata with `structuredFeedback` fields (`information_present`, `missing_spec[]`, `bad_format`, `wrong_information`, `wrong_physical_dimensions`) while keeping `notes` as an additional channel for uncaught signals. Reason: preserve current workflows while enabling deterministic routing.
+- [ ] **Review normalization + logging** – normalize/validate structured fields (trim, dedupe, limits, null handling), add try/catch around parsing, and log sanitized diagnostics only. Reason: protect data quality and observability without exposing raw reviewer text.
+- [ ] **Review lifecycle retention** – persist iteration-level review history snapshots in a separate append-only review-history store while keeping latest review state on the run record (preferred over creating a new run for each retry). Reason: preserve learning data without changing operator workflow or run identity semantics.
+- [ ] **Prompt placeholder mapping** – use existing placeholder style and add review placeholders (`{{CATEGORIZER_REVIEW}}`, `{{EXTRACTION_REVIEW}}`, `{{SUPERVISOR_REVIEW}}`, `{{EXAMPLE_ITEM}}`) resolved from structured review + aggregate signals. Reason: keep injection mechanics explicit and avoid scattered string assembly.
+- [ ] **Influence map per flow stage** – define and centralize trigger logic that maps structured fields to one or many placeholder fragments (e.g., `InjectConditionally(condition, placeholder, text)`). Reason: keep behavior auditable with minimal code additions.
+- [ ] **Subcategory aggregation thresholds** – aggregate the last `10` reviewed items per subcategory and convert results into boolean triggers via documented thresholds. Reason: support stable automation (e.g., formatter on/off) from repeated signals.
+- [ ] **Dynamic example injection** – inject the latest reviewed same-subcategory item into extraction prompt with strict redaction/length limits; fallback to the current static prompt example when no reviewed item is available. Reason: improve relevance while controlling token growth and leakage risk.
+- [ ] **Agent card metrics** – expose aggregation window/sample size + trigger states in the agent card payload/UI. Reason: make the learning effect transparent for operators.
+- [ ] **Manual prompt tuning loop** – document how aggregated metrics and examples inform prompt updates and release-over-release validation. Reason: keep human-in-the-loop improvements measurable.
 
-TODO: capture the current-system export format details and confirm how legacy import compatibility should be validated before implementation begins.
-
-Non-goals (unless explicitly requested): no large-scale refactors and no new data structures beyond what is required to support instance `1` grouping or legacy import compatibility.
-
-## Multi-step Plan: Reference-only Item Edit Payload
-
-Goal: keep item edit flows reference-only (no instance fields) so updates remain scoped to `item_refs` and avoid accidental instance mutations. Reason: reduce data divergence, preserve existing schema contracts, and keep the edit payload minimal by reusing current reference fields instead of adding new structures.
-
-Checklist (re-check and update this planning doc before starting each subsequent task in the sequence):
-
-- [x] **Confirm reference field map** – review `models/item.ts` and verify reference-only fields still map to `item_refs` without renaming; document any mapping considerations. Reason: avoid schema drift while keeping changes minimal.
-- [x] **Add TODO markers** – add TODO comments in `models/item.ts`, `frontend/src/components/ItemEdit.tsx`, `frontend/src/components/forms/itemFormShared.tsx`, and `backend/actions/save-item.ts` to flag the upcoming reference-only adjustments. Reason: keep implementation scoped and coordinated across tiers.
-- [x] **Frontend state + form scope** – update `ItemEdit` state and shared form helpers to accept the reference-only payload and render only reference fields using existing components. Reason: reduce code additions while ensuring the UI stays aligned with the reference schema.
-- [x] **Submit payload guard + logging** – adjust submit logic to send reference fields only and log a warning when instance fields are detected; wrap any risky conversion or payload shaping in try/catch when meaningful. Reason: preserve observability and prevent instance data drift.
-- [x] **Backend guard** – add a backend guard in `backend/actions/save-item.ts` to log and ignore instance fields that appear in edit payloads, ensuring persistence remains reference-only. Reason: enforce reference-only updates server-side without schema changes.
-- [x] **Docs + cleanup** – update `docs/OVERVIEW.md` progress updates and refresh any TODOs adjacent to the touched files once the change is complete. Reason: keep documentation aligned and avoid stale TODOs.
-
-Non-goals (unless explicitly requested): no new fields, no changes to instance data structures, and no broad refactors outside the edit flow.
-
-TODO(reference-only-edit): Reconfirm ItemReferenceEdit stays aligned with ItemRef whenever item reference schemas shift.
-
-Recent alignment: the item edit UI now hides Quality/Auf_Lager inputs while the save flow persists reference-only payloads (item_refs), keeping instance fields untouched as intended by this plan.
-
-## Upcoming Opportunities
-
-- Layout plan: Goal is a multi-column grid for Overview/ItemDetail/BoxDetail; keep mobile constrained to max 100vw with a single-column stack; keep CSS changes minimal to `.grid`, `.landing-grid`, container width, and small grid span utilities.
-- Sanitize print preview URLs before injecting them into the DOM to avoid potential XSS issues.
-- Capture dispatched CUPS job identifiers in logs so support staff can correlate queue issues with individual label requests.
-- Enforce size limits and validate content for uploaded CSV files prior to writing them to disk.
-- Integrate dependency vulnerability scanning (e.g., `npm audit`) once registry access is available.
-
-## Active Issues: UI polish & workflow fixes (Sept 2025)
-
-Goal: address recent UX regressions and workflow bugs while keeping changes minimal and data contracts aligned. Reason: ensure operators can navigate lists, shelves, and item details cleanly without introducing new structures.
-
-Planned fixes (confirm order before implementation):
-
-1) **Box location labels** – show shelf/box labels (not IDs) in BoxList and other label surfaces that currently prefer raw LocationId. Reason: improve readability for warehouse operators. Files: `frontend/src/components/BoxList.tsx`, `frontend/src/components/LocationTag.tsx`, `frontend/src/components/BoxDetail.tsx`, `frontend/src/components/RecentBoxesCard.tsx`, `frontend/src/components/SearchCard.tsx`.
-
-2) **Item list category filter submit-on-enter** – stage Unterkategorie input and apply only on Enter (like search). Reason: avoid filter churn on every keystroke. Files: `frontend/src/components/ItemListPage.tsx`, `frontend/src/lib/itemListFiltersStorage.ts`.
-
-3) **Item detail Vorrat mobile overflow** – constrain table layout and enable horizontal scroll or stacked cells on small screens. Reason: prevent layout breaks on phones. Files: `frontend/src/components/ItemDetail.tsx`, `frontend/public/styles.scss`.
-
-4) **Mobile header controls** – shrink nav buttons to 30px and replace back arrow with a home button linking to `/`. Reason: improve mobile tap targets and simplify navigation. Files: `frontend/src/components/Header.tsx`, `frontend/public/styles.scss`.
-
-5) **Box detail mobile width** – ensure non-shelf box detail view doesn’t overflow the viewport. Reason: fix mobile layout for boxes. Files: `frontend/src/components/BoxDetail.tsx`, `frontend/public/styles.scss`.
-
-6) **Suchbegriff persistence correctness** – reset agentic search term when item changes so it doesn’t leak between items, while keeping persisted Suchbegriff as the default. Reason: preserve accurate agentic runs. Files: `frontend/src/components/ItemDetail.tsx`, `models/item.ts`, `backend/db.ts`, `backend/actions/save-item.ts`, `backend/actions/import-item.ts`.
-
-7) **Entnehmen reload** – reload item detail after stock removal to refresh instance list and metadata. Reason: keep UI in sync with removal actions. Files: `frontend/src/components/ItemDetail.tsx`.
-
-8) **Hide zero-stock instances in Vorrat table** – filter out instances with Auf_Lager <= 0 in the Vorrat card (but keep direct navigation possible). Reason: avoid showing removed instances in list. Files: `frontend/src/components/ItemDetail.tsx`, `backend/actions/box-detail.ts` (if needed), `backend/db.ts` (only if response filtering is preferred server-side).
-
-9) **Item list selection action bar placement** – render the bulk action bar in place of the filter bar when items are selected. Reason: keep actions visible without adding new layout containers. Files: `frontend/src/components/ItemListPage.tsx`, `frontend/public/styles.scss`.
-
-Note: Add TODOs in touched files before implementation, keep logging and try/catch coverage, and validate data structure changes in `models/` + `backend/db.ts` for Suchbegriff field handling.
-
-## Risks & Dependencies
-
-- Tests and builds require the `sass` CLI. Missing or partially installed `sass` causes `sh: 1: sass: not found`, and registry restrictions may prevent installing the dependency.
-- Follow tracked defects in [`docs/BUGS.md`](BUGS.md) when planning work that may intersect known regressions.
+Detailed plan, decisions, and open questions: `docs/agentic-review-learning-loop.md`.
