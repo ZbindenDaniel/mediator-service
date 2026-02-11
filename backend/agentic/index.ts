@@ -333,6 +333,81 @@ function hasAgenticReference(
 }
 
 // TODO(agentic-review-state): Align review state semantics with upstream contract once schema is formalized.
+// TODO(agentic-review-caps): Keep missing_spec limits aligned with any future upstream reviewer payload policy.
+const REVIEW_MISSING_SPEC_MAX_COUNT = 8;
+const REVIEW_MISSING_SPEC_MAX_TOKENS_PER_ENTRY = 12;
+
+function normalizeNullableBoolean(value: unknown): boolean | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+    return null;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (['true', '1', 'yes', 'y'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n'].includes(normalized)) {
+    return false;
+  }
+  if (normalized === 'null') {
+    return null;
+  }
+  return null;
+}
+
+function normalizeMissingSpec(rawMissingSpec: unknown): string[] {
+  if (!Array.isArray(rawMissingSpec) || rawMissingSpec.length === 0) {
+    return [];
+  }
+
+  const deduped = new Map<string, string>();
+  for (const rawEntry of rawMissingSpec) {
+    if (typeof rawEntry !== 'string') {
+      continue;
+    }
+
+    const trimmed = rawEntry.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const tokens = trimmed.split(/\s+/).slice(0, REVIEW_MISSING_SPEC_MAX_TOKENS_PER_ENTRY);
+    const cappedEntry = tokens.join(' ').trim();
+    if (!cappedEntry) {
+      continue;
+    }
+
+    const dedupeKey = cappedEntry.toLowerCase();
+    if (!deduped.has(dedupeKey)) {
+      deduped.set(dedupeKey, cappedEntry);
+    }
+
+    if (deduped.size >= REVIEW_MISSING_SPEC_MAX_COUNT) {
+      break;
+    }
+  }
+
+  return Array.from(deduped.values());
+}
+
 function normalizeReviewMetadata(
   review: AgenticRunReviewMetadata | null | undefined,
   fallback: AgenticRun | null,
@@ -342,39 +417,82 @@ function normalizeReviewMetadata(
     return null;
   }
 
-  const rawState =
-    review && typeof (review as { state?: unknown }).state === 'string'
-      ? ((review as { state?: string | null }).state ?? '').trim()
-      : null;
+  try {
+    const rawState =
+      review && typeof (review as { state?: unknown }).state === 'string'
+        ? ((review as { state?: string | null }).state ?? '').trim()
+        : null;
 
-  const base = review ?? {
-    decision: fallback?.LastReviewDecision ?? null,
-    notes: fallback?.LastReviewNotes ?? null,
-    reviewedBy: fallback?.ReviewedBy ?? null
-  };
+    const base = review ?? {
+      decision: fallback?.LastReviewDecision ?? null,
+      information_present: null,
+      missing_spec: [],
+      bad_format: null,
+      wrong_information: null,
+      wrong_physical_dimensions: null,
+      notes: fallback?.LastReviewNotes ?? null,
+      reviewedBy: fallback?.ReviewedBy ?? null
+    };
 
-  const decision = base.decision && base.decision.trim() ? base.decision.trim().toLowerCase() : null;
-  const notes = base.notes && base.notes.trim() ? base.notes.trim() : null;
-  const reviewedBy = base.reviewedBy && base.reviewedBy.trim() ? base.reviewedBy.trim() : null;
-  const fallbackState = fallback?.ReviewState && fallback.ReviewState.trim() ? fallback.ReviewState.trim() : null;
-  const state = rawState || fallbackState || null;
+    const decision = base.decision && base.decision.trim() ? base.decision.trim().toLowerCase() : null;
+    const notes = base.notes && base.notes.trim() ? base.notes.trim() : null;
+    const reviewedBy = base.reviewedBy && base.reviewedBy.trim() ? base.reviewedBy.trim() : null;
+    const fallbackState = fallback?.ReviewState && fallback.ReviewState.trim() ? fallback.ReviewState.trim() : null;
+    const state = rawState || fallbackState || null;
+    const information_present = normalizeNullableBoolean(base.information_present);
+    const bad_format = normalizeNullableBoolean(base.bad_format);
+    const wrong_information = normalizeNullableBoolean(base.wrong_information);
+    const wrong_physical_dimensions = normalizeNullableBoolean(base.wrong_physical_dimensions);
+    const missing_spec = normalizeMissingSpec(base.missing_spec);
 
-  logger.info?.('[agentic-service] Normalized review metadata', {
-    provided: Boolean(review),
-    normalizedDecision: decision,
-    normalizedNotesPresent: Boolean(notes),
-    normalizedReviewedBy: reviewedBy,
-    normalizedState: state,
-    fallbackState,
-    fallbackReviewedBy: fallback?.ReviewedBy ?? null
-  });
+    logger.info?.('[agentic-service] Normalized review metadata', {
+      provided: Boolean(review),
+      normalizedDecisionPresent: Boolean(decision),
+      normalizedNotesPresent: Boolean(notes),
+      normalizedReviewedByPresent: Boolean(reviewedBy),
+      normalizedStatePresent: Boolean(state),
+      fallbackStatePresent: Boolean(fallbackState),
+      normalizedSignals: {
+        information_present,
+        bad_format,
+        wrong_information,
+        wrong_physical_dimensions,
+        missing_spec_count: missing_spec.length
+      }
+    });
 
-  return {
-    decision,
-    notes,
-    reviewedBy,
-    state
-  };
+    return {
+      decision,
+      information_present,
+      missing_spec,
+      bad_format,
+      wrong_information,
+      wrong_physical_dimensions,
+      notes,
+      reviewedBy,
+      state
+    };
+  } catch (err) {
+    logger.warn?.('[agentic-service] Failed to normalize review metadata', {
+      provided: Boolean(review),
+      fallbackProvided: Boolean(fallback),
+      reviewShape: review && typeof review === 'object' ? Object.keys(review).sort() : null,
+      fallbackReviewStatePresent: Boolean(fallback?.ReviewState),
+      error: toErrorMessage(err)
+    });
+
+    return {
+      decision: null,
+      information_present: null,
+      missing_spec: [],
+      bad_format: null,
+      wrong_information: null,
+      wrong_physical_dimensions: null,
+      notes: null,
+      reviewedBy: null,
+      state: fallback?.ReviewState?.trim() || null
+    };
+  }
 }
 
 // TODO(agentic-transcript-shared): Consider moving transcript attachment to a shared helper module.
@@ -1469,7 +1587,16 @@ function resolveReviewFromPersistedRun(run: AgenticRun | null): AgenticRunReview
     return null;
   }
 
-  return { decision, notes, reviewedBy };
+  return {
+    decision,
+    information_present: null,
+    missing_spec: [],
+    bad_format: null,
+    wrong_information: null,
+    wrong_physical_dimensions: null,
+    notes,
+    reviewedBy
+  };
 }
 
 // TODO(agentic-resume): Persist request context metadata to forward during resume once storage exists.
