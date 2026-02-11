@@ -70,7 +70,7 @@ export default function QrScanButton({
   return (
     <button
       aria-label={label}
-      className={['btn', 'qr-scan-button', className].filter(Boolean).join(' ')}
+      className={['btn', 'qr-scan-button', 'mobile-only', className].filter(Boolean).join(' ')}
       onClick={handleClick}
       type="button"
     >

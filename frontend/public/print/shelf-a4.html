@@ -26,7 +26,7 @@
       font-family: 'Helvetica Neue', Arial, sans-serif;
     }
 
-    .label {
+    .printLabel {
       box-sizing: border-box;
       width: 100%;
       max-width: 180mm;
@@ -45,14 +45,20 @@
       gap: 6mm;
     }
 
-    .headline {
+    .labelText{
       font-size: 36pt;
       font-weight: 700;
       color: #111827;
     }
 
+    .footer {
+      font-size: 18pt;
+      font-weight: 700;
+      color: #111827;
+    }
+
     .category {
-      font-size: 32pt;
+      font-size: 24pt;
       font-weight: 600;
       color: #1f2937;
     }
@@ -89,7 +95,7 @@
         background: none;
       }
 
-      .label {
+      .printLabel {
         box-shadow: none;
         border-color: #111827;
         page-break-inside: avoid;
@@ -103,25 +109,27 @@
 </head>
 
 <body>
-  <div class="label" id="label" hidden>
+  <div class="printLabel" id="printLabel" hidden>
     <div class="meta">
-      <div class="headline" id="shelfId">Regal</div>
+      <div class="labelText" id="labelText">labeltext</div>
       <div class="category" id="category">Kategorie</div>
     </div>
     <div class="qr">
       <img id="qrImage" alt="QR-Code" href="testQR.png" />
       <canvas id="qrCanvas" hidden></canvas>
     </div>
+    <div class="footer" id="shelfId">Regal</div>
   </div>
   <div class="error" id="error" hidden></div>
   <script>
     (function init() {
       const state = { payload: null };
-      const labelEl = document.getElementById('label');
+      const printLabelEl = document.getElementById('printLabel');
       const qrImage = document.getElementById('qrImage');
       const qrCanvas = document.getElementById('qrCanvas');
       const shelfIdEl = document.getElementById('shelfId');
       const categoryEl = document.getElementById('category');
+      const labelTextEl = document.getElementById('labelText');
       const errorEl = document.getElementById('error');
 
       function drawMatrix(modules, margin = 0) {
@@ -155,7 +163,7 @@
         if (!errorEl) return;
         errorEl.textContent = message;
         errorEl.hidden = false;
-        if (labelEl) labelEl.hidden = true;
+        if (printLabelEl) printLabelEl.hidden = true;
       }
 
       function render(payload) {
@@ -167,13 +175,11 @@
           const shelfId = payload.shelfId || payload.id || '';
           const label = payload.labelText || payload.label || '';
           const notes = payload.notes || payload.description || '';
-          const category = [label, notes].filter((segment) => typeof segment === 'string' && segment.trim()).join(' · ')
-            || payload.categoryLabel
-            || payload.category
-            || '';
+        
+          if (labelTextEl && label) labelTextEl.textContent = `${label}`;
+          if (categoryEl && notes) categoryEl.textContent = `${notes}`;
           if (shelfIdEl && shelfId) shelfIdEl.textContent = `${shelfId}`;
-          if (categoryEl && category) categoryEl.textContent = `${category}`;
-          if (labelEl) labelEl.hidden = false;
+          if (printLabelEl) printLabelEl.hidden = false;
 
           const hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
           if (qrImage) {

@@ -213,17 +213,5 @@ export function groupItemsForResponse(
     });
   }
 
-  for (const entry of grouped.values()) {
-    if (entry.representativeItemId && !isCanonicalInstance(entry.representativeItemId)) {
-      logger.info?.('[item-grouping] Falling back to non-canonical representative', {
-        representativeItemId: entry.representativeItemId,
-        artikelNumber: entry.Artikel_Nummer ?? null,
-        quality: entry.Quality ?? null,
-        boxId: entry.BoxID ?? null,
-        location: entry.Location ?? null
-      });
-    }
-  }
-
   return Array.from(grouped.values());
 }
