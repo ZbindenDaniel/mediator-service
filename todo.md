@@ -1,9 +1,8 @@
 # Feature ideas
 - batch agentic run start faisl when already a run exisists
 - qr relocation not yet perfect
-- extra field in basic form
+- extra fields in basic form (optional dimensions, shopartikel)
 - PWA
-- sort and filter boxes
 - naviagte boxes with neighbooring (like items)
 - filter item list by boxes
 - do not persist QR scan logs and declutter logging anyways
@@ -17,4 +16,7 @@
 - log: move from to
 - full image backup
 - periodic backup
+- admin page with export, shelves ...
+- filtered activities
+
 
