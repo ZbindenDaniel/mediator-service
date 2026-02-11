@@ -24,12 +24,12 @@ describe('prepareBoxesForDisplay', () => {
   ];
 
   test('sorts boxes deterministically by BoxID when no other sort is selected', () => {
-    const result = prepareBoxesForDisplay(baseBoxes, { searchText: '', sortKey: 'BoxID' });
+    const result = prepareBoxesForDisplay(baseBoxes, { searchText: '', sortKey: 'boxId' });
     expect(result.map((box) => box.BoxID)).toEqual(['BX-001', 'BX-002', 'BX-010']);
   });
 
   test('filters by search text across relevant properties before sorting', () => {
-    const result = prepareBoxesForDisplay(baseBoxes, { searchText: 'kü', sortKey: 'BoxID' });
+    const result = prepareBoxesForDisplay(baseBoxes, { searchText: 'kü', sortKey: 'boxId' });
     expect(result.map((box) => box.BoxID)).toEqual(['BX-002']);
   });
 
@@ -55,7 +55,7 @@ describe('prepareBoxesForDisplay', () => {
       },
     ];
 
-    const result = prepareBoxesForDisplay(input, { searchText: '', sortKey: 'UpdatedAt' });
+    const result = prepareBoxesForDisplay(input, { searchText: '', sortKey: 'updatedAt' });
     expect(result.map((box) => box.BoxID)).toEqual(['BX-005', 'BX-003', 'BX-004']);
   });
 
@@ -81,7 +81,7 @@ describe('prepareBoxesForDisplay', () => {
       },
     ];
 
-    const result = prepareBoxesForDisplay(input, { searchText: '', sortKey: 'Label' });
+    const result = prepareBoxesForDisplay(input, { searchText: '', sortKey: 'location' });
     expect(result.map((box) => box.BoxID)).toEqual(['BX-018', 'BX-019', 'BX-020']);
   });
 });
