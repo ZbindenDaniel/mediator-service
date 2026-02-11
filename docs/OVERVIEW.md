@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
 - **Agentic subcategory review automation signals**: added last-10 reviewed-event aggregation by subcategory with proportional low-volume thresholds, low-confidence telemetry, trigger booleans, top missing-spec keys, and focused boundary tests.
+- **Prompt placeholder assembly hardening**: added deterministic multi-fragment placeholder resolution for review-stage placeholders, note sanitization safeguards, fragment-count/length logging, and focused tests for append/fallback/failure behavior.
 - **Agentic review signal contract hardening**: aligned frontend/backend review metadata with deterministic boolean/null signals, added capped+deduped `missing_spec` normalization, and covered malformed/legacy payload paths with focused tests and sanitized logging.
 - **Agentic review history retention**: added append-only persistence for per-run review events while keeping latest review fields on `agentic_runs`, with non-blocking history-write logging and focused handler/aggregation tests.
 - **Agentic extraction prompt guardrails**: clarified that `Spezifikationen` is an open object for additional evidence-backed keys and tightened anti-placeholder guidance with matching tests to boost technical detail capture.

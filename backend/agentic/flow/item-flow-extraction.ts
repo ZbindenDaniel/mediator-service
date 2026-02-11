@@ -9,6 +9,12 @@ import { AgentOutputSchema, TargetSchema } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
 import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
+import {
+  appendPlaceholderFragment,
+  PROMPT_PLACEHOLDERS,
+  resolvePromptPlaceholders,
+  type PromptPlaceholderFragments
+} from './prompts';
 import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
 
 export interface ChatModel {
@@ -328,6 +334,24 @@ export async function runExtractionAttempts({
     searchRequestCycles = 0;
   };
 
+  // TODO(agentic-review-prompts): Route review automation signals into placeholder fragments as triggers expand.
+  const basePromptFragments: PromptPlaceholderFragments = new Map();
+  appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, sanitizedReviewerNotes);
+  appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.categorizerReview, sanitizedReviewerNotes);
+  appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, sanitizedReviewerNotes);
+  if (searchSkipped) {
+    appendPlaceholderFragment(
+      basePromptFragments,
+      PROMPT_PLACEHOLDERS.extractionReview,
+      'Search skipped per reviewer guidance. Prioritize existing evidence.'
+    );
+    appendPlaceholderFragment(
+      basePromptFragments,
+      PROMPT_PLACEHOLDERS.categorizerReview,
+      'Search skipped per reviewer guidance. Reuse existing extracted evidence only.'
+    );
+  }
+
   // TODO(agent): Keep retry metadata summaries compact as prompt guidance evolves.
   while (attempt <= maxAttempts) {
     logger?.debug?.({ msg: 'extraction attempt', attempt, itemId });
@@ -470,7 +494,22 @@ export async function runExtractionAttempts({
       });
     }
 
-    const systemPrompt = `${extractPrompt}\nTarget format:\n${targetFormat}`;
+    const extractionPromptFragments: PromptPlaceholderFragments = new Map(basePromptFragments);
+    if (attempt > 1 && lastValidationIssues === 'INVALID_JSON') {
+      appendPlaceholderFragment(
+        extractionPromptFragments,
+        PROMPT_PLACEHOLDERS.extractionReview,
+        `Retry guidance: previous response failed JSON validation (${lastInvalidJsonErrorHint || 'invalid-json'}).`
+      );
+    }
+    const assembledExtractPrompt = resolvePromptPlaceholders({
+      template: extractPrompt,
+      fragments: extractionPromptFragments,
+      logger,
+      itemId,
+      stage: 'extraction'
+    });
+    const systemPrompt = `${assembledExtractPrompt}\nTarget format:\n${targetFormat}`;
     try {
       logger?.debug?.({
         msg: 'extraction prompt length',
@@ -911,11 +950,18 @@ export async function runExtractionAttempts({
 
     let enrichedValidated = validated;
     try {
+      const assembledCategorizerPrompt = resolvePromptPlaceholders({
+        template: categorizerPrompt,
+        fragments: basePromptFragments,
+        logger,
+        itemId,
+        stage: 'categorizer'
+      });
       const categoryPatch = await runCategorizerStage({
         llm,
         logger,
         itemId,
-        categorizerPrompt,
+        categorizerPrompt: assembledCategorizerPrompt,
         candidate: validated.data,
         reviewNotes: sanitizedReviewerNotes,
         skipSearch: searchSkipped,
@@ -1007,8 +1053,15 @@ export async function runExtractionAttempts({
       logger?.warn?.({ err, msg: 'failed to serialize supervisor payload', attempt, itemId });
       supervisorUserContent = String(pricedValidated.data);
     }
+    const assembledSupervisorPrompt = resolvePromptPlaceholders({
+      template: supervisorPrompt,
+      fragments: basePromptFragments,
+      logger,
+      itemId,
+      stage: 'supervisor'
+    });
     const supervisorMessages = [
-      { role: 'system', content: supervisorPrompt },
+      { role: 'system', content: assembledSupervisorPrompt },
       { role: 'user', content: supervisorUserContent }
     ];
     let supRes;
