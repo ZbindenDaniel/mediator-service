@@ -42,6 +42,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - **Langtext value contract hardening**: standardized structured `Langtext` payloads to support `string` + `string[]` values end-to-end, added parser normalization telemetry for dropped/converted values, and expanded focused contract/parse tests to prevent drift across backend/frontend helpers.
 - **Agentic prompt format determinism**: removed non-JSON comment noise from item-format prompt fixtures, documented the Spezifikationen/Langtext mapping in prompt prose, and added parseability coverage in schema tests.
 - **Extraction spec telemetry**: added Langtext/Spezifikationen key-count logging to detect placeholder-only payload regressions earlier.
+- **Box list filter/sort parity**: aligned box list search with Box-ID/location terms, added date-based sorting options, and surfaced per-box item-count plus total-weight aggregates for faster inventory triage.
 
 Detailed progress notes have been moved to `docs/RECENT_HIGHLIGHTS.md`.
 

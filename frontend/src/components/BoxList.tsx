@@ -10,7 +10,7 @@ import LocationTag from './LocationTag';
 // TODO(agent): Review LocationTag label override coverage if new box metadata fields are added.
 // TODO(agent): Revisit box list ARIA labels if location label formatting changes.
 
-export type BoxSortKey = 'BoxID' | 'Label' | 'UpdatedAt';
+export type BoxSortKey = 'boxId' | 'location' | 'createdAt' | 'updatedAt';
 
 interface Props {
   boxes: Box[];
@@ -21,9 +21,10 @@ interface Props {
 }
 
 const SORT_LABELS: Record<BoxSortKey, string> = {
-  BoxID: 'Box-ID',
-  Label: 'Standort',
-  UpdatedAt: 'Zuletzt aktualisiert',
+  boxId: 'Box-ID',
+  location: 'Standort',
+  updatedAt: 'Zuletzt aktualisiert',
+  createdAt: 'Erstellt am',
 };
 
 // TODO(agent): Revisit shelf label normalization once shelf labels are editable.
@@ -54,18 +55,17 @@ function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
 }
 
 export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, onSortChange }: Props) {
-  console.log('[BoxList] rendering boxes', { count: boxes.length });
+  logger.info?.('[BoxList] rendering boxes', { count: boxes.length });
 
   const navigate = useNavigate();
   const navigateToBoxDetail = useCallback((boxId: string, source: 'click' | 'keyboard') => {
     try {
-      console.info('Navigating to box detail from box list row', { boxId, source });
+      logger.info?.('Navigating to box detail from box list row', { boxId, source });
       navigate(`/boxes/${encodeURIComponent(boxId)}`);
     } catch (navigationError) {
-      console.error('Failed to navigate to box detail from box list row', {
+      logError('Failed to navigate to box detail from box list row', navigationError, {
         boxId,
         source,
-        navigationError,
       });
     }
   }, [navigate]);
@@ -75,20 +75,20 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     try {
       const nextValue = event.target.value;
-      console.log('[BoxList] search changed', { nextValue });
+      logger.info?.('[BoxList] search changed', { nextValue });
       onSearchChange(nextValue);
     } catch (err) {
-      console.error('Failed to handle box search change', err);
+      logError('Failed to handle box search change', err);
     }
   };
 
   const handleSortChange = (event: ChangeEvent<HTMLSelectElement>) => {
     try {
       const nextKey = event.target.value as BoxSortKey;
-      console.log('[BoxList] sort changed', { nextKey });
+      logger.info?.('[BoxList] sort changed', { nextKey });
       onSortChange(nextKey);
     } catch (err) {
-      console.error('Failed to handle box sort change', err);
+      logError('Failed to handle box sort change', err);
     }
   };
 
@@ -100,7 +100,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
           <input
             id="box-search"
             type="search"
-            placeholder="Box oder Standort finden"
+            placeholder="Box-ID oder Standort finden"
             value={searchValue}
             onChange={handleSearchChange}
             autoFocus
@@ -122,6 +122,8 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
           <tr className="box-list-header">
             <th className="col-box-id">Behälter</th>
             <th className="col-location">Standort</th>
+            <th className="col-item-count">Artikel</th>
+            <th className="col-total-weight">Gewicht gesamt (kg)</th>
             <th className="col-updated">Aktualisiert</th>
           </tr>
         </thead>
@@ -172,11 +174,15 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                       labelOverride={normalizedShelfLabel || null}
                     />
                   </td>
+                  <td className="col-item-count">{Number.isFinite(box.ItemCount) ? box.ItemCount : 0}</td>
+                  <td className="col-total-weight">
+                    {Number.isFinite(box.TotalWeightKg) ? Number(box.TotalWeightKg).toFixed(3) : '0.000'}
+                  </td>
                   <td className="col-updated">{box.UpdatedAt ? formatDate(box.UpdatedAt) : ''}</td>
                 </tr>
               );
             } catch (err) {
-              console.error('Failed to render box row', { box, err });
+              logError('Failed to render box row', err, { box });
               return null;
             }
           })}
