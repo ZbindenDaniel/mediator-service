@@ -45,6 +45,21 @@ describe('prompt placeholder assembly', () => {
     expect(sanitized).toBe('Keep width details.');
   });
 
+
+  it('injects raw example placeholder blocks without sanitizing multiline JSON', () => {
+    const fragments: PromptPlaceholderFragments = new Map();
+    const exampleBlock = 'Reviewed example item (redacted):\n```json\n{\n  "Spezifikationen": {"RAM": ["DDR5"]}\n}\n```';
+    fragments.set(PROMPT_PLACEHOLDERS.exampleItem, [exampleBlock]);
+
+    const resolved = resolvePromptPlaceholders({
+      template: `Examples:\n${PROMPT_PLACEHOLDERS.exampleItem}`,
+      fragments,
+      itemId: 'item-4',
+      stage: 'extraction'
+    });
+
+    expect(resolved).toContain(exampleBlock);
+  });
   it('degrades gracefully to empty fragments when sanitizer/assembly fails', () => {
     const badFragments = {
       get: () => {
