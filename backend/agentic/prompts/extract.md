@@ -21,8 +21,7 @@
     - Hersteller: Copy from sources or keep provided value.
     - reviewNotes: Treat as guidance.
   - Compact examples:
-    - "Spezifikationen": `{"Displaygröße":"15,6\"","RAM":["DDR5"],"Anschlüsse":["USB-C 3.2","HDMI 2.1"]}`
-    - Leave numeric fields null when missing: `{"Gewicht":null,"Tiefe":null}`
+{{EXAMPLE_ITEM}}
 - format mm values with half milmeter steps (i.e. '13.5', '132')
     - Add `__searchQueries` only if unresolved details block required fields: `{"__searchQueries":["<Modellname> Datenblatt Gewicht kg"]}`
   - Search policy:

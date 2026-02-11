@@ -50,6 +50,7 @@ export interface RunItemFlowInput {
   skipSearch?: boolean;
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
+  exampleItemBlock?: string | null;
 }
 
 // TODO(agent): Revisit target guard expectations once agentic callers provide strict typing.
@@ -322,6 +323,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       target,
       reviewNotes: reviewerNotes,
       skipSearch,
+      exampleItemBlock: input.exampleItemBlock ?? null,
       correctionModel: deps.correctionLlm,
       transcriptWriter
     });

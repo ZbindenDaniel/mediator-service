@@ -50,6 +50,7 @@ export interface RunExtractionOptions {
   target: AgenticTarget;
   reviewNotes?: string | null;
   skipSearch?: boolean;
+  exampleItemBlock?: string | null;
   transcriptWriter?: AgentTranscriptWriter | null;
 }
 
@@ -280,6 +281,7 @@ export async function runExtractionAttempts({
   target,
   reviewNotes,
   skipSearch,
+  exampleItemBlock,
   transcriptWriter
 }: RunExtractionOptions): Promise<ExtractionResult> {
   let lastRaw = '';
@@ -339,6 +341,11 @@ export async function runExtractionAttempts({
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.categorizerReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, sanitizedReviewerNotes);
+  const resolvedExampleItemBlock = typeof exampleItemBlock === 'string' ? exampleItemBlock.trim() : '';
+  if (resolvedExampleItemBlock) {
+    basePromptFragments.set(PROMPT_PLACEHOLDERS.exampleItem, [resolvedExampleItemBlock]);
+  }
+
   if (searchSkipped) {
     appendPlaceholderFragment(
       basePromptFragments,

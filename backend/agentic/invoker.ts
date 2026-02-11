@@ -18,6 +18,7 @@ import {
 } from '../db';
 import { modelConfig, searchConfig } from './config';
 import { runItemFlow } from './flow/item-flow';
+import { selectExampleItemBlock, STATIC_EXAMPLE_ITEM_BLOCK } from './example-selector';
 import type { ItemFlowLogger } from './flow/item-flow';
 import type { ChatModel } from './flow/item-flow-extraction';
 import type { AgenticTarget } from './flow/item-flow-schemas';
@@ -188,6 +189,35 @@ export class AgenticModelInvoker {
   private chatModelFactory?: ChatModelFactory;
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
   private readonly persistAgenticRunError: (artikelNummer: string, errorMessage: string, attemptAt?: string) => void;
+  // TODO(agentic-examples): Revisit reviewed example query coverage when additional extraction fields become prompt-relevant.
+  private readonly selectReviewedExampleBySubcategory = db.prepare(
+    `
+      SELECT
+        r.Artikel_Nummer,
+        r.Artikelbeschreibung,
+        r.Kurzbeschreibung,
+        r.Langtext,
+        r.Hersteller,
+        r.Länge_mm,
+        r.Breite_mm,
+        r.Höhe_mm,
+        r.Gewicht_kg,
+        r.Verkaufspreis,
+        ar.LastReviewDecision,
+        COALESCE(ar.LastModified, ar.UpdatedAt) AS ReviewedAt
+      FROM item_refs r
+      JOIN agentic_runs ar ON ar.Artikel_Nummer = r.Artikel_Nummer
+      WHERE CAST(r.Unterkategorien_A AS INTEGER) = (
+        SELECT CAST(base.Unterkategorien_A AS INTEGER)
+        FROM item_refs base
+        WHERE base.Artikel_Nummer = @Artikel_Nummer
+      )
+        AND r.Artikel_Nummer <> @Artikel_Nummer
+        AND LOWER(COALESCE(ar.LastReviewDecision, '')) = 'approved'
+      ORDER BY datetime(COALESCE(ar.LastModified, ar.UpdatedAt)) DESC, ar.Id DESC
+      LIMIT 5
+    `
+  );
 
   constructor(options: AgenticModelInvokerOptions = {}) {
     this.logger = options.logger ?? console;
@@ -502,12 +532,27 @@ export class AgenticModelInvoker {
       const llm = await this.ensureChatModel();
       const searchInvoker = this.ensureSearchInvoker();
 
+      let exampleItemBlock: string | null = STATIC_EXAMPLE_ITEM_BLOCK;
+      try {
+        const candidates = this.selectReviewedExampleBySubcategory.all({ Artikel_Nummer: trimmedItemId }) as Array<Record<string, unknown>>;
+        const exampleSelection = selectExampleItemBlock({
+          candidates,
+          currentItemId: trimmedItemId,
+          logger: this.logger
+        });
+        exampleItemBlock = exampleSelection.exampleBlock;
+      } catch (err) {
+        this.logger.warn?.({ err, msg: 'failed to select reviewed example block for prompt', itemId: trimmedItemId });
+        exampleItemBlock = STATIC_EXAMPLE_ITEM_BLOCK;
+      }
+
       const payload = await runItemFlow(
         {
           target,
           search: input.searchQuery ?? null,
           reviewNotes: normalizedReviewNotes,
-          skipSearch
+          skipSearch,
+          exampleItemBlock
         },
         {
           llm,
