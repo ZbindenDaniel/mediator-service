@@ -19,6 +19,17 @@ const SEARCH_SOURCES_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-sources.md');
 const CHAT_PROMPT_PATH = path.join(PROMPTS_DIR, 'chat.md');
 const DB_SCHEMA_PATH = path.resolve(__dirname, '../../db.ts');
 const CHAT_SCHEMA_TOKEN = '{{ITEM_DATABASE_SCHEMA}}';
+const PROMPT_FRAGMENT_MAX_LENGTH = 400;
+
+export const PROMPT_PLACEHOLDERS = {
+  categorizerReview: '{{CATEGORIZER_REVIEW}}',
+  extractionReview: '{{EXTRACTION_REVIEW}}',
+  supervisorReview: '{{SUPERVISOR_REVIEW}}',
+  exampleItem: '{{EXAMPLE_ITEM}}'
+} as const;
+
+export type PromptPlaceholderToken = (typeof PROMPT_PLACEHOLDERS)[keyof typeof PROMPT_PLACEHOLDERS];
+export type PromptPlaceholderFragments = Map<PromptPlaceholderToken, string[]>;
 
 type SchemaTable = {
   name: string;
@@ -74,6 +85,84 @@ interface ReadPromptOptions {
   itemId: string;
   prompt: string;
   logger?: ItemFlowLogger;
+}
+
+function stripRoleLikePrefixes(value: string): string {
+  const rolePrefixPattern = /^\s*(system|assistant|user|developer|tool)\s*:\s*/i;
+  return value
+    .split('\n')
+    .map((line) => line.replace(rolePrefixPattern, '').trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function sanitizePromptFragment(notes: unknown, maxLength = PROMPT_FRAGMENT_MAX_LENGTH): string {
+  try {
+    if (typeof notes !== 'string') {
+      return '';
+    }
+    const withoutCodeFences = notes.replace(/```[\s\S]*?```/g, ' ').replace(/`{1,3}/g, ' ');
+    const withoutRolePrefixes = stripRoleLikePrefixes(withoutCodeFences);
+    const condensed = withoutRolePrefixes.replace(/\s+/g, ' ').trim();
+    if (!condensed) {
+      return '';
+    }
+    return condensed.slice(0, Math.max(0, maxLength));
+  } catch {
+    return '';
+  }
+}
+
+export function appendPlaceholderFragment(
+  fragments: PromptPlaceholderFragments,
+  placeholder: PromptPlaceholderToken,
+  fragmentSource: unknown
+): void {
+  const sanitizedFragment = sanitizePromptFragment(fragmentSource);
+  if (!sanitizedFragment) {
+    return;
+  }
+  const existing = fragments.get(placeholder) ?? [];
+  existing.push(sanitizedFragment);
+  fragments.set(placeholder, existing);
+}
+
+export function resolvePromptPlaceholders({
+  template,
+  fragments,
+  logger,
+  itemId,
+  stage
+}: {
+  template: string;
+  fragments: PromptPlaceholderFragments;
+  logger?: ItemFlowLogger;
+  itemId: string;
+  stage: string;
+}): string {
+  try {
+    let assembled = template;
+    const placeholderStats: Array<{ placeholder: PromptPlaceholderToken; count: number; totalLength: number }> = [];
+    for (const placeholder of Object.values(PROMPT_PLACEHOLDERS)) {
+      const placeholderFragments = fragments.get(placeholder) ?? [];
+      const combined = placeholderFragments.join('\n');
+      assembled = assembled.split(placeholder).join(combined);
+      placeholderStats.push({
+        placeholder,
+        count: placeholderFragments.length,
+        totalLength: combined.length
+      });
+    }
+    logger?.debug?.({ msg: 'assembled prompt placeholders', itemId, stage, placeholderStats });
+    return assembled;
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to assemble prompt placeholders', itemId, stage });
+    let fallback = template;
+    for (const placeholder of Object.values(PROMPT_PLACEHOLDERS)) {
+      fallback = fallback.split(placeholder).join('');
+    }
+    return fallback;
+  }
 }
 
 async function readPromptFile(promptPath: string, { itemId, prompt, logger }: ReadPromptOptions): Promise<string> {
