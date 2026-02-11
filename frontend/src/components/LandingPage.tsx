@@ -123,14 +123,7 @@ export default function LandingPage() {
           health={health}
           className="stats-card desktop-only"
         />
-        {/* TODO(chat-card): Confirm chat entry visibility should remain mobile-only. */}
-        <div className="card mobile-only" id="qr-card">
-          <Link className="linkcard" to="/scan">
-            <div>
-              <h2>QR-Scanner</h2>
-              <p className="muted">QR-Codes von Behältern scannen und Details sofort anzeigen</p>
-            </div>
-          </Link>        </div>
+
         {/* <div className="card mobile-only" id="chat-card">
           <Link className="linkcard" to="/chat">
             <div>

@@ -8,7 +8,7 @@ export interface ShelfLocationDefinition {
 export const shelfLocations: ShelfLocationDefinition[] = [
   {
     id: 'B379',
-    label: 'Birmensdorferstr.',
+    label: 'revamp',
     floors: ['0']
   },
   {

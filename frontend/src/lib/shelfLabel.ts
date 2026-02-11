@@ -62,7 +62,7 @@ export function formatShelfLabel(shelfId?: string | null): string | null {
       });
     }
 
-    return `${locationLabel} · Etage ${floorSegment}`;
+    return `${locationLabel} (${floorSegment})`;
   } catch (error) {
     logError('Failed to format shelf label', error, {
       shelfId: normalizedShelfId,

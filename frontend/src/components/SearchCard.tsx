@@ -192,11 +192,12 @@ export default function SearchCard() {
               <div>
                 <Link to={`/items/${encodeURIComponent(res.item.ItemUUID)}`}>
                   <span className="pill mono">
-                    {(res.item.ItemUUID || '').slice(-6).toUpperCase()}
+                    {(res.item.Artikel_Nummer || '')}
                   </span>
                 </Link>
               </div>
               <div className="muted">{res.item.Artikelbeschreibung || ''}</div>
+
               <div>
                 {res.item.BoxID && (
                   <>
