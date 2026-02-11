@@ -94,6 +94,78 @@ export function applyPriceFallbackAfterReview(
   }
 }
 
+
+
+type NormalizedReviewMetadata = {
+  information_present: boolean | null;
+  missing_spec: string[];
+  bad_format: boolean | null;
+  wrong_information: boolean | null;
+  wrong_physical_dimensions: boolean | null;
+  notes: string | null;
+};
+
+function normalizeNullableBoolean(value: unknown): boolean | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (['true', '1', 'yes', 'y', 'ja'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n', 'nein'].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+function normalizeMissingSpec(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const deduped = new Map<string, string>();
+  value.forEach((entry) => {
+    if (typeof entry !== 'string') {
+      return;
+    }
+    const trimmed = entry.trim();
+    if (!trimmed) {
+      return;
+    }
+    const key = trimmed.toLowerCase();
+    if (!deduped.has(key)) {
+      deduped.set(key, trimmed);
+    }
+  });
+  return Array.from(deduped.values()).slice(0, 10);
+}
+
+function normalizeReviewMetadataPayload(data: Record<string, unknown>): NormalizedReviewMetadata {
+  const notesRaw = typeof data.notes === 'string' ? data.notes.trim() : '';
+  return {
+    information_present: normalizeNullableBoolean(data.information_present),
+    missing_spec: normalizeMissingSpec(data.missing_spec),
+    bad_format: normalizeNullableBoolean(data.bad_format),
+    wrong_information: normalizeNullableBoolean(data.wrong_information),
+    wrong_physical_dimensions: normalizeNullableBoolean(data.wrong_physical_dimensions),
+    notes: notesRaw || null
+  };
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -227,7 +299,8 @@ const action = defineHttpAction({
       }
 
       const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
-      const notes = typeof data.notes === 'string' ? data.notes.trim() : '';
+      const reviewMetadata = normalizeReviewMetadataPayload(data);
+      const notes = reviewMetadata.notes ?? '';
       const decision =
         action === 'close'
           ? 'approved'
@@ -343,13 +416,16 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: (err as Error).message });
       }
 
+      // TODO(agentic-review-metrics): Keep review event metadata aligned with frontend contract changes.
       ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: artikelNummer,
         Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
         Meta: JSON.stringify(
-          action === 'close' ? { decision, reason: 'manual-close', notes } : { decision, notes }
+          action === 'close'
+            ? { decision, reason: 'manual-close', ...reviewMetadata }
+            : { decision, ...reviewMetadata }
         )
       });
 

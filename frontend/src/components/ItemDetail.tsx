@@ -9,7 +9,14 @@ import RelocateItemCard from './RelocateItemCard';
 // TODO(agentic-close): Confirm close action copy and upsert payload once backend wiring lands.
 // TODO(agentic-edit-lock): Confirm messaging for edit restrictions while agentic runs are active.
 // TODO(agentic-status-labels): Keep queued label aligned with shared status labels.
-import type { Item, EventLog, AgenticRun, ItemDetailResponse, ItemInstanceSummary } from '../../../models';
+import type {
+  Item,
+  EventLog,
+  AgenticRun,
+  ItemDetailResponse,
+  ItemInstanceSummary,
+  ItemDetailReviewAutomationSignal
+} from '../../../models';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
@@ -65,6 +72,7 @@ import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './I
 import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
+import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
 
 interface Props {
   itemId: string;
@@ -163,6 +171,35 @@ interface NormalizedDetailValue {
 }
 
 const DETAIL_PLACEHOLDER_TEXT = '-';
+
+
+interface AgenticReviewInput {
+  decision: 'approved' | 'rejected';
+  information_present: boolean;
+  bad_format: boolean;
+  wrong_information: boolean;
+  wrong_physical_dimensions: boolean;
+  missing_spec: string[];
+  notes: string | null;
+}
+
+function parseMissingSpecInput(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+  const deduped = new Map<string, string>();
+  value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .forEach((entry) => {
+      const key = entry.toLowerCase();
+      if (!deduped.has(key)) {
+        deduped.set(key, entry);
+      }
+    });
+  return Array.from(deduped.values()).slice(0, 10);
+}
 
 function buildPlaceholder(): NormalizedDetailValue {
   return {
@@ -741,6 +778,8 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
+  const [agenticReviewAutomation, setAgenticReviewAutomation] = useState<ItemDetailReviewAutomationSignal | null>(null);
+  const [agenticCardWarning, setAgenticCardWarning] = useState<string | null>(null);
   // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
   const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
   const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
@@ -1413,6 +1452,9 @@ export default function ItemDetail({ itemId }: Props) {
     agenticRows.push(['Kommentar', latestAgenticReviewNote]);
   }
 
+  agenticRows.push(...buildAgenticReviewMetricRows(agenticReviewAutomation, agenticCardWarning));
+
+
   const normalizeInstanceList = useCallback(
     (payload: ItemDetailResponse['instances'] | unknown): ItemInstanceSummary[] => {
       try {
@@ -1490,6 +1532,14 @@ export default function ItemDetail({ itemId }: Props) {
         setItem(data.item);
         setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
         setAgentic(data.agentic ?? null);
+        try {
+          setAgenticReviewAutomation(data.agenticReviewAutomation ?? null);
+          setAgenticCardWarning(null);
+        } catch (error) {
+          logError('ItemDetail: Failed to apply agent card metrics from payload', error, { itemId });
+          setAgenticReviewAutomation(null);
+          setAgenticCardWarning('Metriken konnten nicht geladen werden.');
+        }
         const media = Array.isArray(data.media)
           ? data.media.filter((src: unknown): src is string => typeof src === 'string' && src.trim() !== '')
           : [];
@@ -1503,6 +1553,8 @@ export default function ItemDetail({ itemId }: Props) {
         setItem(null);
         setEvents([]);
         setAgentic(null);
+        setAgenticReviewAutomation(null);
+        setAgenticCardWarning('Metriken sind derzeit nicht verfügbar.');
         setAgenticError('Ki-Status konnte nicht geladen werden.');
         setMediaAssets([]);
         setInstances([]);
@@ -1514,6 +1566,8 @@ export default function ItemDetail({ itemId }: Props) {
       setItem(null);
       setEvents([]);
       setAgentic(null);
+      setAgenticReviewAutomation(null);
+      setAgenticCardWarning('Metriken sind derzeit nicht verfügbar.');
       setAgenticError('Ki-Status konnte nicht geladen werden.');
       setMediaAssets([]);
       setInstances([]);
@@ -1983,6 +2037,95 @@ export default function ItemDetail({ itemId }: Props) {
 
 
 
+
+
+  async function promptAgenticReviewInput(
+    decision: 'approved' | 'rejected'
+  ): Promise<AgenticReviewInput | null> {
+    const notes = await promptAgenticReviewNote(decision);
+    if (notes === null) {
+      return null;
+    }
+
+    const askFlag = async (title: string, message: string): Promise<boolean | null> => {
+      try {
+        const confirmed = await dialogService.confirm({
+          title,
+          message,
+          confirmLabel: 'Ja',
+          cancelLabel: 'Nein'
+        });
+        return confirmed;
+      } catch (error) {
+        logError('ItemDetail: Failed to capture structured review flag', error, {
+          itemId,
+          title
+        });
+        return null;
+      }
+    };
+
+    const informationPresent = await askFlag(
+      'Information vollständig?',
+      'Sind die Informationen grundsätzlich vollständig und nutzbar?'
+    );
+    if (informationPresent === null) {
+      return null;
+    }
+
+    const badFormat = await askFlag(
+      'Formatproblem vorhanden?',
+      'Gibt es ein relevantes Formatproblem in der Ausgabe?'
+    );
+    if (badFormat === null) {
+      return null;
+    }
+
+    const wrongInformation = await askFlag(
+      'Fachlich falsch?',
+      'Enthält die Ausgabe fachlich falsche Informationen?'
+    );
+    if (wrongInformation === null) {
+      return null;
+    }
+
+    const wrongDimensions = await askFlag(
+      'Physische Maße falsch?',
+      'Sind physische Maße/Gewicht offensichtlich falsch?'
+    );
+    if (wrongDimensions === null) {
+      return null;
+    }
+
+    let missingSpecRaw: string | null = '';
+    try {
+      missingSpecRaw = await dialogService.prompt({
+        title: 'Fehlende Spezifikationen',
+        message: 'Optionale Liste fehlender Spezifikationen (kommagetrennt).',
+        confirmLabel: 'Übernehmen',
+        cancelLabel: 'Ohne Angaben',
+        placeholder: 'z. B. Spannung, Material, Schutzklasse',
+        defaultValue: ''
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to prompt for missing specification list', error, { itemId });
+      return null;
+    }
+    if (missingSpecRaw === null) {
+      return null;
+    }
+
+    return {
+      decision,
+      information_present: informationPresent,
+      bad_format: badFormat,
+      wrong_information: wrongInformation,
+      wrong_physical_dimensions: wrongDimensions,
+      missing_spec: parseMissingSpecInput(missingSpecRaw),
+      notes: notes.trim() ? notes.trim() : null
+    };
+  }
+
   async function handleAgenticReview(decision: 'approved' | 'rejected') {
     if (!agentic) return;
     const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
@@ -2024,8 +2167,8 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const noteInput = await promptAgenticReviewNote(decision);
-    if (noteInput === null) {
+    const reviewInput = await promptAgenticReviewInput(decision);
+    if (reviewInput === null) {
       return;
     }
     setAgenticActionPending(true);
@@ -2035,7 +2178,7 @@ export default function ItemDetail({ itemId }: Props) {
       const res = await fetch(buildAgenticItemRefPath(referenceId, 'review'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor, decision, notes: noteInput })
+        body: JSON.stringify({ actor, ...reviewInput })
       });
       if (res.ok) {
         const data = await res.json();
@@ -2245,6 +2388,11 @@ export default function ItemDetail({ itemId }: Props) {
       };
       const reviewForTrigger = {
         decision: refreshedRun.LastReviewDecision ?? agentic?.LastReviewDecision ?? null,
+        information_present: null,
+        missing_spec: [],
+        bad_format: null,
+        wrong_information: null,
+        wrong_physical_dimensions: null,
         notes: refreshedRun.LastReviewNotes ?? agentic?.LastReviewNotes ?? null,
         reviewedBy: refreshedRun.ReviewedBy ?? agentic?.ReviewedBy ?? null
       };
