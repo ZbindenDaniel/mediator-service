@@ -28,6 +28,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 ## Progress Updates
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
 - **Agentic reviewed-example prompt injection**: added same-subcategory latest-approved example selection with redaction + payload caps, wired `{{EXAMPLE_ITEM}}` prompt assembly fallback behavior, and added focused selector tests for hit/miss/truncation paths.
+- **Agentic reviewed-example decision-source alignment**: updated invoker example selection to read review decisions from `agentic_runs.ReviewState` (aliased for existing selector contracts), removing dependency on legacy `LastReviewDecision` column naming and preventing startup query failures after migration.
 - **Agentic subcategory review automation signals**: added last-10 reviewed-event aggregation by subcategory with proportional low-volume thresholds, low-confidence telemetry, trigger booleans, top missing-spec keys, and focused boundary tests.
 - **Agentic review loop transparency**: captured structured review booleans/missing-spec notes from the UI, aligned trigger payload contracts, and surfaced agent-card percentage/trigger metrics with denominator context plus graceful fallback UI tests.
 - **Prompt placeholder assembly hardening**: added deterministic multi-fragment placeholder resolution for review-stage placeholders, note sanitization safeguards, fragment-count/length logging, and focused tests for append/fallback/failure behavior.

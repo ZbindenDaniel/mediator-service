@@ -189,9 +189,11 @@ export class AgenticModelInvoker {
   private chatModelFactory?: ChatModelFactory;
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
   private readonly persistAgenticRunError: (artikelNummer: string, errorMessage: string, attemptAt?: string) => void;
-  // TODO(agentic-examples): Revisit reviewed example query coverage when additional extraction fields become prompt-relevant.
-  private readonly selectReviewedExampleBySubcategory = db.prepare(
-    `
+  // TODO(agentic-examples): Re-evaluate reviewed-example decision source if review lifecycle stores a dedicated final-decision field again.
+  private readonly selectReviewedExampleBySubcategory: { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
+
+  private buildReviewedExampleStatement(): { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> } {
+    const reviewedExampleQuery = `
       SELECT
         r.Artikel_Nummer,
         r.Artikelbeschreibung,
@@ -203,7 +205,7 @@ export class AgenticModelInvoker {
         r.Höhe_mm,
         r.Gewicht_kg,
         r.Verkaufspreis,
-        ar.LastReviewDecision,
+        ar.ReviewState AS LastReviewDecision,
         COALESCE(ar.LastModified, ar.UpdatedAt) AS ReviewedAt
       FROM item_refs r
       JOIN agentic_runs ar ON ar.Artikel_Nummer = r.Artikel_Nummer
@@ -213,11 +215,25 @@ export class AgenticModelInvoker {
         WHERE base.Artikel_Nummer = @Artikel_Nummer
       )
         AND r.Artikel_Nummer <> @Artikel_Nummer
-        AND LOWER(COALESCE(ar.LastReviewDecision, '')) = 'approved'
+        AND LOWER(COALESCE(ar.ReviewState, '')) = 'approved'
       ORDER BY datetime(COALESCE(ar.LastModified, ar.UpdatedAt)) DESC, ar.Id DESC
       LIMIT 5
-    `
-  );
+    `;
+
+    try {
+      this.logger.info?.({
+        msg: 'agentic example selector using ReviewState decision field for reviewed example lookup'
+      });
+      const statement = db.prepare(reviewedExampleQuery);
+      return statement as { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
+    } catch (err) {
+      this.logger.error?.({
+        err,
+        msg: 'failed to prepare reviewed example selector statement'
+      });
+      throw err;
+    }
+  }
 
   constructor(options: AgenticModelInvokerOptions = {}) {
     this.logger = options.logger ?? console;
@@ -225,6 +241,7 @@ export class AgenticModelInvoker {
       apiKey: searchConfig.tavilyApiKey,
       logger: this.logger
     });
+    this.selectReviewedExampleBySubcategory = this.buildReviewedExampleStatement();
     // TODO(agentic-error-handling): Align DB error persistence with future retry scheduling metadata once available.
     this.persistAgenticRunError = (artikelNummer: string, errorMessage: string, attemptAt?: string) => {
       try {
