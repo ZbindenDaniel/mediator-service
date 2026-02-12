@@ -381,6 +381,7 @@ export interface PersistAgenticRunCloseOptions {
   artikelNummer: string | null | undefined;
   actor?: string | null;
   notes?: string | null;
+  decision?: 'approved' | 'rejected';
   context: string;
 }
 
@@ -395,6 +396,7 @@ export async function persistAgenticRunClose({
   artikelNummer,
   actor,
   notes,
+  decision,
   context
 }: PersistAgenticRunCloseOptions): Promise<PersistAgenticRunCloseResult> {
   // TODO(agentic-endpoint-migration): Remove legacy ID guard once all callers pass Artikel_Nummer.
@@ -412,6 +414,7 @@ export async function persistAgenticRunClose({
 
   const sanitizedActor = actor && actor.trim() ? actor.trim() : 'system';
   const sanitizedNotes = notes && notes.trim() ? notes.trim() : null;
+  const sanitizedDecision = decision === 'rejected' ? 'rejected' : 'approved';
 
   try {
     const response = await fetch(
@@ -419,7 +422,7 @@ export async function persistAgenticRunClose({
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: sanitizedActor, notes: sanitizedNotes })
+        body: JSON.stringify({ actor: sanitizedActor, notes: sanitizedNotes, decision: sanitizedDecision })
       }
     );
 
