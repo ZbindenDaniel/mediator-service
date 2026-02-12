@@ -74,6 +74,7 @@ export interface AgenticRunTriggerPayload {
   search?: string | null;
   actor?: string | null;
   review?: {
+    action?: string | null;
     decision?: string | null;
     information_present?: boolean | null;
     missing_spec?: string[];

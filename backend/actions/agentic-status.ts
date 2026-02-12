@@ -10,6 +10,7 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 // TODO(agentic-close-not-started): Validate close flow for not-started runs after import/export restores.
 
 // TODO(agentic-review-ref): Confirm reference-only price fallback once review flows stop expecting instance payloads.
+// TODO(agentic-review-action): Revisit whether checklist-only reviews should trigger downstream automation hooks.
 export function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
@@ -103,6 +104,7 @@ type NormalizedReviewMetadata = {
   wrong_information: boolean | null;
   wrong_physical_dimensions: boolean | null;
   notes: string | null;
+  reviewedBy: string | null;
 };
 
 function normalizeNullableBoolean(value: unknown): boolean | null {
@@ -156,13 +158,15 @@ function normalizeMissingSpec(value: unknown): string[] {
 
 function normalizeReviewMetadataPayload(data: Record<string, unknown>): NormalizedReviewMetadata {
   const notesRaw = typeof data.notes === 'string' ? data.notes.trim() : '';
+  const reviewedByRaw = typeof data.reviewedBy === 'string' ? data.reviewedBy.trim() : '';
   return {
     information_present: normalizeNullableBoolean(data.information_present),
     missing_spec: normalizeMissingSpec(data.missing_spec),
     bad_format: normalizeNullableBoolean(data.bad_format),
     wrong_information: normalizeNullableBoolean(data.wrong_information),
     wrong_physical_dimensions: normalizeNullableBoolean(data.wrong_physical_dimensions),
-    notes: notesRaw || null
+    notes: notesRaw || null,
+    reviewedBy: reviewedByRaw || null
   };
 }
 
@@ -301,22 +305,30 @@ const action = defineHttpAction({
       const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
       const reviewMetadata = normalizeReviewMetadataPayload(data);
       const notes = reviewMetadata.notes ?? '';
+      const reviewedBy = reviewMetadata.reviewedBy ?? actor;
+      const requestedAction = typeof data.action === 'string' ? data.action.trim().toLowerCase() : '';
+      const decisionInput = typeof data.decision === 'string' ? data.decision.trim().toLowerCase() : '';
+      const isChecklistReview = action === 'review' && requestedAction === 'review' && !decisionInput;
       const decision =
         action === 'close'
           ? 'approved'
-          : typeof data.decision === 'string'
-            ? data.decision.trim().toLowerCase()
-            : '';
+          : decisionInput;
 
       if (!actor) {
         return sendJson(res, 400, { error: 'actor is required' });
       }
-      if (!['approved', 'rejected'].includes(decision)) {
-        return sendJson(res, 400, { error: 'decision must be approved or rejected' });
+      if (!isChecklistReview && !['approved', 'rejected'].includes(decision)) {
+        return sendJson(res, 400, { error: 'decision must be approved or rejected, or action must be review' });
       }
 
       const reviewedAt = new Date().toISOString();
-      const status = decision === 'approved' ? AGENTIC_RUN_STATUS_APPROVED : AGENTIC_RUN_STATUS_REJECTED;
+      const status = isChecklistReview
+        ? null
+        : decision === 'approved'
+          ? AGENTIC_RUN_STATUS_APPROVED
+          : AGENTIC_RUN_STATUS_REJECTED;
+      const reviewStateToPersist = isChecklistReview ? 'pending' : decision;
+      const reviewDecisionToPersist = isChecklistReview ? null : decision;
       const artikelNummer = resolveArtikelNummerForAgentic(itemId, {
         logger: console,
         legacyRoute: route?.legacyRoute
@@ -341,9 +353,9 @@ const action = defineHttpAction({
               SearchQuery: null,
               Status: status,
               LastModified: reviewedAt,
-              ReviewState: decision,
-              ReviewedBy: actor,
-              LastReviewDecision: decision,
+              ReviewState: reviewStateToPersist,
+              ReviewedBy: reviewedBy,
+              LastReviewDecision: reviewDecisionToPersist,
               LastReviewNotes: notes || null
             });
             if (!upsertResult || upsertResult.changes === 0) {
@@ -353,11 +365,11 @@ const action = defineHttpAction({
           } else {
             const result = ctx.updateAgenticReview.run({
               Artikel_Nummer: artikelNummer,
-              ReviewState: decision,
-              ReviewedBy: actor,
+              ReviewState: reviewStateToPersist,
+              ReviewedBy: reviewedBy,
               LastModified: reviewedAt,
               Status: status,
-              LastReviewDecision: decision,
+              LastReviewDecision: reviewDecisionToPersist,
               LastReviewNotes: notes || null
             });
             if (!result || result.changes === 0) {
@@ -379,11 +391,11 @@ const action = defineHttpAction({
 
           const result = ctx.updateAgenticReview.run({
             Artikel_Nummer: artikelNummer,
-            ReviewState: decision,
-            ReviewedBy: actor,
+            ReviewState: reviewStateToPersist,
+            ReviewedBy: reviewedBy,
             LastModified: reviewedAt,
             Status: status,
-            LastReviewDecision: decision,
+            LastReviewDecision: reviewDecisionToPersist,
             LastReviewNotes: notes || null
           });
           if (!result || result.changes === 0) {
@@ -392,7 +404,7 @@ const action = defineHttpAction({
           }
         }
 
-        if (decision === 'rejected') {
+        if (!isChecklistReview && decision === 'rejected') {
           try {
             ctx.updateAgenticRunStatus.run(
               normalizeAgenticStatusUpdate({
@@ -421,13 +433,28 @@ const action = defineHttpAction({
         Actor: actor,
         EntityType: 'Item',
         EntityId: artikelNummer,
-        Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
+        Event: isChecklistReview
+          ? 'AgenticReviewSubmitted'
+          : decision === 'approved'
+            ? 'AgenticReviewApproved'
+            : 'AgenticReviewRejected',
         Meta: JSON.stringify(
           action === 'close'
-            ? { decision, reason: 'manual-close', ...reviewMetadata }
-            : { decision, ...reviewMetadata }
+            ? { action: 'close', decision, reason: 'manual-close', ...reviewMetadata, reviewedBy }
+            : isChecklistReview
+              ? { action: 'review', ...reviewMetadata, reviewedBy }
+              : { decision, ...reviewMetadata, reviewedBy }
         )
       });
+
+      if (isChecklistReview) {
+        console.info('[agentic-review] Checklist-only review stored', {
+          artikelNummer,
+          actor,
+          reviewedBy,
+          action: requestedAction || 'review'
+        });
+      }
 
       if (decision === 'approved') {
         try {
