@@ -1,4 +1,6 @@
 # Feature ideas
+- price calculation: if not 0 then =FLOOR((N5+30)/3)
+- revisit the erp-sync feature
 - batch agentic run start faisl when already a run exisists
 - qr relocation not yet perfect
 - extra fields in basic form (optional dimensions, shopartikel)
