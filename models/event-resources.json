@@ -21,6 +21,7 @@
   { "key": "AgenticSearchQueued", "label": "Ki-Suche eingereiht", "level": "info", "topic": "agentic" },
   { "key": "AgenticResultReceived", "label": "Ki-Ergebnis erhalten", "level": "info", "topic": "agentic" },
   { "key": "AgenticResultFailed", "label": "Ki-Ergebnis fehlgeschlagen", "level": "error", "topic": "agentic" },
+  { "key": "AgenticReviewSubmitted", "label": "Ki-Review eingereicht", "level": "info", "topic": "agentic" },
   { "key": "AgenticReviewApproved", "label": "Ki-Ergebnis freigegeben", "level": "info", "topic": "agentic" },
   { "key": "AgenticReviewRejected", "label": "Ki-Ergebnis abgelehnt", "level": "important", "topic": "agentic" }
 ]

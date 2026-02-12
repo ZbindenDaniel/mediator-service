@@ -85,7 +85,8 @@ import {
   zeroItemStock,
   deleteItem,
   deleteBox,
-  enqueueShopwareSyncJob
+  enqueueShopwareSyncJob,
+  insertAgenticRunReviewHistoryEntry
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
@@ -757,6 +758,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           listItemsForExport,
           listItemsWithFilters,
           updateAgenticReview,
+          insertAgenticRunReviewHistoryEntry,
           INBOX_DIR,
           PUBLIC_DIR,
           PREVIEW_DIR,
