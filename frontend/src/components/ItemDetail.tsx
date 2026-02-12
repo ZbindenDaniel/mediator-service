@@ -178,16 +178,6 @@ interface NormalizedDetailValue {
 const DETAIL_PLACEHOLDER_TEXT = '-';
 
 
-interface AgenticReviewInput {
-  information_present: boolean;
-  bad_format: boolean;
-  wrong_information: boolean;
-  wrong_physical_dimensions: boolean;
-  missing_spec: string[];
-  notes: string | null;
-  reviewedBy: string | null;
-}
-
 export const AGENTIC_REVIEW_PROMPT_SEQUENCE = ['checklist', 'note'] as const;
 
 const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
@@ -1595,9 +1585,9 @@ export default function ItemDetail({ itemId }: Props) {
           const rawAgenticStatus = (entry as ItemInstanceSummary)?.AgenticStatus;
           const parsedAgenticStatus =
             typeof rawAgenticStatus === 'string'
-            && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
-            ? rawAgenticStatus
-            : null;
+              && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
+              ? rawAgenticStatus
+              : null;
           const rawStock = (entry as ItemInstanceSummary)?.Auf_Lager;
           const parsedStock =
             typeof rawStock === 'number'
@@ -2261,44 +2251,49 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-const mappedInput = mapReviewAnswersToInput(
-  {
-    plausible,
-    formattingCorrect,
-    missingExpectedInfo,
-    requiredDimensionsMissing
-  },
-  {
-    missingSpecRaw,
-    notes,
-    reviewedBy: null
-  }
-);
+    const notes = await promptAgenticReviewNote();
+    if (notes === null) {
+      return null;
+    }
 
-logger.info?.('ItemDetail: Agentic review submission stage', {
-  checklistStarted: true,
-  checklistSubmitted: true,
-  noteProvided: Boolean(mappedInput.notes)
-});
+    const mappedInput = mapReviewAnswersToInput(
+      {
+        plausible,
+        formattingCorrect,
+        missingExpectedInfo,
+        requiredDimensionsMissing
+      },
+      {
+        missingSpecRaw,
+        notes,
+        reviewedBy: null
+      }
+    );
 
-logger.info?.('ItemDetail: Mapped review checklist answers to structured payload', {
-  itemId,
-  signalPresenceCount: [
-    mappedInput.information_present,
-    mappedInput.bad_format,
-    mappedInput.wrong_information,
-    mappedInput.wrong_physical_dimensions
-  ].filter((value) => value !== null).length,
-  signalTrueCount: [
-    mappedInput.bad_format,
-    mappedInput.wrong_information,
-    mappedInput.wrong_physical_dimensions
-  ].filter(Boolean).length,
-  missingSpecCount: mappedInput.missing_spec.length,
-  hasNote: Boolean(mappedInput.notes)
-});
+    logger.info?.('ItemDetail: Agentic review submission stage', {
+      checklistStarted: true,
+      checklistSubmitted: true,
+      noteProvided: Boolean(mappedInput.notes)
+    });
 
-return mappedInput;
+    logger.info?.('ItemDetail: Mapped review checklist answers to structured payload', {
+      itemId,
+      signalPresenceCount: [
+        mappedInput.information_present,
+        mappedInput.bad_format,
+        mappedInput.wrong_information,
+        mappedInput.wrong_physical_dimensions
+      ].filter((value) => value !== null).length,
+      signalTrueCount: [
+        mappedInput.bad_format,
+        mappedInput.wrong_information,
+        mappedInput.wrong_physical_dimensions
+      ].filter(Boolean).length,
+      missingSpecCount: mappedInput.missing_spec.length,
+      hasNote: Boolean(mappedInput.notes)
+    });
+
+    return mappedInput;
 
   }
 
