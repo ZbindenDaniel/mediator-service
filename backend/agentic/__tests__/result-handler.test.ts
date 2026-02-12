@@ -330,4 +330,102 @@ describe('agentic result handler integration', () => {
     );
   });
 
+  test('normalizes structured review booleans for history metadata and logs signal counts', () => {
+    const existingReference = { Artikel_Nummer: 'R-300', Artikelbeschreibung: 'Item', Veröffentlicht_Status: 'no' };
+    const existingRun: AgenticRun = {
+      Id: 300,
+      Artikel_Nummer: 'R-300',
+      SearchQuery: 'search',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
+      LastModified: '2024-01-01T00:00:00.000Z',
+      ReviewState: 'not_required',
+      ReviewedBy: null,
+      LastReviewDecision: null,
+      LastReviewNotes: null,
+      RetryCount: 0,
+      NextRetryAt: null,
+      LastError: null,
+      LastAttemptAt: null
+    };
+    const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
+    const requestLog: AgenticRequestLog = {
+      UUID: 'R-300',
+      Search: 'search',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
+      Error: null,
+      CreatedAt: nowIso,
+      UpdatedAt: nowIso,
+      NotifiedAt: null,
+      LastNotificationError: null,
+      PayloadJson: null
+    };
+
+    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
+    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
+    const reviewHistory: Array<Record<string, unknown>> = [];
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>('../result-handler');
+
+    handleAgenticResult(
+      {
+        artikelNummer: 'R-300',
+        payload: {
+          artikelNummer: 'R-300',
+          item: { Artikelbeschreibung: 'Example item', Artikel_Nummer: 'R-300', searchQuery: 'search' },
+          status: 'completed',
+          summary: 'done',
+          actor: 'human-reviewer',
+          action: 'review',
+          reviewedBy: 'human-reviewer',
+          review: {
+            information_present: 'false',
+            bad_format: 'true',
+            wrong_information: 1,
+            wrong_physical_dimensions: '0',
+            missing_spec: ['Spannung', 'spannung', '  ', 'Material']
+          }
+        }
+      },
+      {
+        ctx: {
+          db: { transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>): ReturnType<T> => fn(...args) },
+          getItemReference: { get: (id: string) => references.get(id) },
+          getAgenticRun: { get: (id: string) => runs.get(id) },
+          persistItemReference: jest.fn(),
+          updateAgenticRunStatus: {
+            run: jest.fn((update: Record<string, unknown>) => {
+              const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
+              runs.set(update.Artikel_Nummer as string, merged);
+              return { changes: 1 };
+            })
+          },
+          upsertAgenticRun: { run: jest.fn() },
+          insertAgenticRunReviewHistoryEntry: { run: jest.fn((entry: Record<string, unknown>) => reviewHistory.push(entry)) },
+          logEvent: jest.fn(),
+          getAgenticRequestLog: () => requestLog
+        },
+        logger
+      }
+    );
+
+    expect(reviewHistory).toHaveLength(1);
+    expect(JSON.parse(String(reviewHistory[0].ReviewMetadata))).toEqual({
+      information_present: false,
+      missing_spec: ['Spannung', 'Material'],
+      bad_format: true,
+      wrong_information: true,
+      wrong_physical_dimensions: false
+    });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'Agentic result normalized review signal summary',
+      expect.objectContaining({
+        signalPresenceCount: 4,
+        signalTrueCount: 2,
+        missingSpecCount: 2
+      })
+    );
+  });
+
+
 });
