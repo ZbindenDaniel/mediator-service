@@ -189,11 +189,11 @@ export class AgenticModelInvoker {
   private chatModelFactory?: ChatModelFactory;
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
   private readonly persistAgenticRunError: (artikelNummer: string, errorMessage: string, attemptAt?: string) => void;
-  // TODO(agentic-examples): Remove LastReviewDecision fallback query once productive database migration has been fully verified.
+  // TODO(agentic-examples): Re-evaluate reviewed-example decision source if review lifecycle stores a dedicated final-decision field again.
   private readonly selectReviewedExampleBySubcategory: { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
 
   private buildReviewedExampleStatement(): { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> } {
-    const selectBase = `
+    const reviewedExampleQuery = `
       SELECT
         r.Artikel_Nummer,
         r.Artikelbeschreibung,
@@ -205,7 +205,7 @@ export class AgenticModelInvoker {
         r.Höhe_mm,
         r.Gewicht_kg,
         r.Verkaufspreis,
-        %REVIEW_DECISION_FIELD%,
+        ar.ReviewState AS LastReviewDecision,
         COALESCE(ar.LastModified, ar.UpdatedAt) AS ReviewedAt
       FROM item_refs r
       JOIN agentic_runs ar ON ar.Artikel_Nummer = r.Artikel_Nummer
@@ -215,38 +215,23 @@ export class AgenticModelInvoker {
         WHERE base.Artikel_Nummer = @Artikel_Nummer
       )
         AND r.Artikel_Nummer <> @Artikel_Nummer
-        AND LOWER(COALESCE(%REVIEW_FILTER_FIELD%, '')) = 'approved'
+        AND LOWER(COALESCE(ar.ReviewState, '')) = 'approved'
       ORDER BY datetime(COALESCE(ar.LastModified, ar.UpdatedAt)) DESC, ar.Id DESC
       LIMIT 5
     `;
 
     try {
-      const statement = db.prepare(
-        selectBase
-          .replace('%REVIEW_DECISION_FIELD%', 'ar.LastReviewDecision AS LastReviewDecision')
-          .replace('%REVIEW_FILTER_FIELD%', 'ar.LastReviewDecision')
-      );
+      this.logger.info?.({
+        msg: 'agentic example selector using ReviewState decision field for reviewed example lookup'
+      });
+      const statement = db.prepare(reviewedExampleQuery);
       return statement as { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
     } catch (err) {
-      this.logger.warn?.({
+      this.logger.error?.({
         err,
-        msg: 'agentic example selector fallback activated: LastReviewDecision unavailable, using ReviewState for migration compatibility'
+        msg: 'failed to prepare reviewed example selector statement'
       });
-
-      try {
-        const fallbackStatement = db.prepare(
-          selectBase
-            .replace('%REVIEW_DECISION_FIELD%', "COALESCE(ar.LastReviewDecision, ar.ReviewState) AS LastReviewDecision")
-            .replace('%REVIEW_FILTER_FIELD%', 'ar.ReviewState')
-        );
-        return fallbackStatement as { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
-      } catch (fallbackErr) {
-        this.logger.error?.({
-          err: fallbackErr,
-          msg: 'failed to prepare reviewed example selector statement with both primary and fallback review fields'
-        });
-        throw fallbackErr;
-      }
+      throw err;
     }
   }
 
