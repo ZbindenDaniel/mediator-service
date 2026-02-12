@@ -12,6 +12,8 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 // TODO(agentic-review-ref): Confirm reference-only price fallback once review flows stop expecting instance payloads.
 // TODO(agentic-review-action): Revisit whether checklist-only reviews should trigger downstream automation hooks.
 // TODO(agentic-review-transitions): Keep close/final-decision transition logging aligned with review lifecycle metrics.
+// TODO(agentic-review-history-source): Add explicit source column if review history needs first-class path attribution.
+// TODO(agentic-review-noop): Consider storing an explicit review-update reason when state remains unchanged.
 export function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
@@ -169,6 +171,70 @@ function normalizeReviewMetadataPayload(data: Record<string, unknown>): Normaliz
     notes: notesRaw || null,
     reviewedBy: reviewedByRaw || null
   };
+}
+
+function persistManualReviewHistoryEntry(
+  ctx: { insertAgenticRunReviewHistoryEntry?: { run: (entry: Record<string, unknown>) => { changes?: number } } },
+  payload: {
+    artikelNummer: string;
+    status: string;
+    reviewState: string;
+    reviewDecision: string | null;
+    notes: string | null;
+    reviewedBy: string | null;
+    reviewMetadata: NormalizedReviewMetadata;
+    recordedAt: string;
+    action: string;
+    actor: string;
+  }
+): void {
+  if (!ctx.insertAgenticRunReviewHistoryEntry?.run) {
+    console.warn('[agentic-review] Review history insert dependency missing; skipping manual history persistence', {
+      artikelNummer: payload.artikelNummer,
+      action: payload.action
+    });
+    return;
+  }
+
+  try {
+    const insertResult = ctx.insertAgenticRunReviewHistoryEntry.run({
+      Artikel_Nummer: payload.artikelNummer,
+      Status: payload.status,
+      ReviewState: payload.reviewState,
+      ReviewDecision: payload.reviewDecision,
+      ReviewNotes: payload.notes,
+      ReviewMetadata: JSON.stringify({
+        ...payload.reviewMetadata,
+        action: payload.action,
+        source: 'manual-review'
+      }),
+      ReviewedBy: payload.reviewedBy,
+      RecordedAt: payload.recordedAt
+    });
+
+    console.info('[agentic-review] Persisted manual review history entry', {
+      artikelNummer: payload.artikelNummer,
+      action: payload.action,
+      actor: payload.actor,
+      reviewState: payload.reviewState,
+      reviewDecisionPresent: Boolean(payload.reviewDecision),
+      metadataSignalCount: [
+        payload.reviewMetadata.information_present,
+        payload.reviewMetadata.bad_format,
+        payload.reviewMetadata.wrong_information,
+        payload.reviewMetadata.wrong_physical_dimensions
+      ].filter((value) => value !== null).length,
+      missingSpecCount: payload.reviewMetadata.missing_spec.length,
+      inserted: Boolean(insertResult && (insertResult.changes ?? 1) > 0)
+    });
+  } catch (error) {
+    console.warn('[agentic-review] Failed to persist manual review history entry', {
+      artikelNummer: payload.artikelNummer,
+      action: payload.action,
+      reviewState: payload.reviewState,
+      error: toErrorMessage(error)
+    });
+  }
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -341,6 +407,8 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic review' });
       }
 
+      let resolvedRunStatusForHistory: string = 'review';
+
       try {
         const transitionPayload = {
           Artikel_Nummer: artikelNummer,
@@ -362,12 +430,18 @@ const action = defineHttpAction({
           }
 
           const fromState = typeof run?.ReviewState === 'string' ? run.ReviewState : null;
+          if (typeof run?.Status === 'string' && run.Status.trim()) {
+            resolvedRunStatusForHistory = run.Status.trim();
+          } else if (!isChecklistReview && status) {
+            resolvedRunStatusForHistory = status;
+          }
           console.info('[agentic-review] Attempting review transition', {
             artikelNummer,
             actor,
             action: 'close',
             fromState,
-            toState: reviewStateToPersist
+            toState: reviewStateToPersist,
+            stateChanged: fromState !== reviewStateToPersist
           });
 
           try {
@@ -422,12 +496,18 @@ const action = defineHttpAction({
           }
 
           const fromState = typeof run.ReviewState === 'string' ? run.ReviewState : null;
+          if (typeof run?.Status === 'string' && run.Status.trim()) {
+            resolvedRunStatusForHistory = run.Status.trim();
+          } else if (!isChecklistReview && status) {
+            resolvedRunStatusForHistory = status;
+          }
           console.info('[agentic-review] Attempting review transition', {
             artikelNummer,
             actor,
             action: requestedAction || action || 'review',
             fromState,
-            toState: reviewStateToPersist
+            toState: reviewStateToPersist,
+            stateChanged: fromState !== reviewStateToPersist
           });
 
           try {
@@ -478,6 +558,19 @@ const action = defineHttpAction({
         console.error('Failed to update agentic review for Artikelnummer', err);
         return sendJson(res, 500, { error: (err as Error).message });
       }
+
+      persistManualReviewHistoryEntry(ctx, {
+        artikelNummer,
+        status: status ?? resolvedRunStatusForHistory,
+        reviewState: reviewStateToPersist,
+        reviewDecision: reviewDecisionToPersist,
+        notes: notes || null,
+        reviewedBy,
+        reviewMetadata,
+        recordedAt: reviewedAt,
+        action: action === 'close' ? 'close' : requestedAction || action || 'review',
+        actor
+      });
 
       // TODO(agentic-review-metrics): Keep review event metadata aligned with frontend contract changes.
       ctx.logEvent({

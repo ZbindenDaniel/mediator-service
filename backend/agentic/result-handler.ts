@@ -113,6 +113,59 @@ function normalizePublishedStatus(value: unknown): string {
   return 'no';
 }
 
+function normalizeNullableBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+    return null;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === 'null') {
+    return null;
+  }
+  if (['true', '1', 'yes', 'y'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n'].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+function normalizeMissingSpec(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const deduped = new Map<string, string>();
+  for (const entry of value) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const trimmed = entry.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (!deduped.has(key)) {
+      deduped.set(key, trimmed);
+    }
+    if (deduped.size >= 10) {
+      break;
+    }
+  }
+  return Array.from(deduped.values());
+}
+
 
 function normalizeReviewMetadataForHistory(
   payload: Record<string, unknown>,
@@ -126,21 +179,30 @@ function normalizeReviewMetadataForHistory(
         : null;
 
     const resolved = {
-      information_present:
-        reviewObject?.information_present ??
-        payload.information_present ??
-        payload.informationPresent ??
-        null,
-      missing_spec: reviewObject?.missing_spec ?? payload.missing_spec ?? payload.missingSpec ?? [],
-      bad_format: reviewObject?.bad_format ?? payload.bad_format ?? payload.badFormat ?? null,
-      wrong_information:
-        reviewObject?.wrong_information ?? payload.wrong_information ?? payload.wrongInformation ?? null,
-      wrong_physical_dimensions:
-        reviewObject?.wrong_physical_dimensions ??
-        payload.wrong_physical_dimensions ??
-        payload.wrongPhysicalDimensions ??
-        null
+      information_present: normalizeNullableBoolean(
+        reviewObject?.information_present ?? payload.information_present ?? payload.informationPresent ?? null
+      ),
+      missing_spec: normalizeMissingSpec(reviewObject?.missing_spec ?? payload.missing_spec ?? payload.missingSpec ?? []),
+      bad_format: normalizeNullableBoolean(reviewObject?.bad_format ?? payload.bad_format ?? payload.badFormat ?? null),
+      wrong_information: normalizeNullableBoolean(
+        reviewObject?.wrong_information ?? payload.wrong_information ?? payload.wrongInformation ?? null
+      ),
+      wrong_physical_dimensions: normalizeNullableBoolean(
+        reviewObject?.wrong_physical_dimensions ?? payload.wrong_physical_dimensions ?? payload.wrongPhysicalDimensions ?? null
+      )
     };
+
+    logger?.info?.('Agentic result normalized review signal summary', {
+      signalPresenceCount: [
+        resolved.information_present,
+        resolved.bad_format,
+        resolved.wrong_information,
+        resolved.wrong_physical_dimensions
+      ].filter((value) => value !== null).length,
+      signalTrueCount: [resolved.bad_format, resolved.wrong_information, resolved.wrong_physical_dimensions].filter(Boolean)
+        .length,
+      missingSpecCount: resolved.missing_spec.length
+    });
 
     return JSON.stringify(resolved);
   } catch (err) {

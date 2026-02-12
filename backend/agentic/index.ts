@@ -460,7 +460,11 @@ function normalizeReviewMetadata(
         wrong_information,
         wrong_physical_dimensions,
         missing_spec_count: missing_spec.length
-      }
+      },
+      signalPresenceCount: [information_present, bad_format, wrong_information, wrong_physical_dimensions].filter(
+        (value) => value !== null
+      ).length,
+      signalTrueCount: [bad_format, wrong_information, wrong_physical_dimensions].filter(Boolean).length
     });
 
     return {
