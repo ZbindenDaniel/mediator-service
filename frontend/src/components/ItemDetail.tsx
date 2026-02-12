@@ -2001,51 +2001,28 @@ export default function ItemDetail({ itemId }: Props) {
     agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
   );
 
+  // TODO(agentic-review-note-modal): Keep this as a single-step modal unless operators request guided note validation.
   async function promptAgenticReviewNote(): Promise<string | null> {
-    while (true) {
-      let promptResult: string | null;
-      try {
-        promptResult = await dialogService.prompt({
-          title: 'Review-Notiz',
-          message: 'Bitte optional eine Notiz für das Review hinzufügen.',
-          confirmLabel: 'Speichern',
-          cancelLabel: 'Ohne Notiz',
-          placeholder: 'Notiz (optional)',
-          defaultValue: ''
-        });
-      } catch (error) {
-        console.error('Failed to prompt for agentic review note', error);
-        return null;
-      }
-
-      if (promptResult === null) {
-        return '';
-      }
-
-      const trimmed = promptResult.trim();
-      if (trimmed.length === 0) {
-        let proceedWithoutNote = false;
-        try {
-          proceedWithoutNote = await dialogService.confirm({
-            title: 'Leere Notiz',
-            message: 'Ohne Notiz fortfahren?',
-            confirmLabel: 'Ohne Notiz',
-            cancelLabel: 'Zurück'
-          });
-        } catch (error) {
-          console.error('Failed to confirm empty agentic review note', error);
-          return null;
-        }
-
-        if (proceedWithoutNote) {
-          return '';
-        }
-
-        continue;
-      }
-
-      return trimmed;
+    let promptResult: string | null;
+    try {
+      promptResult = await dialogService.prompt({
+        title: 'Review-Notiz',
+        message: 'Bitte optional eine Notiz für den finalen Review-Abschluss hinzufügen.',
+        confirmLabel: 'Review Abschliessen',
+        cancelLabel: 'Abbrechen',
+        placeholder: 'Notiz (optional)',
+        defaultValue: ''
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to prompt for agentic review note', error, { itemId });
+      return null;
     }
+
+    if (promptResult === null) {
+      return null;
+    }
+
+    return promptResult.trim();
   }
 
   async function promptAgenticCloseNote(): Promise<string | null> {
@@ -2228,6 +2205,10 @@ export default function ItemDetail({ itemId }: Props) {
     if (reviewInput === null) {
       return;
     }
+    logger.info?.('ItemDetail: Submitting agentic review', {
+      referenceId,
+      hasNote: Boolean(reviewInput.notes && reviewInput.notes.trim().length > 0)
+    });
     setAgenticActionPending(true);
     setAgenticError(null);
     setAgenticReviewIntent('review');
