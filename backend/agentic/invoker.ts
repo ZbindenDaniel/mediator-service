@@ -189,9 +189,11 @@ export class AgenticModelInvoker {
   private chatModelFactory?: ChatModelFactory;
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
   private readonly persistAgenticRunError: (artikelNummer: string, errorMessage: string, attemptAt?: string) => void;
-  // TODO(agentic-examples): Revisit reviewed example query coverage when additional extraction fields become prompt-relevant.
-  private readonly selectReviewedExampleBySubcategory = db.prepare(
-    `
+  // TODO(agentic-examples): Re-evaluate reviewed-example decision source if review lifecycle stores a dedicated final-decision field again.
+  private readonly selectReviewedExampleBySubcategory: { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
+
+  private buildReviewedExampleStatement(): { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> } {
+    const reviewedExampleQuery = `
       SELECT
         r.Artikel_Nummer,
         r.Artikelbeschreibung,
@@ -203,8 +205,8 @@ export class AgenticModelInvoker {
         r.Höhe_mm,
         r.Gewicht_kg,
         r.Verkaufspreis,
-        ar.LastReviewDecision,
-        COALESCE(ar.LastModified, ar.UpdatedAt) AS ReviewedAt
+        %REVIEW_DECISION_FIELD% AS LastReviewDecision,
+        %REVIEWED_AT_FIELD% AS ReviewedAt
       FROM item_refs r
       JOIN agentic_runs ar ON ar.Artikel_Nummer = r.Artikel_Nummer
       WHERE CAST(r.Unterkategorien_A AS INTEGER) = (
@@ -213,11 +215,59 @@ export class AgenticModelInvoker {
         WHERE base.Artikel_Nummer = @Artikel_Nummer
       )
         AND r.Artikel_Nummer <> @Artikel_Nummer
-        AND LOWER(COALESCE(ar.LastReviewDecision, '')) = 'approved'
-      ORDER BY datetime(COALESCE(ar.LastModified, ar.UpdatedAt)) DESC, ar.Id DESC
+        AND LOWER(COALESCE(%REVIEW_DECISION_FIELD%, '')) = 'approved'
+      ORDER BY datetime(%REVIEWED_AT_FIELD%) DESC, ar.Id DESC
       LIMIT 5
-    `
-  );
+    `;
+
+    try {
+      const columnRows = db.prepare('PRAGMA table_info(agentic_runs)').all() as Array<Record<string, unknown>>;
+      const hasColumn = (name: string) => columnRows.some((column) => String(column.name ?? '').trim() === name);
+      const reviewDecisionField = hasColumn('ReviewState') ? 'ar.ReviewState' : hasColumn('LastReviewDecision') ? 'ar.LastReviewDecision' : "'approved'";
+      const reviewedAtField = hasColumn('LastModified')
+        ? 'ar.LastModified'
+        : hasColumn('UpdatedAt')
+          ? 'ar.UpdatedAt'
+          : "datetime('now')";
+
+      if (!hasColumn('ReviewState') && hasColumn('LastReviewDecision')) {
+        this.logger.warn?.({
+          msg: 'agentic example selector falling back to LastReviewDecision because ReviewState is unavailable'
+        });
+      }
+
+      if (!hasColumn('LastModified') && hasColumn('UpdatedAt')) {
+        this.logger.warn?.({
+          msg: 'agentic example selector falling back to UpdatedAt because LastModified is unavailable'
+        });
+      }
+
+      if (!hasColumn('LastModified') && !hasColumn('UpdatedAt')) {
+        this.logger.warn?.({
+          msg: 'agentic example selector missing LastModified/UpdatedAt; using current timestamp fallback for ordering'
+        });
+      }
+
+      this.logger.info?.({
+        msg: 'agentic example selector prepared with dynamic review/timestamp fields',
+        reviewDecisionField,
+        reviewedAtField
+      });
+
+      const statement = db.prepare(
+        reviewedExampleQuery
+          .split('%REVIEW_DECISION_FIELD%').join(reviewDecisionField)
+          .split('%REVIEWED_AT_FIELD%').join(reviewedAtField)
+      );
+      return statement as { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
+    } catch (err) {
+      this.logger.error?.({
+        err,
+        msg: 'failed to prepare reviewed example selector statement'
+      });
+      throw err;
+    }
+  }
 
   constructor(options: AgenticModelInvokerOptions = {}) {
     this.logger = options.logger ?? console;
@@ -225,6 +275,7 @@ export class AgenticModelInvoker {
       apiKey: searchConfig.tavilyApiKey,
       logger: this.logger
     });
+    this.selectReviewedExampleBySubcategory = this.buildReviewedExampleStatement();
     // TODO(agentic-error-handling): Align DB error persistence with future retry scheduling metadata once available.
     this.persistAgenticRunError = (artikelNummer: string, errorMessage: string, attemptAt?: string) => {
       try {
