@@ -1,22 +1,30 @@
 # Feature ideas
+- automatic printer server handling after restart
+- change export to include all formats json AND html (langText_json, langtext_html), use in kivi and mediator import accoridngly
 - price calculation: if not 0 then =FLOOR((N5+30)/3)
+- Items with qty 0 should still be browsable
+- relocate item and box should allow for text search to find by label
+- improved boxList filter, add 'Standort'
+- weight and itemcount of shelfs is not calculated
 - revisit the erp-sync feature
-- batch agentic run start faisl when already a run exisists
+- batch agentic run start fails when already a run exisists
 - qr relocation not yet perfect
 - extra fields in basic form (optional dimensions, shopartikel)
+- add to review 'In den shop?'
+- only export 'shop' when reviewed
+- don't show boxes which are inside shelfs in boxList
 - PWA
+- pie chart in 'statistics'
 - naviagte boxes with neighbooring (like items)
 - filter item list by boxes
 - do not persist QR scan logs and declutter logging anyways
 - embeddings (https://chatgpt.com/codex/tasks/task_e_6984ef91d550832da3cb21c0a2f8651b)
 - postgres migration
-- automatic printer server handling after restart
 - declutter 'Vorrat'
 - cleanup flows and make views more compact, collapsable
 - in shelves gather box items and loose items together e.g. display itemList with 'behälter' this resolves it and reuses components
-- box List: qty item.sums(weight volume)
 - log: move from to
-- full image backup
+- full image backup of server
 - periodic backup
 - admin page with export, shelves ...
 - filtered activities
