@@ -7,6 +7,7 @@ import RelocateItemCard from './RelocateItemCard';
 // TODO(agent): Confirm instance inventory ordering requirements once detail UI feedback arrives.
 // TODO(agentic-run-delete): Validate the agentic deletion UX against backend guarantees once the reset API stabilizes.
 // TODO(agentic-close): Confirm close action copy and upsert payload once backend wiring lands.
+// TODO(agentic-close-decision): Revisit derived final-decision mapping if checklist semantics change.
 // TODO(agentic-edit-lock): Confirm messaging for edit restrictions while agentic runs are active.
 // TODO(agentic-status-labels): Keep queued label aligned with shared status labels.
 import type {
@@ -2090,26 +2091,26 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   async function promptAgenticCloseNote(): Promise<string | null> {
-    let promptResult: string | null;
     try {
-      promptResult = await dialogService.prompt({
+      const promptResult = await dialogService.prompt({
         title: 'Abschluss-Notiz',
         message: 'Optional eine Notiz für den Abschluss hinzufügen.',
-        confirmLabel: 'Speichern',
-        cancelLabel: 'Ohne Notiz',
+        confirmLabel: 'Review Abschliessen',
+        cancelLabel: 'Abbrechen',
         placeholder: 'Notiz (optional)',
         defaultValue: ''
       });
+
+      if (promptResult === null) {
+        logger.warn?.('ItemDetail: User aborted agentic close note prompt', { itemId });
+        return null;
+      }
+
+      return promptResult.trim();
     } catch (error) {
-      console.error('Failed to prompt for agentic close note', error);
+      logError('ItemDetail: Failed to prompt for agentic close note', error, { itemId });
       return null;
     }
-
-    if (promptResult === null) {
-      return '';
-    }
-
-    return promptResult.trim();
   }
 
 
@@ -2680,27 +2681,32 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    let confirmed = false;
-    try {
-      confirmed = await dialogService.confirm({
-        title: 'KI Suche abschliessen',
-        message: 'KI Suche abschliessen und als freigegeben markieren?',
-        confirmLabel: 'Abschliessen',
-        cancelLabel: 'Zurück'
-      });
-    } catch (error) {
-      console.error('Failed to confirm agentic close', error);
-      return;
-    }
-
-    if (!confirmed) {
-      return;
-    }
+    const triggerStates = agenticReviewAutomation?.triggerStates;
+    const derivedDecision = triggerStates && (
+      triggerStates.information_present_low_trigger
+      || triggerStates.bad_format_trigger
+      || triggerStates.wrong_information_trigger
+      || triggerStates.wrong_physical_dimensions_trigger
+      || triggerStates.missing_spec_trigger
+    )
+      ? 'rejected'
+      : 'approved';
 
     const noteInput = await promptAgenticCloseNote();
     if (noteInput === null) {
+      logger.warn?.('ItemDetail: User aborted agentic close flow', {
+        itemId,
+        artikelNummer: referenceId,
+        derivedDecision
+      });
       return;
     }
+
+    logger.info?.('ItemDetail: Agentic close started', {
+      itemId,
+      artikelNummer: referenceId,
+      derivedDecision
+    });
 
     setAgenticActionPending(true);
     setAgenticReviewIntent(null);
@@ -2711,6 +2717,7 @@ export default function ItemDetail({ itemId }: Props) {
         artikelNummer: referenceId,
         actor,
         notes: noteInput,
+        decision: derivedDecision,
         context: 'item detail close'
       });
 
@@ -2718,16 +2725,28 @@ export default function ItemDetail({ itemId }: Props) {
         if (closeResult.agentic) {
           setAgentic(closeResult.agentic);
         }
+        logger.info?.('ItemDetail: Agentic close completed', {
+          status: closeResult.status,
+          derivedDecision
+        });
         setAgenticError(null);
       } else {
         const fallbackMessage =
           closeResult.status === 404
             ? 'Kein KI Durchlauf gefunden.'
             : 'Ki-Suche konnte nicht abgeschlossen werden.';
+        logger.error?.('ItemDetail: Agentic close request failed', {
+          status: closeResult.status,
+          derivedDecision,
+          artikelNummer: referenceId
+        });
         setAgenticError(closeResult.message ?? fallbackMessage);
       }
     } catch (err) {
-      logError('Ki-Abschlussanfrage fehlgeschlagen', err, { referenceId });
+      logError('Ki-Abschlussanfrage fehlgeschlagen', err, {
+        referenceId,
+        derivedDecision
+      });
       setAgenticError('Ki-Suche konnte nicht abgeschlossen werden.');
     } finally {
       setAgenticActionPending(false);
