@@ -13,6 +13,7 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 // TODO(agentic-review-action): Revisit whether checklist-only reviews should trigger downstream automation hooks.
 // TODO(agentic-review-transitions): Keep close/final-decision transition logging aligned with review lifecycle metrics.
 // TODO(agentic-review-history-source): Add explicit source column if review history needs first-class path attribution.
+// TODO(agentic-review-noop): Consider storing an explicit review-update reason when state remains unchanged.
 export function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
@@ -176,7 +177,7 @@ function persistManualReviewHistoryEntry(
   ctx: { insertAgenticRunReviewHistoryEntry?: { run: (entry: Record<string, unknown>) => { changes?: number } } },
   payload: {
     artikelNummer: string;
-    status: string | null;
+    status: string;
     reviewState: string;
     reviewDecision: string | null;
     notes: string | null;
@@ -406,6 +407,8 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic review' });
       }
 
+      let resolvedRunStatusForHistory: string = 'review';
+
       try {
         const transitionPayload = {
           Artikel_Nummer: artikelNummer,
@@ -427,12 +430,18 @@ const action = defineHttpAction({
           }
 
           const fromState = typeof run?.ReviewState === 'string' ? run.ReviewState : null;
+          if (typeof run?.Status === 'string' && run.Status.trim()) {
+            resolvedRunStatusForHistory = run.Status.trim();
+          } else if (!isChecklistReview && status) {
+            resolvedRunStatusForHistory = status;
+          }
           console.info('[agentic-review] Attempting review transition', {
             artikelNummer,
             actor,
             action: 'close',
             fromState,
-            toState: reviewStateToPersist
+            toState: reviewStateToPersist,
+            stateChanged: fromState !== reviewStateToPersist
           });
 
           try {
@@ -487,12 +496,18 @@ const action = defineHttpAction({
           }
 
           const fromState = typeof run.ReviewState === 'string' ? run.ReviewState : null;
+          if (typeof run?.Status === 'string' && run.Status.trim()) {
+            resolvedRunStatusForHistory = run.Status.trim();
+          } else if (!isChecklistReview && status) {
+            resolvedRunStatusForHistory = status;
+          }
           console.info('[agentic-review] Attempting review transition', {
             artikelNummer,
             actor,
             action: requestedAction || action || 'review',
             fromState,
-            toState: reviewStateToPersist
+            toState: reviewStateToPersist,
+            stateChanged: fromState !== reviewStateToPersist
           });
 
           try {
@@ -546,7 +561,7 @@ const action = defineHttpAction({
 
       persistManualReviewHistoryEntry(ctx, {
         artikelNummer,
-        status,
+        status: status ?? resolvedRunStatusForHistory,
         reviewState: reviewStateToPersist,
         reviewDecision: reviewDecisionToPersist,
         notes: notes || null,

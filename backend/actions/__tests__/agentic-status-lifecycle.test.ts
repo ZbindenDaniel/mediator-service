@@ -84,6 +84,7 @@ describe('agentic-status lifecycle transitions', () => {
     expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
+        Status: 'review',
         ReviewState: 'pending',
         ReviewDecision: null
       })

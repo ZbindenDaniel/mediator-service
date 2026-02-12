@@ -2294,7 +2294,6 @@ export default function ItemDetail({ itemId }: Props) {
     });
 
     return mappedInput;
-
   }
 
   async function handleAgenticReview() {
