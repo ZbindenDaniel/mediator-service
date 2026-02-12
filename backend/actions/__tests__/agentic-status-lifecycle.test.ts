@@ -48,7 +48,7 @@ describe('agentic-status lifecycle transitions', () => {
 
   // TODO(agentic-status-tests): Extend lifecycle coverage for db exception payload details if transition contracts evolve.
   // TODO(agentic-review-history-tests): Add assertion for review history source metadata if schema introduces explicit source column.
-  it('stores checklist submit as pending with no final decision', async () => {
+  it('finalizes checklist submit as approved when no negative checklist signal is present', async () => {
     const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
     const getAgenticRun = { get: jest.fn(() => baseRun) };
     const ctx = {
@@ -75,18 +75,18 @@ describe('agentic-status lifecycle transitions', () => {
     expect(updateAgenticReview.run).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
-        ReviewState: 'pending',
-        Status: null,
-        LastReviewDecision: null,
+        ReviewState: 'approved',
+        Status: AGENTIC_RUN_STATUS_APPROVED,
+        LastReviewDecision: 'approved',
         ReviewedBy: 'qa-user'
       })
     );
     expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
-        Status: 'review',
-        ReviewState: 'pending',
-        ReviewDecision: null
+        Status: AGENTIC_RUN_STATUS_APPROVED,
+        ReviewState: 'approved',
+        ReviewDecision: 'approved'
       })
     );
   });
@@ -133,6 +133,56 @@ describe('agentic-status lifecycle transitions', () => {
         Artikel_Nummer: 'A-100',
         ReviewState: 'approved',
         ReviewDecision: 'approved'
+      })
+    );
+  });
+
+
+  it('finalizes checklist submit as rejected when at least one negative checklist signal is present', async () => {
+    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
+    const getAgenticRun = {
+      get: jest
+        .fn()
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'rejected', Status: AGENTIC_RUN_STATUS_REJECTED, LastReviewDecision: 'rejected' })
+    };
+    const ctx = {
+      db: {},
+      getAgenticRun,
+      getItemReference: { get: jest.fn() },
+      upsertAgenticRun: { run: jest.fn() },
+      updateAgenticRunStatus: { run: jest.fn() },
+      updateAgenticReview,
+      logEvent: jest.fn(),
+      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+    };
+
+    const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
+      actor: 'qa-user',
+      action: 'review',
+      bad_format: true,
+      notes: 'checklist complete'
+    });
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'A-100',
+        ReviewState: 'rejected',
+        Status: AGENTIC_RUN_STATUS_REJECTED,
+        LastReviewDecision: 'rejected'
+      })
+    );
+    expect(getBody().agentic?.ReviewState).toBe('rejected');
+    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'A-100',
+        Status: AGENTIC_RUN_STATUS_REJECTED,
+        ReviewState: 'rejected',
+        ReviewDecision: 'rejected'
       })
     );
   });

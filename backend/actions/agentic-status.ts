@@ -14,6 +14,7 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 // TODO(agentic-review-transitions): Keep close/final-decision transition logging aligned with review lifecycle metrics.
 // TODO(agentic-review-history-source): Add explicit source column if review history needs first-class path attribution.
 // TODO(agentic-review-noop): Consider storing an explicit review-update reason when state remains unchanged.
+// TODO(agentic-review-decision-threshold): Revisit implicit reject/approve checklist thresholding if operators request weighted scoring.
 export function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
@@ -381,24 +382,33 @@ const action = defineHttpAction({
       const decisionInput = typeof data.decision === 'string' ? data.decision.trim().toLowerCase() : '';
       const isChecklistReview = action === 'review' && requestedAction === 'review' && !decisionInput;
       const hasExplicitFinalDecision = decisionInput === 'approved' || decisionInput === 'rejected';
-      const isFinalizeTransition = action === 'close' || hasExplicitFinalDecision;
-      const decision = action === 'close' ? (hasExplicitFinalDecision ? decisionInput : 'approved') : decisionInput;
+      const hasNegativeChecklistSignal =
+        reviewMetadata.information_present === false ||
+        reviewMetadata.bad_format === true ||
+        reviewMetadata.wrong_information === true ||
+        reviewMetadata.wrong_physical_dimensions === true ||
+        reviewMetadata.missing_spec.length > 0;
+      const derivedChecklistDecision = isChecklistReview
+        ? (hasNegativeChecklistSignal ? 'rejected' : 'approved')
+        : null;
+      const decision = action === 'close'
+        ? (hasExplicitFinalDecision ? decisionInput : 'approved')
+        : hasExplicitFinalDecision
+          ? decisionInput
+          : derivedChecklistDecision;
+      const isFinalizeTransition = action === 'close' || Boolean(decision);
 
       if (!actor) {
         return sendJson(res, 400, { error: 'actor is required' });
       }
-      if (!isChecklistReview && !isFinalizeTransition) {
-        return sendJson(res, 400, { error: 'decision must be approved or rejected, or action must be review' });
+      if (!isFinalizeTransition || !decision) {
+        return sendJson(res, 400, { error: 'decision could not be resolved from review payload' });
       }
 
       const reviewedAt = new Date().toISOString();
-      const status = isChecklistReview
-        ? null
-        : decision === 'approved'
-          ? AGENTIC_RUN_STATUS_APPROVED
-          : AGENTIC_RUN_STATUS_REJECTED;
-      const reviewStateToPersist = isChecklistReview ? 'pending' : decision;
-      const reviewDecisionToPersist = isChecklistReview ? null : decision;
+      const status = decision === 'approved' ? AGENTIC_RUN_STATUS_APPROVED : AGENTIC_RUN_STATUS_REJECTED;
+      const reviewStateToPersist = decision;
+      const reviewDecisionToPersist = decision;
       const artikelNummer = resolveArtikelNummerForAgentic(itemId, {
         logger: console,
         legacyRoute: route?.legacyRoute
@@ -535,7 +545,7 @@ const action = defineHttpAction({
           }
         }
 
-        if (!isChecklistReview && decision === 'rejected') {
+        if (decision === 'rejected') {
           try {
             ctx.updateAgenticRunStatus.run(
               normalizeAgenticStatusUpdate({
@@ -577,26 +587,21 @@ const action = defineHttpAction({
         Actor: actor,
         EntityType: 'Item',
         EntityId: artikelNummer,
-        Event: isChecklistReview
-          ? 'AgenticReviewSubmitted'
-          : decision === 'approved'
-            ? 'AgenticReviewApproved'
-            : 'AgenticReviewRejected',
+        Event: decision === 'approved' ? 'AgenticReviewApproved' : 'AgenticReviewRejected',
         Meta: JSON.stringify(
           action === 'close'
             ? { action: 'close', decision, reason: 'manual-close', ...reviewMetadata, reviewedBy }
-            : isChecklistReview
-              ? { action: 'review', ...reviewMetadata, reviewedBy }
-              : { decision, ...reviewMetadata, reviewedBy }
+            : { action: requestedAction || action || 'review', decision, ...reviewMetadata, reviewedBy }
         )
       });
 
       if (isChecklistReview) {
-        console.info('[agentic-review] Checklist-only review stored', {
+        console.info('[agentic-review] Checklist review finalized with derived decision', {
           artikelNummer,
           actor,
           reviewedBy,
-          action: requestedAction || 'review'
+          decision,
+          negativeSignalDetected: hasNegativeChecklistSignal
         });
       }
 
