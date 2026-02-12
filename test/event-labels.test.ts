@@ -18,15 +18,16 @@ test('event label translations', () => {
 });
 
 test('event level helpers', () => {
-  expect(eventLevel('Deleted')).toBe('error');
+  expect(eventLevel('Deleted')).toBe('important');
   expect(eventLevel('AgenticResultReceived')).toBe('info');
   expect(eventLevel('AgenticReviewRejected')).toBe('important');
+  expect(eventLevel('AgenticReviewSubmitted')).toBe('info');
   expect(eventLevel('UnknownEvent')).toBe(EVENT_DEFAULT_LEVEL);
 });
 
 test('event resources expose lookup map', () => {
   const deleted = resolveEventResource('Deleted');
-  expect(deleted).toEqual({ key: 'Deleted', label: 'Gelöscht', level: 'error', topic: 'general' });
+  expect(deleted).toEqual({ key: 'Deleted', label: 'Gelöscht', level: 'important', topic: 'data' });
   expect(EVENT_LABELS.Deleted).toBe('Gelöscht');
   expect(Array.isArray(EVENT_RESOURCES)).toBe(true);
 });
@@ -57,7 +58,8 @@ test('eventKeysForTopics maps topics to event keys', () => {
     expect.arrayContaining([
       'AgenticRunRestarted',
       'AgenticResultFailed',
-      'AgenticReviewRejected'
+      'AgenticReviewRejected',
+      'AgenticReviewSubmitted'
     ])
   );
   expect(agenticKeys).not.toContain('Moved');

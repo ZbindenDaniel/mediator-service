@@ -58,6 +58,7 @@ import {
   loadItemListFilters
 } from '../lib/itemListFiltersStorage';
 import { logger, logError } from '../utils/logger';
+import { mapReviewAnswersToInput, type AgenticReviewInput } from '../lib/agenticReviewMapping';
 import { filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
@@ -177,16 +178,6 @@ interface NormalizedDetailValue {
 const DETAIL_PLACEHOLDER_TEXT = '-';
 
 
-interface AgenticReviewInput {
-  information_present: boolean;
-  bad_format: boolean;
-  wrong_information: boolean;
-  wrong_physical_dimensions: boolean;
-  missing_spec: string[];
-  notes: string | null;
-  reviewedBy: string | null;
-}
-
 const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
 const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 140;
 
@@ -214,23 +205,6 @@ function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): R
   }
 }
 
-function parseMissingSpecInput(value: string | null): string[] {
-  if (!value) {
-    return [];
-  }
-  const deduped = new Map<string, string>();
-  value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .forEach((entry) => {
-      const key = entry.toLowerCase();
-      if (!deduped.has(key)) {
-        deduped.set(key, entry);
-      }
-    });
-  return Array.from(deduped.values()).slice(0, 10);
-}
 
 function formatReviewPreviewValue(value: unknown, maxLength = REVIEW_PREVIEW_MAX_TEXT_LENGTH): string {
   if (value === null || value === undefined) {
@@ -2132,7 +2106,7 @@ export default function ItemDetail({ itemId }: Props) {
             { label: 'Artikelbeschreibung', value: item?.Artikelbeschreibung ?? null },
             { label: 'Kurzbeschreibung', value: item?.Kurzbeschreibung ?? null }
           ],
-          'Gibt es ein relevantes Formatproblem in der Ausgabe?'
+          'Is formatting correct?'
         )}
       </div>
     );
@@ -2143,7 +2117,7 @@ export default function ItemDetail({ itemId }: Props) {
           itemId,
           'Section B · Langtext',
           buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
-          'Sind die Informationen grundsätzlich vollständig und nutzbar?'
+          'Is expected information missing?'
         )}
       </div>
     );
@@ -2159,7 +2133,7 @@ export default function ItemDetail({ itemId }: Props) {
             { label: 'Höhe_mm', value: item?.Höhe_mm ?? null },
             { label: 'Gewicht_kg', value: item?.Gewicht_kg ?? null }
           ],
-          'Sind physische Maße/Gewicht offensichtlich falsch?'
+          'Are required physical properties/dimensions missing?'
         )}
       </div>
     );
@@ -2170,7 +2144,7 @@ export default function ItemDetail({ itemId }: Props) {
           itemId,
           'Section D · Fachliche Bewertung',
           buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
-          'Enthält die Ausgabe fachlich falsche Informationen?'
+          'Is the data plausible?'
         )}
       </div>
     );
@@ -2205,35 +2179,35 @@ export default function ItemDetail({ itemId }: Props) {
       }
     };
 
-    const informationPresent = await askFlag(
-      'Information vollständig?',
-      langtextPreviewMessage
-    );
-    if (informationPresent === null) {
-      return null;
-    }
-
-    const badFormat = await askFlag(
-      'Formatproblem vorhanden?',
-      contentFormatPreviewMessage
-    );
-    if (badFormat === null) {
-      return null;
-    }
-
-    const wrongInformation = await askFlag(
-      'Fachlich falsch?',
+    const plausible = await askFlag(
+      'Is the data plausible?',
       langtextWrongInfoMessage
     );
-    if (wrongInformation === null) {
+    if (plausible === null) {
       return null;
     }
 
-    const wrongDimensions = await askFlag(
-      'Physische Maße falsch?',
+    const formattingCorrect = await askFlag(
+      'Is formatting correct?',
+      contentFormatPreviewMessage
+    );
+    if (formattingCorrect === null) {
+      return null;
+    }
+
+    const missingExpectedInfo = await askFlag(
+      'Is expected information missing?',
+      langtextPreviewMessage
+    );
+    if (missingExpectedInfo === null) {
+      return null;
+    }
+
+    const requiredDimensionsMissing = await askFlag(
+      'Are required physical properties/dimensions missing?',
       dimensionPreviewMessage
     );
-    if (wrongDimensions === null) {
+    if (requiredDimensionsMissing === null) {
       return null;
     }
 
@@ -2256,15 +2230,38 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    return {
-      information_present: informationPresent,
-      bad_format: badFormat,
-      wrong_information: wrongInformation,
-      wrong_physical_dimensions: wrongDimensions,
-      missing_spec: parseMissingSpecInput(missingSpecRaw),
-      notes: notes.trim() ? notes.trim() : null,
-      reviewedBy: null
-    };
+    const mappedInput = mapReviewAnswersToInput(
+      {
+        plausible,
+        formattingCorrect,
+        missingExpectedInfo,
+        requiredDimensionsMissing
+      },
+      {
+        missingSpecRaw,
+        notes,
+        reviewedBy: null
+      }
+    );
+
+    logger.info?.('ItemDetail: Mapped review checklist answers to structured payload', {
+      itemId,
+      signalPresenceCount: [
+        mappedInput.information_present,
+        mappedInput.bad_format,
+        mappedInput.wrong_information,
+        mappedInput.wrong_physical_dimensions
+      ].filter((value) => value !== null).length,
+      signalTrueCount: [
+        mappedInput.bad_format,
+        mappedInput.wrong_information,
+        mappedInput.wrong_physical_dimensions
+      ].filter(Boolean).length,
+      missingSpecCount: mappedInput.missing_spec.length,
+      hasNote: Boolean(mappedInput.notes)
+    });
+
+    return mappedInput;
   }
 
   async function handleAgenticReview() {
