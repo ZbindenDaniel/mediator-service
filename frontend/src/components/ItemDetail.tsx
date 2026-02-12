@@ -67,6 +67,7 @@ import { filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(agentic-review-checklist): Revisit checklist prompt UX if operators request multi-field modal editing.
+// TODO(agentic-review-preview): Revalidate review modal preview compactness after operator feedback on readability.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -184,6 +185,9 @@ interface AgenticReviewInput {
   reviewedBy: string | null;
 }
 
+const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
+const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 140;
+
 function parseMissingSpecInput(value: string | null): string[] {
   if (!value) {
     return [];
@@ -200,6 +204,49 @@ function parseMissingSpecInput(value: string | null): string[] {
       }
     });
   return Array.from(deduped.values()).slice(0, 10);
+}
+
+function formatReviewPreviewValue(value: unknown, maxLength = REVIEW_PREVIEW_MAX_TEXT_LENGTH): string {
+  if (value === null || value === undefined) {
+    return REVIEW_PREVIEW_PLACEHOLDER;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : REVIEW_PREVIEW_PLACEHOLDER;
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'Ja' : 'Nein';
+  }
+
+  const textValue = typeof value === 'string' ? value : String(value);
+  const compact = textValue.replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return REVIEW_PREVIEW_PLACEHOLDER;
+  }
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+  return `${compact.slice(0, Math.max(1, maxLength - 1))}…`;
+}
+
+function buildReviewPreviewSection(
+  title: string,
+  fields: Array<[string, unknown]>,
+  itemId: string,
+  fallbackMessage: string
+): string {
+  try {
+    const lines = fields.map(([label, value]) => `• ${label}: ${formatReviewPreviewValue(value)}`);
+    return [`Kontextvorschau (${title}):`, ...lines, '', fallbackMessage].join('\n');
+  } catch (error) {
+    logger.warn?.('ItemDetail: Failed to assemble review modal preview; using fallback message.', {
+      itemId,
+      title,
+      error
+    });
+    return fallbackMessage;
+  }
 }
 
 function buildPlaceholder(): NormalizedDetailValue {
@@ -2034,6 +2081,50 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
+    const contentFormatPreviewMessage = buildReviewPreviewSection(
+      'Artikelbeschreibung / Kategorie / Kurzbeschreibung',
+      [
+        ['Artikelbeschreibung', item?.Artikelbeschreibung ?? null],
+        ['Kategorie', item ? resolveUnterkategorieLabel(item.Unterkategorien_A) : null],
+        ['Kurzbeschreibung', item?.Kurzbeschreibung ?? null]
+      ],
+      itemId,
+      'Gibt es ein relevantes Formatproblem in der Ausgabe?'
+    );
+
+    const langtextPreviewMessage = buildReviewPreviewSection(
+      'Langtext',
+      [['Langtext', item?.Langtext ?? null]],
+      itemId,
+      'Sind die Informationen grundsätzlich vollständig und nutzbar?'
+    );
+
+    const dimensionPreviewMessage = buildReviewPreviewSection(
+      'Abmessungen / Gewicht',
+      [
+        ['Länge_mm', item?.Länge_mm ?? null],
+        ['Breite_mm', item?.Breite_mm ?? null],
+        ['Höhe_mm', item?.Höhe_mm ?? null],
+        ['Gewicht_kg', item?.Gewicht_kg ?? null]
+      ],
+      itemId,
+      'Sind physische Maße/Gewicht offensichtlich falsch?'
+    );
+
+    const langtextWrongInfoMessage = buildReviewPreviewSection(
+      'Langtext',
+      [['Langtext', item?.Langtext ?? null]],
+      itemId,
+      'Enthält die Ausgabe fachlich falsche Informationen?'
+    );
+
+    const langtextMissingSpecMessage = buildReviewPreviewSection(
+      'Langtext',
+      [['Langtext', item?.Langtext ?? null]],
+      itemId,
+      'Optionale Liste fehlender Spezifikationen (kommagetrennt).'
+    );
+
     const askFlag = async (title: string, message: string): Promise<boolean | null> => {
       try {
         const confirmed = await dialogService.confirm({
@@ -2054,7 +2145,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const informationPresent = await askFlag(
       'Information vollständig?',
-      'Sind die Informationen grundsätzlich vollständig und nutzbar?'
+      langtextPreviewMessage
     );
     if (informationPresent === null) {
       return null;
@@ -2062,7 +2153,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const badFormat = await askFlag(
       'Formatproblem vorhanden?',
-      'Gibt es ein relevantes Formatproblem in der Ausgabe?'
+      contentFormatPreviewMessage
     );
     if (badFormat === null) {
       return null;
@@ -2070,7 +2161,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const wrongInformation = await askFlag(
       'Fachlich falsch?',
-      'Enthält die Ausgabe fachlich falsche Informationen?'
+      langtextWrongInfoMessage
     );
     if (wrongInformation === null) {
       return null;
@@ -2078,7 +2169,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const wrongDimensions = await askFlag(
       'Physische Maße falsch?',
-      'Sind physische Maße/Gewicht offensichtlich falsch?'
+      dimensionPreviewMessage
     );
     if (wrongDimensions === null) {
       return null;
@@ -2088,7 +2179,7 @@ export default function ItemDetail({ itemId }: Props) {
     try {
       missingSpecRaw = await dialogService.prompt({
         title: 'Fehlende Spezifikationen',
-        message: 'Optionale Liste fehlender Spezifikationen (kommagetrennt).',
+        message: langtextMissingSpecMessage,
         confirmLabel: 'Übernehmen',
         cancelLabel: 'Ohne Angaben',
         placeholder: 'z. B. Spannung, Material, Schutzklasse',
