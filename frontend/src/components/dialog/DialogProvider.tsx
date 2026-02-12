@@ -1,4 +1,5 @@
 // TODO: Ensure dialog queue management and service registration remain consistent with new requirements.
+// TODO(review-dialog-variants): Revisit variant-specific dialog sizing hooks if more modal layouts are introduced.
 import React, {
   PropsWithChildren,
   ReactNode,
@@ -22,6 +23,7 @@ export interface BaseDialogOptions {
   title?: ReactNode;
   message: ReactNode;
   confirmLabel?: string;
+  contentClassName?: string;
 }
 
 export interface ConfirmDialogOptions extends BaseDialogOptions {
@@ -327,6 +329,7 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
             ref={(node) => {
               dialogRef.current = node;
             }}
+            className={activeRequest.options.contentClassName}
             heading={activeRequest.options.title}
             message={activeRequest.options.message}
             role="dialog"

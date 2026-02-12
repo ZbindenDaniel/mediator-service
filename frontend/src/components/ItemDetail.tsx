@@ -68,6 +68,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
 // TODO(agentic-review-checklist): Revisit checklist prompt UX if operators request multi-field modal editing.
 // TODO(agentic-review-preview): Revalidate review modal preview compactness after operator feedback on readability.
+// TODO(agentic-review-dialog): Reconfirm section/question emphasis styling in the review modal after reviewer validation.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -188,6 +189,30 @@ interface AgenticReviewInput {
 const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
 const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 140;
 
+function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): ReviewDialogField[] {
+  try {
+    const parsed = parseLangtext(itemValue ?? '');
+    if (parsed.kind === 'json') {
+      const entries = parsed.entries.slice(0, 8);
+      if (entries.length === 0) {
+        return [{ label: 'Langtext', value: REVIEW_PREVIEW_PLACEHOLDER }];
+      }
+      return entries.map((entry) => ({
+        label: entry.key,
+        value: entry.value
+      }));
+    }
+    return [{ label: 'Langtext', value: parsed.text || REVIEW_PREVIEW_PLACEHOLDER }];
+  } catch (error) {
+    logger.warn?.('ItemDetail: Failed to parse review Langtext section; falling back to plain text.', {
+      itemId,
+      sectionName: 'Langtext',
+      error
+    });
+    return [{ label: 'Langtext', value: typeof itemValue === 'string' ? itemValue : String(itemValue ?? REVIEW_PREVIEW_PLACEHOLDER) }];
+  }
+}
+
 function parseMissingSpecInput(value: string | null): string[] {
   if (!value) {
     return [];
@@ -230,23 +255,62 @@ function formatReviewPreviewValue(value: unknown, maxLength = REVIEW_PREVIEW_MAX
   return `${compact.slice(0, Math.max(1, maxLength - 1))}…`;
 }
 
-function buildReviewPreviewSection(
-  title: string,
-  fields: Array<[string, unknown]>,
+interface ReviewDialogField {
+  label: string;
+  value: unknown;
+  highlight?: boolean;
+}
+
+function buildReviewDialogFields(
   itemId: string,
-  fallbackMessage: string
-): string {
+  sectionName: string,
+  fields: ReviewDialogField[]
+): ReviewDialogField[] {
   try {
-    const lines = fields.map(([label, value]) => `• ${label}: ${formatReviewPreviewValue(value)}`);
-    return [`Kontextvorschau (${title}):`, ...lines, '', fallbackMessage].join('\n');
+    return fields.map((field) => ({
+      ...field,
+      value: formatReviewPreviewValue(field.value)
+    }));
   } catch (error) {
-    logger.warn?.('ItemDetail: Failed to assemble review modal preview; using fallback message.', {
+    logger.warn?.('ItemDetail: Failed to format review preview section; falling back to plain text.', {
       itemId,
-      title,
+      sectionName,
       error
     });
-    return fallbackMessage;
+    return fields.map((field) => ({
+      ...field,
+      value: typeof field.value === 'string' ? field.value : String(field.value ?? REVIEW_PREVIEW_PLACEHOLDER)
+    }));
   }
+}
+
+function buildReviewDialogSection(
+  itemId: string,
+  sectionName: string,
+  fields: ReviewDialogField[],
+  question: string
+): React.ReactNode {
+  const safeFields = buildReviewDialogFields(itemId, sectionName, fields);
+  return (
+    <section className="review-dialog__section">
+      <h3 className="review-dialog__section-title">{sectionName}</h3>
+      <div className="review-dialog__rows">
+        {safeFields.map((field) => (
+          <div
+            className={`review-dialog__row${field.highlight ? ' review-dialog__row--question' : ''}`}
+            key={`${sectionName}-${field.label}`}
+          >
+            <span className="review-dialog__row-label">{field.label}</span>
+            <span className="review-dialog__row-value">{field.value as React.ReactNode}</span>
+          </div>
+        ))}
+        <div className="review-dialog__row review-dialog__row--question">
+          <span className="review-dialog__row-label">Frage</span>
+          <span className="review-dialog__row-value">{question}</span>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function buildPlaceholder(): NormalizedDetailValue {
@@ -2058,57 +2122,77 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    const contentFormatPreviewMessage = buildReviewPreviewSection(
-      'Artikelbeschreibung / Kategorie / Kurzbeschreibung',
-      [
-        ['Artikelbeschreibung', item?.Artikelbeschreibung ?? null],
-        ['Kategorie', item ? resolveUnterkategorieLabel(item.Unterkategorien_A) : null],
-        ['Kurzbeschreibung', item?.Kurzbeschreibung ?? null]
-      ],
-      itemId,
-      'Gibt es ein relevantes Formatproblem in der Ausgabe?'
+    const contentFormatPreviewMessage = (
+      <div className="review-dialog__sections">
+        {buildReviewDialogSection(
+          itemId,
+          'Section A · Artikelbeschreibung / Kurzbeschreibung',
+          [
+            { label: 'Artikelbeschreibung', value: item?.Artikelbeschreibung ?? null },
+            { label: 'Kurzbeschreibung', value: item?.Kurzbeschreibung ?? null }
+          ],
+          'Gibt es ein relevantes Formatproblem in der Ausgabe?'
+        )}
+      </div>
     );
 
-    const langtextPreviewMessage = buildReviewPreviewSection(
-      'Langtext',
-      [['Langtext', item?.Langtext ?? null]],
-      itemId,
-      'Sind die Informationen grundsätzlich vollständig und nutzbar?'
+    const langtextPreviewMessage = (
+      <div className="review-dialog__sections">
+        {buildReviewDialogSection(
+          itemId,
+          'Section B · Langtext',
+          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
+          'Sind die Informationen grundsätzlich vollständig und nutzbar?'
+        )}
+      </div>
     );
 
-    const dimensionPreviewMessage = buildReviewPreviewSection(
-      'Abmessungen / Gewicht',
-      [
-        ['Länge_mm', item?.Länge_mm ?? null],
-        ['Breite_mm', item?.Breite_mm ?? null],
-        ['Höhe_mm', item?.Höhe_mm ?? null],
-        ['Gewicht_kg', item?.Gewicht_kg ?? null]
-      ],
-      itemId,
-      'Sind physische Maße/Gewicht offensichtlich falsch?'
+    const dimensionPreviewMessage = (
+      <div className="review-dialog__sections">
+        {buildReviewDialogSection(
+          itemId,
+          'Section C · Abmessungen / Gewicht',
+          [
+            { label: 'Länge_mm', value: item?.Länge_mm ?? null },
+            { label: 'Breite_mm', value: item?.Breite_mm ?? null },
+            { label: 'Höhe_mm', value: item?.Höhe_mm ?? null },
+            { label: 'Gewicht_kg', value: item?.Gewicht_kg ?? null }
+          ],
+          'Sind physische Maße/Gewicht offensichtlich falsch?'
+        )}
+      </div>
     );
 
-    const langtextWrongInfoMessage = buildReviewPreviewSection(
-      'Langtext',
-      [['Langtext', item?.Langtext ?? null]],
-      itemId,
-      'Enthält die Ausgabe fachlich falsche Informationen?'
+    const langtextWrongInfoMessage = (
+      <div className="review-dialog__sections">
+        {buildReviewDialogSection(
+          itemId,
+          'Section D · Fachliche Bewertung',
+          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
+          'Enthält die Ausgabe fachlich falsche Informationen?'
+        )}
+      </div>
     );
 
-    const langtextMissingSpecMessage = buildReviewPreviewSection(
-      'Langtext',
-      [['Langtext', item?.Langtext ?? null]],
-      itemId,
-      'Optionale Liste fehlender Spezifikationen (kommagetrennt).'
+    const langtextMissingSpecMessage = (
+      <div className="review-dialog__sections">
+        {buildReviewDialogSection(
+          itemId,
+          'Section D · Fehlende Spezifikationen',
+          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
+          'Optionale Liste fehlender Spezifikationen (kommagetrennt).'
+        )}
+      </div>
     );
 
-    const askFlag = async (title: string, message: string): Promise<boolean | null> => {
+    const askFlag = async (title: string, message: React.ReactNode): Promise<boolean | null> => {
       try {
         const confirmed = await dialogService.confirm({
           title,
           message,
           confirmLabel: 'Ja',
-          cancelLabel: 'Nein'
+          cancelLabel: 'Nein',
+          contentClassName: 'review-dialog'
         });
         return confirmed;
       } catch (error) {
@@ -2160,7 +2244,8 @@ export default function ItemDetail({ itemId }: Props) {
         confirmLabel: 'Übernehmen',
         cancelLabel: 'Ohne Angaben',
         placeholder: 'z. B. Spannung, Material, Schutzklasse',
-        defaultValue: ''
+        defaultValue: '',
+        contentClassName: 'review-dialog'
       });
     } catch (error) {
       logError('ItemDetail: Failed to prompt for missing specification list', error, { itemId });
