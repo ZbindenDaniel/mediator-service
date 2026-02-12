@@ -27,6 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
+- **Agentic review lifecycle determinism**: split checklist submissions into pending-only transitions, enforced finalize transitions (`close` or explicit decision) to persist approved/rejected states with matching run status updates, and added guarded transition/error logging plus focused lifecycle integration tests to prevent lingering pending states.
 - **Agentic close finalization flow hardening**: unified close-note prompt completion under a single `Review Abschliessen` action, treated explicit cancel as user-abort, derived and submitted binary final decisions (`approved`/`rejected`) from review automation signals, and added structured close start/complete/abort/error logging without changing backend contracts.
 - **Agentic review completion UX simplification**: removed the empty-note reconfirmation loop, finalized the review-note modal labels for direct completion, and added focused submit telemetry (`hasNote`) while keeping the existing `notes` and structured flag payload contract unchanged.
 - **Agentic review evidence-first dialog layout**: reworked review prompts into sectioned data cards (Artikelbeschreibung/Kurzbeschreibung, Langtext key-value preview, Maße/Gewicht) with emphasized question rows, responsive large-dialog constraints, and guarded preview-format fallbacks with section-scoped warning logs.

@@ -11,6 +11,7 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 
 // TODO(agentic-review-ref): Confirm reference-only price fallback once review flows stop expecting instance payloads.
 // TODO(agentic-review-action): Revisit whether checklist-only reviews should trigger downstream automation hooks.
+// TODO(agentic-review-transitions): Keep close/final-decision transition logging aligned with review lifecycle metrics.
 export function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
@@ -175,6 +176,10 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 // TODO(agentic-status-ref-id): Remove legacy /api/items route once all callers use Artikelnummer-specific paths.
 function resolveArtikelNummerForAgentic(
   itemId: string,
@@ -309,15 +314,14 @@ const action = defineHttpAction({
       const requestedAction = typeof data.action === 'string' ? data.action.trim().toLowerCase() : '';
       const decisionInput = typeof data.decision === 'string' ? data.decision.trim().toLowerCase() : '';
       const isChecklistReview = action === 'review' && requestedAction === 'review' && !decisionInput;
-      const decision =
-        action === 'close'
-          ? 'approved'
-          : decisionInput;
+      const hasExplicitFinalDecision = decisionInput === 'approved' || decisionInput === 'rejected';
+      const isFinalizeTransition = action === 'close' || hasExplicitFinalDecision;
+      const decision = action === 'close' ? (hasExplicitFinalDecision ? decisionInput : 'approved') : decisionInput;
 
       if (!actor) {
         return sendJson(res, 400, { error: 'actor is required' });
       }
-      if (!isChecklistReview && !['approved', 'rejected'].includes(decision)) {
+      if (!isChecklistReview && !isFinalizeTransition) {
         return sendJson(res, 400, { error: 'decision must be approved or rejected, or action must be review' });
       }
 
@@ -338,6 +342,16 @@ const action = defineHttpAction({
       }
 
       try {
+        const transitionPayload = {
+          Artikel_Nummer: artikelNummer,
+          ReviewState: reviewStateToPersist,
+          ReviewedBy: reviewedBy,
+          LastModified: reviewedAt,
+          Status: status,
+          LastReviewDecision: reviewDecisionToPersist,
+          LastReviewNotes: notes || null
+        };
+
         if (action === 'close') {
           let run: any;
           try {
@@ -347,35 +361,53 @@ const action = defineHttpAction({
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
           }
 
-          if (!run) {
-            const upsertResult = ctx.upsertAgenticRun.run({
-              Artikel_Nummer: artikelNummer,
-              SearchQuery: null,
-              Status: status,
-              LastModified: reviewedAt,
-              ReviewState: reviewStateToPersist,
-              ReviewedBy: reviewedBy,
-              LastReviewDecision: reviewDecisionToPersist,
-              LastReviewNotes: notes || null
-            });
-            if (!upsertResult || upsertResult.changes === 0) {
-              console.error('Agentic close upsert had no effect for Artikelnummer', artikelNummer);
-              return sendJson(res, 500, { error: 'Failed to update review state' });
+          const fromState = typeof run?.ReviewState === 'string' ? run.ReviewState : null;
+          console.info('[agentic-review] Attempting review transition', {
+            artikelNummer,
+            actor,
+            action: 'close',
+            fromState,
+            toState: reviewStateToPersist
+          });
+
+          try {
+            if (!run) {
+              const upsertResult = ctx.upsertAgenticRun.run({
+                Artikel_Nummer: artikelNummer,
+                SearchQuery: null,
+                Status: status,
+                LastModified: reviewedAt,
+                ReviewState: reviewStateToPersist,
+                ReviewedBy: reviewedBy,
+                LastReviewDecision: reviewDecisionToPersist,
+                LastReviewNotes: notes || null
+              });
+              if (!upsertResult || upsertResult.changes === 0) {
+                throw new Error('Agentic close upsert had no effect');
+              }
+            } else {
+              const result = ctx.updateAgenticReview.run(transitionPayload);
+              if (!result || result.changes === 0) {
+                throw new Error('Agentic review update had no effect');
+              }
             }
-          } else {
-            const result = ctx.updateAgenticReview.run({
-              Artikel_Nummer: artikelNummer,
-              ReviewState: reviewStateToPersist,
-              ReviewedBy: reviewedBy,
-              LastModified: reviewedAt,
-              Status: status,
-              LastReviewDecision: reviewDecisionToPersist,
-              LastReviewNotes: notes || null
+          } catch (dbErr) {
+            console.error('Agentic close transition failed for Artikelnummer', {
+              artikelNummer,
+              actor,
+              fromState,
+              toState: reviewStateToPersist,
+              error: toErrorMessage(dbErr)
             });
-            if (!result || result.changes === 0) {
-              console.error('Agentic review update had no effect for Artikelnummer', artikelNummer);
-              return sendJson(res, 500, { error: 'Failed to update review state' });
-            }
+            return sendJson(res, 500, {
+              error: 'Failed to persist review transition',
+              details: {
+                action: 'close',
+                fromState,
+                toState: reviewStateToPersist,
+                artikelNummer
+              }
+            });
           }
         } else {
           let run: any;
@@ -389,18 +421,37 @@ const action = defineHttpAction({
             return sendJson(res, 404, { error: 'Agentic run not found' });
           }
 
-          const result = ctx.updateAgenticReview.run({
-            Artikel_Nummer: artikelNummer,
-            ReviewState: reviewStateToPersist,
-            ReviewedBy: reviewedBy,
-            LastModified: reviewedAt,
-            Status: status,
-            LastReviewDecision: reviewDecisionToPersist,
-            LastReviewNotes: notes || null
+          const fromState = typeof run.ReviewState === 'string' ? run.ReviewState : null;
+          console.info('[agentic-review] Attempting review transition', {
+            artikelNummer,
+            actor,
+            action: requestedAction || action || 'review',
+            fromState,
+            toState: reviewStateToPersist
           });
-          if (!result || result.changes === 0) {
-            console.error('Agentic review update had no effect for Artikelnummer', artikelNummer);
-            return sendJson(res, 500, { error: 'Failed to update review state' });
+
+          try {
+            const result = ctx.updateAgenticReview.run(transitionPayload);
+            if (!result || result.changes === 0) {
+              throw new Error('Agentic review update had no effect');
+            }
+          } catch (dbErr) {
+            console.error('Agentic review transition failed for Artikelnummer', {
+              artikelNummer,
+              actor,
+              fromState,
+              toState: reviewStateToPersist,
+              error: toErrorMessage(dbErr)
+            });
+            return sendJson(res, 500, {
+              error: 'Failed to persist review transition',
+              details: {
+                action: requestedAction || action || 'review',
+                fromState,
+                toState: reviewStateToPersist,
+                artikelNummer
+              }
+            });
           }
         }
 
