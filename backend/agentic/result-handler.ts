@@ -151,6 +151,74 @@ function normalizeReviewMetadataForHistory(
   }
 }
 
+function hasReviewMetadataPayload(payload: Record<string, unknown>): {
+  hasMetadata: boolean;
+  suppressedFields: string[];
+} {
+  const suppressedFields: string[] = [];
+
+  if (typeof payload.reviewDecision === 'string' && payload.reviewDecision.trim()) {
+    suppressedFields.push('ReviewDecision');
+  }
+  if (typeof payload.reviewNotes === 'string' && payload.reviewNotes.trim()) {
+    suppressedFields.push('ReviewNotes');
+  }
+
+  const reviewCandidate = payload.review;
+  const reviewObject =
+    typeof reviewCandidate === 'object' && reviewCandidate ? (reviewCandidate as Record<string, unknown>) : null;
+  if (reviewObject) {
+    const checklistKeys = ['information_present', 'missing_spec', 'bad_format', 'wrong_information', 'wrong_physical_dimensions'];
+    for (const key of checklistKeys) {
+      if (Object.prototype.hasOwnProperty.call(reviewObject, key)) {
+        suppressedFields.push(`ReviewChecklist.${key}`);
+      }
+    }
+  }
+
+  return {
+    hasMetadata: suppressedFields.length > 0,
+    suppressedFields
+  };
+}
+
+function resolveReviewHistoryEligibility(
+  payload: Record<string, unknown>,
+  logger?: AgenticResultLogger
+): { shouldInsertHistory: boolean; source: string } {
+  // TODO(agentic-review-history-source): Replace action-key detection with a dedicated request context source marker once callbacks include one.
+  try {
+    const actionCandidates: Array<unknown> = [
+      payload.action,
+      payload.reviewAction,
+      payload.review_action,
+      (payload.meta as Record<string, unknown> | undefined)?.action,
+      (payload.metadata as Record<string, unknown> | undefined)?.action,
+      (payload.review as Record<string, unknown> | undefined)?.action
+    ];
+
+    for (const candidate of actionCandidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+      const normalized = candidate.trim().toLowerCase();
+      if (normalized === 'review' || normalized === 'close') {
+        return { shouldInsertHistory: true, source: normalized };
+      }
+    }
+
+    return {
+      shouldInsertHistory: false,
+      source: typeof payload.actor === 'string' && payload.actor.trim() ? payload.actor.trim() : 'unknown'
+    };
+  } catch (err) {
+    logger?.warn?.('Agentic result failed to resolve review history source; skipping history insert', {
+      error: err instanceof Error ? err.message : err
+    });
+    return { shouldInsertHistory: false, source: 'ambiguous' };
+  }
+}
+
 function resolvePayloadArtikelNummer(payload: Record<string, unknown>): string | null {
   const itemPayload = payload.item;
   const candidates: Array<unknown> = [
@@ -336,6 +404,8 @@ export function handleAgenticResult(
   const reviewedByInput = typeof payload.reviewedBy === 'string' && payload.reviewedBy.trim() ? payload.reviewedBy.trim() : null;
   const agenticActor = typeof payload.actor === 'string' && payload.actor ? payload.actor : 'agentic-service';
   const reviewMetadataJson = normalizeReviewMetadataForHistory(payload, logger);
+  const reviewMetadataPresence = hasReviewMetadataPayload(payload);
+  const reviewHistoryEligibility = resolveReviewHistoryEligibility(payload, logger);
 
   let statusForPersistence = normalizedIncomingStatus;
   let reviewDecisionForPersistence = reviewDecisionInputRaw;
@@ -511,7 +581,7 @@ export function handleAgenticResult(
           ctx.upsertAgenticRun.run(normalizedRunUpdate);
         }
 
-        if (ctx.insertAgenticRunReviewHistoryEntry?.run) {
+        if (ctx.insertAgenticRunReviewHistoryEntry?.run && reviewHistoryEligibility.shouldInsertHistory) {
           try {
             ctx.insertAgenticRunReviewHistoryEntry.run({
               Artikel_Nummer: artikelNummerInput,
@@ -531,6 +601,12 @@ export function handleAgenticResult(
               error: err instanceof Error ? err.message : err
             });
           }
+        } else if (reviewMetadataPresence.hasMetadata) {
+          logger.info?.('Agentic result suppressed review history metadata from non-human source', {
+            artikelNummer: artikelNummerInput,
+            source: reviewHistoryEligibility.source,
+            suppressedFields: reviewMetadataPresence.suppressedFields
+          });
         }
       }
 
