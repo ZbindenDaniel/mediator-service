@@ -4,6 +4,7 @@ import type { AgenticRun } from './agentic-run';
 
 export interface AgenticRunReviewMetadata {
   decision: string | null;
+  action?: string | null;
   // TODO(agentic-review-contract): Keep frontend/backend review signal fields aligned when contract evolves.
   information_present: boolean | null;
   missing_spec: string[];

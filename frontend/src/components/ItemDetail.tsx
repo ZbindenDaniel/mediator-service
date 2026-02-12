@@ -66,6 +66,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-restart-queue): Confirm restart responses include queued metadata for UI sync.
 
 // TODO(agentic-failure-reason): Ensure agentic restart errors expose backend reasons in UI.
+// TODO(agentic-review-checklist): Revisit checklist prompt UX if operators request multi-field modal editing.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -144,7 +145,7 @@ export interface AgenticStatusCardProps {
   status: AgenticStatusDisplay;
   rows: [string, React.ReactNode][];
   actionPending: boolean;
-  reviewIntent: 'approved' | 'rejected' | null;
+  reviewIntent: 'review' | null;
   error: string | null;
   needsReview: boolean;
   searchTerm?: string;
@@ -159,7 +160,7 @@ export interface AgenticStatusCardProps {
   startLabel?: string;
   onStart?: () => void | Promise<void>;
   onRestart: () => void | Promise<void>;
-  onReview: (decision: 'approved' | 'rejected') => void | Promise<void>;
+  onReview: () => void | Promise<void>;
   onCancel: () => void | Promise<void>;
   onClose?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
@@ -174,13 +175,13 @@ const DETAIL_PLACEHOLDER_TEXT = '-';
 
 
 interface AgenticReviewInput {
-  decision: 'approved' | 'rejected';
   information_present: boolean;
   bad_format: boolean;
   wrong_information: boolean;
   wrong_physical_dimensions: boolean;
   missing_spec: string[];
   notes: string | null;
+  reviewedBy: string | null;
 }
 
 function parseMissingSpecInput(value: string | null): string[] {
@@ -445,11 +446,7 @@ export function AgenticStatusCard({
             </div>
           ) : null}
           {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
-          {reviewIntent ? (
-            <p className="muted">
-              Review-Aktion "{reviewIntent === 'approved' ? 'Freigeben' : 'Ablehnen'}" vorbereitet.
-            </p>
-          ) : null}
+          {reviewIntent ? <p className="muted">Review-Checkliste wird gesendet…</p> : null}
           {error ? (
             <p className="muted" style={{ color: '#a30000' }}>{error}</p>
           ) : null}
@@ -483,11 +480,8 @@ export function AgenticStatusCard({
           ) : null}
           {needsReview ? (
             <div className='row'>
-              <button type="button" className="btn" disabled={actionPending} onClick={() => onReview('approved')}>
-                Freigeben
-              </button>
-              <button type="button" className="btn danger" disabled={actionPending} onClick={() => onReview('rejected')}>
-                Ablehnen
+              <button type="button" className="btn" disabled={actionPending} onClick={onReview}>
+                Review run
               </button>
             </div>
           ) : null}
@@ -777,7 +771,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
-  const [agenticReviewIntent, setAgenticReviewIntent] = useState<'approved' | 'rejected' | null>(null);
+  const [agenticReviewIntent, setAgenticReviewIntent] = useState<'review' | null>(null);
   const [agenticReviewAutomation, setAgenticReviewAutomation] = useState<ItemDetailReviewAutomationSignal | null>(null);
   const [agenticCardWarning, setAgenticCardWarning] = useState<string | null>(null);
   // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
@@ -1960,18 +1954,13 @@ export default function ItemDetail({ itemId }: Props) {
     agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
   );
 
-  async function promptAgenticReviewNote(
-    decision: 'approved' | 'rejected'
-  ): Promise<string | null> {
+  async function promptAgenticReviewNote(): Promise<string | null> {
     while (true) {
       let promptResult: string | null;
       try {
         promptResult = await dialogService.prompt({
           title: 'Review-Notiz',
-          message:
-            decision === 'approved'
-              ? 'Bitte eine Notiz für die Freigabe hinzufügen (optional).'
-              : 'Bitte eine Notiz für die Ablehnung hinzufügen (optional).',
+          message: 'Bitte optional eine Notiz für das Review hinzufügen.',
           confirmLabel: 'Speichern',
           cancelLabel: 'Ohne Notiz',
           placeholder: 'Notiz (optional)',
@@ -2039,10 +2028,8 @@ export default function ItemDetail({ itemId }: Props) {
 
 
 
-  async function promptAgenticReviewInput(
-    decision: 'approved' | 'rejected'
-  ): Promise<AgenticReviewInput | null> {
-    const notes = await promptAgenticReviewNote(decision);
+  async function promptAgenticReviewInput(): Promise<AgenticReviewInput | null> {
+    const notes = await promptAgenticReviewNote();
     if (notes === null) {
       return null;
     }
@@ -2116,17 +2103,17 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     return {
-      decision,
       information_present: informationPresent,
       bad_format: badFormat,
       wrong_information: wrongInformation,
       wrong_physical_dimensions: wrongDimensions,
       missing_spec: parseMissingSpecInput(missingSpecRaw),
-      notes: notes.trim() ? notes.trim() : null
+      notes: notes.trim() ? notes.trim() : null,
+      reviewedBy: null
     };
   }
 
-  async function handleAgenticReview(decision: 'approved' | 'rejected') {
+  async function handleAgenticReview() {
     if (!agentic) return;
     const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
     if (!referenceId) {
@@ -2146,39 +2133,18 @@ export default function ItemDetail({ itemId }: Props) {
       }
       return;
     }
-    const confirmMessage =
-      decision === 'approved'
-        ? 'KIs Ergebnis freigeben?'
-        : 'KIs Ergebnis ablehnen?';
-    let confirmed = false;
-    try {
-      confirmed = await dialogService.confirm({
-        title: 'Review bestätigen',
-        message: confirmMessage,
-        confirmLabel: decision === 'approved' ? 'Freigeben' : 'Ablehnen',
-        cancelLabel: 'Abbrechen'
-      });
-    } catch (error) {
-      console.error('Failed to confirm agentic review decision', error);
-      return;
-    }
-
-    if (!confirmed) {
-      return;
-    }
-
-    const reviewInput = await promptAgenticReviewInput(decision);
+    const reviewInput = await promptAgenticReviewInput();
     if (reviewInput === null) {
       return;
     }
     setAgenticActionPending(true);
     setAgenticError(null);
-    setAgenticReviewIntent(decision);
+    setAgenticReviewIntent('review');
     try {
       const res = await fetch(buildAgenticItemRefPath(referenceId, 'review'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor, ...reviewInput })
+        body: JSON.stringify({ actor, action: 'review', ...reviewInput, reviewedBy: actor })
       });
       if (res.ok) {
         const data = await res.json();
