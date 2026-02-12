@@ -178,6 +178,8 @@ interface NormalizedDetailValue {
 const DETAIL_PLACEHOLDER_TEXT = '-';
 
 
+export const AGENTIC_REVIEW_PROMPT_SEQUENCE = ['checklist', 'note'] as const;
+
 const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
 const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 140;
 
@@ -205,6 +207,23 @@ function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): R
   }
 }
 
+
+export function buildAgenticReviewSubmissionPayload(
+  actor: string,
+  reviewInput: AgenticReviewInput
+): Record<string, unknown> {
+  return {
+    actor,
+    action: 'review',
+    information_present: reviewInput.information_present,
+    bad_format: reviewInput.bad_format,
+    wrong_information: reviewInput.wrong_information,
+    wrong_physical_dimensions: reviewInput.wrong_physical_dimensions,
+    missing_spec: reviewInput.missing_spec,
+    notes: reviewInput.notes,
+    reviewedBy: actor
+  };
+}
 
 function formatReviewPreviewValue(value: unknown, maxLength = REVIEW_PREVIEW_MAX_TEXT_LENGTH): string {
   if (value === null || value === undefined) {
@@ -1566,9 +1585,9 @@ export default function ItemDetail({ itemId }: Props) {
           const rawAgenticStatus = (entry as ItemInstanceSummary)?.AgenticStatus;
           const parsedAgenticStatus =
             typeof rawAgenticStatus === 'string'
-            && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
-            ? rawAgenticStatus
-            : null;
+              && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as (typeof AGENTIC_RUN_STATUSES)[number])
+              ? rawAgenticStatus
+              : null;
           const rawStock = (entry as ItemInstanceSummary)?.Auf_Lager;
           const parsedStock =
             typeof rawStock === 'number'
@@ -2040,6 +2059,7 @@ export default function ItemDetail({ itemId }: Props) {
     agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
   );
 
+  // TODO(agentic-review-flow-order): Reconfirm whether optional note should remain a final prompt once reviewer feedback is collected.
   // TODO(agentic-review-note-modal): Keep this as a single-step modal unless operators request guided note validation.
   async function promptAgenticReviewNote(): Promise<string | null> {
     let promptResult: string | null;
@@ -2092,10 +2112,11 @@ export default function ItemDetail({ itemId }: Props) {
 
 
   async function promptAgenticReviewInput(): Promise<AgenticReviewInput | null> {
-    const notes = await promptAgenticReviewNote();
-    if (notes === null) {
-      return null;
-    }
+    logger.info?.('ItemDetail: Agentic review submission stage', {
+      checklistStarted: true,
+      checklistSubmitted: false,
+      noteProvided: false
+    });
 
     const contentFormatPreviewMessage = (
       <div className="review-dialog__sections">
@@ -2230,6 +2251,11 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
+    const notes = await promptAgenticReviewNote();
+    if (notes === null) {
+      return null;
+    }
+
     const mappedInput = mapReviewAnswersToInput(
       {
         plausible,
@@ -2243,6 +2269,12 @@ export default function ItemDetail({ itemId }: Props) {
         reviewedBy: null
       }
     );
+
+    logger.info?.('ItemDetail: Agentic review submission stage', {
+      checklistStarted: true,
+      checklistSubmitted: true,
+      noteProvided: Boolean(mappedInput.notes)
+    });
 
     logger.info?.('ItemDetail: Mapped review checklist answers to structured payload', {
       itemId,
@@ -2265,56 +2297,59 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   async function handleAgenticReview() {
-    if (!agentic) return;
-    const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
-    if (!referenceId) {
-      logError('ItemDetail: Missing Artikel_Nummer for agentic review', undefined, { itemId });
-      setAgenticError('Artikelnummer fehlt für den Review.');
-      return;
-    }
-    const actor = await ensureUser();
-    if (!actor) {
-      try {
-        await dialogService.alert({
-          title: 'Aktion nicht möglich',
-          message: 'Bitte zuerst oben den Benutzer setzen.'
-        });
-      } catch (error) {
-        console.error('Failed to display agentic review user alert', error);
-      }
-      return;
-    }
-    const reviewInput = await promptAgenticReviewInput();
-    if (reviewInput === null) {
-      return;
-    }
-    logger.info?.('ItemDetail: Submitting agentic review', {
-      referenceId,
-      hasNote: Boolean(reviewInput.notes && reviewInput.notes.trim().length > 0)
-    });
-    setAgenticActionPending(true);
-    setAgenticError(null);
-    setAgenticReviewIntent('review');
     try {
-      const res = await fetch(buildAgenticItemRefPath(referenceId, 'review'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor, action: 'review', ...reviewInput, reviewedBy: actor })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAgentic(data.agentic ?? null);
-        setAgenticError(null);
-      } else {
-        logError('Agentic review update failed', null, { referenceId, status: res.status });
-        setAgenticError('Review konnte nicht gespeichert werden.');
+      if (!agentic) return;
+      const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
+      if (!referenceId) {
+        logError('ItemDetail: Missing Artikel_Nummer for agentic review', undefined, { itemId });
+        setAgenticError('Artikelnummer fehlt für den Review.');
+        return;
       }
-    } catch (err) {
-      logError('Agentic review request failed', err, { referenceId });
-      setAgenticError('Review-Anfrage fehlgeschlagen.');
-    } finally {
+      const actor = await ensureUser();
+      if (!actor) {
+        try {
+          await dialogService.alert({
+            title: 'Aktion nicht möglich',
+            message: 'Bitte zuerst oben den Benutzer setzen.'
+          });
+        } catch (error) {
+          console.error('Failed to display agentic review user alert', error);
+        }
+        return;
+      }
+      const reviewInput = await promptAgenticReviewInput();
+      if (reviewInput === null) {
+        return;
+      }
+      setAgenticActionPending(true);
+      setAgenticError(null);
+      setAgenticReviewIntent('review');
+      try {
+        const res = await fetch(buildAgenticItemRefPath(referenceId, 'review'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildAgenticReviewSubmissionPayload(actor, reviewInput))
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAgentic(data.agentic ?? null);
+          setAgenticError(null);
+        } else {
+          logError('Agentic review update failed', null, { referenceId, status: res.status });
+          setAgenticError('Review konnte nicht gespeichert werden.');
+        }
+      } catch (err) {
+        logError('Agentic review request failed', err, { referenceId });
+        setAgenticError('Review-Anfrage fehlgeschlagen.');
+      } finally {
+        setAgenticReviewIntent(null);
+        setAgenticActionPending(false);
+      }
+    } catch (error) {
+      logError('ItemDetail: Failed to run agentic review flow', error, { itemId });
       setAgenticReviewIntent(null);
       setAgenticActionPending(false);
+      setAgenticError('Review-Anfrage fehlgeschlagen.');
     }
   }
 
