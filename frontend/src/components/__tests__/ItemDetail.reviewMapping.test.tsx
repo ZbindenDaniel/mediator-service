@@ -1,13 +1,15 @@
 import { mapReviewAnswersToInput } from '../../lib/agenticReviewMapping';
 
 describe('mapReviewAnswersToInput', () => {
-  it('maps updated review question semantics to existing review payload fields', () => {
+  // TODO(agentic-review-semantics): Re-check mapping if checklist wording changes again.
+  it('maps explicit german checklist intent to existing review payload fields', () => {
     const payload = mapReviewAnswersToInput(
       {
-        plausible: false,
-        formattingCorrect: true,
-        missingExpectedInfo: true,
-        requiredDimensionsMissing: true
+        descriptionMatches: true,
+        shortTextMatches: false,
+        hasUnnecessarySpecs: true,
+        hasMissingSpecs: true,
+        dimensionsPlausible: false
       },
       {
         missingSpecRaw: ' Spannung, material,Spannung , ',
@@ -17,7 +19,7 @@ describe('mapReviewAnswersToInput', () => {
 
     expect(payload).toEqual({
       information_present: false,
-      bad_format: false,
+      bad_format: true,
       wrong_information: true,
       wrong_physical_dimensions: true,
       missing_spec: ['Spannung', 'material'],
@@ -26,13 +28,14 @@ describe('mapReviewAnswersToInput', () => {
     });
   });
 
-  it('maps positive answers and empty free text safely', () => {
+  it('keeps positive checklist answers non-blocking and trims free text safely', () => {
     const payload = mapReviewAnswersToInput(
       {
-        plausible: true,
-        formattingCorrect: true,
-        missingExpectedInfo: false,
-        requiredDimensionsMissing: false
+        descriptionMatches: true,
+        shortTextMatches: true,
+        hasUnnecessarySpecs: false,
+        hasMissingSpecs: false,
+        dimensionsPlausible: true
       },
       {
         missingSpecRaw: '',

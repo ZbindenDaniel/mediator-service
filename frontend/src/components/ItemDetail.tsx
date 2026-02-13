@@ -2060,6 +2060,7 @@ export default function ItemDetail({ itemId }: Props) {
   );
 
   // TODO(agentic-review-flow-order): Reconfirm whether optional note should remain a final prompt once reviewer feedback is collected.
+  // TODO(agentic-review-step-telemetry): Revisit per-question logging payload fields if analytics schema expands.
   // TODO(agentic-review-note-modal): Keep this as a single-step modal unless operators request guided note validation.
   async function promptAgenticReviewNote(): Promise<string | null> {
     let promptResult: string | null;
@@ -2118,70 +2119,71 @@ export default function ItemDetail({ itemId }: Props) {
       noteProvided: false
     });
 
-    const contentFormatPreviewMessage = (
+    const descriptionPreviewMessage = (
       <div className="review-dialog__sections">
         {buildReviewDialogSection(
           itemId,
-          'Section A · Artikelbeschreibung / Kurzbeschreibung',
-          [
-            { label: 'Artikelbeschreibung', value: item?.Artikelbeschreibung ?? null },
-            { label: 'Kurzbeschreibung', value: item?.Kurzbeschreibung ?? null }
-          ],
-          'Is formatting correct?'
+          'Schritt 1 · Artikelbeschreibung',
+          [{ label: 'Artikelbeschreibung', value: item?.Artikelbeschreibung ?? null }],
+          'Artikelbeschreibung passend?'
         )}
       </div>
     );
 
-    const langtextPreviewMessage = (
+    const shortTextPreviewMessage = (
       <div className="review-dialog__sections">
         {buildReviewDialogSection(
           itemId,
-          'Section B · Langtext',
+          'Schritt 2 · Kurztext',
+          [{ label: 'Kurztext', value: item?.Kurzbeschreibung ?? null }],
+          'Kurztext passend?'
+        )}
+      </div>
+    );
+
+    const unnecessarySpecsPreviewMessage = (
+      <div className="review-dialog__sections">
+        {buildReviewDialogSection(
+          itemId,
+          'Schritt 3 · Spezifikationen',
           buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
-          'Is expected information missing?'
+          'Spezifikationen: unnötige Infos?'
         )}
       </div>
     );
 
-    const dimensionPreviewMessage = (
+    const missingSpecsPreviewMessage = (
       <div className="review-dialog__sections">
         {buildReviewDialogSection(
           itemId,
-          'Section C · Abmessungen / Gewicht',
+          'Schritt 4 · Spezifikationen',
+          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
+          'Spezifikationen: fehlende Infos?'
+        )}
+      </div>
+    );
+
+    const dimensionsPreviewMessage = (
+      <div className="review-dialog__sections">
+        {buildReviewDialogSection(
+          itemId,
+          'Schritt 5 · Dimensionen',
           [
             { label: 'Länge_mm', value: item?.Länge_mm ?? null },
             { label: 'Breite_mm', value: item?.Breite_mm ?? null },
             { label: 'Höhe_mm', value: item?.Höhe_mm ?? null },
             { label: 'Gewicht_kg', value: item?.Gewicht_kg ?? null }
           ],
-          'Are required physical properties/dimensions missing?'
+          'Dimensionen vorhanden/plausibel?'
         )}
       </div>
     );
 
-    const langtextWrongInfoMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Section D · Fachliche Bewertung',
-          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
-          'Is the data plausible?'
-        )}
-      </div>
-    );
-
-    const langtextMissingSpecMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Section D · Fehlende Spezifikationen',
-          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
-          'Optionale Liste fehlender Spezifikationen (kommagetrennt).'
-        )}
-      </div>
-    );
-
-    const askFlag = async (title: string, message: React.ReactNode): Promise<boolean | null> => {
+    const askFlag = async (
+      stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
+      title: string,
+      message: React.ReactNode
+    ): Promise<boolean | null> => {
       try {
         const confirmed = await dialogService.confirm({
           title,
@@ -2190,65 +2192,103 @@ export default function ItemDetail({ itemId }: Props) {
           cancelLabel: 'Nein',
           contentClassName: 'review-dialog'
         });
+        logger.info?.('ItemDetail: Agentic review checklist step completed', {
+          itemId,
+          stepKey,
+          completed: true,
+          answer: confirmed
+        });
         return confirmed;
       } catch (error) {
         logError('ItemDetail: Failed to capture structured review flag', error, {
           itemId,
-          title
+          title,
+          stepKey
+        });
+        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
+          itemId,
+          stepKey,
+          completed: false
         });
         return null;
       }
     };
 
-    const plausible = await askFlag(
-      'Is the data plausible?',
-      langtextWrongInfoMessage
+    const descriptionMatches = await askFlag(
+      'descriptionMatches',
+      'Artikelbeschreibung passend?',
+      descriptionPreviewMessage
     );
-    if (plausible === null) {
+    if (descriptionMatches === null) {
       return null;
     }
 
-    const formattingCorrect = await askFlag(
-      'Is formatting correct?',
-      contentFormatPreviewMessage
+    const shortTextMatches = await askFlag(
+      'shortTextMatches',
+      'Kurztext passend?',
+      shortTextPreviewMessage
     );
-    if (formattingCorrect === null) {
+    if (shortTextMatches === null) {
       return null;
     }
 
-    const missingExpectedInfo = await askFlag(
-      'Is expected information missing?',
-      langtextPreviewMessage
+    const hasUnnecessarySpecs = await askFlag(
+      'hasUnnecessarySpecs',
+      'Spezifikationen: unnötige Infos?',
+      unnecessarySpecsPreviewMessage
     );
-    if (missingExpectedInfo === null) {
+    if (hasUnnecessarySpecs === null) {
       return null;
     }
 
-    const requiredDimensionsMissing = await askFlag(
-      'Are required physical properties/dimensions missing?',
-      dimensionPreviewMessage
+    const hasMissingSpecs = await askFlag(
+      'hasMissingSpecs',
+      'Spezifikationen: fehlende Infos?',
+      missingSpecsPreviewMessage
     );
-    if (requiredDimensionsMissing === null) {
+    if (hasMissingSpecs === null) {
+      return null;
+    }
+
+    const dimensionsPlausible = await askFlag(
+      'dimensionsPlausible',
+      'Dimensionen vorhanden/plausibel?',
+      dimensionsPreviewMessage
+    );
+    if (dimensionsPlausible === null) {
       return null;
     }
 
     let missingSpecRaw: string | null = '';
-    try {
-      missingSpecRaw = await dialogService.prompt({
-        title: 'Fehlende Spezifikationen',
-        message: langtextMissingSpecMessage,
-        confirmLabel: 'Übernehmen',
-        cancelLabel: 'Ohne Angaben',
-        placeholder: 'z. B. Spannung, Material, Schutzklasse',
-        defaultValue: '',
-        contentClassName: 'review-dialog'
+    if (hasMissingSpecs) {
+      try {
+        missingSpecRaw = await dialogService.prompt({
+          title: 'Fehlende Spezifikationen',
+          message: missingSpecsPreviewMessage,
+          confirmLabel: 'Übernehmen',
+          cancelLabel: 'Abbrechen',
+          placeholder: 'z. B. Spannung, Material, Schutzklasse',
+          defaultValue: '',
+          contentClassName: 'review-dialog'
+        });
+      } catch (error) {
+        logError('ItemDetail: Failed to prompt for missing specification list', error, { itemId });
+        return null;
+      }
+      if (missingSpecRaw === null) {
+        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
+          itemId,
+          stepKey: 'missingSpecRaw',
+          completed: false
+        });
+        return null;
+      }
+      logger.info?.('ItemDetail: Agentic review checklist step completed', {
+        itemId,
+        stepKey: 'missingSpecRaw',
+        completed: true,
+        missingSpecCharacters: missingSpecRaw.length
       });
-    } catch (error) {
-      logError('ItemDetail: Failed to prompt for missing specification list', error, { itemId });
-      return null;
-    }
-    if (missingSpecRaw === null) {
-      return null;
     }
 
     const notes = await promptAgenticReviewNote();
@@ -2258,10 +2298,11 @@ export default function ItemDetail({ itemId }: Props) {
 
     const mappedInput = mapReviewAnswersToInput(
       {
-        plausible,
-        formattingCorrect,
-        missingExpectedInfo,
-        requiredDimensionsMissing
+        descriptionMatches,
+        shortTextMatches,
+        hasUnnecessarySpecs,
+        hasMissingSpecs,
+        dimensionsPlausible
       },
       {
         missingSpecRaw,
