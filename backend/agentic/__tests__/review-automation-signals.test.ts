@@ -91,6 +91,30 @@ describe('review automation signal aggregation', () => {
     expect(signals.information_present_low_trigger).toBe(false);
   });
 
+
+  test('uses explicit zero thresholds when the aggregation sample is empty', () => {
+    const info = jest.fn();
+    const signals = aggregateReviewAutomationSignals([], { info, warn: jest.fn(), error: jest.fn() });
+
+    expect(signals.sampleSize).toBe(0);
+    expect(signals.lowConfidence).toBe(true);
+    expect(signals.bad_format_trigger).toBe(false);
+
+    expect(info).toHaveBeenCalledWith(
+      '[agentic-review-automation] Computed aggregate review automation signals',
+      expect.objectContaining({
+        sampleSize: 0,
+        thresholds: {
+          badFormatMinCount: 0,
+          wrongInformationMinCount: 0,
+          wrongPhysicalDimensionsMinCount: 0,
+          missingSpecMinCount: 0,
+          informationPresentLowMinCount: 0
+        }
+      })
+    );
+  });
+
   test('loads subcategory history window before aggregating signals', () => {
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
     const history = [

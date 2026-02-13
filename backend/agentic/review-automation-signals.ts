@@ -121,7 +121,8 @@ function normalizeMissingSpec(value: unknown): string[] {
 
 function thresholdForSample(baseThreshold: number, sampleSize: number): number {
   if (sampleSize <= 0) {
-    return Number.MAX_SAFE_INTEGER;
+    // TODO(agentic-review-signals): Keep zero-sample thresholds explicit for easier telemetry inspection.
+    return 0;
   }
   return Math.max(1, Math.ceil((baseThreshold / AGGREGATION_WINDOW) * sampleSize));
 }
@@ -239,11 +240,11 @@ export function aggregateReviewAutomationSignals(
       informationPresentFalseCount,
       informationPresentFalsePct: roundPct(informationPresentFalseCount, sampleSize),
       missingSpecTopKeys,
-      bad_format_trigger: badFormatTrueCount >= thresholds.badFormatMinCount,
-      wrong_information_trigger: wrongInformationTrueCount >= thresholds.wrongInformationMinCount,
-      wrong_physical_dimensions_trigger: wrongPhysicalDimensionsTrueCount >= thresholds.wrongPhysicalDimensionsMinCount,
-      missing_spec_trigger: topMissingSpecCount >= thresholds.missingSpecMinCount,
-      information_present_low_trigger: informationPresentFalseCount >= thresholds.informationPresentLowMinCount
+      bad_format_trigger: sampleSize > 0 && badFormatTrueCount >= thresholds.badFormatMinCount,
+      wrong_information_trigger: sampleSize > 0 && wrongInformationTrueCount >= thresholds.wrongInformationMinCount,
+      wrong_physical_dimensions_trigger: sampleSize > 0 && wrongPhysicalDimensionsTrueCount >= thresholds.wrongPhysicalDimensionsMinCount,
+      missing_spec_trigger: sampleSize > 0 && topMissingSpecCount >= thresholds.missingSpecMinCount,
+      information_present_low_trigger: sampleSize > 0 && informationPresentFalseCount >= thresholds.informationPresentLowMinCount
     };
 
     logger.info?.('[agentic-review-automation] Computed aggregate review automation signals', {
