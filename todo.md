@@ -5,6 +5,10 @@
 - Items with qty 0 should still be browsable
 - relocate item and box should allow for text search to find by label
 - improved boxList filter, add 'Standort'
+- track the amount of search queries used/received
+- better structure agentic transcript
+- remove button 'Ki-Suche abschiliessen' in some states
+- Search queries badly formated
 - weight and itemcount of shelfs is not calculated
 - revisit the erp-sync feature
 - batch agentic run start fails when already a run exisists
