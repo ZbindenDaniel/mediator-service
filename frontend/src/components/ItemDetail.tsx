@@ -71,6 +71,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-checklist): Revisit checklist prompt UX if operators request multi-field modal editing.
 // TODO(agentic-review-preview): Revalidate review modal preview compactness after operator feedback on readability.
 // TODO(agentic-review-dialog): Reconfirm section/question emphasis styling in the review modal after reviewer validation.
+// TODO(agentic-review-spec-fields): Revisit field normalization if Langtext parsing contracts change.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -78,6 +79,15 @@ import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
+import {
+  buildNormalizedReviewSpecFields,
+  mergeSpecFieldSelection,
+  parseReviewSpecTokenList
+} from './agenticReviewSpecFields';
+import AgenticSpecFieldReviewModal, {
+  type AgenticSpecFieldOption,
+  type AgenticSpecFieldReviewResult
+} from './AgenticSpecFieldReviewModal';
 
 interface Props {
   itemId: string;
@@ -182,6 +192,7 @@ export const AGENTIC_REVIEW_PROMPT_SEQUENCE = ['checklist', 'note'] as const;
 
 const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
 const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 140;
+
 
 function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): ReviewDialogField[] {
   try {
@@ -878,6 +889,14 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'review' | null>(null);
+  const [specFieldReviewModalState, setSpecFieldReviewModalState] = useState<{
+    title: string;
+    description: string;
+    fieldOptions: AgenticSpecFieldOption[];
+    includeAdditionalInput: boolean;
+    additionalInputPlaceholder?: string;
+    resolve: (result: AgenticSpecFieldReviewResult | null) => void;
+  } | null>(null);
   const [agenticReviewAutomation, setAgenticReviewAutomation] = useState<ItemDetailReviewAutomationSignal | null>(null);
   const [agenticCardWarning, setAgenticCardWarning] = useState<string | null>(null);
   // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
@@ -2111,6 +2130,33 @@ export default function ItemDetail({ itemId }: Props) {
 
 
 
+  async function promptSpecFieldReviewSelection(options: {
+    title: string;
+    description: string;
+    fieldOptions: AgenticSpecFieldOption[];
+    includeAdditionalInput?: boolean;
+    additionalInputPlaceholder?: string;
+  }): Promise<AgenticSpecFieldReviewResult | null> {
+    try {
+      return await new Promise<AgenticSpecFieldReviewResult | null>((resolve) => {
+        setSpecFieldReviewModalState({
+          title: options.title,
+          description: options.description,
+          fieldOptions: options.fieldOptions,
+          includeAdditionalInput: options.includeAdditionalInput ?? false,
+          additionalInputPlaceholder: options.additionalInputPlaceholder,
+          resolve
+        });
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to collect spec field review selection', error, { itemId, title: options.title });
+      return null;
+    }
+  }
+
+
+
+
 
 
   async function promptAgenticReviewInput(): Promise<AgenticReviewInput | null> {
@@ -2119,6 +2165,14 @@ export default function ItemDetail({ itemId }: Props) {
       checklistSubmitted: false,
       noteProvided: false
     });
+
+    const normalizedSpecFields = buildNormalizedReviewSpecFields(item?.Langtext ?? null, itemId, REVIEW_PREVIEW_PLACEHOLDER, formatReviewPreviewValue);
+    const normalizedSpecFieldOptions: AgenticSpecFieldOption[] = normalizedSpecFields.map((entry) => ({
+      value: entry.key,
+      label: entry.value && entry.value !== REVIEW_PREVIEW_PLACEHOLDER
+        ? `${entry.key}: ${entry.value}`
+        : entry.key
+    }));
 
     const descriptionPreviewMessage = (
       <div className="review-dialog__sections">
@@ -2263,21 +2317,14 @@ export default function ItemDetail({ itemId }: Props) {
     let missingSpecRaw: string | null = '';
     let unneededSpecRaw: string | null = '';
     if (hasUnnecessarySpecs) {
-      try {
-        unneededSpecRaw = await dialogService.prompt({
-          title: 'Unnötige Spezifikationen',
-          message: unnecessarySpecsPreviewMessage,
-          confirmLabel: 'Übernehmen',
-          cancelLabel: 'Abbrechen',
-          placeholder: 'z. B. interne Hinweise, irrelevante Marketingtexte',
-          defaultValue: '',
-          contentClassName: 'review-dialog'
-        });
-      } catch (error) {
-        logError('ItemDetail: Failed to prompt for unneeded specification list', error, { itemId });
-        return null;
-      }
-      if (unneededSpecRaw === null) {
+      const selection = await promptSpecFieldReviewSelection({
+        title: 'Unnötige Spezifikationen',
+        description: 'Bitte unnötige Spezifikationsfelder auswählen.',
+        fieldOptions: normalizedSpecFieldOptions,
+        includeAdditionalInput: true,
+        additionalInputPlaceholder: 'z. B. interne Hinweise, irrelevante Marketingtexte'
+      });
+      if (selection === null) {
         logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
           itemId,
           stepKey: 'unneededSpecRaw',
@@ -2285,30 +2332,24 @@ export default function ItemDetail({ itemId }: Props) {
         });
         return null;
       }
+      unneededSpecRaw = mergeSpecFieldSelection(selection.selectedFields, selection.additionalInput);
       logger.info?.('ItemDetail: Agentic review checklist step completed', {
         itemId,
         stepKey: 'unneededSpecRaw',
         completed: true,
-        unneededSpecCharacters: unneededSpecRaw.length
+        unneededSpecCount: parseReviewSpecTokenList(unneededSpecRaw).length
       });
     }
 
     if (hasMissingSpecs) {
-      try {
-        missingSpecRaw = await dialogService.prompt({
-          title: 'Fehlende Spezifikationen',
-          message: missingSpecsPreviewMessage,
-          confirmLabel: 'Übernehmen',
-          cancelLabel: 'Abbrechen',
-          placeholder: 'z. B. Spannung, Material, Schutzklasse',
-          defaultValue: '',
-          contentClassName: 'review-dialog'
-        });
-      } catch (error) {
-        logError('ItemDetail: Failed to prompt for missing specification list', error, { itemId });
-        return null;
-      }
-      if (missingSpecRaw === null) {
+      const selection = await promptSpecFieldReviewSelection({
+        title: 'Fehlende Spezifikationen',
+        description: 'Bitte fehlende Spezifikationsfelder auswählen oder ergänzen.',
+        fieldOptions: normalizedSpecFieldOptions,
+        includeAdditionalInput: true,
+        additionalInputPlaceholder: 'z. B. Spannung, Material, Schutzklasse'
+      });
+      if (selection === null) {
         logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
           itemId,
           stepKey: 'missingSpecRaw',
@@ -2316,11 +2357,12 @@ export default function ItemDetail({ itemId }: Props) {
         });
         return null;
       }
+      missingSpecRaw = mergeSpecFieldSelection(selection.selectedFields, selection.additionalInput);
       logger.info?.('ItemDetail: Agentic review checklist step completed', {
         itemId,
         stepKey: 'missingSpecRaw',
         completed: true,
-        missingSpecCharacters: missingSpecRaw.length
+        missingSpecCount: parseReviewSpecTokenList(missingSpecRaw).length
       });
     }
 
@@ -3333,6 +3375,34 @@ export default function ItemDetail({ itemId }: Props) {
               onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             />
 
+
+            {specFieldReviewModalState ? (
+              <AgenticSpecFieldReviewModal
+                title={specFieldReviewModalState.title}
+                description={specFieldReviewModalState.description}
+                fieldOptions={specFieldReviewModalState.fieldOptions}
+                includeAdditionalInput={specFieldReviewModalState.includeAdditionalInput}
+                additionalInputPlaceholder={specFieldReviewModalState.additionalInputPlaceholder}
+                onCancel={() => {
+                  try {
+                    specFieldReviewModalState.resolve(null);
+                  } catch (error) {
+                    logError('ItemDetail: Failed to resolve cancelled spec field review modal', error, { itemId });
+                  } finally {
+                    setSpecFieldReviewModalState(null);
+                  }
+                }}
+                onConfirm={(result) => {
+                  try {
+                    specFieldReviewModalState.resolve(result);
+                  } catch (error) {
+                    logError('ItemDetail: Failed to resolve confirmed spec field review modal', error, { itemId });
+                  } finally {
+                    setSpecFieldReviewModalState(null);
+                  }
+                }}
+              />
+            ) : null}
 
             <PrintLabelButton itemId={item.ItemUUID} />
 

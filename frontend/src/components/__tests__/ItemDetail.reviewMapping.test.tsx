@@ -1,4 +1,5 @@
 import { mapReviewAnswersToInput } from '../../lib/agenticReviewMapping';
+import { mergeSpecFieldSelection } from '../agenticReviewSpecFields';
 
 describe('mapReviewAnswersToInput', () => {
   // TODO(agentic-review-semantics): Re-check mapping if checklist wording changes again.
@@ -28,6 +29,28 @@ describe('mapReviewAnswersToInput', () => {
       notes: 'please review',
       reviewedBy: null
     });
+  });
+
+
+
+  it('maps selected spec fields into unneeded_spec and missing_spec payload arrays', () => {
+    const payload = mapReviewAnswersToInput(
+      {
+        descriptionMatches: true,
+        shortTextMatches: true,
+        hasUnnecessarySpecs: true,
+        hasMissingSpecs: true,
+        dimensionsPlausible: true
+      },
+      {
+        missingSpecRaw: mergeSpecFieldSelection(['Spannung', 'Leistung'], ' Schutzklasse , '),
+        unneededSpecRaw: mergeSpecFieldSelection(['Marketing'], ' intern ,'),
+        notes: ''
+      }
+    );
+
+    expect(payload.unneeded_spec).toEqual(['Marketing', 'intern']);
+    expect(payload.missing_spec).toEqual(['Spannung', 'Leistung', 'Schutzklasse']);
   });
 
   it('keeps positive checklist answers non-blocking and trims free text safely', () => {

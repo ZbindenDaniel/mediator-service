@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+<!-- TODO(agentic-review-spec-field-ui): Revisit selector affordances after reviewer telemetry confirms usage patterns. -->
+- **Agentic review spec-field selectors in UI**: derived normalized Langtext spec fields for review flows, added minimal field-selection modal support for unnecessary/missing specs with fallback logging, and covered selected-field to payload mapping via focused component-level tests.
 <!-- TODO(agentic-review-unneeded-spec): validate analytics consumer readiness for the new unneeded_spec signal. -->
 - **Agentic unneeded-spec review signal contract**: added shared/FE/BE support for structured `unneeded_spec` arrays alongside `missing_spec`, normalized and persisted both lists through manual review and history paths, and extended logs with count-only review signal metrics.
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
