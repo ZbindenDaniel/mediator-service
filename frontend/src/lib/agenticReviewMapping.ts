@@ -1,9 +1,10 @@
 // TODO(agentic-review-mapping): Keep question semantics and payload field mapping aligned across checklist UI revisions.
 export interface AgenticReviewQuestionAnswers {
-  plausible: boolean;
-  formattingCorrect: boolean;
-  missingExpectedInfo: boolean;
-  requiredDimensionsMissing: boolean;
+  descriptionMatches: boolean;
+  shortTextMatches: boolean;
+  hasUnnecessarySpecs: boolean;
+  hasMissingSpecs: boolean;
+  dimensionsPlausible: boolean;
 }
 
 export interface AgenticReviewInput {
@@ -39,10 +40,10 @@ export function mapReviewAnswersToInput(
   options: { missingSpecRaw: string | null; notes: string; reviewedBy?: string | null }
 ): AgenticReviewInput {
   return {
-    information_present: !answers.missingExpectedInfo,
-    bad_format: !answers.formattingCorrect,
-    wrong_information: !answers.plausible,
-    wrong_physical_dimensions: answers.requiredDimensionsMissing,
+    information_present: !answers.hasMissingSpecs,
+    bad_format: !answers.descriptionMatches || !answers.shortTextMatches,
+    wrong_information: answers.hasUnnecessarySpecs,
+    wrong_physical_dimensions: !answers.dimensionsPlausible,
     missing_spec: parseMissingSpecInput(options.missingSpecRaw),
     notes: options.notes.trim() ? options.notes.trim() : null,
     reviewedBy: options.reviewedBy ?? null
