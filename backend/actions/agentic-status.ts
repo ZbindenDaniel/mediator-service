@@ -104,6 +104,7 @@ export function applyPriceFallbackAfterReview(
 type NormalizedReviewMetadata = {
   information_present: boolean | null;
   missing_spec: string[];
+  unneeded_spec: string[];
   bad_format: boolean | null;
   wrong_information: boolean | null;
   wrong_physical_dimensions: boolean | null;
@@ -139,7 +140,7 @@ function normalizeNullableBoolean(value: unknown): boolean | null {
   return null;
 }
 
-function normalizeMissingSpec(value: unknown): string[] {
+function normalizeSpecList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -165,7 +166,8 @@ function normalizeReviewMetadataPayload(data: Record<string, unknown>): Normaliz
   const reviewedByRaw = typeof data.reviewedBy === 'string' ? data.reviewedBy.trim() : '';
   return {
     information_present: normalizeNullableBoolean(data.information_present),
-    missing_spec: normalizeMissingSpec(data.missing_spec),
+    missing_spec: normalizeSpecList(data.missing_spec),
+    unneeded_spec: normalizeSpecList(data.unneeded_spec),
     bad_format: normalizeNullableBoolean(data.bad_format),
     wrong_information: normalizeNullableBoolean(data.wrong_information),
     wrong_physical_dimensions: normalizeNullableBoolean(data.wrong_physical_dimensions),
@@ -226,6 +228,7 @@ function persistManualReviewHistoryEntry(
         payload.reviewMetadata.wrong_physical_dimensions
       ].filter((value) => value !== null).length,
       missingSpecCount: payload.reviewMetadata.missing_spec.length,
+      unneededSpecCount: payload.reviewMetadata.unneeded_spec.length,
       inserted: Boolean(insertResult && (insertResult.changes ?? 1) > 0)
     });
   } catch (error) {
@@ -387,7 +390,8 @@ const action = defineHttpAction({
         reviewMetadata.bad_format === true ||
         reviewMetadata.wrong_information === true ||
         reviewMetadata.wrong_physical_dimensions === true ||
-        reviewMetadata.missing_spec.length > 0;
+        reviewMetadata.missing_spec.length > 0 ||
+        reviewMetadata.unneeded_spec.length > 0;
       const derivedChecklistDecision = isChecklistReview
         ? (hasNegativeChecklistSignal ? 'rejected' : 'approved')
         : null;

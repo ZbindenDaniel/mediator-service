@@ -183,6 +183,7 @@ function normalizeReviewMetadataForHistory(
         reviewObject?.information_present ?? payload.information_present ?? payload.informationPresent ?? null
       ),
       missing_spec: normalizeMissingSpec(reviewObject?.missing_spec ?? payload.missing_spec ?? payload.missingSpec ?? []),
+      unneeded_spec: normalizeMissingSpec(reviewObject?.unneeded_spec ?? payload.unneeded_spec ?? payload.unneededSpec ?? []),
       bad_format: normalizeNullableBoolean(reviewObject?.bad_format ?? payload.bad_format ?? payload.badFormat ?? null),
       wrong_information: normalizeNullableBoolean(
         reviewObject?.wrong_information ?? payload.wrong_information ?? payload.wrongInformation ?? null
@@ -201,7 +202,8 @@ function normalizeReviewMetadataForHistory(
       ].filter((value) => value !== null).length,
       signalTrueCount: [resolved.bad_format, resolved.wrong_information, resolved.wrong_physical_dimensions].filter(Boolean)
         .length,
-      missingSpecCount: resolved.missing_spec.length
+      missingSpecCount: resolved.missing_spec.length,
+      unneededSpecCount: resolved.unneeded_spec.length
     });
 
     return JSON.stringify(resolved);
@@ -230,7 +232,7 @@ function hasReviewMetadataPayload(payload: Record<string, unknown>): {
   const reviewObject =
     typeof reviewCandidate === 'object' && reviewCandidate ? (reviewCandidate as Record<string, unknown>) : null;
   if (reviewObject) {
-    const checklistKeys = ['information_present', 'missing_spec', 'bad_format', 'wrong_information', 'wrong_physical_dimensions'];
+    const checklistKeys = ['information_present', 'missing_spec', 'unneeded_spec', 'bad_format', 'wrong_information', 'wrong_physical_dimensions'];
     for (const key of checklistKeys) {
       if (Object.prototype.hasOwnProperty.call(reviewObject, key)) {
         suppressedFields.push(`ReviewChecklist.${key}`);

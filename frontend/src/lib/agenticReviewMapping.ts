@@ -13,6 +13,7 @@ export interface AgenticReviewInput {
   wrong_information: boolean;
   wrong_physical_dimensions: boolean;
   missing_spec: string[];
+  unneeded_spec: string[];
   notes: string | null;
   reviewedBy: string | null;
 }
@@ -37,7 +38,7 @@ export function parseMissingSpecInput(value: string | null): string[] {
 
 export function mapReviewAnswersToInput(
   answers: AgenticReviewQuestionAnswers,
-  options: { missingSpecRaw: string | null; notes: string; reviewedBy?: string | null }
+  options: { missingSpecRaw: string | null; unneededSpecRaw?: string | null; unneededSpecKeys?: string[]; notes: string; reviewedBy?: string | null }
 ): AgenticReviewInput {
   return {
     information_present: !answers.hasMissingSpecs,
@@ -45,6 +46,9 @@ export function mapReviewAnswersToInput(
     wrong_information: answers.hasUnnecessarySpecs,
     wrong_physical_dimensions: !answers.dimensionsPlausible,
     missing_spec: parseMissingSpecInput(options.missingSpecRaw),
+    unneeded_spec: Array.isArray(options.unneededSpecKeys)
+      ? parseMissingSpecInput(options.unneededSpecKeys.join(","))
+      : parseMissingSpecInput(options.unneededSpecRaw ?? null),
     notes: options.notes.trim() ? options.notes.trim() : null,
     reviewedBy: options.reviewedBy ?? null
   };

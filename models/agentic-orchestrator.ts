@@ -8,6 +8,8 @@ export interface AgenticRunReviewMetadata {
   // TODO(agentic-review-contract): Keep frontend/backend review signal fields aligned when contract evolves.
   information_present: boolean | null;
   missing_spec: string[];
+  // TODO(agentic-review-contract): Keep unneeded_spec normalization aligned with missing_spec caps.
+  unneeded_spec: string[];
   bad_format: boolean | null;
   wrong_information: boolean | null;
   wrong_physical_dimensions: boolean | null;

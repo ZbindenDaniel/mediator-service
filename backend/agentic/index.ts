@@ -375,13 +375,13 @@ function normalizeNullableBoolean(value: unknown): boolean | null {
   return null;
 }
 
-function normalizeMissingSpec(rawMissingSpec: unknown): string[] {
-  if (!Array.isArray(rawMissingSpec) || rawMissingSpec.length === 0) {
+function normalizeSpecList(rawSpecList: unknown): string[] {
+  if (!Array.isArray(rawSpecList) || rawSpecList.length === 0) {
     return [];
   }
 
   const deduped = new Map<string, string>();
-  for (const rawEntry of rawMissingSpec) {
+  for (const rawEntry of rawSpecList) {
     if (typeof rawEntry !== 'string') {
       continue;
     }
@@ -429,6 +429,7 @@ function normalizeReviewMetadata(
       decision: fallback?.LastReviewDecision ?? null,
       information_present: null,
       missing_spec: [],
+      unneeded_spec: [],
       bad_format: null,
       wrong_information: null,
       wrong_physical_dimensions: null,
@@ -445,7 +446,8 @@ function normalizeReviewMetadata(
     const bad_format = normalizeNullableBoolean(base.bad_format);
     const wrong_information = normalizeNullableBoolean(base.wrong_information);
     const wrong_physical_dimensions = normalizeNullableBoolean(base.wrong_physical_dimensions);
-    const missing_spec = normalizeMissingSpec(base.missing_spec);
+    const missing_spec = normalizeSpecList(base.missing_spec);
+    const unneeded_spec = normalizeSpecList(base.unneeded_spec);
 
     logger.info?.('[agentic-service] Normalized review metadata', {
       provided: Boolean(review),
@@ -459,7 +461,8 @@ function normalizeReviewMetadata(
         bad_format,
         wrong_information,
         wrong_physical_dimensions,
-        missing_spec_count: missing_spec.length
+        missing_spec_count: missing_spec.length,
+        unneeded_spec_count: unneeded_spec.length
       },
       signalPresenceCount: [information_present, bad_format, wrong_information, wrong_physical_dimensions].filter(
         (value) => value !== null
@@ -471,6 +474,7 @@ function normalizeReviewMetadata(
       decision,
       information_present,
       missing_spec,
+      unneeded_spec,
       bad_format,
       wrong_information,
       wrong_physical_dimensions,
@@ -491,6 +495,7 @@ function normalizeReviewMetadata(
       decision: null,
       information_present: null,
       missing_spec: [],
+      unneeded_spec: [],
       bad_format: null,
       wrong_information: null,
       wrong_physical_dimensions: null,
@@ -1590,14 +1595,20 @@ export function mapReviewHistoryForAggregation(
         typeof entry.ReviewMetadata === 'string' && entry.ReviewMetadata.trim()
           ? (JSON.parse(entry.ReviewMetadata) as Record<string, unknown>)
           : {};
-    } catch {
+    } catch (error) {
+      console.warn('[agentic-service] Failed to parse review history metadata; using empty spec arrays', {
+        missingSpecCount: 0,
+        unneededSpecCount: 0,
+        error: toErrorMessage(error)
+      });
       parsedMetadata = {};
     }
 
     return {
       decision: entry.ReviewDecision ?? null,
       information_present: normalizeNullableBoolean(parsedMetadata.information_present),
-      missing_spec: normalizeMissingSpec(parsedMetadata.missing_spec),
+      missing_spec: normalizeSpecList(parsedMetadata.missing_spec),
+      unneeded_spec: normalizeSpecList(parsedMetadata.unneeded_spec),
       bad_format: normalizeNullableBoolean(parsedMetadata.bad_format),
       wrong_information: normalizeNullableBoolean(parsedMetadata.wrong_information),
       wrong_physical_dimensions: normalizeNullableBoolean(parsedMetadata.wrong_physical_dimensions),
@@ -1624,6 +1635,7 @@ function resolveReviewFromPersistedRun(
     decision,
     information_present: null,
     missing_spec: [],
+    unneeded_spec: [],
     bad_format: null,
     wrong_information: null,
     wrong_physical_dimensions: null,
