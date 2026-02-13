@@ -220,6 +220,7 @@ export function buildAgenticReviewSubmissionPayload(
     wrong_information: reviewInput.wrong_information,
     wrong_physical_dimensions: reviewInput.wrong_physical_dimensions,
     missing_spec: reviewInput.missing_spec,
+    unneeded_spec: reviewInput.unneeded_spec,
     notes: reviewInput.notes,
     reviewedBy: actor
   };
@@ -2260,6 +2261,38 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     let missingSpecRaw: string | null = '';
+    let unneededSpecRaw: string | null = '';
+    if (hasUnnecessarySpecs) {
+      try {
+        unneededSpecRaw = await dialogService.prompt({
+          title: 'Unnötige Spezifikationen',
+          message: unnecessarySpecsPreviewMessage,
+          confirmLabel: 'Übernehmen',
+          cancelLabel: 'Abbrechen',
+          placeholder: 'z. B. interne Hinweise, irrelevante Marketingtexte',
+          defaultValue: '',
+          contentClassName: 'review-dialog'
+        });
+      } catch (error) {
+        logError('ItemDetail: Failed to prompt for unneeded specification list', error, { itemId });
+        return null;
+      }
+      if (unneededSpecRaw === null) {
+        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
+          itemId,
+          stepKey: 'unneededSpecRaw',
+          completed: false
+        });
+        return null;
+      }
+      logger.info?.('ItemDetail: Agentic review checklist step completed', {
+        itemId,
+        stepKey: 'unneededSpecRaw',
+        completed: true,
+        unneededSpecCharacters: unneededSpecRaw.length
+      });
+    }
+
     if (hasMissingSpecs) {
       try {
         missingSpecRaw = await dialogService.prompt({
@@ -2306,6 +2339,7 @@ export default function ItemDetail({ itemId }: Props) {
       },
       {
         missingSpecRaw,
+        unneededSpecRaw,
         notes,
         reviewedBy: null
       }
@@ -2331,6 +2365,7 @@ export default function ItemDetail({ itemId }: Props) {
         mappedInput.wrong_physical_dimensions
       ].filter(Boolean).length,
       missingSpecCount: mappedInput.missing_spec.length,
+      unneededSpecCount: mappedInput.unneeded_spec.length,
       hasNote: Boolean(mappedInput.notes)
     });
 
@@ -2587,6 +2622,7 @@ export default function ItemDetail({ itemId }: Props) {
         decision: refreshedRun.LastReviewDecision ?? agentic?.LastReviewDecision ?? null,
         information_present: null,
         missing_spec: [],
+        unneeded_spec: [],
         bad_format: null,
         wrong_information: null,
         wrong_physical_dimensions: null,

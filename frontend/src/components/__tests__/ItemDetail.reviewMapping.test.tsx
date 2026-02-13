@@ -13,6 +13,7 @@ describe('mapReviewAnswersToInput', () => {
       },
       {
         missingSpecRaw: ' Spannung, material,Spannung , ',
+        unneededSpecRaw: 'intern, Intern,  ',
         notes: '  please review  '
       }
     );
@@ -23,6 +24,7 @@ describe('mapReviewAnswersToInput', () => {
       wrong_information: true,
       wrong_physical_dimensions: true,
       missing_spec: ['Spannung', 'material'],
+      unneeded_spec: ['intern'],
       notes: 'please review',
       reviewedBy: null
     });
@@ -39,6 +41,7 @@ describe('mapReviewAnswersToInput', () => {
       },
       {
         missingSpecRaw: '',
+        unneededSpecRaw: '',
         notes: '  '
       }
     );
@@ -49,6 +52,7 @@ describe('mapReviewAnswersToInput', () => {
       wrong_information: false,
       wrong_physical_dimensions: false,
       missing_spec: [],
+      unneeded_spec: [],
       notes: null,
       reviewedBy: null
     });

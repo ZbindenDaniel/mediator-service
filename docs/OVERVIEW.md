@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+<!-- TODO(agentic-review-unneeded-spec): validate analytics consumer readiness for the new unneeded_spec signal. -->
+- **Agentic unneeded-spec review signal contract**: added shared/FE/BE support for structured `unneeded_spec` arrays alongside `missing_spec`, normalized and persisted both lists through manual review and history paths, and extended logs with count-only review signal metrics.
 <!-- TODO(progress-updates): regroup the summary with each milestone and keep the detailed log in RECENT_HIGHLIGHTS. -->
 - **Review automation zero-sample threshold clarity**: replaced sentinel `Number.MAX_SAFE_INTEGER` thresholds with explicit zero-count thresholds for empty review samples and guarded trigger evaluation behind `sampleSize > 0`, keeping logs readable while preserving non-trigger behavior with no data.
 - **Agentic review intent clarity + per-step telemetry**: replaced checklist prompts with explicit German reviewer questions for description, kurztext, unnecessary/missing specifications, and dimensions, mapped each step to stable internal signal keys without schema changes, and added per-step completion/abort logs to improve drop-off visibility while preserving sequential checklist→note flow.

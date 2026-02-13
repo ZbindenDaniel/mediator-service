@@ -15,6 +15,7 @@ export interface AgenticRunTriggerPayload {
     decision?: string | null;
     information_present?: boolean | string | number | null;
     missing_spec?: unknown;
+    unneeded_spec?: unknown;
     bad_format?: boolean | string | number | null;
     wrong_information?: boolean | string | number | null;
     wrong_physical_dimensions?: boolean | string | number | null;
@@ -239,11 +240,15 @@ function normalizeReviewMetadata(
   const missingSpec = Array.isArray(review.missing_spec)
     ? review.missing_spec.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim()).filter(Boolean)
     : [];
+  const unneededSpec = Array.isArray(review.unneeded_spec)
+    ? review.unneeded_spec.filter((entry): entry is string => typeof entry === 'string').map((entry) => entry.trim()).filter(Boolean)
+    : [];
 
   return {
     decision: normalizeField(review.decision),
     information_present: normalizeNullableBoolean(review.information_present),
     missing_spec: missingSpec,
+    unneeded_spec: unneededSpec,
     bad_format: normalizeNullableBoolean(review.bad_format),
     wrong_information: normalizeNullableBoolean(review.wrong_information),
     wrong_physical_dimensions: normalizeNullableBoolean(review.wrong_physical_dimensions),

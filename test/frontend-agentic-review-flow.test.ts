@@ -15,6 +15,7 @@ describe('agentic review flow ordering and payload contract', () => {
       wrong_information: true,
       wrong_physical_dimensions: false,
       missing_spec: ['Spannung', 'Material'],
+      unneeded_spec: ['Interner Hinweis'],
       notes: 'Optional note',
       reviewedBy: null
     });
@@ -27,6 +28,7 @@ describe('agentic review flow ordering and payload contract', () => {
       wrong_information: true,
       wrong_physical_dimensions: false,
       missing_spec: ['Spannung', 'Material'],
+      unneeded_spec: ['Interner Hinweis'],
       notes: 'Optional note',
       reviewedBy: 'Reviewer'
     });
@@ -39,6 +41,7 @@ describe('agentic review flow ordering and payload contract', () => {
       'wrong_information',
       'wrong_physical_dimensions',
       'missing_spec',
+      'unneeded_spec',
       'notes',
       'reviewedBy'
     ]);

@@ -111,6 +111,7 @@ const action = defineHttpAction({
             decision: normalizedReviewDecision || null,
             information_present: null,
             missing_spec: [],
+            unneeded_spec: [],
             bad_format: null,
             wrong_information: null,
             wrong_physical_dimensions: null,

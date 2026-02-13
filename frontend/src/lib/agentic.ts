@@ -78,6 +78,7 @@ export interface AgenticRunTriggerPayload {
     decision?: string | null;
     information_present?: boolean | null;
     missing_spec?: string[];
+    unneeded_spec?: string[];
     bad_format?: boolean | null;
     wrong_information?: boolean | null;
     wrong_physical_dimensions?: boolean | null;
