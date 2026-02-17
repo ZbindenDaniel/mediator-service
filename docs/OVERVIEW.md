@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+<!-- TODO(agentic-schema-contract): Keep prompt docs and validators aligned when schema fields change. -->
+- **Agentic canonical Spezifikationen schema contract**: simplified to one shared item-structure contract across extraction/categorization/supervision prompts and validators, removed envelope versioning complexity, and now injects canonical schema text through prompt placeholders so agents receive the contract inline with key telemetry + compatibility tests retained.
 <!-- TODO(agentic-review-spec-field-ui): Revisit selector affordances after reviewer telemetry confirms usage patterns. -->
 - **Agentic review spec-field selectors in UI**: derived normalized Langtext spec fields for review flows, added minimal field-selection modal support for unnecessary/missing specs with fallback logging, and covered selected-field to payload mapping via focused component-level tests.
 <!-- TODO(agentic-review-unneeded-spec): validate analytics consumer readiness for the new unneeded_spec signal. -->

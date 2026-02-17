@@ -5,7 +5,7 @@ import { parseJsonWithSanitizer } from '../utils/json';
 import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
-import { AgentOutputSchema, TargetSchema } from './item-flow-schemas';
+import { AgentOutputSchema, TargetSchema, logSchemaKeyTelemetry } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
 import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
@@ -229,6 +229,7 @@ function mapLangtextToSpezifikationenForLlm(
 }
 
 // TODO(agent): Remove Spezifikationen alias remap once prompt compliance is stable across providers.
+// TODO(agentic-schema): Remove legacy non-envelope payload support after all providers emit schemaVersion envelopes.
 function normalizeLangtextAlias(
   payload: unknown,
   { itemId, attempt, logger }: { itemId: string; attempt: number; logger?: ExtractionLogger }
@@ -338,9 +339,11 @@ export async function runExtractionAttempts({
 
   // TODO(agentic-review-prompts): Route review automation signals into placeholder fragments as triggers expand.
   const basePromptFragments: PromptPlaceholderFragments = new Map();
+  // TODO(agentic-schema-injection): Revisit whether categorizer/supervisor require reduced schema slices once prompt sizes are measured.
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.categorizerReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, sanitizedReviewerNotes);
+  appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.targetSchemaFormat, targetFormat);
   const resolvedExampleItemBlock = typeof exampleItemBlock === 'string' ? exampleItemBlock.trim() : '';
   if (resolvedExampleItemBlock) {
     basePromptFragments.set(PROMPT_PLACEHOLDERS.exampleItem, [resolvedExampleItemBlock]);
@@ -808,13 +811,16 @@ export async function runExtractionAttempts({
 
     let normalizedParsed = normalizeLangtextAlias(parsed as unknown, { itemId, attempt, logger });
     const parsedRecord = normalizedParsed && typeof normalizedParsed === 'object' ? (normalizedParsed as Record<string, unknown>) : null;
+
+    let candidatePayload: unknown = normalizedParsed;
+    logSchemaKeyTelemetry(logger, { stage: 'extraction', itemId, payload: candidatePayload });
     const rawQueries = parsedRecord?.__searchQueries;
     if (Array.isArray(rawQueries) && rawQueries.length > searchesPerRequestLimit) {
       const resolvedLimit = Number.isFinite(searchesPerRequestLimit) && searchesPerRequestLimit > 0
         ? Math.floor(searchesPerRequestLimit)
         : 1;
       const truncatedQueries = rawQueries.slice(0, resolvedLimit);
-      normalizedParsed = { ...parsedRecord, __searchQueries: truncatedQueries };
+      candidatePayload = { ...(parsedRecord ?? {}), __searchQueries: truncatedQueries };
       try {
         logger?.warn?.({
           msg: 'truncating agent search queries before schema validation',
@@ -852,7 +858,7 @@ export async function runExtractionAttempts({
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to compute extraction spec telemetry', itemId, attempt });
     }
-    const agentParsed = AgentOutputSchema.safeParse(normalizedParsed);
+    const agentParsed = AgentOutputSchema.safeParse(candidatePayload);
     if (!agentParsed.success) {
       const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
       logger?.warn?.({
@@ -1050,12 +1056,12 @@ export async function runExtractionAttempts({
     logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
     let supervisorUserContent = '';
     try {
-      const supervisorPayload = mapLangtextToSpezifikationenForLlm(pricedValidated.data, {
+      const supervisorItemPayload = mapLangtextToSpezifikationenForLlm(pricedValidated.data, {
         itemId,
         logger,
         context: 'supervisor'
       });
-      supervisorUserContent = JSON.stringify(supervisorPayload);
+      supervisorUserContent = JSON.stringify(supervisorItemPayload);
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to serialize supervisor payload', attempt, itemId });
       supervisorUserContent = String(pricedValidated.data);

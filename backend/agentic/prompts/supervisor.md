@@ -4,6 +4,9 @@
 </role>
 <task>
   Assess item data strictly while balancing fairness and localization needs to decide whether it should pass or fail.
+  Validate fields against `backend/agentic/prompts/schema-contract.md`.
+  - Canonical target schema is injected below:
+{{TARGET_SCHEMA_FORMAT}}
 </task>
 <rules>
   - Be strict: most values should be filled in unless the source material truly lacks the information.

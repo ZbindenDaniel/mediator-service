@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { LangtextPayload } from '../../../models';
 import { parseLangtext } from '../../lib/langtext';
 import { searchLimits } from '../config';
+import { collectSchemaKeys } from './schema-contract';
 
 function normalizeLocalizedNumberInput(value: unknown): number | null | unknown {
   if (value == null || value === '') {
@@ -135,6 +136,22 @@ export const AgentOutputSchema = TargetSchema.extend({
   confidence: z.number().min(0).max(1).optional(),
   confidenceNote: z.string().min(1).max(1024).optional()
 }).passthrough();
+
+
+export function logSchemaKeyTelemetry(
+  logger: Partial<Pick<Console, 'warn' | 'info'>> | undefined,
+  {
+    stage,
+    itemId,
+    payload
+  }: { stage: string; itemId: string; payload: unknown }
+): void {
+  try {
+    logger?.info?.({ msg: 'schema key telemetry', stage, itemId, payloadKeys: collectSchemaKeys(payload) });
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to log schema key telemetry', stage, itemId });
+  }
+}
 
 export const ShopwareDecisionSchema = z
   .object({

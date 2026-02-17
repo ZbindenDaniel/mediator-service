@@ -84,12 +84,39 @@ describe('extraction prompt guidance', () => {
     const extractPromptPath = path.resolve(__dirname, '../prompts/extract.md');
     const extractPrompt = fs.readFileSync(extractPromptPath, 'utf8');
 
-    expect(extractPrompt).toContain('For LLM output, use `Spezifikationen` as the meaningful specs field name.');
     expect(extractPrompt).toContain('Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays.');
     expect(extractPrompt).toContain('Anti-pattern: Never return placeholder-only `Spezifikationen`');
     expect(extractPrompt).toContain('Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.');
-    expect(extractPrompt).toContain('Quality `Spezifikationen` object:');
-    expect(extractPrompt).toContain('Leave numeric fields null when missing:');
     expect(extractPrompt).toContain('Add `__searchQueries` only if unresolved details block required fields:');
+    expect(extractPrompt).toContain('{{TARGET_SCHEMA_FORMAT}}');
+
+    const outputFormatStart = extractPrompt.indexOf('<output_format>');
+    const outputFormatEnd = extractPrompt.indexOf('</output_format>');
+    const schemaPlaceholderPosition = extractPrompt.indexOf('{{TARGET_SCHEMA_FORMAT}}');
+    expect(outputFormatStart).toBeGreaterThan(-1);
+    expect(outputFormatEnd).toBeGreaterThan(outputFormatStart);
+    expect(schemaPlaceholderPosition).toBeGreaterThan(outputFormatStart);
+    expect(schemaPlaceholderPosition).toBeLessThan(outputFormatEnd);
+  });
+
+
+  it('keeps schema injection placeholder in categorizer and supervisor prompts', () => {
+    const categorizerPromptPath = path.resolve(__dirname, '../prompts/categorizer.md');
+    const supervisorPromptPath = path.resolve(__dirname, '../prompts/supervisor.md');
+    const categorizerPrompt = fs.readFileSync(categorizerPromptPath, 'utf8');
+    const supervisorPrompt = fs.readFileSync(supervisorPromptPath, 'utf8');
+
+    expect(categorizerPrompt).toContain('{{TARGET_SCHEMA_FORMAT}}');
+    expect(supervisorPrompt).toContain('{{TARGET_SCHEMA_FORMAT}}');
+  });
+
+  it('keeps canonical schema-contract in sync with item format', () => {
+    const contractPath = path.resolve(__dirname, '../prompts/schema-contract.md');
+    const itemFormatPath = path.resolve(__dirname, '../prompts/item-format.json');
+    const contract = fs.readFileSync(contractPath, 'utf8');
+    const itemFormat = JSON.parse(fs.readFileSync(itemFormatPath, 'utf8'));
+
+    expect(contract).toContain('Spezifikationen Schema Contract');
+    expect(itemFormat.Spezifikationen).toBeDefined();
   });
 });
