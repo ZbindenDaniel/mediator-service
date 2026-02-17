@@ -259,6 +259,8 @@ export const IMPORTER_FORCE_ZERO_STOCK = importerForceZeroStockFlag;
 const erpImportIncludeMedia =
   parseBooleanFlag(process.env.ERP_IMPORT_INCLUDE_MEDIA, 'ERP_IMPORT_INCLUDE_MEDIA') ?? false;
 export const ERP_IMPORT_INCLUDE_MEDIA = erpImportIncludeMedia;
+// TODO(agent): Add startup healthcheck coverage for ERP_SYNC_ENABLED + ERP_IMPORT_URL combinations.
+export const ERP_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_SYNC_ENABLED, 'ERP_SYNC_ENABLED') ?? true;
 export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || '').trim());
 export const ERP_IMPORT_USERNAME = (process.env.ERP_IMPORT_USERNAME || '').trim();
 export const ERP_IMPORT_PASSWORD = (process.env.ERP_IMPORT_PASSWORD || '').trim();
@@ -269,6 +271,10 @@ export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   'ERP_IMPORT_TIMEOUT_MS'
 );
 export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').trim();
+
+if (!ERP_SYNC_ENABLED) {
+  console.info('[config] ERP sync disabled via ERP_SYNC_ENABLED flag.');
+}
 
 export interface ShopwareCredentialsConfig {
   clientId?: string;
