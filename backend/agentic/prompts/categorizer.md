@@ -5,6 +5,9 @@
   Analyze the provided item JSON payload (plus any reviewer instructions and taxonomy reference) and return the most appropriate Haupt- and Unterkategorie codes.
 </task>
 <rules>
+  {{BASE_ROLE_POLICY}}
+  {{OUTPUT_CONTRACT}}
+  {{ERROR_POLICY}}
   - Do **not** alter or infer any fields beyond the four category codes. Respect schema contract in `backend/agentic/prompts/schema-contract.md`.
   - Canonical target schema is injected below:
 {{TARGET_SCHEMA_FORMAT}}

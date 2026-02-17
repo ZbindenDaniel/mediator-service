@@ -9,6 +9,9 @@
 {{TARGET_SCHEMA_FORMAT}}
 </task>
 <rules>
+  {{BASE_ROLE_POLICY}}
+  {{OUTPUT_CONTRACT}}
+  {{ERROR_POLICY}}
   - Be strict: most values should be filled in unless the source material truly lacks the information.
   - Be fair: if you see an error and know how to correct it do so. You might fix invalid JSON formating for example.
   - Be reasonable: A missing price with otherwise good data does not mean it's failed. Most important is the decription. Be strict in the first attempt and become easier with the last attempt allthough inccorect data may never be passed.

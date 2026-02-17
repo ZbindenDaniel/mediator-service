@@ -12,6 +12,9 @@
   - If none of the products match, respond with isMatch: false and omit the target object.
 </task>
 <rules>
+  {{BASE_ROLE_POLICY}}
+  {{OUTPUT_CONTRACT}}
+  {{ERROR_POLICY}}
   - Return a **single JSON object** with the following structure:
     ```
     {

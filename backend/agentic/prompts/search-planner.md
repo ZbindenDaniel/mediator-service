@@ -7,6 +7,9 @@
   - Decide whether automated search is required.
 </task>
 <rules>
+  {{BASE_ROLE_POLICY}}
+  {{OUTPUT_CONTRACT}}
+  {{ERROR_POLICY}}
   - Reply with a compact JSON object:
     {
       "shouldSearch": boolean,

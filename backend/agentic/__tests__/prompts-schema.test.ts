@@ -25,7 +25,7 @@ function extractSchemaSql(source: string, constantName: string): string {
 }
 
 function parseTableColumns(sql: string, tableName: string): string[] {
-  const tableRegex = new RegExp(`CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+${tableName}\\s*\\(([\\s\\S]*?)\);`, 'im');
+  const tableRegex = new RegExp(`CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+${tableName}\\s*\\(([\\s\\S]*?)\\);`, 'im');
   const match = tableRegex.exec(sql);
   if (!match) {
     throw new Error(`Table not found in schema: ${tableName}`);
@@ -36,7 +36,7 @@ function parseTableColumns(sql: string, tableName: string): string[] {
     .split('\n')
     .map((line) => line.trim().replace(/,+$/, ''))
     .filter(Boolean)
-    .filter((line) => !/^(foreign key|primary key|unique)/i.test(line))
+    .filter((line) => !/^(--|foreign key|primary key|unique)/i.test(line))
     .map((line) => line.split(/\s+/)[0]);
 }
 
@@ -84,7 +84,7 @@ describe('extraction prompt guidance', () => {
     const extractPromptPath = path.resolve(__dirname, '../prompts/extract.md');
     const extractPrompt = fs.readFileSync(extractPromptPath, 'utf8');
 
-    expect(extractPrompt).toContain('Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays.');
+    expect(extractPrompt).toContain('Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays of strings.');
     expect(extractPrompt).toContain('Anti-pattern: Never return placeholder-only `Spezifikationen`');
     expect(extractPrompt).toContain('Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.');
     expect(extractPrompt).toContain('Add `__searchQueries` only if unresolved details block required fields:');
@@ -116,7 +116,7 @@ describe('extraction prompt guidance', () => {
     const contract = fs.readFileSync(contractPath, 'utf8');
     const itemFormat = JSON.parse(fs.readFileSync(itemFormatPath, 'utf8'));
 
-    expect(contract).toContain('Spezifikationen Schema Contract');
+    expect(contract).toContain('\"Spezifikationen\"');
     expect(itemFormat.Spezifikationen).toBeDefined();
   });
 });

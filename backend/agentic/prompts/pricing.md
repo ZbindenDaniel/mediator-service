@@ -8,6 +8,9 @@
   - If no trustworthy pricing signal exists, return null.
 </task>
 <rules>
+  {{BASE_ROLE_POLICY}}
+  {{OUTPUT_CONTRACT}}
+  {{ERROR_POLICY}}
   - Respond with JSON only and use the exact key "Verkaufspreis".
   - Use a numeric value (no currency symbols) or null.
   - Do not modify or add any other fields.
