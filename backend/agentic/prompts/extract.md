@@ -7,7 +7,10 @@
   - Fill every schema  provided; use the provided defaults when data is missing.
 </task>
 <rules>
+  {{BASE_ROLE_POLICY}}
   - Output must match <output_format> exactly.
+  {{OUTPUT_CONTRACT}}
+  {{ERROR_POLICY}}
   - Focus on already present keys in 'Spezifikationen'; add additional fields found in the search.
   - Field notes:
     - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
@@ -37,5 +40,6 @@ Your internal reasoning goes here.
 </output_format>
 
 <example>
+  {{PRODUCT_EXAMPLE_POLICY}}
 {{EXAMPLE_ITEM}}
 </example>

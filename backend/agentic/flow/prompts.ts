@@ -21,6 +21,31 @@ const DB_SCHEMA_PATH = path.resolve(__dirname, '../../db.ts');
 const CHAT_SCHEMA_TOKEN = '{{ITEM_DATABASE_SCHEMA}}';
 const PROMPT_FRAGMENT_MAX_LENGTH = 400;
 
+const SHARED_PROMPT_TOKENS = {
+  baseRolePolicy: '{{BASE_ROLE_POLICY}}',
+  outputContract: '{{OUTPUT_CONTRACT}}',
+  errorPolicy: '{{ERROR_POLICY}}',
+  productExamplePolicy: '{{PRODUCT_EXAMPLE_POLICY}}'
+} as const;
+
+export const PROMPT_TEMPLATE_VERSIONS = {
+  baseRolePolicy: 'v1.0.0',
+  outputContract: 'v1.0.0',
+  errorPolicy: 'v1.0.0',
+  productExamplePolicy: 'v1.0.0'
+} as const;
+
+const SHARED_PROMPT_FRAGMENTS: Record<(typeof SHARED_PROMPT_TOKENS)[keyof typeof SHARED_PROMPT_TOKENS], string> = {
+  [SHARED_PROMPT_TOKENS.baseRolePolicy]:
+    '- Follow only the provided evidence and reviewer instructions.\n- Keep role-specific behavior scoped to this stage; do not perform other pipeline stages implicitly.',
+  [SHARED_PROMPT_TOKENS.outputContract]:
+    '- Return only the requested output payload.\n- Do not prepend or append narrative text outside explicitly allowed sections.',
+  [SHARED_PROMPT_TOKENS.errorPolicy]:
+    '- If required information is missing, use the role-specific fallback (null/empty/fail) instead of inventing data.\n- Never fabricate unsupported facts.',
+  [SHARED_PROMPT_TOKENS.productExamplePolicy]:
+    '- Treat included examples as style/shape references; never copy product-specific claims unless they are present in the current input.'
+};
+
 export const PROMPT_PLACEHOLDERS = {
   categorizerReview: '{{CATEGORIZER_REVIEW}}',
   extractionReview: '{{EXTRACTION_REVIEW}}',
@@ -49,6 +74,8 @@ type ColumnNote = {
 export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
   item_refs: {
     Artikel_Nummer: { note: 'Einzigartige nummer für Artikelreferenzen, als primary key benutzt', aliases: ['SKU'] },
+    Suchbegriff: { note: 'Originaler Suchbegriff bzw. Referenzquery für den Artikel' },
+    Grafikname: { note: 'Legacy Grafik-/Assetname für Druck oder Medienzuordnung' },
     ImageNames: { note: 'Comma-separated image list' },
     Artikelbeschreibung: { note: 'Produkt/Model name oder Name des jeweiligen Artikels' },
     Verkaufspreis: { note: 'Preis' },
@@ -64,7 +91,10 @@ export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
     Gewicht_kg: { note: 'Weight in kilograms' },
     Hauptkategorien_A: { note: 'Grobkategorien' },
     Unterkategorien_A: { note: 'Unterkategorien' },
+    Hauptkategorien_B: { note: 'Optional zweite Grobkategorie für Mehrfachzuordnung' },
+    Unterkategorien_B: { note: 'Optional zweite Unterkategorie für Mehrfachzuordnung' },
     Veröffentlicht_Status: { note: 'Publication status' },
+    Quality: { note: 'Optional quality/review state for enrichment outcomes' },
     Shopartikel: { note: 'Shop article flag' },
     Artikeltyp: { note: 'Product type' },
     Einheit: { note: 'Unit of measure' },
@@ -79,6 +109,7 @@ export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
     UpdatedAt: { note: 'Last update timestamp' },
     Datum_erfasst: { note: 'Capture timestamp' },
     Auf_Lager: { note: 'Stock availability flag', aliases: ['stock'] },
+    Quality: { note: 'Optional quality/review state for item instance data' },
     ShopwareVariantId: { note: 'Shopware variant id' }
   }
 };
@@ -87,6 +118,42 @@ interface ReadPromptOptions {
   itemId: string;
   prompt: string;
   logger?: ItemFlowLogger;
+}
+
+interface ComposePromptTemplateOptions {
+  promptName: string;
+  promptTemplate: string;
+  itemId: string;
+  logger?: ItemFlowLogger;
+}
+
+// TODO(agentic-prompt-versions): Add compatibility aliases if fragment token names ever change.
+export function composePromptTemplate({ promptName, promptTemplate, itemId, logger }: ComposePromptTemplateOptions): string {
+  try {
+    let rendered = promptTemplate;
+    const appliedSharedFragments: string[] = [];
+
+    for (const [token, fragment] of Object.entries(SHARED_PROMPT_FRAGMENTS)) {
+      if (!rendered.includes(token)) {
+        continue;
+      }
+      rendered = rendered.split(token).join(fragment);
+      appliedSharedFragments.push(token);
+    }
+
+    logger?.debug?.({
+      msg: 'prompt template composed',
+      itemId,
+      promptName,
+      appliedSharedFragments,
+      promptTemplateVersions: PROMPT_TEMPLATE_VERSIONS
+    });
+
+    return rendered;
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to compose prompt template; using unrendered template', itemId, promptName });
+    return promptTemplate;
+  }
 }
 
 function stripRoleLikePrefixes(value: string): string {
@@ -370,7 +437,7 @@ export interface LoadChatPromptOptions {
 export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromptsOptions): Promise<LoadPromptsResult> {
   try {
     // TODO(agent): Keep curated search source injection aligned with prompt updates.
-    const [format, extract, supervisor, categorizer, pricing, pricingRules, searchPlannerTemplate, searchSources] = await Promise.all([
+    const [format, extractTemplate, supervisorTemplate, categorizerTemplate, pricingTemplate, pricingRules, searchPlannerTemplate, searchSources] = await Promise.all([
       readPromptFile(FORMAT_PATH, { itemId, prompt: 'format', logger }),
       readPromptFile(EXTRACT_PROMPT_PATH, { itemId, prompt: 'extract', logger }),
       readPromptFile(SUPERVISOR_PROMPT_PATH, { itemId, prompt: 'supervisor', logger }),
@@ -381,9 +448,30 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       readPromptFile(SEARCH_SOURCES_PROMPT_PATH, { itemId, prompt: 'search-sources', logger })
     ]);
 
+    const extract = composePromptTemplate({ promptName: 'extract', promptTemplate: extractTemplate, itemId, logger });
+    const supervisor = composePromptTemplate({
+      promptName: 'supervisor',
+      promptTemplate: supervisorTemplate,
+      itemId,
+      logger
+    });
+    const categorizer = composePromptTemplate({
+      promptName: 'categorizer',
+      promptTemplate: categorizerTemplate,
+      itemId,
+      logger
+    });
+    const pricing = composePromptTemplate({ promptName: 'pricing', promptTemplate: pricingTemplate, itemId, logger });
+    const searchPlannerComposedTemplate = composePromptTemplate({
+      promptName: 'search-planner',
+      promptTemplate: searchPlannerTemplate,
+      itemId,
+      logger
+    });
+
     const composedPricing = `${pricing.trim()}\n\n<pricing_rules>\n${pricingRules.trim()}\n</pricing_rules>\n`;
 
-    const searchPlanner = `${searchPlannerTemplate.trim()}\n\n<sources>\n${searchSources.trim()}\n</sources>\n`;
+    const searchPlanner = `${searchPlannerComposedTemplate.trim()}\n\n<sources>\n${searchSources.trim()}\n</sources>\n`;
 
     logger?.debug?.({
       msg: 'search planner prompt composed with curated sources',
@@ -393,9 +481,15 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
 
     let jsonCorrection: string;
     try {
-      jsonCorrection = await readPromptFile(JSON_CORRECTION_PROMPT_PATH, {
+      const jsonCorrectionTemplate = await readPromptFile(JSON_CORRECTION_PROMPT_PATH, {
         itemId,
         prompt: 'json-correction',
+        logger
+      });
+      jsonCorrection = composePromptTemplate({
+        promptName: 'json-correction',
+        promptTemplate: jsonCorrectionTemplate,
+        itemId,
         logger
       });
     } catch (err) {
@@ -406,7 +500,8 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
     let shopware: string | null | undefined;
     if (includeShopware) {
       try {
-        shopware = await readPromptFile(SHOPWARE_PROMPT_PATH, { itemId, prompt: 'shopware', logger });
+        const shopwareTemplate = await readPromptFile(SHOPWARE_PROMPT_PATH, { itemId, prompt: 'shopware', logger });
+        shopware = composePromptTemplate({ promptName: 'shopware', promptTemplate: shopwareTemplate, itemId, logger });
       } catch (err) {
         logger?.warn?.({ err, msg: 'shopware prompt unavailable', itemId });
         shopware = null;
@@ -419,7 +514,8 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       includeShopware: Boolean(includeShopware),
       hasJsonCorrection: Boolean(jsonCorrection),
       pricingRulesLength: pricingRules.length,
-      hasShopware: shopware != null
+      hasShopware: shopware != null,
+      promptTemplateVersions: PROMPT_TEMPLATE_VERSIONS
     });
 
     return { format, extract, supervisor, categorizer, pricing: composedPricing, jsonCorrection, searchPlanner, shopware };

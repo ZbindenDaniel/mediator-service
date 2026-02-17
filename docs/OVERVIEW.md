@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+<!-- TODO(agentic-prompt-templates): Bump fragment versions + snapshots whenever shared policy text changes. -->
+- **Shared prompt fragment templates + version telemetry**: extracted duplicated role/output/error/example guidance into reusable prompt-template fragments, kept role prompts focused on explicit deltas, logged per-run shared template versions during composition, and added snapshot coverage to detect unintended prompt drift.
 <!-- TODO(agentic-search-dedupe-heuristics): Re-tune domain cap/diversity thresholds once retrieval quality telemetry stabilizes. -->
 - **Agentic search traffic dedupe + taxonomy guardrails**: normalized and deduplicated planner queries before execution, blocked taxonomy/internal-category targeted web lookups in favor of product-fact searches, deduplicated sources by domain+title+URL hash with per-domain caps, introduced vendor-diversity ordering heuristics, and added per-run retrieval metrics (`uniqueQueries`, `uniqueDomains`, `duplicateSuppressionCount`) plus focused tests for taxonomy rejection and dedupe behavior.
 <!-- TODO(agentic-schema-contract): Keep prompt docs and validators aligned when schema fields change. -->
