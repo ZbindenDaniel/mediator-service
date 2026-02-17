@@ -423,7 +423,54 @@ function extractSearchPlans(
 ): SearchPlan[] {
   const plans: SearchPlan[] = [];
   const normalizedTarget: Record<string, unknown> | null = target && typeof target === 'object' ? (target as Record<string, unknown>) : null;
-  const baseQuery = `Gerätedaten ${searchTerm}`;
+  const baseQuery = `${searchTerm}`.trim();
+  // TODO(agentic-search-query-suffixes): Revisit suffix priorities after collecting planner/retrieval quality telemetry.
+  const missingFields = identifyMissingSchemaFields(normalizedTarget);
+
+  const MAX_QUERY_SEGMENTS = 10;
+  const canAppendSegments = (query: string, extraSegments: string[]): boolean => {
+    const querySegmentCount = query
+      .split(/\s+/)
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0).length;
+    return querySegmentCount + extraSegments.length <= MAX_QUERY_SEGMENTS;
+  };
+
+  const mapMissingFieldsToCompactSuffix = (
+    fields: string[]
+  ): { suffix: string | null; convertedFields: string[]; suffixTokens: string[] } => {
+    try {
+      const normalized = new Set(fields.map((field) => field.trim()).filter((field) => field.length > 0));
+
+      if (
+        normalized.has('Länge_mm') ||
+        normalized.has('Breite_mm') ||
+        normalized.has('Höhe_mm')
+      ) {
+        const convertedFields = ['Länge_mm', 'Breite_mm', 'Höhe_mm'].filter((field) => normalized.has(field));
+        return { suffix: 'dimensions', convertedFields, suffixTokens: ['dimensions'] };
+      }
+
+      if (normalized.has('Gewicht_kg')) {
+        return {
+          suffix: 'weight kg',
+          convertedFields: ['Gewicht_kg'],
+          suffixTokens: ['weight', 'kg']
+        };
+      }
+
+      const specFields = ['Langtext', 'Kurzbeschreibung', 'Artikelbeschreibung'];
+      const convertedSpecFields = specFields.filter((field) => normalized.has(field));
+      if (convertedSpecFields.length > 0) {
+        return { suffix: 'specs', convertedFields: convertedSpecFields, suffixTokens: ['specs'] };
+      }
+
+      return { suffix: null, convertedFields: [], suffixTokens: [] };
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to map missing fields to compact search suffix', itemId });
+      return { suffix: null, convertedFields: [], suffixTokens: [] };
+    }
+  };
 
   const resolvedManufacturer = normalizedTarget && typeof normalizedTarget['Hersteller'] === 'string'
     ? (normalizedTarget['Hersteller'] as string).trim()
@@ -470,34 +517,83 @@ function extractSearchPlans(
 
   logger?.info?.({ msg: 'search field summary', itemId, fieldsUsed: fieldSummary });
 
-  plans.push({ query: baseQuery, metadata: { context: 'primary' } });
+  if (baseQuery) {
+    plans.push({ query: baseQuery, metadata: { context: 'primary' } });
+  }
 
-  if (resolvedManufacturer) {
-    const manufacturerQuery = `Gerätedaten ${resolvedManufacturer} ${searchTerm}`.trim();
-    plans.push({
-      query: manufacturerQuery,
-      metadata: { context: 'manufacturer_enriched', manufacturer: resolvedManufacturer }
-    });
+  const compactSuffixMapping = mapMissingFieldsToCompactSuffix(missingFields);
+  logger?.info?.({
+    msg: 'search missing field suffix mapping',
+    itemId,
+    convertedMissingFields: compactSuffixMapping.convertedFields,
+    suffixTokens: compactSuffixMapping.suffixTokens
+  });
+
+  if (compactSuffixMapping.suffix && baseQuery) {
+    const suffixSegments = compactSuffixMapping.suffixTokens;
+    if (canAppendSegments(baseQuery, suffixSegments)) {
+      plans.push({
+        query: `${baseQuery} ${compactSuffixMapping.suffix}`.trim(),
+        metadata: {
+          context: 'missing_fields_enriched',
+          missingFields: compactSuffixMapping.convertedFields
+        }
+      });
+    }
+  }
+
+  if (resolvedManufacturer && baseQuery) {
+    const manufacturerQuery = `${resolvedManufacturer} ${baseQuery}`.trim();
+    const manufacturerSegments = manufacturerQuery
+      .split(/\s+/)
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+    if (manufacturerSegments.length <= MAX_QUERY_SEGMENTS) {
+      plans.push({
+        query: manufacturerQuery,
+        metadata: { context: 'manufacturer_enriched', manufacturer: resolvedManufacturer }
+      });
+    }
   }
 
   if (resolvedShortDescription && resolvedShortDescription !== resolvedArticleDescription) {
-    const shortDescriptionQuery = `Gerätedaten ${resolvedShortDescription} ${resolvedManufacturer || ''}`.trim();
-    plans.push({
-      query: shortDescriptionQuery,
-      metadata: {
-        context: 'short_description_enriched',
-        shortDescription: resolvedShortDescription,
-        manufacturer: resolvedManufacturer || undefined
-      }
-    });
+    const shortDescriptionQuery = `${resolvedShortDescription} ${resolvedManufacturer || ''}`.trim();
+    const shortDescriptionSegments = shortDescriptionQuery
+      .split(/\s+/)
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+    if (shortDescriptionSegments.length <= MAX_QUERY_SEGMENTS) {
+      plans.push({
+        query: shortDescriptionQuery,
+        metadata: {
+          context: 'short_description_enriched',
+          shortDescription: resolvedShortDescription,
+          manufacturer: resolvedManufacturer || undefined
+        }
+      });
+    }
   }
 
-  if (lockedFieldSnippets.length > 0) {
-    const lockedQuery = `Gerätedaten ${searchTerm} ${lockedFieldSnippets.join(' ')}`.trim();
-    plans.push({
-      query: lockedQuery,
-      metadata: { context: 'locked_fields_enriched', lockedFields: lockedFields.slice(0, lockedFieldSnippets.length) }
-    });
+  if (lockedFieldSnippets.length > 0 && baseQuery) {
+    const allowedLockedSnippets: string[] = [];
+    for (const snippet of lockedFieldSnippets) {
+      const nextSnippetSegments = snippet
+        .split(/\s+/)
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length > 0);
+      if (!canAppendSegments(`${baseQuery} ${allowedLockedSnippets.join(' ')}`.trim(), nextSnippetSegments)) {
+        break;
+      }
+      allowedLockedSnippets.push(snippet);
+    }
+
+    if (allowedLockedSnippets.length > 0) {
+      const lockedQuery = `${baseQuery} ${allowedLockedSnippets.join(' ')}`.trim();
+      plans.push({
+        query: lockedQuery,
+        metadata: { context: 'locked_fields_enriched', lockedFields: lockedFields.slice(0, allowedLockedSnippets.length) }
+      });
+    }
   }
 
   return dedupeSearchPlans(plans);
