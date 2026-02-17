@@ -200,6 +200,8 @@ interface ImportPhaseResult extends ImportResult {
 }
 
 interface ImportExecutionResult {
+  mode: ImportMode;
+  baselineFlow: boolean;
   test: ImportPhaseResult;
   polling: ImportPhaseResult | null;
   import: ImportPhaseResult | null;
@@ -565,6 +567,7 @@ function parsePollTargetMetadata(
 // TODO(sync-erp-polling-parser): Extend parser if ERP introduces JSON responses for import status endpoints.
 // TODO(sync-erp-session-cookies): Replace temporary cookie-jar flow if ERP provides stable token-based polling APIs.
 // TODO(sync-erp-unknown-grace): Tune unknown-state grace thresholds with production telemetry once kivitendo redirect chains stabilize.
+// TODO(sync-erp-async-readiness): Add async readiness handling back on top of the deterministic script-parity baseline once integration is validated.
 async function runCurlImport(options: ImportOptions): Promise<ImportExecutionResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
@@ -582,6 +585,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   const authPasswordFieldName = buildAuthFieldName('password', options.authFieldPrefix);
   const authClientIdFieldName = buildAuthFieldName('client_id', options.authFieldPrefix);
   const importMode: ImportMode = ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity';
+  const baselineFlow = importMode === 'script-parity';
 
   let cookieDirPath: string | null = null;
   let cookieJarPath: string | null = null;
@@ -906,6 +910,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   if (testResult.exitCode !== 0 || !testAcceptedByMarker) {
     return {
+      mode: importMode,
+      baselineFlow,
       test: {
         ...testResult,
         phase: 'test',
@@ -935,27 +941,6 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       reason: 'ERP_IMPORT_POLLING_ENABLED=false'
     });
 
-    // TODO(sync-erp-script-parity-report-id): Evaluate promoting missing baseline reportId from warning telemetry to explicit metric once ERP responses stabilize.
-    try {
-      const baselineReportId = parsedTest.reportId || extractQueryParam(`${testResult.stdout}\n${testResult.effectiveUrl}`, 'id');
-      if (!baselineReportId) {
-        loggerRef.warn?.('[sync-erp] Missing report id after action_test in script-parity baseline', {
-          phase: 'test',
-          effectiveUrl: trimDiagnosticOutput(testResult.effectiveUrl, 200),
-          stdoutSample: trimDiagnosticOutput(testResult.stdout, 200),
-          mode: importMode
-        });
-      }
-    } catch (warningLogError) {
-      loggerRef.warn?.('[sync-erp] Failed while logging missing baseline report id warning', {
-        phase: 'test',
-        mode: importMode,
-        effectiveUrl: trimDiagnosticOutput(testResult.effectiveUrl, 200),
-        stdoutSample: trimDiagnosticOutput(testResult.stdout, 200),
-        error: warningLogError instanceof Error ? warningLogError.message : String(warningLogError)
-      });
-    }
-
     const importResult = await runCurl('import', buildImportArgs('import'));
     const parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
     const importAcceptedByMarker = parsedImport.acceptedByMarker;
@@ -972,6 +957,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     });
 
     return {
+      mode: importMode,
+      baselineFlow,
       test: {
         ...testResult,
         phase: 'test',
@@ -1254,6 +1241,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   } catch (pollError) {
     loggerRef.error?.('[sync-erp] ERP polling failed', { pollError });
     return {
+      mode: importMode,
+      baselineFlow,
       test: {
         ...testResult,
         phase: 'test',
@@ -1296,6 +1285,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   if (pollingResult.state !== 'ready') {
     return {
+      mode: importMode,
+      baselineFlow,
       test: {
         ...testResult,
         phase: 'test',
@@ -1334,6 +1325,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   });
 
   return {
+    mode: importMode,
+    baselineFlow,
     test: {
       ...testResult,
       phase: 'test',
@@ -1492,6 +1485,8 @@ const action = defineHttpAction({
         });
         return sendJson(res, 502, {
           error: 'ERP-Testlauf wurde nicht bestätigt. Import wurde nicht gestartet.',
+          mode: curlResult.mode,
+          baselineFlow: curlResult.baselineFlow,
           failurePhase: 'test',
           state: curlResult.test.state,
           effectiveUrl: curlResult.test.effectiveUrl || null,
@@ -1535,6 +1530,8 @@ const action = defineHttpAction({
             : isUnexpectedHome
             ? 'ERP-Import konnte nicht fortgesetzt werden, da eine unerwartete Startseite statt der Import-Vorschau geladen wurde.'
             : 'ERP-Import konnte nicht fortgesetzt werden, da keine Import-Vorschau bereit war.',
+          mode: curlResult.mode,
+          baselineFlow: curlResult.baselineFlow,
           details: isContextLost
             ? 'ERP antwortete wiederholt mit login.pl?action=company_logo. Bitte CSV-Import-Kontext/Profil erneut öffnen und den Sync neu starten.'
             : isUnexpectedHome
@@ -1577,6 +1574,8 @@ const action = defineHttpAction({
         });
         return sendJson(res, 502, {
           error: 'ERP-Import ist fehlgeschlagen.',
+          mode: curlResult.mode,
+          baselineFlow: curlResult.baselineFlow,
           failurePhase: 'import',
           state: curlResult.import?.state ?? 'unknown',
           effectiveUrl: curlResult.import?.effectiveUrl || null,
@@ -1619,6 +1618,8 @@ const action = defineHttpAction({
 
       return sendJson(res, 200, {
         ok: true,
+        mode: curlResult.mode,
+        baselineFlow: curlResult.baselineFlow,
         failurePhase: curlResult.failurePhase,
         state: curlResult.import.state,
         effectiveUrl: curlResult.import.effectiveUrl || null,
