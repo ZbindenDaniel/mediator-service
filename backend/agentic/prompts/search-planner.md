@@ -22,6 +22,10 @@
     }
   - If reviewer notes forbid search, set "shouldSearch" to false and return an empty "plans" array.
   - Generate at most three targeted queries, focusing only on the most critical missing fields.
+  - Query construction priority:
+    1. `<exact product name>`
+    2. `<exact product name> <missing attribute>` (for example: dimensions, weight, specs, datasheet)
+    3. Only one fallback variant if the first two query shapes fail to cover required missing fields.
+  - Do not force `site:` filters or source-domain constraints when constructing queries.
   - Omit any explanations outside the JSON response.
-  - Prefer the curated IT hardware sources in the attached list when choosing search targets. Select only the most relevant sites for the product category.
 </rules>
