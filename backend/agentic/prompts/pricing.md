@@ -11,15 +11,23 @@
   {{BASE_ROLE_POLICY}}
   {{OUTPUT_CONTRACT}}
   {{ERROR_POLICY}}
-  - Respond with JSON only and use the exact key "Verkaufspreis".
-  - Use a numeric value (no currency symbols) or null.
-  - Do not modify or add any other fields.
+  - Respond with JSON only.
+  - Include pricing decision fields when available: `directListingPrice`, `trustedHistoricalPrice`, `Verkaufspreis`, `confidence`, `evidenceCount`, `sourceUrl`, `parseStatus`, `zeroIsValid`.
+  - Use numeric values (no currency symbols) for price outputs when possible, or `null`.
+  - Preserve the exact key names above.
 </rules>
 <output_format>
 
 ```json
 {
-  "Verkaufspreis": null
+  "directListingPrice": null,
+  "trustedHistoricalPrice": null,
+  "Verkaufspreis": null,
+  "confidence": 0,
+  "evidenceCount": 0,
+  "sourceUrl": "",
+  "parseStatus": "no-signal",
+  "zeroIsValid": false
 }
 ```
 

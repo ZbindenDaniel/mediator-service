@@ -1114,6 +1114,20 @@ export async function runExtractionAttempts({
       }
     }
 
+    // TODO(agentic-supervisor-payload-contract): Move supervisor payload contract checks into a shared preflight helper if more stages consume it.
+    const supervisorPayloadValidation = AgentOutputSchema.safeParse(pricedValidated.data);
+    if (!supervisorPayloadValidation.success) {
+      logger?.warn?.({
+        msg: 'supervisor payload failed data-structure validation',
+        attempt,
+        itemId,
+        issues: supervisorPayloadValidation.error.issues
+      });
+      lastValidated = null;
+      lastValidationIssues = `SUPERVISOR_PAYLOAD_INVALID: ${JSON.stringify(supervisorPayloadValidation.error.issues)}`;
+      continue;
+    }
+
     logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
     let supervisorUserContent = '';
     try {
