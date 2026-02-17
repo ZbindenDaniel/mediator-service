@@ -1,5 +1,7 @@
 import path from 'path';
+import os from 'os';
 import { spawn } from 'child_process';
+import { mkdtemp, rm } from 'fs/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   ERP_IMPORT_FORM_FIELD,
@@ -176,7 +178,7 @@ interface ImportResult {
 }
 
 type ImportPhase = 'test' | 'polling' | 'import';
-type PollState = 'processing' | 'ready' | 'failed' | 'unknown';
+type PollState = 'processing' | 'ready' | 'failed' | 'auth_lost' | 'unknown';
 
 interface ImportPhaseResult extends ImportResult {
   phase: ImportPhase;
@@ -202,6 +204,14 @@ interface ParsedErpResponse {
 
 const ERP_TEST_ACCEPTANCE_MARKERS = ['Ihr Import wird verarbeitet'];
 const ERP_POLL_FAILURE_MARKERS = ['Import fehlgeschlagen', 'Fehler beim Import'];
+
+
+const ERP_LOGIN_REDIRECT_MARKERS = ['LoginScreen/user_login', 'name="login"', 'id="login"', 'type="password"'];
+
+function hasAuthLossMarkers(stdout: string, effectiveUrl: string): boolean {
+  const responseText = `${stdout}\n${effectiveUrl}`;
+  return ERP_LOGIN_REDIRECT_MARKERS.some((marker) => responseText.includes(marker));
+}
 
 function trimDiagnosticOutput(raw: string, maxLength = 500): string {
   const trimmed = raw.trim();
@@ -229,11 +239,16 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
   const isProcessing =
     responseText.includes('Import Status') || responseText.includes('action=CsvImport/result');
   const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
+  const hasAuthLostMarker = hasAuthLossMarkers(stdout, effectiveUrl);
   const job = extractQueryParam(responseText, 'job');
   const reportId = extractQueryParam(responseText, 'id');
 
   if (hasFailureMarker) {
     return { job, reportId, state: 'failed' };
+  }
+
+  if (hasAuthLostMarker) {
+    return { job, reportId, state: 'auth_lost' };
   }
 
   if (isReady && reportId) {
@@ -269,6 +284,7 @@ function buildPollingUrl(baseUrl: string, parsed: ParsedErpResponse): string {
 // TODO(agent): Add structured log fields for curl timing metrics once we track ERP latency.
 // TODO(sync-erp-phases): Keep phase-marker matching aligned with ERP response wording changes.
 // TODO(sync-erp-polling-parser): Extend parser if ERP introduces JSON responses for import status endpoints.
+// TODO(sync-erp-session-cookies): Replace temporary cookie-jar flow if ERP provides stable token-based polling APIs.
 async function runCurlImport(options: ImportOptions): Promise<ImportExecutionResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
@@ -285,6 +301,16 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   const authLoginFieldName = buildAuthFieldName('login', options.authFieldPrefix);
   const authPasswordFieldName = buildAuthFieldName('password', options.authFieldPrefix);
   const authClientIdFieldName = buildAuthFieldName('client_id', options.authFieldPrefix);
+
+  let cookieDirPath: string | null = null;
+  let cookieJarPath: string | null = null;
+
+  const buildCookieArgs = (): string[] => {
+    if (!cookieJarPath) {
+      return [];
+    }
+    return ['--cookie-jar', cookieJarPath, '--cookie', cookieJarPath];
+  };
 
   const runCurl = async (phase: ImportPhase, args: string[]): Promise<ImportResult> => {
     const redactedArgs = args.map((arg) => {
@@ -422,6 +448,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       toFormArg(authClientIdFieldName, clientId || '1'),
       '-F',
       `actor=${actor}`,
+      ...buildCookieArgs(),
       url
     ];
 
@@ -448,6 +475,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       '--location',
       '--write-out',
       '\n%{url_effective}',
+      ...buildCookieArgs(),
       pollUrl
     ];
 
@@ -458,6 +486,16 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     return args;
   };
 
+  try {
+    cookieDirPath = await mkdtemp(path.join(os.tmpdir(), 'erp-sync-cookie-'));
+    cookieJarPath = path.join(cookieDirPath, 'session.cookies');
+    loggerRef.info?.('[sync-erp] ERP cookie jar created', { cookieJarPath });
+  } catch (cookieCreateError) {
+    loggerRef.error?.('[sync-erp] Failed to initialize ERP cookie jar', { cookieCreateError });
+    throw cookieCreateError;
+  }
+
+  try {
   const testResult = await runCurl('test', buildImportArgs('test'));
   let testAcceptedByMarker = false;
   let parsedTest: ParsedErpResponse = { job: null, reportId: null, state: 'unknown' };
@@ -533,7 +571,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         break;
       }
 
-      if (currentState.state === 'failed' || currentState.state === 'unknown') {
+      if (currentState.state === 'failed' || currentState.state === 'auth_lost' || currentState.state === 'unknown') {
         pollingResult = {
           exitCode: 1,
           stdout: '',
@@ -551,7 +589,24 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       const pollUrl = buildPollingUrl(url, currentState);
       const pollRequest = await runCurl('polling', buildPollArgs(pollUrl));
-      currentState = parseErpImportState(pollRequest.stdout, pollRequest.effectiveUrl);
+      try {
+        const authLostDetected = hasAuthLossMarkers(pollRequest.stdout, pollRequest.effectiveUrl);
+        if (authLostDetected) {
+          loggerRef.warn?.('[sync-erp] ERP polling detected login redirect', {
+            phase: 'polling',
+            effectiveUrl: pollRequest.effectiveUrl
+          });
+          currentState = { job: null, reportId: null, state: 'auth_lost' };
+        } else {
+          currentState = parseErpImportState(pollRequest.stdout, pollRequest.effectiveUrl);
+        }
+      } catch (authDetectionError) {
+        loggerRef.error?.('[sync-erp] Failed to evaluate ERP polling auth state', {
+          phase: 'polling',
+          authDetectionError
+        });
+        currentState = { job: null, reportId: null, state: 'unknown' };
+      }
       pollingResult = {
         ...pollRequest,
         phase: 'polling',
@@ -663,6 +718,19 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     markerValidationPassed: true,
     failurePhase: importAcceptedByMarker ? null : 'import'
   };
+  } finally {
+    if (cookieDirPath) {
+      try {
+        await rm(cookieDirPath, { recursive: true, force: true });
+        loggerRef.info?.('[sync-erp] ERP cookie jar cleaned up', { cookieDirPath });
+      } catch (cookieCleanupError) {
+        loggerRef.warn?.('[sync-erp] Failed to clean up ERP cookie jar', {
+          cookieDirPath,
+          cookieCleanupError
+        });
+      }
+    }
+  }
 }
 
 const action = defineHttpAction({
@@ -784,6 +852,8 @@ const action = defineHttpAction({
         return sendJson(res, 502, {
           error: 'ERP-Testlauf wurde nicht bestätigt. Import wurde nicht gestartet.',
           failurePhase: 'test',
+          state: curlResult.test.state,
+          effectiveUrl: curlResult.test.effectiveUrl || null,
           phases: {
             test: {
               status: curlResult.test.exitCode === 0 ? 'failed-validation' : 'failed-execution',
@@ -792,7 +862,9 @@ const action = defineHttpAction({
               stdout: testStdout,
               stderr: testStderr,
               job: curlResult.test.job ?? null,
-              reportId: curlResult.test.reportId ?? null
+              reportId: curlResult.test.reportId ?? null,
+              state: curlResult.test.state,
+              effectiveUrl: curlResult.test.effectiveUrl || null
             },
             polling: {
               status: 'skipped'
@@ -814,13 +886,17 @@ const action = defineHttpAction({
         return sendJson(res, 502, {
           error: 'ERP-Import konnte nicht fortgesetzt werden, da keine Import-Vorschau bereit war.',
           failurePhase: 'polling',
+          state: curlResult.polling?.state ?? 'unknown',
+          effectiveUrl: curlResult.polling?.effectiveUrl || null,
           phases: {
             test: {
               status: 'passed',
               exitCode: curlResult.test.exitCode,
               matchedMarker: curlResult.test.acceptedByMarker,
               job: curlResult.test.job ?? null,
-              reportId: curlResult.test.reportId ?? null
+              reportId: curlResult.test.reportId ?? null,
+              state: curlResult.test.state,
+              effectiveUrl: curlResult.test.effectiveUrl || null
             },
             polling: {
               status: 'failed',
@@ -829,7 +905,8 @@ const action = defineHttpAction({
               job: curlResult.polling?.job ?? null,
               reportId: curlResult.polling?.reportId ?? null,
               stdout: trimDiagnosticOutput(curlResult.polling?.stdout ?? ''),
-              stderr: trimDiagnosticOutput(curlResult.polling?.stderr ?? '')
+              stderr: trimDiagnosticOutput(curlResult.polling?.stderr ?? ''),
+              effectiveUrl: curlResult.polling?.effectiveUrl || null
             },
             import: {
               status: 'skipped'
@@ -845,20 +922,25 @@ const action = defineHttpAction({
         return sendJson(res, 502, {
           error: 'ERP-Import ist fehlgeschlagen.',
           failurePhase: 'import',
+          state: curlResult.import?.state ?? 'unknown',
+          effectiveUrl: curlResult.import?.effectiveUrl || null,
           phases: {
             test: {
               status: 'passed',
               exitCode: curlResult.test.exitCode,
               matchedMarker: curlResult.test.acceptedByMarker,
               job: curlResult.test.job ?? null,
-              reportId: curlResult.test.reportId ?? null
+              reportId: curlResult.test.reportId ?? null,
+              state: curlResult.test.state,
+              effectiveUrl: curlResult.test.effectiveUrl || null
             },
             polling: {
               status: 'passed',
               exitCode: curlResult.polling.exitCode,
               state: curlResult.polling.state,
               job: curlResult.polling.job ?? null,
-              reportId: curlResult.polling.reportId ?? null
+              reportId: curlResult.polling.reportId ?? null,
+            effectiveUrl: curlResult.polling.effectiveUrl || null
             },
             import: {
               status: 'failed',
@@ -867,7 +949,9 @@ const action = defineHttpAction({
               stderr: trimDiagnosticOutput(curlResult.import?.stderr ?? ''),
               stdout: trimDiagnosticOutput(curlResult.import?.stdout ?? ''),
               job: curlResult.import?.job ?? null,
-              reportId: curlResult.import?.reportId ?? null
+              reportId: curlResult.import?.reportId ?? null,
+              state: curlResult.import?.state,
+              effectiveUrl: curlResult.import?.effectiveUrl || null
             }
           }
         });
@@ -875,27 +959,35 @@ const action = defineHttpAction({
 
       return sendJson(res, 200, {
         ok: true,
+        failurePhase: curlResult.failurePhase,
+        state: curlResult.import.state,
+        effectiveUrl: curlResult.import.effectiveUrl || null,
         phases: {
           test: {
             status: 'passed',
             exitCode: curlResult.test.exitCode,
             matchedMarker: curlResult.test.acceptedByMarker,
             job: curlResult.test.job ?? null,
-            reportId: curlResult.test.reportId ?? null
+            reportId: curlResult.test.reportId ?? null,
+            state: curlResult.test.state,
+            effectiveUrl: curlResult.test.effectiveUrl || null
           },
           polling: {
             status: 'passed',
             exitCode: curlResult.polling.exitCode,
             state: curlResult.polling.state,
             job: curlResult.polling.job ?? null,
-            reportId: curlResult.polling.reportId ?? null
+            reportId: curlResult.polling.reportId ?? null,
+            effectiveUrl: curlResult.polling.effectiveUrl || null
           },
           import: {
             status: 'passed',
             exitCode: curlResult.import.exitCode,
             matchedMarker: curlResult.import.acceptedByMarker,
             job: curlResult.import.job ?? null,
-            reportId: curlResult.import.reportId ?? null
+            reportId: curlResult.import.reportId ?? null,
+            state: curlResult.import.state,
+            effectiveUrl: curlResult.import.effectiveUrl || null
           }
         },
         artifact: path.basename(stagedExport.archivePath),
