@@ -18,6 +18,7 @@ import {
   ERP_IMPORT_TIMEOUT_MS,
   ERP_IMPORT_POLL_INTERVAL_MS,
   ERP_IMPORT_POLL_TIMEOUT_MS,
+  ERP_IMPORT_POLLING_ENABLED,
   ERP_IMPORT_URL,
   ERP_IMPORT_USERNAME
 } from '../config';
@@ -26,6 +27,7 @@ import { defineHttpAction } from './index';
 
 // TODO(agent): Capture ERP sync response metadata (job IDs) once the upstream API returns them.
 // TODO(agent): Consolidate ERP import HTTP client with shared networking utilities once available.
+// TODO(sync-erp-baseline-path): Remove baseline no-poll path after continuation URL polling is proven stable in production.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -718,6 +720,75 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     };
   }
 
+  loggerRef.info?.('[sync-erp] ERP phase transition', {
+    fromPhase: 'test',
+    toPhase: ERP_IMPORT_POLLING_ENABLED ? 'polling' : 'import',
+    pollingEnabled: ERP_IMPORT_POLLING_ENABLED
+  });
+
+  if (!ERP_IMPORT_POLLING_ENABLED) {
+    loggerRef.info?.('[sync-erp] ERP baseline flow enabled; skipping polling and executing import immediately', {
+      phase: 'import',
+      reason: 'ERP_IMPORT_POLLING_ENABLED=false'
+    });
+
+    // TODO(sync-erp-baseline-delay): Revisit this delay once baseline reliability is confirmed across ERP environments.
+    const baselineDelayMs = Math.max(0, ERP_IMPORT_POLL_INTERVAL_MS);
+    if (baselineDelayMs > 0) {
+      loggerRef.info?.('[sync-erp] ERP baseline flow waiting between marker-validated test and import', {
+        phase: 'import',
+        baselineDelayMs
+      });
+      await new Promise((resolve) => setTimeout(resolve, baselineDelayMs));
+    }
+
+    const importResult = await runCurl('import', buildImportArgs('import'));
+    const parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
+    const importAcceptedByMarker = parsedImport.acceptedByMarker;
+    logParseEvidence(loggerRef, 'import', parsedImport);
+
+    loggerRef.info?.('[sync-erp] ERP phase validation', {
+      phase: 'import',
+      exitCode: importResult.exitCode,
+      matchedMarker: importAcceptedByMarker,
+      state: parsedImport.state,
+      job: parsedImport.job,
+      reportId: parsedImport.reportId
+    });
+
+    return {
+      test: {
+        ...testResult,
+        phase: 'test',
+        acceptedByMarker: testAcceptedByMarker,
+        state: parsedTest.state,
+        job: parsedTest.job,
+        reportId: parsedTest.reportId
+      },
+      polling: {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        effectiveUrl: testResult.effectiveUrl || url,
+        phase: 'polling',
+        acceptedByMarker: true,
+        state: 'ready',
+        job: parsedTest.job,
+        reportId: parsedTest.reportId
+      },
+      import: {
+        ...importResult,
+        phase: 'import',
+        acceptedByMarker: importAcceptedByMarker,
+        state: parsedImport.state,
+        job: parsedImport.job,
+        reportId: parsedImport.reportId
+      },
+      markerValidationPassed: true,
+      failurePhase: importAcceptedByMarker ? null : 'import'
+    };
+  }
+
   const pollIntervalMs = Math.max(250, ERP_IMPORT_POLL_INTERVAL_MS);
   const pollTimeoutMs = Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS);
   const unknownGraceMs = Math.min(pollTimeoutMs, Math.max(pollIntervalMs * 2, 5000));
@@ -1034,6 +1105,12 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     };
   }
 
+  loggerRef.info?.('[sync-erp] ERP phase transition', {
+    fromPhase: 'polling',
+    toPhase: 'import',
+    pollingEnabled: ERP_IMPORT_POLLING_ENABLED
+  });
+
   const importResult = await runCurl('import', buildImportArgs('import'));
   const parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
   const importAcceptedByMarker = parsedImport.acceptedByMarker;
@@ -1282,9 +1359,10 @@ const action = defineHttpAction({
         });
       }
 
-      if (!curlResult.import || curlResult.import.exitCode !== 0) {
+      if (!curlResult.import || curlResult.import.exitCode !== 0 || curlResult.failurePhase === 'import') {
         console.error('[sync-erp] ERP import failed', {
-          exitCode: curlResult.import?.exitCode ?? -1
+          exitCode: curlResult.import?.exitCode ?? -1,
+          matchedMarker: curlResult.import?.acceptedByMarker ?? false
         });
         return sendJson(res, 502, {
           error: 'ERP-Import ist fehlgeschlagen.',
