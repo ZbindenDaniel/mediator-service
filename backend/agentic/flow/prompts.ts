@@ -25,7 +25,9 @@ export const PROMPT_PLACEHOLDERS = {
   categorizerReview: '{{CATEGORIZER_REVIEW}}',
   extractionReview: '{{EXTRACTION_REVIEW}}',
   supervisorReview: '{{SUPERVISOR_REVIEW}}',
-  exampleItem: '{{EXAMPLE_ITEM}}'
+  exampleItem: '{{EXAMPLE_ITEM}}',
+  // TODO(agentic-schema-injection): Keep target schema placeholder naming aligned across all agent prompts.
+  targetSchemaFormat: '{{TARGET_SCHEMA_FORMAT}}'
 } as const;
 
 export type PromptPlaceholderToken = (typeof PROMPT_PLACEHOLDERS)[keyof typeof PROMPT_PLACEHOLDERS];

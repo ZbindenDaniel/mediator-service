@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+<!-- TODO(agentic-schema-contract): Keep prompt docs and validators aligned when schema fields change. -->
+- **Agentic canonical Spezifikationen schema contract**: simplified to one shared item-structure contract across extraction/categorization/supervision prompts and validators, removed envelope versioning complexity, and now injects canonical schema text through prompt placeholders so agents receive the contract inline with key telemetry + compatibility tests retained.
 <!-- TODO(agentic-review-spec-field-ui): Revisit selector affordances after reviewer telemetry confirms usage patterns. -->
 - **Supervisor dual-category gating in extraction**: added an explicit second-category requirement gate so supervisor PASS now allows null `_B` fields for single-category payloads, enforces complete/distinct `_B` fields only when explicitly requested, and logs structured decision-path context (including guarded error handling) for category validation outcomes.
 - **Categorizer↔supervisor second-category alignment simplification**: kept the stage contract lightweight by honoring explicit `requiresSecondCategory` flags when present while retaining fallback behavior and structured supervisor validation logs to reduce conflicts with minimal code growth.

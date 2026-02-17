@@ -8,7 +8,7 @@
   - Consider the user's original input/target before requesting new searches.
 </task>
 <rules>
-  - Output must match <output_format> exactly.
+  - Output must match <output_format> exactly and follow `backend/agentic/prompts/schema-contract.md`.
   - Use only schema-approved keys.
   - Focus on already present keys in 'Spezifikationen'; add additional spec'-fields found in the search.
   - Field notes:
@@ -31,6 +31,10 @@
 </rules>
 <output_format>
 Follow this format exactly:
+<!-- TODO(agentic-schema-injection): Keep injected schema block and JSON skeleton ordering aligned with parser expectations. -->
+Canonical target schema (injected at runtime):
+{{TARGET_SCHEMA_FORMAT}}
+
 <think>
 Your internal reasoning goes here.
 </think>

@@ -5,7 +5,7 @@ import { FlowError } from './errors';
 import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
 import type { ChatModel, ExtractionLogger } from './item-flow-extraction';
-import type { AgenticOutput } from './item-flow-schemas';
+import { logSchemaKeyTelemetry, type AgenticOutput } from './item-flow-schemas';
 import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
 
 // TODO(agent): Monitor categorizer drift once evaluation datasets are curated.
@@ -210,6 +210,8 @@ export async function runCategorizerStage({
     logger?.error?.({ err, msg: 'categorizer returned invalid JSON', itemId, rawSnippet: raw.slice(0, 500) });
     throw new FlowError('CATEGORIZER_INVALID_JSON', 'Categorizer agent returned invalid JSON', 500, { cause: err });
   }
+
+  logSchemaKeyTelemetry(logger, { stage: 'categorizer', itemId, payload: parsed });
 
   const validated = CategorizerPayloadSchema.safeParse(parsed);
   if (!validated.success) {
