@@ -279,6 +279,16 @@ export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   30000,
   'ERP_IMPORT_TIMEOUT_MS'
 );
+export const ERP_IMPORT_POLL_INTERVAL_MS = parsePositiveInt(
+  process.env.ERP_IMPORT_POLL_INTERVAL_MS,
+  1500,
+  'ERP_IMPORT_POLL_INTERVAL_MS'
+);
+export const ERP_IMPORT_POLL_TIMEOUT_MS = parsePositiveInt(
+  process.env.ERP_IMPORT_POLL_TIMEOUT_MS,
+  20000,
+  'ERP_IMPORT_POLL_TIMEOUT_MS'
+);
 export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').trim();
 
 if (!ERP_SYNC_ENABLED) {
