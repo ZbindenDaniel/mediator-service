@@ -86,4 +86,78 @@ describe('forwardAgenticTrigger review metadata', () => {
       expect.any(Object)
     );
   });
+
+  it('ignores duplicate start attempts when an active run already exists', async () => {
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'Already running',
+      artikelNummer: 'item-running'
+    };
+
+    const result = await forwardAgenticTrigger(payload, {
+      context: 'unit-test',
+      logger,
+      service: {
+        logger,
+        getAgenticRun: {
+          get: jest.fn().mockReturnValue({ Status: 'running' })
+        }
+      } as any
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 409,
+      body: {
+        status: 'ignored',
+        message: 'Agentic run already in progress',
+        reason: 'run-already-in-progress'
+      },
+      rawBody: null
+    });
+    expect(startAgenticRun).not.toHaveBeenCalled();
+  });
+
+  it('returns a state conflict response when preflight state lookup fails', async () => {
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'Conflict run',
+      artikelNummer: 'item-conflict'
+    };
+
+    const result = await forwardAgenticTrigger(payload, {
+      context: 'unit-test',
+      logger,
+      service: {
+        logger,
+        getAgenticRun: {
+          get: jest.fn(() => {
+            throw new Error('db unavailable');
+          })
+        }
+      } as any
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 409,
+      body: {
+        status: 'error',
+        message: 'Unable to validate current run state before start',
+        reason: 'run-state-conflict'
+      },
+      rawBody: null
+    });
+    expect(startAgenticRun).not.toHaveBeenCalled();
+  });
 });
