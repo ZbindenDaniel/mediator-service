@@ -27,6 +27,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 - **Agentic stage-domain contract hardening**: constrained extraction outputs to evidence fields (taxonomy keys now rejected pre-categorization), clarified extraction/categorizer/supervisor prompt responsibilities, deferred taxonomy completeness checks until categorization, and added stage-labeled handoff logging plus focused pipeline tests for premature taxonomy enforcement.
+<!-- TODO(agentic-search-dedupe-heuristics): Re-tune domain cap/diversity thresholds once retrieval quality telemetry stabilizes. -->
+- **Agentic search traffic dedupe + taxonomy guardrails**: normalized and deduplicated planner queries before execution, blocked taxonomy/internal-category targeted web lookups in favor of product-fact searches, deduplicated sources by domain+title+URL hash with per-domain caps, introduced vendor-diversity ordering heuristics, and added per-run retrieval metrics (`uniqueQueries`, `uniqueDomains`, `duplicateSuppressionCount`) plus focused tests for taxonomy rejection and dedupe behavior.
 <!-- TODO(agentic-schema-contract): Keep prompt docs and validators aligned when schema fields change. -->
 - **Agentic canonical Spezifikationen schema contract**: simplified to one shared item-structure contract across extraction/categorization/supervision prompts and validators, removed envelope versioning complexity, and now injects canonical schema text through prompt placeholders so agents receive the contract inline with key telemetry + compatibility tests retained.
 <!-- TODO(agentic-review-spec-field-ui): Revisit selector affordances after reviewer telemetry confirms usage patterns. -->
