@@ -217,6 +217,13 @@ interface ReportReadinessContext {
   reportUrl: string;
 }
 
+interface ReportReadinessStateSummary {
+  processing: boolean;
+  lastUrl: string;
+  job: string | null;
+  reportId: string | null;
+}
+
 interface ParsedErpResponse {
   job: string | null;
   reportId: string | null;
@@ -274,6 +281,15 @@ function buildReportReadinessUrl(baseUrl: string, reportId: string): string {
 
 function hasImportPreviewHeading(stdout: string): boolean {
   return /<h2[^>]*>\s*Import-Vorschau\s*<\/h2>/i.test(stdout);
+}
+
+function summarizeReadinessState(parsed: ParsedErpResponse, lastUrl: string): ReportReadinessStateSummary {
+  return {
+    processing: parsed.state === 'processing',
+    lastUrl,
+    job: parsed.job,
+    reportId: parsed.reportId
+  };
 }
 
 // TODO(sync-erp-report-readiness): Revisit report-id extraction once ERP exposes a stable JSON response for action_test.
@@ -385,7 +401,7 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       state = 'context_lost';
     } else if (isAuthenticatedHome) {
       state = 'unexpected_home';
-    } else if (hasImportVorschauH2 || hasReportAction) {
+    } else if (hasImportVorschauH2 || (hasReportAction && !!reportId)) {
       state = 'ready';
     } else if (hasImportStatusH2 || hasResultAction) {
       state = 'processing';
@@ -738,6 +754,74 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   // TODO(sync-erp-context-lost): Keep context re-bootstrap URL aligned with ERP profile navigation changes.
   const buildContextBootstrapUrl = (): string => `${url}?action=CsvImport/import`;
 
+  // TODO(sync-erp-readiness-contract): Keep report readiness criteria aligned with browser import flow behavior.
+  const waitForReportReadiness = async (
+    reportContext: ReportReadinessContext
+  ): Promise<{ ready: boolean; reportResult: ImportResult | null; parsedReport: ParsedErpResponse | null; timeoutSummary: ReportReadinessStateSummary | null }> => {
+    const pollIntervalMs = Math.max(250, ERP_IMPORT_POLL_INTERVAL_MS);
+    const pollTimeoutMs = Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS);
+    const startedAt = Date.now();
+    let reportResult: ImportResult | null = null;
+    let parsedReport: ParsedErpResponse | null = null;
+
+    while (Date.now() - startedAt <= pollTimeoutMs) {
+      try {
+        reportResult = await runCurl('polling', buildPollArgs(reportContext.reportUrl));
+        parsedReport = parseErpImportState(reportResult.stdout, reportResult.effectiveUrl);
+      } catch (reportPollError) {
+        loggerRef.error?.('[sync-erp] Report readiness polling failed', {
+          phase: 'polling',
+          mode: importMode,
+          reportId: reportContext.reportId,
+          job: reportContext.job,
+          reportUrl: trimDiagnosticOutput(reportContext.reportUrl, 200),
+          error: reportPollError instanceof Error ? reportPollError.message : String(reportPollError)
+        });
+        throw reportPollError;
+      }
+
+      const reportHasImportVorschau = hasImportPreviewHeading(reportResult.stdout);
+      const reportFetchReady =
+        reportResult.exitCode === 0 &&
+        parsedReport.evidence.effectiveUrlAction === 'CsvImport/report' &&
+        !!parsedReport.reportId;
+      const readinessSatisfied = reportHasImportVorschau || reportFetchReady;
+
+      loggerRef.info?.('[sync-erp] ERP report readiness transition', {
+        phase: 'polling',
+        mode: importMode,
+        reportId: parsedReport.reportId || reportContext.reportId,
+        job: parsedReport.job || reportContext.job,
+        elapsedMs: Date.now() - startedAt,
+        readinessSatisfied,
+        reportHasImportVorschau,
+        reportFetchReady,
+        state: parsedReport.state,
+        lastUrl: reportResult.effectiveUrl || reportContext.reportUrl
+      });
+
+      if (readinessSatisfied) {
+        return { ready: true, reportResult, parsedReport, timeoutSummary: null };
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    return {
+      ready: false,
+      reportResult,
+      parsedReport,
+      timeoutSummary: parsedReport
+        ? summarizeReadinessState(parsedReport, reportResult?.effectiveUrl || reportContext.reportUrl)
+        : {
+            processing: false,
+            lastUrl: reportContext.reportUrl,
+            job: reportContext.job,
+            reportId: reportContext.reportId
+          }
+    };
+  };
+
   try {
     cookieDirPath = await mkdtemp(path.join(os.tmpdir(), 'erp-sync-cookie-'));
     cookieJarPath = path.join(cookieDirPath, 'session.cookies');
@@ -823,18 +907,19 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       };
     }
 
-    let reportResult: ImportResult;
+    let reportReadinessResult: Awaited<ReturnType<typeof waitForReportReadiness>>;
     try {
-      reportResult = await runCurl('polling', buildPollArgs(reportContext.reportUrl));
-    } catch (reportFetchError) {
-      const reportFetchErrorMessage = reportFetchError instanceof Error ? reportFetchError.message : String(reportFetchError);
-      loggerRef.error?.('[sync-erp] Failed to fetch ERP report readiness page', {
+      reportReadinessResult = await waitForReportReadiness(reportContext);
+    } catch (reportReadinessError) {
+      const reportReadinessErrorMessage =
+        reportReadinessError instanceof Error ? reportReadinessError.message : String(reportReadinessError);
+      loggerRef.error?.('[sync-erp] Failed during ERP report readiness polling', {
         phase: 'polling',
         mode: importMode,
         reportId: reportContext.reportId,
         job: reportContext.job,
         reportUrl: trimDiagnosticOutput(reportContext.reportUrl, 200),
-        error: reportFetchErrorMessage
+        error: reportReadinessErrorMessage
       });
       return {
         test: {
@@ -844,7 +929,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           state: parsedTest.state,
           job: parsedTest.job,
           reportId: parsedTest.reportId,
-          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}Failed to fetch report readiness page after action_test: ${reportFetchErrorMessage}`
+          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}Failed during report readiness polling after action_test: ${reportReadinessErrorMessage}`
         },
         polling: null,
         import: null,
@@ -853,19 +938,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       };
     }
 
-    const hasReadyPreview = reportResult.exitCode === 0 && hasImportPreviewHeading(reportResult.stdout);
-    loggerRef.info?.('[sync-erp] ERP report readiness validation', {
-      phase: 'polling',
-      mode: importMode,
-      exitCode: reportResult.exitCode,
-      hasImportVorschauH2: hasImportPreviewHeading(reportResult.stdout),
-      reportId: reportContext.reportId,
-      job: reportContext.job,
-      effectiveUrl: reportResult.effectiveUrl || null
-    });
-
-    if (!hasReadyPreview) {
-      const reportDiagnostics = `Report readiness check failed (exitCode=${reportResult.exitCode}, hasImportVorschauH2=${hasImportPreviewHeading(reportResult.stdout)})`;
+    if (!reportReadinessResult.ready) {
+      const timeoutSummary = reportReadinessResult.timeoutSummary;
+      const reportDiagnostics = `Report readiness timeout reached without Import-Vorschau (processing=${timeoutSummary?.processing ?? false}, lastUrl=${timeoutSummary?.lastUrl || 'none'}, job=${timeoutSummary?.job || 'none'}, reportId=${timeoutSummary?.reportId || 'none'})`;
       return {
         test: {
           ...testResult,
@@ -873,7 +948,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           acceptedByMarker: false,
           state: parsedTest.state,
           job: parsedTest.job,
-          reportId: reportContext.reportId,
+          reportId: timeoutSummary?.reportId || reportContext.reportId,
           stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}${reportDiagnostics}`
         },
         polling: null,
@@ -1207,10 +1282,11 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   }
 
   if (!pollingResult) {
+    const timeoutSummary = summarizeReadinessState(currentState, continuationUrl || url);
     pollingResult = {
       exitCode: 1,
       stdout: '',
-      stderr: `ERP polling timed out without a ready import report (attempts=${attempt}, consecutiveUnknownCount=${consecutiveUnknownCount}, recentEffectiveUrls=${recentEffectiveUrls.join(' -> ') || 'none'}, recentEffectiveUrlActions=${recentEffectiveUrlActions.join(' -> ') || 'none'})`,
+      stderr: `ERP polling timed out without readiness (processing=${timeoutSummary.processing}, lastUrl=${timeoutSummary.lastUrl}, job=${timeoutSummary.job || 'none'}, reportId=${timeoutSummary.reportId || 'none'}, attempts=${attempt}, consecutiveUnknownCount=${consecutiveUnknownCount}, recentEffectiveUrls=${recentEffectiveUrls.join(' -> ') || 'none'}, recentEffectiveUrlActions=${recentEffectiveUrlActions.join(' -> ') || 'none'})`,
       effectiveUrl: continuationUrl || url,
       phase: 'polling',
       acceptedByMarker: false,
