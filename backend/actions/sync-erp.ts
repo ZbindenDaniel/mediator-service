@@ -211,6 +211,12 @@ type ImportMode = 'script-parity' | 'polling-enabled';
 
 type PollTargetSource = 'fromTestResponse' | 'fromLastPoll' | 'fallbackBaseController';
 
+interface ReportReadinessContext {
+  reportId: string;
+  job: string | null;
+  reportUrl: string;
+}
+
 interface ParsedErpResponse {
   job: string | null;
   reportId: string | null;
@@ -246,6 +252,54 @@ function trimDiagnosticOutput(raw: string, maxLength = 500): string {
     return trimmed;
   }
   return `${trimmed.slice(0, maxLength)}…`;
+}
+
+function buildReportReadinessUrl(baseUrl: string, reportId: string): string {
+  const trimmedReportId = reportId.trim();
+  if (!trimmedReportId) {
+    throw new Error('ERP report id is empty.');
+  }
+
+  try {
+    const parsedBaseUrl = new URL(baseUrl);
+    parsedBaseUrl.searchParams.set('action', 'CsvImport/report');
+    parsedBaseUrl.searchParams.set('no_layout', '1');
+    parsedBaseUrl.searchParams.set('id', trimmedReportId);
+    return parsedBaseUrl.toString();
+  } catch (error) {
+    const normalizedBaseUrl = baseUrl.includes('?') ? baseUrl.split('?')[0] : baseUrl;
+    return `${normalizedBaseUrl}?action=CsvImport/report&no_layout=1&id=${encodeURIComponent(trimmedReportId)}`;
+  }
+}
+
+function hasImportPreviewHeading(stdout: string): boolean {
+  return /<h2[^>]*>\s*Import-Vorschau\s*<\/h2>/i.test(stdout);
+}
+
+// TODO(sync-erp-report-readiness): Revisit report-id extraction once ERP exposes a stable JSON response for action_test.
+function deriveReportReadinessContext(testResult: ImportResult, logger: Pick<Console, 'warn'>, baseUrl: string): ReportReadinessContext {
+  try {
+    const responseText = `${testResult.stdout}\n${testResult.effectiveUrl}`;
+    const reportId = extractQueryParam(responseText, 'id');
+    const job = extractQueryParam(responseText, 'job');
+
+    if (!reportId) {
+      throw new Error('Missing report id in action_test response URL/HTML.');
+    }
+
+    return {
+      reportId,
+      job,
+      reportUrl: buildReportReadinessUrl(baseUrl, reportId)
+    };
+  } catch (error) {
+    logger.warn?.('[sync-erp] Failed to derive report readiness context from action_test', {
+      effectiveUrl: trimDiagnosticOutput(testResult.effectiveUrl, 200),
+      stdoutSample: trimDiagnosticOutput(testResult.stdout, 200),
+      error: error instanceof Error ? error.message : String(error)
+    });
+    throw error;
+  }
 }
 
 function extractQueryParam(urlValue: string, key: string): string | null {
@@ -734,21 +788,99 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   });
 
   if (!ERP_IMPORT_POLLING_ENABLED) {
-    loggerRef.info?.('[sync-erp] ERP baseline flow enabled; skipping polling and executing import immediately', {
-      phase: 'import',
+    loggerRef.info?.('[sync-erp] ERP baseline flow enabled; validating report readiness before import', {
+      phase: 'polling',
       mode: importMode,
       reason: 'ERP_IMPORT_POLLING_ENABLED=false'
     });
 
-    // TODO(sync-erp-baseline-delay): Revisit this delay once baseline reliability is confirmed across ERP environments.
-    const baselineDelayMs = Math.max(0, ERP_IMPORT_POLL_INTERVAL_MS);
-    if (baselineDelayMs > 0) {
-      loggerRef.info?.('[sync-erp] ERP baseline flow waiting between marker-validated test and import', {
-        phase: 'import',
+    let reportContext: ReportReadinessContext;
+    try {
+      reportContext = deriveReportReadinessContext(testResult, loggerRef, url);
+      loggerRef.info?.('[sync-erp] ERP report readiness context derived', {
+        phase: 'polling',
         mode: importMode,
-        baselineDelayMs
+        reportId: reportContext.reportId,
+        job: reportContext.job,
+        reportUrl: trimDiagnosticOutput(reportContext.reportUrl, 200)
       });
-      await new Promise((resolve) => setTimeout(resolve, baselineDelayMs));
+    } catch (reportContextError) {
+      const reportContextErrorMessage = reportContextError instanceof Error ? reportContextError.message : String(reportContextError);
+      return {
+        test: {
+          ...testResult,
+          phase: 'test',
+          acceptedByMarker: false,
+          state: parsedTest.state,
+          job: parsedTest.job,
+          reportId: parsedTest.reportId,
+          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}Failed to derive report readiness id after action_test: ${reportContextErrorMessage}`
+        },
+        polling: null,
+        import: null,
+        markerValidationPassed: false,
+        failurePhase: 'test'
+      };
+    }
+
+    let reportResult: ImportResult;
+    try {
+      reportResult = await runCurl('polling', buildPollArgs(reportContext.reportUrl));
+    } catch (reportFetchError) {
+      const reportFetchErrorMessage = reportFetchError instanceof Error ? reportFetchError.message : String(reportFetchError);
+      loggerRef.error?.('[sync-erp] Failed to fetch ERP report readiness page', {
+        phase: 'polling',
+        mode: importMode,
+        reportId: reportContext.reportId,
+        job: reportContext.job,
+        reportUrl: trimDiagnosticOutput(reportContext.reportUrl, 200),
+        error: reportFetchErrorMessage
+      });
+      return {
+        test: {
+          ...testResult,
+          phase: 'test',
+          acceptedByMarker: false,
+          state: parsedTest.state,
+          job: parsedTest.job,
+          reportId: parsedTest.reportId,
+          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}Failed to fetch report readiness page after action_test: ${reportFetchErrorMessage}`
+        },
+        polling: null,
+        import: null,
+        markerValidationPassed: false,
+        failurePhase: 'test'
+      };
+    }
+
+    const hasReadyPreview = reportResult.exitCode === 0 && hasImportPreviewHeading(reportResult.stdout);
+    loggerRef.info?.('[sync-erp] ERP report readiness validation', {
+      phase: 'polling',
+      mode: importMode,
+      exitCode: reportResult.exitCode,
+      hasImportVorschauH2: hasImportPreviewHeading(reportResult.stdout),
+      reportId: reportContext.reportId,
+      job: reportContext.job,
+      effectiveUrl: reportResult.effectiveUrl || null
+    });
+
+    if (!hasReadyPreview) {
+      const reportDiagnostics = `Report readiness check failed (exitCode=${reportResult.exitCode}, hasImportVorschauH2=${hasImportPreviewHeading(reportResult.stdout)})`;
+      return {
+        test: {
+          ...testResult,
+          phase: 'test',
+          acceptedByMarker: false,
+          state: parsedTest.state,
+          job: parsedTest.job,
+          reportId: reportContext.reportId,
+          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}${reportDiagnostics}`
+        },
+        polling: null,
+        import: null,
+        markerValidationPassed: false,
+        failurePhase: 'test'
+      };
     }
 
     const importResult = await runCurl('import', buildImportArgs('import'));
