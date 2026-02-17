@@ -289,6 +289,9 @@ export const ERP_IMPORT_POLL_TIMEOUT_MS = parsePositiveInt(
   20000,
   'ERP_IMPORT_POLL_TIMEOUT_MS'
 );
+// TODO(sync-erp-polling-flag): Remove this experiment gate after continuation URL polling proves more reliable than baseline two-phase execution.
+export const ERP_IMPORT_POLLING_ENABLED =
+  parseBooleanFlag(process.env.ERP_IMPORT_POLLING_ENABLED, 'ERP_IMPORT_POLLING_ENABLED') ?? false;
 export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').trim();
 
 if (!ERP_SYNC_ENABLED) {
