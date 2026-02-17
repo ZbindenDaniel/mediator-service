@@ -6,21 +6,43 @@ import type { AgenticOutput } from './item-flow-schemas';
 import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
 
 // TODO(agent): Revisit pricing rule injection once pricing heuristics are validated with real catalog data.
+// TODO(agentic-pricing-threshold-tuning): Re-tune confidence/evidence thresholds after collecting production telemetry.
 const PricingResponseSchema = z
   .object({
-    Verkaufspreis: z.union([z.number(), z.string(), z.null()]).optional()
+    Verkaufspreis: z.union([z.number(), z.string(), z.null()]).optional(),
+    directListingPrice: z.union([z.number(), z.string(), z.null()]).optional(),
+    trustedHistoricalPrice: z.union([z.number(), z.string(), z.null()]).optional(),
+    confidence: z.union([z.number(), z.string(), z.null()]).optional(),
+    evidenceCount: z.union([z.number(), z.string(), z.null()]).optional(),
+    sourceUrl: z.string().trim().optional(),
+    parseStatus: z.string().trim().optional(),
+    zeroIsValid: z.boolean().optional(),
+    item: z
+      .object({
+        Verkaufspreis: z.union([z.number(), z.string(), z.null()]).optional()
+      })
+      .passthrough()
+      .optional()
   })
   .passthrough();
 
 const PRICING_TIMEOUT_MS = 15000;
+const MIN_CONFIDENCE_FOR_PRICE = 0.6;
+const MIN_EVIDENCE_COUNT_FOR_PRICE = 2;
 
 // TODO(agent): Revisit price normalization once locale-specific pricing data is available.
-function normalizePriceValue(value: unknown): number | null {
+function normalizePriceValue(value: unknown, { allowZero = false }: { allowZero?: boolean } = {}): number | null {
   if (value == null || value === '') {
     return null;
   }
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    if (value === 0 && !allowZero) {
+      return null;
+    }
+    return value;
   }
   if (typeof value !== 'string') {
     return null;
@@ -39,7 +61,71 @@ function normalizePriceValue(value: unknown): number | null {
     return null;
   }
   const parsed = Number.parseFloat(match[0]);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  if (parsed === 0 && !allowZero) {
+    return null;
+  }
+  return parsed;
+}
+
+function normalizeScore(value: unknown): number | null {
+  const parsed = normalizePriceValue(value, { allowZero: true });
+  if (parsed == null) {
+    return null;
+  }
+  if (parsed > 1 && parsed <= 100) {
+    return parsed / 100;
+  }
+  return parsed;
+}
+
+function normalizeEvidenceCount(value: unknown): number {
+  const parsed = normalizePriceValue(value, { allowZero: true });
+  if (parsed == null || !Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(parsed));
+}
+
+type PricingDecisionInput = z.infer<typeof PricingResponseSchema>;
+
+export function resolvePricingDecision(payload: PricingDecisionInput): {
+  normalizedPrice: number | null;
+  confidence: number;
+  evidenceCount: number;
+  selectedSource: 'directListingPrice' | 'trustedHistoricalPrice' | 'Verkaufspreis' | 'item.Verkaufspreis' | 'none';
+} {
+  const allowZero = payload.zeroIsValid === true;
+  const directListingPrice = normalizePriceValue(payload.directListingPrice, { allowZero });
+  const trustedHistoricalPrice = normalizePriceValue(payload.trustedHistoricalPrice, { allowZero });
+  const explicitPrice = normalizePriceValue(payload.Verkaufspreis, { allowZero });
+  const nestedPrice = normalizePriceValue(payload.item?.Verkaufspreis, { allowZero });
+  const confidence = Math.max(0, Math.min(1, normalizeScore(payload.confidence) ?? 0));
+  const evidenceCount = normalizeEvidenceCount(payload.evidenceCount);
+
+  let normalizedPrice: number | null = null;
+  let selectedSource: 'directListingPrice' | 'trustedHistoricalPrice' | 'Verkaufspreis' | 'item.Verkaufspreis' | 'none' = 'none';
+  if (directListingPrice != null) {
+    normalizedPrice = directListingPrice;
+    selectedSource = 'directListingPrice';
+  } else if (trustedHistoricalPrice != null) {
+    normalizedPrice = trustedHistoricalPrice;
+    selectedSource = 'trustedHistoricalPrice';
+  } else if (explicitPrice != null) {
+    normalizedPrice = explicitPrice;
+    selectedSource = 'Verkaufspreis';
+  } else if (nestedPrice != null) {
+    normalizedPrice = nestedPrice;
+    selectedSource = 'item.Verkaufspreis';
+  }
+
+  if (normalizedPrice != null && (confidence < MIN_CONFIDENCE_FOR_PRICE || evidenceCount < MIN_EVIDENCE_COUNT_FOR_PRICE)) {
+    return { normalizedPrice: null, confidence, evidenceCount, selectedSource };
+  }
+
+  return { normalizedPrice, confidence, evidenceCount, selectedSource };
 }
 
 // TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
@@ -63,7 +149,7 @@ function mapLangtextToSpezifikationenForLlm(
 }
 
 export function isUsablePrice(value: unknown): boolean {
-  const normalized = normalizePriceValue(value);
+  const normalized = normalizePriceValue(value, { allowZero: false });
   return typeof normalized === 'number' && Number.isFinite(normalized) && normalized > 0;
 }
 
@@ -196,18 +282,42 @@ export async function runPricingStage({
     return null;
   }
 
-  const candidatePayload = validated.data as { Verkaufspreis?: unknown; item?: { Verkaufspreis?: unknown } };
-  const priceValue =
-    candidatePayload.Verkaufspreis !== undefined
-      ? candidatePayload.Verkaufspreis
-      : candidatePayload.item?.Verkaufspreis;
-  const normalizedPrice = normalizePriceValue(priceValue);
-
-  if (!isUsablePrice(normalizedPrice)) {
-    logger?.info?.({ msg: 'pricing stage returned no usable price', itemId });
+  let decision;
+  try {
+    decision = resolvePricingDecision(validated.data);
+  } catch (err) {
+    logger?.error?.({
+      err,
+      msg: 'pricing parse/normalize failed',
+      itemId,
+      sourceUrl: validated.data.sourceUrl ?? null,
+      parseStatus: validated.data.parseStatus ?? 'normalization-exception'
+    });
     return null;
   }
 
-  logger?.info?.({ msg: 'pricing stage resolved price', itemId, Verkaufspreis: normalizedPrice });
-  return { Verkaufspreis: normalizedPrice };
+  if (!isUsablePrice(decision.normalizedPrice)) {
+    logger?.info?.({
+      msg: 'pricing stage returned no usable price',
+      itemId,
+      sourceUrl: validated.data.sourceUrl ?? null,
+      parseStatus: validated.data.parseStatus ?? 'parsed',
+      selectedSource: decision.selectedSource,
+      confidence: decision.confidence,
+      evidenceCount: decision.evidenceCount
+    });
+    return null;
+  }
+
+  logger?.info?.({
+    msg: 'pricing stage resolved price',
+    itemId,
+    Verkaufspreis: decision.normalizedPrice,
+    selectedSource: decision.selectedSource,
+    confidence: decision.confidence,
+    evidenceCount: decision.evidenceCount,
+    sourceUrl: validated.data.sourceUrl ?? null,
+    parseStatus: validated.data.parseStatus ?? 'parsed'
+  });
+  return { Verkaufspreis: decision.normalizedPrice };
 }

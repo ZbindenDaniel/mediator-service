@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+<!-- TODO(agentic-pricing-telemetry): Revisit threshold defaults after collecting confidence/evidence distributions. -->
+- **Pricing decision-tree hardening**: documented explicit price-source precedence (`directListingPrice` -> `trustedHistoricalPrice` -> `null`), disallowed implicit zero-price acceptance, added confidence/evidence gating for non-null outputs, enriched pricing parse logs with source URL + parse status, and added edge-case tests for empty/conflicting/malformed/zero pricing payloads.
 <!-- TODO(agentic-prompt-templates): Bump fragment versions + snapshots whenever shared policy text changes. -->
 - **Shared prompt fragment templates + version telemetry**: extracted duplicated role/output/error/example guidance into reusable prompt-template fragments, kept role prompts focused on explicit deltas, logged per-run shared template versions during composition, and added snapshot coverage to detect unintended prompt drift.
 <!-- TODO(agentic-search-dedupe-heuristics): Re-tune domain cap/diversity thresholds once retrieval quality telemetry stabilizes. -->
