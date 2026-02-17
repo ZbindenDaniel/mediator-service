@@ -5,6 +5,7 @@
   Analyze the provided item JSON payload (plus any reviewer instructions and taxonomy reference) and return the most appropriate Haupt- and Unterkategorie codes.
 </task>
 <rules>
+  <!-- TODO(agentic-review-context): Keep categorizer reviewer placeholder adjacent to reviewer-priority rule. -->
   {{BASE_ROLE_POLICY}}
   {{OUTPUT_CONTRACT}}
   {{ERROR_POLICY}}
@@ -14,6 +15,7 @@
   - Always analyse the provided item JSON and prefer explicit signals (names, specs, usage) when selecting categories.
   - Treat Spezifikationen as supporting context when deciding categories.
   - Reviewer notes take priority. Follow any reviewer instructions about focus areas or constraints before applying other rules.
+  {{CATEGORIZER_REVIEW}}
   - The taxonomy reference supplied alongside the conversation is authoritative. Use it to map descriptions to valid codes.
   - Preserve locked values. If the payload includes a "__locked" array listing category fields, keep their existing values.
   - Return JSON with numeric codes (no text labels). Use null when no confident assignment can be made.
