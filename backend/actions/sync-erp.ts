@@ -203,6 +203,8 @@ interface ImportExecutionResult {
   failurePhase: ImportPhase | null;
 }
 
+type PollTargetSource = 'fromTestResponse' | 'fromLastPoll' | 'fallbackBaseController';
+
 interface ParsedErpResponse {
   job: string | null;
   reportId: string | null;
@@ -430,6 +432,33 @@ function extractContinuationUrl(
   }
 }
 
+function parsePollTargetMetadata(
+  pollTargetUrl: string,
+  logger: Pick<Console, 'warn'>
+): { pollTargetAction: string | null; pollTargetJob: string | null; pollTargetReportId: string | null } {
+  // TODO(sync-erp-poll-target): Keep polling-target metadata extraction aligned if ERP query parameter names change.
+  try {
+    const parsedTargetUrl = new URL(pollTargetUrl);
+    return {
+      pollTargetAction: parsedTargetUrl.searchParams.get('action'),
+      pollTargetJob: parsedTargetUrl.searchParams.get('job'),
+      pollTargetReportId: parsedTargetUrl.searchParams.get('id')
+    };
+  } catch (pollTargetParseError) {
+    logger.warn?.('[sync-erp] Failed to parse polling target URL metadata; continuing with regex fallback', {
+      pollTargetUrl: trimDiagnosticOutput(pollTargetUrl, 200),
+      pollTargetParseError:
+        pollTargetParseError instanceof Error ? pollTargetParseError.message : String(pollTargetParseError)
+    });
+
+    return {
+      pollTargetAction: extractQueryParam(pollTargetUrl, 'action'),
+      pollTargetJob: extractQueryParam(pollTargetUrl, 'job'),
+      pollTargetReportId: extractQueryParam(pollTargetUrl, 'id')
+    };
+  }
+}
+
 // TODO(agent): Confirm whether ERP import requires curl retries on transient 5xx responses.
 // TODO(agent): Add structured log fields for curl timing metrics once we track ERP latency.
 // TODO(sync-erp-phases): Keep phase-marker matching aligned with ERP response wording changes.
@@ -455,6 +484,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   let cookieDirPath: string | null = null;
   let cookieJarPath: string | null = null;
+  const attemptedPollTargets: string[] = [];
 
   const buildCookieArgs = (): string[] => {
     if (!cookieJarPath) {
@@ -710,6 +740,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   recordEffectiveUrlState(testResult.effectiveUrl, currentState.evidence.effectiveUrlAction);
   let continuationUrl = extractContinuationUrl('test', url, testResult.effectiveUrl, currentState, loggerRef);
+  let continuationSource: PollTargetSource = continuationUrl ? 'fromTestResponse' : 'fallbackBaseController';
 
   try {
     while (Date.now() - pollStartedAt <= pollTimeoutMs) {
@@ -762,9 +793,33 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       const pollUrl = continuationUrl || url;
+      const pollTargetSource: PollTargetSource = continuationUrl ? continuationSource : 'fallbackBaseController';
+      const { pollTargetAction, pollTargetJob, pollTargetReportId } = parsePollTargetMetadata(pollUrl, loggerRef);
+
+      attemptedPollTargets.push(
+        `${pollTargetSource}:${trimDiagnosticOutput(pollUrl, 180)}@${pollTargetAction || 'unknown'}:${pollTargetJob || 'none'}:${pollTargetReportId || 'none'}`
+      );
+      if (attemptedPollTargets.length > 10) {
+        attemptedPollTargets.shift();
+      }
+
+      loggerRef.info?.('[sync-erp] ERP polling target selected', {
+        phase: 'polling',
+        pollTargetSource,
+        pollTargetUrl: trimDiagnosticOutput(pollUrl, 200),
+        pollTargetAction,
+        pollTargetJob,
+        pollTargetReportId
+      });
+
       if (!continuationUrl) {
         loggerRef.warn?.('[sync-erp] Polling fallback to base controller URL due to missing continuation context', {
           phase: 'polling',
+          pollTargetSource,
+          pollTargetUrl: trimDiagnosticOutput(pollUrl, 200),
+          pollTargetAction,
+          pollTargetJob,
+          pollTargetReportId,
           job: currentState.job,
           reportId: currentState.reportId
         });
@@ -802,6 +857,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       const nextContinuationUrl = extractContinuationUrl('polling', url, pollRequest.effectiveUrl, currentState, loggerRef);
       if (nextContinuationUrl) {
         continuationUrl = nextContinuationUrl;
+        continuationSource = 'fromLastPoll';
       }
 
       lastEffectiveUrlAction = currentState.evidence.effectiveUrlAction;
@@ -925,6 +981,11 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     failurePhase: importAcceptedByMarker ? null : 'import'
   };
   } finally {
+    loggerRef.info?.('[sync-erp] ERP polling summary', {
+      attemptedTargetsCount: attemptedPollTargets.length,
+      attemptedTargetsSequence: trimDiagnosticOutput(attemptedPollTargets.join(' -> '), 600)
+    });
+
     if (cookieDirPath) {
       try {
         await rm(cookieDirPath, { recursive: true, force: true });
