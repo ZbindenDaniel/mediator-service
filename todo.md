@@ -1,3 +1,4 @@
+
 # Prioritized Todo Backlog
 
 Objective: turn the collected ideas into an execution-ready backlog with clear priority, explicit reason, and a higher-level goal. The focus is to make incremental changes with minimal additions, reuse existing structures, and avoid unclear assumptions.
@@ -19,6 +20,9 @@ Objective: turn the collected ideas into an execution-ready backlog with clear p
 3. **Ensure shelf weight and item count are calculated correctly.** Current totals are incomplete or inaccurate. **Reason:** incorrect aggregates are a data contract quality issue and reduce trust in inventory views. **Higher-level goal:** align aggregation logic across backend/frontend models while reusing existing summary helpers and verifying structure compatibility.
 
 4. **Keep qty=0 items reachable only via explicit navigation.** Preserve record traceability without polluting default browse lists. **Reason:** users need detail access for audit and follow-up while keeping main lists focused. **Higher-level goal:** apply minimal query/filter adjustments so explicit lookups still resolve and list behavior stays predictable.
+
+5. **Distinction between listprice and sell price.** When adding a new field 'Listenpreis' to the items we can make a distinction between the prices we find. The pricing agent should then put the prices found in the correct field (new price or current market price). When exporting we calculate 'Verkaufspreis based on the findings (either we take it as is are calculate `Verkaufspreis = Math.Floor((Listenpreis +30)/15)*5`). Alsow we might inject other prices of similar items intot the pricing agent chat
+
 
 ## Priority 1 — Workflow Integrity and Business Rules
 
