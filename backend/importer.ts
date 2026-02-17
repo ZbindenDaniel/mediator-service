@@ -1782,6 +1782,7 @@ export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ cou
           ReviewedBy: normalizeAgenticRunField(record.ReviewedBy) || null,
           LastReviewDecision: normalizeAgenticRunField(record.LastReviewDecision) || null,
           LastReviewNotes: normalizeAgenticRunField(record.LastReviewNotes) || null,
+          LastSearchLinksJson: normalizeAgenticRunField(record.LastSearchLinksJson) || null
         };
 
         try {
