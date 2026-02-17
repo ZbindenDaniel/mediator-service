@@ -183,6 +183,7 @@ type PollState =
   | 'ready'
   | 'failed'
   | 'auth_lost'
+  | 'context_lost'
   | 'unexpected_home'
   | 'unknown'
   | 'invalid_response';
@@ -224,6 +225,8 @@ const ERP_POLL_FAILURE_MARKERS = ['Import fehlgeschlagen', 'Fehler beim Import']
 const ERP_LOGIN_FORM_MARKERS = ['name="login"', 'id="login"', 'type="password"'];
 const ERP_LOGIN_REDIRECT_URL_MARKER = 'LoginScreen/user_login';
 const ERP_AUTHENTICATED_HOME_MARKERS = ['dashboard', 'startseite', 'home', 'willkommen'];
+const ERP_CONTEXT_LOST_ACTION = 'company_logo';
+const ERP_CONTEXT_LOST_MAX_POLLS = 2;
 
 function hasAuthLossMarkers(stdout: string, effectiveUrl: string): boolean {
   const normalizedResponse = stdout.toLowerCase();
@@ -306,6 +309,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
     const isLoginForm = hasAuthLossMarkers(stdout, effectiveUrl);
     const effectiveUrlAction = extractEffectiveUrlAction(effectiveUrl);
     const isAuthenticatedHome = isAuthenticatedHomeResponse(stdout, effectiveUrl, effectiveUrlAction);
+    const isContextLost =
+      effectiveUrlAction === ERP_CONTEXT_LOST_ACTION && /\/login\.pl(?:$|\?)/i.test(effectiveUrl);
     const hasResultAction = effectiveUrlAction === 'CsvImport/result';
     const hasReportAction = effectiveUrlAction === 'CsvImport/report';
     const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
@@ -317,6 +322,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       state = 'failed';
     } else if (isLoginForm) {
       state = 'auth_lost';
+    } else if (isContextLost) {
+      state = 'context_lost';
     } else if (isAuthenticatedHome) {
       state = 'unexpected_home';
     } else if (hasImportVorschauH2 || hasReportAction) {
@@ -667,6 +674,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     return args;
   };
 
+  // TODO(sync-erp-context-lost): Keep context re-bootstrap URL aligned with ERP profile navigation changes.
+  const buildContextBootstrapUrl = (): string => `${url}?action=CsvImport/import`;
+
   try {
     cookieDirPath = await mkdtemp(path.join(os.tmpdir(), 'erp-sync-cookie-'));
     cookieJarPath = path.join(cookieDirPath, 'session.cookies');
@@ -741,6 +751,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   recordEffectiveUrlState(testResult.effectiveUrl, currentState.evidence.effectiveUrlAction);
   let continuationUrl = extractContinuationUrl('test', url, testResult.effectiveUrl, currentState, loggerRef);
   let continuationSource: PollTargetSource = continuationUrl ? 'fromTestResponse' : 'fallbackBaseController';
+  let rebootstrapAttempted = false;
+  let contextLostCount = 0;
 
   try {
     while (Date.now() - pollStartedAt <= pollTimeoutMs) {
@@ -750,7 +762,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         attempt,
         elapsedMs,
         state: currentState.state,
+        effectiveUrlAction: currentState.evidence.effectiveUrlAction,
         consecutiveUnknownCount,
+        contextLostCount,
+        rebootstrapAttempted,
         lastEffectiveUrlAction,
         job: currentState.job,
         reportId: currentState.reportId
@@ -789,6 +804,76 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           reportId: currentState.reportId
         };
         break;
+      }
+
+      if (currentState.state === 'context_lost') {
+        contextLostCount += 1;
+        if (!rebootstrapAttempted) {
+          rebootstrapAttempted = true;
+          const bootstrapUrl = buildContextBootstrapUrl();
+          loggerRef.warn?.('[sync-erp] ERP context lost; attempting controlled re-bootstrap', {
+            state: currentState.state,
+            effectiveUrlAction: currentState.evidence.effectiveUrlAction,
+            rebootstrapAttempted,
+            bootstrapUrl: trimDiagnosticOutput(bootstrapUrl, 200),
+            continuationUrl: trimDiagnosticOutput(continuationUrl || url, 200),
+            job: currentState.job,
+            reportId: currentState.reportId
+          });
+
+          try {
+            const bootstrapRequest = await runCurl('polling', buildPollArgs(bootstrapUrl));
+            const bootstrapState = parseErpImportState(bootstrapRequest.stdout, bootstrapRequest.effectiveUrl);
+            logParseEvidence(loggerRef, 'polling', bootstrapState);
+            const bootstrapContinuationUrl = extractContinuationUrl(
+              'polling',
+              url,
+              bootstrapRequest.effectiveUrl,
+              bootstrapState,
+              loggerRef
+            );
+            if (bootstrapContinuationUrl) {
+              continuationUrl = bootstrapContinuationUrl;
+              continuationSource = 'fromLastPoll';
+            }
+            currentState = bootstrapState;
+            continue;
+          } catch (rebootstrapError) {
+            loggerRef.error?.('[sync-erp] ERP context re-bootstrap failed', {
+              state: currentState.state,
+              effectiveUrlAction: currentState.evidence.effectiveUrlAction,
+              rebootstrapAttempted,
+              error: rebootstrapError instanceof Error ? rebootstrapError.message : String(rebootstrapError)
+            });
+            pollingResult = {
+              exitCode: 1,
+              stdout: '',
+              stderr: `ERP context re-bootstrap failed: ${rebootstrapError instanceof Error ? rebootstrapError.message : String(rebootstrapError)}`,
+              effectiveUrl: continuationUrl || url,
+              phase: 'polling',
+              acceptedByMarker: false,
+              state: 'context_lost',
+              job: currentState.job,
+              reportId: currentState.reportId
+            };
+            break;
+          }
+        }
+
+        if (contextLostCount > ERP_CONTEXT_LOST_MAX_POLLS) {
+          pollingResult = {
+            exitCode: 1,
+            stdout: '',
+            stderr: `ERP context remained lost after controlled re-bootstrap (contextLostCount=${contextLostCount}, maxContextLostPolls=${ERP_CONTEXT_LOST_MAX_POLLS}, lastAction=${currentState.evidence.effectiveUrlAction || 'none'})`,
+            effectiveUrl: continuationUrl || url,
+            phase: 'polling',
+            acceptedByMarker: false,
+            state: 'context_lost',
+            job: currentState.job,
+            reportId: currentState.reportId
+          };
+          break;
+        }
       }
 
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
@@ -852,6 +937,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         consecutiveUnknownCount += 1;
       } else {
         consecutiveUnknownCount = 0;
+      }
+
+      if (currentState.state !== 'context_lost') {
+        contextLostCount = 0;
       }
 
       const nextContinuationUrl = extractContinuationUrl('polling', url, pollRequest.effectiveUrl, currentState, loggerRef);
@@ -1145,6 +1234,7 @@ const action = defineHttpAction({
 
       if (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready') {
         const isUnexpectedHome = curlResult.polling?.state === 'unexpected_home';
+        const isContextLost = curlResult.polling?.state === 'context_lost';
         console.error('[sync-erp] ERP polling phase did not reach ready state', {
           state: curlResult.polling?.state ?? 'unknown',
           exitCode: curlResult.polling?.exitCode ?? -1,
@@ -1152,10 +1242,14 @@ const action = defineHttpAction({
           reportId: curlResult.polling?.reportId ?? null
         });
         return sendJson(res, 502, {
-          error: isUnexpectedHome
+          error: isContextLost
+            ? 'ERP-Import-Kontext ging verloren und konnte nicht zuverlässig wiederhergestellt werden.'
+            : isUnexpectedHome
             ? 'ERP-Import konnte nicht fortgesetzt werden, da eine unerwartete Startseite statt der Import-Vorschau geladen wurde.'
             : 'ERP-Import konnte nicht fortgesetzt werden, da keine Import-Vorschau bereit war.',
-          details: isUnexpectedHome
+          details: isContextLost
+            ? 'ERP antwortete wiederholt mit login.pl?action=company_logo. Bitte CSV-Import-Kontext/Profil erneut öffnen und den Sync neu starten.'
+            : isUnexpectedHome
             ? 'ERP antwortete mit einer authentifizierten Startseite ohne Import-Kontext. Prüfen Sie Profil-/Mandanten-Bootstrap und Importkontext.'
             : undefined,
           failurePhase: 'polling',
