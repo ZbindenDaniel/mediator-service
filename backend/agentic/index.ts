@@ -162,17 +162,20 @@ function persistRequestPayloadSnapshot(
 export function normalizeAgenticStatusUpdate(update: Record<string, unknown>): Record<string, unknown> {
   const normalized: Record<string, unknown> = { ...update };
 
+  // TODO(agentic-status-update-bindings): Keep default parameter bindings synchronized with SQL named parameters.
   for (const flag of AGENTIC_STATUS_UPDATE_FLAGS) {
-    if (Object.prototype.hasOwnProperty.call(normalized, flag)) {
-      const value = normalized[flag];
-      if (typeof value === 'boolean') {
-        normalized[flag] = value ? 1 : 0;
-      } else if (typeof value === 'number' || typeof value === 'bigint') {
-        normalized[flag] = Number(value);
-      } else {
-        normalized[flag] = value ?? 0;
-      }
+    const value = Object.prototype.hasOwnProperty.call(normalized, flag) ? normalized[flag] : 0;
+    if (typeof value === 'boolean') {
+      normalized[flag] = value ? 1 : 0;
+    } else if (typeof value === 'number' || typeof value === 'bigint') {
+      normalized[flag] = Number(value);
+    } else {
+      normalized[flag] = value ?? 0;
     }
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(normalized, 'LastSearchLinksJson')) {
+    normalized.LastSearchLinksJson = null;
   }
 
   return normalized;
@@ -603,7 +606,8 @@ function persistQueuedRun(
       ReviewState: reviewState,
       ReviewedBy: reviewedBy,
       LastReviewDecision: reviewDecision,
-      LastReviewNotes: reviewNotes
+      LastReviewNotes: reviewNotes,
+      LastSearchLinksJson: null
     });
   } catch (err) {
     logger.error?.('[agentic-service] Failed to upsert agentic run during queue', {
@@ -1365,7 +1369,8 @@ export async function deleteAgenticRun(
       ReviewState: 'not_required',
       ReviewedBy: null,
       LastReviewDecision: null,
-      LastReviewNotes: null
+      LastReviewNotes: null,
+      LastSearchLinksJson: existing.LastSearchLinksJson ?? null
     });
 
     if (!insertResult?.changes) {
@@ -1516,7 +1521,8 @@ export async function restartAgenticRun(
         ReviewState: reviewState,
         ReviewedBy: reviewedBy,
         LastReviewDecision: lastReviewDecision,
-        LastReviewNotes: lastReviewNotes
+        LastReviewNotes: lastReviewNotes,
+        LastSearchLinksJson: existing?.LastSearchLinksJson ?? null
       });
     }
 

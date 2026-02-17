@@ -182,7 +182,8 @@ type AgenticBulkQueueResult = {
             ReviewState: 'not_required',
             ReviewedBy: null,
             LastReviewDecision: existingRun?.LastReviewDecision ?? null,
-            LastReviewNotes: existingRun?.LastReviewNotes ?? null
+            LastReviewNotes: existingRun?.LastReviewNotes ?? null,
+            LastSearchLinksJson: existingRun?.LastSearchLinksJson ?? null
           };
 
           try {

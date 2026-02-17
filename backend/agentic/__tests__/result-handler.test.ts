@@ -412,6 +412,7 @@ describe('agentic result handler integration', () => {
     expect(JSON.parse(String(reviewHistory[0].ReviewMetadata))).toEqual({
       information_present: false,
       missing_spec: ['Spannung', 'Material'],
+      unneeded_spec: [],
       bad_format: true,
       wrong_information: true,
       wrong_physical_dimensions: false
@@ -488,7 +489,17 @@ describe('agentic result handler integration', () => {
           upsertAgenticRun: { run: jest.fn() },
           insertAgenticRunReviewHistoryEntry: { run: jest.fn() },
           logEvent: jest.fn(),
-          getAgenticRequestLog: () => null
+          getAgenticRequestLog: () => ({
+            UUID: 'R-400',
+            Search: 'search',
+            Status: AGENTIC_RUN_STATUS_QUEUED,
+            Error: null,
+            CreatedAt: '2024-01-01T00:00:00.000Z',
+            UpdatedAt: '2024-01-01T00:00:00.000Z',
+            NotifiedAt: null,
+            LastNotificationError: null,
+            PayloadJson: null
+          })
         },
         logger: console
       }

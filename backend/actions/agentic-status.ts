@@ -468,7 +468,8 @@ const action = defineHttpAction({
                 ReviewState: reviewStateToPersist,
                 ReviewedBy: reviewedBy,
                 LastReviewDecision: reviewDecisionToPersist,
-                LastReviewNotes: notes || null
+                LastReviewNotes: notes || null,
+                LastSearchLinksJson: run?.LastSearchLinksJson ?? null
               });
               if (!upsertResult || upsertResult.changes === 0) {
                 throw new Error('Agentic close upsert had no effect');

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_FAILED } from '../../models';
+import { normalizeAgenticStatusUpdate } from '../agentic';
 import type { AgenticRun } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -164,11 +165,12 @@ const action = defineHttpAction({
       };
 
       try {
-        const updateResult = ctx.updateAgenticRunStatus.run(runUpdate);
+        const updateResult = ctx.updateAgenticRunStatus.run(normalizeAgenticStatusUpdate(runUpdate));
         if (!updateResult?.changes) {
           console.warn('Agentic run missing during failure update, creating new record', artikelNummer);
           ctx.upsertAgenticRun.run({
             ...runUpdate,
+            LastSearchLinksJson: existingRun?.LastSearchLinksJson ?? null
           });
         }
       } catch (updateErr) {

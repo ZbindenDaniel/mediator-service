@@ -1388,7 +1388,8 @@ const action = defineHttpAction({
                   ReviewState: 'not_required',
                   ReviewedBy: null,
                   LastReviewDecision: null,
-                  LastReviewNotes: null
+                  LastReviewNotes: null,
+                  LastSearchLinksJson: null
                 };
 
                 try {
