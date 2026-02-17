@@ -245,6 +245,17 @@ interface ParsedErpResponse {
   diagnostics?: string;
 }
 
+type ErpIdentifierSource = 'effectiveUrl' | 'htmlHref' | 'scriptPayload';
+
+interface ExtractedErpIdentifiers {
+  job: string | null;
+  reportId: string | null;
+  sources: {
+    job: ErpIdentifierSource | null;
+    reportId: ErpIdentifierSource | null;
+  };
+}
+
 const ERP_POLL_FAILURE_MARKERS = ['Import fehlgeschlagen', 'Fehler beim Import'];
 
 const ERP_LOGIN_FORM_MARKERS = ['name="login"', 'id="login"', 'type="password"'];
@@ -320,12 +331,23 @@ function summarizeReadinessState(parsed: ParsedErpResponse, lastUrl: string): Re
 // TODO(sync-erp-report-readiness): Revisit report-id extraction once ERP exposes a stable JSON response for action_test.
 function deriveReportReadinessContext(testResult: ImportResult, logger: Pick<Console, 'warn'>, baseUrl: string): ReportReadinessContext {
   try {
-    const responseText = `${testResult.stdout}\n${testResult.effectiveUrl}`;
-    const reportId = extractQueryParam(responseText, 'id');
-    const job = extractQueryParam(responseText, 'job');
+    const identifiers = extractErpIdentifiers(testResult.stdout, testResult.effectiveUrl);
+    const reportId = identifiers.reportId;
+    const job = identifiers.job;
+
+    logger.warn?.('[sync-erp] ERP readiness identifier extraction', {
+      reportId,
+      reportSource: identifiers.sources.reportId || 'none',
+      job,
+      jobSource: identifiers.sources.job || 'none',
+      effectiveUrl: trimDiagnosticOutput(testResult.effectiveUrl, 200)
+    });
 
     if (!reportId) {
-      throw new Error('Missing report id in action_test response URL/HTML.');
+      const fallbackReason = job
+        ? `Missing report id in action_test response URL/HTML (job-only continuation available: ${job}).`
+        : 'Missing report id in action_test response URL/HTML.';
+      throw new Error(fallbackReason);
     }
 
     return {
@@ -355,6 +377,98 @@ function extractQueryParam(urlValue: string, key: string): string | null {
       error: error instanceof Error ? error.message : String(error)
     });
     return null;
+  }
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x2f;/gi, '/')
+    .replace(/&#47;/gi, '/');
+}
+
+function decodeUrlEncodedFragments(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function extractIdentifierFromPattern(value: string, type: 'resultJob' | 'reportId'): string | null {
+  const pattern =
+    type === 'resultJob'
+      ? /action\s*=\s*CsvImport\s*\/\s*result[^\n"'<>]*?[?&]job\s*=\s*(\d+)/i
+      : /action\s*=\s*CsvImport\s*\/\s*report[^\n"'<>]*?[?&]id\s*=\s*(\d+)/i;
+  const match = value.match(pattern);
+  return match?.[1] || null;
+}
+
+// TODO(sync-erp-identifier-patterns): Expand parser patterns if ERP starts embedding continuation URLs in additional data attributes.
+function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedErpIdentifiers {
+  try {
+    const htmlHrefMatches = Array.from(stdout.matchAll(/href\s*=\s*['\"]([^'\"]+)['\"]/gi)).map(
+      (match) => match[1] || ''
+    );
+    const scriptPayloadMatches = Array.from(stdout.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)).map(
+      (match) => match[1] || ''
+    );
+
+    const candidates: Array<{ source: ErpIdentifierSource; value: string }> = [
+      { source: 'effectiveUrl', value: effectiveUrl },
+      ...htmlHrefMatches.map((value) => ({ source: 'htmlHref' as const, value })),
+      ...scriptPayloadMatches.map((value) => ({ source: 'scriptPayload' as const, value }))
+    ];
+
+    let job: string | null = null;
+    let reportId: string | null = null;
+    let jobSource: ErpIdentifierSource | null = null;
+    let reportSource: ErpIdentifierSource | null = null;
+
+    for (const candidate of candidates) {
+      const normalizedCandidate = decodeUrlEncodedFragments(decodeHtmlEntities(candidate.value));
+      const responseText = `${normalizedCandidate}\n${decodeHtmlEntities(candidate.value)}`;
+      if (!reportId) {
+        reportId = extractQueryParam(responseText, 'id') || extractIdentifierFromPattern(responseText, 'reportId');
+        if (reportId) {
+          reportSource = candidate.source;
+        }
+      }
+      if (!job) {
+        job = extractQueryParam(responseText, 'job') || extractIdentifierFromPattern(responseText, 'resultJob');
+        if (job) {
+          jobSource = candidate.source;
+        }
+      }
+      if (reportId && job) {
+        break;
+      }
+    }
+
+    return {
+      job,
+      reportId,
+      sources: {
+        job: jobSource,
+        reportId: reportSource
+      }
+    };
+  } catch (error) {
+    console.warn('[sync-erp] Failed to extract ERP identifiers from response payload', {
+      effectiveUrl: trimDiagnosticOutput(effectiveUrl, 120),
+      stdoutSample: trimDiagnosticOutput(stdout, 200),
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return {
+      job: null,
+      reportId: null,
+      sources: {
+        job: null,
+        reportId: null
+      }
+    };
   }
 }
 
@@ -414,8 +528,9 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
     const hasResultAction = effectiveUrlAction === 'CsvImport/result';
     const hasReportAction = effectiveUrlAction === 'CsvImport/report';
     const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
-    const job = extractQueryParam(responseText, 'job');
-    const reportId = extractQueryParam(responseText, 'id');
+    const identifiers = extractErpIdentifiers(stdout, effectiveUrl);
+    const job = identifiers.job;
+    const reportId = identifiers.reportId;
 
     let state: PollState = 'unknown';
     if (hasFailureMarker) {
@@ -433,6 +548,14 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
     }
 
     const acceptedByMarker = (state === 'processing' || state === 'ready') && !isLoginForm;
+
+    console.info('[sync-erp] ERP identifier extraction', {
+      effectiveUrl: trimDiagnosticOutput(effectiveUrl, 120),
+      reportId,
+      reportSource: identifiers.sources.reportId || 'none',
+      job,
+      jobSource: identifiers.sources.job || 'none'
+    });
 
     if (state === 'unknown') {
       console.warn('[sync-erp] ERP parser encountered unknown response pattern', {
