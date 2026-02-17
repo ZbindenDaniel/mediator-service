@@ -397,6 +397,7 @@ function buildPollingUrl(baseUrl: string, parsed: ParsedErpResponse): string {
 // TODO(sync-erp-phases): Keep phase-marker matching aligned with ERP response wording changes.
 // TODO(sync-erp-polling-parser): Extend parser if ERP introduces JSON responses for import status endpoints.
 // TODO(sync-erp-session-cookies): Replace temporary cookie-jar flow if ERP provides stable token-based polling APIs.
+// TODO(sync-erp-unknown-grace): Tune unknown-state grace thresholds with production telemetry once kivitendo redirect chains stabilize.
 async function runCurlImport(options: ImportOptions): Promise<ImportExecutionResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
@@ -641,10 +642,35 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   const pollIntervalMs = Math.max(250, ERP_IMPORT_POLL_INTERVAL_MS);
   const pollTimeoutMs = Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS);
+  const unknownGraceMs = Math.min(pollTimeoutMs, Math.max(pollIntervalMs * 2, 5000));
+  const maxUnknownAttempts = Math.max(3, Math.ceil(unknownGraceMs / pollIntervalMs));
   const pollStartedAt = Date.now();
   let attempt = 0;
   let currentState = parsedTest;
+  let consecutiveUnknownCount = 0;
+  let lastEffectiveUrlAction: string | null = currentState.evidence.effectiveUrlAction;
+  const recentEffectiveUrls: string[] = [];
+  const recentEffectiveUrlActions: string[] = [];
   let pollingResult: ImportPhaseResult | null = null;
+
+  const recordEffectiveUrlState = (effectiveUrl: string, action: string | null): void => {
+    const normalizedEffectiveUrl = (effectiveUrl || '').trim();
+    if (normalizedEffectiveUrl) {
+      recentEffectiveUrls.push(normalizedEffectiveUrl);
+      if (recentEffectiveUrls.length > 5) {
+        recentEffectiveUrls.shift();
+      }
+    }
+
+    if (action) {
+      recentEffectiveUrlActions.push(action);
+      if (recentEffectiveUrlActions.length > 5) {
+        recentEffectiveUrlActions.shift();
+      }
+    }
+  };
+
+  recordEffectiveUrlState(testResult.effectiveUrl, currentState.evidence.effectiveUrlAction);
 
   try {
     while (Date.now() - pollStartedAt <= pollTimeoutMs) {
@@ -654,6 +680,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         attempt,
         elapsedMs,
         state: currentState.state,
+        consecutiveUnknownCount,
+        lastEffectiveUrlAction,
         job: currentState.job,
         reportId: currentState.reportId
       });
@@ -677,7 +705,6 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         currentState.state === 'failed' ||
         currentState.state === 'auth_lost' ||
         currentState.state === 'unexpected_home' ||
-        currentState.state === 'unknown' ||
         currentState.state === 'invalid_response'
       ) {
         pollingResult = {
@@ -697,7 +724,38 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       const pollUrl = buildPollingUrl(url, currentState);
       const pollRequest = await runCurl('polling', buildPollArgs(pollUrl));
-      currentState = parseErpImportState(pollRequest.stdout, pollRequest.effectiveUrl);
+
+      try {
+        currentState = parseErpImportState(pollRequest.stdout, pollRequest.effectiveUrl);
+      } catch (pollParseError) {
+        loggerRef.warn?.('[sync-erp] ERP polling parser transition failed, downgrading to unknown state', {
+          attempt,
+          pollParseError: pollParseError instanceof Error ? pollParseError.message : String(pollParseError)
+        });
+        currentState = {
+          job: null,
+          reportId: null,
+          state: 'unknown',
+          acceptedByMarker: false,
+          evidence: {
+            hasImportStatusH2: false,
+            hasImportVorschauH2: false,
+            isLoginForm: false,
+            effectiveUrlAction: null
+          },
+          diagnostics: pollParseError instanceof Error ? pollParseError.message : 'Unknown parser transition failure'
+        };
+      }
+
+      if (currentState.state === 'unknown') {
+        consecutiveUnknownCount += 1;
+      } else {
+        consecutiveUnknownCount = 0;
+      }
+
+      lastEffectiveUrlAction = currentState.evidence.effectiveUrlAction;
+      recordEffectiveUrlState(pollRequest.effectiveUrl, lastEffectiveUrlAction);
+
       logParseEvidence(loggerRef, 'polling', currentState);
       pollingResult = {
         ...pollRequest,
@@ -707,6 +765,19 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         job: currentState.job,
         reportId: currentState.reportId
       };
+
+      const unknownGraceExceeded =
+        currentState.state === 'unknown' &&
+        (consecutiveUnknownCount >= maxUnknownAttempts || elapsedMs >= unknownGraceMs);
+
+      if (unknownGraceExceeded) {
+        pollingResult = {
+          ...pollingResult,
+          exitCode: 1,
+          stderr: `ERP processing remained unknown beyond grace window (consecutiveUnknownCount=${consecutiveUnknownCount}, maxUnknownAttempts=${maxUnknownAttempts}, elapsedMs=${elapsedMs}, unknownGraceMs=${unknownGraceMs})`
+        };
+        break;
+      }
     }
   } catch (pollError) {
     loggerRef.error?.('[sync-erp] ERP polling failed', { pollError });
@@ -740,7 +811,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     pollingResult = {
       exitCode: 1,
       stdout: '',
-      stderr: 'ERP polling timed out without a ready import report',
+      stderr: `ERP polling timed out without a ready import report (attempts=${attempt}, consecutiveUnknownCount=${consecutiveUnknownCount}, recentEffectiveUrls=${recentEffectiveUrls.join(' -> ') || 'none'}, recentEffectiveUrlActions=${recentEffectiveUrlActions.join(' -> ') || 'none'})`,
       effectiveUrl: buildPollingUrl(url, currentState),
       phase: 'polling',
       acceptedByMarker: false,
