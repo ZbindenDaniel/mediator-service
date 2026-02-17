@@ -57,6 +57,75 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
 }
 
+const REVIEW_SPEC_FIELD_LIMIT = 20;
+const REVIEW_SPEC_PREVIEW_LIMIT = 5;
+
+// TODO(agentic-review-normalization): Revisit review directive phrasing if prompt transport adds structured review metadata.
+function normalizeReviewSpecFieldList(params: {
+  value: unknown;
+  itemId: string;
+  fieldName: 'missing_spec' | 'unneeded_spec';
+  logger: AgenticModelInvokerLogger;
+}): string[] {
+  const { value, itemId, fieldName, logger } = params;
+  try {
+    if (!Array.isArray(value)) {
+      if (value !== null && value !== undefined) {
+        logger.warn?.({
+          msg: 'agentic invocation ignored non-array review directive field',
+          itemId,
+          fieldName,
+          valueType: typeof value
+        });
+      }
+      return [];
+    }
+
+    const normalized = Array.from(
+      new Set(
+        value
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.replace(/\s+/g, ' ').trim())
+          .filter((entry) => entry.length > 0)
+      )
+    )
+      .sort((left, right) => left.localeCompare(right, 'de', { sensitivity: 'base' }))
+      .slice(0, REVIEW_SPEC_FIELD_LIMIT);
+
+    logger.debug?.({
+      msg: 'agentic invocation normalized review directive field',
+      itemId,
+      fieldName,
+      count: normalized.length,
+      sample: normalized.slice(0, REVIEW_SPEC_PREVIEW_LIMIT)
+    });
+
+    return normalized;
+  } catch (err) {
+    logger.warn?.({ err, msg: 'failed to normalize review directive field', itemId, fieldName });
+    return [];
+  }
+}
+
+function composeReviewNotes(params: {
+  reviewNotes: string | null;
+  missingSpecFields: string[];
+  unneededSpecFields: string[];
+}): string | null {
+  const { reviewNotes, missingSpecFields, unneededSpecFields } = params;
+  const fragments: string[] = [];
+  if (reviewNotes) {
+    fragments.push(reviewNotes);
+  }
+  if (missingSpecFields.length > 0) {
+    fragments.push(`Missing spec fields to prioritize: ${missingSpecFields.join(', ')}.`);
+  }
+  if (unneededSpecFields.length > 0) {
+    fragments.push(`Spec fields to remove if present: ${unneededSpecFields.join(', ')}.`);
+  }
+  return fragments.length > 0 ? fragments.join('\n\n') : null;
+}
+
 // TODO(agent): Revisit Langtext serialization heuristics when upstream payloads evolve.
 function buildTargetFromRow(
   row: Record<string, unknown>,
@@ -531,14 +600,45 @@ export class AgenticModelInvoker {
       }
 
       let normalizedReviewNotes: string | null = null;
+      let normalizedMissingSpecFields: string[] = [];
+      let normalizedUnneededSpecFields: string[] = [];
       try {
         const rawNotes = input.review?.notes ?? null;
         if (typeof rawNotes === 'string') {
           const condensed = rawNotes.replace(/\s+/g, ' ').trim();
           normalizedReviewNotes = condensed ? condensed : null;
         }
+
+        normalizedMissingSpecFields = normalizeReviewSpecFieldList({
+          value: input.review?.missing_spec,
+          itemId: trimmedItemId,
+          fieldName: 'missing_spec',
+          logger: this.logger
+        });
+        normalizedUnneededSpecFields = normalizeReviewSpecFieldList({
+          value: input.review?.unneeded_spec,
+          itemId: trimmedItemId,
+          fieldName: 'unneeded_spec',
+          logger: this.logger
+        });
+
+        normalizedReviewNotes = composeReviewNotes({
+          reviewNotes: normalizedReviewNotes,
+          missingSpecFields: normalizedMissingSpecFields,
+          unneededSpecFields: normalizedUnneededSpecFields
+        });
+
+        this.logger.info?.({
+          msg: 'agentic invocation normalized review metadata',
+          itemId: trimmedItemId,
+          hasReviewNotes: Boolean(normalizedReviewNotes),
+          missingSpecCount: normalizedMissingSpecFields.length,
+          unneededSpecCount: normalizedUnneededSpecFields.length,
+          missingSpecSample: normalizedMissingSpecFields.slice(0, REVIEW_SPEC_PREVIEW_LIMIT),
+          unneededSpecSample: normalizedUnneededSpecFields.slice(0, REVIEW_SPEC_PREVIEW_LIMIT)
+        });
       } catch (err) {
-        this.logger.warn?.({ err, msg: 'failed to normalize review notes for agentic invocation', itemId: trimmedItemId });
+        this.logger.warn?.({ err, msg: 'failed to normalize review metadata for agentic invocation', itemId: trimmedItemId });
       }
 
       let skipSearch = false;
