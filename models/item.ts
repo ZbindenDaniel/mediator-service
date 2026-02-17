@@ -69,6 +69,8 @@ export interface ItemInstance {
 // TODO(langtext-contract): Remove legacy string fallback from ItemRef.Langtext once all callers consume structured payloads.
 export type LangtextPayloadValue = string | string[];
 export type LangtextPayload = Record<string, LangtextPayloadValue>;
+// TODO(agentic-spezifikationen): Remove legacy string payload support after agentic extraction boundaries fully normalize to this canonical object type.
+export type CanonicalSpezifikationenPayload = LangtextPayload;
 
 export interface ItemRef {
   Artikel_Nummer: string;

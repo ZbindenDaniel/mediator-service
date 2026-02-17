@@ -87,7 +87,7 @@ describe('runExtractionAttempts JSON correction', () => {
     expect(result.data).toEqual(JSON.parse(correctedExtraction));
   });
 
-  it('remaps Spezifikationen alias into Langtext before schema validation', async () => {
+  it('normalizes Spezifikationen alias into Langtext before schema validation', async () => {
     const target = buildTarget();
     const extractionOnlyAlias =
       '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
@@ -125,9 +125,9 @@ describe('runExtractionAttempts JSON correction', () => {
 
     expect(result.success).toBe(true);
     expect(result.data.Langtext).toEqual({ Veröffentlicht: 'ja', Stromversorgung: '230V' });
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
-        msg: 'remapping Spezifikationen alias to Langtext before schema validation',
+        msg: 'normalized Spezifikationen boundary value',
         itemId: target.Artikel_Nummer,
         attempt: 1
       })
@@ -171,6 +171,47 @@ describe('runExtractionAttempts JSON correction', () => {
 
     expect(result.success).toBe(true);
     expect(result.data.Langtext).toEqual({ Veröffentlicht: 'langtext', Stromversorgung: '110V' });
+  });
+
+
+  it('returns structured validation issues when Spezifikationen normalization fails', async () => {
+    const target = buildTarget();
+    const extractionInvalidSpezifikationen =
+      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
+      '"Spezifikationen":["invalid"],"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":2,' +
+      '"Unterkategorien_B":22}';
+
+    const llm: ChatModel = {
+      invoke: jest.fn(async () => ({ content: asJsonBlock(extractionInvalidSpezifikationen) }))
+    };
+
+    await expect(
+      runExtractionAttempts({
+        llm,
+        logger: console,
+        itemId: target.Artikel_Nummer,
+        maxAttempts: 1,
+        searchContexts: [],
+        aggregatedSources: [],
+        recordSources: jest.fn(),
+        buildAggregatedSearchText: () => '',
+        extractPrompt: 'extract',
+        correctionPrompt: 'repair json',
+        targetFormat: '{}',
+        supervisorPrompt: 'supervisor',
+        categorizerPrompt: 'categorizer',
+        pricingPrompt: 'pricing',
+        searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
+        target,
+        reviewNotes: null,
+        skipSearch: true,
+        transcriptWriter: null
+      })
+    ).rejects.toMatchObject({
+      code: 'SCHEMA_VALIDATION_FAILED',
+      statusCode: 422
+    });
   });
 
   it('allows null B categories when a second category is not required', async () => {

@@ -5,6 +5,112 @@ import { parseLangtext } from '../../lib/langtext';
 import { searchLimits } from '../config';
 import { collectSchemaKeys } from './schema-contract';
 
+
+function getNormalizationValueType(value: unknown): string {
+  if (Array.isArray(value)) {
+    return 'array';
+  }
+  if (value === null) {
+    return 'null';
+  }
+  return typeof value;
+}
+
+export interface SpezifikationenNormalizationIssue {
+  code: 'SPEZIFIKATIONEN_NORMALIZATION_FAILED';
+  message: string;
+  path: ['Langtext'];
+  fromType: string;
+  toType: 'string | object';
+  keysCount: number;
+}
+
+export function normalizeSpezifikationenBoundary(
+  payload: unknown,
+  context: {
+    logger?: Partial<Pick<Console, 'info' | 'warn'>>;
+    itemId: string;
+    attempt: number;
+    stage: string;
+  }
+): { normalizedPayload: unknown; issue: SpezifikationenNormalizationIssue | null } {
+  try {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return { normalizedPayload: payload, issue: null };
+    }
+
+    const record = payload as Record<string, unknown>;
+    const hasLangtext = record.Langtext !== null && record.Langtext !== undefined && record.Langtext !== '';
+    if (hasLangtext || !Object.prototype.hasOwnProperty.call(record, 'Spezifikationen')) {
+      return { normalizedPayload: payload, issue: null };
+    }
+
+    const spezifikationen = record.Spezifikationen;
+    const fromType = getNormalizationValueType(spezifikationen);
+    const keysCount = spezifikationen && typeof spezifikationen === 'object' && !Array.isArray(spezifikationen)
+      ? Object.keys(spezifikationen as Record<string, unknown>).length
+      : 0;
+
+    if (typeof spezifikationen === 'string' || (spezifikationen && typeof spezifikationen === 'object' && !Array.isArray(spezifikationen))) {
+      const remapped = { ...record, Langtext: spezifikationen };
+      delete remapped.Spezifikationen;
+      context.logger?.info?.({
+        msg: 'normalized Spezifikationen boundary value',
+        itemId: context.itemId,
+        attempt: context.attempt,
+        stage: context.stage,
+        fromType,
+        toType: 'string | object',
+        keysCount
+      });
+      return { normalizedPayload: remapped, issue: null };
+    }
+
+    const issue: SpezifikationenNormalizationIssue = {
+      code: 'SPEZIFIKATIONEN_NORMALIZATION_FAILED',
+      message: `Spezifikationen must be a string or object to normalize into Langtext (received ${fromType})`,
+      path: ['Langtext'],
+      fromType,
+      toType: 'string | object',
+      keysCount
+    };
+
+    context.logger?.warn?.({
+      msg: 'failed to normalize Spezifikationen boundary value',
+      itemId: context.itemId,
+      attempt: context.attempt,
+      stage: context.stage,
+      fromType,
+      toType: 'string | object',
+      keysCount,
+      issue
+    });
+
+    return { normalizedPayload: payload, issue };
+  } catch (err) {
+    const issue: SpezifikationenNormalizationIssue = {
+      code: 'SPEZIFIKATIONEN_NORMALIZATION_FAILED',
+      message: 'Unexpected error while normalizing Spezifikationen into Langtext',
+      path: ['Langtext'],
+      fromType: 'unknown',
+      toType: 'string | object',
+      keysCount: 0
+    };
+    context.logger?.warn?.({
+      err,
+      msg: 'failed to normalize Spezifikationen boundary value',
+      itemId: context.itemId,
+      attempt: context.attempt,
+      stage: context.stage,
+      fromType: issue.fromType,
+      toType: issue.toType,
+      keysCount: issue.keysCount,
+      issue
+    });
+    return { normalizedPayload: payload, issue };
+  }
+}
+
 function normalizeLocalizedNumberInput(value: unknown): number | null | unknown {
   if (value == null || value === '') {
     return null;
