@@ -265,6 +265,15 @@ export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || 
 export const ERP_IMPORT_USERNAME = (process.env.ERP_IMPORT_USERNAME || '').trim();
 export const ERP_IMPORT_PASSWORD = (process.env.ERP_IMPORT_PASSWORD || '').trim();
 export const ERP_IMPORT_FORM_FIELD = (process.env.ERP_IMPORT_FORM_FIELD || 'file').trim() || 'file';
+// TODO(agent-erp-form-overrides): Promote ERP import overrides into a dedicated schema-driven config module.
+export const ERP_IMPORT_FORM_SEPARATOR = (process.env.ERP_IMPORT_FORM_SEPARATOR || 'comma').trim() || 'comma';
+export const ERP_IMPORT_FORM_CHARSET = (process.env.ERP_IMPORT_FORM_CHARSET || 'UTF-8').trim() || 'UTF-8';
+export const ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP =
+  (process.env.ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP || '453').trim() || '453';
+export const ERP_IMPORT_FORM_DEFAULT_UNIT = (process.env.ERP_IMPORT_FORM_DEFAULT_UNIT || 'Stck').trim() || 'Stck';
+export const ERP_IMPORT_FORM_PART_CLASSIFICATION =
+  (process.env.ERP_IMPORT_FORM_PART_CLASSIFICATION || '2').trim() || '2';
+export const ERP_IMPORT_AUTH_FIELD_PREFIX = (process.env.ERP_IMPORT_AUTH_FIELD_PREFIX || '{AUTH}').trim();
 export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   process.env.ERP_IMPORT_TIMEOUT_MS,
   30000,
