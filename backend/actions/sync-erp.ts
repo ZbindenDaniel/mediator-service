@@ -14,6 +14,8 @@ import {
   ERP_SYNC_ENABLED,
   ERP_IMPORT_PASSWORD,
   ERP_IMPORT_TIMEOUT_MS,
+  ERP_IMPORT_POLL_INTERVAL_MS,
+  ERP_IMPORT_POLL_TIMEOUT_MS,
   ERP_IMPORT_URL,
   ERP_IMPORT_USERNAME
 } from '../config';
@@ -170,20 +172,36 @@ interface ImportResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  effectiveUrl: string;
 }
 
+type ImportPhase = 'test' | 'polling' | 'import';
+type PollState = 'processing' | 'ready' | 'failed' | 'unknown';
+
 interface ImportPhaseResult extends ImportResult {
-  phase: 'test' | 'import';
+  phase: ImportPhase;
   acceptedByMarker: boolean;
+  state?: PollState;
+  job?: string | null;
+  reportId?: string | null;
 }
 
 interface ImportExecutionResult {
   test: ImportPhaseResult;
+  polling: ImportPhaseResult | null;
   import: ImportPhaseResult | null;
   markerValidationPassed: boolean;
+  failurePhase: ImportPhase | null;
+}
+
+interface ParsedErpResponse {
+  job: string | null;
+  reportId: string | null;
+  state: PollState;
 }
 
 const ERP_TEST_ACCEPTANCE_MARKERS = ['Ihr Import wird verarbeitet'];
+const ERP_POLL_FAILURE_MARKERS = ['Import fehlgeschlagen', 'Fehler beim Import'];
 
 function trimDiagnosticOutput(raw: string, maxLength = 500): string {
   const trimmed = raw.trim();
@@ -198,9 +216,59 @@ function matchesAcceptanceMarker(stdout: string): boolean {
   return ERP_TEST_ACCEPTANCE_MARKERS.some((marker) => normalizedStdout.includes(marker));
 }
 
+function extractQueryParam(urlValue: string, key: string): string | null {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = urlValue.match(new RegExp(`[?&]${escapedKey}=([^&#]+)`));
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpResponse {
+  const responseText = `${stdout}\n${effectiveUrl}`;
+  const isReady =
+    responseText.includes('Import-Vorschau') || responseText.includes('action=CsvImport/report');
+  const isProcessing =
+    responseText.includes('Import Status') || responseText.includes('action=CsvImport/result');
+  const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
+  const job = extractQueryParam(responseText, 'job');
+  const reportId = extractQueryParam(responseText, 'id');
+
+  if (hasFailureMarker) {
+    return { job, reportId, state: 'failed' };
+  }
+
+  if (isReady && reportId) {
+    return { job, reportId, state: 'ready' };
+  }
+
+  if (isProcessing && job) {
+    return { job, reportId, state: 'processing' };
+  }
+
+  if (isReady) {
+    return { job, reportId, state: 'ready' };
+  }
+
+  if (isProcessing) {
+    return { job, reportId, state: 'processing' };
+  }
+
+  return { job, reportId, state: 'unknown' };
+}
+
+function buildPollingUrl(baseUrl: string, parsed: ParsedErpResponse): string {
+  if (parsed.reportId) {
+    return `${baseUrl}?action=CsvImport/report&id=${encodeURIComponent(parsed.reportId)}`;
+  }
+  if (parsed.job) {
+    return `${baseUrl}?action=CsvImport/result&job=${encodeURIComponent(parsed.job)}`;
+  }
+  return baseUrl;
+}
+
 // TODO(agent): Confirm whether ERP import requires curl retries on transient 5xx responses.
 // TODO(agent): Add structured log fields for curl timing metrics once we track ERP latency.
 // TODO(sync-erp-phases): Keep phase-marker matching aligned with ERP response wording changes.
+// TODO(sync-erp-polling-parser): Extend parser if ERP introduces JSON responses for import status endpoints.
 async function runCurlImport(options: ImportOptions): Promise<ImportExecutionResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
@@ -217,67 +285,145 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   const authLoginFieldName = buildAuthFieldName('login', options.authFieldPrefix);
   const authPasswordFieldName = buildAuthFieldName('password', options.authFieldPrefix);
   const authClientIdFieldName = buildAuthFieldName('client_id', options.authFieldPrefix);
-  const buildCurlArgs = (phase: 'test' | 'import'): string[] => {
-    const actionTestValue = phase === 'test' ? '1' : erpFields.actionTest;
-    const actionImportValue = phase === 'import' ? erpFields.actionImport : '0';
-    return [
-    '-X',
-    'POST',
-    '--silent',
-    '--insecure',
-    '--show-error',
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.action, erpFields.action),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.actionTest, actionTestValue),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, actionImportValue),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.escapeChar, erpFields.escapeChar),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.profileType, erpFields.profileType),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.quoteChar, erpFields.quoteChar),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.separator, erpFields.separator),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.applyBookingGroup, erpFields.applyBookingGroup),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.articleNumberPolicy, erpFields.articleNumberPolicy),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.charset, erpFields.charset),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.defaultBookingGroup, erpFields.defaultBookingGroup),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.duplicates, erpFields.duplicates),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.numberFormat, erpFields.numberFormat),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.partType, erpFields.partType),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustment, erpFields.sellPriceAdjustment),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustmentType, erpFields.sellPriceAdjustmentType),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.sellPricePlaces, erpFields.sellPricePlaces),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.shopArticleIfMissing, erpFields.shopArticleIfMissing),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.partClassification, erpFields.partClassification),
-    '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.defaultUnit, erpFields.defaultUnit),
-    '-F',
-    `${fieldName}=@${artifact.archivePath};type=${mimeType}`,
-    '-F',
-    toFormArg(authClientIdFieldName, clientId || '1'),
-    '-F',
-    `actor=${actor}`,
-    url
-    ];
+
+  const runCurl = async (phase: ImportPhase, args: string[]): Promise<ImportResult> => {
+    const redactedArgs = args.map((arg) => {
+      if (/(^|})login=/.test(arg)) {
+        return `${arg.split('=')[0]}=***`;
+      }
+      if (/(^|})password=/.test(arg)) {
+        return `${arg.split('=')[0]}=***`;
+      }
+      if (/(^|})client_id=/.test(arg)) {
+        return `${arg.split('=')[0]}=***`;
+      }
+      return arg;
+    });
+
+    loggerRef.info?.('[sync-erp] curl import request', {
+      url,
+      phase,
+      fieldName,
+      includeMedia,
+      archivePath: artifact.archivePath,
+      timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : undefined,
+      args: redactedArgs
+    });
+
+    try {
+      const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let stdout = '';
+      let stderr = '';
+
+      if (child.stdout) {
+        child.stdout.on('data', (chunk) => {
+          stdout += chunk.toString();
+        });
+      }
+
+      if (child.stderr) {
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk.toString();
+        });
+      }
+
+      return await new Promise<ImportResult>((resolve, reject) => {
+        child.on('error', (error) => {
+          loggerRef.error?.('[sync-erp] curl spawn failed', { phase, error });
+          reject(error);
+        });
+
+        child.on('close', (code, signal) => {
+          if (signal) {
+            stderr = `${stderr}${stderr ? '\\n' : ''}curl terminated with signal ${signal}`;
+          }
+          const exitCode = typeof code === 'number' ? code : -1;
+
+          const lineBreakIndex = stdout.lastIndexOf('\n');
+          const effectiveUrl = lineBreakIndex >= 0 ? stdout.slice(lineBreakIndex + 1).trim() : '';
+          stdout = lineBreakIndex >= 0 ? stdout.slice(0, lineBreakIndex) : stdout;
+
+          if (stdout.trim()) {
+            loggerRef.info?.('[sync-erp] curl stdout', { phase, stdout: stdout.trim() });
+          }
+
+          if (effectiveUrl) {
+            loggerRef.info?.('[sync-erp] curl effective url', { phase, effectiveUrl });
+          }
+
+          if (stderr.trim()) {
+            loggerRef.warn?.('[sync-erp] curl stderr', { phase, stderr: stderr.trim() });
+          }
+
+          resolve({ exitCode, stdout, stderr, effectiveUrl });
+        });
+      });
+    } catch (error) {
+      loggerRef.error?.('[sync-erp] curl execution failed', { phase, error });
+      throw error;
+    }
   };
 
-  const runPhase = async (phase: 'test' | 'import'): Promise<ImportResult> => {
-    const args = buildCurlArgs(phase);
+  const buildImportArgs = (phase: 'test' | 'import'): string[] => {
+    const actionTestValue = phase === 'test' ? '1' : erpFields.actionTest;
+    const actionImportValue = phase === 'import' ? erpFields.actionImport : '0';
+    const args = [
+      '-X',
+      'POST',
+      '--silent',
+      '--insecure',
+      '--show-error',
+      '--location',
+      '--write-out',
+      '\n%{url_effective}',
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.action, erpFields.action),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.actionTest, actionTestValue),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, actionImportValue),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.escapeChar, erpFields.escapeChar),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.profileType, erpFields.profileType),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.quoteChar, erpFields.quoteChar),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.separator, erpFields.separator),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.applyBookingGroup, erpFields.applyBookingGroup),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.articleNumberPolicy, erpFields.articleNumberPolicy),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.charset, erpFields.charset),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.defaultBookingGroup, erpFields.defaultBookingGroup),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.duplicates, erpFields.duplicates),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.numberFormat, erpFields.numberFormat),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.partType, erpFields.partType),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustment, erpFields.sellPriceAdjustment),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustmentType, erpFields.sellPriceAdjustmentType),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.sellPricePlaces, erpFields.sellPricePlaces),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.shopArticleIfMissing, erpFields.shopArticleIfMissing),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.partClassification, erpFields.partClassification),
+      '-F',
+      toFormArg(ERP_IMPORT_FIELD_NAMES.defaultUnit, erpFields.defaultUnit),
+      '-F',
+      `${fieldName}=@${artifact.archivePath};type=${mimeType}`,
+      '-F',
+      toFormArg(authClientIdFieldName, clientId || '1'),
+      '-F',
+      `actor=${actor}`,
+      url
+    ];
 
     if (username) {
       args.splice(args.length - 1, 0, '-F', toFormArg(authLoginFieldName, username));
@@ -288,82 +434,36 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     }
 
     if (timeoutSeconds) {
-      args.splice(4, 0, '--max-time', `${timeoutSeconds}`);
+      args.splice(6, 0, '--max-time', `${timeoutSeconds}`);
     }
 
-    const redactedArgs = args.map((arg) => {
-    if (/(^|})login=/.test(arg)) {
-      return `${arg.split('=')[0]}=***`;
-    }
-    if (/(^|})password=/.test(arg)) {
-      return `${arg.split('=')[0]}=***`;
-    }
-    if (/(^|})client_id=/.test(arg)) {
-      return `${arg.split('=')[0]}=***`;
-    }
-    return arg;
-  });
-
-    loggerRef.info?.('[sync-erp] curl import request', {
-    url,
-    phase,
-    fieldName,
-    includeMedia,
-    archivePath: artifact.archivePath,
-    timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : undefined,
-    args: redactedArgs
-  });
-
-    try {
-      const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-
-    if (child.stdout) {
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk.toString();
-      });
-    }
-
-    if (child.stderr) {
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk.toString();
-      });
-    }
-
-      return await new Promise<ImportResult>((resolve, reject) => {
-        child.on('error', (error) => {
-          loggerRef.error?.('[sync-erp] curl spawn failed', { phase, error });
-          reject(error);
-        });
-
-        child.on('close', (code, signal) => {
-          if (signal) {
-            stderr = `${stderr}${stderr ? '\n' : ''}curl terminated with signal ${signal}`;
-          }
-          const exitCode = typeof code === 'number' ? code : -1;
-
-          if (stdout.trim()) {
-            loggerRef.info?.('[sync-erp] curl stdout', { phase, stdout: stdout.trim() });
-          }
-
-          if (stderr.trim()) {
-            loggerRef.warn?.('[sync-erp] curl stderr', { phase, stderr: stderr.trim() });
-          }
-
-          resolve({ exitCode, stdout, stderr });
-        });
-      });
-    } catch (error) {
-      loggerRef.error?.('[sync-erp] curl execution failed', { phase, error });
-      throw error;
-    }
+    return args;
   };
 
-  const testResult = await runPhase('test');
+  const buildPollArgs = (pollUrl: string): string[] => {
+    const args = [
+      '--silent',
+      '--insecure',
+      '--show-error',
+      '--location',
+      '--write-out',
+      '\n%{url_effective}',
+      pollUrl
+    ];
+
+    if (timeoutSeconds) {
+      args.splice(6, 0, '--max-time', `${timeoutSeconds}`);
+    }
+
+    return args;
+  };
+
+  const testResult = await runCurl('test', buildImportArgs('test'));
   let testAcceptedByMarker = false;
+  let parsedTest: ParsedErpResponse = { job: null, reportId: null, state: 'unknown' };
   try {
     testAcceptedByMarker = matchesAcceptanceMarker(testResult.stdout);
+    parsedTest = parseErpImportState(testResult.stdout, testResult.effectiveUrl);
   } catch (parseError) {
     loggerRef.error?.('[sync-erp] Failed to parse ERP test response', {
       phase: 'test',
@@ -376,7 +476,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   loggerRef.info?.('[sync-erp] ERP phase validation', {
     phase: 'test',
     exitCode: testResult.exitCode,
-    matchedMarker: testAcceptedByMarker
+    matchedMarker: testAcceptedByMarker,
+    state: parsedTest.state,
+    job: parsedTest.job,
+    reportId: parsedTest.reportId
   });
 
   if (testResult.exitCode !== 0 || !testAcceptedByMarker) {
@@ -384,33 +487,181 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       test: {
         ...testResult,
         phase: 'test',
-        acceptedByMarker: testAcceptedByMarker
+        acceptedByMarker: testAcceptedByMarker,
+        state: parsedTest.state,
+        job: parsedTest.job,
+        reportId: parsedTest.reportId
       },
+      polling: null,
       import: null,
-      markerValidationPassed: false
+      markerValidationPassed: false,
+      failurePhase: 'test'
     };
   }
 
-  const importResult = await runPhase('import');
+  const pollIntervalMs = Math.max(250, ERP_IMPORT_POLL_INTERVAL_MS);
+  const pollTimeoutMs = Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS);
+  const pollStartedAt = Date.now();
+  let attempt = 0;
+  let currentState = parsedTest;
+  let pollingResult: ImportPhaseResult | null = null;
+
+  try {
+    while (Date.now() - pollStartedAt <= pollTimeoutMs) {
+      attempt += 1;
+      const elapsedMs = Date.now() - pollStartedAt;
+      loggerRef.info?.('[sync-erp] ERP polling iteration', {
+        attempt,
+        elapsedMs,
+        state: currentState.state,
+        job: currentState.job,
+        reportId: currentState.reportId
+      });
+
+      if (currentState.state === 'ready') {
+        pollingResult = {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          effectiveUrl: buildPollingUrl(url, currentState),
+          phase: 'polling',
+          acceptedByMarker: true,
+          state: 'ready',
+          job: currentState.job,
+          reportId: currentState.reportId
+        };
+        break;
+      }
+
+      if (currentState.state === 'failed' || currentState.state === 'unknown') {
+        pollingResult = {
+          exitCode: 1,
+          stdout: '',
+          stderr: 'ERP processing state signaled failure or unknown status',
+          effectiveUrl: buildPollingUrl(url, currentState),
+          phase: 'polling',
+          acceptedByMarker: false,
+          state: currentState.state,
+          job: currentState.job,
+          reportId: currentState.reportId
+        };
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      const pollUrl = buildPollingUrl(url, currentState);
+      const pollRequest = await runCurl('polling', buildPollArgs(pollUrl));
+      currentState = parseErpImportState(pollRequest.stdout, pollRequest.effectiveUrl);
+      pollingResult = {
+        ...pollRequest,
+        phase: 'polling',
+        acceptedByMarker: currentState.state === 'ready',
+        state: currentState.state,
+        job: currentState.job,
+        reportId: currentState.reportId
+      };
+    }
+  } catch (pollError) {
+    loggerRef.error?.('[sync-erp] ERP polling failed', { pollError });
+    return {
+      test: {
+        ...testResult,
+        phase: 'test',
+        acceptedByMarker: testAcceptedByMarker,
+        state: parsedTest.state,
+        job: parsedTest.job,
+        reportId: parsedTest.reportId
+      },
+      polling: {
+        exitCode: -1,
+        stdout: '',
+        stderr: (pollError as Error).message,
+        effectiveUrl: buildPollingUrl(url, currentState),
+        phase: 'polling',
+        acceptedByMarker: false,
+        state: 'unknown',
+        job: currentState.job,
+        reportId: currentState.reportId
+      },
+      import: null,
+      markerValidationPassed: true,
+      failurePhase: 'polling'
+    };
+  }
+
+  if (!pollingResult) {
+    pollingResult = {
+      exitCode: 1,
+      stdout: '',
+      stderr: 'ERP polling timed out without a ready import report',
+      effectiveUrl: buildPollingUrl(url, currentState),
+      phase: 'polling',
+      acceptedByMarker: false,
+      state: currentState.state,
+      job: currentState.job,
+      reportId: currentState.reportId
+    };
+  }
+
+  if (pollingResult.state !== 'ready') {
+    return {
+      test: {
+        ...testResult,
+        phase: 'test',
+        acceptedByMarker: testAcceptedByMarker,
+        state: parsedTest.state,
+        job: parsedTest.job,
+        reportId: parsedTest.reportId
+      },
+      polling: pollingResult,
+      import: null,
+      markerValidationPassed: true,
+      failurePhase: 'polling'
+    };
+  }
+
+  const importResult = await runCurl('import', buildImportArgs('import'));
   const importAcceptedByMarker = importResult.exitCode === 0;
+  let parsedImport: ParsedErpResponse = { job: null, reportId: null, state: 'unknown' };
+  try {
+    parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
+  } catch (parseError) {
+    loggerRef.error?.('[sync-erp] Failed to parse ERP import response', {
+      phase: 'import',
+      exitCode: importResult.exitCode,
+      parseError
+    });
+  }
+
   loggerRef.info?.('[sync-erp] ERP phase validation', {
     phase: 'import',
     exitCode: importResult.exitCode,
-    matchedMarker: importAcceptedByMarker
+    matchedMarker: importAcceptedByMarker,
+    state: parsedImport.state,
+    job: parsedImport.job,
+    reportId: parsedImport.reportId
   });
 
   return {
     test: {
       ...testResult,
       phase: 'test',
-      acceptedByMarker: testAcceptedByMarker
+      acceptedByMarker: testAcceptedByMarker,
+      state: parsedTest.state,
+      job: parsedTest.job,
+      reportId: parsedTest.reportId
     },
+    polling: pollingResult,
     import: {
       ...importResult,
       phase: 'import',
-      acceptedByMarker: importAcceptedByMarker
+      acceptedByMarker: importAcceptedByMarker,
+      state: parsedImport.state,
+      job: parsedImport.job,
+      reportId: parsedImport.reportId
     },
-    markerValidationPassed: true
+    markerValidationPassed: true,
+    failurePhase: importAcceptedByMarker ? null : 'import'
   };
 }
 
@@ -532,13 +783,53 @@ const action = defineHttpAction({
         });
         return sendJson(res, 502, {
           error: 'ERP-Testlauf wurde nicht bestätigt. Import wurde nicht gestartet.',
+          failurePhase: 'test',
           phases: {
             test: {
               status: curlResult.test.exitCode === 0 ? 'failed-validation' : 'failed-execution',
               exitCode: curlResult.test.exitCode,
               matchedMarker: curlResult.test.acceptedByMarker,
               stdout: testStdout,
-              stderr: testStderr
+              stderr: testStderr,
+              job: curlResult.test.job ?? null,
+              reportId: curlResult.test.reportId ?? null
+            },
+            polling: {
+              status: 'skipped'
+            },
+            import: {
+              status: 'skipped'
+            }
+          }
+        });
+      }
+
+      if (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready') {
+        console.error('[sync-erp] ERP polling phase did not reach ready state', {
+          state: curlResult.polling?.state ?? 'unknown',
+          exitCode: curlResult.polling?.exitCode ?? -1,
+          job: curlResult.polling?.job ?? null,
+          reportId: curlResult.polling?.reportId ?? null
+        });
+        return sendJson(res, 502, {
+          error: 'ERP-Import konnte nicht fortgesetzt werden, da keine Import-Vorschau bereit war.',
+          failurePhase: 'polling',
+          phases: {
+            test: {
+              status: 'passed',
+              exitCode: curlResult.test.exitCode,
+              matchedMarker: curlResult.test.acceptedByMarker,
+              job: curlResult.test.job ?? null,
+              reportId: curlResult.test.reportId ?? null
+            },
+            polling: {
+              status: 'failed',
+              exitCode: curlResult.polling?.exitCode ?? -1,
+              state: curlResult.polling?.state ?? 'unknown',
+              job: curlResult.polling?.job ?? null,
+              reportId: curlResult.polling?.reportId ?? null,
+              stdout: trimDiagnosticOutput(curlResult.polling?.stdout ?? ''),
+              stderr: trimDiagnosticOutput(curlResult.polling?.stderr ?? '')
             },
             import: {
               status: 'skipped'
@@ -553,18 +844,30 @@ const action = defineHttpAction({
         });
         return sendJson(res, 502, {
           error: 'ERP-Import ist fehlgeschlagen.',
+          failurePhase: 'import',
           phases: {
             test: {
               status: 'passed',
               exitCode: curlResult.test.exitCode,
-              matchedMarker: curlResult.test.acceptedByMarker
+              matchedMarker: curlResult.test.acceptedByMarker,
+              job: curlResult.test.job ?? null,
+              reportId: curlResult.test.reportId ?? null
+            },
+            polling: {
+              status: 'passed',
+              exitCode: curlResult.polling.exitCode,
+              state: curlResult.polling.state,
+              job: curlResult.polling.job ?? null,
+              reportId: curlResult.polling.reportId ?? null
             },
             import: {
               status: 'failed',
               exitCode: curlResult.import?.exitCode ?? -1,
               matchedMarker: curlResult.import?.acceptedByMarker ?? false,
-              stderr: curlResult.import?.stderr ?? '',
-              stdout: curlResult.import?.stdout ?? ''
+              stderr: trimDiagnosticOutput(curlResult.import?.stderr ?? ''),
+              stdout: trimDiagnosticOutput(curlResult.import?.stdout ?? ''),
+              job: curlResult.import?.job ?? null,
+              reportId: curlResult.import?.reportId ?? null
             }
           }
         });
@@ -576,12 +879,23 @@ const action = defineHttpAction({
           test: {
             status: 'passed',
             exitCode: curlResult.test.exitCode,
-            matchedMarker: curlResult.test.acceptedByMarker
+            matchedMarker: curlResult.test.acceptedByMarker,
+            job: curlResult.test.job ?? null,
+            reportId: curlResult.test.reportId ?? null
+          },
+          polling: {
+            status: 'passed',
+            exitCode: curlResult.polling.exitCode,
+            state: curlResult.polling.state,
+            job: curlResult.polling.job ?? null,
+            reportId: curlResult.polling.reportId ?? null
           },
           import: {
             status: 'passed',
             exitCode: curlResult.import.exitCode,
-            matchedMarker: curlResult.import.acceptedByMarker
+            matchedMarker: curlResult.import.acceptedByMarker,
+            job: curlResult.import.job ?? null,
+            reportId: curlResult.import.reportId ?? null
           }
         },
         artifact: path.basename(stagedExport.archivePath),
