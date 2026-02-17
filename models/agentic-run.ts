@@ -3,6 +3,7 @@ export interface AgenticRun {
   Id: number;
   Artikel_Nummer: string;
   SearchQuery: string | null;
+  LastSearchLinksJson?: string | null;
   Status: string;
   LastModified: string;
   ReviewState: string;

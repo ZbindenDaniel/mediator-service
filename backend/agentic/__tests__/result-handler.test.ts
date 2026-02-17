@@ -428,4 +428,83 @@ describe('agentic result handler integration', () => {
   });
 
 
+  test('persists normalized search links json on run updates', () => {
+    const existingReference = { Artikel_Nummer: 'R-400', Artikelbeschreibung: 'Item', Veröffentlicht_Status: 'no' };
+    const existingRun: AgenticRun = {
+      Id: 400,
+      Artikel_Nummer: 'R-400',
+      SearchQuery: 'search',
+      Status: AGENTIC_RUN_STATUS_QUEUED,
+      LastModified: '2024-01-01T00:00:00.000Z',
+      ReviewState: 'not_required',
+      ReviewedBy: null,
+      LastReviewDecision: null,
+      LastReviewNotes: null,
+      RetryCount: 0,
+      NextRetryAt: null,
+      LastError: null,
+      LastAttemptAt: null
+    };
+
+    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
+    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
+    const updateAgenticRunStatus = {
+      run: jest.fn((update: Record<string, unknown>) => {
+        const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
+        runs.set(update.Artikel_Nummer as string, merged);
+        return { changes: 1 };
+      })
+    };
+
+    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>('../result-handler');
+
+    handleAgenticResult(
+      {
+        artikelNummer: 'R-400',
+        payload: {
+          artikelNummer: 'R-400',
+          item: {
+            Artikel_Nummer: 'R-400',
+            searchQuery: 'search',
+            sources: [
+              { url: 'https://example.com/a', title: 'A' },
+              { url: ' https://example.com/a ' },
+              { url: 'https://example.com/b', description: 'desc' },
+              { title: 'missing-url' }
+            ]
+          },
+          status: 'completed',
+          reviewDecision: 'approved',
+          needsReview: false
+        }
+      },
+      {
+        ctx: {
+          db: { transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>): ReturnType<T> => fn(...args) },
+          getItemReference: { get: (id: string) => references.get(id) },
+          getAgenticRun: { get: (id: string) => runs.get(id) },
+          persistItemReference: jest.fn(),
+          updateAgenticRunStatus,
+          upsertAgenticRun: { run: jest.fn() },
+          insertAgenticRunReviewHistoryEntry: { run: jest.fn() },
+          logEvent: jest.fn(),
+          getAgenticRequestLog: () => null
+        },
+        logger: console
+      }
+    );
+
+    expect(updateAgenticRunStatus.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'R-400',
+        LastSearchLinksJsonIsSet: 1,
+        LastSearchLinksJson: JSON.stringify([
+          { url: 'https://example.com/a', title: 'A' },
+          { url: 'https://example.com/b', description: 'desc' }
+        ])
+      })
+    );
+  });
+
+
 });
