@@ -5,7 +5,7 @@ import { parseJsonWithSanitizer } from '../utils/json';
 import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
-import { AgentOutputSchema, TargetSchema, logSchemaKeyTelemetry } from './item-flow-schemas';
+import { AgentOutputSchema, TargetSchema, logSchemaKeyTelemetry, normalizeSpezifikationenBoundary } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
 import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
@@ -289,38 +289,7 @@ function mapLangtextToSpezifikationenForLlm(
   }
 }
 
-// TODO(agent): Remove Spezifikationen alias remap once prompt compliance is stable across providers.
-// TODO(agentic-schema): Remove legacy non-envelope payload support after all providers emit schemaVersion envelopes.
-function normalizeLangtextAlias(
-  payload: unknown,
-  { itemId, attempt, logger }: { itemId: string; attempt: number; logger?: ExtractionLogger }
-): unknown {
-  try {
-    if (!payload || typeof payload !== 'object') {
-      return payload;
-    }
-    const record = payload as Record<string, unknown>;
-    const hasLangtext = 'Langtext' in record && record.Langtext !== null && record.Langtext !== undefined && record.Langtext !== '';
-    if (!hasLangtext && 'Spezifikationen' in record && record.Spezifikationen !== null && record.Spezifikationen !== undefined && record.Spezifikationen !== '') {
-      const remapped = { ...record, Langtext: record.Spezifikationen };
-      logger?.warn?.({
-        msg: 'remapping Spezifikationen alias to Langtext before schema validation',
-        itemId,
-        attempt
-      });
-      return remapped;
-    }
-    return payload;
-  } catch (err) {
-    logger?.warn?.({
-      err,
-      msg: 'failed to normalize Spezifikationen alias before schema validation',
-      itemId,
-      attempt
-    });
-    return payload;
-  }
-}
+// TODO(agentic-spezifikationen): Keep boundary normalization in item-flow-schemas.ts as the single Spezifikationen ingestion path.
 
 export async function runExtractionAttempts({
   llm,
@@ -870,10 +839,33 @@ export async function runExtractionAttempts({
       });
     }
 
-    let normalizedParsed = normalizeLangtextAlias(parsed as unknown, { itemId, attempt, logger });
-    const parsedRecord = normalizedParsed && typeof normalizedParsed === 'object' ? (normalizedParsed as Record<string, unknown>) : null;
+    const normalizedBoundary = normalizeSpezifikationenBoundary(parsed as unknown, {
+      logger,
+      itemId,
+      attempt,
+      stage: 'extraction-pre-validation'
+    });
+    const parsedRecord = normalizedBoundary.normalizedPayload && typeof normalizedBoundary.normalizedPayload === 'object'
+      ? (normalizedBoundary.normalizedPayload as Record<string, unknown>)
+      : null;
 
-    let candidatePayload: unknown = normalizedParsed;
+    let candidatePayload: unknown = normalizedBoundary.normalizedPayload;
+    if (normalizedBoundary.issue) {
+      lastValidated = null;
+      lastSupervision = `Spezifikationen boundary normalization failed: ${normalizedBoundary.issue.message}`;
+      lastValidationIssues = [normalizedBoundary.issue];
+      const nextAttempt = attempt + 1;
+      logger?.info?.({
+        msg: 'retrying extraction attempt',
+        attempt,
+        nextAttempt,
+        itemId,
+        reason: 'SPEZIFIKATIONEN_NORMALIZATION_FAILED',
+        validationIssuesPreview: sanitizeForLog([normalizedBoundary.issue])
+      });
+      advanceAttempt();
+      continue;
+    }
     logSchemaKeyTelemetry(logger, { stage: 'extraction', itemId, payload: candidatePayload });
     const rawQueries = parsedRecord?.__searchQueries;
     if (Array.isArray(rawQueries) && rawQueries.length > searchesPerRequestLimit) {
