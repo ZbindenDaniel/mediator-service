@@ -3,7 +3,13 @@ import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
 import {
   ERP_IMPORT_FORM_FIELD,
+  ERP_IMPORT_AUTH_FIELD_PREFIX,
   ERP_IMPORT_CLIENT_ID,
+  ERP_IMPORT_FORM_CHARSET,
+  ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP,
+  ERP_IMPORT_FORM_DEFAULT_UNIT,
+  ERP_IMPORT_FORM_PART_CLASSIFICATION,
+  ERP_IMPORT_FORM_SEPARATOR,
   ERP_IMPORT_INCLUDE_MEDIA,
   ERP_SYNC_ENABLED,
   ERP_IMPORT_PASSWORD,
@@ -63,11 +69,92 @@ function normalizeItemIds(rawItemIds: unknown): string[] {
   return normalized;
 }
 
+type ErpImportValue = string | number;
+
+interface ErpImportFieldMap {
+  action: string;
+  actionImport: string;
+  escapeChar: string;
+  profileType: string;
+  quoteChar: string;
+  separator: string;
+  applyBookingGroup: string;
+  articleNumberPolicy: string;
+  charset: string;
+  defaultBookingGroup: string;
+  duplicates: string;
+  numberFormat: string;
+  partType: string;
+  sellPriceAdjustment: string;
+  sellPriceAdjustmentType: string;
+  sellPricePlaces: number;
+  shopArticleIfMissing: number;
+  partClassification: string;
+  defaultUnit: string;
+}
+
+const ERP_IMPORT_FIELD_NAMES = {
+  action: 'action',
+  actionImport: 'action_import',
+  escapeChar: 'escape_char',
+  profileType: 'profile.type',
+  quoteChar: 'quote_char',
+  separator: 'sep_char',
+  applyBookingGroup: 'settings.apply_buchungsgruppe',
+  articleNumberPolicy: 'settings.article_number_policy',
+  charset: 'settings.charset',
+  defaultBookingGroup: 'settings.default_buchungsgruppe',
+  duplicates: 'settings.duplicates',
+  numberFormat: 'settings.numberformat',
+  partType: 'settings.part_type',
+  sellPriceAdjustment: 'settings.sellprice_adjustment',
+  sellPriceAdjustmentType: 'settings.sellprice_adjustment_type',
+  sellPricePlaces: 'settings.sellprice_places',
+  shopArticleIfMissing: 'settings.shoparticle_if_missing',
+  partClassification: 'settings.part_classification',
+  defaultUnit: 'settings.default_unit'
+} as const satisfies Record<keyof ErpImportFieldMap, string>;
+
+// TODO(agent-erp-form-contract): Keep ERP field-value defaults aligned with docs/erp-sync.sh after upstream ERP changes.
+function buildErpImportFieldMap(): ErpImportFieldMap {
+  return {
+    action: 'CsvImport/import',
+    actionImport: '1',
+    escapeChar: 'quote',
+    profileType: 'parts',
+    quoteChar: 'quote',
+    separator: ERP_IMPORT_FORM_SEPARATOR || 'comma',
+    applyBookingGroup: 'all',
+    articleNumberPolicy: 'update_parts',
+    charset: ERP_IMPORT_FORM_CHARSET || 'UTF-8',
+    defaultBookingGroup: ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP || '453',
+    duplicates: 'no_check',
+    numberFormat: '1000.00',
+    partType: 'part',
+    sellPriceAdjustment: '0',
+    sellPriceAdjustmentType: 'percent',
+    sellPricePlaces: 2,
+    shopArticleIfMissing: 1,
+    partClassification: ERP_IMPORT_FORM_PART_CLASSIFICATION || '2',
+    defaultUnit: ERP_IMPORT_FORM_DEFAULT_UNIT || 'Stck'
+  };
+}
+
+function toFormArg(fieldName: string, value: ErpImportValue): string {
+  return `${fieldName}=${String(value)}`;
+}
+
+function buildAuthFieldName(baseName: 'login' | 'password' | 'client_id', authPrefix?: string): string {
+  const normalizedPrefix = (authPrefix || '').trim();
+  return normalizedPrefix ? `${normalizedPrefix}${baseName}` : baseName;
+}
+
 interface ImportOptions {
   actor: string;
   artifact: ItemsExportArtifact;
   clientId: string;
   formField: string;
+  authFieldPrefix?: string;
   includeMedia: boolean;
   logger?: Pick<Console, 'error' | 'info' | 'warn'>;
   password: string;
@@ -90,9 +177,16 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
   // TODO(agent): Reconcile ERP import content type selection with export artifact shape when media rules evolve.
   const expectedKind = includeMedia ? 'zip' : 'csv';
   const archiveKind = artifact.kind;
+  if (archiveKind !== expectedKind) {
+    throw new Error(`ERP export artifact mismatch: expected ${expectedKind}, received ${archiveKind}.`);
+  }
   const mimeType = archiveKind === 'zip' ? 'application/zip' : 'text/csv';
   const fieldName = formField || 'file';
   const timeoutSeconds = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.ceil(timeoutMs / 1000) : undefined;
+  const erpFields = buildErpImportFieldMap();
+  const authLoginFieldName = buildAuthFieldName('login', options.authFieldPrefix);
+  const authPasswordFieldName = buildAuthFieldName('password', options.authFieldPrefix);
+  const authClientIdFieldName = buildAuthFieldName('client_id', options.authFieldPrefix);
   const args: string[] = [
     '-X',
     'POST',
@@ -100,54 +194,58 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
     '--insecure',
     '--show-error',
     '-F',
-    'action=CsvImport/import',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.action, erpFields.action),
     '-F',
-    'action_import=1',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, erpFields.actionImport),
     '-F',
-    'escape_char=quote',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.escapeChar, erpFields.escapeChar),
     '-F',
-    'profile.type=parts',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.profileType, erpFields.profileType),
     '-F',
-    'quote_char=quote',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.quoteChar, erpFields.quoteChar),
     '-F',
-    'sep_char=semicolon',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.separator, erpFields.separator),
     '-F',
-    'settings.apply_buchungsgruppe=all',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.applyBookingGroup, erpFields.applyBookingGroup),
     '-F',
-    'settings.article_number_policy=update_prices',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.articleNumberPolicy, erpFields.articleNumberPolicy),
     '-F',
-    'settings.charset=CP850',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.charset, erpFields.charset),
     '-F',
-    'settings.default_buchungsgruppe=395',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.defaultBookingGroup, erpFields.defaultBookingGroup),
     '-F',
-    'settings.duplicates=no_check',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.duplicates, erpFields.duplicates),
     '-F',
-    'settings.numberformat=1.000,00',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.numberFormat, erpFields.numberFormat),
     '-F',
-    'settings.part_type=part',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.partType, erpFields.partType),
     '-F',
-    'settings.sellprice_adjustment=0',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustment, erpFields.sellPriceAdjustment),
     '-F',
-    'settings.sellprice_adjustment_type=percent',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustmentType, erpFields.sellPriceAdjustmentType),
     '-F',
-    'settings.sellprice_places=2',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.sellPricePlaces, erpFields.sellPricePlaces),
     '-F',
-    'settings.shoparticle_if_missing=0',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.shopArticleIfMissing, erpFields.shopArticleIfMissing),
+    '-F',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.partClassification, erpFields.partClassification),
+    '-F',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.defaultUnit, erpFields.defaultUnit),
     '-F',
     `${fieldName}=@${artifact.archivePath};type=${mimeType}`,
     '-F',
-    `client_id=${clientId || '1'}`,
+    toFormArg(authClientIdFieldName, clientId || '1'),
     '-F',
     `actor=${actor}`,
     url
   ];
 
   if (username) {
-    args.splice(args.length - 1, 0, '-F', `login=${username}`);
+    args.splice(args.length - 1, 0, '-F', toFormArg(authLoginFieldName, username));
   }
 
   if (password) {
-    args.splice(args.length - 1, 0, '-F', `password=${password}`);
+    args.splice(args.length - 1, 0, '-F', toFormArg(authPasswordFieldName, password));
   }
 
   if (timeoutSeconds) {
@@ -155,14 +253,14 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
   }
 
   const redactedArgs = args.map((arg) => {
-    if (arg.startsWith('login=')) {
-      return 'login=***';
+    if (/(^|})login=/.test(arg)) {
+      return `${arg.split('=')[0]}=***`;
     }
-    if (arg.startsWith('password=')) {
-      return 'password=***';
+    if (/(^|})password=/.test(arg)) {
+      return `${arg.split('=')[0]}=***`;
     }
-    if (arg.startsWith('client_id=')) {
-      return 'client_id=***';
+    if (/(^|})client_id=/.test(arg)) {
+      return `${arg.split('=')[0]}=***`;
     }
     return arg;
   });
@@ -265,6 +363,14 @@ const action = defineHttpAction({
         return sendJson(res, 404, { error: 'Keine Artikel für den ERP-Sync gefunden.' });
       }
 
+      if (ERP_IMPORT_INCLUDE_MEDIA) {
+        console.error('[sync-erp] ERP import requires CSV payloads but ERP_IMPORT_INCLUDE_MEDIA=true was configured');
+        return sendJson(res, 409, {
+          error:
+            'ERP-Import erwartet CSV ohne Medien. Bitte ERP_IMPORT_INCLUDE_MEDIA=false setzen oder Importmodus anpassen.'
+        });
+      }
+
       const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
       stagedExport = await stageItemsExport({
         archiveBaseName: `erp-sync-${Date.now()}`,
@@ -306,6 +412,7 @@ const action = defineHttpAction({
           artifact: stagedExport,
           clientId: ERP_IMPORT_CLIENT_ID,
           formField: ERP_IMPORT_FORM_FIELD,
+          authFieldPrefix: ERP_IMPORT_AUTH_FIELD_PREFIX,
           includeMedia: ERP_IMPORT_INCLUDE_MEDIA,
           logger: console,
           password: ERP_IMPORT_PASSWORD,
