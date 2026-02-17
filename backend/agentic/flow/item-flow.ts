@@ -18,7 +18,55 @@ import { searchShopwareRaw, isShopwareConfigured, type ShopwareSearchResult } fr
 import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
-import { createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
+import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
+
+const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
+
+function sanitizeReviewContextNotes(reviewNotes: string | null): { value: string | null; truncated: boolean } {
+  if (!reviewNotes) {
+    return { value: null, truncated: false };
+  }
+
+  const compact = reviewNotes.replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return { value: null, truncated: false };
+  }
+
+  if (compact.length <= REVIEW_CONTEXT_NOTE_LIMIT) {
+    return { value: compact, truncated: false };
+  }
+
+  return {
+    value: `${compact.slice(0, REVIEW_CONTEXT_NOTE_LIMIT)}…`,
+    truncated: true
+  };
+}
+
+function parseDirectiveCount(reviewNotes: string, prefix: string): number {
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = reviewNotes.match(new RegExp(`${escapedPrefix}\\s*([^.]*)\\.?`, 'i'));
+  if (!match?.[1]) {
+    return 0;
+  }
+
+  return match[1]
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean).length;
+}
+
+function summarizeReviewDirectives(reviewNotes: string | null): { missingSpecCount?: number; unneededSpecCount?: number } {
+  if (!reviewNotes) {
+    return {};
+  }
+
+  const missingSpecCount = parseDirectiveCount(reviewNotes, 'Missing spec fields to prioritize:');
+  const unneededSpecCount = parseDirectiveCount(reviewNotes, 'Spec fields to remove if present:');
+  return {
+    ...(missingSpecCount > 0 ? { missingSpecCount } : {}),
+    ...(unneededSpecCount > 0 ? { unneededSpecCount } : {})
+  };
+}
 
 export interface ItemFlowLogger extends ExtractionLogger {
   info?: Console['info'];
@@ -155,6 +203,26 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       transcriptWriter = await createTranscriptWriter(itemId, logger);
     } catch (err) {
       logger.warn?.({ err, msg: 'failed to initialize transcript writer', itemId });
+    }
+
+    try {
+      const sanitizedReviewContext = sanitizeReviewContextNotes(reviewerNotes);
+      const reviewDirectiveSummary = summarizeReviewDirectives(sanitizedReviewContext.value);
+      await appendTranscriptSection(
+        transcriptWriter,
+        'review-context',
+        {
+          reviewNotes: sanitizedReviewContext.value,
+          reviewNotesTruncated: sanitizedReviewContext.truncated,
+          skipSearch,
+          ...reviewDirectiveSummary
+        },
+        'Initial reviewer directives captured',
+        logger,
+        itemId
+      );
+    } catch (err) {
+      logger.warn?.({ err, msg: 'failed to append review-context transcript section', itemId });
     }
 
     const rateLimiter = createRateLimiter({

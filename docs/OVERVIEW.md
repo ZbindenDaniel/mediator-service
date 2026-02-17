@@ -26,6 +26,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+<!-- TODO(agentic-review-context-transcript): Revisit directive summary shape if structured review metadata replaces composed notes. -->
+- **Agentic review-context transcript bootstrap**: item flow now writes an initial `review-context` transcript section immediately after writer initialization (before shopware and other early exits), storing normalized reviewer notes, skip-search state, and concise missing/unneeded directive counts with capped note length and guarded logging.
 <!-- TODO(agentic-pricing-telemetry): Revisit threshold defaults after collecting confidence/evidence distributions. -->
 - **Pricing decision-tree hardening**: documented explicit price-source precedence (`directListingPrice` -> `trustedHistoricalPrice` -> `null`), disallowed implicit zero-price acceptance, added confidence/evidence gating for non-null outputs, enriched pricing parse logs with source URL + parse status, and added edge-case tests for empty/conflicting/malformed/zero pricing payloads.
 <!-- TODO(agentic-prompt-templates): Bump fragment versions + snapshots whenever shared policy text changes. -->
