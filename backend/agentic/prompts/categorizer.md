@@ -1,4 +1,5 @@
 <role>
+<responsibility>Categorizer stage owner: taxonomy assignment only.</responsibility>
   You are a categorization agent that assigns the most suitable Haupt- and Unterkategorie codes to an item.
 </role>
 <task>

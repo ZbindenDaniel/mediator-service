@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- **Agentic stage-domain contract hardening**: constrained extraction outputs to evidence fields (taxonomy keys now rejected pre-categorization), clarified extraction/categorizer/supervisor prompt responsibilities, deferred taxonomy completeness checks until categorization, and added stage-labeled handoff logging plus focused pipeline tests for premature taxonomy enforcement.
 <!-- TODO(agentic-schema-contract): Keep prompt docs and validators aligned when schema fields change. -->
 - **Agentic canonical Spezifikationen schema contract**: simplified to one shared item-structure contract across extraction/categorization/supervision prompts and validators, removed envelope versioning complexity, and now injects canonical schema text through prompt placeholders so agents receive the contract inline with key telemetry + compatibility tests retained.
 <!-- TODO(agentic-review-spec-field-ui): Revisit selector affordances after reviewer telemetry confirms usage patterns. -->

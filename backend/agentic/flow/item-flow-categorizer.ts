@@ -1,3 +1,4 @@
+// TODO(agentic-stage-contract): Keep categorizer output constrained to taxonomy ownership when contracts evolve.
 import fs from 'fs/promises';
 import path from 'path';
 import { z } from 'zod';
@@ -127,7 +128,7 @@ export async function runCategorizerStage({
   skipSearch,
   transcriptWriter
 }: RunCategorizerStageOptions): Promise<Partial<AgenticOutput>> {
-  logger?.debug?.({ msg: 'invoking categorizer agent', itemId });
+  logger?.debug?.({ msg: 'invoking categorizer agent', stage: 'categorization', itemId });
 
   const taxonomyReference = await loadCategoryReference(logger, itemId);
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
@@ -183,7 +184,7 @@ export async function runCategorizerStage({
     ];
     categorizeRes = await llm.invoke(categorizerMessages);
   } catch (err) {
-    logger?.error?.({ err, msg: 'categorizer llm invocation failed', itemId });
+    logger?.error?.({ err, msg: 'categorizer llm invocation failed', stage: 'categorization', itemId });
     throw new FlowError('CATEGORIZER_INVOKE_FAILED', 'Categorizer stage failed to invoke model', 502, { cause: err });
   }
 
@@ -207,7 +208,7 @@ export async function runCategorizerStage({
       context: { itemId, stage: 'categorizer-agent' }
     });
   } catch (err) {
-    logger?.error?.({ err, msg: 'categorizer returned invalid JSON', itemId, rawSnippet: raw.slice(0, 500) });
+    logger?.error?.({ err, msg: 'categorizer returned invalid JSON', stage: 'categorization', itemId, rawSnippet: raw.slice(0, 500) });
     throw new FlowError('CATEGORIZER_INVALID_JSON', 'Categorizer agent returned invalid JSON', 500, { cause: err });
   }
 
@@ -216,7 +217,7 @@ export async function runCategorizerStage({
   const validated = CategorizerPayloadSchema.safeParse(parsed);
   if (!validated.success) {
     logger?.error?.({
-      msg: 'categorizer schema validation failed',
+      msg: 'categorizer schema validation failed', stage: 'categorization',
       itemId,
       issues: validated.error.issues
     });

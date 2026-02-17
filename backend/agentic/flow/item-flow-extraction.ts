@@ -5,7 +5,7 @@ import { parseJsonWithSanitizer } from '../utils/json';
 import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
-import { AgentOutputSchema, TargetSchema, logSchemaKeyTelemetry } from './item-flow-schemas';
+import { AgentOutputSchema, ExtractionOutputSchema, TargetSchema, TAXONOMY_FIELDS, logSchemaKeyTelemetry } from './item-flow-schemas';
 import { runCategorizerStage } from './item-flow-categorizer';
 import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
@@ -203,67 +203,6 @@ function stripLegacyIdentifiers(value: unknown): void {
       delete record[key];
     }
   }
-}
-
-interface CategoryValidationDecision {
-  requiresSecondCategory: boolean;
-  isValid: boolean;
-  reason: string;
-}
-
-function resolveRequiresSecondCategory(payload: AgenticOutput): boolean {
-  const record = payload as AgenticOutput & {
-    requiresSecondCategory?: unknown;
-    categoryRules?: { requiresSecondCategory?: unknown };
-  };
-  if (typeof record.requiresSecondCategory === 'boolean') {
-    return record.requiresSecondCategory;
-  }
-  if (typeof record.categoryRules?.requiresSecondCategory === 'boolean') {
-    return record.categoryRules.requiresSecondCategory;
-  }
-  return record.Hauptkategorien_B != null || record.Unterkategorien_B != null;
-}
-
-function validateSecondCategoryRequirement(payload: AgenticOutput): CategoryValidationDecision {
-  const requiresSecondCategory = resolveRequiresSecondCategory(payload);
-  if (!requiresSecondCategory) {
-    return {
-      requiresSecondCategory,
-      isValid: true,
-      reason: 'second category not required'
-    };
-  }
-
-  if (payload.Hauptkategorien_B == null || payload.Unterkategorien_B == null) {
-    return {
-      requiresSecondCategory,
-      isValid: false,
-      reason: 'second category required but Hauptkategorien_B/Unterkategorien_B are incomplete'
-    };
-  }
-
-  if (payload.Hauptkategorien_A != null && payload.Hauptkategorien_A === payload.Hauptkategorien_B) {
-    return {
-      requiresSecondCategory,
-      isValid: false,
-      reason: 'second main category must differ from Hauptkategorien_A when required'
-    };
-  }
-
-  if (payload.Unterkategorien_A != null && payload.Unterkategorien_A === payload.Unterkategorien_B) {
-    return {
-      requiresSecondCategory,
-      isValid: false,
-      reason: 'second subcategory must differ from Unterkategorien_A when required'
-    };
-  }
-
-  return {
-    requiresSecondCategory,
-    isValid: true,
-    reason: 'second category requirement satisfied'
-  };
 }
 
 // TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
@@ -919,7 +858,7 @@ export async function runExtractionAttempts({
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to compute extraction spec telemetry', itemId, attempt });
     }
-    const agentParsed = AgentOutputSchema.safeParse(candidatePayload);
+    const agentParsed = ExtractionOutputSchema.safeParse(candidatePayload);
     if (!agentParsed.success) {
       const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
       logger?.warn?.({
@@ -947,6 +886,31 @@ export async function runExtractionAttempts({
     }
 
     const parsedData = agentParsed.data as AgenticOutput & Record<string, unknown>;
+    const unexpectedTaxonomyFields = TAXONOMY_FIELDS.filter((field) => Object.prototype.hasOwnProperty.call(parsedData, field));
+    if (unexpectedTaxonomyFields.length > 0) {
+      logger?.warn?.({
+        msg: 'stage extraction contract violation: taxonomy fields present',
+        stage: 'extraction',
+        attempt,
+        itemId,
+        fields: unexpectedTaxonomyFields
+      });
+      lastValidated = null;
+      lastSupervision = `Extraction output included forbidden taxonomy fields: ${unexpectedTaxonomyFields.join(', ')}`;
+      lastValidationIssues = unexpectedTaxonomyFields.map((field) => ({ path: [field], message: 'taxonomy fields are categorizer-owned' }));
+      const nextAttempt = attempt + 1;
+      logger?.info?.({
+        msg: 'retrying extraction attempt',
+        stage: 'extraction',
+        attempt,
+        nextAttempt,
+        itemId,
+        reason: 'EXTRACTION_TAXONOMY_FIELDS_PRESENT',
+        fields: unexpectedTaxonomyFields
+      });
+      advanceAttempt();
+      continue;
+    }
     stripLegacyIdentifiers(parsedData);
     const { __searchQueries, ...candidateData } = parsedData;
     logger?.debug?.({
@@ -1059,7 +1023,8 @@ export async function runExtractionAttempts({
         enrichedValidated = { success: true as const, data: mergedParse.data };
       }
     } catch (err) {
-      logger?.error?.({ err, msg: 'categorizer stage failed', attempt, itemId });
+      logger?.error?.({ err, msg: 'categorizer stage failed',
+        stage: 'categorization', attempt, itemId });
       if (err instanceof FlowError) {
         throw err;
       }
@@ -1114,7 +1079,7 @@ export async function runExtractionAttempts({
       }
     }
 
-    logger?.debug?.({ msg: 'invoking supervisor agent', attempt, itemId });
+    logger?.debug?.({ msg: 'invoking supervisor agent', stage: 'supervision', attempt, itemId });
     let supervisorUserContent = '';
     try {
       const supervisorItemPayload = mapLangtextToSpezifikationenForLlm(pricedValidated.data, {
@@ -1142,7 +1107,7 @@ export async function runExtractionAttempts({
     try {
       supRes = await llm.invoke(supervisorMessages);
     } catch (err) {
-      logger?.error?.({ err, msg: 'supervisor llm invocation failed', attempt, itemId });
+      logger?.error?.({ err, msg: 'supervisor llm invocation failed', stage: 'supervision', attempt, itemId });
       throw err;
     }
     const supervision = stringifyLangChainContent(supRes?.content, {
@@ -1195,46 +1160,25 @@ export async function runExtractionAttempts({
     lastSupervision = normalizedSupervision;
     logger?.debug?.({
       msg: 'supervisor response received',
+      stage: 'supervision',
       attempt,
       itemId,
       supervisionPreview: sanitizeForLog(supervision)
     });
     const supervisorPass = normalizedSupervision.toLowerCase().includes('pass');
-    let categoryValidationPass = true;
-    if (supervisorPass) {
-      // TODO(agent): Consider moving category validation into a shared policy helper when additional supervisor gates are introduced.
-      try {
-        const categoryDecision = validateSecondCategoryRequirement(pricedValidated.data);
-        categoryValidationPass = categoryDecision.isValid;
-        logger?.info?.({
-          msg: 'supervisor category validation evaluated',
-          attempt,
-          itemId,
-          supervisorPass,
-          categoryValidationPass,
-          requiresSecondCategory: categoryDecision.requiresSecondCategory,
-          decisionReason: categoryDecision.reason,
-          categorySnapshot: {
-            Hauptkategorien_A: pricedValidated.data.Hauptkategorien_A ?? null,
-            Unterkategorien_A: pricedValidated.data.Unterkategorien_A ?? null,
-            Hauptkategorien_B: pricedValidated.data.Hauptkategorien_B ?? null,
-            Unterkategorien_B: pricedValidated.data.Unterkategorien_B ?? null
-          }
-        });
-      } catch (err) {
-        categoryValidationPass = false;
-        logger?.error?.({
-          err,
-          msg: 'supervisor category validation failed unexpectedly',
-          attempt,
-          itemId,
-          supervisorPass,
-          classificationPayload: sanitizeForLog(pricedValidated.data),
-          decisionPath: 'supervisor-pass -> category-validation-exception'
-        });
-      }
+    const pass = supervisorPass;
+    try {
+      logger?.info?.({
+        msg: 'supervision contract evaluated for stage output',
+        stage: 'supervision',
+        attempt,
+        itemId,
+        supervisorPass,
+        taxonomyDeferredUntilCategorizer: true
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log supervision contract evaluation', stage: 'supervision', attempt, itemId });
     }
-    const pass = supervisorPass && categoryValidationPass;
 
     lastValidated = pricedValidated;
     if (pass) {
@@ -1249,7 +1193,6 @@ export async function runExtractionAttempts({
         itemId,
         reason: 'SUPERVISOR_FEEDBACK',
         supervisorPass,
-        categoryValidationPass,
         supervisionPreview: sanitizeForLog(supervision)
       });
       advanceAttempt();
