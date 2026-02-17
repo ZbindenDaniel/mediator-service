@@ -929,90 +929,31 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   });
 
   if (!ERP_IMPORT_POLLING_ENABLED) {
-    loggerRef.info?.('[sync-erp] ERP baseline flow enabled; validating report readiness before import', {
-      phase: 'polling',
+    loggerRef.info?.('[sync-erp] ERP baseline flow enabled; continuing to import after action_test marker validation', {
+      phase: 'import',
       mode: importMode,
       reason: 'ERP_IMPORT_POLLING_ENABLED=false'
     });
 
-    let reportContext: ReportReadinessContext;
+    // TODO(sync-erp-script-parity-report-id): Evaluate promoting missing baseline reportId from warning telemetry to explicit metric once ERP responses stabilize.
     try {
-      reportContext = deriveReportReadinessContext(testResult, loggerRef, url);
-      loggerRef.info?.('[sync-erp] ERP report readiness context derived', {
-        phase: 'polling',
+      const baselineReportId = parsedTest.reportId || extractQueryParam(`${testResult.stdout}\n${testResult.effectiveUrl}`, 'id');
+      if (!baselineReportId) {
+        loggerRef.warn?.('[sync-erp] Missing report id after action_test in script-parity baseline', {
+          phase: 'test',
+          effectiveUrl: trimDiagnosticOutput(testResult.effectiveUrl, 200),
+          stdoutSample: trimDiagnosticOutput(testResult.stdout, 200),
+          mode: importMode
+        });
+      }
+    } catch (warningLogError) {
+      loggerRef.warn?.('[sync-erp] Failed while logging missing baseline report id warning', {
+        phase: 'test',
         mode: importMode,
-        reportId: reportContext.reportId,
-        job: reportContext.job,
-        reportUrl: trimDiagnosticOutput(reportContext.reportUrl, 200)
+        effectiveUrl: trimDiagnosticOutput(testResult.effectiveUrl, 200),
+        stdoutSample: trimDiagnosticOutput(testResult.stdout, 200),
+        error: warningLogError instanceof Error ? warningLogError.message : String(warningLogError)
       });
-    } catch (reportContextError) {
-      const reportContextErrorMessage = reportContextError instanceof Error ? reportContextError.message : String(reportContextError);
-      return {
-        test: {
-          ...testResult,
-          phase: 'test',
-          acceptedByMarker: false,
-          state: parsedTest.state,
-          job: parsedTest.job,
-          reportId: parsedTest.reportId,
-          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}Failed to derive report readiness id after action_test: ${reportContextErrorMessage}`
-        },
-        polling: null,
-        import: null,
-        markerValidationPassed: false,
-        failurePhase: 'test'
-      };
-    }
-
-    let reportReadinessResult: Awaited<ReturnType<typeof waitForReportReadiness>>;
-    try {
-      reportReadinessResult = await waitForReportReadiness(reportContext);
-    } catch (reportReadinessError) {
-      const reportReadinessErrorMessage =
-        reportReadinessError instanceof Error ? reportReadinessError.message : String(reportReadinessError);
-      loggerRef.error?.('[sync-erp] Failed during ERP report readiness polling', {
-        phase: 'polling',
-        mode: importMode,
-        reportId: reportContext.reportId,
-        job: reportContext.job,
-        reportUrl: trimDiagnosticOutput(reportContext.reportUrl, 200),
-        error: reportReadinessErrorMessage
-      });
-      return {
-        test: {
-          ...testResult,
-          phase: 'test',
-          acceptedByMarker: false,
-          state: parsedTest.state,
-          job: parsedTest.job,
-          reportId: parsedTest.reportId,
-          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}Failed during report readiness polling after action_test: ${reportReadinessErrorMessage}`
-        },
-        polling: null,
-        import: null,
-        markerValidationPassed: false,
-        failurePhase: 'test'
-      };
-    }
-
-    if (!reportReadinessResult.ready) {
-      const timeoutSummary = reportReadinessResult.timeoutSummary;
-      const reportDiagnostics = `Report readiness timeout reached without Import-Vorschau (processing=${timeoutSummary?.processing ?? false}, lastUrl=${timeoutSummary?.lastUrl || 'none'}, job=${timeoutSummary?.job || 'none'}, reportId=${timeoutSummary?.reportId || 'none'})`;
-      return {
-        test: {
-          ...testResult,
-          phase: 'test',
-          acceptedByMarker: false,
-          state: parsedTest.state,
-          job: parsedTest.job,
-          reportId: timeoutSummary?.reportId || reportContext.reportId,
-          stderr: `${testResult.stderr}${testResult.stderr ? '\n' : ''}${reportDiagnostics}`
-        },
-        polling: null,
-        import: null,
-        markerValidationPassed: false,
-        failurePhase: 'test'
-      };
     }
 
     const importResult = await runCurl('import', buildImportArgs('import'));
