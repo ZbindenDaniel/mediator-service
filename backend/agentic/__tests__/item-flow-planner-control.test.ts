@@ -92,7 +92,52 @@ describe('collectSearchContexts planner coordination', () => {
       })
     );
     expect(result.searchContexts).toHaveLength(3);
-    expect(result.aggregatedSources).toHaveLength(3);
+    expect(result.aggregatedSources).toHaveLength(2);
+  });
+
+  it('rejects taxonomy-targeted planner queries and keeps product-fact queries', async () => {
+    const calls: string[] = [];
+    const searchInvoker: SearchInvoker = jest.fn(async (query) => {
+      calls.push(query);
+      return { text: `Result for ${query}`, sources: [] };
+    });
+
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+
+    await collectSearchContexts({
+      searchTerm: 'Laborgerät 3050',
+      searchInvoker,
+      logger,
+      itemId: 'item-taxonomy-reject',
+      shouldSearch: true,
+      plannerDecision: {
+        shouldSearch: true,
+        plans: [
+          {
+            query: 'Hauptkategorien_A code prüfen 12-34',
+            metadata: { context: 'planner' }
+          },
+          {
+            query: 'Hersteller Datenblatt Laborgerät 3050',
+            metadata: { context: 'planner' }
+          }
+        ]
+      }
+    });
+
+    expect(calls).toEqual(['Gerätedaten Laborgerät 3050', 'Hersteller Datenblatt Laborgerät 3050']);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        msg: 'taxonomy-targeted search plans rejected',
+        itemId: 'item-taxonomy-reject',
+        taxonomyRejectedCount: 1
+      })
+    );
   });
 
   it('retains missing-field and locked-field plans when max plan limit truncates merged plans', async () => {
@@ -163,4 +208,59 @@ describe('collectSearchContexts planner coordination', () => {
     );
   });
 
+  it('deduplicates repeated sources and caps repeated domains while logging retrieval metrics', async () => {
+    const searchInvoker: SearchInvoker = jest.fn(async () => ({
+      text: 'ok',
+      sources: [
+        { title: 'T1', url: 'https://vendor.example/a', description: 'A' },
+        { title: 'T1', url: 'https://vendor.example/a', description: 'A duplicate' },
+        { title: 'T2', url: 'https://vendor.example/b', description: 'B' },
+        { title: 'T3', url: 'https://vendor.example/c', description: 'C should be capped' },
+        { title: 'M1', url: 'https://manufacturer.example/spec', description: 'Spec' }
+      ]
+    }));
+
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+
+    const result = await collectSearchContexts({
+      searchTerm: 'Laborgerät 9000',
+      searchInvoker,
+      logger,
+      itemId: 'item-retrieval-metrics',
+      shouldSearch: true,
+      plannerDecision: {
+        shouldSearch: true,
+        plans: [
+          { query: 'Gerätedaten Laborgerät 9000', metadata: { context: 'planner' } },
+          { query: '  gerätedaten   laborgerät 9000  ', metadata: { context: 'planner' } }
+        ]
+      }
+    });
+
+    expect(result.aggregatedSources).toHaveLength(3);
+    expect(result.aggregatedSources.map((source) => source.url)).toEqual([
+      'https://vendor.example/a',
+      'https://vendor.example/b',
+      'https://manufacturer.example/spec'
+    ]);
+
+    const retrievalMetricCall = logger.info.mock.calls.find(
+      ([entry]) => (entry as { msg?: string } | undefined)?.msg === 'search retrieval metrics'
+    );
+    expect(retrievalMetricCall).toBeDefined();
+    expect(retrievalMetricCall?.[0]).toEqual(
+      expect.objectContaining({
+        msg: 'search retrieval metrics',
+        itemId: 'item-retrieval-metrics',
+        uniqueQueries: 1,
+        uniqueDomains: 2,
+      })
+    );
+    expect((retrievalMetricCall?.[0] as { duplicateSuppressionCount?: number }).duplicateSuppressionCount).toBeGreaterThanOrEqual(3);
+  });
 });

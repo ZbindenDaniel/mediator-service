@@ -3,6 +3,7 @@
 // TODO(agent): Review aggregated search text sanitization thresholds once search quality metrics are available.
 // TODO(agent): Monitor spec-line preservation rates and tune heuristics against false positives once telemetry matures.
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import type { SearchResult } from '../tools/tavily-client';
 import { RateLimitError } from '../tools/tavily-client';
 import type { SearchSource } from '../utils/source-formatter';
@@ -85,6 +86,13 @@ export interface PlannerDecision {
 }
 
 const MAX_SEARCH_TRANSCRIPT_SECTION_LENGTH = 250_000;
+const MAX_SOURCES_PER_DOMAIN_PER_BATCH = 2;
+
+interface SearchPlanFilterResult {
+  plans: SearchPlan[];
+  duplicateCount: number;
+  taxonomyRejectedCount: number;
+}
 
 interface PlannerInvocationOptions {
   llm: ChatModel;
@@ -123,6 +131,79 @@ function dedupeSearchPlans(plans: SearchPlan[]): SearchPlan[] {
     }
   }
   return Array.from(uniqueQueries.values());
+}
+
+function normalizeQuery(query: string): string {
+  return query
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .replace(/[“”"'`´]/g, '')
+    .trim();
+}
+
+function isTaxonomyTargetedQuery(query: string): boolean {
+  const normalized = normalizeQuery(query);
+  if (!normalized) {
+    return false;
+  }
+
+  return /\b(taxonomy|kategoriecode|category\s*code|hauptkategorien?_[ab]|unterkategorien?_[ab]|interne\s*kategorie|kategorie\s*(?:id|code|nummer))\b/i.test(
+    normalized
+  );
+}
+
+function isVendorBiasedQuery(query: string): boolean {
+  return /\b(buy|shop|vendor|haendler|händler|amazon|ebay|preisvergleich|angebote?)\b/i.test(query);
+}
+
+function isManufacturerOrSpecQuery(query: string): boolean {
+  return /\b(hersteller|manufacturer|datenblatt|spec(?:ification)?s?|pdf|bedienungsanleitung|manual)\b/i.test(query);
+}
+
+function filterAndDiversifySearchPlans(plans: SearchPlan[]): SearchPlanFilterResult {
+  const uniqueByNormalizedQuery = new Map<string, SearchPlan>();
+  let duplicateCount = 0;
+  let taxonomyRejectedCount = 0;
+
+  for (const plan of plans) {
+    if (isTaxonomyTargetedQuery(plan.query)) {
+      taxonomyRejectedCount += 1;
+      continue;
+    }
+    const key = normalizeQuery(plan.query);
+    if (!key) {
+      continue;
+    }
+    if (uniqueByNormalizedQuery.has(key)) {
+      duplicateCount += 1;
+      continue;
+    }
+    uniqueByNormalizedQuery.set(key, plan);
+  }
+
+  const diversifiedPlans: SearchPlan[] = [];
+  const deferredVendorPlans: SearchPlan[] = [];
+  let vendorHits = 0;
+
+  for (const plan of uniqueByNormalizedQuery.values()) {
+    const isVendorPlan = isVendorBiasedQuery(plan.query);
+    const isSpecPlan = isManufacturerOrSpecQuery(plan.query);
+    if (isVendorPlan && !isSpecPlan) {
+      vendorHits += 1;
+      if (vendorHits > 2) {
+        deferredVendorPlans.push(plan);
+        continue;
+      }
+    }
+    diversifiedPlans.push(plan);
+  }
+
+  return {
+    plans: [...diversifiedPlans, ...deferredVendorPlans],
+    duplicateCount,
+    taxonomyRejectedCount
+  };
 }
 
 function hasNonEmptyStringArray(value: unknown): boolean {
@@ -515,6 +596,25 @@ function buildSearchTranscriptSection(
   };
 }
 
+function resolveDomain(inputUrl: string | null | undefined): string {
+  if (!inputUrl || typeof inputUrl !== 'string') {
+    return 'unknown';
+  }
+  try {
+    return new URL(inputUrl).hostname.toLowerCase();
+  } catch {
+    return 'unknown';
+  }
+}
+
+function buildSourceDedupKey(source: SearchSource): string {
+  const domain = resolveDomain(typeof source.url === 'string' ? source.url : null);
+  const title = typeof source.title === 'string' ? source.title.trim().toLowerCase() : '';
+  const normalizedUrl = typeof source.url === 'string' ? source.url.trim().toLowerCase() : '';
+  const urlHash = createHash('sha1').update(normalizedUrl).digest('hex');
+  return `${domain}|${title}|${urlHash}`;
+}
+
 export async function collectSearchContexts({
   searchTerm,
   searchInvoker,
@@ -544,6 +644,12 @@ export async function collectSearchContexts({
   const resolvedTarget = resolveTarget(target ?? null, logger, itemId);
   const searchContexts: SearchContext[] = [];
   const seenSourceKeys = new Set<string>();
+  const sourceDomainCounts = new Map<string, number>();
+  const retrievalMetrics = {
+    uniqueQueries: new Set<string>(),
+    uniqueDomains: new Set<string>(),
+    duplicateSuppressionCount: 0
+  };
   const aggregatedSources: SearchSource[] = [];
   const missingSchemaFields = Array.isArray(providedMissingFields) && providedMissingFields.length
     ? providedMissingFields
@@ -570,13 +676,22 @@ export async function collectSearchContexts({
             : typeof source.content === 'string' && source.content.trim()
               ? source.content.trim()
               : '';
-        const key = source.url || `${source.title ?? ''}-${description}`;
+        const key = buildSourceDedupKey(source);
+        const domain = resolveDomain(typeof source.url === 'string' ? source.url : null);
         if (key && seenSourceKeys.has(key)) {
+          retrievalMetrics.duplicateSuppressionCount += 1;
+          continue;
+        }
+        const domainCount = sourceDomainCounts.get(domain) ?? 0;
+        if (domainCount >= MAX_SOURCES_PER_DOMAIN_PER_BATCH) {
+          retrievalMetrics.duplicateSuppressionCount += 1;
           continue;
         }
         if (key) {
           seenSourceKeys.add(key);
         }
+        sourceDomainCounts.set(domain, domainCount + 1);
+        retrievalMetrics.uniqueDomains.add(domain);
         if (description && description !== source.description) {
           aggregatedSources.push({ ...source, description });
         } else {
@@ -722,7 +837,17 @@ export async function collectSearchContexts({
     searchPlans = fallbackPlans;
   }
 
-  searchPlans = dedupeSearchPlans(searchPlans);
+  const filteredPlanResult = filterAndDiversifySearchPlans(searchPlans);
+  searchPlans = filteredPlanResult.plans;
+  retrievalMetrics.duplicateSuppressionCount +=
+    filteredPlanResult.duplicateCount + filteredPlanResult.taxonomyRejectedCount;
+  if (filteredPlanResult.taxonomyRejectedCount > 0) {
+    logger?.warn?.({
+      msg: 'taxonomy-targeted search plans rejected',
+      itemId,
+      taxonomyRejectedCount: filteredPlanResult.taxonomyRejectedCount
+    });
+  }
   const rankedPlans = searchPlans.length > resolvedMaxPlans ? rankPlansForLimit(searchPlans) : searchPlans;
   const limitedPlans = rankedPlans.slice(0, resolvedMaxPlans);
 
@@ -743,6 +868,7 @@ export async function collectSearchContexts({
   }
 
   for (const [index, plan] of limitedPlans.entries()) {
+    retrievalMetrics.uniqueQueries.add(normalizeQuery(plan.query));
     const metadata = { ...plan.metadata, requestIndex: index };
     logger?.info?.({ msg: 'search start', searchQuery: plan.query, itemId, metadata });
     try {
@@ -802,6 +928,14 @@ export async function collectSearchContexts({
       throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
     }
   }
+
+  logger?.info?.({
+    msg: 'search retrieval metrics',
+    itemId,
+    uniqueQueries: retrievalMetrics.uniqueQueries.size,
+    uniqueDomains: retrievalMetrics.uniqueDomains.size,
+    duplicateSuppressionCount: retrievalMetrics.duplicateSuppressionCount
+  });
 
   return {
     searchContexts,
