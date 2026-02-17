@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
+// TODO(agent): Show ERP sync availability from a dedicated status endpoint when available.
 
 interface BulkItemActionBarProps {
   selectedIds: string[];
@@ -467,26 +468,17 @@ export default function BulkItemActionBar({
 
     let confirmed = false;
     try {
-      dialogService.alert({
+      confirmed = await dialogService.confirm({
         title: 'Kivitendo Sync',
         message: (
           <div className="bulk-item-action-bar__confirm-content">
-            <p>Diese Funktion ist zur Zeit nicht verfügbar!</p>
+            <p>Sollen die ausgewählten Artikel an das ERP synchronisiert werden?</p>
             <p>{selectionLabel}</p>
           </div>
         ),
+        confirmLabel: 'Sync starten',
+        cancelLabel: 'Abbrechen'
       });
-      // confirmed = await dialogService.confirm({
-      //   title: 'Kivitendo Sync',
-      //   message: (
-      //     <div className="bulk-item-action-bar__confirm-content">
-      //       <p>Sollen die ausgewählten Artikel an das ERP synchronisiert werden?</p>
-      //       <p>{selectionLabel}</p>
-      //     </div>
-      //   ),
-      //   confirmLabel: 'Sync starten',
-      //   cancelLabel: 'Abbrechen'
-      // });
       console.info('Bulk ERP sync confirmation resolved', {
         confirmed,
         selectionCount: selectedCount

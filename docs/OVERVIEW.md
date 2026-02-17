@@ -26,6 +26,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - In progress: grouping helpers for list and box detail item payloads to support summarized responses.
 
 ## Progress Updates
+- **ERP sync runtime re-enable guardrail**: restored `/api/sync/erp` execution path behind a new `ERP_SYNC_ENABLED` runtime flag with clear API feedback when disabled, and aligned bulk action UI to use confirmation + backend-provided error messages instead of hardcoded unavailable messaging.
 - **Agentic search planner query-priority guidance refresh**: updated planner instructions to prioritize exact product-name queries, then exact-name-plus-missing-attribute queries, allow only one fallback variant, and explicitly avoid forced `site:`/domain-constrained query construction; planner source-list context is now marked optional in prompt composition to preserve recall while keeping the response contract unchanged.
 <!-- TODO(agentic-review-context-transcript): Revisit directive summary shape if structured review metadata replaces composed notes. -->
 - **Agentic review-context transcript bootstrap**: item flow now writes an initial `review-context` transcript section immediately after writer initialization (before shopware and other early exits), storing normalized reviewer notes, skip-search state, and concise missing/unneeded directive counts with capped note length and guarded logging.
