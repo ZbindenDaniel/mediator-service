@@ -653,8 +653,8 @@ div {
 }
 
 .review-dialog__row-value {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    // white-space: pre-wrap;
+    // overflow-wrap: anywhere;
 }
 
 .review-dialog__row--question {
@@ -715,7 +715,7 @@ div {
 .dialog-buttons {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 12px;
 }
 

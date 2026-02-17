@@ -191,7 +191,7 @@ const DETAIL_PLACEHOLDER_TEXT = '-';
 export const AGENTIC_REVIEW_PROMPT_SEQUENCE = ['checklist', 'note'] as const;
 
 const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
-const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 140;
+const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 400;
 
 
 function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): ReviewDialogField[] {
@@ -299,7 +299,7 @@ function buildReviewDialogSection(
   const safeFields = buildReviewDialogFields(itemId, sectionName, fields);
   return (
     <section className="review-dialog__section">
-      <h3 className="review-dialog__section-title">{sectionName}</h3>
+      <h3 className="review-dialog__section-title">{question}</h3>
       <div className="review-dialog__rows">
         {safeFields.map((field) => (
           <div
@@ -310,10 +310,6 @@ function buildReviewDialogSection(
             <span className="review-dialog__row-value">{field.value as React.ReactNode}</span>
           </div>
         ))}
-        <div className="review-dialog__row review-dialog__row--question">
-          <span className="review-dialog__row-label">Frage</span>
-          <span className="review-dialog__row-value">{question}</span>
-        </div>
       </div>
     </section>
   );
@@ -2271,7 +2267,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const descriptionMatches = await askFlag(
       'descriptionMatches',
-      'Artikelbeschreibung passend?',
+      'Schritt 1  · Artikelbeschreibung',
       descriptionPreviewMessage
     );
     if (descriptionMatches === null) {
@@ -2280,7 +2276,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const shortTextMatches = await askFlag(
       'shortTextMatches',
-      'Kurztext passend?',
+      'Schritt 2 · Kurztext',
       shortTextPreviewMessage
     );
     if (shortTextMatches === null) {
@@ -2289,7 +2285,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const hasUnnecessarySpecs = await askFlag(
       'hasUnnecessarySpecs',
-      'Spezifikationen: unnötige Infos?',
+      'Schitt 3 · Spezifikationen',
       unnecessarySpecsPreviewMessage
     );
     if (hasUnnecessarySpecs === null) {
@@ -2298,7 +2294,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const hasMissingSpecs = await askFlag(
       'hasMissingSpecs',
-      'Spezifikationen: fehlende Infos?',
+      'Schritt 3 · Spezifikationen',
       missingSpecsPreviewMessage
     );
     if (hasMissingSpecs === null) {
@@ -2307,7 +2303,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     const dimensionsPlausible = await askFlag(
       'dimensionsPlausible',
-      'Dimensionen vorhanden/plausibel?',
+      'Schritt 4 · Dimensionen',
       dimensionsPreviewMessage
     );
     if (dimensionsPlausible === null) {

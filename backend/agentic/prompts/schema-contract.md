@@ -1,7 +1,3 @@
-# Agentic Spezifikationen Schema Contract
-
-All extraction, categorization, and supervision exchanges should follow this item shape:
-
 ```json
 {
   "Artikel_Nummer": "",
@@ -9,8 +5,7 @@ All extraction, categorization, and supervision exchanges should follow this ite
   "Verkaufspreis": null,
   "Kurzbeschreibung": "",
   "Spezifikationen": {
-    "Veröffentlicht": "",
-    "Stromversorgung": ""
+    "Veröffentlicht": ""
   },
   "Hersteller": "",
   "Länge_mm": null,
@@ -24,9 +19,3 @@ All extraction, categorization, and supervision exchanges should follow this ite
   "reviewNotes": ""
 }
 ```
-
-Rules:
-- `Spezifikationen` is the canonical nested specs field; do not use `Langtext` in LLM-facing payloads.
-- `Spezifikationen` values are `string | string[]`.
-- Numeric fields are `number | null`.
-- Category fields are nullable numbers and optional when a stage only edits a subset.
