@@ -73,6 +73,7 @@ type ErpImportValue = string | number;
 
 interface ErpImportFieldMap {
   action: string;
+  actionTest: string;
   actionImport: string;
   escapeChar: string;
   profileType: string;
@@ -95,6 +96,7 @@ interface ErpImportFieldMap {
 
 const ERP_IMPORT_FIELD_NAMES = {
   action: 'action',
+  actionTest: 'action_test',
   actionImport: 'action_import',
   escapeChar: 'escape_char',
   profileType: 'profile.type',
@@ -119,6 +121,7 @@ const ERP_IMPORT_FIELD_NAMES = {
 function buildErpImportFieldMap(): ErpImportFieldMap {
   return {
     action: 'CsvImport/import',
+    actionTest: '0',
     actionImport: '1',
     escapeChar: 'quote',
     profileType: 'parts',
@@ -169,9 +172,36 @@ interface ImportResult {
   stderr: string;
 }
 
+interface ImportPhaseResult extends ImportResult {
+  phase: 'test' | 'import';
+  acceptedByMarker: boolean;
+}
+
+interface ImportExecutionResult {
+  test: ImportPhaseResult;
+  import: ImportPhaseResult | null;
+  markerValidationPassed: boolean;
+}
+
+const ERP_TEST_ACCEPTANCE_MARKERS = ['Ihr Import wird verarbeitet'];
+
+function trimDiagnosticOutput(raw: string, maxLength = 500): string {
+  const trimmed = raw.trim();
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, maxLength)}…`;
+}
+
+function matchesAcceptanceMarker(stdout: string): boolean {
+  const normalizedStdout = stdout.trim();
+  return ERP_TEST_ACCEPTANCE_MARKERS.some((marker) => normalizedStdout.includes(marker));
+}
+
 // TODO(agent): Confirm whether ERP import requires curl retries on transient 5xx responses.
 // TODO(agent): Add structured log fields for curl timing metrics once we track ERP latency.
-async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
+// TODO(sync-erp-phases): Keep phase-marker matching aligned with ERP response wording changes.
+async function runCurlImport(options: ImportOptions): Promise<ImportExecutionResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
   // TODO(agent): Reconcile ERP import content type selection with export artifact shape when media rules evolve.
@@ -187,7 +217,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
   const authLoginFieldName = buildAuthFieldName('login', options.authFieldPrefix);
   const authPasswordFieldName = buildAuthFieldName('password', options.authFieldPrefix);
   const authClientIdFieldName = buildAuthFieldName('client_id', options.authFieldPrefix);
-  const args: string[] = [
+  const buildCurlArgs = (phase: 'test' | 'import'): string[] => {
+    const actionTestValue = phase === 'test' ? '1' : erpFields.actionTest;
+    const actionImportValue = phase === 'import' ? erpFields.actionImport : '0';
+    return [
     '-X',
     'POST',
     '--silent',
@@ -196,7 +229,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
     '-F',
     toFormArg(ERP_IMPORT_FIELD_NAMES.action, erpFields.action),
     '-F',
-    toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, erpFields.actionImport),
+    toFormArg(ERP_IMPORT_FIELD_NAMES.actionTest, actionTestValue),
+    '-F',
+    toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, actionImportValue),
     '-F',
     toFormArg(ERP_IMPORT_FIELD_NAMES.escapeChar, erpFields.escapeChar),
     '-F',
@@ -238,21 +273,25 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
     '-F',
     `actor=${actor}`,
     url
-  ];
+    ];
+  };
 
-  if (username) {
-    args.splice(args.length - 1, 0, '-F', toFormArg(authLoginFieldName, username));
-  }
+  const runPhase = async (phase: 'test' | 'import'): Promise<ImportResult> => {
+    const args = buildCurlArgs(phase);
 
-  if (password) {
-    args.splice(args.length - 1, 0, '-F', toFormArg(authPasswordFieldName, password));
-  }
+    if (username) {
+      args.splice(args.length - 1, 0, '-F', toFormArg(authLoginFieldName, username));
+    }
 
-  if (timeoutSeconds) {
-    args.splice(4, 0, '--max-time', `${timeoutSeconds}`);
-  }
+    if (password) {
+      args.splice(args.length - 1, 0, '-F', toFormArg(authPasswordFieldName, password));
+    }
 
-  const redactedArgs = args.map((arg) => {
+    if (timeoutSeconds) {
+      args.splice(4, 0, '--max-time', `${timeoutSeconds}`);
+    }
+
+    const redactedArgs = args.map((arg) => {
     if (/(^|})login=/.test(arg)) {
       return `${arg.split('=')[0]}=***`;
     }
@@ -265,8 +304,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
     return arg;
   });
 
-  loggerRef.info?.('[sync-erp] curl import request', {
+    loggerRef.info?.('[sync-erp] curl import request', {
     url,
+    phase,
     fieldName,
     includeMedia,
     archivePath: artifact.archivePath,
@@ -274,8 +314,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
     args: redactedArgs
   });
 
-  try {
-    const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    try {
+      const child = spawn('curl', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
 
@@ -291,33 +331,87 @@ async function runCurlImport(options: ImportOptions): Promise<ImportResult> {
       });
     }
 
-    return await new Promise<ImportResult>((resolve, reject) => {
-      child.on('error', (error) => {
-        loggerRef.error?.('[sync-erp] curl spawn failed', error);
-        reject(error);
+      return await new Promise<ImportResult>((resolve, reject) => {
+        child.on('error', (error) => {
+          loggerRef.error?.('[sync-erp] curl spawn failed', { phase, error });
+          reject(error);
+        });
+
+        child.on('close', (code, signal) => {
+          if (signal) {
+            stderr = `${stderr}${stderr ? '\n' : ''}curl terminated with signal ${signal}`;
+          }
+          const exitCode = typeof code === 'number' ? code : -1;
+
+          if (stdout.trim()) {
+            loggerRef.info?.('[sync-erp] curl stdout', { phase, stdout: stdout.trim() });
+          }
+
+          if (stderr.trim()) {
+            loggerRef.warn?.('[sync-erp] curl stderr', { phase, stderr: stderr.trim() });
+          }
+
+          resolve({ exitCode, stdout, stderr });
+        });
       });
+    } catch (error) {
+      loggerRef.error?.('[sync-erp] curl execution failed', { phase, error });
+      throw error;
+    }
+  };
 
-      child.on('close', (code, signal) => {
-        if (signal) {
-          stderr = `${stderr}${stderr ? '\n' : ''}curl terminated with signal ${signal}`;
-        }
-        const exitCode = typeof code === 'number' ? code : -1;
-
-        if (stdout.trim()) {
-          loggerRef.info?.('[sync-erp] curl stdout', stdout.trim());
-        }
-
-        if (stderr.trim()) {
-          loggerRef.warn?.('[sync-erp] curl stderr', stderr.trim());
-        }
-
-        resolve({ exitCode, stdout, stderr });
-      });
+  const testResult = await runPhase('test');
+  let testAcceptedByMarker = false;
+  try {
+    testAcceptedByMarker = matchesAcceptanceMarker(testResult.stdout);
+  } catch (parseError) {
+    loggerRef.error?.('[sync-erp] Failed to parse ERP test response', {
+      phase: 'test',
+      exitCode: testResult.exitCode,
+      parseError
     });
-  } catch (error) {
-    loggerRef.error?.('[sync-erp] curl execution failed', error);
-    throw error;
+    testAcceptedByMarker = false;
   }
+
+  loggerRef.info?.('[sync-erp] ERP phase validation', {
+    phase: 'test',
+    exitCode: testResult.exitCode,
+    matchedMarker: testAcceptedByMarker
+  });
+
+  if (testResult.exitCode !== 0 || !testAcceptedByMarker) {
+    return {
+      test: {
+        ...testResult,
+        phase: 'test',
+        acceptedByMarker: testAcceptedByMarker
+      },
+      import: null,
+      markerValidationPassed: false
+    };
+  }
+
+  const importResult = await runPhase('import');
+  const importAcceptedByMarker = importResult.exitCode === 0;
+  loggerRef.info?.('[sync-erp] ERP phase validation', {
+    phase: 'import',
+    exitCode: importResult.exitCode,
+    matchedMarker: importAcceptedByMarker
+  });
+
+  return {
+    test: {
+      ...testResult,
+      phase: 'test',
+      acceptedByMarker: testAcceptedByMarker
+    },
+    import: {
+      ...importResult,
+      phase: 'import',
+      acceptedByMarker: importAcceptedByMarker
+    },
+    markerValidationPassed: true
+  };
 }
 
 const action = defineHttpAction({
@@ -405,7 +499,7 @@ const action = defineHttpAction({
       }
 
       console.info('[sync-erp] Starting ERP curl import');
-      let curlResult: ImportResult;
+      let curlResult: ImportExecutionResult;
       try {
         curlResult = await runCurlImport({
           actor,
@@ -428,23 +522,68 @@ const action = defineHttpAction({
         });
       }
 
-      if (curlResult.exitCode !== 0) {
+      if (!curlResult.markerValidationPassed) {
+        const testStdout = trimDiagnosticOutput(curlResult.test.stdout);
+        const testStderr = trimDiagnosticOutput(curlResult.test.stderr);
+        console.error('[sync-erp] ERP import test phase rejected', {
+          phase: curlResult.test.phase,
+          exitCode: curlResult.test.exitCode,
+          matchedMarker: curlResult.test.acceptedByMarker
+        });
+        return sendJson(res, 502, {
+          error: 'ERP-Testlauf wurde nicht bestätigt. Import wurde nicht gestartet.',
+          phases: {
+            test: {
+              status: curlResult.test.exitCode === 0 ? 'failed-validation' : 'failed-execution',
+              exitCode: curlResult.test.exitCode,
+              matchedMarker: curlResult.test.acceptedByMarker,
+              stdout: testStdout,
+              stderr: testStderr
+            },
+            import: {
+              status: 'skipped'
+            }
+          }
+        });
+      }
+
+      if (!curlResult.import || curlResult.import.exitCode !== 0) {
         console.error('[sync-erp] ERP import failed', {
-          exitCode: curlResult.exitCode
+          exitCode: curlResult.import?.exitCode ?? -1
         });
         return sendJson(res, 502, {
           error: 'ERP-Import ist fehlgeschlagen.',
-          exitCode: curlResult.exitCode,
-          stderr: curlResult.stderr,
-          stdout: curlResult.stdout
+          phases: {
+            test: {
+              status: 'passed',
+              exitCode: curlResult.test.exitCode,
+              matchedMarker: curlResult.test.acceptedByMarker
+            },
+            import: {
+              status: 'failed',
+              exitCode: curlResult.import?.exitCode ?? -1,
+              matchedMarker: curlResult.import?.acceptedByMarker ?? false,
+              stderr: curlResult.import?.stderr ?? '',
+              stdout: curlResult.import?.stdout ?? ''
+            }
+          }
         });
       }
 
       return sendJson(res, 200, {
         ok: true,
-        exitCode: curlResult.exitCode,
-        stdout: curlResult.stdout,
-        stderr: curlResult.stderr,
+        phases: {
+          test: {
+            status: 'passed',
+            exitCode: curlResult.test.exitCode,
+            matchedMarker: curlResult.test.acceptedByMarker
+          },
+          import: {
+            status: 'passed',
+            exitCode: curlResult.import.exitCode,
+            matchedMarker: curlResult.import.acceptedByMarker
+          }
+        },
         artifact: path.basename(stagedExport.archivePath),
         itemCount: items.length,
         includeMedia: ERP_IMPORT_INCLUDE_MEDIA
