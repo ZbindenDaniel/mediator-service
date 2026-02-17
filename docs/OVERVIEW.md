@@ -27,6 +27,8 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 <!-- TODO(agentic-review-spec-field-ui): Revisit selector affordances after reviewer telemetry confirms usage patterns. -->
+- **Supervisor dual-category gating in extraction**: added an explicit second-category requirement gate so supervisor PASS now allows null `_B` fields for single-category payloads, enforces complete/distinct `_B` fields only when explicitly requested, and logs structured decision-path context (including guarded error handling) for category validation outcomes.
+- **Categorizer↔supervisor second-category alignment simplification**: kept the stage contract lightweight by honoring explicit `requiresSecondCategory` flags when present while retaining fallback behavior and structured supervisor validation logs to reduce conflicts with minimal code growth.
 - **Agentic review spec-field selectors in UI**: derived normalized Langtext spec fields for review flows, added minimal field-selection modal support for unnecessary/missing specs with fallback logging, and covered selected-field to payload mapping via focused component-level tests.
 <!-- TODO(agentic-review-unneeded-spec): validate analytics consumer readiness for the new unneeded_spec signal. -->
 - **Agentic unneeded-spec review signal contract**: added shared/FE/BE support for structured `unneeded_spec` arrays alongside `missing_spec`, normalized and persisted both lists through manual review and history paths, and extended logs with count-only review signal metrics.

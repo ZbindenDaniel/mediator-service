@@ -205,6 +205,67 @@ function stripLegacyIdentifiers(value: unknown): void {
   }
 }
 
+interface CategoryValidationDecision {
+  requiresSecondCategory: boolean;
+  isValid: boolean;
+  reason: string;
+}
+
+function resolveRequiresSecondCategory(payload: AgenticOutput): boolean {
+  const record = payload as AgenticOutput & {
+    requiresSecondCategory?: unknown;
+    categoryRules?: { requiresSecondCategory?: unknown };
+  };
+  if (typeof record.requiresSecondCategory === 'boolean') {
+    return record.requiresSecondCategory;
+  }
+  if (typeof record.categoryRules?.requiresSecondCategory === 'boolean') {
+    return record.categoryRules.requiresSecondCategory;
+  }
+  return record.Hauptkategorien_B != null || record.Unterkategorien_B != null;
+}
+
+function validateSecondCategoryRequirement(payload: AgenticOutput): CategoryValidationDecision {
+  const requiresSecondCategory = resolveRequiresSecondCategory(payload);
+  if (!requiresSecondCategory) {
+    return {
+      requiresSecondCategory,
+      isValid: true,
+      reason: 'second category not required'
+    };
+  }
+
+  if (payload.Hauptkategorien_B == null || payload.Unterkategorien_B == null) {
+    return {
+      requiresSecondCategory,
+      isValid: false,
+      reason: 'second category required but Hauptkategorien_B/Unterkategorien_B are incomplete'
+    };
+  }
+
+  if (payload.Hauptkategorien_A != null && payload.Hauptkategorien_A === payload.Hauptkategorien_B) {
+    return {
+      requiresSecondCategory,
+      isValid: false,
+      reason: 'second main category must differ from Hauptkategorien_A when required'
+    };
+  }
+
+  if (payload.Unterkategorien_A != null && payload.Unterkategorien_A === payload.Unterkategorien_B) {
+    return {
+      requiresSecondCategory,
+      isValid: false,
+      reason: 'second subcategory must differ from Unterkategorien_A when required'
+    };
+  }
+
+  return {
+    requiresSecondCategory,
+    isValid: true,
+    reason: 'second category requirement satisfied'
+  };
+}
+
 // TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
 function mapLangtextToSpezifikationenForLlm(
   payload: unknown,
@@ -1132,7 +1193,42 @@ export async function runExtractionAttempts({
       itemId,
       supervisionPreview: sanitizeForLog(supervision)
     });
-    const pass = normalizedSupervision.toLowerCase().includes('pass');
+    const supervisorPass = normalizedSupervision.toLowerCase().includes('pass');
+    let categoryValidationPass = true;
+    if (supervisorPass) {
+      // TODO(agent): Consider moving category validation into a shared policy helper when additional supervisor gates are introduced.
+      try {
+        const categoryDecision = validateSecondCategoryRequirement(pricedValidated.data);
+        categoryValidationPass = categoryDecision.isValid;
+        logger?.info?.({
+          msg: 'supervisor category validation evaluated',
+          attempt,
+          itemId,
+          supervisorPass,
+          categoryValidationPass,
+          requiresSecondCategory: categoryDecision.requiresSecondCategory,
+          decisionReason: categoryDecision.reason,
+          categorySnapshot: {
+            Hauptkategorien_A: pricedValidated.data.Hauptkategorien_A ?? null,
+            Unterkategorien_A: pricedValidated.data.Unterkategorien_A ?? null,
+            Hauptkategorien_B: pricedValidated.data.Hauptkategorien_B ?? null,
+            Unterkategorien_B: pricedValidated.data.Unterkategorien_B ?? null
+          }
+        });
+      } catch (err) {
+        categoryValidationPass = false;
+        logger?.error?.({
+          err,
+          msg: 'supervisor category validation failed unexpectedly',
+          attempt,
+          itemId,
+          supervisorPass,
+          classificationPayload: sanitizeForLog(pricedValidated.data),
+          decisionPath: 'supervisor-pass -> category-validation-exception'
+        });
+      }
+    }
+    const pass = supervisorPass && categoryValidationPass;
 
     lastValidated = pricedValidated;
     if (pass) {
@@ -1146,6 +1242,8 @@ export async function runExtractionAttempts({
         nextAttempt,
         itemId,
         reason: 'SUPERVISOR_FEEDBACK',
+        supervisorPass,
+        categoryValidationPass,
         supervisionPreview: sanitizeForLog(supervision)
       });
       advanceAttempt();

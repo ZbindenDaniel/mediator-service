@@ -293,15 +293,17 @@ export async function runCategorizerStage({
     result[field] = nextValue === null ? null : nextValue;
   }
 
+  const assignedCategories = {
+    Hauptkategorien_A: result.Hauptkategorien_A ?? candidate.Hauptkategorien_A ?? null,
+    Unterkategorien_A: result.Unterkategorien_A ?? candidate.Unterkategorien_A ?? null,
+    Hauptkategorien_B: result.Hauptkategorien_B ?? candidate.Hauptkategorien_B ?? null,
+    Unterkategorien_B: result.Unterkategorien_B ?? candidate.Unterkategorien_B ?? null
+  };
+
   logger?.info?.({
     msg: 'categorizer completed',
     itemId,
-    assignedCategories: {
-      Hauptkategorien_A: result.Hauptkategorien_A ?? candidate.Hauptkategorien_A ?? null,
-      Unterkategorien_A: result.Unterkategorien_A ?? candidate.Unterkategorien_A ?? null,
-      Hauptkategorien_B: result.Hauptkategorien_B ?? candidate.Hauptkategorien_B ?? null,
-      Unterkategorien_B: result.Unterkategorien_B ?? candidate.Unterkategorien_B ?? null
-    }
+    assignedCategories
   });
 
   return result;
