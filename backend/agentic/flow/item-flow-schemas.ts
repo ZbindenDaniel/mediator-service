@@ -137,6 +137,15 @@ export const AgentOutputSchema = TargetSchema.extend({
   confidenceNote: z.string().min(1).max(1024).optional()
 }).passthrough();
 
+export const TAXONOMY_FIELDS = ['Hauptkategorien_A', 'Unterkategorien_A', 'Hauptkategorien_B', 'Unterkategorien_B'] as const;
+
+export const ExtractionOutputSchema = AgentOutputSchema.omit({
+  Hauptkategorien_A: true,
+  Unterkategorien_A: true,
+  Hauptkategorien_B: true,
+  Unterkategorien_B: true
+});
+
 
 export function logSchemaKeyTelemetry(
   logger: Partial<Pick<Console, 'warn' | 'info'>> | undefined,

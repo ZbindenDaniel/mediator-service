@@ -12,7 +12,6 @@ jest.mock('../flow/item-flow-pricing', () => ({
   runPricingStage: jest.fn(async () => ({}))
 }));
 
-// TODO(agent): Extend Langtext defaults once schema scaffolding captures additional structured hints.
 const buildTarget = (): AgenticTarget => ({
   Artikel_Nummer: 'item-1',
   Artikelbeschreibung: 'Widget',
@@ -38,22 +37,15 @@ describe('runExtractionAttempts JSON correction', () => {
     const invalidExtraction =
       '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
       '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
-      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":2,' +
-      '"Unterkategorien_B":22 this is incomplete';
+      '"Höhe_mm":null,"Gewicht_kg":null this is incomplete';
     const correctedExtraction =
       '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
       '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
-      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":2,' +
-      '"Unterkategorien_B":22}';
+      '"Höhe_mm":null,"Gewicht_kg":null}';
 
     const responses = [{ content: asJsonBlock(invalidExtraction) }, { content: 'pass' }];
-    const llm: ChatModel = {
-      invoke: jest.fn(async () => responses.shift() ?? { content: '' })
-    };
-
-    const correctionLlm: ChatModel = {
-      invoke: jest.fn(async () => ({ content: correctedExtraction }))
-    };
+    const llm: ChatModel = { invoke: jest.fn(async () => responses.shift() ?? { content: '' }) };
+    const correctionLlm: ChatModel = { invoke: jest.fn(async () => ({ content: correctedExtraction })) };
 
     const result = await runExtractionAttempts({
       llm,
@@ -79,73 +71,54 @@ describe('runExtractionAttempts JSON correction', () => {
     });
 
     expect(correctionLlm.invoke).toHaveBeenCalledTimes(1);
-    const extractionMessages = (llm.invoke as jest.Mock).mock.calls[0]?.[0];
-    const extractionPromptPreview = JSON.stringify(extractionMessages);
-    expect(extractionPromptPreview).toContain('Spezifikationen');
-    expect(extractionPromptPreview).not.toContain('\"Langtext\"');
     expect(result.success).toBe(true);
     expect(result.data).toEqual(JSON.parse(correctedExtraction));
   });
 
-  it('remaps Spezifikationen alias into Langtext before schema validation', async () => {
+  it('fails extraction when taxonomy fields are emitted by extraction output', async () => {
     const target = buildTarget();
-    const extractionOnlyAlias =
+    const extractionWithTaxonomy =
       '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
-      '"Spezifikationen":{"Veröffentlicht":"ja","Stromversorgung":"230V"},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
-      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":2,' +
-      '"Unterkategorien_B":22}';
+      '"Langtext":{"Veröffentlicht":"langtext","Stromversorgung":"110V"},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1}';
 
-    const responses = [{ content: asJsonBlock(extractionOnlyAlias) }, { content: 'pass' }];
-    const llm: ChatModel = {
-      invoke: jest.fn(async () => responses.shift() ?? { content: '' })
-    };
-    const logger = { warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() };
+    const responses = [{ content: asJsonBlock(extractionWithTaxonomy) }];
+    const llm: ChatModel = { invoke: jest.fn(async () => responses.shift() ?? { content: '' }) };
 
-    const result = await runExtractionAttempts({
-      llm,
-      logger,
-      itemId: target.Artikel_Nummer,
-      maxAttempts: 1,
-      searchContexts: [],
-      aggregatedSources: [],
-      recordSources: jest.fn(),
-      buildAggregatedSearchText: () => '',
-      extractPrompt: 'extract',
-      correctionPrompt: 'repair json',
-      targetFormat: '{}',
-      supervisorPrompt: 'supervisor',
-      categorizerPrompt: 'categorizer',
-      pricingPrompt: 'pricing',
-      searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
-      target,
-      reviewNotes: null,
-      skipSearch: true,
-      transcriptWriter: null
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data.Langtext).toEqual({ Veröffentlicht: 'ja', Stromversorgung: '230V' });
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        msg: 'remapping Spezifikationen alias to Langtext before schema validation',
+    await expect(
+      runExtractionAttempts({
+        llm,
+        logger: console,
         itemId: target.Artikel_Nummer,
-        attempt: 1
+        maxAttempts: 1,
+        searchContexts: [],
+        aggregatedSources: [],
+        recordSources: jest.fn(),
+        buildAggregatedSearchText: () => '',
+        extractPrompt: 'extract',
+        correctionPrompt: 'repair json',
+        targetFormat: '{}',
+        supervisorPrompt: 'supervisor',
+        categorizerPrompt: 'categorizer',
+        pricingPrompt: 'pricing',
+        searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
+        target,
+        reviewNotes: null,
+        skipSearch: true,
+        transcriptWriter: null
       })
-    );
+    ).rejects.toMatchObject({ code: 'SCHEMA_VALIDATION_FAILED' });
   });
 
-  it('keeps Langtext when both Langtext and Spezifikationen are present', async () => {
+  it('does not let extraction supervision fail solely on downstream taxonomy requirements', async () => {
     const target = buildTarget();
-    const extractionBothKeys =
+    const extractionPayload =
       '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
-      '"Langtext":{"Veröffentlicht":"langtext","Stromversorgung":"110V"},"Spezifikationen":{"Veröffentlicht":"alias","Stromversorgung":"230V"},' +
-      '"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,' +
-      '"Unterkategorien_A":11,"Hauptkategorien_B":2,"Unterkategorien_B":22}';
+      '"Langtext":{"Veröffentlicht":"langtext","Stromversorgung":"110V"},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"requiresSecondCategory":true}';
 
-    const responses = [{ content: asJsonBlock(extractionBothKeys) }, { content: 'pass' }];
-    const llm: ChatModel = {
-      invoke: jest.fn(async () => responses.shift() ?? { content: '' })
-    };
+    const responses = [{ content: asJsonBlock(extractionPayload) }, { content: 'pass' }];
+    const llm: ChatModel = { invoke: jest.fn(async () => responses.shift() ?? { content: '' }) };
 
     const result = await runExtractionAttempts({
       llm,
@@ -170,131 +143,5 @@ describe('runExtractionAttempts JSON correction', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.data.Langtext).toEqual({ Veröffentlicht: 'langtext', Stromversorgung: '110V' });
-  });
-
-  it('allows null B categories when a second category is not required', async () => {
-    const target = buildTarget();
-    const singleCategoryExtraction =
-      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
-      '"Langtext":{"Veröffentlicht":"langtext","Stromversorgung":"110V"},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
-      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":null,"Unterkategorien_B":null}';
-
-    const responses = [{ content: asJsonBlock(singleCategoryExtraction) }, { content: 'pass' }];
-    const llm: ChatModel = {
-      invoke: jest.fn(async () => responses.shift() ?? { content: '' })
-    };
-
-    const result = await runExtractionAttempts({
-      llm,
-      logger: console,
-      itemId: target.Artikel_Nummer,
-      maxAttempts: 1,
-      searchContexts: [],
-      aggregatedSources: [],
-      recordSources: jest.fn(),
-      buildAggregatedSearchText: () => '',
-      extractPrompt: 'extract',
-      correctionPrompt: 'repair json',
-      targetFormat: '{}',
-      supervisorPrompt: 'supervisor',
-      categorizerPrompt: 'categorizer',
-      pricingPrompt: 'pricing',
-      searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
-      target,
-      reviewNotes: null,
-      skipSearch: true,
-      transcriptWriter: null
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.data.Hauptkategorien_B).toBeNull();
-    expect(result.data.Unterkategorien_B).toBeNull();
-  });
-
-  it('fails supervisor pass when second category is explicitly required but incomplete', async () => {
-    const target = buildTarget();
-    const requiresSecondCategoryExtraction =
-      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
-      '"Langtext":{"Veröffentlicht":"langtext","Stromversorgung":"110V"},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
-      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":null,' +
-      '"Unterkategorien_B":null,"requiresSecondCategory":true}';
-
-    const responses = [{ content: asJsonBlock(requiresSecondCategoryExtraction) }, { content: 'pass' }];
-    const llm: ChatModel = {
-      invoke: jest.fn(async () => responses.shift() ?? { content: '' })
-    };
-
-    const result = await runExtractionAttempts({
-      llm,
-      logger: console,
-      itemId: target.Artikel_Nummer,
-      maxAttempts: 1,
-      searchContexts: [],
-      aggregatedSources: [],
-      recordSources: jest.fn(),
-      buildAggregatedSearchText: () => '',
-      extractPrompt: 'extract',
-      correctionPrompt: 'repair json',
-      targetFormat: '{}',
-      supervisorPrompt: 'supervisor',
-      categorizerPrompt: 'categorizer',
-      pricingPrompt: 'pricing',
-      searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
-      target,
-      reviewNotes: null,
-      skipSearch: true,
-      transcriptWriter: null
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.data.Hauptkategorien_B).toBeNull();
-    expect(result.data.Unterkategorien_B).toBeNull();
-  });
-
-  it('prefers explicit requiresSecondCategory decision so stages do not conflict', async () => {
-    const target = buildTarget();
-    const extractionWithExplicitRule =
-      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
-      '"Langtext":{"Veröffentlicht":"langtext","Stromversorgung":"110V"},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
-      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":null,' +
-      '"Unterkategorien_B":null,"requiresSecondCategory":false}';
-
-    const responses = [{ content: asJsonBlock(extractionWithExplicitRule) }, { content: 'pass' }];
-    const llm: ChatModel = {
-      invoke: jest.fn(async () => responses.shift() ?? { content: '' })
-    };
-    const logger = { warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() };
-
-    const result = await runExtractionAttempts({
-      llm,
-      logger,
-      itemId: target.Artikel_Nummer,
-      maxAttempts: 1,
-      searchContexts: [],
-      aggregatedSources: [],
-      recordSources: jest.fn(),
-      buildAggregatedSearchText: () => '',
-      extractPrompt: 'extract',
-      correctionPrompt: 'repair json',
-      targetFormat: '{}',
-      supervisorPrompt: 'supervisor',
-      categorizerPrompt: 'categorizer',
-      pricingPrompt: 'pricing',
-      searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
-      target,
-      reviewNotes: null,
-      skipSearch: true,
-      transcriptWriter: null
-    });
-
-    expect(result.success).toBe(true);
-    expect(logger.info).toHaveBeenCalledWith(
-      expect.objectContaining({
-        msg: 'supervisor category validation evaluated',
-        requiresSecondCategory: false,
-        categoryValidationPass: true
-      })
-    );
   });
 });
