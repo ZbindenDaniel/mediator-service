@@ -1,7 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
-import type { AgenticRunReviewMetadata } from '../../models';
+import {
+  AGENTIC_RUN_ACTIVE_STATUSES,
+  normalizeAgenticRunStatus,
+  type AgenticRunReviewMetadata
+} from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 // TODO(agentic-start-flow): Extract shared agentic start/restart validation once UI start flows stabilize.
 
@@ -42,7 +46,12 @@ export class AgenticTriggerValidationError extends Error {
 export interface AgenticTriggerForwardResult {
   ok: boolean;
   status: number;
-  body: unknown;
+  body: {
+    status: 'triggered' | 'ignored' | 'error';
+    message: string;
+    reason?: string | null;
+    agentic?: unknown;
+  };
   rawBody: string | null;
 }
 
@@ -137,6 +146,51 @@ export async function forwardAgenticTrigger(
     throw new Error('Agentic service dependencies are required');
   }
 
+  // TODO(agentic-trigger-prestart): Reuse this active-run preflight check with restart/queue actions if duplicate conflicts increase.
+  try {
+    const existingRun = typeof serviceDeps.getAgenticRun?.get === 'function'
+      ? (serviceDeps.getAgenticRun.get(artikelNummer) as { Status?: string | null } | undefined)
+      : undefined;
+    const normalizedStatus = normalizeAgenticRunStatus(existingRun?.Status ?? null);
+    if (existingRun && AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedStatus)) {
+      const reason = 'run-already-in-progress';
+      logger.warn?.('[agentic-trigger] Ignored duplicate start attempt for active run', {
+        context,
+        artikelNummer,
+        status: normalizedStatus,
+        reason
+      });
+      return {
+        ok: false,
+        status: 409,
+        body: {
+          status: 'ignored',
+          message: 'Agentic run already in progress',
+          reason
+        },
+        rawBody: null
+      };
+    }
+  } catch (err) {
+    const reason = 'run-state-conflict';
+    logger.error?.('[agentic-trigger] Failed to resolve pre-start run state', {
+      context,
+      artikelNummer,
+      reason,
+      error: err instanceof Error ? err.message : 'unknown-error'
+    });
+    return {
+      ok: false,
+      status: 409,
+      body: {
+        status: 'error',
+        message: 'Unable to validate current run state before start',
+        reason
+      },
+      rawBody: null
+    };
+  }
+
   try {
     const result = await startAgenticRun(
       {
@@ -154,15 +208,22 @@ export async function forwardAgenticTrigger(
     );
 
     if (!result.queued) {
+      const reason = result.reason ?? 'start-declined';
       logger.warn?.('[agentic-trigger] Agentic run start declined', {
         context,
         artikelNummer,
-        reason: result.reason
+        reason
       });
       return {
         ok: false,
         status: 409,
-        body: { reason: result.reason },
+        body: {
+          status: reason === 'already-exists' ? 'ignored' : 'error',
+          message: reason === 'already-exists'
+            ? 'Agentic run already exists for this Artikel_Nummer'
+            : 'Agentic run start declined',
+          reason
+        },
         rawBody: null
       };
     }
@@ -174,18 +235,29 @@ export async function forwardAgenticTrigger(
     return {
       ok: true,
       status: 202,
-      body: { agentic: result.agentic },
+      body: {
+        status: 'triggered',
+        message: 'Agentic run queued',
+        agentic: result.agentic
+      },
       rawBody: null
     };
   } catch (err) {
+    const reason = 'agentic-start-failed';
     logger.error?.('[agentic-trigger] Failed to start agentic run', {
       context,
-      error: err instanceof Error ? err.message : err
+      artikelNummer,
+      reason,
+      error: err instanceof Error ? err.message : 'unknown-error'
     });
     return {
       ok: false,
       status: 500,
-      body: { error: 'agentic-start-failed' },
+      body: {
+        status: 'error',
+        message: 'Failed to start agentic run',
+        reason
+      },
       rawBody: null
     };
   }
@@ -316,15 +388,19 @@ const action = defineHttpAction({
       });
 
       if (result.ok) {
-        const agenticPayload = (result.body as { agentic?: unknown }) ?? {};
         return sendJson(res, result.status || 202, {
           ok: true,
-          agentic: agenticPayload.agentic ?? null
+          status: result.body.status,
+          message: result.body.message,
+          agentic: result.body.agentic ?? null
         });
       }
 
       return sendJson(res, result.status || 422, {
         error: 'Ki Aufruf fehlgeschlagen',
+        status: result.body.status,
+        message: result.body.message,
+        reason: result.body.reason ?? null,
         details: result.body ?? result.rawBody
       });
     } catch (err) {
