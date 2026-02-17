@@ -131,7 +131,7 @@ describe('collectSearchContexts transcript integration', () => {
       text: 'search text body',
       sources: [
         { title: 'Source 1', url: 'https://example.com/1', description: 'desc 1' },
-        { title: 'Source 1 duplicate', url: 'https://example.com/1', description: 'desc duplicate' },
+        { title: 'Source 1', url: 'https://example.com/1', description: 'desc duplicate' },
         { title: 'Source 2', url: 'https://example.com/2', description: 'desc 2' }
       ]
     }));
