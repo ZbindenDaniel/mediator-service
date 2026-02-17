@@ -96,7 +96,8 @@ type AgenticRunStatusFlag =
   | 'RetryCountIsSet'
   | 'NextRetryAtIsSet'
   | 'LastErrorIsSet'
-  | 'LastAttemptAtIsSet';
+  | 'LastAttemptAtIsSet'
+  | 'LastSearchLinksJsonIsSet';
 
 const AGENTIC_STATUS_UPDATE_FLAGS: AgenticRunStatusFlag[] = [
   'ReviewedByIsSet',
@@ -105,11 +106,12 @@ const AGENTIC_STATUS_UPDATE_FLAGS: AgenticRunStatusFlag[] = [
   'RetryCountIsSet',
   'NextRetryAtIsSet',
   'LastErrorIsSet',
-  'LastAttemptAtIsSet'
+  'LastAttemptAtIsSet',
+  'LastSearchLinksJsonIsSet'
 ];
 
 const SELECT_STALE_AGENTIC_RUNS_SQL = `
-  SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+  SELECT Id, Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
     FROM agentic_runs
    WHERE Status IN ('queued', 'running')

@@ -1135,6 +1135,7 @@ CREATE TABLE IF NOT EXISTS agentic_runs (
   Id INTEGER PRIMARY KEY AUTOINCREMENT,
   Artikel_Nummer TEXT NOT NULL UNIQUE,
   SearchQuery TEXT,
+  LastSearchLinksJson TEXT,
   Status TEXT NOT NULL,
   LastModified TEXT NOT NULL DEFAULT (datetime('now')),
   ReviewState TEXT NOT NULL DEFAULT 'not_required',
@@ -1254,6 +1255,9 @@ function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
   }
   if (!hasColumn('LastReviewNotes')) {
     alterations.push({ name: 'LastReviewNotes', sql: "ALTER TABLE agentic_runs ADD COLUMN LastReviewNotes TEXT" });
+  }
+  if (!hasColumn('LastSearchLinksJson')) {
+    alterations.push({ name: 'LastSearchLinksJson', sql: "ALTER TABLE agentic_runs ADD COLUMN LastSearchLinksJson TEXT" });
   }
 
   const addedColumns: string[] = [];
@@ -1987,13 +1991,14 @@ export function getAgenticRequestLog(uuid: string): AgenticRequestLog | null {
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
-      Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy, LastReviewDecision, LastReviewNotes
+      Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy, LastReviewDecision, LastReviewNotes
     )
     VALUES (
-      @Artikel_Nummer, @SearchQuery, @Status, @LastModified, @ReviewState, @ReviewedBy, @LastReviewDecision, @LastReviewNotes
+      @Artikel_Nummer, @SearchQuery, @LastSearchLinksJson, @Status, @LastModified, @ReviewState, @ReviewedBy, @LastReviewDecision, @LastReviewNotes
     )
     ON CONFLICT(Artikel_Nummer) DO UPDATE SET
       SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
+      LastSearchLinksJson=COALESCE(excluded.LastSearchLinksJson, agentic_runs.LastSearchLinksJson),
       Status=excluded.Status,
       LastModified=excluded.LastModified,
       ReviewState=excluded.ReviewState,
@@ -2007,7 +2012,7 @@ export const upsertAgenticRun = db.prepare(
   `
 );
 export const getAgenticRun = db.prepare(`
-  SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+  SELECT Id, Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes,
          RetryCount, NextRetryAt, LastError, LastAttemptAt
   FROM agentic_runs
@@ -2020,6 +2025,7 @@ export const updateAgenticRunStatus = db.prepare(
     UPDATE agentic_runs
        SET Status=@Status,
            SearchQuery=COALESCE(@SearchQuery, SearchQuery),
+           LastSearchLinksJson=CASE WHEN @LastSearchLinksJsonIsSet THEN @LastSearchLinksJson ELSE LastSearchLinksJson END,
            LastModified=@LastModified,
            ReviewState=@ReviewState,
            ReviewedBy=CASE WHEN @ReviewedByIsSet THEN @ReviewedBy ELSE ReviewedBy END,
@@ -2168,7 +2174,7 @@ const updateAgenticRunErrorStatement = db.prepare(
 );
 
 const selectQueuedAgenticRuns = db.prepare(`
-  SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
+  SELECT Id, Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy,
          LastReviewDecision, LastReviewNotes,
          RetryCount, NextRetryAt, LastError, LastAttemptAt
   FROM agentic_runs

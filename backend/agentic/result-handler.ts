@@ -142,6 +142,58 @@ function normalizeNullableBoolean(value: unknown): boolean | null {
   return null;
 }
 
+
+// TODO(agentic-search-links): Revisit persisted source cap when retrieval telemetry confirms practical reviewer usage.
+function normalizeSearchLinks(value: unknown): Array<{ url: string; title?: string; description?: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const normalized: Array<{ url: string; title?: string; description?: string }> = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const candidate = entry as Record<string, unknown>;
+    const url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+    if (!url) {
+      continue;
+    }
+    const dedupeKey = url.toLowerCase();
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    const title = typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.trim() : undefined;
+    const description =
+      typeof candidate.description === 'string' && candidate.description.trim() ? candidate.description.trim() : undefined;
+    normalized.push({ url, title, description });
+    if (normalized.length >= 25) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+function serializeSearchLinksJson(value: unknown, logger?: AgenticResultLogger, artikelNummer?: string): string | null {
+  const normalizedLinks = normalizeSearchLinks(value);
+  if (normalizedLinks.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(normalizedLinks);
+  } catch (err) {
+    logger?.warn?.('Agentic result failed to serialize search links', {
+      artikelNummer,
+      error: err instanceof Error ? err.message : err
+    });
+    return null;
+  }
+}
+
 function normalizeMissingSpec(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -605,6 +657,7 @@ export function handleAgenticResult(
         typeof agenticPayload?.searchQuery === 'string' && agenticPayload.searchQuery.trim()
           ? agenticPayload.searchQuery.trim()
           : existingRun?.SearchQuery ?? null;
+      const lastSearchLinksJson = serializeSearchLinksJson(agenticPayload?.sources, logger, artikelNummerInput);
       searchQueryForLog = searchQueryUpdate;
 
       if (!artikelNummerInput) {
@@ -616,6 +669,8 @@ export function handleAgenticResult(
         const runUpdate = {
           Artikel_Nummer: artikelNummerInput,
           SearchQuery: searchQueryUpdate,
+          LastSearchLinksJson: lastSearchLinksJson,
+          LastSearchLinksJsonIsSet: true,
           Status: status,
           LastModified: now,
           ReviewState: effectiveReviewState,
