@@ -568,6 +568,7 @@ function parsePollTargetMetadata(
 // TODO(sync-erp-session-cookies): Replace temporary cookie-jar flow if ERP provides stable token-based polling APIs.
 // TODO(sync-erp-unknown-grace): Tune unknown-state grace thresholds with production telemetry once kivitendo redirect chains stabilize.
 // TODO(sync-erp-async-readiness): Add async readiness handling back on top of the deterministic script-parity baseline once integration is validated.
+// TODO(sync-erp-import-verification): Keep baseline import verification diagnostics-only unless polling mode is explicitly enabled.
 async function runCurlImport(options: ImportOptions): Promise<ImportExecutionResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
@@ -942,18 +943,63 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     });
 
     const importResult = await runCurl('import', buildImportArgs('import'));
-    const parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
+    let parsedImport: ParsedErpResponse;
+
+    try {
+      parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
+      logParseEvidence(loggerRef, 'import', parsedImport);
+    } catch (parseError) {
+      loggerRef.warn?.('[sync-erp] ERP import verification parser threw unexpectedly; falling back to raw diagnostics', {
+        mode: importMode,
+        parseError: parseError instanceof Error ? parseError.message : String(parseError),
+        fallbackSummary: {
+          exitCode: importResult.exitCode,
+          stdoutSample: trimDiagnosticOutput(importResult.stdout, 200)
+        }
+      });
+
+      parsedImport = {
+        job: null,
+        reportId: null,
+        state: 'invalid_response',
+        acceptedByMarker: false,
+        evidence: {
+          hasImportStatusH2: false,
+          hasImportVorschauH2: false,
+          isLoginForm: false,
+          effectiveUrlAction: extractEffectiveUrlAction(importResult.effectiveUrl)
+        },
+        diagnostics: `fallback(exitCode=${importResult.exitCode}, stdout=${trimDiagnosticOutput(importResult.stdout, 200)})`
+      };
+    }
+
     const importAcceptedByMarker = parsedImport.acceptedByMarker;
-    logParseEvidence(loggerRef, 'import', parsedImport);
+    const importVerification = {
+      state: parsedImport.state,
+      matchedMarker: importAcceptedByMarker,
+      effectiveUrl: importResult.effectiveUrl || null
+    };
+
+    if (parsedImport.state === 'invalid_response') {
+      loggerRef.warn?.('[sync-erp] ERP import verification could not be parsed; using raw fallback diagnostics', {
+        mode: importMode,
+        importVerification,
+        fallbackSummary: {
+          exitCode: importResult.exitCode,
+          stdoutSample: trimDiagnosticOutput(importResult.stdout, 200)
+        },
+        diagnostics: parsedImport.diagnostics || null
+      });
+    }
 
     loggerRef.info?.('[sync-erp] ERP phase validation', {
       phase: 'import',
       mode: importMode,
       exitCode: importResult.exitCode,
-      matchedMarker: importAcceptedByMarker,
-      state: parsedImport.state,
+      importVerification,
       job: parsedImport.job,
-      reportId: parsedImport.reportId
+      reportId: parsedImport.reportId,
+      diagnosticsOnly: true
     });
 
     return {
@@ -977,7 +1023,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         reportId: parsedImport.reportId
       },
       markerValidationPassed: true,
-      failurePhase: importAcceptedByMarker ? null : 'import'
+      failurePhase: importResult.exitCode === 0 ? null : 'import'
     };
   }
 
@@ -1616,12 +1662,18 @@ const action = defineHttpAction({
         });
       }
 
+      const importVerificationMessage =
+        curlResult.mode === 'script-parity' && curlResult.import.state === 'processing'
+          ? 'ERP-Import wurde asynchron angenommen und wird voraussichtlich in Kürze finalisiert.'
+          : null;
+
       return sendJson(res, 200, {
         ok: true,
         mode: curlResult.mode,
         baselineFlow: curlResult.baselineFlow,
         failurePhase: curlResult.failurePhase,
         state: curlResult.import.state,
+        message: importVerificationMessage,
         effectiveUrl: curlResult.import.effectiveUrl || null,
         phases: {
           test: {
