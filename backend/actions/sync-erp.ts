@@ -205,6 +205,11 @@ interface ImportExecutionResult {
   test: ImportPhaseResult;
   polling: ImportPhaseResult | null;
   import: ImportPhaseResult | null;
+  importContinuation: {
+    completed: boolean;
+    timedOut: boolean;
+    lastState: PollState;
+  } | null;
   markerValidationPassed: boolean;
   failurePhase: ImportPhase | null;
 }
@@ -569,6 +574,7 @@ function parsePollTargetMetadata(
 // TODO(sync-erp-unknown-grace): Tune unknown-state grace thresholds with production telemetry once kivitendo redirect chains stabilize.
 // TODO(sync-erp-async-readiness): Add async readiness handling back on top of the deterministic script-parity baseline once integration is validated.
 // TODO(sync-erp-import-verification): Keep baseline import verification diagnostics-only unless polling mode is explicitly enabled.
+// TODO(sync-erp-post-import-loop): Keep continuation-loop markers aligned if ERP changes processing/preview headings.
 async function runCurlImport(options: ImportOptions): Promise<ImportExecutionResult> {
   const { actor, artifact, clientId, formField, includeMedia, logger, password, timeoutMs, url, username } = options;
   const loggerRef = logger ?? console;
@@ -884,6 +890,135 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     };
   };
 
+  const continueAfterImportProcessing = async (
+    initialImportResult: ImportResult,
+    initialState: ParsedErpResponse
+  ): Promise<{ importResult: ImportResult; parsedImport: ParsedErpResponse; continuationOutcome: ImportExecutionResult['importContinuation'] }> => {
+    let latestImportResult = initialImportResult;
+    let latestState = initialState;
+    const pollIntervalMs = Math.max(250, ERP_IMPORT_POLL_INTERVAL_MS);
+    const pollTimeoutMs = Math.min(Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS), 15000);
+    const startedAt = Date.now();
+    let attempt = 0;
+
+    while (Date.now() - startedAt <= pollTimeoutMs) {
+      if (latestState.state !== 'processing') {
+        return {
+          importResult: latestImportResult,
+          parsedImport: latestState,
+          continuationOutcome: {
+            completed: latestState.state === 'ready',
+            timedOut: false,
+            lastState: latestState.state
+          }
+        };
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      attempt += 1;
+      const effectiveUrl = extractContinuationUrl('import', url, latestImportResult.effectiveUrl, latestState, loggerRef);
+      const elapsedMs = Date.now() - startedAt;
+
+      loggerRef.info?.('[sync-erp] ERP import continuation iteration', {
+        attempt,
+        elapsedMs,
+        state: latestState.state,
+        job: latestState.job,
+        reportId: latestState.reportId,
+        effectiveUrl: effectiveUrl || null
+      });
+
+      if (!effectiveUrl) {
+        loggerRef.warn?.('[sync-erp] ERP import continuation skipped due to missing continuation URL', {
+          attempt,
+          elapsedMs,
+          state: latestState.state,
+          job: latestState.job,
+          reportId: latestState.reportId
+        });
+        return {
+          importResult: latestImportResult,
+          parsedImport: latestState,
+          continuationOutcome: {
+            completed: false,
+            timedOut: false,
+            lastState: latestState.state
+          }
+        };
+      }
+
+      try {
+        const continuationResult = await runCurl('import', buildPollArgs(effectiveUrl));
+        latestImportResult = continuationResult;
+
+        try {
+          latestState = parseErpImportState(continuationResult.stdout, continuationResult.effectiveUrl);
+          logParseEvidence(loggerRef, 'import', latestState);
+        } catch (parseError) {
+          loggerRef.warn?.('[sync-erp] Failed to parse ERP continuation response; keeping processing state', {
+            attempt,
+            elapsedMs,
+            effectiveUrl: trimDiagnosticOutput(effectiveUrl, 200),
+            parseError: parseError instanceof Error ? parseError.message : String(parseError)
+          });
+          latestState = {
+            ...latestState,
+            state: 'invalid_response',
+            acceptedByMarker: false,
+            diagnostics: parseError instanceof Error ? parseError.message : String(parseError)
+          };
+          return {
+            importResult: latestImportResult,
+            parsedImport: latestState,
+            continuationOutcome: {
+              completed: false,
+              timedOut: false,
+              lastState: latestState.state
+            }
+          };
+        }
+
+        if (latestState.state === 'ready' || latestState.state === 'failed' || latestState.state === 'auth_lost') {
+          return {
+            importResult: latestImportResult,
+            parsedImport: latestState,
+            continuationOutcome: {
+              completed: latestState.state === 'ready',
+              timedOut: false,
+              lastState: latestState.state
+            }
+          };
+        }
+      } catch (continuationError) {
+        loggerRef.error?.('[sync-erp] ERP import continuation request failed', {
+          attempt,
+          elapsedMs,
+          effectiveUrl: trimDiagnosticOutput(effectiveUrl, 200),
+          continuationError: continuationError instanceof Error ? continuationError.message : String(continuationError)
+        });
+        return {
+          importResult: latestImportResult,
+          parsedImport: latestState,
+          continuationOutcome: {
+            completed: false,
+            timedOut: false,
+            lastState: latestState.state
+          }
+        };
+      }
+    }
+
+    return {
+      importResult: latestImportResult,
+      parsedImport: latestState,
+      continuationOutcome: {
+        completed: false,
+        timedOut: true,
+        lastState: latestState.state
+      }
+    };
+  };
+
   try {
     cookieDirPath = await mkdtemp(path.join(os.tmpdir(), 'erp-sync-cookie-'));
     cookieJarPath = path.join(cookieDirPath, 'session.cookies');
@@ -923,6 +1058,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       },
       polling: null,
       import: null,
+      importContinuation: null,
       markerValidationPassed: false,
       failurePhase: 'test'
     };
@@ -942,7 +1078,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       reason: 'ERP_IMPORT_POLLING_ENABLED=false'
     });
 
-    const importResult = await runCurl('import', buildImportArgs('import'));
+    let importResult = await runCurl('import', buildImportArgs('import'));
     let parsedImport: ParsedErpResponse;
 
     try {
@@ -973,11 +1109,26 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       };
     }
 
-    const importAcceptedByMarker = parsedImport.acceptedByMarker;
+    let importAcceptedByMarker = parsedImport.acceptedByMarker;
+    let importContinuation: ImportExecutionResult['importContinuation'] = {
+      completed: parsedImport.state === 'ready',
+      timedOut: false,
+      lastState: parsedImport.state
+    };
+
+    if (parsedImport.state === 'processing') {
+      const continuation = await continueAfterImportProcessing(importResult, parsedImport);
+      importResult = continuation.importResult;
+      parsedImport = continuation.parsedImport;
+      importAcceptedByMarker = parsedImport.acceptedByMarker;
+      importContinuation = continuation.continuationOutcome;
+    }
+
     const importVerification = {
       state: parsedImport.state,
       matchedMarker: importAcceptedByMarker,
-      effectiveUrl: importResult.effectiveUrl || null
+      effectiveUrl: importResult.effectiveUrl || null,
+      importContinuation
     };
 
     if (parsedImport.state === 'invalid_response') {
@@ -1022,6 +1173,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         job: parsedImport.job,
         reportId: parsedImport.reportId
       },
+      importContinuation,
       markerValidationPassed: true,
       failurePhase: importResult.exitCode === 0 ? null : 'import'
     };
@@ -1309,6 +1461,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         reportId: currentState.reportId
       },
       import: null,
+      importContinuation: null,
       markerValidationPassed: true,
       failurePhase: 'polling'
     };
@@ -1343,6 +1496,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       },
       polling: pollingResult,
       import: null,
+      importContinuation: null,
       markerValidationPassed: true,
       failurePhase: 'polling'
     };
@@ -1355,9 +1509,23 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     mode: importMode
   });
 
-  const importResult = await runCurl('import', buildImportArgs('import'));
-  const parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
-  const importAcceptedByMarker = parsedImport.acceptedByMarker;
+  let importResult = await runCurl('import', buildImportArgs('import'));
+  let parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
+  let importAcceptedByMarker = parsedImport.acceptedByMarker;
+  let importContinuation: ImportExecutionResult['importContinuation'] = {
+    completed: parsedImport.state === 'ready',
+    timedOut: false,
+    lastState: parsedImport.state
+  };
+
+  if (parsedImport.state === 'processing') {
+    const continuation = await continueAfterImportProcessing(importResult, parsedImport);
+    importResult = continuation.importResult;
+    parsedImport = continuation.parsedImport;
+    importAcceptedByMarker = parsedImport.acceptedByMarker;
+    importContinuation = continuation.continuationOutcome;
+  }
+
   logParseEvidence(loggerRef, 'import', parsedImport);
 
   loggerRef.info?.('[sync-erp] ERP phase validation', {
@@ -1390,6 +1558,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       job: parsedImport.job,
       reportId: parsedImport.reportId
     },
+    importContinuation,
     markerValidationPassed: true,
     failurePhase: importAcceptedByMarker ? null : 'import'
   };
@@ -1559,6 +1728,11 @@ const action = defineHttpAction({
       }
 
       const pollingSkipped = !ERP_IMPORT_POLLING_ENABLED && !curlResult.polling;
+      const importContinuationOutcome = curlResult.importContinuation ?? {
+        completed: curlResult.import?.state === 'ready',
+        timedOut: false,
+        lastState: curlResult.import?.state ?? 'unknown'
+      };
 
       if (!pollingSkipped && (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready')) {
         const isUnexpectedHome = curlResult.polling?.state === 'unexpected_home';
@@ -1624,6 +1798,9 @@ const action = defineHttpAction({
           baselineFlow: curlResult.baselineFlow,
           failurePhase: 'import',
           state: curlResult.import?.state ?? 'unknown',
+          completed: importContinuationOutcome.completed,
+          timedOut: importContinuationOutcome.timedOut,
+          lastState: importContinuationOutcome.lastState,
           effectiveUrl: curlResult.import?.effectiveUrl || null,
           phases: {
             test: {
@@ -1662,10 +1839,69 @@ const action = defineHttpAction({
         });
       }
 
-      const importVerificationMessage =
-        curlResult.mode === 'script-parity' && curlResult.import.state === 'processing'
-          ? 'ERP-Import wurde asynchron angenommen und wird voraussichtlich in Kürze finalisiert.'
-          : null;
+      if (curlResult.import.state === 'processing') {
+        const statusCode = importContinuationOutcome.timedOut ? 504 : 202;
+        const responseMessage = importContinuationOutcome.timedOut
+          ? 'ERP-Import blieb im Verarbeitungsstatus und erreichte innerhalb des Zeitlimits keinen Abschluss.'
+          : 'ERP-Import wird noch verarbeitet; Abschluss noch nicht bestätigt.';
+
+        console.warn('[sync-erp] ERP import continuation did not reach completion', {
+          mode: curlResult.mode,
+          statusCode,
+          completed: importContinuationOutcome.completed,
+          timedOut: importContinuationOutcome.timedOut,
+          lastState: importContinuationOutcome.lastState,
+          effectiveUrl: curlResult.import.effectiveUrl || null
+        });
+
+        return sendJson(res, statusCode, {
+          ok: false,
+          mode: curlResult.mode,
+          baselineFlow: curlResult.baselineFlow,
+          failurePhase: curlResult.failurePhase,
+          state: curlResult.import.state,
+          completed: importContinuationOutcome.completed,
+          timedOut: importContinuationOutcome.timedOut,
+          lastState: importContinuationOutcome.lastState,
+          message: responseMessage,
+          effectiveUrl: curlResult.import.effectiveUrl || null,
+          phases: {
+            test: {
+              status: 'passed',
+              exitCode: curlResult.test.exitCode,
+              matchedMarker: curlResult.test.acceptedByMarker,
+              job: curlResult.test.job ?? null,
+              reportId: curlResult.test.reportId ?? null,
+              state: curlResult.test.state,
+              effectiveUrl: curlResult.test.effectiveUrl || null
+            },
+            polling: pollingSkipped
+              ? {
+                  status: 'skipped'
+                }
+              : {
+                  status: 'passed',
+                  exitCode: curlResult.polling!.exitCode,
+                  state: curlResult.polling!.state,
+                  job: curlResult.polling!.job ?? null,
+                  reportId: curlResult.polling!.reportId ?? null,
+                  effectiveUrl: curlResult.polling!.effectiveUrl || null
+                },
+            import: {
+              status: 'pending',
+              exitCode: curlResult.import.exitCode,
+              matchedMarker: curlResult.import.acceptedByMarker,
+              job: curlResult.import.job ?? null,
+              reportId: curlResult.import.reportId ?? null,
+              state: curlResult.import.state,
+              effectiveUrl: curlResult.import.effectiveUrl || null
+            }
+          },
+          artifact: path.basename(stagedExport.archivePath),
+          itemCount: items.length,
+          includeMedia: ERP_IMPORT_INCLUDE_MEDIA
+        });
+      }
 
       return sendJson(res, 200, {
         ok: true,
@@ -1673,7 +1909,9 @@ const action = defineHttpAction({
         baselineFlow: curlResult.baselineFlow,
         failurePhase: curlResult.failurePhase,
         state: curlResult.import.state,
-        message: importVerificationMessage,
+        completed: importContinuationOutcome.completed,
+        timedOut: importContinuationOutcome.timedOut,
+        lastState: importContinuationOutcome.lastState,
         effectiveUrl: curlResult.import.effectiveUrl || null,
         phases: {
           test: {
