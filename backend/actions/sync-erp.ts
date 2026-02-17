@@ -178,7 +178,7 @@ interface ImportResult {
 }
 
 type ImportPhase = 'test' | 'polling' | 'import';
-type PollState = 'processing' | 'ready' | 'failed' | 'auth_lost' | 'unknown';
+type PollState = 'processing' | 'ready' | 'failed' | 'auth_lost' | 'unknown' | 'invalid_response';
 
 interface ImportPhaseResult extends ImportResult {
   phase: ImportPhase;
@@ -200,9 +200,16 @@ interface ParsedErpResponse {
   job: string | null;
   reportId: string | null;
   state: PollState;
+  acceptedByMarker: boolean;
+  evidence: {
+    hasImportStatusH2: boolean;
+    hasImportVorschauH2: boolean;
+    isLoginForm: boolean;
+    effectiveUrlAction: string | null;
+  };
+  diagnostics?: string;
 }
 
-const ERP_TEST_ACCEPTANCE_MARKERS = ['Ihr Import wird verarbeitet'];
 const ERP_POLL_FAILURE_MARKERS = ['Import fehlgeschlagen', 'Fehler beim Import'];
 
 
@@ -221,53 +228,96 @@ function trimDiagnosticOutput(raw: string, maxLength = 500): string {
   return `${trimmed.slice(0, maxLength)}…`;
 }
 
-function matchesAcceptanceMarker(stdout: string): boolean {
-  const normalizedStdout = stdout.trim();
-  return ERP_TEST_ACCEPTANCE_MARKERS.some((marker) => normalizedStdout.includes(marker));
-}
-
 function extractQueryParam(urlValue: string, key: string): string | null {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = urlValue.match(new RegExp(`[?&]${escapedKey}=([^&#]+)`));
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
+function extractEffectiveUrlAction(effectiveUrl: string): string | null {
+  if (!effectiveUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(effectiveUrl);
+    return parsedUrl.searchParams.get('action');
+  } catch {
+    return extractQueryParam(effectiveUrl, 'action');
+  }
+}
+
 function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpResponse {
-  const responseText = `${stdout}\n${effectiveUrl}`;
-  const isReady =
-    responseText.includes('Import-Vorschau') || responseText.includes('action=CsvImport/report');
-  const isProcessing =
-    responseText.includes('Import Status') || responseText.includes('action=CsvImport/result');
-  const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
-  const hasAuthLostMarker = hasAuthLossMarkers(stdout, effectiveUrl);
-  const job = extractQueryParam(responseText, 'job');
-  const reportId = extractQueryParam(responseText, 'id');
+  // TODO(sync-erp-parser): Extract parser into shared ERP sync utility if additional actions need the same evidence contract.
+  try {
+    const responseText = `${stdout}\n${effectiveUrl}`;
+    const hasImportStatusH2 = /<h2[^>]*>\s*Import Status\s*<\/h2>/i.test(responseText);
+    const hasImportVorschauH2 = /<h2[^>]*>\s*Import-Vorschau\s*<\/h2>/i.test(responseText);
+    const isLoginForm = hasAuthLossMarkers(stdout, effectiveUrl);
+    const effectiveUrlAction = extractEffectiveUrlAction(effectiveUrl);
+    const hasResultAction = effectiveUrlAction === 'CsvImport/result';
+    const hasReportAction = effectiveUrlAction === 'CsvImport/report';
+    const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
+    const job = extractQueryParam(responseText, 'job');
+    const reportId = extractQueryParam(responseText, 'id');
 
-  if (hasFailureMarker) {
-    return { job, reportId, state: 'failed' };
+    let state: PollState = 'unknown';
+    if (hasFailureMarker) {
+      state = 'failed';
+    } else if (isLoginForm) {
+      state = 'auth_lost';
+    } else if (hasImportVorschauH2 || hasReportAction) {
+      state = 'ready';
+    } else if (hasImportStatusH2 || hasResultAction) {
+      state = 'processing';
+    }
+
+    const acceptedByMarker = (state === 'processing' || state === 'ready') && !isLoginForm;
+
+    return {
+      job,
+      reportId,
+      state,
+      acceptedByMarker,
+      evidence: {
+        hasImportStatusH2,
+        hasImportVorschauH2,
+        isLoginForm,
+        effectiveUrlAction
+      }
+    };
+  } catch (parseError) {
+    return {
+      job: null,
+      reportId: null,
+      state: 'invalid_response',
+      acceptedByMarker: false,
+      evidence: {
+        hasImportStatusH2: false,
+        hasImportVorschauH2: false,
+        isLoginForm: false,
+        effectiveUrlAction: null
+      },
+      diagnostics: parseError instanceof Error ? parseError.message : 'Unknown parser failure'
+    };
   }
+}
 
-  if (hasAuthLostMarker) {
-    return { job, reportId, state: 'auth_lost' };
-  }
-
-  if (isReady && reportId) {
-    return { job, reportId, state: 'ready' };
-  }
-
-  if (isProcessing && job) {
-    return { job, reportId, state: 'processing' };
-  }
-
-  if (isReady) {
-    return { job, reportId, state: 'ready' };
-  }
-
-  if (isProcessing) {
-    return { job, reportId, state: 'processing' };
-  }
-
-  return { job, reportId, state: 'unknown' };
+function logParseEvidence(
+  logger: Pick<Console, 'debug' | 'info'>,
+  phase: ImportPhase,
+  parsed: ParsedErpResponse
+): void {
+  logger.info?.('[sync-erp] ERP parser evidence', {
+    phase,
+    state: parsed.state,
+    acceptedByMarker: parsed.acceptedByMarker,
+    hasImportStatusH2: parsed.evidence.hasImportStatusH2,
+    hasImportVorschauH2: parsed.evidence.hasImportVorschauH2,
+    isLoginForm: parsed.evidence.isLoginForm,
+    effectiveUrlAction: parsed.evidence.effectiveUrlAction,
+    diagnostics: parsed.diagnostics
+  });
 }
 
 function buildPollingUrl(baseUrl: string, parsed: ParsedErpResponse): string {
@@ -497,19 +547,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   try {
   const testResult = await runCurl('test', buildImportArgs('test'));
-  let testAcceptedByMarker = false;
-  let parsedTest: ParsedErpResponse = { job: null, reportId: null, state: 'unknown' };
-  try {
-    testAcceptedByMarker = matchesAcceptanceMarker(testResult.stdout);
-    parsedTest = parseErpImportState(testResult.stdout, testResult.effectiveUrl);
-  } catch (parseError) {
-    loggerRef.error?.('[sync-erp] Failed to parse ERP test response', {
-      phase: 'test',
-      exitCode: testResult.exitCode,
-      parseError
-    });
-    testAcceptedByMarker = false;
-  }
+  const parsedTest = parseErpImportState(testResult.stdout, testResult.effectiveUrl);
+  const testAcceptedByMarker = parsedTest.acceptedByMarker;
+  logParseEvidence(loggerRef, 'test', parsedTest);
 
   loggerRef.info?.('[sync-erp] ERP phase validation', {
     phase: 'test',
@@ -571,7 +611,12 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         break;
       }
 
-      if (currentState.state === 'failed' || currentState.state === 'auth_lost' || currentState.state === 'unknown') {
+      if (
+        currentState.state === 'failed' ||
+        currentState.state === 'auth_lost' ||
+        currentState.state === 'unknown' ||
+        currentState.state === 'invalid_response'
+      ) {
         pollingResult = {
           exitCode: 1,
           stdout: '',
@@ -589,28 +634,12 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       const pollUrl = buildPollingUrl(url, currentState);
       const pollRequest = await runCurl('polling', buildPollArgs(pollUrl));
-      try {
-        const authLostDetected = hasAuthLossMarkers(pollRequest.stdout, pollRequest.effectiveUrl);
-        if (authLostDetected) {
-          loggerRef.warn?.('[sync-erp] ERP polling detected login redirect', {
-            phase: 'polling',
-            effectiveUrl: pollRequest.effectiveUrl
-          });
-          currentState = { job: null, reportId: null, state: 'auth_lost' };
-        } else {
-          currentState = parseErpImportState(pollRequest.stdout, pollRequest.effectiveUrl);
-        }
-      } catch (authDetectionError) {
-        loggerRef.error?.('[sync-erp] Failed to evaluate ERP polling auth state', {
-          phase: 'polling',
-          authDetectionError
-        });
-        currentState = { job: null, reportId: null, state: 'unknown' };
-      }
+      currentState = parseErpImportState(pollRequest.stdout, pollRequest.effectiveUrl);
+      logParseEvidence(loggerRef, 'polling', currentState);
       pollingResult = {
         ...pollRequest,
         phase: 'polling',
-        acceptedByMarker: currentState.state === 'ready',
+        acceptedByMarker: currentState.acceptedByMarker,
         state: currentState.state,
         job: currentState.job,
         reportId: currentState.reportId
@@ -676,17 +705,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   }
 
   const importResult = await runCurl('import', buildImportArgs('import'));
-  const importAcceptedByMarker = importResult.exitCode === 0;
-  let parsedImport: ParsedErpResponse = { job: null, reportId: null, state: 'unknown' };
-  try {
-    parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
-  } catch (parseError) {
-    loggerRef.error?.('[sync-erp] Failed to parse ERP import response', {
-      phase: 'import',
-      exitCode: importResult.exitCode,
-      parseError
-    });
-  }
+  const parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
+  const importAcceptedByMarker = parsedImport.acceptedByMarker;
+  logParseEvidence(loggerRef, 'import', parsedImport);
 
   loggerRef.info?.('[sync-erp] ERP phase validation', {
     phase: 'import',
