@@ -28,6 +28,7 @@ import { defineHttpAction } from './index';
 // TODO(agent): Capture ERP sync response metadata (job IDs) once the upstream API returns them.
 // TODO(agent): Consolidate ERP import HTTP client with shared networking utilities once available.
 // TODO(sync-erp-baseline-path): Remove baseline no-poll path after continuation URL polling is proven stable in production.
+// TODO(sync-erp-script-parity-default): Re-evaluate whether script-parity should remain default after polling-only diagnostics are stabilized.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -205,6 +206,8 @@ interface ImportExecutionResult {
   markerValidationPassed: boolean;
   failurePhase: ImportPhase | null;
 }
+
+type ImportMode = 'script-parity' | 'polling-enabled';
 
 type PollTargetSource = 'fromTestResponse' | 'fromLastPoll' | 'fallbackBaseController';
 
@@ -490,6 +493,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   const authLoginFieldName = buildAuthFieldName('login', options.authFieldPrefix);
   const authPasswordFieldName = buildAuthFieldName('password', options.authFieldPrefix);
   const authClientIdFieldName = buildAuthFieldName('client_id', options.authFieldPrefix);
+  const importMode: ImportMode = ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity';
 
   let cookieDirPath: string | null = null;
   let cookieJarPath: string | null = null;
@@ -519,6 +523,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     loggerRef.info?.('[sync-erp] curl import request', {
       url,
       phase,
+      mode: importMode,
       fieldName,
       includeMedia,
       archivePath: artifact.archivePath,
@@ -696,6 +701,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   loggerRef.info?.('[sync-erp] ERP phase validation', {
     phase: 'test',
+    mode: importMode,
     exitCode: testResult.exitCode,
     matchedMarker: testAcceptedByMarker,
     state: parsedTest.state,
@@ -723,12 +729,14 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   loggerRef.info?.('[sync-erp] ERP phase transition', {
     fromPhase: 'test',
     toPhase: ERP_IMPORT_POLLING_ENABLED ? 'polling' : 'import',
-    pollingEnabled: ERP_IMPORT_POLLING_ENABLED
+    pollingEnabled: ERP_IMPORT_POLLING_ENABLED,
+    mode: importMode
   });
 
   if (!ERP_IMPORT_POLLING_ENABLED) {
     loggerRef.info?.('[sync-erp] ERP baseline flow enabled; skipping polling and executing import immediately', {
       phase: 'import',
+      mode: importMode,
       reason: 'ERP_IMPORT_POLLING_ENABLED=false'
     });
 
@@ -737,6 +745,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     if (baselineDelayMs > 0) {
       loggerRef.info?.('[sync-erp] ERP baseline flow waiting between marker-validated test and import', {
         phase: 'import',
+        mode: importMode,
         baselineDelayMs
       });
       await new Promise((resolve) => setTimeout(resolve, baselineDelayMs));
@@ -749,6 +758,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
     loggerRef.info?.('[sync-erp] ERP phase validation', {
       phase: 'import',
+      mode: importMode,
       exitCode: importResult.exitCode,
       matchedMarker: importAcceptedByMarker,
       state: parsedImport.state,
@@ -765,17 +775,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         job: parsedTest.job,
         reportId: parsedTest.reportId
       },
-      polling: {
-        exitCode: 0,
-        stdout: '',
-        stderr: '',
-        effectiveUrl: testResult.effectiveUrl || url,
-        phase: 'polling',
-        acceptedByMarker: true,
-        state: 'ready',
-        job: parsedTest.job,
-        reportId: parsedTest.reportId
-      },
+      polling: null,
       import: {
         ...importResult,
         phase: 'import',
@@ -1108,7 +1108,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   loggerRef.info?.('[sync-erp] ERP phase transition', {
     fromPhase: 'polling',
     toPhase: 'import',
-    pollingEnabled: ERP_IMPORT_POLLING_ENABLED
+    pollingEnabled: ERP_IMPORT_POLLING_ENABLED,
+    mode: importMode
   });
 
   const importResult = await runCurl('import', buildImportArgs('import'));
@@ -1118,6 +1119,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
   loggerRef.info?.('[sync-erp] ERP phase validation', {
     phase: 'import',
+    mode: importMode,
     exitCode: importResult.exitCode,
     matchedMarker: importAcceptedByMarker,
     state: parsedImport.state,
@@ -1250,7 +1252,7 @@ const action = defineHttpAction({
         }
       }
 
-      console.info('[sync-erp] Starting ERP curl import');
+      console.info('[sync-erp] Starting ERP curl import', { mode: ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity' });
       let curlResult: ImportExecutionResult;
       try {
         curlResult = await runCurlImport({
@@ -1309,10 +1311,13 @@ const action = defineHttpAction({
         });
       }
 
-      if (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready') {
+      const pollingSkipped = !ERP_IMPORT_POLLING_ENABLED && !curlResult.polling;
+
+      if (!pollingSkipped && (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready')) {
         const isUnexpectedHome = curlResult.polling?.state === 'unexpected_home';
         const isContextLost = curlResult.polling?.state === 'context_lost';
         console.error('[sync-erp] ERP polling phase did not reach ready state', {
+          mode: ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity',
           state: curlResult.polling?.state ?? 'unknown',
           exitCode: curlResult.polling?.exitCode ?? -1,
           job: curlResult.polling?.job ?? null,
@@ -1379,14 +1384,18 @@ const action = defineHttpAction({
               state: curlResult.test.state,
               effectiveUrl: curlResult.test.effectiveUrl || null
             },
-            polling: {
-              status: 'passed',
-              exitCode: curlResult.polling.exitCode,
-              state: curlResult.polling.state,
-              job: curlResult.polling.job ?? null,
-              reportId: curlResult.polling.reportId ?? null,
-            effectiveUrl: curlResult.polling.effectiveUrl || null
-            },
+            polling: pollingSkipped
+              ? {
+                  status: 'skipped'
+                }
+              : {
+                  status: 'passed',
+                  exitCode: curlResult.polling!.exitCode,
+                  state: curlResult.polling!.state,
+                  job: curlResult.polling!.job ?? null,
+                  reportId: curlResult.polling!.reportId ?? null,
+                  effectiveUrl: curlResult.polling!.effectiveUrl || null
+                },
             import: {
               status: 'failed',
               exitCode: curlResult.import?.exitCode ?? -1,
@@ -1417,14 +1426,18 @@ const action = defineHttpAction({
             state: curlResult.test.state,
             effectiveUrl: curlResult.test.effectiveUrl || null
           },
-          polling: {
-            status: 'passed',
-            exitCode: curlResult.polling.exitCode,
-            state: curlResult.polling.state,
-            job: curlResult.polling.job ?? null,
-            reportId: curlResult.polling.reportId ?? null,
-            effectiveUrl: curlResult.polling.effectiveUrl || null
-          },
+          polling: pollingSkipped
+            ? {
+                status: 'skipped'
+              }
+            : {
+                status: 'passed',
+                exitCode: curlResult.polling!.exitCode,
+                state: curlResult.polling!.state,
+                job: curlResult.polling!.job ?? null,
+                reportId: curlResult.polling!.reportId ?? null,
+                effectiveUrl: curlResult.polling!.effectiveUrl || null
+              },
           import: {
             status: 'passed',
             exitCode: curlResult.import.exitCode,
