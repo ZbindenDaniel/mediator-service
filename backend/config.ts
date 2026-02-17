@@ -259,16 +259,31 @@ export const IMPORTER_FORCE_ZERO_STOCK = importerForceZeroStockFlag;
 const erpImportIncludeMedia =
   parseBooleanFlag(process.env.ERP_IMPORT_INCLUDE_MEDIA, 'ERP_IMPORT_INCLUDE_MEDIA') ?? false;
 export const ERP_IMPORT_INCLUDE_MEDIA = erpImportIncludeMedia;
+// TODO(agent): Add startup healthcheck coverage for ERP_SYNC_ENABLED + ERP_IMPORT_URL combinations.
+export const ERP_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_SYNC_ENABLED, 'ERP_SYNC_ENABLED') ?? true;
 export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || '').trim());
 export const ERP_IMPORT_USERNAME = (process.env.ERP_IMPORT_USERNAME || '').trim();
 export const ERP_IMPORT_PASSWORD = (process.env.ERP_IMPORT_PASSWORD || '').trim();
 export const ERP_IMPORT_FORM_FIELD = (process.env.ERP_IMPORT_FORM_FIELD || 'file').trim() || 'file';
+// TODO(agent-erp-form-overrides): Promote ERP import overrides into a dedicated schema-driven config module.
+export const ERP_IMPORT_FORM_SEPARATOR = (process.env.ERP_IMPORT_FORM_SEPARATOR || 'comma').trim() || 'comma';
+export const ERP_IMPORT_FORM_CHARSET = (process.env.ERP_IMPORT_FORM_CHARSET || 'UTF-8').trim() || 'UTF-8';
+export const ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP =
+  (process.env.ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP || '453').trim() || '453';
+export const ERP_IMPORT_FORM_DEFAULT_UNIT = (process.env.ERP_IMPORT_FORM_DEFAULT_UNIT || 'Stck').trim() || 'Stck';
+export const ERP_IMPORT_FORM_PART_CLASSIFICATION =
+  (process.env.ERP_IMPORT_FORM_PART_CLASSIFICATION || '2').trim() || '2';
+export const ERP_IMPORT_AUTH_FIELD_PREFIX = (process.env.ERP_IMPORT_AUTH_FIELD_PREFIX || '{AUTH}').trim();
 export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   process.env.ERP_IMPORT_TIMEOUT_MS,
   30000,
   'ERP_IMPORT_TIMEOUT_MS'
 );
 export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').trim();
+
+if (!ERP_SYNC_ENABLED) {
+  console.info('[config] ERP sync disabled via ERP_SYNC_ENABLED flag.');
+}
 
 export interface ShopwareCredentialsConfig {
   clientId?: string;

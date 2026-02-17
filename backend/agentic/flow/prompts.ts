@@ -436,7 +436,7 @@ export interface LoadChatPromptOptions {
 
 export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromptsOptions): Promise<LoadPromptsResult> {
   try {
-    // TODO(agent): Keep curated search source injection aligned with prompt updates.
+    // TODO(agent): Revisit whether optional source context still improves planner quality telemetry.
     const [format, extractTemplate, supervisorTemplate, categorizerTemplate, pricingTemplate, pricingRules, searchPlannerTemplate, searchSources] = await Promise.all([
       readPromptFile(FORMAT_PATH, { itemId, prompt: 'format', logger }),
       readPromptFile(EXTRACT_PROMPT_PATH, { itemId, prompt: 'extract', logger }),
@@ -471,10 +471,10 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
 
     const composedPricing = `${pricing.trim()}\n\n<pricing_rules>\n${pricingRules.trim()}\n</pricing_rules>\n`;
 
-    const searchPlanner = `${searchPlannerComposedTemplate.trim()}\n\n<sources>\n${searchSources.trim()}\n</sources>\n`;
+    const searchPlanner = `${searchPlannerComposedTemplate.trim()}\n\n<optional_sources_context>\n${searchSources.trim()}\n\nDo not force site filters or domain constraints from this list; use it only as optional context when needed.\n</optional_sources_context>\n`;
 
     logger?.debug?.({
-      msg: 'search planner prompt composed with curated sources',
+      msg: 'search planner prompt composed with optional source context',
       itemId,
       sourcesLength: searchSources.length
     });

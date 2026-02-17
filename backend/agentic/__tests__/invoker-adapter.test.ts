@@ -331,7 +331,13 @@ describe('AgenticModelInvoker request payload merging', () => {
         review: {
           notes: 'Please double check details',
           missing_spec: ['Gewicht_kg', '  Höhe_mm  ', '', 'Gewicht_kg'],
-          unneeded_spec: ['PlaceholderField', 'Ausstattung', 'PlaceholderField']
+          unneeded_spec: ['PlaceholderField', 'Ausstattung', 'PlaceholderField'],
+          decision: null,
+          information_present: null,
+          bad_format: null,
+          wrong_information: null,
+          wrong_physical_dimensions: null,
+          reviewedBy: null
         },
         requestId: null
       });
