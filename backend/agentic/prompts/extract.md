@@ -7,7 +7,9 @@
   - Fill every schema  provided; use the provided defaults when data is missing.
 </task>
 <rules>
+  <!-- TODO(agentic-review-context): Keep extraction reviewer guidance placeholder near rule preamble. -->
   {{BASE_ROLE_POLICY}}
+  {{EXTRACTION_REVIEW}}
   - Output must match <output_format> exactly.
   {{OUTPUT_CONTRACT}}
   {{ERROR_POLICY}}
