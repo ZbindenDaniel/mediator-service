@@ -178,7 +178,14 @@ interface ImportResult {
 }
 
 type ImportPhase = 'test' | 'polling' | 'import';
-type PollState = 'processing' | 'ready' | 'failed' | 'auth_lost' | 'unknown' | 'invalid_response';
+type PollState =
+  | 'processing'
+  | 'ready'
+  | 'failed'
+  | 'auth_lost'
+  | 'unexpected_home'
+  | 'unknown'
+  | 'invalid_response';
 
 interface ImportPhaseResult extends ImportResult {
   phase: ImportPhase;
@@ -212,12 +219,15 @@ interface ParsedErpResponse {
 
 const ERP_POLL_FAILURE_MARKERS = ['Import fehlgeschlagen', 'Fehler beim Import'];
 
-
-const ERP_LOGIN_REDIRECT_MARKERS = ['LoginScreen/user_login', 'name="login"', 'id="login"', 'type="password"'];
+const ERP_LOGIN_FORM_MARKERS = ['name="login"', 'id="login"', 'type="password"'];
+const ERP_LOGIN_REDIRECT_URL_MARKER = 'LoginScreen/user_login';
+const ERP_AUTHENTICATED_HOME_MARKERS = ['dashboard', 'startseite', 'home', 'willkommen'];
 
 function hasAuthLossMarkers(stdout: string, effectiveUrl: string): boolean {
-  const responseText = `${stdout}\n${effectiveUrl}`;
-  return ERP_LOGIN_REDIRECT_MARKERS.some((marker) => responseText.includes(marker));
+  const normalizedResponse = stdout.toLowerCase();
+  const normalizedUrl = effectiveUrl.toLowerCase();
+  const hasLoginForm = ERP_LOGIN_FORM_MARKERS.some((marker) => normalizedResponse.includes(marker));
+  return hasLoginForm || normalizedUrl.includes(ERP_LOGIN_REDIRECT_URL_MARKER.toLowerCase());
 }
 
 function trimDiagnosticOutput(raw: string, maxLength = 500): string {
@@ -229,9 +239,18 @@ function trimDiagnosticOutput(raw: string, maxLength = 500): string {
 }
 
 function extractQueryParam(urlValue: string, key: string): string | null {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = urlValue.match(new RegExp(`[?&]${escapedKey}=([^&#]+)`));
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  try {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = urlValue.match(new RegExp(`[?&]${escapedKey}=([^&#]+)`));
+    return match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch (error) {
+    console.warn('[sync-erp] Failed to extract query parameter', {
+      key,
+      urlSample: trimDiagnosticOutput(urlValue, 120),
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return null;
+  }
 }
 
 function extractEffectiveUrlAction(effectiveUrl: string): string | null {
@@ -242,12 +261,41 @@ function extractEffectiveUrlAction(effectiveUrl: string): string | null {
   try {
     const parsedUrl = new URL(effectiveUrl);
     return parsedUrl.searchParams.get('action');
-  } catch {
+  } catch (error) {
+    console.warn('[sync-erp] Failed to parse effective URL with URL API, falling back to regex extraction', {
+      effectiveUrl: trimDiagnosticOutput(effectiveUrl, 120),
+      error: error instanceof Error ? error.message : String(error)
+    });
     return extractQueryParam(effectiveUrl, 'action');
   }
 }
 
+function isAuthenticatedHomeResponse(stdout: string, effectiveUrl: string, effectiveUrlAction: string | null): boolean {
+  if (effectiveUrlAction) {
+    return false;
+  }
+
+  const normalizedResponse = stdout.toLowerCase();
+  const hasHomeMarker = ERP_AUTHENTICATED_HOME_MARKERS.some((marker) => normalizedResponse.includes(marker));
+  if (!hasHomeMarker) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(effectiveUrl);
+    const normalizedPath = parsedUrl.pathname.toLowerCase();
+    return normalizedPath.endsWith('/controller.php') || normalizedPath.endsWith('/index.php');
+  } catch (error) {
+    console.warn('[sync-erp] Could not validate authenticated homepage URL shape', {
+      effectiveUrl: trimDiagnosticOutput(effectiveUrl, 120),
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return /controller\.php|index\.php/i.test(effectiveUrl);
+  }
+}
+
 function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpResponse {
+  // TODO(sync-erp-home-markers): Revisit homepage marker heuristics when ERP offers a stable post-login context endpoint.
   // TODO(sync-erp-parser): Extract parser into shared ERP sync utility if additional actions need the same evidence contract.
   try {
     const responseText = `${stdout}\n${effectiveUrl}`;
@@ -255,6 +303,7 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
     const hasImportVorschauH2 = /<h2[^>]*>\s*Import-Vorschau\s*<\/h2>/i.test(responseText);
     const isLoginForm = hasAuthLossMarkers(stdout, effectiveUrl);
     const effectiveUrlAction = extractEffectiveUrlAction(effectiveUrl);
+    const isAuthenticatedHome = isAuthenticatedHomeResponse(stdout, effectiveUrl, effectiveUrlAction);
     const hasResultAction = effectiveUrlAction === 'CsvImport/result';
     const hasReportAction = effectiveUrlAction === 'CsvImport/report';
     const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
@@ -266,6 +315,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       state = 'failed';
     } else if (isLoginForm) {
       state = 'auth_lost';
+    } else if (isAuthenticatedHome) {
+      state = 'unexpected_home';
     } else if (hasImportVorschauH2 || hasReportAction) {
       state = 'ready';
     } else if (hasImportStatusH2 || hasResultAction) {
@@ -273,6 +324,17 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
     }
 
     const acceptedByMarker = (state === 'processing' || state === 'ready') && !isLoginForm;
+
+    if (state === 'unknown') {
+      console.warn('[sync-erp] ERP parser encountered unknown response pattern', {
+        effectiveUrl: trimDiagnosticOutput(effectiveUrl, 120),
+        hasImportStatusH2,
+        hasImportVorschauH2,
+        isLoginForm,
+        isAuthenticatedHome,
+        effectiveUrlAction
+      });
+    }
 
     return {
       job,
@@ -304,7 +366,7 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
 }
 
 function logParseEvidence(
-  logger: Pick<Console, 'debug' | 'info'>,
+  logger: Pick<Console, 'info' | 'warn' | 'error'>,
   phase: ImportPhase,
   parsed: ParsedErpResponse
 ): void {
@@ -614,6 +676,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       if (
         currentState.state === 'failed' ||
         currentState.state === 'auth_lost' ||
+        currentState.state === 'unexpected_home' ||
         currentState.state === 'unknown' ||
         currentState.state === 'invalid_response'
       ) {
@@ -898,6 +961,7 @@ const action = defineHttpAction({
       }
 
       if (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready') {
+        const isUnexpectedHome = curlResult.polling?.state === 'unexpected_home';
         console.error('[sync-erp] ERP polling phase did not reach ready state', {
           state: curlResult.polling?.state ?? 'unknown',
           exitCode: curlResult.polling?.exitCode ?? -1,
@@ -905,7 +969,12 @@ const action = defineHttpAction({
           reportId: curlResult.polling?.reportId ?? null
         });
         return sendJson(res, 502, {
-          error: 'ERP-Import konnte nicht fortgesetzt werden, da keine Import-Vorschau bereit war.',
+          error: isUnexpectedHome
+            ? 'ERP-Import konnte nicht fortgesetzt werden, da eine unerwartete Startseite statt der Import-Vorschau geladen wurde.'
+            : 'ERP-Import konnte nicht fortgesetzt werden, da keine Import-Vorschau bereit war.',
+          details: isUnexpectedHome
+            ? 'ERP antwortete mit einer authentifizierten Startseite ohne Import-Kontext. Prüfen Sie Profil-/Mandanten-Bootstrap und Importkontext.'
+            : undefined,
           failurePhase: 'polling',
           state: curlResult.polling?.state ?? 'unknown',
           effectiveUrl: curlResult.polling?.effectiveUrl || null,
