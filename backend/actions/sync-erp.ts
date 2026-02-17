@@ -279,6 +279,24 @@ function buildReportReadinessUrl(baseUrl: string, reportId: string): string {
   }
 }
 
+function buildControllerReferer(baseUrl: string): string {
+  try {
+    const parsedBaseUrl = new URL(baseUrl);
+    const pathname = parsedBaseUrl.pathname;
+    const normalizedPathname = pathname.endsWith('/') ? pathname : pathname.replace(/[^/]+$/, '');
+    parsedBaseUrl.pathname = `${normalizedPathname}controller.pl`;
+    parsedBaseUrl.search = '';
+    parsedBaseUrl.hash = '';
+    return parsedBaseUrl.toString();
+  } catch (error) {
+    const normalizedBaseUrl = baseUrl.replace(/[?#].*$/, '');
+    const normalizedPath = normalizedBaseUrl.endsWith('/')
+      ? normalizedBaseUrl
+      : normalizedBaseUrl.replace(/[^/]+$/, '');
+    return `${normalizedPath}controller.pl`;
+  }
+}
+
 function hasImportPreviewHeading(stdout: string): boolean {
   return /<h2[^>]*>\s*Import-Vorschau\s*<\/h2>/i.test(stdout);
 }
@@ -751,6 +769,28 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     return args;
   };
 
+  // TODO(sync-erp-report-request-parity): Revalidate report fetch headers if browser HAR shows additional required request metadata.
+  const buildReportPollArgs = (reportUrl: string): string[] => {
+    try {
+      const parsedReportUrl = new URL(reportUrl);
+      const action = parsedReportUrl.searchParams.get('action');
+      const reportId = parsedReportUrl.searchParams.get('id');
+
+      if (action !== 'CsvImport/report' || !reportId) {
+        throw new Error('unexpected report polling URL shape');
+      }
+
+      const args = buildPollArgs(parsedReportUrl.toString());
+      const insertIndex = timeoutSeconds ? 8 : 6;
+      const referer = buildControllerReferer(url);
+      args.splice(insertIndex, 0, '-H', `Referer: ${referer}`, '-H', 'X-Requested-With: XMLHttpRequest');
+      return args;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Malformed ERP report request URL: ${trimDiagnosticOutput(reportUrl, 180)} (${message})`);
+    }
+  };
+
   // TODO(sync-erp-context-lost): Keep context re-bootstrap URL aligned with ERP profile navigation changes.
   const buildContextBootstrapUrl = (): string => `${url}?action=CsvImport/import`;
 
@@ -766,8 +806,15 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
     while (Date.now() - startedAt <= pollTimeoutMs) {
       try {
-        reportResult = await runCurl('polling', buildPollArgs(reportContext.reportUrl));
-        parsedReport = parseErpImportState(reportResult.stdout, reportResult.effectiveUrl);
+        const reportArgs = buildReportPollArgs(reportContext.reportUrl);
+        reportResult = await runCurl('polling', reportArgs);
+
+        try {
+          parsedReport = parseErpImportState(reportResult.stdout, reportResult.effectiveUrl);
+        } catch (parseError) {
+          const parseMessage = parseError instanceof Error ? parseError.message : String(parseError);
+          throw new Error(`Malformed ERP report response: ${parseMessage}`);
+        }
       } catch (reportPollError) {
         loggerRef.error?.('[sync-erp] Report readiness polling failed', {
           phase: 'polling',
@@ -786,6 +833,16 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         parsedReport.evidence.effectiveUrlAction === 'CsvImport/report' &&
         !!parsedReport.reportId;
       const readinessSatisfied = reportHasImportVorschau || reportFetchReady;
+
+      loggerRef.info?.('[sync-erp] ERP report fetch evidence', {
+        phase: 'polling',
+        mode: importMode,
+        configuredReportId: reportContext.reportId,
+        parsedReportId: parsedReport.reportId,
+        effectiveUrl: reportResult.effectiveUrl || reportContext.reportUrl,
+        hasImportVorschau: reportHasImportVorschau,
+        reportFetchReady
+      });
 
       loggerRef.info?.('[sync-erp] ERP report readiness transition', {
         phase: 'polling',
