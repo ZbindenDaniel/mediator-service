@@ -205,6 +205,45 @@ function stripLegacyIdentifiers(value: unknown): void {
   }
 }
 
+function serializeCompactPayload(payload: unknown): string {
+  try {
+    return JSON.stringify(payload ?? {});
+  } catch {
+    return '{}';
+  }
+}
+
+function mergeAccumulatedCandidate(
+  accumulator: AgenticOutput | null,
+  nextCandidate: AgenticOutput,
+  context: { logger?: ExtractionLogger; itemId: string; attempt: number; passIndex: number }
+): { success: true; data: AgenticOutput } | { success: false; issues: unknown } {
+  try {
+    const merged = { ...(accumulator ?? {}), ...nextCandidate };
+    const mergedParse = AgentOutputSchema.safeParse(merged);
+    if (!mergedParse.success) {
+      context.logger?.warn?.({
+        msg: 'failed to merge extraction accumulator',
+        itemId: context.itemId,
+        attempt: context.attempt,
+        passIndex: context.passIndex,
+        issues: mergedParse.error.issues
+      });
+      return { success: false, issues: mergedParse.error.issues };
+    }
+    return { success: true, data: mergedParse.data };
+  } catch (err) {
+    context.logger?.warn?.({
+      err,
+      msg: 'unexpected extraction accumulator merge failure',
+      itemId: context.itemId,
+      attempt: context.attempt,
+      passIndex: context.passIndex
+    });
+    return { success: false, issues: err };
+  }
+}
+
 interface CategoryValidationDecision {
   requiresSecondCategory: boolean;
   isValid: boolean;
@@ -328,6 +367,9 @@ export async function runExtractionAttempts({
   let lastInvalidJsonPlaceholderIssues: string[] = [];
 
   let attempt = 1;
+  // TODO(agent): Revisit pass-level retry ceilings once extraction telemetry shows stable pass success rates.
+  let passIndex = 0;
+  let extractionAccumulator: AgenticOutput | null = null;
   const { Artikel_Nummer: _promptHiddenItemId, ...promptFacingTargetRaw } = target;
   const promptFacingTarget = mapLangtextToSpezifikationenForLlm(promptFacingTargetRaw, { itemId, logger, context: 'extraction-target-snapshot' }) as Record<string, unknown>;
   // TODO(agent): Keep prompt-facing target redactions aligned with fields hidden from agents.
@@ -397,18 +439,18 @@ export async function runExtractionAttempts({
     logger?.debug?.({ msg: 'extraction attempt', attempt, itemId });
 
     // TODO(agent): Re-check prompt context assembly for further reductions after reviewer feedback.
-    // TODO(agent): Re-evaluate prompt length logging thresholds once prompt compression stabilizes.
-    let aggregatedSearchText = '';
-    try {
-      aggregatedSearchText = buildAggregatedSearchText();
-    } catch (err) {
-      logger?.warn?.({ err, msg: 'failed to build aggregated search text', attempt, itemId });
-      aggregatedSearchText = '';
-    }
-    if (!aggregatedSearchText.trim() && searchSkipped) {
-      aggregatedSearchText = 'No automated search results were generated because the reviewer requested manual focus.';
-      logger?.info?.({ msg: 'extraction prompt noting skipped search', attempt, itemId });
-    }
+    const totalPasses = Math.max(1, searchContexts.length);
+    const fallbackContextText = (() => {
+      try {
+        return buildAggregatedSearchText();
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to build aggregated search text fallback', attempt, itemId, passIndex: passIndex + 1 });
+        return '';
+      }
+    })();
+    const activeContext = searchContexts[passIndex] ?? { query: 'aggregated-fallback', text: fallbackContextText, sources: [] };
+    const singleContextText = typeof activeContext?.text === 'string' ? activeContext.text : '';
+    const compactAccumulator = serializeCompactPayload(extractionAccumulator);
 
     let searchRequestHint = searchesPerRequestLimit === 1
       ? 'Need more info? Add one "__searchQueries" entry.'
@@ -441,36 +483,52 @@ export async function runExtractionAttempts({
       reviewerInstructionBlock = '';
     }
 
-    // TODO: possible merge issue
-    const formattedSources = attempt > 1 ? formatSourcesForRetry(aggregatedSources, logger) : [];
+    try {
+      logger?.info?.({
+        msg: 'extraction context pass',
+        attempt,
+        itemId,
+        passIndex: passIndex + 1,
+        totalPasses,
+        singleContextLength: singleContextText.length,
+        accumulatorSizeEstimate: compactAccumulator.length
+      });
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to log extraction context pass metrics', attempt, itemId, passIndex: passIndex + 1 });
+    }
+
     const contextSections: string[] = [];
     const reviewerNotesLineCount = sanitizedReviewerNotes ? sanitizedReviewerNotes.split('\n').length : 0;
-    const aggregatedSearchLineCount = aggregatedSearchText ? aggregatedSearchText.split('\n').length : 0;
     const targetSnapshotLineCount = trimmedTargetSnapshot ? trimmedTargetSnapshot.split('\n').length : 0;
     try {
       logger?.debug?.({
         msg: 'prompt segment size metrics',
         attempt,
         itemId,
+        passIndex: passIndex + 1,
+        totalPasses,
         reviewerNotesLength: sanitizedReviewerNotes.length,
         reviewerNotesLineCount,
-        aggregatedSearchLength: aggregatedSearchText.length,
-        aggregatedSearchLineCount,
+        singleContextLength: singleContextText.length,
         targetSnapshotLength: trimmedTargetSnapshot.length,
-        targetSnapshotLineCount
+        targetSnapshotLineCount,
+        accumulatorSizeEstimate: compactAccumulator.length
       });
     } catch (err) {
-      logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId });
+      logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId, passIndex: passIndex + 1 });
     }
 
-    const initialSections = ['Aggregated search context:', aggregatedSearchText, searchRequestHint];
     if (reviewerInstructionBlock) {
       contextSections.push(reviewerInstructionBlock);
     }
-    if (formattedSources.length > 0) {
-      contextSections.push(['Sources:', formattedSources.join('\n')].join('\n'));
+    if (attempt > 1) {
+      const formattedSources = formatSourcesForRetry(aggregatedSources, logger);
+      if (formattedSources.length > 0) {
+        contextSections.push(['Sources:', formattedSources.join('\n')].join('\n'));
+      }
     }
-    contextSections.push('Search context:', aggregatedSearchText || 'None.');
+    contextSections.push('Current search context:', singleContextText || 'None.');
+    contextSections.push('Accumulated candidate (compact JSON):', compactAccumulator);
     contextSections.push(searchRequestHint);
     const baseUserContent = contextSections.join('\n\n');
     let userContent = baseUserContent;
@@ -960,8 +1018,21 @@ export async function runExtractionAttempts({
           maxSearchRequestCycles: MAX_SEARCH_REQUEST_CYCLES
         });
         lastSupervision = 'TOO_MANY_SEARCH_REQUESTS';
-        lastValidated = { success: true, data: candidateData };
-        lastValidationIssues = null;
+        const bestEffortMerge = mergeAccumulatedCandidate(extractionAccumulator, candidateData, {
+          logger,
+          itemId,
+          attempt,
+          passIndex: passIndex + 1
+        });
+        if (bestEffortMerge.success) {
+          extractionAccumulator = bestEffortMerge.data;
+          lastValidated = { success: true, data: bestEffortMerge.data };
+          lastValidationIssues = null;
+        } else {
+          const mergeIssues = (bestEffortMerge as { issues: unknown }).issues;
+          lastValidated = { success: true, data: candidateData };
+          lastValidationIssues = mergeIssues;
+        }
         logger?.info?.({
           msg: 'using best-effort extraction data after search limit reached',
           attempt,
@@ -1011,8 +1082,47 @@ export async function runExtractionAttempts({
       continue;
     }
 
-    const validated = { success: true as const, data: candidateData };
+    const mergedAccumulator = mergeAccumulatedCandidate(extractionAccumulator, candidateData, {
+      logger,
+      itemId,
+      attempt,
+      passIndex: passIndex + 1
+    });
+    if (!mergedAccumulator.success) {
+      const mergeIssues = (mergedAccumulator as { issues: unknown }).issues;
+      lastValidated = null;
+      lastSupervision = 'ACCUMULATOR_MERGE_FAILED';
+      lastValidationIssues = mergeIssues;
+      const nextAttempt = attempt + 1;
+      logger?.info?.({
+        msg: 'retrying extraction attempt',
+        attempt,
+        nextAttempt,
+        itemId,
+        reason: 'ACCUMULATOR_MERGE_FAILED',
+        passIndex: passIndex + 1,
+        validationIssuesPreview: sanitizeForLog(mergeIssues)
+      });
+      advanceAttempt();
+      continue;
+    }
+
+    extractionAccumulator = mergedAccumulator.data;
     lastValidationIssues = null;
+    const nextPassIndex = passIndex + 1;
+    if (nextPassIndex < Math.max(1, searchContexts.length)) {
+      passIndex = nextPassIndex;
+      logger?.info?.({
+        msg: 'advancing extraction context pass',
+        attempt,
+        itemId,
+        completedPassIndex: passIndex,
+        totalPasses: Math.max(1, searchContexts.length)
+      });
+      continue;
+    }
+
+    const validated = { success: true as const, data: extractionAccumulator };
 
     let enrichedValidated = validated;
     try {
