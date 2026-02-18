@@ -738,6 +738,7 @@ export async function collectSearchContexts({
     logger?.warn?.({ err, msg: 'failed to log resolved search plan limit', itemId });
   }
   const resolvedTarget = resolveTarget(target ?? null, logger, itemId);
+  // TODO(agent-next-step): Keep initial search contexts append-only so extraction cursoring can consume only new passes.
   const searchContexts: SearchContext[] = [];
   const seenSourceKeys = new Set<string>();
   const sourceDomainCounts = new Map<string, number>();
@@ -1024,6 +1025,14 @@ export async function collectSearchContexts({
       throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
     }
   }
+
+
+  logger?.info?.({
+    msg: 'prepared search contexts for extraction',
+    itemId,
+    contextCount: searchContexts.length,
+    aggregatedSourceCount: aggregatedSources.length
+  });
 
   logger?.info?.({
     msg: 'search retrieval metrics',
