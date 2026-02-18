@@ -93,9 +93,17 @@ interface BrowserParityMappingFieldPair {
 
 function resolveBrowserParityMappings(logger: Pick<Console, 'info' | 'error'>): BrowserParityMappingFieldPair[] {
   try {
+    if (!Array.isArray(ERP_IMPORT_BROWSER_PARITY_MAPPINGS)) {
+      throw new Error('expected ERP_IMPORT_BROWSER_PARITY_MAPPINGS to resolve to an array');
+    }
+
     const resolved = ERP_IMPORT_BROWSER_PARITY_MAPPINGS.map((mapping, index) => {
-      const from = mapping.from.trim();
-      const to = mapping.to.trim();
+      if (!mapping || typeof mapping !== 'object') {
+        throw new Error(`entry at index ${index} must be an object with non-empty from/to values`);
+      }
+
+      const from = typeof mapping.from === 'string' ? mapping.from.trim() : '';
+      const to = typeof mapping.to === 'string' ? mapping.to.trim() : '';
       if (!from || !to) {
         throw new Error(`entry at index ${index} requires non-empty from/to values`);
       }
@@ -107,7 +115,8 @@ function resolveBrowserParityMappings(logger: Pick<Console, 'info' | 'error'>): 
     const message = error instanceof Error ? error.message : String(error);
     logger.error?.('[sync-erp] Invalid browser-parity mapping configuration', {
       error: message,
-      expectedShape: 'ERP_IMPORT_BROWSER_PARITY_MAPPINGS=[{"from":"...","to":"..."}]'
+      expectedShape:
+        'ERP_IMPORT_BROWSER_PARITY_MAPPINGS=[{"from":"...","to":"..."}] or newline-separated "from=to" pairs'
     });
     throw new Error(`Invalid browser-parity mapping configuration: ${message}`);
   }
@@ -172,6 +181,7 @@ const ERP_IMPORT_FIELD_NAMES = {
 // TODO(agent-erp-form-contract): Keep ERP field-value defaults aligned with docs/erp-sync.sh after upstream ERP changes.
 // TODO(sync-erp-browser-contract-fields): Keep browser-parity payload keys aligned with ERP HAR captures during rollout.
 // TODO(sync-erp-browser-mappings-order): Keep mappings[+].from / mappings[].to ordering aligned with HAR captures.
+// TODO(sync-erp-browser-mappings-telemetry): Keep mapping validation telemetry aligned with browser parity diagnostics.
 function buildErpImportFieldMap(contract: ImportRequestContract = 'legacy'): ErpImportFieldMap {
   const profileId = contract === 'browser-parity' ? ERP_IMPORT_PROFILE_ID : ERP_IMPORT_PROFILE_ID || '1';
   const tmpProfileId =
@@ -1179,6 +1189,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             ]
           : [];
       const browserParityMappings = requestContract === 'browser-parity' ? resolveBrowserParityMappings(loggerRef) : [];
+      const mappingValidationPassed = requestContract === 'browser-parity';
       const browserParityMappingArgs: string[] = [];
       if (requestContract === 'browser-parity') {
         for (const mapping of browserParityMappings) {
@@ -1190,7 +1201,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       loggerRef.info?.('[sync-erp] ERP browser-parity mappings', {
         phase,
         browserParityApplied: requestContract === 'browser-parity',
-        mappingCount: browserParityMappings.length
+        mappingsInjected: requestContract === 'browser-parity' && browserParityMappings.length > 0,
+        mappingCount: browserParityMappings.length,
+        mappingValidationPassed
       });
 
       const args = [

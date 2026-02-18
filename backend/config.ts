@@ -288,13 +288,16 @@ export interface ErpImportBrowserParityMapping {
   to: string;
 }
 
+// TODO(sync-erp-browser-mappings-line-parser): Keep line-based mapping pair parser aligned with browser parity docs.
 function parseErpImportBrowserParityMappings(raw: string | undefined): ErpImportBrowserParityMapping[] {
   if (typeof raw !== 'string' || !raw.trim()) {
     return [];
   }
 
-  try {
-    const parsed = JSON.parse(raw) as unknown;
+  const normalizedRaw = raw.trim();
+
+  const parseJsonMappings = (input: string): ErpImportBrowserParityMapping[] => {
+    const parsed = JSON.parse(input) as unknown;
     if (!Array.isArray(parsed)) {
       throw new Error('expected a JSON array of {"from":"...","to":"..."} objects');
     }
@@ -312,11 +315,49 @@ function parseErpImportBrowserParityMappings(raw: string | undefined): ErpImport
 
       return { from: fromValue, to: toValue };
     });
+  };
+
+  const parseLineMappings = (input: string): ErpImportBrowserParityMapping[] => {
+    const mappings: ErpImportBrowserParityMapping[] = [];
+    const lines = input.split(/\r?\n/);
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index]?.trim() || '';
+      if (!line) {
+        continue;
+      }
+
+      const separatorIndex = line.indexOf('=');
+      if (separatorIndex <= 0 || separatorIndex === line.length - 1) {
+        throw new Error(
+          `line ${index + 1} must use "from=to" format with non-empty values`
+        );
+      }
+
+      const fromValue = line.slice(0, separatorIndex).trim();
+      const toValue = line.slice(separatorIndex + 1).trim();
+      if (!fromValue || !toValue) {
+        throw new Error(
+          `line ${index + 1} must include non-empty "from" and "to" values`
+        );
+      }
+
+      mappings.push({ from: fromValue, to: toValue });
+    }
+
+    return mappings;
+  };
+
+  try {
+    const parsedMappings = normalizedRaw.startsWith('[')
+      ? parseJsonMappings(normalizedRaw)
+      : parseLineMappings(normalizedRaw);
+    return parsedMappings;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
       `Invalid ERP_IMPORT_BROWSER_PARITY_MAPPINGS value: ${message}. Example: ` +
-        '[{"from":"vm_product_length","to":"cvar_vm_product_length"}]'
+        '[{"from":"vm_product_length","to":"cvar_vm_product_length"}] or "vm_product_length=cvar_vm_product_length"'
     );
   }
 }
