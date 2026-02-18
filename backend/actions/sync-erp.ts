@@ -843,7 +843,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   const importMode: ImportMode = ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity';
   const baselineFlow = importMode === 'script-parity';
 
-  const resolvePhaseActions = (phase: 'test' | 'import'): { action: string; actionTest: string; actionImport: string } => {
+  // TODO(sync-erp-legacy-flags): Remove legacy action_test/action_import flags once browser-parity is the only supported contract.
+  const resolvePhaseActions = (
+    phase: 'test' | 'import'
+  ): { action: string; actionTest: string | null; actionImport: string | null; includeLegacyActionFlags: boolean } => {
     try {
       if (requestContract === 'browser-parity') {
         if (!erpFields.profileId || !erpFields.tmpProfileId) {
@@ -851,15 +854,17 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         }
         return {
           action: phase === 'test' ? 'CsvImport/test' : 'CsvImport/import',
-          actionTest: phase === 'test' ? '1' : '0',
-          actionImport: phase === 'import' ? '1' : '0'
+          actionTest: null,
+          actionImport: null,
+          includeLegacyActionFlags: false
         };
       }
 
       return {
         action: erpFields.action,
         actionTest: phase === 'test' ? '1' : erpFields.actionTest,
-        actionImport: phase === 'import' ? erpFields.actionImport : '0'
+        actionImport: phase === 'import' ? erpFields.actionImport : '0',
+        includeLegacyActionFlags: true
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -978,6 +983,16 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         }
       });
 
+      const legacyActionArgs =
+        phaseActions.includeLegacyActionFlags && phaseActions.actionTest !== null && phaseActions.actionImport !== null
+          ? [
+              '-F',
+              toFormArg(ERP_IMPORT_FIELD_NAMES.actionTest, phaseActions.actionTest),
+              '-F',
+              toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, phaseActions.actionImport)
+            ]
+          : [];
+
       const args = [
         '-X',
         'POST',
@@ -989,10 +1004,6 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         '\n%{url_effective}',
         '-F',
         toFormArg(ERP_IMPORT_FIELD_NAMES.action, phaseActions.action),
-        '-F',
-        toFormArg(ERP_IMPORT_FIELD_NAMES.actionTest, phaseActions.actionTest),
-        '-F',
-        toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, phaseActions.actionImport),
         '-F',
         toFormArg(ERP_IMPORT_FIELD_NAMES.formSent, erpFields.formSent),
         '-F',
@@ -1046,6 +1057,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         ...buildCookieArgs(),
         url
       ];
+
+      if (legacyActionArgs.length > 0) {
+        args.splice(10, 0, ...legacyActionArgs);
+      }
 
       if (username) {
         args.splice(args.length - 1, 0, '-F', toFormArg(authLoginFieldName, username));
@@ -1114,6 +1129,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   };
 
   // TODO(sync-erp-context-lost): Keep context re-bootstrap URL aligned with ERP profile navigation changes.
+  // TODO(sync-erp-probe-contract): Validate this bootstrap URL against browser-captured request contracts before using it for continuation recovery.
   const buildContextBootstrapUrl = (): string => `${url}?action=CsvImport/import`;
 
   // TODO(sync-erp-readiness-contract): Keep report readiness criteria aligned with browser import flow behavior.
@@ -1205,10 +1221,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     initialImportResult: ImportResult,
     initialState: ParsedErpResponse
   ): Promise<{ importResult: ImportResult; parsedImport: ParsedErpResponse; continuationOutcome: ImportExecutionResult['importContinuation'] }> => {
-    // TODO(sync-erp-continuation-probe): Remove one-shot context probe if ERP reliably returns continuation identifiers in processing responses.
+    // TODO(sync-erp-continuation-probe): Browser captures show CsvImport/import probe requests are not sufficient to recover job/report IDs without full multipart request context.
     let latestImportResult = initialImportResult;
     let latestState = initialState;
-    let fallbackProbeAttempted = false;
     const pollIntervalMs = Math.max(250, ERP_IMPORT_POLL_INTERVAL_MS);
     const pollTimeoutMs = Math.min(Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS), 15000);
     const startedAt = Date.now();
@@ -1260,96 +1275,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             continuationCaptureError instanceof Error ? continuationCaptureError.message : String(continuationCaptureError)
         });
 
-        if (!fallbackProbeAttempted && latestState.state === 'processing' && !latestState.job && !latestState.reportId) {
-          fallbackProbeAttempted = true;
-          const probeUrl = buildContextBootstrapUrl();
-          loggerRef.warn?.('[sync-erp] ERP import continuation fallback probe started', {
-            attempt,
-            elapsedMs,
-            fallbackProbeAttempted,
-            probeUrl: trimDiagnosticOutput(probeUrl, 200),
-            state: latestState.state,
-            job: latestState.job,
-            reportId: latestState.reportId
-          });
-
-          try {
-            const probeResult = await runCurl('import', buildPollArgs(probeUrl));
-            let probeState = latestState;
-            try {
-              probeState = parseErpImportState(probeResult.stdout, probeResult.effectiveUrl);
-            } catch (probeParseError) {
-              loggerRef.warn?.('[sync-erp] ERP import continuation fallback probe parse failed', {
-                attempt,
-                elapsedMs,
-                fallbackProbeAttempted,
-                probeUrl: trimDiagnosticOutput(probeUrl, 200),
-                error: probeParseError instanceof Error ? probeParseError.message : String(probeParseError)
-              });
-            }
-
-            const probedIdentifiers = extractErpIdentifiers(probeResult.stdout, probeResult.effectiveUrl);
-            const identifiersRecovered = Boolean(probedIdentifiers.reportId || probedIdentifiers.job);
-            loggerRef.info?.('[sync-erp] ERP import continuation fallback probe finished', {
-              attempt,
-              elapsedMs,
-              fallbackProbeAttempted,
-              identifiersRecovered,
-              reportId: probedIdentifiers.reportId,
-              job: probedIdentifiers.job,
-              reportSource: probedIdentifiers.sources.reportId || 'none',
-              jobSource: probedIdentifiers.sources.job || 'none'
-            });
-
-            latestImportResult = probeResult;
-            latestState = {
-              ...probeState,
-              reportId: probeState.reportId || probedIdentifiers.reportId,
-              job: probeState.job || probedIdentifiers.job
-            };
-
-            if (identifiersRecovered) {
-              logParseEvidence(loggerRef, 'import', latestState);
-              continue;
-            }
-
-            return {
-              importResult: latestImportResult,
-              parsedImport: latestState,
-              continuationOutcome: {
-                completed: false,
-                timedOut: false,
-                lastState: latestState.state,
-                diagnostics: buildContinuationDiagnostics(),
-                missingContinuationContext: true
-              }
-            };
-          } catch (probeError) {
-            loggerRef.warn?.('[sync-erp] ERP import continuation fallback probe request failed', {
-              attempt,
-              elapsedMs,
-              fallbackProbeAttempted,
-              probeUrl: trimDiagnosticOutput(probeUrl, 200),
-              error: probeError instanceof Error ? probeError.message : String(probeError)
-            });
-            return {
-              importResult: latestImportResult,
-              parsedImport: latestState,
-              continuationOutcome: {
-                completed: false,
-                timedOut: false,
-                lastState: latestState.state,
-                diagnostics: buildContinuationDiagnostics(),
-                missingContinuationContext: true
-              }
-            };
-          }
-        }
-
         loggerRef.warn?.('[sync-erp] ERP import continuation skipped due to missing continuation URL', {
           attempt,
           elapsedMs,
-          fallbackProbeAttempted,
+          browserContractInsight: 'CsvImport/import probe without multipart payload did not recover identifiers in captured requests',
           state: latestState.state,
           job: latestState.job,
           reportId: latestState.reportId
