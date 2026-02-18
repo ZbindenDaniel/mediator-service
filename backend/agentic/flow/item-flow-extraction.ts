@@ -681,14 +681,13 @@ export async function runExtractionAttempts({
     // TODO(agent): Re-check prompt context assembly for further reductions after reviewer feedback.
     const totalPasses = Math.max(1, searchContexts.length);
     const targetSnapshotSource = extractionAccumulator ?? promptFacingTarget;
-    const targetSnapshotSourceLabel = extractionAccumulator ? 'accumulator' : 'initial-target';
+    const snapshotSource: 'accumulator' | 'initial-target' = extractionAccumulator ? 'accumulator' : 'initial-target';
     // TODO(agent): Keep prompt-facing target redactions aligned with fields hidden from agents.
     const normalizedTargetSnapshot = mapLangtextToSpezifikationenForLlm(targetSnapshotSource, {
       itemId,
       logger,
       context: 'extraction-target-snapshot'
     });
-    const sanitizedTargetPreview = sanitizeForLog(normalizedTargetSnapshot);
     let serializedTargetSnapshot = '';
     try {
       serializedTargetSnapshot = JSON.stringify(normalizedTargetSnapshot, null, 2);
@@ -704,12 +703,13 @@ export async function runExtractionAttempts({
     const trimmedTargetSnapshot = serializedTargetSnapshot
       ? truncateForLog(serializedTargetSnapshot, TARGET_SNAPSHOT_MAX_LENGTH).trim()
       : '';
+    const targetSnapshotPreview = sanitizeForLog(trimmedTargetSnapshot || normalizedTargetSnapshot);
     logger?.debug?.({
       msg: 'resolved target snapshot source for extraction prompt',
       attempt,
       itemId,
       contextIndex: contextCursor + 1,
-      targetSnapshotSource: targetSnapshotSourceLabel
+      snapshotSource
     });
     const fallbackContextText = (() => {
       try {
@@ -872,14 +872,18 @@ export async function runExtractionAttempts({
         msg: 'appended target snapshot to extraction prompt',
         attempt,
         itemId,
-        targetPreview: sanitizedTargetPreview
+        contextIndex: contextCursor + 1,
+        snapshotSource,
+        targetPreview: targetSnapshotPreview
       });
     } else {
       logger?.debug?.({
         msg: 'target snapshot unavailable for extraction prompt',
         attempt,
         itemId,
-        targetPreview: sanitizedTargetPreview
+        contextIndex: contextCursor + 1,
+        snapshotSource,
+        targetPreview: targetSnapshotPreview
       });
     }
 
@@ -994,7 +998,7 @@ export async function runExtractionAttempts({
     lastRaw = raw;
 
     const extractionTranscriptPayload: TranscriptSectionPayload = {
-      request: { targetPreview: sanitizedTargetPreview, attempt },
+      request: { targetPreview: targetSnapshotPreview, attempt, snapshotSource },
       messages: extractionMessages,
       response: raw
     };
