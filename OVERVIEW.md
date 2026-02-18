@@ -28,6 +28,6 @@
 - ✅ Extraction follow-up query contract now enforces a single `__searchQueries` entry per iteration while preserving truncation telemetry (`requestedCount`, `usedCount=1`) and supervisor-driven attempt progression.
 - ✅ Manual review now prunes reviewer-marked `unneeded_spec` keys from `ItemRef.Langtext`, and agentic invocation prunes those same keys from the next-run target snapshot before prompting extraction.
 
-- ✅ ERP browser-parity mapping emission now supports ordered config parsing with strict validation (`from`/`to`) and per-phase mapping telemetry logs.
+- ✅ ERP browser-parity mapping emission now supports ordered config parsing (JSON array or newline `from=to` pairs) with strict validation (`from`/`to`) and per-phase mapping telemetry logs (`mappingCount`, `mappingValidationPassed`, `mappingsInjected`).
 - ✅ ERP test-phase continuation fallback now proceeds to import when state remains `processing`, with structured diagnostics and explicit fallback error context.
 - ✅ ERP browser-parity import contract now requires explicit `profile.id` + `tmp_profile_id` configuration and rejects empty/default placeholder values before curl execution.
