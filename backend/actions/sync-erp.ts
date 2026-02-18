@@ -1644,6 +1644,95 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     continuationUrl = testContinuation.nextContinuationUrl;
     continuationSource = testContinuation.source;
   } catch (initialContinuationError) {
+    // TODO(sync-erp-fallback-import-flow): Extract shared import-phase execution helper to avoid duplicated import + continuation logic between normal and fallback paths.
+    if (currentState.state === 'processing') {
+      loggerRef.warn?.('[sync-erp] Missing continuation URL after test phase; falling back to import phase', {
+        fallbackFromTestWithoutContinuation: true,
+        testState: currentState.state,
+        job: currentState.job,
+        reportId: currentState.reportId,
+        error:
+          initialContinuationError instanceof Error
+            ? initialContinuationError.message
+            : String(initialContinuationError)
+      });
+
+      try {
+        loggerRef.info?.('[sync-erp] ERP phase transition', {
+          fromPhase: 'test',
+          toPhase: 'import',
+          reason: 'missing-continuation-url-after-test-fallback',
+          mode: importMode,
+          fallbackFromTestWithoutContinuation: true,
+          testState: currentState.state,
+          job: currentState.job,
+          reportId: currentState.reportId
+        });
+
+        let importResult = await runCurl('import', buildImportArgs('import'));
+        let parsedImport = parseErpImportState(importResult.stdout, importResult.effectiveUrl);
+        let importAcceptedByMarker = parsedImport.acceptedByMarker;
+        let importContinuation: ImportExecutionResult['importContinuation'] = {
+          completed: parsedImport.state === 'ready',
+          timedOut: false,
+          lastState: parsedImport.state
+        };
+
+        if (parsedImport.state === 'processing') {
+          const continuation = await continueAfterImportProcessing(importResult, parsedImport);
+          importResult = continuation.importResult;
+          parsedImport = continuation.parsedImport;
+          importAcceptedByMarker = parsedImport.acceptedByMarker;
+          importContinuation = continuation.continuationOutcome;
+        }
+
+        logParseEvidence(loggerRef, 'import', parsedImport);
+
+        loggerRef.info?.('[sync-erp] ERP phase validation', {
+          phase: 'import',
+          mode: importMode,
+          exitCode: importResult.exitCode,
+          matchedMarker: importAcceptedByMarker,
+          state: parsedImport.state,
+          job: parsedImport.job,
+          reportId: parsedImport.reportId
+        });
+
+        return {
+          mode: importMode,
+          baselineFlow,
+          test: {
+            ...testResult,
+            phase: 'test',
+            acceptedByMarker: testAcceptedByMarker,
+            state: parsedTest.state,
+            job: parsedTest.job,
+            reportId: parsedTest.reportId
+          },
+          polling: null,
+          import: {
+            ...importResult,
+            phase: 'import',
+            acceptedByMarker: importAcceptedByMarker,
+            state: parsedImport.state,
+            job: parsedImport.job,
+            reportId: parsedImport.reportId
+          },
+          importContinuation,
+          markerValidationPassed: true,
+          failurePhase: importAcceptedByMarker ? null : 'import'
+        };
+      } catch (fallbackImportStartError) {
+        const fallbackImportStartMessage =
+          fallbackImportStartError instanceof Error
+            ? fallbackImportStartError.message
+            : String(fallbackImportStartError);
+        throw new Error(
+          `[sync-erp] Import phase start failed after fallback from missing continuation URL (testState=${currentState.state}, job=${currentState.job || 'none'}, reportId=${currentState.reportId || 'none'}): ${fallbackImportStartMessage}`
+        );
+      }
+    }
+
     throw new Error(
       `[sync-erp] Missing continuation URL after test phase: ${
         initialContinuationError instanceof Error ? initialContinuationError.message : String(initialContinuationError)

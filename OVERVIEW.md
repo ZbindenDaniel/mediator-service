@@ -26,3 +26,5 @@
 - ✅ Extraction follow-up query contract now enforces a single `__searchQueries` entry per iteration while preserving truncation telemetry (`requestedCount`, `usedCount=1`) and supervisor-driven attempt progression.
 
 - ✅ ERP browser-parity mapping emission now supports ordered config parsing with strict validation (`from`/`to`) and per-phase mapping telemetry logs.
+- ✅ ERP test-phase continuation fallback now proceeds to import when state remains `processing`, with structured diagnostics and explicit fallback error context.
+
