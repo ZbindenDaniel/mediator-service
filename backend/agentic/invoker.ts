@@ -126,6 +126,71 @@ function composeReviewNotes(params: {
   return fragments.length > 0 ? fragments.join('\n\n') : null;
 }
 
+// TODO(agentic-review-prune): Extend pruning to additional structured spec containers when new schemas are introduced.
+function pruneUnneededSpecFieldsFromTarget(params: {
+  target: AgenticTarget;
+  unneededSpecFields: string[];
+  itemId: string;
+  logger: AgenticModelInvokerLogger;
+}): AgenticTarget {
+  const { target, unneededSpecFields, itemId, logger } = params;
+  if (unneededSpecFields.length === 0) {
+    return target;
+  }
+
+  try {
+    const langtextSource = target.Langtext;
+    if (!langtextSource || typeof langtextSource !== 'object' || Array.isArray(langtextSource)) {
+      logger.debug?.({
+        msg: 'agentic invocation skipped unneeded spec pruning; target Langtext is not an object',
+        itemId,
+        langtextType: typeof langtextSource
+      });
+      return target;
+    }
+
+    const keysToRemove = new Set(unneededSpecFields.map((entry) => entry.toLowerCase()));
+    const nextLangtext: Record<string, unknown> = { ...(langtextSource as Record<string, unknown>) };
+    const removedFields: string[] = [];
+
+    for (const key of Object.keys(nextLangtext)) {
+      if (!keysToRemove.has(key.trim().toLowerCase())) {
+        continue;
+      }
+      removedFields.push(key);
+      delete nextLangtext[key];
+    }
+
+    if (removedFields.length === 0) {
+      logger.info?.({
+        msg: 'agentic invocation found no matching Langtext fields to prune',
+        itemId,
+        unneededSpecCount: unneededSpecFields.length
+      });
+      return target;
+    }
+
+    logger.info?.({
+      msg: 'agentic invocation pruned reviewer-marked unneeded spec fields from target',
+      itemId,
+      removedSpecCount: removedFields.length,
+      removedSpecSample: removedFields.slice(0, REVIEW_SPEC_PREVIEW_LIMIT)
+    });
+
+    return {
+      ...target,
+      Langtext: nextLangtext
+    };
+  } catch (err) {
+    logger.warn?.({
+      err,
+      msg: 'agentic invocation failed to prune reviewer-marked unneeded spec fields',
+      itemId
+    });
+    return target;
+  }
+}
+
 // TODO(agent): Revisit Langtext serialization heuristics when upstream payloads evolve.
 function buildTargetFromRow(
   row: Record<string, unknown>,
@@ -680,6 +745,12 @@ export class AgenticModelInvoker {
         target.Artikelbeschreibung = input.searchQuery;
       }
       target = this.mergeTargetWithRequestPayload({ ...target }, input.requestId ?? null);
+      target = pruneUnneededSpecFieldsFromTarget({
+        target,
+        unneededSpecFields: normalizedUnneededSpecFields,
+        itemId: trimmedItemId,
+        logger: this.logger
+      });
       const llm = await this.ensureChatModel();
       const searchInvoker = this.ensureSearchInvoker();
 

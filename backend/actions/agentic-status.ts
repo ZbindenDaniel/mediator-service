@@ -99,6 +99,94 @@ export function applyPriceFallbackAfterReview(
   }
 }
 
+// TODO(agentic-review-prune): Extend spec pruning beyond Langtext once additional structured specification fields are introduced.
+export function pruneUnneededSpecsAfterReview(
+  artikelNummer: string,
+  unneededSpec: string[],
+  ctx: {
+    getItemReference: { get: (id: string) => ItemRef | undefined };
+    persistItemReference?: (ref: ItemRef) => void;
+  },
+  logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
+): void {
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmedArtikelNummer || !Array.isArray(unneededSpec) || unneededSpec.length === 0) {
+    return;
+  }
+
+  let reference: ItemRef | undefined;
+  try {
+    reference = ctx.getItemReference.get(trimmedArtikelNummer);
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to load reference for unneeded spec pruning', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+    return;
+  }
+
+  if (!reference) {
+    logger.warn?.('[agentic-review] Artikelnummer reference not found for unneeded spec pruning', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  if (!ctx.persistItemReference) {
+    logger.error?.('[agentic-review] Persistence helper unavailable; cannot prune unneeded spec fields', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  const langtext = reference.Langtext;
+  if (!langtext || typeof langtext !== 'object' || Array.isArray(langtext)) {
+    logger.debug?.('[agentic-review] Skipping unneeded spec pruning because Langtext is not an object', {
+      artikelNummer: trimmedArtikelNummer,
+      langtextType: typeof langtext
+    });
+    return;
+  }
+
+  try {
+    const removalLookup = new Set(unneededSpec.map((entry) => entry.trim().toLowerCase()).filter(Boolean));
+    const nextLangtext: Record<string, unknown> = { ...(langtext as Record<string, unknown>) };
+    const removed: string[] = [];
+
+    for (const key of Object.keys(nextLangtext)) {
+      if (!removalLookup.has(key.trim().toLowerCase())) {
+        continue;
+      }
+      removed.push(key);
+      delete nextLangtext[key];
+    }
+
+    if (!removed.length) {
+      logger.info?.('[agentic-review] No matching Langtext keys found for unneeded spec pruning', {
+        artikelNummer: trimmedArtikelNummer,
+        unneededSpecCount: unneededSpec.length
+      });
+      return;
+    }
+
+    ctx.persistItemReference({
+      ...reference,
+      Langtext: nextLangtext
+    });
+
+    logger.info?.('[agentic-review] Pruned reviewer-marked unneeded Langtext specs', {
+      artikelNummer: trimmedArtikelNummer,
+      removedCount: removed.length,
+      removedSample: removed.slice(0, 5)
+    });
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to persist unneeded spec pruning update', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+  }
+}
+
 
 
 type NormalizedReviewMetadata = {
@@ -616,6 +704,12 @@ const action = defineHttpAction({
         } catch (err) {
           console.error('Failed to apply fallback sale price after review for Artikelnummer', err);
         }
+      }
+
+      try {
+        pruneUnneededSpecsAfterReview(artikelNummer, reviewMetadata.unneeded_spec, ctx, console);
+      } catch (err) {
+        console.error('Failed to prune unneeded spec fields after review for Artikelnummer', err);
       }
 
       try {
