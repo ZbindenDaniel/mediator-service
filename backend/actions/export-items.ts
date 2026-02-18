@@ -527,6 +527,25 @@ function toCsvValue(val: any): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function escapeHtmlForExport(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case '\'':
+        return '&#39;';
+      default:
+        return character;
+    }
+  });
+}
+
 function serializeBoxes(rows: Record<string, unknown>[]): string {
   const header = boxColumns.join(',');
   const lines = rows.map((row) => boxColumns.map((column) => toCsvValue(row[column] ?? '')).join(','));
@@ -563,6 +582,30 @@ function logMissingMetadataValue(
 }
 
 // TODO(agent): Revisit CSV media derivation when asset manifests are queryable via API.
+function formatKurzbeschreibungForHtmlExport(
+  value: unknown,
+  context: { artikelNummer: string | null; itemUUID: string | null }
+): string {
+  // TODO(export-html-kurztext): Add optional class hooks once ERP template styling rules are finalized.
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  try {
+    const normalized = String(value).trim();
+    if (!normalized) {
+      return '';
+    }
+    return `<p>${escapeHtmlForExport(normalized)}</p>`;
+  } catch (error) {
+    console.error('[export-items] Failed to format Kurzbeschreibung for HTML export; falling back to string.', {
+      ...context,
+      error
+    });
+    return '';
+  }
+}
+
 function resolveLangtextExportFormat(
   exportMode: ExportMode,
   logger: Pick<Console, 'error' | 'info' | 'warn'> = console
@@ -716,6 +759,12 @@ function resolveExportValue(
       });
     }
     return normalizeMediaStringForExport(canonicalGrafikname);
+  }
+
+  if (field === 'Kurzbeschreibung' && langtextFormat === 'html') {
+    const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
+    const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    return formatKurzbeschreibungForHtmlExport(value, { artikelNummer, itemUUID });
   }
 
   if (field === 'Langtext') {

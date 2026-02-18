@@ -23,7 +23,7 @@ describe('serializeLangtextForExport', () => {
   it('serializes Langtext payloads to HTML lists', () => {
     const payload = { Specs: 'Robust', Features: 'Waterproof\nShockproof' };
     const result = serializeLangtextForExport(payload, 'html', baseContext);
-    expect(result).toBe('<ul><li><strong>Specs</strong> Robust</li><li><strong>Features</strong> Waterproof<br />Shockproof</li></ul>');
+    expect(result).toBe('<table><tbody><tr><th scope="row">Specs</th><td>Robust</td></tr><tr><th scope="row">Features</th><td>Waterproof<br />Shockproof</td></tr></tbody></table>');
   });
 
   it('handles legacy text inputs for markdown serialization', () => {

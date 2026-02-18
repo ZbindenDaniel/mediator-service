@@ -12,3 +12,5 @@
 ## Notes
 - Browser request captures indicate `CsvImport/import` probe requests without multipart context are insufficient to recover continuation identifiers.
 - Changes should stay minimal and reuse existing request assembly/polling structures.
+
+- ✅ ERP CSV HTML formatting refinement: `Langtext` HTML export now renders as a table and `Kurzbeschreibung` is wrapped in `<p>` for future styling hooks.
