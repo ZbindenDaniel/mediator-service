@@ -1,4 +1,4 @@
-import type { AgenticModelInvocationInput, AgenticModelInvocationResult } from '../../models';
+import type { AgenticModelInvocationInput, AgenticModelInvocationResult, LangtextPayload } from '../../models';
 import {
   db,
   getItem,
@@ -179,7 +179,7 @@ function pruneUnneededSpecFieldsFromTarget(params: {
 
     return {
       ...target,
-      Langtext: nextLangtext
+      Langtext: nextLangtext as LangtextPayload
     };
   } catch (err) {
     logger.warn?.({
@@ -746,11 +746,13 @@ export class AgenticModelInvoker {
       }
       target = this.mergeTargetWithRequestPayload({ ...target }, input.requestId ?? null);
       target = pruneUnneededSpecFieldsFromTarget({
-        target,
+        target: target as AgenticTarget,
         unneededSpecFields: normalizedUnneededSpecFields,
         itemId: trimmedItemId,
         logger: this.logger
       });
+      // Ensure target is typed as AgenticTarget for downstream usage
+      const typedTarget: AgenticTarget = target as AgenticTarget;
       const llm = await this.ensureChatModel();
       const searchInvoker = this.ensureSearchInvoker();
 
@@ -770,7 +772,7 @@ export class AgenticModelInvoker {
 
       const payload = await runItemFlow(
         {
-          target,
+          target: typedTarget,
           search: input.searchQuery ?? null,
           reviewNotes: normalizedReviewNotes,
           skipSearch,

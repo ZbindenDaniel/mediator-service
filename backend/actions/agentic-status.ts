@@ -171,7 +171,7 @@ export function pruneUnneededSpecsAfterReview(
 
     ctx.persistItemReference({
       ...reference,
-      Langtext: nextLangtext
+      Langtext: nextLangtext as typeof reference.Langtext
     });
 
     logger.info?.('[agentic-review] Pruned reviewer-marked unneeded Langtext specs', {
