@@ -11,10 +11,10 @@
   {{BASE_ROLE_POLICY}}
   {{OUTPUT_CONTRACT}}
   {{ERROR_POLICY}}
-  - Respond with JSON only.
-  - Include pricing decision fields when available: `directListingPrice`, `trustedHistoricalPrice`, `Verkaufspreis`, `confidence`, `evidenceCount`, `sourceUrl`, `parseStatus`, `zeroIsValid`.
+  - Respond with JSON only. Do not output prose, markdown, code fences, or explanatory text before/after the JSON object.
+  - Always return exactly one JSON object using the contract keys: `directListingPrice`, `trustedHistoricalPrice`, `Verkaufspreis`, `confidence`, `evidenceCount`, `sourceUrl`, `parseStatus`, `zeroIsValid`.
   - Use numeric values (no currency symbols) for price outputs when possible, or `null`.
-  - Preserve the exact key names above.
+  - Preserve the exact key names above and keep missing values as `null`, `0`, `""`, or `false` according to the schema example.
 </rules>
 <output_format>
 

@@ -29,6 +29,7 @@ const PricingResponseSchema = z
 const PRICING_TIMEOUT_MS = 15000;
 const MIN_CONFIDENCE_FOR_PRICE = 0.6;
 const MIN_EVIDENCE_COUNT_FOR_PRICE = 2;
+const PRICING_JSON_REPAIR_TIMEOUT_MS = 10000;
 
 // TODO(agent): Revisit price normalization once locale-specific pricing data is available.
 function normalizePriceValue(value: unknown, { allowZero = false }: { allowZero?: boolean } = {}): number | null {
@@ -164,6 +165,93 @@ export interface RunPricingStageOptions {
   transcriptWriter?: AgentTranscriptWriter | null;
 }
 
+async function repairPricingJsonResponse({
+  llm,
+  logger,
+  itemId,
+  pricingPrompt,
+  requestPayload,
+  invalidResponse,
+  parseError
+}: {
+  llm: ChatModel;
+  logger?: ExtractionLogger;
+  itemId: string;
+  pricingPrompt: string;
+  requestPayload: string;
+  invalidResponse: string;
+  parseError: string;
+}): Promise<string | null> {
+  // TODO(agentic-pricing-json): Move JSON repair prompts into shared prompt assets if more stages need them.
+  const repairSystemPrompt = [
+    'You repair invalid pricing-agent outputs.',
+    'Return only valid JSON (no markdown fences, no explanation).',
+    'Keep field names exactly as defined by the pricing contract (Verkaufspreis, directListingPrice, trustedHistoricalPrice, confidence, evidenceCount, sourceUrl, parseStatus, zeroIsValid, item).',
+    'If a value is unknown, use null.'
+  ].join(' ');
+
+  const repairUserPayload = [
+    'Original pricing instructions:',
+    pricingPrompt,
+    '',
+    'Original pricing request payload:',
+    requestPayload,
+    '',
+    'Invalid response:',
+    invalidResponse,
+    '',
+    `Parsing error: ${parseError}`,
+    '',
+    'Rewrite the invalid response into valid JSON only.'
+  ].join('\n');
+
+  logger?.info?.({ msg: 'invoking pricing json repair', itemId });
+
+  let repairTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let repairTimedOut = false;
+
+  try {
+    const timeoutPromise = new Promise<null>((resolve) => {
+      repairTimeoutId = setTimeout(() => {
+        repairTimedOut = true;
+        logger?.warn?.({ msg: 'pricing json repair timed out', itemId, timeoutMs: PRICING_JSON_REPAIR_TIMEOUT_MS });
+        resolve(null);
+      }, PRICING_JSON_REPAIR_TIMEOUT_MS);
+    });
+
+    const invokePromise = llm
+      .invoke([
+        { role: 'system', content: repairSystemPrompt },
+        { role: 'user', content: repairUserPayload }
+      ])
+      .catch((err) => {
+        if (!repairTimedOut) {
+          logger?.warn?.({ err, msg: 'pricing json repair invocation failed', itemId });
+        }
+        return null;
+      });
+
+    const repairResult = await Promise.race([invokePromise, timeoutPromise]);
+    if (repairTimeoutId) {
+      clearTimeout(repairTimeoutId);
+    }
+    if (!repairResult) {
+      return null;
+    }
+
+    return stringifyLangChainContent(repairResult.content, {
+      context: 'itemFlow.pricing.repair',
+      logger
+    });
+  } catch (err) {
+    if (repairTimeoutId) {
+      clearTimeout(repairTimeoutId);
+    }
+    logger?.warn?.({ err, msg: 'pricing json repair failed unexpectedly', itemId });
+    return null;
+  }
+}
+
 export async function runPricingStage({
   llm,
   logger,
@@ -253,6 +341,11 @@ export async function runPricingStage({
     logger
   });
 
+  // TODO(agentic-pricing-contract): Remove prefix check once providers expose guaranteed JSON response-format contracts.
+  if (!raw.trimStart().startsWith('{')) {
+    logger?.warn?.({ msg: 'pricing response violated json-object contract', itemId, preview: raw.slice(0, 160) });
+  }
+
   const transcriptPayload: TranscriptSectionPayload = {
     request: payloadForPricing,
     messages: pricingMessages,
@@ -273,7 +366,31 @@ export async function runPricingStage({
     });
   } catch (err) {
     logger?.warn?.({ err, msg: 'pricing response contained invalid json', itemId });
-    return null;
+
+    const repairParseError = err instanceof Error ? err.message : String(err);
+    const repairedRaw = await repairPricingJsonResponse({
+      llm,
+      logger,
+      itemId,
+      pricingPrompt,
+      requestPayload: userPayload,
+      invalidResponse: raw,
+      parseError: repairParseError
+    });
+    if (!repairedRaw) {
+      return null;
+    }
+
+    try {
+      parsed = parseJsonWithSanitizer(repairedRaw, {
+        loggerInstance: logger,
+        context: { itemId, stage: 'pricing-agent-repair' }
+      });
+      logger?.info?.({ msg: 'pricing json repair succeeded', itemId });
+    } catch (repairErr) {
+      logger?.warn?.({ err: repairErr, msg: 'pricing json repair output remained invalid', itemId });
+      return null;
+    }
   }
 
   const validated = PricingResponseSchema.safeParse(parsed);
