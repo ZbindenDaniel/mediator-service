@@ -87,7 +87,7 @@ describe('extraction prompt guidance', () => {
     expect(extractPrompt).toContain('Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays of strings.');
     expect(extractPrompt).toContain('Anti-pattern: Never return placeholder-only `Spezifikationen`');
     expect(extractPrompt).toContain('Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.');
-    expect(extractPrompt).toContain('Add `__searchQueries` only if unresolved details block required fields:');
+    expect(extractPrompt).toContain('Add one `__searchQueries` entry only when needed:');
     expect(extractPrompt).toContain('{{TARGET_SCHEMA_FORMAT}}');
 
     const outputFormatStart = extractPrompt.indexOf('<output_format>');
