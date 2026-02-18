@@ -217,7 +217,7 @@ interface ImportExecutionResult {
 
 type ImportMode = 'script-parity' | 'polling-enabled';
 
-type PollTargetSource = 'fromTestResponse' | 'fromLastPoll' | 'fallbackBaseController';
+type PollTargetSource = 'effectiveUrl' | 'htmlLink' | 'reconstructed' | 'fallbackBaseController';
 
 interface ReportReadinessContext {
   reportId: string;
@@ -247,6 +247,12 @@ interface ParsedErpResponse {
 }
 
 type ErpIdentifierSource = 'effectiveUrl' | 'htmlHref' | 'scriptPayload';
+type ContinuationSource = 'effectiveUrl' | 'htmlLink' | 'reconstructed';
+
+interface ContinuationSelection {
+  nextContinuationUrl: string;
+  source: ContinuationSource;
+}
 
 interface ExtractedErpIdentifiers {
   job: string | null;
@@ -619,51 +625,110 @@ function logParseEvidence(
   });
 }
 
+function normalizeContinuationAction(action: string | null): string | null {
+  if (!action) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(action).replace(/\s+/g, '');
+  } catch {
+    return action.replace(/\s+/g, '');
+  }
+}
+
+function isContinuationUrlCandidate(urlValue: string): boolean {
+  const normalized = decodeHtmlEntities(urlValue).toLowerCase();
+  return normalized.includes('action=csvimport/report') || normalized.includes('action=csvimport/result');
+}
+
+function extractHtmlContinuationLinks(stdout: string, effectiveUrl: string, baseUrl: string): string[] {
+  const rawMatches = Array.from(
+    stdout.matchAll(/(?:href|data-(?:url|href)|formaction|action)\s*=\s*['\"]([^'\"]*CsvImport[^'\"]*)['\"]/gi)
+  ).map((match) => decodeHtmlEntities(match[1] || '').trim());
+
+  const links: string[] = [];
+  for (const rawMatch of rawMatches) {
+    if (!rawMatch || !isContinuationUrlCandidate(rawMatch)) {
+      continue;
+    }
+
+    try {
+      const resolved = new URL(rawMatch, effectiveUrl || baseUrl).toString();
+      links.push(resolved);
+      continue;
+    } catch {
+      links.push(rawMatch);
+    }
+  }
+
+  return Array.from(new Set(links));
+}
+
 // TODO(sync-erp-continuation-url): Revisit continuation URL extraction if ERP changes CsvImport redirect/query behavior.
-function extractContinuationUrl(
+function captureContinuationUrl(
   phase: ImportPhase,
   baseUrl: string,
+  stdout: string,
   effectiveUrl: string,
   parsed: ParsedErpResponse,
-  logger: Pick<Console, 'warn'>
-): string | null {
+  logger: Pick<Console, 'warn' | 'info'>
+): ContinuationSelection {
   try {
     if (effectiveUrl) {
       const parsedEffectiveUrl = new URL(effectiveUrl);
-      const action = parsedEffectiveUrl.searchParams.get('action');
+      const action = normalizeContinuationAction(parsedEffectiveUrl.searchParams.get('action'));
       const job = parsedEffectiveUrl.searchParams.get('job') || parsed.job;
       const reportId = parsedEffectiveUrl.searchParams.get('id') || parsed.reportId;
       if (action === 'CsvImport/report' && reportId) {
-        return parsedEffectiveUrl.toString();
+        const selection = { nextContinuationUrl: parsedEffectiveUrl.toString(), source: 'effectiveUrl' as const };
+        logger.info?.('[sync-erp] ERP continuation URL selected', { phase, ...selection });
+        return selection;
       }
       if (action === 'CsvImport/result' && job) {
-        return parsedEffectiveUrl.toString();
+        const selection = { nextContinuationUrl: parsedEffectiveUrl.toString(), source: 'effectiveUrl' as const };
+        logger.info?.('[sync-erp] ERP continuation URL selected', { phase, ...selection });
+        return selection;
       }
     }
 
+    const htmlLinks = extractHtmlContinuationLinks(stdout, effectiveUrl, baseUrl);
+    const htmlLink = htmlLinks[0];
+    if (htmlLink) {
+      const selection = { nextContinuationUrl: htmlLink, source: 'htmlLink' as const };
+      logger.info?.('[sync-erp] ERP continuation URL selected', { phase, htmlLinks, ...selection });
+      return selection;
+    }
+
     if (parsed.reportId) {
-      return `${baseUrl}?action=CsvImport/report&id=${encodeURIComponent(parsed.reportId)}`;
+      const selection = {
+        nextContinuationUrl: `${baseUrl}?action=CsvImport/report&id=${encodeURIComponent(parsed.reportId)}`,
+        source: 'reconstructed' as const
+      };
+      logger.info?.('[sync-erp] ERP continuation URL selected', { phase, htmlLinks, ...selection });
+      return selection;
     }
     if (parsed.job) {
-      return `${baseUrl}?action=CsvImport/result&job=${encodeURIComponent(parsed.job)}`;
+      const selection = {
+        nextContinuationUrl: `${baseUrl}?action=CsvImport/result&job=${encodeURIComponent(parsed.job)}`,
+        source: 'reconstructed' as const
+      };
+      logger.info?.('[sync-erp] ERP continuation URL selected', { phase, htmlLinks, ...selection });
+      return selection;
     }
-    return null;
+
+    throw new Error(
+      `No continuation URL available for phase "${phase}" (effectiveUrl=${trimDiagnosticOutput(effectiveUrl, 200)}, state=${parsed.state}).`
+    );
   } catch (urlParseError) {
-    logger.warn?.('[sync-erp] Failed to extract continuation URL from ERP response', {
+    logger.warn?.('[sync-erp] Failed to capture continuation URL from ERP response', {
       phase,
       effectiveUrl: trimDiagnosticOutput(effectiveUrl, 200),
       job: parsed.job,
       reportId: parsed.reportId,
       urlParseError: urlParseError instanceof Error ? urlParseError.message : String(urlParseError)
     });
-
-    if (parsed.reportId) {
-      return `${baseUrl}?action=CsvImport/report&id=${encodeURIComponent(parsed.reportId)}`;
-    }
-    if (parsed.job) {
-      return `${baseUrl}?action=CsvImport/result&job=${encodeURIComponent(parsed.job)}`;
-    }
-    return null;
+    throw urlParseError;
   }
 }
 
@@ -1046,19 +1111,29 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
 
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
       attempt += 1;
-      const effectiveUrl = extractContinuationUrl('import', url, latestImportResult.effectiveUrl, latestState, loggerRef);
       const elapsedMs = Date.now() - startedAt;
+      let continuationSelection: ContinuationSelection | null = null;
 
-      loggerRef.info?.('[sync-erp] ERP import continuation iteration', {
-        attempt,
-        elapsedMs,
-        state: latestState.state,
-        job: latestState.job,
-        reportId: latestState.reportId,
-        effectiveUrl: effectiveUrl || null
-      });
+      try {
+        continuationSelection = captureContinuationUrl(
+          'import',
+          url,
+          latestImportResult.stdout,
+          latestImportResult.effectiveUrl,
+          latestState,
+          loggerRef
+        );
+      } catch (continuationCaptureError) {
+        loggerRef.warn?.('[sync-erp] ERP import continuation URL unavailable', {
+          attempt,
+          elapsedMs,
+          state: latestState.state,
+          job: latestState.job,
+          reportId: latestState.reportId,
+          error:
+            continuationCaptureError instanceof Error ? continuationCaptureError.message : String(continuationCaptureError)
+        });
 
-      if (!effectiveUrl) {
         if (!fallbackProbeAttempted && latestState.state === 'processing' && !latestState.job && !latestState.reportId) {
           fallbackProbeAttempted = true;
           const probeUrl = buildContextBootstrapUrl();
@@ -1163,8 +1238,19 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         };
       }
 
+      loggerRef.info?.('[sync-erp] ERP import continuation iteration', {
+        attempt,
+        elapsedMs,
+        state: latestState.state,
+        job: latestState.job,
+        reportId: latestState.reportId,
+        nextContinuationUrl: continuationSelection.nextContinuationUrl,
+        source: continuationSelection.source,
+        phase: 'import'
+      });
+
       try {
-        const continuationResult = await runCurl('import', buildPollArgs(effectiveUrl));
+        const continuationResult = await runCurl('import', buildPollArgs(continuationSelection.nextContinuationUrl));
         latestImportResult = continuationResult;
 
         try {
@@ -1174,7 +1260,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           loggerRef.warn?.('[sync-erp] Failed to parse ERP continuation response; keeping processing state', {
             attempt,
             elapsedMs,
-            effectiveUrl: trimDiagnosticOutput(effectiveUrl, 200),
+            effectiveUrl: trimDiagnosticOutput(continuationSelection.nextContinuationUrl, 200),
             parseError: parseError instanceof Error ? parseError.message : String(parseError)
           });
           latestState = {
@@ -1209,7 +1295,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         loggerRef.error?.('[sync-erp] ERP import continuation request failed', {
           attempt,
           elapsedMs,
-          effectiveUrl: trimDiagnosticOutput(effectiveUrl, 200),
+          effectiveUrl: trimDiagnosticOutput(continuationSelection.nextContinuationUrl, 200),
           continuationError: continuationError instanceof Error ? continuationError.message : String(continuationError)
         });
         return {
@@ -1426,8 +1512,19 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   };
 
   recordEffectiveUrlState(testResult.effectiveUrl, currentState.evidence.effectiveUrlAction);
-  let continuationUrl = extractContinuationUrl('test', url, testResult.effectiveUrl, currentState, loggerRef);
-  let continuationSource: PollTargetSource = continuationUrl ? 'fromTestResponse' : 'fallbackBaseController';
+  let continuationUrl: string | null = null;
+  let continuationSource: PollTargetSource = 'fallbackBaseController';
+  try {
+    const testContinuation = captureContinuationUrl('test', url, testResult.stdout, testResult.effectiveUrl, currentState, loggerRef);
+    continuationUrl = testContinuation.nextContinuationUrl;
+    continuationSource = testContinuation.source;
+  } catch (initialContinuationError) {
+    throw new Error(
+      `[sync-erp] Missing continuation URL after test phase: ${
+        initialContinuationError instanceof Error ? initialContinuationError.message : String(initialContinuationError)
+      }`
+    );
+  }
   let rebootstrapAttempted = false;
   let contextLostCount = 0;
 
@@ -1502,17 +1599,16 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             const bootstrapRequest = await runCurl('polling', buildPollArgs(bootstrapUrl));
             const bootstrapState = parseErpImportState(bootstrapRequest.stdout, bootstrapRequest.effectiveUrl);
             logParseEvidence(loggerRef, 'polling', bootstrapState);
-            const bootstrapContinuationUrl = extractContinuationUrl(
+            const bootstrapContinuation = captureContinuationUrl(
               'polling',
               url,
+              bootstrapRequest.stdout,
               bootstrapRequest.effectiveUrl,
               bootstrapState,
               loggerRef
             );
-            if (bootstrapContinuationUrl) {
-              continuationUrl = bootstrapContinuationUrl;
-              continuationSource = 'fromLastPoll';
-            }
+            continuationUrl = bootstrapContinuation.nextContinuationUrl;
+            continuationSource = bootstrapContinuation.source;
             currentState = bootstrapState;
             continue;
           } catch (rebootstrapError) {
@@ -1554,8 +1650,12 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       }
 
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      const pollUrl = continuationUrl || url;
-      const pollTargetSource: PollTargetSource = continuationUrl ? continuationSource : 'fallbackBaseController';
+      if (!continuationUrl) {
+        throw new Error('[sync-erp] Missing continuation URL before polling request.');
+      }
+
+      const pollUrl = continuationUrl;
+      const pollTargetSource: PollTargetSource = continuationSource;
       const { pollTargetAction, pollTargetJob, pollTargetReportId } = parsePollTargetMetadata(pollUrl, loggerRef);
 
       attemptedPollTargets.push(
@@ -1574,18 +1674,6 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         pollTargetReportId
       });
 
-      if (!continuationUrl) {
-        loggerRef.warn?.('[sync-erp] Polling fallback to base controller URL due to missing continuation context', {
-          phase: 'polling',
-          pollTargetSource,
-          pollTargetUrl: trimDiagnosticOutput(pollUrl, 200),
-          pollTargetAction,
-          pollTargetJob,
-          pollTargetReportId,
-          job: currentState.job,
-          reportId: currentState.reportId
-        });
-      }
       const pollRequest = await runCurl('polling', buildPollArgs(pollUrl));
 
       try {
@@ -1620,10 +1708,23 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         contextLostCount = 0;
       }
 
-      const nextContinuationUrl = extractContinuationUrl('polling', url, pollRequest.effectiveUrl, currentState, loggerRef);
-      if (nextContinuationUrl) {
-        continuationUrl = nextContinuationUrl;
-        continuationSource = 'fromLastPoll';
+      try {
+        const nextContinuation = captureContinuationUrl(
+          'polling',
+          url,
+          pollRequest.stdout,
+          pollRequest.effectiveUrl,
+          currentState,
+          loggerRef
+        );
+        continuationUrl = nextContinuation.nextContinuationUrl;
+        continuationSource = nextContinuation.source;
+      } catch (nextContinuationError) {
+        throw new Error(
+          `[sync-erp] Missing continuation URL after polling response: ${
+            nextContinuationError instanceof Error ? nextContinuationError.message : String(nextContinuationError)
+          }`
+        );
       }
 
       lastEffectiveUrlAction = currentState.evidence.effectiveUrlAction;
