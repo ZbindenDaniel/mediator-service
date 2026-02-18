@@ -9,7 +9,7 @@
 2. ✅ Align browser-parity action contract for preview/import (`CsvImport/test` + `CsvImport/import`) and remove legacy action flag emission in browser-parity mode.
 3. ✅ Re-validate parser and completion criteria with deterministic logs and minimal branching.
 4. ✅ Refine extraction iteration logging/outcome handling for additional context requests (single-query append).
-5. ⏳ Add explicit browser-parity mapping emission (`mappings[+].from` / `mappings[].to`) based on captured HAR payloads.
+5. ✅ Add explicit browser-parity mapping emission (`mappings[+].from` / `mappings[].to`) based on captured HAR payloads.
 6. ✅ Add pricing-stage JSON repair fallback when the pricing model emits narrative text instead of contract JSON.
 
 ## Notes
@@ -24,3 +24,5 @@
 - Pricing prompt now explicitly forbids prose/markdown and requires a single contract JSON object to reduce parser failures before repair fallback.
 
 - ✅ Extraction follow-up query contract now enforces a single `__searchQueries` entry per iteration while preserving truncation telemetry (`requestedCount`, `usedCount=1`) and supervisor-driven attempt progression.
+
+- ✅ ERP browser-parity mapping emission now supports ordered config parsing with strict validation (`from`/`to`) and per-phase mapping telemetry logs.
