@@ -241,6 +241,8 @@ interface ParsedErpResponse {
     hasImportStatusH2: boolean;
     hasImportVorschauH2: boolean;
     isLoginForm: boolean;
+    rawAction: string | null;
+    normalizedAction: string | null;
     effectiveUrlAction: string | null;
   };
   diagnostics?: string;
@@ -387,6 +389,22 @@ function extractQueryParam(urlValue: string, key: string): string | null {
   }
 }
 
+function decodeUriComponentOnce(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeActionForMatching(action: string | null): string | null {
+  if (!action) {
+    return null;
+  }
+
+  return decodeUriComponentOnce(action).replace(/\s+/g, '');
+}
+
 function decodeHtmlEntities(value: string): string {
   return value
     .replace(/&amp;/gi, '&')
@@ -397,25 +415,28 @@ function decodeHtmlEntities(value: string): string {
 }
 
 function decodeUrlEncodedFragments(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
+  return decodeUriComponentOnce(value);
 }
 
 function extractIdentifierFromPattern(value: string, type: 'resultJob' | 'reportId'): string | null {
   const pattern =
     type === 'resultJob'
-      ? /action\s*=\s*CsvImport\s*\/\s*result[^\n"'<>]*?[?&]job\s*=\s*(\d+)/i
-      : /action\s*=\s*CsvImport\s*\/\s*report[^\n"'<>]*?[?&]id\s*=\s*(\d+)/i;
+      ? /action\s*=\s*CsvImport\s*(?:\/|%2f)\s*result[^\n"'<>]*?(?:[?&]|\b)job\s*=\s*(\d+)/i
+      : /action\s*=\s*CsvImport\s*(?:\/|%2f)\s*report[^\n"'<>]*?(?:[?&]|\b)id\s*=\s*(\d+)/i;
   const match = value.match(pattern);
   return match?.[1] || null;
+}
+
+function extractActionFromValue(value: string): { rawAction: string | null; normalizedAction: string | null } {
+  const rawAction = extractQueryParam(value, 'action');
+  const normalizedAction = normalizeActionForMatching(rawAction);
+  return { rawAction, normalizedAction };
 }
 
 // TODO(sync-erp-identifier-patterns): Expand parser patterns if ERP starts embedding continuation URLs in additional data attributes.
 function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedErpIdentifiers {
   try {
+    // TODO(sync-erp-mixed-encoding): Keep extraction candidates scoped to effective URL + HTML/script payloads unless ERP introduces new response containers.
     const htmlHrefMatches = Array.from(stdout.matchAll(/href\s*=\s*['\"]([^'\"]+)['\"]/gi)).map(
       (match) => match[1] || ''
     );
@@ -440,7 +461,8 @@ function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedE
 
     for (const candidate of candidates) {
       const normalizedCandidate = decodeUrlEncodedFragments(decodeHtmlEntities(candidate.value));
-      const responseText = `${normalizedCandidate}\n${decodeHtmlEntities(candidate.value)}`;
+      const decodedCandidate = decodeHtmlEntities(candidate.value);
+      const responseText = `${normalizedCandidate}\n${decodedCandidate}`;
       if (!reportId) {
         reportId = extractQueryParam(responseText, 'id') || extractIdentifierFromPattern(responseText, 'reportId');
         if (reportId) {
@@ -532,7 +554,7 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
     const hasImportStatusH2 = /<h2[^>]*>\s*Import Status\s*<\/h2>/i.test(responseText);
     const hasImportVorschauH2 = /<h2[^>]*>\s*Import-Vorschau\s*<\/h2>/i.test(responseText);
     const isLoginForm = hasAuthLossMarkers(stdout, effectiveUrl);
-    const effectiveUrlAction = extractEffectiveUrlAction(effectiveUrl);
+    const { rawAction: effectiveUrlActionRaw, normalizedAction: effectiveUrlAction } = extractActionFromValue(effectiveUrl);
     const isAuthenticatedHome = isAuthenticatedHomeResponse(stdout, effectiveUrl, effectiveUrlAction);
     const isContextLost =
       effectiveUrlAction === ERP_CONTEXT_LOST_ACTION && /\/login\.pl(?:$|\?)/i.test(effectiveUrl);
@@ -588,6 +610,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
         hasImportStatusH2,
         hasImportVorschauH2,
         isLoginForm,
+        rawAction: effectiveUrlActionRaw,
+        normalizedAction: effectiveUrlAction,
         effectiveUrlAction
       }
     };
@@ -601,6 +625,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
         hasImportStatusH2: false,
         hasImportVorschauH2: false,
         isLoginForm: false,
+        rawAction: null,
+        normalizedAction: null,
         effectiveUrlAction: null
       },
       diagnostics: parseError instanceof Error ? parseError.message : 'Unknown parser failure'
@@ -620,25 +646,21 @@ function logParseEvidence(
     hasImportStatusH2: parsed.evidence.hasImportStatusH2,
     hasImportVorschauH2: parsed.evidence.hasImportVorschauH2,
     isLoginForm: parsed.evidence.isLoginForm,
+    rawAction: parsed.evidence.rawAction,
+    normalizedAction: parsed.evidence.normalizedAction,
     effectiveUrlAction: parsed.evidence.effectiveUrlAction,
+    job: parsed.job,
+    reportId: parsed.reportId,
     diagnostics: parsed.diagnostics
   });
 }
 
 function normalizeContinuationAction(action: string | null): string | null {
-  if (!action) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(action).replace(/\s+/g, '');
-  } catch {
-    return action.replace(/\s+/g, '');
-  }
+  return normalizeActionForMatching(action);
 }
 
 function isContinuationUrlCandidate(urlValue: string): boolean {
-  const normalized = decodeHtmlEntities(urlValue).toLowerCase();
+  const normalized = decodeUriComponentOnce(decodeHtmlEntities(urlValue)).toLowerCase();
   return normalized.includes('action=csvimport/report') || normalized.includes('action=csvimport/result');
 }
 
@@ -1396,6 +1418,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         }
       });
 
+      const fallbackAction = extractActionFromValue(importResult.effectiveUrl);
       parsedImport = {
         job: null,
         reportId: null,
@@ -1405,7 +1428,9 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           hasImportStatusH2: false,
           hasImportVorschauH2: false,
           isLoginForm: false,
-          effectiveUrlAction: extractEffectiveUrlAction(importResult.effectiveUrl)
+          rawAction: fallbackAction.rawAction,
+          normalizedAction: fallbackAction.normalizedAction,
+          effectiveUrlAction: fallbackAction.normalizedAction
         },
         diagnostics: `fallback(exitCode=${importResult.exitCode}, stdout=${trimDiagnosticOutput(importResult.stdout, 200)})`
       };
@@ -1692,6 +1717,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             hasImportStatusH2: false,
             hasImportVorschauH2: false,
             isLoginForm: false,
+            rawAction: null,
+            normalizedAction: null,
             effectiveUrlAction: null
           },
           diagnostics: pollParseError instanceof Error ? pollParseError.message : 'Unknown parser transition failure'
