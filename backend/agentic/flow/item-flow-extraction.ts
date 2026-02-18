@@ -262,31 +262,6 @@ function logIterationDecision(
       decisionPath: payload.outcome.decisionPath,
       outcome: payload.outcome.type
     });
-    
-function logIterationEvent(
-  logger: ExtractionLogger | undefined,
-  payload: {
-    itemId: string;
-    iteration: number;
-    contextIndex: number;
-    attemptWithinIteration: number;
-    outcome: IterationOutcome;
-    detail?: unknown;
-  }
-): void {
-  try {
-    const logPayload = {
-      msg: 'extraction iteration outcome',
-      itemId: payload.itemId,
-      iteration: payload.iteration,
-      contextIndex: payload.contextIndex,
-      attemptWithinIteration: payload.attemptWithinIteration,
-      outcome: payload.outcome,
-      detail: sanitizeForLog(payload.detail)
-    };
-    logger?.info?.(logPayload);
-  } catch (err) {
-    logger?.warn?.({ err, msg: 'failed to build iteration outcome log payload', itemId: payload.itemId });
   }
 }
 
@@ -1320,15 +1295,11 @@ export async function runExtractionAttempts({
         type: 'retry_same_context',
         reason: 'SCHEMA_VALIDATION_FAILED',
         decisionPath: 'parse -> schema-validation-failed',
-        details: { issues: agentParsed.error.issues },
-        validationIssuesPreview: sanitizeForLog(agentParsed.error.issues)
+        details: { issues: agentParsed.error.issues }
       };
       if (await dispatchIterationOutcome(schemaValidationOutcome) === 'break') {
         break;
       }
-      
-      logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'schema_invalid', detail: sanitizeForLog(agentParsed.error.issues) });
-      advanceAttempt();
       continue;
     }
 
@@ -1353,6 +1324,35 @@ export async function runExtractionAttempts({
           searchRequestCycles,
           maxSearchRequestCycles: MAX_SEARCH_REQUEST_CYCLES
         });
+        const bestEffortMerge = mergeAccumulatedCandidate(extractionAccumulator, candidateData, {
+          logger,
+          itemId,
+          attempt,
+          passIndex: contextCursor + 1
+        });
+        if (bestEffortMerge.success) {
+          extractionAccumulator = bestEffortMerge.data;
+          lastValidated = { success: true, data: bestEffortMerge.data };
+          lastValidationIssues = null;
+          passFailureValidationIssues = null;
+          logger?.info?.({
+            msg: 'using best-effort extraction data after search limit reached',
+            attempt,
+            itemId,
+            payloadPreview: sanitizeForLog(bestEffortMerge.data)
+          });
+        } else {
+          const mergeIssues = (bestEffortMerge as { issues: unknown }).issues;
+          lastValidated = { success: true, data: candidateData };
+          lastValidationIssues = mergeIssues;
+          passFailureValidationIssues = mergeIssues;
+          logger?.warn?.({
+            msg: 'best-effort merge failed after search limit reached',
+            attempt,
+            itemId,
+            mergeIssues: sanitizeForLog(mergeIssues)
+          });
+        }
         const terminalOutcome: IterationOutcome = {
           type: 'failed_terminal',
           reason: 'TOO_MANY_SEARCH_REQUESTS',
@@ -1381,15 +1381,6 @@ export async function runExtractionAttempts({
       if (await dispatchIterationOutcome(searchOutcome) === 'break') {
         break;
       }
-      
-      logIterationEvent(logger, {
-        itemId,
-        iteration: attempt,
-        contextIndex: contextCursor + 1,
-        attemptWithinIteration: 1,
-        outcome: 'need_more_context',
-        detail: { requestedQueriesPreview: sanitizeForLog(queriesToProcess) }
-      });
       continue;
     }
 
