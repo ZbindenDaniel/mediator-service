@@ -209,6 +209,7 @@ interface ImportExecutionResult {
     completed: boolean;
     timedOut: boolean;
     lastState: PollState;
+    missingContinuationContext?: boolean;
   } | null;
   markerValidationPassed: boolean;
   failurePhase: ImportPhase | null;
@@ -412,6 +413,9 @@ function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedE
     const htmlHrefMatches = Array.from(stdout.matchAll(/href\s*=\s*['\"]([^'\"]+)['\"]/gi)).map(
       (match) => match[1] || ''
     );
+    const htmlAttributeMatches = Array.from(
+      stdout.matchAll(/(?:data-(?:url|href)|formaction|action)\s*=\s*['\"]([^'\"]*CsvImport[^'\"]*)['\"]/gi)
+    ).map((match) => match[1] || '');
     const scriptPayloadMatches = Array.from(stdout.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)).map(
       (match) => match[1] || ''
     );
@@ -419,6 +423,7 @@ function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedE
     const candidates: Array<{ source: ErpIdentifierSource; value: string }> = [
       { source: 'effectiveUrl', value: effectiveUrl },
       ...htmlHrefMatches.map((value) => ({ source: 'htmlHref' as const, value })),
+      ...htmlAttributeMatches.map((value) => ({ source: 'htmlHref' as const, value })),
       ...scriptPayloadMatches.map((value) => ({ source: 'scriptPayload' as const, value }))
     ];
 
@@ -1017,8 +1022,10 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     initialImportResult: ImportResult,
     initialState: ParsedErpResponse
   ): Promise<{ importResult: ImportResult; parsedImport: ParsedErpResponse; continuationOutcome: ImportExecutionResult['importContinuation'] }> => {
+    // TODO(sync-erp-continuation-probe): Remove one-shot context probe if ERP reliably returns continuation identifiers in processing responses.
     let latestImportResult = initialImportResult;
     let latestState = initialState;
+    let fallbackProbeAttempted = false;
     const pollIntervalMs = Math.max(250, ERP_IMPORT_POLL_INTERVAL_MS);
     const pollTimeoutMs = Math.min(Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS), 15000);
     const startedAt = Date.now();
@@ -1052,9 +1059,94 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       });
 
       if (!effectiveUrl) {
+        if (!fallbackProbeAttempted && latestState.state === 'processing' && !latestState.job && !latestState.reportId) {
+          fallbackProbeAttempted = true;
+          const probeUrl = buildContextBootstrapUrl();
+          loggerRef.warn?.('[sync-erp] ERP import continuation fallback probe started', {
+            attempt,
+            elapsedMs,
+            fallbackProbeAttempted,
+            probeUrl: trimDiagnosticOutput(probeUrl, 200),
+            state: latestState.state,
+            job: latestState.job,
+            reportId: latestState.reportId
+          });
+
+          try {
+            const probeResult = await runCurl('import', buildPollArgs(probeUrl));
+            let probeState = latestState;
+            try {
+              probeState = parseErpImportState(probeResult.stdout, probeResult.effectiveUrl);
+            } catch (probeParseError) {
+              loggerRef.warn?.('[sync-erp] ERP import continuation fallback probe parse failed', {
+                attempt,
+                elapsedMs,
+                fallbackProbeAttempted,
+                probeUrl: trimDiagnosticOutput(probeUrl, 200),
+                error: probeParseError instanceof Error ? probeParseError.message : String(probeParseError)
+              });
+            }
+
+            const probedIdentifiers = extractErpIdentifiers(probeResult.stdout, probeResult.effectiveUrl);
+            const identifiersRecovered = Boolean(probedIdentifiers.reportId || probedIdentifiers.job);
+            loggerRef.info?.('[sync-erp] ERP import continuation fallback probe finished', {
+              attempt,
+              elapsedMs,
+              fallbackProbeAttempted,
+              identifiersRecovered,
+              reportId: probedIdentifiers.reportId,
+              job: probedIdentifiers.job,
+              reportSource: probedIdentifiers.sources.reportId || 'none',
+              jobSource: probedIdentifiers.sources.job || 'none'
+            });
+
+            latestImportResult = probeResult;
+            latestState = {
+              ...probeState,
+              reportId: probeState.reportId || probedIdentifiers.reportId,
+              job: probeState.job || probedIdentifiers.job
+            };
+
+            if (identifiersRecovered) {
+              logParseEvidence(loggerRef, 'import', latestState);
+              continue;
+            }
+
+            return {
+              importResult: latestImportResult,
+              parsedImport: latestState,
+              continuationOutcome: {
+                completed: false,
+                timedOut: false,
+                lastState: latestState.state,
+                missingContinuationContext: true
+              }
+            };
+          } catch (probeError) {
+            loggerRef.warn?.('[sync-erp] ERP import continuation fallback probe request failed', {
+              attempt,
+              elapsedMs,
+              fallbackProbeAttempted,
+              probeUrl: trimDiagnosticOutput(probeUrl, 200),
+              error: probeError instanceof Error ? probeError.message : String(probeError)
+            });
+            return {
+              importResult: latestImportResult,
+              parsedImport: latestState,
+              continuationOutcome: {
+                completed: false,
+                timedOut: false,
+                lastState: latestState.state,
+                missingContinuationContext: true
+              }
+            };
+          }
+        }
+
         loggerRef.warn?.('[sync-erp] ERP import continuation skipped due to missing continuation URL', {
           attempt,
           elapsedMs,
+          fallbackProbeAttempted,
           state: latestState.state,
           job: latestState.job,
           reportId: latestState.reportId
@@ -1065,7 +1157,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           continuationOutcome: {
             completed: false,
             timedOut: false,
-            lastState: latestState.state
+            lastState: latestState.state,
+            missingContinuationContext: !latestState.job && !latestState.reportId
           }
         };
       }
@@ -1854,7 +1947,8 @@ const action = defineHttpAction({
       const importContinuationOutcome = curlResult.importContinuation ?? {
         completed: curlResult.import?.state === 'ready',
         timedOut: false,
-        lastState: curlResult.import?.state ?? 'unknown'
+        lastState: curlResult.import?.state ?? 'unknown',
+        missingContinuationContext: false
       };
 
       if (!pollingSkipped && (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready')) {
@@ -1986,6 +2080,7 @@ const action = defineHttpAction({
           completed: importContinuationOutcome.completed,
           timedOut: importContinuationOutcome.timedOut,
           lastState: importContinuationOutcome.lastState,
+          missingContinuationContext: importContinuationOutcome.missingContinuationContext ?? false,
           message: responseMessage,
           effectiveUrl: curlResult.import.effectiveUrl || null,
           phases: {
@@ -2035,6 +2130,7 @@ const action = defineHttpAction({
         completed: importContinuationOutcome.completed,
         timedOut: importContinuationOutcome.timedOut,
         lastState: importContinuationOutcome.lastState,
+        missingContinuationContext: importContinuationOutcome.missingContinuationContext ?? false,
         effectiveUrl: curlResult.import.effectiveUrl || null,
         phases: {
           test: {
