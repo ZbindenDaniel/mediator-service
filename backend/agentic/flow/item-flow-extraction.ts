@@ -69,6 +69,10 @@ const MAX_RETRY_SUMMARY_LENGTH = 260;
 // TODO(migration): Remove legacy identifier logging/stripping once all agent outputs are Artikel_Nummer-only.
 const LEGACY_IDENTIFIER_KEYS = ['itemUUid', 'itemId', 'id'] as const;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
+const ACCUMULATOR_TEXT_MAX_LENGTH = 280;
+const ACCUMULATOR_SUMMARY_MAX_LENGTH = 2400;
+const ACCUMULATOR_OUTLINE_VALUE_MAX_LENGTH = 90;
+const INTERNAL_ACCUMULATOR_KEYS = new Set<string>(['__searchQueries', ...LEGACY_IDENTIFIER_KEYS]);
 const NULL_TARGET_TEMPLATE = Object.freeze(
   Object.keys(TargetSchema.shape).reduce<Record<string, null>>((acc, key) => {
     acc[key] = null;
@@ -210,6 +214,131 @@ function serializeCompactPayload(payload: unknown): string {
     return JSON.stringify(payload ?? {});
   } catch {
     return '{}';
+  }
+}
+
+function truncateAccumulatorText(value: string, maxLength = ACCUMULATOR_TEXT_MAX_LENGTH): { value: string; truncated: boolean } {
+  if (value.length <= maxLength) {
+    return { value, truncated: false };
+  }
+  return {
+    value: `<<TRUNCATED:${value.length}>>${value.slice(0, maxLength)}<<END_TRUNCATED>>`,
+    truncated: true
+  };
+}
+
+function summarizeOutlineValue(value: unknown): string {
+  if (value == null) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return truncateAccumulatorText(value, ACCUMULATOR_OUTLINE_VALUE_MAX_LENGTH).value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `[array:${value.length}]`;
+  }
+  if (typeof value === 'object') {
+    return `[object:${Object.keys(value as Record<string, unknown>).length}]`;
+  }
+  return truncateAccumulatorText(String(value), ACCUMULATOR_OUTLINE_VALUE_MAX_LENGTH).value;
+}
+
+function serializeExtractionAccumulator(accumulator: AgenticOutput | null): {
+  summary: string;
+  rawKeyCount: number;
+  droppedFieldsCount: number;
+  truncatedFieldsCount: number;
+  usedFallbackOutline: boolean;
+  serializedLength: number;
+} {
+  // TODO(agent): Tune accumulator summary thresholds based on prompt telemetry once usage stabilizes.
+  try {
+    if (!accumulator || typeof accumulator !== 'object') {
+      return {
+        summary: '{}',
+        rawKeyCount: 0,
+        droppedFieldsCount: 0,
+        truncatedFieldsCount: 0,
+        usedFallbackOutline: false,
+        serializedLength: 2
+      };
+    }
+    const inputRecord = accumulator as Record<string, unknown>;
+    const rawEntries = Object.entries(inputRecord);
+    const cleaned: Record<string, unknown> = {};
+    let droppedFieldsCount = 0;
+    let truncatedFieldsCount = 0;
+
+    for (const [key, value] of rawEntries) {
+      if (INTERNAL_ACCUMULATOR_KEYS.has(key)) {
+        droppedFieldsCount += 1;
+        continue;
+      }
+      if (value == null) {
+        droppedFieldsCount += 1;
+        continue;
+      }
+      if (typeof value === 'string') {
+        const compact = value.trim();
+        if (!compact) {
+          droppedFieldsCount += 1;
+          continue;
+        }
+        const truncated = truncateAccumulatorText(compact);
+        if (truncated.truncated) {
+          truncatedFieldsCount += 1;
+        }
+        cleaned[key] = truncated.value;
+        continue;
+      }
+      if (Array.isArray(value)) {
+        if (value.length === 0) {
+          droppedFieldsCount += 1;
+          continue;
+        }
+        cleaned[key] = value;
+        continue;
+      }
+      if (typeof value === 'object') {
+        const keys = Object.keys(value as Record<string, unknown>);
+        if (keys.length === 0) {
+          droppedFieldsCount += 1;
+          continue;
+        }
+        cleaned[key] = value;
+        continue;
+      }
+      cleaned[key] = value;
+    }
+
+    let summary = serializeCompactPayload(cleaned);
+    let usedFallbackOutline = false;
+    if (summary.length > ACCUMULATOR_SUMMARY_MAX_LENGTH) {
+      usedFallbackOutline = true;
+      const outlineLines = Object.entries(cleaned).map(([key, value]) => `${key}=${summarizeOutlineValue(value)}`);
+      summary = outlineLines.length ? outlineLines.join('; ') : '{}';
+    }
+
+    return {
+      summary,
+      rawKeyCount: rawEntries.length,
+      droppedFieldsCount,
+      truncatedFieldsCount,
+      usedFallbackOutline,
+      serializedLength: summary.length
+    };
+  } catch {
+    return {
+      summary: '{}',
+      rawKeyCount: 0,
+      droppedFieldsCount: 0,
+      truncatedFieldsCount: 0,
+      usedFallbackOutline: false,
+      serializedLength: 2
+    };
   }
 }
 
@@ -454,7 +583,8 @@ export async function runExtractionAttempts({
     })();
     const activeContext = searchContexts[contextCursor] ?? { query: 'aggregated-fallback', text: fallbackContextText, sources: [] };
     const singleContextText = typeof activeContext?.text === 'string' ? activeContext.text : '';
-    const compactAccumulator = serializeCompactPayload(extractionAccumulator);
+    const accumulatorSummary = serializeExtractionAccumulator(extractionAccumulator);
+    const compactAccumulator = accumulatorSummary.summary;
 
     let searchRequestHint = searchesPerRequestLimit === 1
       ? 'Need more info? Add one "__searchQueries" entry.'
@@ -495,10 +625,32 @@ export async function runExtractionAttempts({
         contextIndex: contextCursor + 1,
         totalPasses,
         singleContextLength: singleContextText.length,
-        accumulatorSizeEstimate: compactAccumulator.length
+        accumulatorSizeEstimate: compactAccumulator.length,
+        accumulatorRawKeyCount: accumulatorSummary.rawKeyCount,
+        accumulatorSerializedLength: accumulatorSummary.serializedLength,
+        accumulatorDroppedFieldsCount: accumulatorSummary.droppedFieldsCount,
+        accumulatorTruncatedFieldsCount: accumulatorSummary.truncatedFieldsCount
       });
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to log extraction context pass metrics', attempt, itemId, contextIndex: contextCursor + 1 });
+    }
+
+    if (accumulatorSummary.usedFallbackOutline) {
+      try {
+        logger?.warn?.({
+          msg: 'accumulator summary exceeded threshold; using compact key-value outline',
+          attempt,
+          itemId,
+          contextIndex: contextCursor + 1,
+          threshold: ACCUMULATOR_SUMMARY_MAX_LENGTH,
+          accumulatorSerializedLength: accumulatorSummary.serializedLength,
+          accumulatorRawKeyCount: accumulatorSummary.rawKeyCount,
+          accumulatorDroppedFieldsCount: accumulatorSummary.droppedFieldsCount,
+          accumulatorTruncatedFieldsCount: accumulatorSummary.truncatedFieldsCount
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to log accumulator summary fallback warning', attempt, itemId, contextIndex: contextCursor + 1 });
+      }
     }
 
     const contextSections: string[] = [];
@@ -516,7 +668,12 @@ export async function runExtractionAttempts({
         singleContextLength: singleContextText.length,
         targetSnapshotLength: trimmedTargetSnapshot.length,
         targetSnapshotLineCount,
-        accumulatorSizeEstimate: compactAccumulator.length
+        accumulatorSizeEstimate: compactAccumulator.length,
+        accumulatorRawKeyCount: accumulatorSummary.rawKeyCount,
+        accumulatorSerializedLength: accumulatorSummary.serializedLength,
+        accumulatorDroppedFieldsCount: accumulatorSummary.droppedFieldsCount,
+        accumulatorTruncatedFieldsCount: accumulatorSummary.truncatedFieldsCount,
+        accumulatorFallbackOutline: accumulatorSummary.usedFallbackOutline
       });
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId, contextIndex: contextCursor + 1 });
