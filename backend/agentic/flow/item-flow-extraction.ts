@@ -61,6 +61,14 @@ export interface ExtractionResult {
   sources: SearchSource[];
 }
 
+type IterationOutcome =
+  | 'success'
+  | 'need_more_context'
+  | 'invalid_json'
+  | 'schema_invalid'
+  | 'supervisor_retry'
+  | 'error';
+
 const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
@@ -254,6 +262,31 @@ function logIterationDecision(
       decisionPath: payload.outcome.decisionPath,
       outcome: payload.outcome.type
     });
+    
+function logIterationEvent(
+  logger: ExtractionLogger | undefined,
+  payload: {
+    itemId: string;
+    iteration: number;
+    contextIndex: number;
+    attemptWithinIteration: number;
+    outcome: IterationOutcome;
+    detail?: unknown;
+  }
+): void {
+  try {
+    const logPayload = {
+      msg: 'extraction iteration outcome',
+      itemId: payload.itemId,
+      iteration: payload.iteration,
+      contextIndex: payload.contextIndex,
+      attemptWithinIteration: payload.attemptWithinIteration,
+      outcome: payload.outcome,
+      detail: sanitizeForLog(payload.detail)
+    };
+    logger?.info?.(logPayload);
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to build iteration outcome log payload', itemId: payload.itemId });
   }
 }
 
@@ -499,6 +532,7 @@ function mapLangtextToSpezifikationenForLlm(
 
 // TODO(agentic-spezifikationen): Keep boundary normalization in item-flow-schemas.ts as the single Spezifikationen ingestion path.
 
+// TODO(agent): Refactor extraction attempt orchestration into explicit iteration pipeline.
 export async function runExtractionAttempts({
   llm,
   correctionModel,
@@ -1176,6 +1210,7 @@ export async function runExtractionAttempts({
           hasCorrectionAttempt: Boolean(correctedContent),
           parseErrorHint: truncateForLog(lastInvalidJsonErrorHint)
         });
+        logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'invalid_json', detail: truncateForLog(lastInvalidJsonErrorHint) });
         advanceAttempt();
         continue;
       }
@@ -1285,11 +1320,15 @@ export async function runExtractionAttempts({
         type: 'retry_same_context',
         reason: 'SCHEMA_VALIDATION_FAILED',
         decisionPath: 'parse -> schema-validation-failed',
-        details: { issues: agentParsed.error.issues }
+        details: { issues: agentParsed.error.issues },
+        validationIssuesPreview: sanitizeForLog(agentParsed.error.issues)
       };
       if (await dispatchIterationOutcome(schemaValidationOutcome) === 'break') {
         break;
       }
+      
+      logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'schema_invalid', detail: sanitizeForLog(agentParsed.error.issues) });
+      advanceAttempt();
       continue;
     }
 
@@ -1324,14 +1363,14 @@ export async function runExtractionAttempts({
         }
         continue;
       }
-      const queriesToProcess = __searchQueries.slice(0, searchesPerRequestLimit);
+      const queriesToProcess = __searchQueries.slice(0, 1);
       if (queriesToProcess.length < __searchQueries.length) {
         logger?.warn?.({
           msg: 'truncating agent search requests to configured limit',
           attempt,
           itemId,
           requestedCount: __searchQueries.length,
-          allowedCount: searchesPerRequestLimit
+          allowedCount: 1
         });
       }
       const searchOutcome: IterationOutcome = {
@@ -1342,6 +1381,15 @@ export async function runExtractionAttempts({
       if (await dispatchIterationOutcome(searchOutcome) === 'break') {
         break;
       }
+      
+      logIterationEvent(logger, {
+        itemId,
+        iteration: attempt,
+        contextIndex: contextCursor + 1,
+        attemptWithinIteration: 1,
+        outcome: 'need_more_context',
+        detail: { requestedQueriesPreview: sanitizeForLog(queriesToProcess) }
+      });
       continue;
     }
 
