@@ -30,3 +30,4 @@
 
 - ✅ ERP browser-parity mapping emission now supports ordered config parsing with strict validation (`from`/`to`) and per-phase mapping telemetry logs.
 - ✅ ERP test-phase continuation fallback now proceeds to import when state remains `processing`, with structured diagnostics and explicit fallback error context.
+- ✅ ERP browser-parity import contract now requires explicit `profile.id` + `tmp_profile_id` configuration and rejects empty/default placeholder values before curl execution.

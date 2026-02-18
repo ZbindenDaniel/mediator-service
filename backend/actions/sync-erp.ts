@@ -173,8 +173,9 @@ const ERP_IMPORT_FIELD_NAMES = {
 // TODO(sync-erp-browser-contract-fields): Keep browser-parity payload keys aligned with ERP HAR captures during rollout.
 // TODO(sync-erp-browser-mappings-order): Keep mappings[+].from / mappings[].to ordering aligned with HAR captures.
 function buildErpImportFieldMap(contract: ImportRequestContract = 'legacy'): ErpImportFieldMap {
-  const profileId = ERP_IMPORT_PROFILE_ID || '1';
-  const tmpProfileId = ERP_IMPORT_TMP_PROFILE_ID || profileId;
+  const profileId = contract === 'browser-parity' ? ERP_IMPORT_PROFILE_ID : ERP_IMPORT_PROFILE_ID || '1';
+  const tmpProfileId =
+    contract === 'browser-parity' ? ERP_IMPORT_TMP_PROFILE_ID : ERP_IMPORT_TMP_PROFILE_ID || profileId;
   return {
     action: 'CsvImport/import',
     actionTest: '0',
@@ -1001,15 +1002,42 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   const importMode: ImportMode = ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity';
   const baselineFlow = importMode === 'script-parity';
 
+  // TODO(sync-erp-profile-contract): Revisit placeholder-value policy if ERP documents additional sentinel profile IDs.
+  const validateBrowserParityProfiles = (): void => {
+    const profileId = erpFields.profileId.trim();
+    const tmpProfileId = erpFields.tmpProfileId.trim();
+    const profileIdConfigured = Boolean(profileId) && profileId !== '1';
+    const tmpProfileIdConfigured = Boolean(tmpProfileId) && tmpProfileId !== '1';
+    const profileValidationPassed = profileIdConfigured && tmpProfileIdConfigured;
+
+    loggerRef.info?.('[sync-erp] ERP browser-parity profile validation', {
+      contract: requestContract,
+      profileValidationPassed,
+      profileIdConfigured,
+      tmpProfileIdConfigured,
+      profilePresence: {
+        profileId: profileId ? 'configured' : 'missing',
+        tmpProfileId: tmpProfileId ? 'configured' : 'missing'
+      }
+    });
+
+    if (!profileValidationPassed) {
+      const profileIdReason = !profileId ? 'missing' : profileId === '1' ? 'default-placeholder' : null;
+      const tmpProfileIdReason = !tmpProfileId ? 'missing' : tmpProfileId === '1' ? 'default-placeholder' : null;
+      throw new Error(
+        `browser-parity contract requires explicit ERP profile IDs: profile.id=${profileIdReason ?? 'ok'}, ` +
+          `tmp_profile_id=${tmpProfileIdReason ?? 'ok'}. Configure ERP_IMPORT_PROFILE_ID and ERP_IMPORT_TMP_PROFILE_ID with non-placeholder values before import.`
+      );
+    }
+  };
+
   // TODO(sync-erp-legacy-flags): Remove legacy action_test/action_import flags once browser-parity is the only supported contract.
   const resolvePhaseActions = (
     phase: 'test' | 'import'
   ): { action: string; actionTest: string | null; actionImport: string | null; includeLegacyActionFlags: boolean } => {
     try {
       if (requestContract === 'browser-parity') {
-        if (!erpFields.profileId || !erpFields.tmpProfileId) {
-          throw new Error('profile.id and tmp_profile_id are required for browser-parity contract');
-        }
+        validateBrowserParityProfiles();
         return {
           action: phase === 'test' ? 'CsvImport/test' : 'CsvImport/import',
           actionTest: null,
