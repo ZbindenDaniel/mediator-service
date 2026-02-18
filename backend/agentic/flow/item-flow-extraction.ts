@@ -225,6 +225,44 @@ function serializeCompactPayload(payload: unknown): string {
   }
 }
 
+type IterationOutcome =
+  | { type: 'complete'; decisionPath: string }
+  | { type: 'needs_more_search'; decisionPath: string; queries: string[] }
+  | { type: 'retry_same_context'; decisionPath: string; reason: string; details?: Record<string, unknown> }
+  | { type: 'failed_terminal'; decisionPath: string; reason: string };
+
+function logIterationDecision(
+  logger: ExtractionLogger | undefined,
+  payload: { attempt: number; itemId: string; outcome: IterationOutcome; contextIndex: number }
+): void {
+  try {
+    const serializedDecision = JSON.stringify({
+      outcome: payload.outcome.type,
+      reason: 'reason' in payload.outcome ? payload.outcome.reason : undefined,
+      decisionPath: payload.outcome.decisionPath,
+      details: 'details' in payload.outcome ? payload.outcome.details : undefined,
+      queriesCount: 'queries' in payload.outcome ? payload.outcome.queries.length : undefined
+    });
+    logger?.info?.({
+      msg: 'extraction iteration decision',
+      attempt: payload.attempt,
+      itemId: payload.itemId,
+      contextIndex: payload.contextIndex,
+      decisionPath: payload.outcome.decisionPath,
+      outcome: payload.outcome.type,
+      serializedDecision
+    });
+  } catch (err) {
+    logger?.warn?.({
+      err,
+      msg: 'failed to serialize extraction iteration decision',
+      attempt: payload.attempt,
+      itemId: payload.itemId,
+      contextIndex: payload.contextIndex,
+      decisionPath: payload.outcome.decisionPath,
+      outcome: payload.outcome.type
+    });
+    
 function logIterationEvent(
   logger: ExtractionLogger | undefined,
   payload: {
@@ -576,6 +614,93 @@ export async function runExtractionAttempts({
   const advanceAttempt = () => {
     attempt += 1;
     searchRequestCycles = 0;
+  };
+
+  const dispatchIterationOutcome = async (outcome: IterationOutcome): Promise<'break' | 'continue'> => {
+    logIterationDecision(logger, { attempt, itemId, outcome, contextIndex: contextCursor + 1 });
+
+    if (outcome.type === 'complete') {
+      success = true;
+      return 'break';
+    }
+
+    if (outcome.type === 'failed_terminal') {
+      lastSupervision = outcome.reason;
+      passFailureSupervision = outcome.reason;
+      lastValidationIssues = 'TOO_MANY_SEARCH_REQUESTS';
+      passFailureValidationIssues = 'TOO_MANY_SEARCH_REQUESTS';
+      return 'break';
+    }
+
+    if (outcome.type === 'needs_more_search') {
+      const previousContextCount = searchContexts.length;
+      for (const [index, query] of outcome.queries.entries()) {
+        try {
+          const { text: extraText, sources: extraSources } = await searchInvoker(query, 5, {
+            context: 'agent',
+            attempt,
+            requestIndex: index + 1
+          });
+          searchContexts.push({ query, text: extraText, sources: extraSources });
+          recordSources(extraSources);
+          logger?.info?.({ msg: 'additional search complete', query, sourceCount: Array.isArray(extraSources) ? extraSources.length : 0, itemId });
+        } catch (searchErr) {
+          logger?.error?.({ err: searchErr, msg: 'additional search failed', query, itemId });
+          if (searchErr instanceof RateLimitError) {
+            throw new FlowError('RATE_LIMITED', 'Search provider rate limited requests', searchErr.statusCode ?? 503);
+          }
+          throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
+        }
+      }
+      lastSupervision = `ADDITIONAL_SEARCH_REQUESTED: ${outcome.queries.join(' | ')}`;
+      passFailureSupervision = lastSupervision;
+      lastValidated = null;
+      lastValidationIssues = '__SEARCH_REQUESTED__';
+      passFailureValidationIssues = '__SEARCH_REQUESTED__';
+      try {
+        contextCursor = Math.max(contextCursor + 1, previousContextCount);
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to advance extraction cursor after additional search', itemId, attempt, contextIndex: contextCursor + 1 });
+      }
+      return 'continue';
+    }
+
+    if (outcome.reason === 'CONTEXT_ADVANCE') {
+      const nextPassIndex = contextCursor + 1;
+      if (nextPassIndex < Math.max(1, searchContexts.length)) {
+        try {
+          contextCursor = nextPassIndex;
+          passFailureSupervision = '';
+          passFailureValidationIssues = null;
+          passInvalidJsonErrorHint = '';
+          passInvalidJsonPlaceholderIssues = [];
+          logger?.info?.({
+            msg: 'advancing extraction context pass',
+            attempt,
+            itemId,
+            contextIndex: contextCursor + 1,
+            completedPassIndex: contextCursor,
+            totalPasses: Math.max(1, searchContexts.length)
+          });
+        } catch (err) {
+          logger?.warn?.({ err, msg: 'failed to advance extraction context cursor', itemId, attempt, contextIndex: contextCursor + 1 });
+        }
+      }
+      return 'continue';
+    }
+
+    const nextAttempt = attempt + 1;
+    logger?.info?.({
+      msg: 'retrying extraction attempt',
+      attempt,
+      nextAttempt,
+      itemId,
+      reason: outcome.reason,
+      contextIndex: contextCursor + 1,
+      validationIssuesPreview: sanitizeForLog(outcome.details)
+    });
+    advanceAttempt();
+    return 'continue';
   };
 
   // TODO(agentic-review-prompts): Route review automation signals into placeholder fragments as triggers expand.
@@ -931,9 +1056,9 @@ export async function runExtractionAttempts({
 
     const jsonMatch = itemContent.match(/\{[\s\S]*\}/);
      if (jsonMatch) {
-      const jsonontent = jsonMatch[1]?.trim?.() ?? '';
+      const jsonContent = jsonMatch[0]?.trim?.() ?? '';
       if (typeof jsonMatch.index === 'number') {
-        itemContent = jsonontent;
+        itemContent = jsonContent;
       }
     } else {
       logger?.debug?.({
@@ -1191,15 +1316,17 @@ export async function runExtractionAttempts({
       lastValidationIssues = agentParsed.error.issues;
       passFailureSupervision = lastSupervision;
       passFailureValidationIssues = agentParsed.error.issues;
-      const nextAttempt = attempt + 1;
-      logger?.info?.({
-        msg: 'retrying extraction attempt',
-        attempt,
-        nextAttempt,
-        itemId,
+      const schemaValidationOutcome: IterationOutcome = {
+        type: 'retry_same_context',
         reason: 'SCHEMA_VALIDATION_FAILED',
+        decisionPath: 'parse -> schema-validation-failed',
+        details: { issues: agentParsed.error.issues },
         validationIssuesPreview: sanitizeForLog(agentParsed.error.issues)
-      });
+      };
+      if (await dispatchIterationOutcome(schemaValidationOutcome) === 'break') {
+        break;
+      }
+      
       logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'schema_invalid', detail: sanitizeForLog(agentParsed.error.issues) });
       advanceAttempt();
       continue;
@@ -1226,32 +1353,15 @@ export async function runExtractionAttempts({
           searchRequestCycles,
           maxSearchRequestCycles: MAX_SEARCH_REQUEST_CYCLES
         });
-        lastSupervision = 'TOO_MANY_SEARCH_REQUESTS';
-        passFailureSupervision = lastSupervision;
-        const bestEffortMerge = mergeAccumulatedCandidate(extractionAccumulator, candidateData, {
-          logger,
-          itemId,
-          attempt,
-          passIndex: contextCursor + 1
-        });
-        if (bestEffortMerge.success) {
-          extractionAccumulator = bestEffortMerge.data;
-          lastValidated = { success: true, data: bestEffortMerge.data };
-          lastValidationIssues = null;
-          passFailureValidationIssues = null;
-        } else {
-          const mergeIssues = (bestEffortMerge as { issues: unknown }).issues;
-          lastValidated = { success: true, data: candidateData };
-          lastValidationIssues = mergeIssues;
-          passFailureValidationIssues = mergeIssues;
+        const terminalOutcome: IterationOutcome = {
+          type: 'failed_terminal',
+          reason: 'TOO_MANY_SEARCH_REQUESTS',
+          decisionPath: 'parse -> search-requested -> terminal-search-limit'
+        };
+        if (await dispatchIterationOutcome(terminalOutcome) === 'break') {
+          break;
         }
-        logger?.info?.({
-          msg: 'using best-effort extraction data after search limit reached',
-          attempt,
-          itemId,
-          payloadPreview: sanitizeForLog(candidateData)
-        });
-        break;
+        continue;
       }
       const queriesToProcess = __searchQueries.slice(0, 1);
       if (queriesToProcess.length < __searchQueries.length) {
@@ -1263,35 +1373,15 @@ export async function runExtractionAttempts({
           allowedCount: 1
         });
       }
-      const previousContextCount = searchContexts.length;
-      for (const [index, query] of queriesToProcess.entries()) {
-        try {
-          const { text: extraText, sources: extraSources } = await searchInvoker(query, 5, {
-            context: 'agent',
-            attempt,
-            requestIndex: index + 1
-          });
-          searchContexts.push({ query, text: extraText, sources: extraSources });
-          recordSources(extraSources);
-          logger?.info?.({ msg: 'additional search complete', query, sourceCount: Array.isArray(extraSources) ? extraSources.length : 0, itemId });
-        } catch (searchErr) {
-          logger?.error?.({ err: searchErr, msg: 'additional search failed', query, itemId });
-          if (searchErr instanceof RateLimitError) {
-            throw new FlowError('RATE_LIMITED', 'Search provider rate limited requests', searchErr.statusCode ?? 503);
-          }
-          throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
-        }
+      const searchOutcome: IterationOutcome = {
+        type: 'needs_more_search',
+        decisionPath: 'parse -> search-requested',
+        queries: queriesToProcess
+      };
+      if (await dispatchIterationOutcome(searchOutcome) === 'break') {
+        break;
       }
-      lastSupervision = `ADDITIONAL_SEARCH_REQUESTED: ${queriesToProcess.join(' | ')}`;
-      passFailureSupervision = lastSupervision;
-      lastValidated = null;
-      lastValidationIssues = '__SEARCH_REQUESTED__';
-      passFailureValidationIssues = '__SEARCH_REQUESTED__';
-      try {
-        contextCursor = Math.max(contextCursor + 1, previousContextCount);
-      } catch (err) {
-        logger?.warn?.({ err, msg: 'failed to advance extraction cursor after additional search', itemId, attempt, contextIndex: contextCursor + 1 });
-      }
+      
       logIterationEvent(logger, {
         itemId,
         iteration: attempt,
@@ -1316,17 +1406,15 @@ export async function runExtractionAttempts({
       lastValidationIssues = mergeIssues;
       passFailureSupervision = lastSupervision;
       passFailureValidationIssues = mergeIssues;
-      const nextAttempt = attempt + 1;
-      logger?.info?.({
-        msg: 'retrying extraction attempt',
-        attempt,
-        nextAttempt,
-        itemId,
+      const mergeOutcome: IterationOutcome = {
+        type: 'retry_same_context',
         reason: 'ACCUMULATOR_MERGE_FAILED',
-        contextIndex: contextCursor + 1,
-        validationIssuesPreview: sanitizeForLog(mergeIssues)
-      });
-      advanceAttempt();
+        decisionPath: 'parse -> merge-accumulator-failed',
+        details: { mergeIssues }
+      };
+      if (await dispatchIterationOutcome(mergeOutcome) === 'break') {
+        break;
+      }
       continue;
     }
 
@@ -1340,37 +1428,34 @@ export async function runExtractionAttempts({
       lastValidationIssues = incrementalParse.error.issues;
       passFailureSupervision = lastSupervision;
       passFailureValidationIssues = incrementalParse.error.issues;
-      const nextAttempt = attempt + 1;
       logger?.warn?.({
         msg: 'incremental accumulator validation failed',
         itemId,
         attempt,
         contextIndex: contextCursor + 1,
-        nextAttempt,
         issues: incrementalParse.error.issues
       });
-      advanceAttempt();
+      const incrementalValidationOutcome: IterationOutcome = {
+        type: 'retry_same_context',
+        reason: 'INCREMENTAL_MERGE_SCHEMA_INVALID',
+        decisionPath: 'parse -> merge-accumulator -> incremental-schema-invalid',
+        details: { issues: incrementalParse.error.issues }
+      };
+      if (await dispatchIterationOutcome(incrementalValidationOutcome) === 'break') {
+        break;
+      }
       continue;
     }
     extractionAccumulator = incrementalParse.data;
     const nextPassIndex = contextCursor + 1;
     if (nextPassIndex < Math.max(1, searchContexts.length)) {
-      try {
-        contextCursor = nextPassIndex;
-        passFailureSupervision = '';
-        passFailureValidationIssues = null;
-        passInvalidJsonErrorHint = '';
-        passInvalidJsonPlaceholderIssues = [];
-        logger?.info?.({
-          msg: 'advancing extraction context pass',
-          attempt,
-          itemId,
-          contextIndex: contextCursor + 1,
-          completedPassIndex: contextCursor,
-          totalPasses: Math.max(1, searchContexts.length)
-        });
-      } catch (err) {
-        logger?.warn?.({ err, msg: 'failed to advance extraction context cursor', itemId, attempt, contextIndex: contextCursor + 1 });
+      const contextAdvanceOutcome: IterationOutcome = {
+        type: 'retry_same_context',
+        reason: 'CONTEXT_ADVANCE',
+        decisionPath: 'parse -> merge-accumulator -> context-advance'
+      };
+      if (await dispatchIterationOutcome(contextAdvanceOutcome) === 'break') {
+        break;
       }
       continue;
     }
@@ -1481,6 +1566,15 @@ export async function runExtractionAttempts({
       lastValidated = null;
       lastValidationIssues = `SUPERVISOR_PAYLOAD_INVALID: ${JSON.stringify(supervisorPayloadValidation.error.issues)}`;
       passFailureValidationIssues = lastValidationIssues;
+      const supervisorPayloadOutcome: IterationOutcome = {
+        type: 'retry_same_context',
+        reason: 'SUPERVISOR_PAYLOAD_INVALID',
+        decisionPath: 'parse -> validation -> supervisor-payload-invalid',
+        details: { issues: supervisorPayloadValidation.error.issues }
+      };
+      if (await dispatchIterationOutcome(supervisorPayloadOutcome) === 'break') {
+        break;
+      }
       continue;
     }
 
@@ -1612,24 +1706,23 @@ export async function runExtractionAttempts({
     const pass = supervisorPass && categoryValidationPass;
 
     lastValidated = pricedValidated;
-    if (pass) {
-      success = true;
-      logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'success' });
-      break;
-    } else {
-      const nextAttempt = attempt + 1;
-      logger?.info?.({
-        msg: 'supervisor flagged issues, will retry if attempts remain',
-        attempt,
-        nextAttempt,
-        itemId,
+    const evaluationOutcome: IterationOutcome = pass
+      ? {
+        type: 'complete',
+        decisionPath: 'parse -> correction -> validation -> evaluation:pass'
+      }
+      : {
+        type: 'retry_same_context',
         reason: 'SUPERVISOR_FEEDBACK',
-        supervisorPass,
-        categoryValidationPass,
-        supervisionPreview: sanitizeForLog(supervision)
-      });
-      logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'supervisor_retry', detail: sanitizeForLog(supervision) });
-      advanceAttempt();
+        decisionPath: 'parse -> correction -> validation -> evaluation:retry',
+        details: {
+          supervisorPass,
+          categoryValidationPass,
+          supervisionPreview: sanitizeForLog(supervision)
+        }
+      };
+    if (await dispatchIterationOutcome(evaluationOutcome) === 'break') {
+      break;
     }
   }
 
