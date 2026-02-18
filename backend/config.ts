@@ -273,6 +273,15 @@ export const ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP =
 export const ERP_IMPORT_FORM_DEFAULT_UNIT = (process.env.ERP_IMPORT_FORM_DEFAULT_UNIT || 'Stck').trim() || 'Stck';
 export const ERP_IMPORT_FORM_PART_CLASSIFICATION =
   (process.env.ERP_IMPORT_FORM_PART_CLASSIFICATION || '2').trim() || '2';
+// TODO(sync-erp-browser-contract): Promote browser-parity ERP request contract options to a typed contract schema.
+export const ERP_IMPORT_FORM_DATE_FORMAT = (process.env.ERP_IMPORT_FORM_DATE_FORMAT || 'dd.mm.yyyy').trim() || 'dd.mm.yyyy';
+export const ERP_IMPORT_FORM_FULL_PREVIEW =
+  parseBooleanFlag(process.env.ERP_IMPORT_FORM_FULL_PREVIEW, 'ERP_IMPORT_FORM_FULL_PREVIEW') ?? false;
+export const ERP_IMPORT_PROFILE_ID = (process.env.ERP_IMPORT_PROFILE_ID || '').trim();
+export const ERP_IMPORT_TMP_PROFILE_ID = (process.env.ERP_IMPORT_TMP_PROFILE_ID || '').trim();
+const rawErpImportRequestContract = (process.env.ERP_IMPORT_REQUEST_CONTRACT || '').trim().toLowerCase();
+export const ERP_IMPORT_REQUEST_CONTRACT =
+  rawErpImportRequestContract === 'browser-parity' ? 'browser-parity' : 'legacy';
 export const ERP_IMPORT_AUTH_FIELD_PREFIX = (process.env.ERP_IMPORT_AUTH_FIELD_PREFIX || '{AUTH}').trim();
 export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   process.env.ERP_IMPORT_TIMEOUT_MS,
