@@ -52,7 +52,8 @@ export function normalizeSpezifikationenBoundary(
       : 0;
 
     if (typeof spezifikationen === 'string' || (spezifikationen && typeof spezifikationen === 'object' && !Array.isArray(spezifikationen))) {
-      const remapped = { ...record, Spezifikationen: spezifikationen };
+      const remapped = { ...record, Langtext: spezifikationen };
+      delete (remapped as Record<string, unknown>).Spezifikationen;
       context.logger?.info?.({
         msg: 'normalized Spezifikationen boundary value',
         itemId: context.itemId,
