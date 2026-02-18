@@ -61,13 +61,7 @@ export interface ExtractionResult {
   sources: SearchSource[];
 }
 
-type IterationOutcome =
-  | 'success'
-  | 'need_more_context'
-  | 'invalid_json'
-  | 'schema_invalid'
-  | 'supervisor_retry'
-  | 'error';
+// Removed duplicate IterationOutcome definition; only the discriminated union below is used.
 
 const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 7;
@@ -1185,7 +1179,6 @@ export async function runExtractionAttempts({
           hasCorrectionAttempt: Boolean(correctedContent),
           parseErrorHint: truncateForLog(lastInvalidJsonErrorHint)
         });
-        logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'invalid_json', detail: truncateForLog(lastInvalidJsonErrorHint) });
         advanceAttempt();
         continue;
       }
@@ -1426,7 +1419,12 @@ export async function runExtractionAttempts({
         contextIndex: contextCursor + 1,
         issues: incrementalParse.error.issues
       });
-      const incrementalValidationOutcome: IterationOutcome = {
+      const incrementalValidationOutcome: {
+        type: 'retry_same_context';
+        reason: string;
+        decisionPath: string;
+        details: { issues: unknown };
+      } = {
         type: 'retry_same_context',
         reason: 'INCREMENTAL_MERGE_SCHEMA_INVALID',
         decisionPath: 'parse -> merge-accumulator -> incremental-schema-invalid',

@@ -90,7 +90,23 @@ describe('pricing stage json repair', () => {
       llm: { invoke },
       itemId: '019172',
       pricingPrompt: 'Return JSON only',
-      candidate: { Artikel_Nummer: '019172' }
+      candidate: {
+        Artikel_Nummer: '019172',
+        Artikelbeschreibung: '',
+        Verkaufspreis: null,
+        Kurzbeschreibung: '',
+        Langtext: '',
+        Hersteller: '',
+        Länge_mm: null,
+        Breite_mm: null,
+        Höhe_mm: null,
+        Gewicht_kg: null,
+        Zustand: '',
+        trustedHistoricalPrice: null,
+        directListingPrice: null,
+        confidence: 1,
+        evidenceCount: 1
+      }
     });
 
     expect(result).toEqual({ Verkaufspreis: 129.9 });
@@ -107,7 +123,23 @@ describe('pricing stage json repair', () => {
       llm: { invoke },
       itemId: '019172',
       pricingPrompt: 'Return JSON only',
-      candidate: { Artikel_Nummer: '019172' }
+      candidate: {
+        Artikel_Nummer: '019172',
+        Artikelbeschreibung: '',
+        Verkaufspreis: null,
+        Kurzbeschreibung: '',
+        Langtext: '',
+        Hersteller: '',
+        Länge_mm: null,
+        Breite_mm: null,
+        Höhe_mm: null,
+        Gewicht_kg: null,
+        Zustand: '',
+        trustedHistoricalPrice: null,
+        directListingPrice: null,
+        confidence: 1,
+        evidenceCount: 1
+      }
     });
 
     expect(result).toBeNull();
