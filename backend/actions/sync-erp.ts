@@ -273,6 +273,8 @@ interface ParsedErpResponse {
   evidence: {
     hasImportStatusH2: boolean;
     hasImportVorschauH2: boolean;
+    hasImportErgebnisH2: boolean;
+    hasReadyReportHeading: boolean;
     isLoginForm: boolean;
     rawAction: string | null;
     normalizedAction: string | null;
@@ -580,13 +582,15 @@ function isAuthenticatedHomeResponse(stdout: string, effectiveUrl: string, effec
 }
 
 function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpResponse {
-  // TODO(sync-erp-state-contract): Keep result(job)=processing and report(id)+Import-Vorschau=ready aligned with browser-observed flow.
+  // TODO(sync-erp-state-contract): Keep result(job)=processing and report(id)+(Import-Vorschau|Import-Ergebnis)=ready aligned with browser-observed flow.
   // TODO(sync-erp-home-markers): Revisit homepage marker heuristics when ERP offers a stable post-login context endpoint.
   // TODO(sync-erp-parser): Extract parser into shared ERP sync utility if additional actions need the same evidence contract.
   try {
     const responseText = `${stdout}\n${effectiveUrl}`;
     const hasImportStatusH2 = /<h2[^>]*>\s*Import Status\s*<\/h2>/i.test(responseText);
+    // TODO(sync-erp-report-headings): Both Import-Vorschau and Import-Ergebnis markers are HAR-observed CsvImport/report endpoint headings.
     const hasImportVorschauH2 = /<h2[^>]*>\s*Import-Vorschau\s*<\/h2>/i.test(responseText);
+    const hasImportErgebnisH2 = /<h2[^>]*>\s*Import-Ergebnis\s*<\/h2>/i.test(responseText);
     const isLoginForm = hasAuthLossMarkers(stdout, effectiveUrl);
     const { rawAction: effectiveUrlActionRaw, normalizedAction: effectiveUrlAction } = extractActionFromValue(effectiveUrl);
     const isAuthenticatedHome = isAuthenticatedHomeResponse(stdout, effectiveUrl, effectiveUrlAction);
@@ -594,6 +598,7 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       effectiveUrlAction === ERP_CONTEXT_LOST_ACTION && /\/login\.pl(?:$|\?)/i.test(effectiveUrl);
     const hasResultAction = effectiveUrlAction === 'CsvImport/result';
     const hasReportAction = effectiveUrlAction === 'CsvImport/report';
+    const hasReadyReportHeading = hasImportVorschauH2 || hasImportErgebnisH2;
     const hasFailureMarker = ERP_POLL_FAILURE_MARKERS.some((marker) => responseText.includes(marker));
     const identifiers = extractErpIdentifiers(stdout, effectiveUrl);
     const job = identifiers.job;
@@ -608,7 +613,7 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       state = 'context_lost';
     } else if (isAuthenticatedHome) {
       state = 'unexpected_home';
-    } else if (hasImportVorschauH2 && hasReportAction && !!reportId) {
+    } else if (hasReadyReportHeading && hasReportAction && !!reportId) {
       state = 'ready';
     } else if (hasImportStatusH2 || hasResultAction) {
       state = 'processing';
@@ -629,6 +634,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
         effectiveUrl: trimDiagnosticOutput(effectiveUrl, 120),
         hasImportStatusH2,
         hasImportVorschauH2,
+        hasImportErgebnisH2,
+        hasReadyReportHeading,
         isLoginForm,
         isAuthenticatedHome,
         effectiveUrlAction
@@ -643,6 +650,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       evidence: {
         hasImportStatusH2,
         hasImportVorschauH2,
+        hasImportErgebnisH2,
+        hasReadyReportHeading,
         isLoginForm,
         rawAction: effectiveUrlActionRaw,
         normalizedAction: effectiveUrlAction,
@@ -658,6 +667,8 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       evidence: {
         hasImportStatusH2: false,
         hasImportVorschauH2: false,
+        hasImportErgebnisH2: false,
+        hasReadyReportHeading: false,
         isLoginForm: false,
         rawAction: null,
         normalizedAction: null,
@@ -679,6 +690,8 @@ function logParseEvidence(
     acceptedByMarker: parsed.acceptedByMarker,
     hasImportStatusH2: parsed.evidence.hasImportStatusH2,
     hasImportVorschauH2: parsed.evidence.hasImportVorschauH2,
+    hasImportErgebnisH2: parsed.evidence.hasImportErgebnisH2,
+    hasReadyReportHeading: parsed.evidence.hasReadyReportHeading,
     isLoginForm: parsed.evidence.isLoginForm,
     rawAction: parsed.evidence.rawAction,
     normalizedAction: parsed.evidence.normalizedAction,
@@ -1468,6 +1481,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         evidence: {
           hasImportStatusH2: false,
           hasImportVorschauH2: false,
+          hasImportErgebnisH2: false,
+          hasReadyReportHeading: false,
           isLoginForm: false,
           rawAction: fallbackAction.rawAction,
           normalizedAction: fallbackAction.normalizedAction,
@@ -1757,6 +1772,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           evidence: {
             hasImportStatusH2: false,
             hasImportVorschauH2: false,
+            hasImportErgebnisH2: false,
+            hasReadyReportHeading: false,
             isLoginForm: false,
             rawAction: null,
             normalizedAction: null,
