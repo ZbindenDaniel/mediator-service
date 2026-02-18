@@ -427,7 +427,7 @@ function extractSearchPlans(
   // TODO(agentic-search-query-suffixes): Revisit suffix priorities after collecting planner/retrieval quality telemetry.
   const missingFields = identifyMissingSchemaFields(normalizedTarget);
 
-  const MAX_QUERY_SEGMENTS = 10;
+  const MAX_QUERY_SEGMENTS = 5;
   const canAppendSegments = (query: string, extraSegments: string[]): boolean => {
     const querySegmentCount = query
       .split(/\s+/)

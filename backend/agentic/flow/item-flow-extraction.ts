@@ -893,8 +893,8 @@ export async function runExtractionAttempts({
       }
     }
 
-    const jsonMatch = raw.match(/```json\s*([\s\S]*?)\s*```/i);
-    if (jsonMatch) {
+    const jsonMatch = itemContent.match(/\{[\s\S]*\}/);
+     if (jsonMatch) {
       const jsonontent = jsonMatch[1]?.trim?.() ?? '';
       if (typeof jsonMatch.index === 'number') {
         itemContent = jsonontent;

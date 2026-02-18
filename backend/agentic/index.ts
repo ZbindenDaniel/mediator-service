@@ -1522,7 +1522,7 @@ export async function restartAgenticRun(
         ReviewedBy: reviewedBy,
         LastReviewDecision: lastReviewDecision,
         LastReviewNotes: lastReviewNotes,
-        LastSearchLinksJson: existing?.LastSearchLinksJson ?? null
+        LastSearchLinksJson: null
       });
     }
 

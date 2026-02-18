@@ -5,7 +5,6 @@
   "Verkaufspreis": null,
   "Kurzbeschreibung": "",
   "Spezifikationen": {
-    "Veröffentlicht": ""
   },
   "Hersteller": "",
   "Länge_mm": null,

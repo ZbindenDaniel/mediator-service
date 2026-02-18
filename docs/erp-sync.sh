@@ -14,7 +14,7 @@
 # ---- Logindaten und URL anpassen: ----
 login='csvimport'
 password='B9kc!O-?b*w=i8<'
-client_id='revamp produktiv'
+client_id='1'
 url='https://revamp.kivitendo.ch/kivitendo-erp/controller.pl'
 
 function fail {
@@ -135,6 +135,7 @@ function do_curl {
     -F 'action=CsvImport/import' \
     -F "${action}=1" \
     -F 'profile.type=parts' \
+    -F 'profile.id=2183'
     -F 'settings.numberformat=1000.00' \
     -F 'settings.charset=UTF-8' \
     -F 'sep_char=comma' \
@@ -154,7 +155,7 @@ function do_curl {
     -F "{AUTH}login=${login}" \
     -F "{AUTH}password=${password}" \
     -F "{AUTH}client_id=${client_id}" \
-    -F "file=@${file}" \
+    -F "file=@${docs/erp-sync.sh}" \
     ${url}
 }
 

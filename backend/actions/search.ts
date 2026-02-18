@@ -87,7 +87,7 @@ function computeTokenScore(tokens: string[], candidateTokens: string[]): number 
 }
 
 const DEFAULT_SEARCH_EINHEIT: ItemEinheit = ItemEinheit.Stk;
-const DEFAULT_ITEM_LIMIT = 5;
+const DEFAULT_ITEM_LIMIT = 3;
 
 function parseSearchLimit(value: string | null, context: string, fallback: number): number {
   if (!value) {

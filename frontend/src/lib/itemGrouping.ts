@@ -393,14 +393,14 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
   }
 
   // TODO(item-grouping): Revisit batch warning thresholds if grouping input volumes grow.
-  if (missingKeyCount > 0) {
-    logger.warn?.(`[${logContext}] Missing grouping keys detected in batch`, {
-      missingKeyCount,
-      missingArtikelCount,
-      missingQualityCount,
-      sampleItems: missingKeySamples
-    });
-  }
+  // if (missingKeyCount > 0) {
+  //   logger.warn?.(`[${logContext}] Missing grouping keys detected in batch`, {
+  //     missingKeyCount,
+  //     missingArtikelCount,
+  //     missingQualityCount,
+  //     sampleItems: missingKeySamples
+  //   });
+  // }
   if (qualityFallbackCount > 0) {
     logger.info?.(`[${logContext}] Applied null-quality grouping fallback`, {
       qualityFallbackCount,

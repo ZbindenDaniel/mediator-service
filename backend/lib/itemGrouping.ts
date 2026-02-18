@@ -193,14 +193,14 @@ export function groupItemsForResponse(
   }
 
   // TODO(item-grouping): Revisit batch warning thresholds if grouping input volumes grow.
-  if (missingKeyCount > 0) {
-    logger.warn?.('[item-grouping] Missing grouping keys detected in batch', {
-      missingKeyCount,
-      missingArtikelCount,
-      missingQualityCount,
-      sampleItems: missingKeySamples
-    });
-  }
+  // if (missingKeyCount > 0) {
+  //   logger.warn?.('[item-grouping] Missing grouping keys detected in batch', {
+  //     missingKeyCount,
+  //     missingArtikelCount,
+  //     missingQualityCount,
+  //     sampleItems: missingKeySamples
+  //   });
+  // }
   if (qualityFallbackCount > 0) {
     logger.info?.('[item-grouping] Applied null-quality grouping fallback', {
       qualityFallbackCount,
