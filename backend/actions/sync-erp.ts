@@ -209,6 +209,13 @@ interface ImportExecutionResult {
     completed: boolean;
     timedOut: boolean;
     lastState: PollState;
+    diagnostics?: {
+      phase: 'import-continuation';
+      lastUrl: string;
+      lastState: PollState;
+      job: string | null;
+      reportId: string | null;
+    };
     missingContinuationContext?: boolean;
   } | null;
   markerValidationPassed: boolean;
@@ -547,6 +554,7 @@ function isAuthenticatedHomeResponse(stdout: string, effectiveUrl: string, effec
 }
 
 function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpResponse {
+  // TODO(sync-erp-state-contract): Keep result(job)=processing and report(id)+Import-Vorschau=ready aligned with browser-observed flow.
   // TODO(sync-erp-home-markers): Revisit homepage marker heuristics when ERP offers a stable post-login context endpoint.
   // TODO(sync-erp-parser): Extract parser into shared ERP sync utility if additional actions need the same evidence contract.
   try {
@@ -574,7 +582,7 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       state = 'context_lost';
     } else if (isAuthenticatedHome) {
       state = 'unexpected_home';
-    } else if (hasImportVorschauH2 || (hasReportAction && !!reportId)) {
+    } else if (hasImportVorschauH2 && hasReportAction && !!reportId) {
       state = 'ready';
     } else if (hasImportStatusH2 || hasResultAction) {
       state = 'processing';
@@ -1117,6 +1125,13 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
     const pollTimeoutMs = Math.min(Math.max(pollIntervalMs, ERP_IMPORT_POLL_TIMEOUT_MS), 15000);
     const startedAt = Date.now();
     let attempt = 0;
+    const buildContinuationDiagnostics = (): NonNullable<ImportExecutionResult['importContinuation']>['diagnostics'] => ({
+      phase: 'import-continuation',
+      lastUrl: latestImportResult.effectiveUrl || url,
+      lastState: latestState.state,
+      job: latestState.job,
+      reportId: latestState.reportId
+    });
 
     while (Date.now() - startedAt <= pollTimeoutMs) {
       if (latestState.state !== 'processing') {
@@ -1126,7 +1141,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           continuationOutcome: {
             completed: latestState.state === 'ready',
             timedOut: false,
-            lastState: latestState.state
+            lastState: latestState.state,
+            diagnostics: buildContinuationDiagnostics()
           }
         };
       }
@@ -1216,6 +1232,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
                 completed: false,
                 timedOut: false,
                 lastState: latestState.state,
+                diagnostics: buildContinuationDiagnostics(),
                 missingContinuationContext: true
               }
             };
@@ -1234,6 +1251,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
                 completed: false,
                 timedOut: false,
                 lastState: latestState.state,
+                diagnostics: buildContinuationDiagnostics(),
                 missingContinuationContext: true
               }
             };
@@ -1255,6 +1273,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             completed: false,
             timedOut: false,
             lastState: latestState.state,
+            diagnostics: buildContinuationDiagnostics(),
             missingContinuationContext: !latestState.job && !latestState.reportId
           }
         };
@@ -1297,7 +1316,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             continuationOutcome: {
               completed: false,
               timedOut: false,
-              lastState: latestState.state
+              lastState: latestState.state,
+              diagnostics: buildContinuationDiagnostics()
             }
           };
         }
@@ -1309,7 +1329,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             continuationOutcome: {
               completed: latestState.state === 'ready',
               timedOut: false,
-              lastState: latestState.state
+              lastState: latestState.state,
+              diagnostics: buildContinuationDiagnostics()
             }
           };
         }
@@ -1326,7 +1347,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           continuationOutcome: {
             completed: false,
             timedOut: false,
-            lastState: latestState.state
+            lastState: latestState.state,
+            diagnostics: buildContinuationDiagnostics()
           }
         };
       }
@@ -1338,7 +1360,8 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
       continuationOutcome: {
         completed: false,
         timedOut: true,
-        lastState: latestState.state
+        lastState: latestState.state,
+        diagnostics: buildContinuationDiagnostics()
       }
     };
   };
@@ -2078,6 +2101,7 @@ const action = defineHttpAction({
         lastState: curlResult.import?.state ?? 'unknown',
         missingContinuationContext: false
       };
+      const continuationDiagnostics = importContinuationOutcome.diagnostics || null;
 
       if (!pollingSkipped && (curlResult.failurePhase === 'polling' || !curlResult.polling || curlResult.polling.state !== 'ready')) {
         const isUnexpectedHome = curlResult.polling?.state === 'unexpected_home';
@@ -2146,6 +2170,7 @@ const action = defineHttpAction({
           completed: importContinuationOutcome.completed,
           timedOut: importContinuationOutcome.timedOut,
           lastState: importContinuationOutcome.lastState,
+          continuationDiagnostics,
           effectiveUrl: curlResult.import?.effectiveUrl || null,
           phases: {
             test: {
@@ -2209,6 +2234,7 @@ const action = defineHttpAction({
           timedOut: importContinuationOutcome.timedOut,
           lastState: importContinuationOutcome.lastState,
           missingContinuationContext: importContinuationOutcome.missingContinuationContext ?? false,
+          continuationDiagnostics,
           message: responseMessage,
           effectiveUrl: curlResult.import.effectiveUrl || null,
           phases: {
@@ -2259,6 +2285,7 @@ const action = defineHttpAction({
         timedOut: importContinuationOutcome.timedOut,
         lastState: importContinuationOutcome.lastState,
         missingContinuationContext: importContinuationOutcome.missingContinuationContext ?? false,
+        continuationDiagnostics,
         effectiveUrl: curlResult.import.effectiveUrl || null,
         phases: {
           test: {
