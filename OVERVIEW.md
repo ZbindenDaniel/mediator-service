@@ -11,6 +11,7 @@
 4. ✅ Refine extraction iteration logging/outcome handling for additional context requests (single-query append).
 5. ✅ Add explicit browser-parity mapping emission (`mappings[+].from` / `mappings[].to`) based on captured HAR payloads.
 6. ✅ Add pricing-stage JSON repair fallback when the pricing model emits narrative text instead of contract JSON.
+7. ✅ Extend ERP identifier extraction for script payload encodings (URL-encoded + HTML-escaped query strings) with source/pattern evidence logging to support continuation URL reconstruction when only `job` is recoverable.
 
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.

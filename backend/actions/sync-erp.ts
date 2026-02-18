@@ -308,6 +308,14 @@ interface ParsedErpResponse {
     rawAction: string | null;
     normalizedAction: string | null;
     effectiveUrlAction: string | null;
+    identifierSources: {
+      job: ErpIdentifierSource | null;
+      reportId: ErpIdentifierSource | null;
+    };
+    identifierPatterns: {
+      job: string | null;
+      reportId: string | null;
+    };
   };
   diagnostics?: string;
 }
@@ -326,6 +334,10 @@ interface ExtractedErpIdentifiers {
   sources: {
     job: ErpIdentifierSource | null;
     reportId: ErpIdentifierSource | null;
+  };
+  patterns: {
+    job: string | null;
+    reportId: string | null;
   };
 }
 
@@ -482,13 +494,69 @@ function decodeUrlEncodedFragments(value: string): string {
   return decodeUriComponentOnce(value);
 }
 
-function extractIdentifierFromPattern(value: string, type: 'resultJob' | 'reportId'): string | null {
-  const pattern =
-    type === 'resultJob'
-      ? /action\s*=\s*CsvImport\s*(?:\/|%2f)\s*result[^\n"'<>]*?(?:[?&]|\b)job\s*=\s*(\d+)/i
-      : /action\s*=\s*CsvImport\s*(?:\/|%2f)\s*report[^\n"'<>]*?(?:[?&]|\b)id\s*=\s*(\d+)/i;
-  const match = value.match(pattern);
-  return match?.[1] || null;
+interface IdentifierPattern {
+  name: string;
+  regex: RegExp;
+}
+
+const ERP_IDENTIFIER_PATTERNS: Record<'resultJob' | 'reportId', IdentifierPattern[]> = {
+  resultJob: [
+    {
+      name: 'action-query-job',
+      regex: /action\s*=\s*CsvImport\s*(?:\/|%2f)\s*result[^\n"'<>]*?(?:[?&]|\b)job\s*=\s*(\d+)/i
+    },
+    {
+      name: 'script-encoded-action-job',
+      regex: /action(?:=|%3d)\s*CsvImport\s*(?:\/|%2f)\s*result[^\n"'<>]*?(?:&|%26|&amp;|\b)job(?:=|%3d)\s*(\d+)/i
+    },
+    {
+      name: 'script-result-query-job',
+      regex: /CsvImport\s*(?:\/|%2f)\s*result(?:\?|%3f)[^\n"'<>]*?(?:&|%26|&amp;|\b)job(?:=|%3d)\s*(\d+)/i
+    }
+  ],
+  reportId: [
+    {
+      name: 'action-query-report-id',
+      regex: /action\s*=\s*CsvImport\s*(?:\/|%2f)\s*report[^\n"'<>]*?(?:[?&]|\b)id\s*=\s*(\d+)/i
+    },
+    {
+      name: 'script-encoded-action-report-id',
+      regex: /action(?:=|%3d)\s*CsvImport\s*(?:\/|%2f)\s*report[^\n"'<>]*?(?:&|%26|&amp;|\b)id(?:=|%3d)\s*(\d+)/i
+    },
+    {
+      name: 'script-report-query-id',
+      regex: /CsvImport\s*(?:\/|%2f)\s*report(?:\?|%3f)[^\n"'<>]*?(?:&|%26|&amp;|\b)id(?:=|%3d)\s*(\d+)/i
+    }
+  ]
+};
+
+function extractIdentifierFromPattern(
+  value: string,
+  type: 'resultJob' | 'reportId',
+  source: ErpIdentifierSource
+): { identifier: string | null; pattern: string | null } {
+  const patterns = ERP_IDENTIFIER_PATTERNS[type];
+  if (!patterns.length) {
+    return { identifier: null, pattern: null };
+  }
+
+  for (const pattern of patterns) {
+    try {
+      const match = value.match(pattern.regex);
+      if (match?.[1]) {
+        return { identifier: match[1], pattern: pattern.name };
+      }
+    } catch (error) {
+      console.warn('[sync-erp] ERP identifier regex parsing failed', {
+        type,
+        source,
+        pattern: pattern.name,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  return { identifier: null, pattern: null };
 }
 
 function extractActionFromValue(value: string): { rawAction: string | null; normalizedAction: string | null } {
@@ -500,6 +568,7 @@ function extractActionFromValue(value: string): { rawAction: string | null; norm
 // TODO(sync-erp-identifier-patterns): Expand parser patterns if ERP starts embedding continuation URLs in additional data attributes.
 function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedErpIdentifiers {
   try {
+    // TODO(sync-erp-script-pattern-evidence): Keep script payload regex evidence names aligned with parser logs when adding future continuation patterns.
     // TODO(sync-erp-mixed-encoding): Keep extraction candidates scoped to effective URL + HTML/script payloads unless ERP introduces new response containers.
     const htmlHrefMatches = Array.from(stdout.matchAll(/href\s*=\s*['\"]([^'\"]+)['\"]/gi)).map(
       (match) => match[1] || ''
@@ -522,19 +591,37 @@ function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedE
     let reportId: string | null = null;
     let jobSource: ErpIdentifierSource | null = null;
     let reportSource: ErpIdentifierSource | null = null;
+    let jobPattern: string | null = null;
+    let reportPattern: string | null = null;
 
     for (const candidate of candidates) {
       const normalizedCandidate = decodeUrlEncodedFragments(decodeHtmlEntities(candidate.value));
       const decodedCandidate = decodeHtmlEntities(candidate.value);
       const responseText = `${normalizedCandidate}\n${decodedCandidate}`;
       if (!reportId) {
-        reportId = extractQueryParam(responseText, 'id') || extractIdentifierFromPattern(responseText, 'reportId');
+        const reportFromQueryParam = extractQueryParam(responseText, 'id');
+        if (reportFromQueryParam) {
+          reportId = reportFromQueryParam;
+          reportPattern = 'query-param-id';
+        } else {
+          const reportMatch = extractIdentifierFromPattern(responseText, 'reportId', candidate.source);
+          reportId = reportMatch.identifier;
+          reportPattern = reportMatch.pattern;
+        }
         if (reportId) {
           reportSource = candidate.source;
         }
       }
       if (!job) {
-        job = extractQueryParam(responseText, 'job') || extractIdentifierFromPattern(responseText, 'resultJob');
+        const jobFromQueryParam = extractQueryParam(responseText, 'job');
+        if (jobFromQueryParam) {
+          job = jobFromQueryParam;
+          jobPattern = 'query-param-job';
+        } else {
+          const jobMatch = extractIdentifierFromPattern(responseText, 'resultJob', candidate.source);
+          job = jobMatch.identifier;
+          jobPattern = jobMatch.pattern;
+        }
         if (job) {
           jobSource = candidate.source;
         }
@@ -550,6 +637,10 @@ function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedE
       sources: {
         job: jobSource,
         reportId: reportSource
+      },
+      patterns: {
+        job: jobPattern,
+        reportId: reportPattern
       }
     };
   } catch (error) {
@@ -562,6 +653,10 @@ function extractErpIdentifiers(stdout: string, effectiveUrl: string): ExtractedE
       job: null,
       reportId: null,
       sources: {
+        job: null,
+        reportId: null
+      },
+      patterns: {
         job: null,
         reportId: null
       }
@@ -654,8 +749,10 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
       effectiveUrl: trimDiagnosticOutput(effectiveUrl, 120),
       reportId,
       reportSource: identifiers.sources.reportId || 'none',
+      reportPattern: identifiers.patterns.reportId || 'none',
       job,
-      jobSource: identifiers.sources.job || 'none'
+      jobSource: identifiers.sources.job || 'none',
+      jobPattern: identifiers.patterns.job || 'none'
     });
 
     if (state === 'unknown') {
@@ -684,7 +781,15 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
         isLoginForm,
         rawAction: effectiveUrlActionRaw,
         normalizedAction: effectiveUrlAction,
-        effectiveUrlAction
+        effectiveUrlAction,
+        identifierSources: {
+          job: identifiers.sources.job,
+          reportId: identifiers.sources.reportId
+        },
+        identifierPatterns: {
+          job: identifiers.patterns.job,
+          reportId: identifiers.patterns.reportId
+        }
       }
     };
   } catch (parseError) {
@@ -701,7 +806,15 @@ function parseErpImportState(stdout: string, effectiveUrl: string): ParsedErpRes
         isLoginForm: false,
         rawAction: null,
         normalizedAction: null,
-        effectiveUrlAction: null
+        effectiveUrlAction: null,
+        identifierSources: {
+          job: null,
+          reportId: null
+        },
+        identifierPatterns: {
+          job: null,
+          reportId: null
+        }
       },
       diagnostics: parseError instanceof Error ? parseError.message : 'Unknown parser failure'
     };
@@ -725,6 +838,8 @@ function logParseEvidence(
     rawAction: parsed.evidence.rawAction,
     normalizedAction: parsed.evidence.normalizedAction,
     effectiveUrlAction: parsed.evidence.effectiveUrlAction,
+    identifierSources: parsed.evidence.identifierSources,
+    identifierPatterns: parsed.evidence.identifierPatterns,
     job: parsed.job,
     reportId: parsed.reportId,
     diagnostics: parsed.diagnostics
@@ -1530,7 +1645,15 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
           isLoginForm: false,
           rawAction: fallbackAction.rawAction,
           normalizedAction: fallbackAction.normalizedAction,
-          effectiveUrlAction: fallbackAction.normalizedAction
+          effectiveUrlAction: fallbackAction.normalizedAction,
+          identifierSources: {
+            job: null,
+            reportId: null
+          },
+          identifierPatterns: {
+            job: null,
+            reportId: null
+          }
         },
         diagnostics: `fallback(exitCode=${importResult.exitCode}, stdout=${trimDiagnosticOutput(importResult.stdout, 200)})`
       };
@@ -1910,7 +2033,15 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
             isLoginForm: false,
             rawAction: null,
             normalizedAction: null,
-            effectiveUrlAction: null
+            effectiveUrlAction: null,
+            identifierSources: {
+              job: null,
+              reportId: null
+            },
+            identifierPatterns: {
+              job: null,
+              reportId: null
+            }
           },
           diagnostics: pollParseError instanceof Error ? pollParseError.message : 'Unknown parser transition failure'
         };
