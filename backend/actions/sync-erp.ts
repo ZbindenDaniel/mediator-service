@@ -12,6 +12,11 @@ import {
   ERP_IMPORT_FORM_DEFAULT_UNIT,
   ERP_IMPORT_FORM_PART_CLASSIFICATION,
   ERP_IMPORT_FORM_SEPARATOR,
+  ERP_IMPORT_FORM_DATE_FORMAT,
+  ERP_IMPORT_FORM_FULL_PREVIEW,
+  ERP_IMPORT_PROFILE_ID,
+  ERP_IMPORT_TMP_PROFILE_ID,
+  ERP_IMPORT_REQUEST_CONTRACT,
   ERP_IMPORT_INCLUDE_MEDIA,
   ERP_SYNC_ENABLED,
   ERP_IMPORT_PASSWORD,
@@ -77,18 +82,24 @@ function normalizeItemIds(rawItemIds: unknown): string[] {
 }
 
 type ErpImportValue = string | number;
+type ImportRequestContract = 'legacy' | 'browser-parity';
 
 interface ErpImportFieldMap {
   action: string;
   actionTest: string;
   actionImport: string;
+  formSent: string;
   escapeChar: string;
   profileType: string;
+  profileId: string;
+  tmpProfileId: string;
   quoteChar: string;
   separator: string;
   applyBookingGroup: string;
   articleNumberPolicy: string;
   charset: string;
+  dateFormat: string;
+  fullPreview: string;
   defaultBookingGroup: string;
   duplicates: string;
   numberFormat: string;
@@ -105,13 +116,18 @@ const ERP_IMPORT_FIELD_NAMES = {
   action: 'action',
   actionTest: 'action_test',
   actionImport: 'action_import',
+  formSent: 'form_sent',
   escapeChar: 'escape_char',
   profileType: 'profile.type',
+  profileId: 'profile.id',
+  tmpProfileId: 'tmp_profile_id',
   quoteChar: 'quote_char',
   separator: 'sep_char',
   applyBookingGroup: 'settings.apply_buchungsgruppe',
   articleNumberPolicy: 'settings.article_number_policy',
   charset: 'settings.charset',
+  dateFormat: 'settings.dateformat',
+  fullPreview: 'settings.full_preview',
   defaultBookingGroup: 'settings.default_buchungsgruppe',
   duplicates: 'settings.duplicates',
   numberFormat: 'settings.numberformat',
@@ -125,18 +141,26 @@ const ERP_IMPORT_FIELD_NAMES = {
 } as const satisfies Record<keyof ErpImportFieldMap, string>;
 
 // TODO(agent-erp-form-contract): Keep ERP field-value defaults aligned with docs/erp-sync.sh after upstream ERP changes.
-function buildErpImportFieldMap(): ErpImportFieldMap {
+// TODO(sync-erp-browser-contract-fields): Keep browser-parity payload keys aligned with ERP HAR captures during rollout.
+function buildErpImportFieldMap(contract: ImportRequestContract = 'legacy'): ErpImportFieldMap {
+  const profileId = ERP_IMPORT_PROFILE_ID || '1';
+  const tmpProfileId = ERP_IMPORT_TMP_PROFILE_ID || profileId;
   return {
     action: 'CsvImport/import',
     actionTest: '0',
     actionImport: '1',
+    formSent: '1',
     escapeChar: 'quote',
     profileType: 'parts',
+    profileId,
+    tmpProfileId,
     quoteChar: 'quote',
     separator: ERP_IMPORT_FORM_SEPARATOR || 'comma',
     applyBookingGroup: 'all',
     articleNumberPolicy: 'update_parts',
     charset: ERP_IMPORT_FORM_CHARSET || 'UTF-8',
+    dateFormat: ERP_IMPORT_FORM_DATE_FORMAT || 'dd.mm.yyyy',
+    fullPreview: ERP_IMPORT_FORM_FULL_PREVIEW ? '1' : '0',
     defaultBookingGroup: ERP_IMPORT_FORM_DEFAULT_BOOKING_GROUP || '453',
     duplicates: 'no_check',
     numberFormat: '1000.00',
@@ -146,7 +170,8 @@ function buildErpImportFieldMap(): ErpImportFieldMap {
     sellPricePlaces: 2,
     shopArticleIfMissing: 1,
     partClassification: ERP_IMPORT_FORM_PART_CLASSIFICATION || '2',
-    defaultUnit: ERP_IMPORT_FORM_DEFAULT_UNIT || 'Stck'
+    defaultUnit: ERP_IMPORT_FORM_DEFAULT_UNIT || 'Stck',
+    ...(contract === 'browser-parity' ? { action: 'CsvImport/test', actionTest: '1', actionImport: '0' } : {})
   };
 }
 
@@ -810,12 +835,37 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   const mimeType = archiveKind === 'zip' ? 'application/zip' : 'text/csv';
   const fieldName = formField || 'file';
   const timeoutSeconds = Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.ceil(timeoutMs / 1000) : undefined;
-  const erpFields = buildErpImportFieldMap();
+  const requestContract: ImportRequestContract = ERP_IMPORT_REQUEST_CONTRACT === 'browser-parity' ? 'browser-parity' : 'legacy';
+  const erpFields = buildErpImportFieldMap(requestContract);
   const authLoginFieldName = buildAuthFieldName('login', options.authFieldPrefix);
   const authPasswordFieldName = buildAuthFieldName('password', options.authFieldPrefix);
   const authClientIdFieldName = buildAuthFieldName('client_id', options.authFieldPrefix);
   const importMode: ImportMode = ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity';
   const baselineFlow = importMode === 'script-parity';
+
+  const resolvePhaseActions = (phase: 'test' | 'import'): { action: string; actionTest: string; actionImport: string } => {
+    try {
+      if (requestContract === 'browser-parity') {
+        if (!erpFields.profileId || !erpFields.tmpProfileId) {
+          throw new Error('profile.id and tmp_profile_id are required for browser-parity contract');
+        }
+        return {
+          action: phase === 'test' ? 'CsvImport/test' : 'CsvImport/import',
+          actionTest: phase === 'test' ? '1' : '0',
+          actionImport: phase === 'import' ? '1' : '0'
+        };
+      }
+
+      return {
+        action: erpFields.action,
+        actionTest: phase === 'test' ? '1' : erpFields.actionTest,
+        actionImport: phase === 'import' ? erpFields.actionImport : '0'
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to resolve ERP action contract (${requestContract}) for phase ${phase}: ${message}`);
+    }
+  };
 
   let cookieDirPath: string | null = null;
   let cookieJarPath: string | null = null;
@@ -908,80 +958,118 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
   };
 
   const buildImportArgs = (phase: 'test' | 'import'): string[] => {
-    const actionTestValue = phase === 'test' ? '1' : erpFields.actionTest;
-    const actionImportValue = phase === 'import' ? erpFields.actionImport : '0';
-    const args = [
-      '-X',
-      'POST',
-      '--silent',
-      '--insecure',
-      '--show-error',
-      '--location',
-      '--write-out',
-      '\n%{url_effective}',
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.action, erpFields.action),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.actionTest, actionTestValue),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, actionImportValue),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.escapeChar, erpFields.escapeChar),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.profileType, erpFields.profileType),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.quoteChar, erpFields.quoteChar),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.separator, erpFields.separator),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.applyBookingGroup, erpFields.applyBookingGroup),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.articleNumberPolicy, erpFields.articleNumberPolicy),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.charset, erpFields.charset),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.defaultBookingGroup, erpFields.defaultBookingGroup),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.duplicates, erpFields.duplicates),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.numberFormat, erpFields.numberFormat),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.partType, erpFields.partType),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustment, erpFields.sellPriceAdjustment),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustmentType, erpFields.sellPriceAdjustmentType),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.sellPricePlaces, erpFields.sellPricePlaces),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.shopArticleIfMissing, erpFields.shopArticleIfMissing),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.partClassification, erpFields.partClassification),
-      '-F',
-      toFormArg(ERP_IMPORT_FIELD_NAMES.defaultUnit, erpFields.defaultUnit),
-      '-F',
-      `${fieldName}=@${artifact.archivePath};type=${mimeType}`,
-      '-F',
-      toFormArg(authClientIdFieldName, clientId || '1'),
-      '-F',
-      `actor=${actor}`,
-      ...buildCookieArgs(),
-      url
-    ];
+    try {
+      const phaseActions = resolvePhaseActions(phase);
+      if (requestContract === 'browser-parity' && (!erpFields.dateFormat || !erpFields.formSent)) {
+        throw new Error('settings.dateformat and form_sent are required for browser-parity contract');
+      }
 
-    if (username) {
-      args.splice(args.length - 1, 0, '-F', toFormArg(authLoginFieldName, username));
+      loggerRef.info?.('[sync-erp] ERP request contract selected', {
+        contract: requestContract,
+        phase,
+        mode: importMode,
+        action: phaseActions.action,
+        redactedFields: {
+          profileId: erpFields.profileId ? '***' : null,
+          tmpProfileId: erpFields.tmpProfileId ? '***' : null,
+          dateFormat: erpFields.dateFormat,
+          fullPreview: erpFields.fullPreview,
+          formSent: erpFields.formSent
+        }
+      });
+
+      const args = [
+        '-X',
+        'POST',
+        '--silent',
+        '--insecure',
+        '--show-error',
+        '--location',
+        '--write-out',
+        '\n%{url_effective}',
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.action, phaseActions.action),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.actionTest, phaseActions.actionTest),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, phaseActions.actionImport),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.formSent, erpFields.formSent),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.escapeChar, erpFields.escapeChar),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.profileType, erpFields.profileType),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.profileId, erpFields.profileId),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.tmpProfileId, erpFields.tmpProfileId),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.quoteChar, erpFields.quoteChar),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.separator, erpFields.separator),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.applyBookingGroup, erpFields.applyBookingGroup),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.articleNumberPolicy, erpFields.articleNumberPolicy),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.charset, erpFields.charset),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.dateFormat, erpFields.dateFormat),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.fullPreview, erpFields.fullPreview),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.defaultBookingGroup, erpFields.defaultBookingGroup),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.duplicates, erpFields.duplicates),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.numberFormat, erpFields.numberFormat),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.partType, erpFields.partType),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustment, erpFields.sellPriceAdjustment),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.sellPriceAdjustmentType, erpFields.sellPriceAdjustmentType),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.sellPricePlaces, erpFields.sellPricePlaces),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.shopArticleIfMissing, erpFields.shopArticleIfMissing),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.partClassification, erpFields.partClassification),
+        '-F',
+        toFormArg(ERP_IMPORT_FIELD_NAMES.defaultUnit, erpFields.defaultUnit),
+        '-F',
+        `${fieldName}=@${artifact.archivePath};type=${mimeType}`,
+        '-F',
+        toFormArg(authClientIdFieldName, clientId || '1'),
+        '-F',
+        `actor=${actor}`,
+        ...buildCookieArgs(),
+        url
+      ];
+
+      if (username) {
+        args.splice(args.length - 1, 0, '-F', toFormArg(authLoginFieldName, username));
+      }
+
+      if (password) {
+        args.splice(args.length - 1, 0, '-F', toFormArg(authPasswordFieldName, password));
+      }
+
+      if (timeoutSeconds) {
+        args.splice(6, 0, '--max-time', `${timeoutSeconds}`);
+      }
+
+      return args;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      loggerRef.error?.('[sync-erp] Failed to build ERP import form payload', {
+        contract: requestContract,
+        phase,
+        mode: importMode,
+        error: message
+      });
+      throw new Error(`Failed to build ERP ${requestContract} request payload for phase ${phase}: ${message}`);
     }
-
-    if (password) {
-      args.splice(args.length - 1, 0, '-F', toFormArg(authPasswordFieldName, password));
-    }
-
-    if (timeoutSeconds) {
-      args.splice(6, 0, '--max-time', `${timeoutSeconds}`);
-    }
-
-    return args;
   };
 
   const buildPollArgs = (pollUrl: string): string[] => {
