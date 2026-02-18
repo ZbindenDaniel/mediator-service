@@ -548,17 +548,6 @@ export async function runExtractionAttempts({
   let extractionAccumulator: AgenticOutput | null = null;
   const { Artikel_Nummer: _promptHiddenItemId, ...promptFacingTargetRaw } = target;
   const promptFacingTarget = mapLangtextToSpezifikationenForLlm(promptFacingTargetRaw, { itemId, logger, context: 'extraction-target-snapshot' }) as Record<string, unknown>;
-  // TODO(agent): Keep prompt-facing target redactions aligned with fields hidden from agents.
-  const sanitizedTargetPreview = sanitizeForLog(promptFacingTarget);
-  let serializedTargetSnapshot = '';
-  try {
-    serializedTargetSnapshot = JSON.stringify(promptFacingTarget, null, 2);
-  } catch (err) {
-    logger?.warn?.({ err, msg: 'failed to serialize target for extraction context', itemId });
-  }
-  const trimmedTargetSnapshot = serializedTargetSnapshot
-    ? truncateForLog(serializedTargetSnapshot, TARGET_SNAPSHOT_MAX_LENGTH).trim()
-    : '';
   const numericSearchLimit = Number(maxAgentSearchesPerRequest);
   const searchesPerRequestLimit = Number.isFinite(numericSearchLimit) && numericSearchLimit > 0
     ? Math.floor(numericSearchLimit)
@@ -691,6 +680,37 @@ export async function runExtractionAttempts({
 
     // TODO(agent): Re-check prompt context assembly for further reductions after reviewer feedback.
     const totalPasses = Math.max(1, searchContexts.length);
+    const targetSnapshotSource = extractionAccumulator ?? promptFacingTarget;
+    const targetSnapshotSourceLabel = extractionAccumulator ? 'accumulator' : 'initial-target';
+    // TODO(agent): Keep prompt-facing target redactions aligned with fields hidden from agents.
+    const normalizedTargetSnapshot = mapLangtextToSpezifikationenForLlm(targetSnapshotSource, {
+      itemId,
+      logger,
+      context: 'extraction-target-snapshot'
+    });
+    const sanitizedTargetPreview = sanitizeForLog(normalizedTargetSnapshot);
+    let serializedTargetSnapshot = '';
+    try {
+      serializedTargetSnapshot = JSON.stringify(normalizedTargetSnapshot, null, 2);
+    } catch (err) {
+      logger?.warn?.({
+        err,
+        msg: 'failed to serialize target for extraction context',
+        itemId,
+        attempt,
+        contextIndex: contextCursor + 1
+      });
+    }
+    const trimmedTargetSnapshot = serializedTargetSnapshot
+      ? truncateForLog(serializedTargetSnapshot, TARGET_SNAPSHOT_MAX_LENGTH).trim()
+      : '';
+    logger?.debug?.({
+      msg: 'resolved target snapshot source for extraction prompt',
+      attempt,
+      itemId,
+      contextIndex: contextCursor + 1,
+      targetSnapshotSource: targetSnapshotSourceLabel
+    });
     const fallbackContextText = (() => {
       try {
         return buildAggregatedSearchText();
