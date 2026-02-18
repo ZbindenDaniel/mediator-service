@@ -1,6 +1,6 @@
 import { RateLimitError } from '../tools/tavily-client';
 import { stringifyLangChainContent } from '../utils/langchain';
-import { formatSourcesForRetry, type SearchSource } from '../utils/source-formatter';
+import type { SearchSource } from '../utils/source-formatter';
 import { parseJsonWithSanitizer } from '../utils/json';
 import { searchLimits } from '../config';
 import { FlowError } from './errors';
@@ -368,7 +368,11 @@ export async function runExtractionAttempts({
 
   let attempt = 1;
   // TODO(agent): Revisit pass-level retry ceilings once extraction telemetry shows stable pass success rates.
-  let passIndex = 0;
+  let contextCursor = 0;
+  let passFailureSupervision = '';
+  let passFailureValidationIssues: unknown = null;
+  let passInvalidJsonErrorHint = '';
+  let passInvalidJsonPlaceholderIssues: string[] = [];
   let extractionAccumulator: AgenticOutput | null = null;
   const { Artikel_Nummer: _promptHiddenItemId, ...promptFacingTargetRaw } = target;
   const promptFacingTarget = mapLangtextToSpezifikationenForLlm(promptFacingTargetRaw, { itemId, logger, context: 'extraction-target-snapshot' }) as Record<string, unknown>;
@@ -444,11 +448,11 @@ export async function runExtractionAttempts({
       try {
         return buildAggregatedSearchText();
       } catch (err) {
-        logger?.warn?.({ err, msg: 'failed to build aggregated search text fallback', attempt, itemId, passIndex: passIndex + 1 });
+        logger?.warn?.({ err, msg: 'failed to build aggregated search text fallback', attempt, itemId, contextIndex: contextCursor + 1 });
         return '';
       }
     })();
-    const activeContext = searchContexts[passIndex] ?? { query: 'aggregated-fallback', text: fallbackContextText, sources: [] };
+    const activeContext = searchContexts[contextCursor] ?? { query: 'aggregated-fallback', text: fallbackContextText, sources: [] };
     const singleContextText = typeof activeContext?.text === 'string' ? activeContext.text : '';
     const compactAccumulator = serializeCompactPayload(extractionAccumulator);
 
@@ -488,13 +492,13 @@ export async function runExtractionAttempts({
         msg: 'extraction context pass',
         attempt,
         itemId,
-        passIndex: passIndex + 1,
+        contextIndex: contextCursor + 1,
         totalPasses,
         singleContextLength: singleContextText.length,
         accumulatorSizeEstimate: compactAccumulator.length
       });
     } catch (err) {
-      logger?.warn?.({ err, msg: 'failed to log extraction context pass metrics', attempt, itemId, passIndex: passIndex + 1 });
+      logger?.warn?.({ err, msg: 'failed to log extraction context pass metrics', attempt, itemId, contextIndex: contextCursor + 1 });
     }
 
     const contextSections: string[] = [];
@@ -505,7 +509,7 @@ export async function runExtractionAttempts({
         msg: 'prompt segment size metrics',
         attempt,
         itemId,
-        passIndex: passIndex + 1,
+        contextIndex: contextCursor + 1,
         totalPasses,
         reviewerNotesLength: sanitizedReviewerNotes.length,
         reviewerNotesLineCount,
@@ -515,17 +519,11 @@ export async function runExtractionAttempts({
         accumulatorSizeEstimate: compactAccumulator.length
       });
     } catch (err) {
-      logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId, passIndex: passIndex + 1 });
+      logger?.warn?.({ err, msg: 'failed to log prompt segment size metrics', attempt, itemId, contextIndex: contextCursor + 1 });
     }
 
     if (reviewerInstructionBlock) {
       contextSections.push(reviewerInstructionBlock);
-    }
-    if (attempt > 1) {
-      const formattedSources = formatSourcesForRetry(aggregatedSources, logger);
-      if (formattedSources.length > 0) {
-        contextSections.push(['Sources:', formattedSources.join('\n')].join('\n'));
-      }
     }
     contextSections.push('Current search context:', singleContextText || 'None.');
     contextSections.push('Accumulated candidate (compact JSON):', compactAccumulator);
@@ -535,21 +533,21 @@ export async function runExtractionAttempts({
 
     if (attempt > 1) {
       const retrySummaryLines: string[] = ['Retry summary (compact):'];
-      const supervisionSummary = truncateForPrompt(lastSupervision?.trim?.() ?? 'None');
+      const supervisionSummary = truncateForPrompt(passFailureSupervision?.trim?.() ?? 'None');
       retrySummaryLines.push(`Supervisor: ${supervisionSummary || 'None'}`);
       const validationSummaryParts: string[] = [];
-      if (lastValidationIssues === 'INVALID_JSON') {
-        const parseErrorHint = truncateForPrompt(lastInvalidJsonErrorHint.trim() || 'Invalid JSON output.');
+      if (passFailureValidationIssues === 'INVALID_JSON') {
+        const parseErrorHint = truncateForPrompt(passInvalidJsonErrorHint.trim() || 'Invalid JSON output.');
         validationSummaryParts.push(`Invalid JSON (${parseErrorHint}).`);
-        if (lastInvalidJsonPlaceholderIssues.length) {
-          const placeholderSummary = truncateForPrompt(lastInvalidJsonPlaceholderIssues.join(', '));
+        if (passInvalidJsonPlaceholderIssues.length) {
+          const placeholderSummary = truncateForPrompt(passInvalidJsonPlaceholderIssues.join(', '));
           validationSummaryParts.push(`Placeholders: ${placeholderSummary}.`);
         }
-      } else if (Array.isArray(lastValidationIssues)) {
-        const issueSummary = truncateForPrompt(JSON.stringify(lastValidationIssues));
+      } else if (Array.isArray(passFailureValidationIssues)) {
+        const issueSummary = truncateForPrompt(JSON.stringify(passFailureValidationIssues));
         validationSummaryParts.push(`Schema issues: ${issueSummary}.`);
-      } else if (lastValidationIssues) {
-        validationSummaryParts.push(`Validation: ${truncateForPrompt(String(lastValidationIssues))}.`);
+      } else if (passFailureValidationIssues) {
+        validationSummaryParts.push(`Validation: ${truncateForPrompt(String(passFailureValidationIssues))}.`);
       }
       if (validationSummaryParts.length) {
         retrySummaryLines.push(`Error hint: ${validationSummaryParts.join(' ')}`);
@@ -593,11 +591,11 @@ export async function runExtractionAttempts({
     }
 
     const extractionPromptFragments: PromptPlaceholderFragments = new Map(basePromptFragments);
-    if (attempt > 1 && lastValidationIssues === 'INVALID_JSON') {
+    if (attempt > 1 && passFailureValidationIssues === 'INVALID_JSON') {
       appendPlaceholderFragment(
         extractionPromptFragments,
         PROMPT_PLACEHOLDERS.extractionReview,
-        `Retry guidance: previous response failed JSON validation (${lastInvalidJsonErrorHint || 'invalid-json'}).`
+        `Retry guidance: previous response failed JSON validation (${passInvalidJsonErrorHint || 'invalid-json'}).`
       );
     }
     const assembledExtractPrompt = resolvePromptPlaceholders({
@@ -676,6 +674,8 @@ export async function runExtractionAttempts({
             const nextAttempt = attempt + 1;
             lastValidationIssues = flowErr.code;
             lastSupervision = flowErr.message;
+            passFailureValidationIssues = flowErr.code;
+            passFailureSupervision = flowErr.message;
             logger?.info?.({
               msg: 'retrying extraction attempt',
               attempt,
@@ -706,14 +706,18 @@ export async function runExtractionAttempts({
       response: raw
     };
 
-    await appendTranscriptSection(
-      transcriptWriter,
-      `${attempt}. extraction attempt`,
-      extractionTranscriptPayload,
-      raw,
-      logger,
-      itemId
-    );
+    try {
+      await appendTranscriptSection(
+        transcriptWriter,
+        `${attempt}. extraction attempt`,
+        extractionTranscriptPayload,
+        raw,
+        logger,
+        itemId
+      );
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to append extraction transcript section', itemId, attempt, contextIndex: contextCursor + 1 });
+    }
 
     let thinkContent = '';
     itemContent = raw;
@@ -758,6 +762,8 @@ export async function runExtractionAttempts({
       lastInvalidJsonPayload = null;
       lastInvalidJsonErrorHint = '';
       lastInvalidJsonPlaceholderIssues = [];
+      passInvalidJsonErrorHint = '';
+      passInvalidJsonPlaceholderIssues = [];
     } catch (err) {
       const sanitizedPayload = typeof (err as { sanitized?: string }).sanitized === 'string'
         ? (err as { sanitized?: string }).sanitized?.trim() ?? ''
@@ -872,6 +878,10 @@ export async function runExtractionAttempts({
       if (!parsed) {
         lastSupervision = 'INVALID_JSON';
         lastValidationIssues = 'INVALID_JSON';
+        passFailureSupervision = lastSupervision;
+        passFailureValidationIssues = 'INVALID_JSON';
+        passInvalidJsonErrorHint = lastInvalidJsonErrorHint;
+        passInvalidJsonPlaceholderIssues = [...lastInvalidJsonPlaceholderIssues];
         const nextAttempt = attempt + 1;
         logger?.info?.({
           msg: 'retrying extraction attempt',
@@ -912,6 +922,8 @@ export async function runExtractionAttempts({
       lastValidated = null;
       lastSupervision = `Spezifikationen boundary normalization failed: ${normalizedBoundary.issue.message}`;
       lastValidationIssues = [normalizedBoundary.issue];
+      passFailureSupervision = lastSupervision;
+      passFailureValidationIssues = [normalizedBoundary.issue];
       const nextAttempt = attempt + 1;
       logger?.info?.({
         msg: 'retrying extraction attempt',
@@ -983,6 +995,8 @@ export async function runExtractionAttempts({
       lastValidated = null;
       lastSupervision = `Schema validation failed: ${JSON.stringify(agentParsed.error.issues)}`;
       lastValidationIssues = agentParsed.error.issues;
+      passFailureSupervision = lastSupervision;
+      passFailureValidationIssues = agentParsed.error.issues;
       const nextAttempt = attempt + 1;
       logger?.info?.({
         msg: 'retrying extraction attempt',
@@ -1018,20 +1032,23 @@ export async function runExtractionAttempts({
           maxSearchRequestCycles: MAX_SEARCH_REQUEST_CYCLES
         });
         lastSupervision = 'TOO_MANY_SEARCH_REQUESTS';
+        passFailureSupervision = lastSupervision;
         const bestEffortMerge = mergeAccumulatedCandidate(extractionAccumulator, candidateData, {
           logger,
           itemId,
           attempt,
-          passIndex: passIndex + 1
+          passIndex: contextCursor + 1
         });
         if (bestEffortMerge.success) {
           extractionAccumulator = bestEffortMerge.data;
           lastValidated = { success: true, data: bestEffortMerge.data };
           lastValidationIssues = null;
+          passFailureValidationIssues = null;
         } else {
           const mergeIssues = (bestEffortMerge as { issues: unknown }).issues;
           lastValidated = { success: true, data: candidateData };
           lastValidationIssues = mergeIssues;
+          passFailureValidationIssues = mergeIssues;
         }
         logger?.info?.({
           msg: 'using best-effort extraction data after search limit reached',
@@ -1051,6 +1068,7 @@ export async function runExtractionAttempts({
           allowedCount: searchesPerRequestLimit
         });
       }
+      const previousContextCount = searchContexts.length;
       for (const [index, query] of queriesToProcess.entries()) {
         try {
           const { text: extraText, sources: extraSources } = await searchInvoker(query, 5, {
@@ -1070,8 +1088,15 @@ export async function runExtractionAttempts({
         }
       }
       lastSupervision = `ADDITIONAL_SEARCH_REQUESTED: ${queriesToProcess.join(' | ')}`;
+      passFailureSupervision = lastSupervision;
       lastValidated = null;
       lastValidationIssues = '__SEARCH_REQUESTED__';
+      passFailureValidationIssues = '__SEARCH_REQUESTED__';
+      try {
+        contextCursor = Math.max(contextCursor + 1, previousContextCount);
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to advance extraction cursor after additional search', itemId, attempt, contextIndex: contextCursor + 1 });
+      }
       logger?.info?.({
         msg: 'retrying extraction attempt',
         attempt,
@@ -1086,13 +1111,15 @@ export async function runExtractionAttempts({
       logger,
       itemId,
       attempt,
-      passIndex: passIndex + 1
+      passIndex: contextCursor + 1
     });
     if (!mergedAccumulator.success) {
       const mergeIssues = (mergedAccumulator as { issues: unknown }).issues;
       lastValidated = null;
       lastSupervision = 'ACCUMULATOR_MERGE_FAILED';
       lastValidationIssues = mergeIssues;
+      passFailureSupervision = lastSupervision;
+      passFailureValidationIssues = mergeIssues;
       const nextAttempt = attempt + 1;
       logger?.info?.({
         msg: 'retrying extraction attempt',
@@ -1100,7 +1127,7 @@ export async function runExtractionAttempts({
         nextAttempt,
         itemId,
         reason: 'ACCUMULATOR_MERGE_FAILED',
-        passIndex: passIndex + 1,
+        contextIndex: contextCursor + 1,
         validationIssuesPreview: sanitizeForLog(mergeIssues)
       });
       advanceAttempt();
@@ -1109,16 +1136,46 @@ export async function runExtractionAttempts({
 
     extractionAccumulator = mergedAccumulator.data;
     lastValidationIssues = null;
-    const nextPassIndex = passIndex + 1;
-    if (nextPassIndex < Math.max(1, searchContexts.length)) {
-      passIndex = nextPassIndex;
-      logger?.info?.({
-        msg: 'advancing extraction context pass',
-        attempt,
+    passFailureValidationIssues = null;
+    const incrementalParse = AgentOutputSchema.safeParse(extractionAccumulator);
+    if (!incrementalParse.success) {
+      lastValidated = null;
+      lastSupervision = `INCREMENTAL_MERGE_SCHEMA_INVALID: ${JSON.stringify(incrementalParse.error.issues)}`;
+      lastValidationIssues = incrementalParse.error.issues;
+      passFailureSupervision = lastSupervision;
+      passFailureValidationIssues = incrementalParse.error.issues;
+      const nextAttempt = attempt + 1;
+      logger?.warn?.({
+        msg: 'incremental accumulator validation failed',
         itemId,
-        completedPassIndex: passIndex,
-        totalPasses: Math.max(1, searchContexts.length)
+        attempt,
+        contextIndex: contextCursor + 1,
+        nextAttempt,
+        issues: incrementalParse.error.issues
       });
+      advanceAttempt();
+      continue;
+    }
+    extractionAccumulator = incrementalParse.data;
+    const nextPassIndex = contextCursor + 1;
+    if (nextPassIndex < Math.max(1, searchContexts.length)) {
+      try {
+        contextCursor = nextPassIndex;
+        passFailureSupervision = '';
+        passFailureValidationIssues = null;
+        passInvalidJsonErrorHint = '';
+        passInvalidJsonPlaceholderIssues = [];
+        logger?.info?.({
+          msg: 'advancing extraction context pass',
+          attempt,
+          itemId,
+          contextIndex: contextCursor + 1,
+          completedPassIndex: contextCursor,
+          totalPasses: Math.max(1, searchContexts.length)
+        });
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to advance extraction context cursor', itemId, attempt, contextIndex: contextCursor + 1 });
+      }
       continue;
     }
 
@@ -1227,6 +1284,7 @@ export async function runExtractionAttempts({
       });
       lastValidated = null;
       lastValidationIssues = `SUPERVISOR_PAYLOAD_INVALID: ${JSON.stringify(supervisorPayloadValidation.error.issues)}`;
+      passFailureValidationIssues = lastValidationIssues;
       continue;
     }
 
@@ -1272,7 +1330,11 @@ export async function runExtractionAttempts({
       response: supervision
     };
 
-    await appendTranscriptSection(transcriptWriter, 'supervisor', supervisorTranscriptPayload, supervision, logger, itemId);
+    try {
+      await appendTranscriptSection(transcriptWriter, 'supervisor', supervisorTranscriptPayload, supervision, logger, itemId);
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to append supervisor transcript section', itemId, attempt, contextIndex: contextCursor + 1 });
+    }
     // TODO(agent): Broaden supervisor status parsing once additional workflow states are introduced.
     let normalizedSupervision = supervision;
     if ((normalizedSupervision.startsWith('"') && normalizedSupervision.endsWith('"'))
@@ -1309,6 +1371,7 @@ export async function runExtractionAttempts({
     }
     normalizedSupervision = normalizedSupervision.trim();
     lastSupervision = normalizedSupervision;
+    passFailureSupervision = normalizedSupervision;
     logger?.debug?.({
       msg: 'supervisor response received',
       attempt,
@@ -1387,7 +1450,7 @@ export async function runExtractionAttempts({
       thinkInvalidPreview: sanitizeForLog(lastInvalidJsonPayload?.thinkContent)
     };
 
-    if (lastValidationIssues === 'INVALID_JSON') {
+    if (passFailureValidationIssues === 'INVALID_JSON') {
       logger?.error?.({ ...logBase, reason: 'INVALID_JSON' });
       throw new FlowError('INVALID_JSON', 'Agent failed to return valid JSON after retries', 500, {
         context: {
