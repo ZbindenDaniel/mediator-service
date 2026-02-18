@@ -282,6 +282,48 @@ export const ERP_IMPORT_TMP_PROFILE_ID = (process.env.ERP_IMPORT_TMP_PROFILE_ID 
 const rawErpImportRequestContract = (process.env.ERP_IMPORT_REQUEST_CONTRACT || '').trim().toLowerCase();
 export const ERP_IMPORT_REQUEST_CONTRACT =
   rawErpImportRequestContract === 'legacy' ? 'legacy' : 'browser-parity';
+// TODO(sync-erp-browser-mappings-config): Promote browser-parity mapping config to shared schema docs once rollout settles.
+export interface ErpImportBrowserParityMapping {
+  from: string;
+  to: string;
+}
+
+function parseErpImportBrowserParityMappings(raw: string | undefined): ErpImportBrowserParityMapping[] {
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      throw new Error('expected a JSON array of {"from":"...","to":"..."} objects');
+    }
+
+    return parsed.map((entry, index) => {
+      if (!entry || typeof entry !== 'object') {
+        throw new Error(`entry at index ${index} must be an object with "from" and "to"`);
+      }
+
+      const fromValue = typeof (entry as { from?: unknown }).from === 'string' ? (entry as { from: string }).from.trim() : '';
+      const toValue = typeof (entry as { to?: unknown }).to === 'string' ? (entry as { to: string }).to.trim() : '';
+      if (!fromValue || !toValue) {
+        throw new Error(`entry at index ${index} must include non-empty "from" and "to" strings`);
+      }
+
+      return { from: fromValue, to: toValue };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Invalid ERP_IMPORT_BROWSER_PARITY_MAPPINGS value: ${message}. Example: ` +
+        '[{"from":"vm_product_length","to":"cvar_vm_product_length"}]'
+    );
+  }
+}
+
+export const ERP_IMPORT_BROWSER_PARITY_MAPPINGS = parseErpImportBrowserParityMappings(
+  process.env.ERP_IMPORT_BROWSER_PARITY_MAPPINGS
+);
 export const ERP_IMPORT_AUTH_FIELD_PREFIX = (process.env.ERP_IMPORT_AUTH_FIELD_PREFIX || '{AUTH}').trim();
 export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   process.env.ERP_IMPORT_TIMEOUT_MS,

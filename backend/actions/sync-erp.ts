@@ -17,6 +17,7 @@ import {
   ERP_IMPORT_PROFILE_ID,
   ERP_IMPORT_TMP_PROFILE_ID,
   ERP_IMPORT_REQUEST_CONTRACT,
+  ERP_IMPORT_BROWSER_PARITY_MAPPINGS,
   ERP_IMPORT_INCLUDE_MEDIA,
   ERP_SYNC_ENABLED,
   ERP_IMPORT_PASSWORD,
@@ -85,6 +86,33 @@ function normalizeItemIds(rawItemIds: unknown): string[] {
 type ErpImportValue = string | number;
 type ImportRequestContract = 'legacy' | 'browser-parity';
 
+interface BrowserParityMappingFieldPair {
+  from: string;
+  to: string;
+}
+
+function resolveBrowserParityMappings(logger: Pick<Console, 'info' | 'error'>): BrowserParityMappingFieldPair[] {
+  try {
+    const resolved = ERP_IMPORT_BROWSER_PARITY_MAPPINGS.map((mapping, index) => {
+      const from = mapping.from.trim();
+      const to = mapping.to.trim();
+      if (!from || !to) {
+        throw new Error(`entry at index ${index} requires non-empty from/to values`);
+      }
+      return { from, to };
+    });
+
+    return resolved;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error?.('[sync-erp] Invalid browser-parity mapping configuration', {
+      error: message,
+      expectedShape: 'ERP_IMPORT_BROWSER_PARITY_MAPPINGS=[{"from":"...","to":"..."}]'
+    });
+    throw new Error(`Invalid browser-parity mapping configuration: ${message}`);
+  }
+}
+
 interface ErpImportFieldMap {
   action: string;
   actionTest: string;
@@ -143,6 +171,7 @@ const ERP_IMPORT_FIELD_NAMES = {
 
 // TODO(agent-erp-form-contract): Keep ERP field-value defaults aligned with docs/erp-sync.sh after upstream ERP changes.
 // TODO(sync-erp-browser-contract-fields): Keep browser-parity payload keys aligned with ERP HAR captures during rollout.
+// TODO(sync-erp-browser-mappings-order): Keep mappings[+].from / mappings[].to ordering aligned with HAR captures.
 function buildErpImportFieldMap(contract: ImportRequestContract = 'legacy'): ErpImportFieldMap {
   const profileId = ERP_IMPORT_PROFILE_ID || '1';
   const tmpProfileId = ERP_IMPORT_TMP_PROFILE_ID || profileId;
@@ -1006,6 +1035,20 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
               toFormArg(ERP_IMPORT_FIELD_NAMES.actionImport, phaseActions.actionImport)
             ]
           : [];
+      const browserParityMappings = requestContract === 'browser-parity' ? resolveBrowserParityMappings(loggerRef) : [];
+      const browserParityMappingArgs: string[] = [];
+      if (requestContract === 'browser-parity') {
+        for (const mapping of browserParityMappings) {
+          browserParityMappingArgs.push('-F', toFormArg('mappings[+].from', mapping.from));
+          browserParityMappingArgs.push('-F', toFormArg('mappings[].to', mapping.to));
+        }
+      }
+
+      loggerRef.info?.('[sync-erp] ERP browser-parity mappings', {
+        phase,
+        browserParityApplied: requestContract === 'browser-parity',
+        mappingCount: browserParityMappings.length
+      });
 
       const args = [
         '-X',
@@ -1062,6 +1105,7 @@ async function runCurlImport(options: ImportOptions): Promise<ImportExecutionRes
         toFormArg(ERP_IMPORT_FIELD_NAMES.partClassification, erpFields.partClassification),
         '-F',
         toFormArg(ERP_IMPORT_FIELD_NAMES.defaultUnit, erpFields.defaultUnit),
+        ...browserParityMappingArgs,
         '-F',
         `${fieldName}=@${artifact.archivePath};type=${mimeType}`,
         '-F',
