@@ -61,6 +61,14 @@ export interface ExtractionResult {
   sources: SearchSource[];
 }
 
+type IterationOutcome =
+  | 'success'
+  | 'need_more_context'
+  | 'invalid_json'
+  | 'schema_invalid'
+  | 'supervisor_retry'
+  | 'error';
+
 const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
@@ -499,6 +507,7 @@ function mapLangtextToSpezifikationenForLlm(
 
 // TODO(agentic-spezifikationen): Keep boundary normalization in item-flow-schemas.ts as the single Spezifikationen ingestion path.
 
+// TODO(agent): Refactor extraction attempt orchestration into explicit iteration pipeline.
 export async function runExtractionAttempts({
   llm,
   correctionModel,
@@ -1176,6 +1185,7 @@ export async function runExtractionAttempts({
           hasCorrectionAttempt: Boolean(correctedContent),
           parseErrorHint: truncateForLog(lastInvalidJsonErrorHint)
         });
+        logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'invalid_json', detail: truncateForLog(lastInvalidJsonErrorHint) });
         advanceAttempt();
         continue;
       }
@@ -1353,14 +1363,14 @@ export async function runExtractionAttempts({
         }
         continue;
       }
-      const queriesToProcess = __searchQueries.slice(0, searchesPerRequestLimit);
+      const queriesToProcess = __searchQueries.slice(0, 1);
       if (queriesToProcess.length < __searchQueries.length) {
         logger?.warn?.({
           msg: 'truncating agent search requests to configured limit',
           attempt,
           itemId,
           requestedCount: __searchQueries.length,
-          allowedCount: searchesPerRequestLimit
+          allowedCount: 1
         });
       }
       const searchOutcome: IterationOutcome = {
