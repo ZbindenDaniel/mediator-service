@@ -34,6 +34,7 @@ import { defineHttpAction } from './index';
 // TODO(agent): Consolidate ERP import HTTP client with shared networking utilities once available.
 // TODO(sync-erp-baseline-path): Remove baseline no-poll path after continuation URL polling is proven stable in production.
 // TODO(sync-erp-script-parity-default): Re-evaluate whether script-parity should remain default after polling-only diagnostics are stabilized.
+// TODO(sync-erp-runtime-config-log): Keep startup config log aligned with ERP_IMPORT_* defaults so misconfiguration is visible immediately.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -2050,7 +2051,10 @@ const action = defineHttpAction({
         }
       }
 
-      console.info('[sync-erp] Starting ERP curl import', { mode: ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity' });
+      console.info('[sync-erp] Starting ERP curl import', {
+        mode: ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity',
+        requestContract: ERP_IMPORT_REQUEST_CONTRACT
+      });
       let curlResult: ImportExecutionResult;
       try {
         curlResult = await runCurlImport({

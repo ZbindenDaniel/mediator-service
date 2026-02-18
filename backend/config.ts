@@ -281,7 +281,7 @@ export const ERP_IMPORT_PROFILE_ID = (process.env.ERP_IMPORT_PROFILE_ID || '').t
 export const ERP_IMPORT_TMP_PROFILE_ID = (process.env.ERP_IMPORT_TMP_PROFILE_ID || '').trim();
 const rawErpImportRequestContract = (process.env.ERP_IMPORT_REQUEST_CONTRACT || '').trim().toLowerCase();
 export const ERP_IMPORT_REQUEST_CONTRACT =
-  rawErpImportRequestContract === 'browser-parity' ? 'browser-parity' : 'legacy';
+  rawErpImportRequestContract === 'legacy' ? 'legacy' : 'browser-parity';
 export const ERP_IMPORT_AUTH_FIELD_PREFIX = (process.env.ERP_IMPORT_AUTH_FIELD_PREFIX || '{AUTH}').trim();
 export const ERP_IMPORT_TIMEOUT_MS = parsePositiveInt(
   process.env.ERP_IMPORT_TIMEOUT_MS,
@@ -299,8 +299,9 @@ export const ERP_IMPORT_POLL_TIMEOUT_MS = parsePositiveInt(
   'ERP_IMPORT_POLL_TIMEOUT_MS'
 );
 // TODO(sync-erp-polling-flag): Remove this experiment gate after continuation URL polling proves more reliable than baseline two-phase execution.
+// TODO(sync-erp-polling-default): Confirm production telemetry remains stable with polling enabled by default.
 export const ERP_IMPORT_POLLING_ENABLED =
-  parseBooleanFlag(process.env.ERP_IMPORT_POLLING_ENABLED, 'ERP_IMPORT_POLLING_ENABLED') ?? false;
+  parseBooleanFlag(process.env.ERP_IMPORT_POLLING_ENABLED, 'ERP_IMPORT_POLLING_ENABLED') ?? true;
 export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').trim();
 
 if (!ERP_SYNC_ENABLED) {

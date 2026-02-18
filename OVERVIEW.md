@@ -13,6 +13,7 @@
 6. ✅ Add pricing-stage JSON repair fallback when the pricing model emits narrative text instead of contract JSON.
 
 ## Notes
+- ✅ Default ERP import runtime now expects `polling-enabled` mode with `browser-parity` contract and logs both flags at import start to surface misconfiguration early.
 - ✅ Extraction iteration dispatcher: parse/correction/validation/evaluation now emit explicit outcomes with centralized transition handling and decision-path logging.
 - Browser request captures indicate `CsvImport/import` probe requests without multipart context are insufficient to recover continuation identifiers.
 - Changes should stay minimal and reuse existing request assembly/polling structures.
