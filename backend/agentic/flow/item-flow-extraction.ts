@@ -227,9 +227,9 @@ function serializeCompactPayload(payload: unknown): string {
 
 type IterationOutcome =
   | { type: 'complete'; decisionPath: string }
-  | { type: 'needs_more_search'; decisionPath: string; queries: string[] }
+  | { type: 'needs_more_search'; decisionPath: string; query: string }
   | { type: 'retry_same_context'; decisionPath: string; reason: string; details?: Record<string, unknown> }
-  | { type: 'failed_terminal'; decisionPath: string; reason: string };
+  ;
 
 function logIterationDecision(
   logger: ExtractionLogger | undefined,
@@ -241,7 +241,7 @@ function logIterationDecision(
       reason: 'reason' in payload.outcome ? payload.outcome.reason : undefined,
       decisionPath: payload.outcome.decisionPath,
       details: 'details' in payload.outcome ? payload.outcome.details : undefined,
-      queriesCount: 'queries' in payload.outcome ? payload.outcome.queries.length : undefined
+      queriesCount: payload.outcome.type === 'needs_more_search' ? 1 : undefined
     });
     logger?.info?.({
       msg: 'extraction iteration decision',
@@ -582,13 +582,10 @@ export async function runExtractionAttempts({
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to log resolved agent search limit', itemId });
   }
-  let searchRequestCycles = 0;
-  const MAX_SEARCH_REQUEST_CYCLES = Math.max(3 * searchesPerRequestLimit, maxAttempts * searchesPerRequestLimit);
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
   const searchSkipped = Boolean(skipSearch);
   const advanceAttempt = () => {
     attempt += 1;
-    searchRequestCycles = 0;
   };
 
   const dispatchIterationOutcome = async (outcome: IterationOutcome): Promise<'break' | 'continue'> => {
@@ -599,35 +596,25 @@ export async function runExtractionAttempts({
       return 'break';
     }
 
-    if (outcome.type === 'failed_terminal') {
-      lastSupervision = outcome.reason;
-      passFailureSupervision = outcome.reason;
-      lastValidationIssues = 'TOO_MANY_SEARCH_REQUESTS';
-      passFailureValidationIssues = 'TOO_MANY_SEARCH_REQUESTS';
-      return 'break';
-    }
-
     if (outcome.type === 'needs_more_search') {
       const previousContextCount = searchContexts.length;
-      for (const [index, query] of outcome.queries.entries()) {
-        try {
-          const { text: extraText, sources: extraSources } = await searchInvoker(query, 5, {
-            context: 'agent',
-            attempt,
-            requestIndex: index + 1
-          });
-          searchContexts.push({ query, text: extraText, sources: extraSources });
-          recordSources(extraSources);
-          logger?.info?.({ msg: 'additional search complete', query, sourceCount: Array.isArray(extraSources) ? extraSources.length : 0, itemId });
-        } catch (searchErr) {
-          logger?.error?.({ err: searchErr, msg: 'additional search failed', query, itemId });
-          if (searchErr instanceof RateLimitError) {
-            throw new FlowError('RATE_LIMITED', 'Search provider rate limited requests', searchErr.statusCode ?? 503);
-          }
-          throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
+      try {
+        const { text: extraText, sources: extraSources } = await searchInvoker(outcome.query, 5, {
+          context: 'agent',
+          attempt,
+          requestIndex: 1
+        });
+        searchContexts.push({ query: outcome.query, text: extraText, sources: extraSources });
+        recordSources(extraSources);
+        logger?.info?.({ msg: 'additional search complete', query: outcome.query, sourceCount: Array.isArray(extraSources) ? extraSources.length : 0, itemId });
+      } catch (searchErr) {
+        logger?.error?.({ err: searchErr, msg: 'additional search failed', query: outcome.query, itemId });
+        if (searchErr instanceof RateLimitError) {
+          throw new FlowError('RATE_LIMITED', 'Search provider rate limited requests', searchErr.statusCode ?? 503);
         }
+        throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
       }
-      lastSupervision = `ADDITIONAL_SEARCH_REQUESTED: ${outcome.queries.join(' | ')}`;
+      lastSupervision = `ADDITIONAL_SEARCH_REQUESTED: ${outcome.query}`;
       passFailureSupervision = lastSupervision;
       lastValidated = null;
       lastValidationIssues = '__SEARCH_REQUESTED__';
@@ -637,6 +624,7 @@ export async function runExtractionAttempts({
       } catch (err) {
         logger?.warn?.({ err, msg: 'failed to advance extraction cursor after additional search', itemId, attempt, contextIndex: contextCursor + 1 });
       }
+      advanceAttempt();
       return 'continue';
     }
 
@@ -722,9 +710,7 @@ export async function runExtractionAttempts({
     const accumulatorSummary = serializeExtractionAccumulator(extractionAccumulator);
     const compactAccumulator = accumulatorSummary.summary;
 
-    let searchRequestHint = searchesPerRequestLimit === 1
-      ? 'Need more info? Add one "__searchQueries" entry.'
-      : `Need more info? Add up to ${searchesPerRequestLimit} "__searchQueries" entries.`;
+    let searchRequestHint = 'Need more info? Add one "__searchQueries" entry only when needed.';
     if (searchSkipped) {
       searchRequestHint = `${searchRequestHint} Only request searches if reviewer notes require it.`;
     }
@@ -1232,21 +1218,16 @@ export async function runExtractionAttempts({
     }
     logSchemaKeyTelemetry(logger, { stage: 'extraction', itemId, payload: candidatePayload });
     const rawQueries = parsedRecord?.__searchQueries;
-    if (Array.isArray(rawQueries) && rawQueries.length > searchesPerRequestLimit) {
-      const resolvedLimit = Number.isFinite(searchesPerRequestLimit) && searchesPerRequestLimit > 0
-        ? Math.floor(searchesPerRequestLimit)
-        : 1;
-      const truncatedQueries = rawQueries.slice(0, resolvedLimit);
+    if (Array.isArray(rawQueries) && rawQueries.length > 1) {
+      const truncatedQueries = rawQueries.slice(0, 1);
       candidatePayload = { ...(parsedRecord ?? {}), __searchQueries: truncatedQueries };
       try {
         logger?.warn?.({
-          msg: 'truncating agent search queries before schema validation',
+          msg: 'truncating agent search queries to single follow-up before schema validation',
           itemId,
           attempt,
-          configuredLimit: maxAgentSearchesPerRequest,
-          effectiveLimit: resolvedLimit,
           requestedCount: rawQueries.length,
-          allowedCount: resolvedLimit,
+          usedCount: 1,
           truncatedQueriesPreview: sanitizeForLog(truncatedQueries)
         });
       } catch (err) {
@@ -1315,68 +1296,20 @@ export async function runExtractionAttempts({
 
     if (__searchQueries?.length) {
       logger?.info?.({ msg: 'extraction agent requested additional search', attempt, queries: __searchQueries, itemId });
-      searchRequestCycles += 1;
-      if (searchRequestCycles > MAX_SEARCH_REQUEST_CYCLES) {
+      const queryToProcess = __searchQueries[0];
+      if (__searchQueries.length > 1) {
         logger?.warn?.({
-          msg: 'extraction agent exceeded search request limit',
-          attempt,
-          itemId,
-          searchRequestCycles,
-          maxSearchRequestCycles: MAX_SEARCH_REQUEST_CYCLES
-        });
-        const bestEffortMerge = mergeAccumulatedCandidate(extractionAccumulator, candidateData, {
-          logger,
-          itemId,
-          attempt,
-          passIndex: contextCursor + 1
-        });
-        if (bestEffortMerge.success) {
-          extractionAccumulator = bestEffortMerge.data;
-          lastValidated = { success: true, data: bestEffortMerge.data };
-          lastValidationIssues = null;
-          passFailureValidationIssues = null;
-          logger?.info?.({
-            msg: 'using best-effort extraction data after search limit reached',
-            attempt,
-            itemId,
-            payloadPreview: sanitizeForLog(bestEffortMerge.data)
-          });
-        } else {
-          const mergeIssues = (bestEffortMerge as { issues: unknown }).issues;
-          lastValidated = { success: true, data: candidateData };
-          lastValidationIssues = mergeIssues;
-          passFailureValidationIssues = mergeIssues;
-          logger?.warn?.({
-            msg: 'best-effort merge failed after search limit reached',
-            attempt,
-            itemId,
-            mergeIssues: sanitizeForLog(mergeIssues)
-          });
-        }
-        const terminalOutcome: IterationOutcome = {
-          type: 'failed_terminal',
-          reason: 'TOO_MANY_SEARCH_REQUESTS',
-          decisionPath: 'parse -> search-requested -> terminal-search-limit'
-        };
-        if (await dispatchIterationOutcome(terminalOutcome) === 'break') {
-          break;
-        }
-        continue;
-      }
-      const queriesToProcess = __searchQueries.slice(0, 1);
-      if (queriesToProcess.length < __searchQueries.length) {
-        logger?.warn?.({
-          msg: 'truncating agent search requests to configured limit',
+          msg: 'truncating agent search requests to single follow-up',
           attempt,
           itemId,
           requestedCount: __searchQueries.length,
-          allowedCount: 1
+          usedCount: 1
         });
       }
       const searchOutcome: IterationOutcome = {
         type: 'needs_more_search',
         decisionPath: 'parse -> search-requested',
-        queries: queriesToProcess
+        query: queryToProcess
       };
       if (await dispatchIterationOutcome(searchOutcome) === 'break') {
         break;

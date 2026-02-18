@@ -51,11 +51,9 @@ describe('item flow search query limits', () => {
     const extractionFlowPath = path.resolve(__dirname, '../flow/item-flow-extraction.ts');
     const extractionFlowSource = fs.readFileSync(extractionFlowPath, 'utf8');
 
-    expect(extractionFlowSource).toContain("msg: 'truncating agent search queries before schema validation'");
+    expect(extractionFlowSource).toContain("msg: 'truncating agent search queries to single follow-up before schema validation'");
     expect(extractionFlowSource).toContain('requestedCount: rawQueries.length');
-    expect(extractionFlowSource).toContain('allowedCount: resolvedLimit');
-    expect(extractionFlowSource).toContain('configuredLimit: maxAgentSearchesPerRequest');
-    expect(extractionFlowSource).toContain('effectiveLimit: resolvedLimit');
-    expect(extractionFlowSource).toContain('itemId');
+    expect(extractionFlowSource).toContain('usedCount: 1');
+        expect(extractionFlowSource).toContain('itemId');
   });
 });

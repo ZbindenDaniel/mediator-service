@@ -24,9 +24,9 @@
     - Hersteller: Copy from sources or keep provided value.
     - reviewNotes: Treat as guidance.
 - format mm values with half milmeter steps (i.e. '13.5', '132')
-    - Add `__searchQueries` only if unresolved details block required fields: `{"__searchQueries":["<Modellname> Datenblatt Gewicht kg"]}`
+    - Add one `__searchQueries` entry only when needed: `{"__searchQueries":["<Modellname> Datenblatt Gewicht kg"]}`
   - Search policy:
-    - You do not perform searches. You may include "__searchQueries" only when vital details remain unresolved.
+    - You do not perform searches. Include exactly one "__searchQueries" entry only when vital details remain unresolved.
     - Each query must be precise enough to recover the missing schema data.
   - Respond with JSON only after verifying it matches the schema.
 </rules>
