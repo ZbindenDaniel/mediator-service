@@ -14,5 +14,7 @@
 ## Notes
 - Browser request captures indicate `CsvImport/import` probe requests without multipart context are insufficient to recover continuation identifiers.
 - Changes should stay minimal and reuse existing request assembly/polling structures.
+
+- ✅ ERP CSV HTML formatting refinement: `Langtext` HTML export now renders as a table and `Kurzbeschreibung` is wrapped in `<p>` for future styling hooks.
 - Pricing stage now retries malformed responses through a constrained JSON-repair pass before dropping the pricing update.
 - Pricing prompt now explicitly forbids prose/markdown and requires a single contract JSON object to reduce parser failures before repair fallback.

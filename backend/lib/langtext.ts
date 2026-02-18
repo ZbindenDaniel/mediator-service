@@ -313,7 +313,8 @@ function formatHtmlFromPayload(
   context: Record<string, unknown>,
   logger: LangtextLogger
 ): string | null {
-  const items: string[] = [];
+  // TODO(export-html-table): Add optional per-column class hooks if partner styling requires them.
+  const rows: string[] = [];
 
   for (const [rawKey, rawValue] of Object.entries(payload)) {
     const key = rawKey.trim();
@@ -329,22 +330,22 @@ function formatHtmlFromPayload(
     const trimmedValue = normalizedValue.trim();
     const escapedKey = escapeHtml(key);
     if (!trimmedValue) {
-      items.push(`<li><strong>${escapedKey}</strong></li>`);
+      rows.push(`<tr><th scope="row">${escapedKey}</th><td></td></tr>`);
       continue;
     }
 
     const escapedValue = escapeHtml(trimmedValue).replace(/\n/g, '<br />');
-    items.push(`<li><strong>${escapedKey}</strong> ${escapedValue}</li>`);
+    rows.push(`<tr><th scope="row">${escapedKey}</th><td>${escapedValue}</td></tr>`);
   }
 
-  if (items.length === 0) {
+  if (rows.length === 0) {
     log(logger, 'debug', 'HTML serialization produced no Langtext entries', {
       ...context
     });
     return null;
   }
 
-  return `<ul>${items.join('')}</ul>`;
+  return `<table><tbody>${rows.join('')}</tbody></table>`;
 }
 
 function formatHtmlFromText(value: string): string | null {

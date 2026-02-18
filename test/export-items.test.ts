@@ -198,7 +198,8 @@ describe('export-items action', () => {
       UpdatedAt: now,
       Datum_erfasst: now,
       Auf_Lager: 1,
-      Langtext: ''
+      Kurzbeschreibung: 'ERP short text',
+      Langtext: { Specs: 'Fanless', Ports: 'USB-C\nHDMI' }
     });
 
     const response = await runAction(
@@ -258,7 +259,8 @@ describe('export-items action', () => {
       Datum_erfasst: now,
       Auf_Lager: 1,
       Quality: 2,
-      Langtext: ''
+      Kurzbeschreibung: 'ERP short text',
+      Langtext: { Specs: 'Fanless', Ports: 'USB-C\nHDMI' }
     });
 
     persistItemWithinTransaction({
@@ -293,6 +295,16 @@ describe('export-items action', () => {
     const onHandIndex = headerColumns.indexOf('Auf Lager');
     expect(onHandIndex).toBeGreaterThan(-1);
     expect(Number(dataColumns[onHandIndex])).toBe(3);
+
+    const kurzbeschreibungIndex = headerColumns.indexOf('Kurzbeschreibung');
+    expect(kurzbeschreibungIndex).toBeGreaterThan(-1);
+    expect(dataColumns[kurzbeschreibungIndex]).toBe('<p>ERP short text</p>');
+
+    const langtextIndex = headerColumns.indexOf('Langtext');
+    expect(langtextIndex).toBeGreaterThan(-1);
+    expect(dataColumns[langtextIndex]).toBe(
+      '<table><tbody><tr><th scope="row">Specs</th><td>Fanless</td></tr><tr><th scope="row">Ports</th><td>USB-C<br />HDMI</td></tr></tbody></table>'
+    );
   });
 
   // TODO(agent): Broaden round-trip assertions to cover Langtext payload objects once exporters emit structured content.
