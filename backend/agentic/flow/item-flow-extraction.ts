@@ -61,6 +61,14 @@ export interface ExtractionResult {
   sources: SearchSource[];
 }
 
+type IterationOutcome =
+  | 'success'
+  | 'need_more_context'
+  | 'invalid_json'
+  | 'schema_invalid'
+  | 'supervisor_retry'
+  | 'error';
+
 const MAX_LOG_STRING_LENGTH = 500;
 const MAX_LOG_ARRAY_LENGTH = 7;
 const MAX_LOG_OBJECT_KEYS = 10;
@@ -214,6 +222,33 @@ function serializeCompactPayload(payload: unknown): string {
     return JSON.stringify(payload ?? {});
   } catch {
     return '{}';
+  }
+}
+
+function logIterationEvent(
+  logger: ExtractionLogger | undefined,
+  payload: {
+    itemId: string;
+    iteration: number;
+    contextIndex: number;
+    attemptWithinIteration: number;
+    outcome: IterationOutcome;
+    detail?: unknown;
+  }
+): void {
+  try {
+    const logPayload = {
+      msg: 'extraction iteration outcome',
+      itemId: payload.itemId,
+      iteration: payload.iteration,
+      contextIndex: payload.contextIndex,
+      attemptWithinIteration: payload.attemptWithinIteration,
+      outcome: payload.outcome,
+      detail: sanitizeForLog(payload.detail)
+    };
+    logger?.info?.(logPayload);
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to build iteration outcome log payload', itemId: payload.itemId });
   }
 }
 
@@ -459,6 +494,7 @@ function mapLangtextToSpezifikationenForLlm(
 
 // TODO(agentic-spezifikationen): Keep boundary normalization in item-flow-schemas.ts as the single Spezifikationen ingestion path.
 
+// TODO(agent): Refactor extraction attempt orchestration into explicit iteration pipeline.
 export async function runExtractionAttempts({
   llm,
   correctionModel,
@@ -1049,6 +1085,7 @@ export async function runExtractionAttempts({
           hasCorrectionAttempt: Boolean(correctedContent),
           parseErrorHint: truncateForLog(lastInvalidJsonErrorHint)
         });
+        logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'invalid_json', detail: truncateForLog(lastInvalidJsonErrorHint) });
         advanceAttempt();
         continue;
       }
@@ -1163,6 +1200,7 @@ export async function runExtractionAttempts({
         reason: 'SCHEMA_VALIDATION_FAILED',
         validationIssuesPreview: sanitizeForLog(agentParsed.error.issues)
       });
+      logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'schema_invalid', detail: sanitizeForLog(agentParsed.error.issues) });
       advanceAttempt();
       continue;
     }
@@ -1215,14 +1253,14 @@ export async function runExtractionAttempts({
         });
         break;
       }
-      const queriesToProcess = __searchQueries.slice(0, searchesPerRequestLimit);
+      const queriesToProcess = __searchQueries.slice(0, 1);
       if (queriesToProcess.length < __searchQueries.length) {
         logger?.warn?.({
           msg: 'truncating agent search requests to configured limit',
           attempt,
           itemId,
           requestedCount: __searchQueries.length,
-          allowedCount: searchesPerRequestLimit
+          allowedCount: 1
         });
       }
       const previousContextCount = searchContexts.length;
@@ -1254,12 +1292,13 @@ export async function runExtractionAttempts({
       } catch (err) {
         logger?.warn?.({ err, msg: 'failed to advance extraction cursor after additional search', itemId, attempt, contextIndex: contextCursor + 1 });
       }
-      logger?.info?.({
-        msg: 'retrying extraction attempt',
-        attempt,
+      logIterationEvent(logger, {
         itemId,
-        reason: 'ADDITIONAL_SEARCH_REQUEST',
-        requestedQueriesPreview: sanitizeForLog(queriesToProcess)
+        iteration: attempt,
+        contextIndex: contextCursor + 1,
+        attemptWithinIteration: 1,
+        outcome: 'need_more_context',
+        detail: { requestedQueriesPreview: sanitizeForLog(queriesToProcess) }
       });
       continue;
     }
@@ -1575,6 +1614,7 @@ export async function runExtractionAttempts({
     lastValidated = pricedValidated;
     if (pass) {
       success = true;
+      logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'success' });
       break;
     } else {
       const nextAttempt = attempt + 1;
@@ -1588,6 +1628,7 @@ export async function runExtractionAttempts({
         categoryValidationPass,
         supervisionPreview: sanitizeForLog(supervision)
       });
+      logIterationEvent(logger, { itemId, iteration: attempt, contextIndex: contextCursor + 1, attemptWithinIteration: 1, outcome: 'supervisor_retry', detail: sanitizeForLog(supervision) });
       advanceAttempt();
     }
   }
