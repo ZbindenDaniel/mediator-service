@@ -288,7 +288,7 @@ export interface ItemsExportArtifact {
 export interface StageItemsExportOptions {
   archiveBaseName?: string;
   boxes: Record<string, unknown>[];
-  exportMode: ExportMode;
+  exportMode: ExportModeInput;
   // TODO(export-items): Rename includeMedia now that exports no longer bundle media directories.
   includeMedia: boolean;
   items: Record<string, unknown>[];
@@ -1054,7 +1054,7 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
   const logger = options.logger ?? console;
   const mediaDir = MEDIA_DIR;
   const archiveBaseName = options.archiveBaseName || 'items-export';
-  const exportMode = options.exportMode;
+  const exportMode = EXPORT_MODE_ALIASES[options.exportMode];
 
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), `${archiveBaseName}-`));
   const cleanup = async (): Promise<void> => {
@@ -1069,7 +1069,7 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
     let groupingActive = false;
     try {
       if (!EXPORT_MODES.has(exportMode)) {
-        throw new Error(`Unsupported export mode: ${exportMode}`);
+        throw new Error(`Unsupported export mode: ${options.exportMode}`);
       }
       groupingActive = exportMode === 'erp';
     } catch (modeError) {
