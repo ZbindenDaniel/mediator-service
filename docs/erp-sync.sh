@@ -29,6 +29,8 @@ file="$1"
 function do_curl {
   local action="$1"
 
+  echo "[erp-sync] phase=${action#action_} file=$(basename "$file")"
+
   # ---- Hier ebenfalls die Parameter anpassen, falls notwendig. ----
   # Die anpassbaren Parameter und ihre Werte sind:
 
@@ -135,7 +137,7 @@ function do_curl {
     -F 'action=CsvImport/import' \
     -F "${action}=1" \
     -F 'profile.type=parts' \
-    -F 'profile.id=2183'
+    -F 'profile.id=2183' \
     -F 'settings.numberformat=1000.00' \
     -F 'settings.charset=UTF-8' \
     -F 'sep_char=comma' \
@@ -155,8 +157,14 @@ function do_curl {
     -F "{AUTH}login=${login}" \
     -F "{AUTH}password=${password}" \
     -F "{AUTH}client_id=${client_id}" \
-    -F "file=@${docs/erp-sync.sh}" \
+    -F "file=@${file}" \
     ${url}
+
+  local rc=$?
+  if [ $rc -ne 0 ]; then
+    echo "${action#action_}-Import CURL-Aufruf fehlgeschlagen." >&2
+    exit 2
+  fi
 }
 
 tmpf=$(mktemp)
