@@ -17,6 +17,7 @@
 10. ✅ Split export header contracts by import regime: keep `manual_import` legacy labels/order, add dedicated ERP-compatible `automatic_import` labels/order, and enforce CSV header/row field-count parity with fail-fast logging.
 11. ✅ Force ERP sync export staging to explicit `automatic_import` regime, add start telemetry (`exportRegime`, CSV path/name, profile identifiers), and emit structured `phase: export-stage` errors when staging fails.
 12. ✅ Replace `backend/actions/sync-erp.ts` with a minimal flow: request parsing (`itemIds`), CSV staging, `docs/erp-sync.sh` execution, structured JSON response handling, and guaranteed staging cleanup telemetry.
+13. ✅ Mirror ERP media root from `MEDIA_DIR` into dedicated import mirror directory before each sync run, with structured start/summary/error logging and graceful source-missing handling.
 
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
@@ -35,5 +36,6 @@
 - ✅ ERP browser-parity mapping emission now supports ordered config parsing (JSON array or newline `from=to` pairs) with strict validation (`from`/`to`) and per-phase mapping telemetry logs (`mappingCount`, `mappingValidationPassed`, `mappingsInjected`).
 - ✅ ERP test-phase continuation fallback now proceeds to import when state remains `processing`, with structured diagnostics and explicit fallback error context.
 - ✅ ERP browser-parity import contract now requires explicit `profile.id` + `tmp_profile_id` configuration and rejects empty/default placeholder values before curl execution.
+- ✅ ERP sync now mirrors media from `MEDIA_DIR` into `ERP_MEDIA_MIRROR_DIR` (or derived `*-import` sibling) before import script execution and logs source-missing as warning.
 - ✅ Export items action now accepts `manual_import`/`automatic_import` aliases, maps them onto existing backup/erp export logic, and logs mode/header regime metadata in one structured entry.
 - ✅ CSV item serialization now emits dedicated key-based `automatic_import` headers/order (ERP contract), preserves legacy `manual_import` headers/order, logs selected contract + first three headers, and fails fast on header/data count mismatches.
