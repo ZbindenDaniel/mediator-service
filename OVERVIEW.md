@@ -24,6 +24,8 @@
 
 15. ✅ Preserve incoming `BoxID` values during CSV ingestion (no remint), add strict shelf/non-shelf format validation with structured skip logging, and keep box/item persistence flow unchanged for valid rows.
 
+16. ✅ Refactor `backend/actions/csv-import.ts` archive stage flow to enforce deterministic execution order (`ingestBoxesCsv` -> `ingestCsvFile` -> `ingestAgenticRunsCsv` -> `ingestEventsCsv`) across duplicate/non-item branches with stage-level try/catch telemetry and partial-failure response summaries.
+
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
 - ✅ Default ERP import runtime now expects `polling-enabled` mode with `browser-parity` contract and logs both flags at import start to surface misconfiguration early.

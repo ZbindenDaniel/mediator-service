@@ -27,6 +27,7 @@ import { Entity } from 'models';
 // TODO(agent): Review events.csv ingestion telemetry once live import payloads are available.
 // TODO(agent): Capture agentic_runs.csv archive ingestion telemetry once CSV imports include agentic runs.
 // TODO(agent): Confirm deferred agentic_runs.csv staging cleanup when inbox ingestion fails.
+// TODO(csv-import): Keep archive stage execution order aligned to boxes -> items -> agentic_runs -> events.
 
 const STAGING_TIMEOUT_MS = 30_000;
 const ENTRY_TIMEOUT_MS = 45_000;
@@ -61,6 +62,19 @@ const action = defineHttpAction({
         agenticRunsSkippedMissingReferences: 0,
         mediaFiles: 0,
         message: ''
+      };
+
+      const stageOrder = ['ingestBoxesCsv', 'ingestCsvFile', 'ingestAgenticRunsCsv', 'ingestEventsCsv'] as const;
+      const stageOutcomes: Record<(typeof stageOrder)[number], {
+        attempted: boolean;
+        completed: boolean;
+        count: number;
+        error: string | null;
+      }> = {
+        ingestBoxesCsv: { attempted: false, completed: false, count: 0, error: null },
+        ingestCsvFile: { attempted: false, completed: false, count: 0, error: null },
+        ingestAgenticRunsCsv: { attempted: false, completed: false, count: 0, error: null },
+        ingestEventsCsv: { attempted: false, completed: false, count: 0, error: null },
       };
       // TODO(csv-import): Confirm media extraction should always short-circuit loop once buffered.
 
@@ -310,10 +324,23 @@ const action = defineHttpAction({
         extractionDuration: Date.now() - extractionStartedAt,
       });
 
+      console.info('[csv-import] Starting archive ingestion stages', {
+        order: stageOrder,
+        buffers: {
+          boxes: Boolean(boxesBuffer),
+          items: Boolean(itemsBuffer),
+          agenticRuns: Boolean(agenticRunsBuffer),
+          events: Boolean(eventsBuffer),
+        },
+      });
+
       if (boxesBuffer) {
+        stageOutcomes.ingestBoxesCsv.attempted = true;
         try {
           const { count } = await ingestBoxesCsv(boxesBuffer);
           uploadContext.boxesProcessed = count;
+          stageOutcomes.ingestBoxesCsv.completed = true;
+          stageOutcomes.ingestBoxesCsv.count = count;
           if (!itemsBuffer) {
             console.info('[csv-import] Completed boxes-only archive ingestion', {
               boxesProcessed: count,
@@ -323,28 +350,13 @@ const action = defineHttpAction({
             }
           }
         } catch (boxesError) {
+          stageOutcomes.ingestBoxesCsv.error = boxesError instanceof Error ? boxesError.message : 'Unknown boxes ingestion error';
           console.error('[csv-import] Failed to ingest boxes.csv from archive', boxesError);
         }
       }
 
-      if (eventsBuffer) {
-        try {
-          const { count } = await ingestEventsCsv(eventsBuffer);
-          uploadContext.eventsProcessed = count;
-          if (!itemsBuffer && !boxesBuffer) {
-            console.info('[csv-import] Completed events-only archive ingestion', {
-              eventsProcessed: count,
-            });
-            if (!uploadContext.message) {
-              uploadContext.message = `Processed events.csv with ${count} row${count === 1 ? '' : 's'}.`;
-            }
-          }
-        } catch (eventsError) {
-          console.error('[csv-import] Failed to ingest events.csv from archive', eventsError);
-        }
-      }
-
       if (itemsBuffer) {
+        stageOutcomes.ingestCsvFile.attempted = true;
         const checksum = computeChecksum(itemsBuffer);
         const duplicate = findArchiveDuplicate(ARCHIVE_DIR, normalizedCsvName, checksum);
         // TODO(agent): Keep duplicate-path agentic_runs.csv handling aligned with inbox deferred-ingestion behavior.
@@ -359,6 +371,7 @@ const action = defineHttpAction({
             normalizedCsvName,
             duplicate,
           });
+          stageOutcomes.ingestCsvFile.completed = true;
           if (agenticRunsBuffer) {
             try {
               const deferredAgenticRunsPath = path.join(ctx.INBOX_DIR, `${Date.now()}_${normalizedCsvName}.agentic_runs.csv`);
@@ -397,6 +410,8 @@ const action = defineHttpAction({
             fs.writeFileSync(tmpPath, itemsBuffer);
             uploadContext.queuedCsv = path.basename(tmpPath);
             uploadContext.message = `Saved to inbox as ${path.basename(tmpPath)}`;
+            stageOutcomes.ingestCsvFile.completed = true;
+            stageOutcomes.ingestCsvFile.count = 1;
             if (agenticRunsBuffer) {
               const deferredAgenticRunsPath = `${tmpPath}.agentic_runs.csv`;
               try {
@@ -413,6 +428,7 @@ const action = defineHttpAction({
               }
             }
           } catch (e) {
+            stageOutcomes.ingestCsvFile.error = e instanceof Error ? e.message : 'Unknown CSV queueing error';
             console.error('CSV write failed', e);
             if (zeroStockRequested && typeof ctx?.clearCsvIngestionOptions === 'function') {
               try {
@@ -421,16 +437,18 @@ const action = defineHttpAction({
                 console.error('[csv-import] Failed to clear zero stock ingestion option after write error', cleanupError);
               }
             }
-            return sendJson(res, 500, { error: (e as Error).message });
           }
         }
       }
 
       if (!itemsBuffer && agenticRunsBuffer) {
+        stageOutcomes.ingestAgenticRunsCsv.attempted = true;
         try {
           const { count, skippedMissingReferences } = await ingestAgenticRunsCsv(agenticRunsBuffer);
           uploadContext.agenticRunsProcessed = count;
           uploadContext.agenticRunsSkippedMissingReferences = skippedMissingReferences;
+          stageOutcomes.ingestAgenticRunsCsv.completed = true;
+          stageOutcomes.ingestAgenticRunsCsv.count = count;
           console.info('[csv-import] Completed agentic_runs.csv ingestion', {
             duplicate: false,
             agenticRunsAction: 'ingested',
@@ -438,7 +456,29 @@ const action = defineHttpAction({
             skippedMissingReferences,
           });
         } catch (agenticError) {
+          stageOutcomes.ingestAgenticRunsCsv.error = agenticError instanceof Error ? agenticError.message : 'Unknown agentic_runs ingestion error';
           console.error('[csv-import] Failed to ingest agentic_runs.csv from archive', agenticError);
+        }
+      }
+
+      if (eventsBuffer) {
+        stageOutcomes.ingestEventsCsv.attempted = true;
+        try {
+          const { count } = await ingestEventsCsv(eventsBuffer);
+          uploadContext.eventsProcessed = count;
+          stageOutcomes.ingestEventsCsv.completed = true;
+          stageOutcomes.ingestEventsCsv.count = count;
+          if (!itemsBuffer && !boxesBuffer) {
+            console.info('[csv-import] Completed events-only archive ingestion', {
+              eventsProcessed: count,
+            });
+            if (!uploadContext.message) {
+              uploadContext.message = `Processed events.csv with ${count} row${count === 1 ? '' : 's'}.`;
+            }
+          }
+        } catch (eventsError) {
+          stageOutcomes.ingestEventsCsv.error = eventsError instanceof Error ? eventsError.message : 'Unknown events ingestion error';
+          console.error('[csv-import] Failed to ingest events.csv from archive', eventsError);
         }
       }
 
@@ -446,8 +486,25 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'The ZIP archive did not include items.csv, boxes.csv, events.csv, or media assets.' });
       }
 
+      const completedStages = stageOrder.filter((stage) => stageOutcomes[stage].completed);
+      const failedStages = stageOrder.filter((stage) => stageOutcomes[stage].error);
+      const stageSummary = {
+        order: stageOrder,
+        counts: Object.fromEntries(stageOrder.map((stage) => [stage, stageOutcomes[stage].count])),
+        errors: Object.fromEntries(stageOrder.map((stage) => [stage, stageOutcomes[stage].error])),
+      };
+      console.info('[csv-import] Completed archive ingestion stages', stageSummary);
+
+      uploadContext.message = [
+        uploadContext.message,
+        `Completed stages: ${completedStages.length ? completedStages.join(', ') : 'none'}.`,
+        `Failed stages: ${failedStages.length ? failedStages.map((stage) => `${stage} (${stageOutcomes[stage].error})`).join('; ') : 'none'}.`
+      ].filter(Boolean).join(' ');
+
       return sendJson(res, uploadContext.duplicate ? 409 : 200, {
-        ok: !uploadContext.duplicate,
+        ok: !uploadContext.duplicate && failedStages.length === 0,
+        stageOrder,
+        stageOutcomes,
         ...uploadContext
       });
     } catch (err) {
