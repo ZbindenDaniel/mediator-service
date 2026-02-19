@@ -36,6 +36,7 @@ import { defineHttpAction } from './index';
 // TODO(sync-erp-baseline-path): Remove baseline no-poll path after continuation URL polling is proven stable in production.
 // TODO(sync-erp-script-parity-default): Re-evaluate whether script-parity should remain default after polling-only diagnostics are stabilized.
 // TODO(sync-erp-runtime-config-log): Keep startup config log aligned with ERP_IMPORT_* defaults so misconfiguration is visible immediately.
+// TODO(sync-erp-export-regime): Keep ERP export staging fixed to automatic_import unless contract requirements change.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -2340,15 +2341,28 @@ const action = defineHttpAction({
         });
       }
 
+      const exportRegime = 'automatic_import' as const;
       const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
-      stagedExport = await stageItemsExport({
-        archiveBaseName: `erp-sync-${Date.now()}`,
-        boxes: Array.isArray(boxes) ? boxes : [],
-        exportMode: 'erp',
-        includeMedia: ERP_IMPORT_INCLUDE_MEDIA,
-        items,
-        logger: console
-      });
+      try {
+        stagedExport = await stageItemsExport({
+          archiveBaseName: `erp-sync-${Date.now()}`,
+          boxes: Array.isArray(boxes) ? boxes : [],
+          exportMode: exportRegime,
+          includeMedia: ERP_IMPORT_INCLUDE_MEDIA,
+          items,
+          logger: console
+        });
+      } catch (stageError) {
+        console.error('[sync-erp] Failed to stage export for ERP sync', {
+          phase: 'export-stage',
+          regime: exportRegime,
+          error: stageError
+        });
+        return sendJson(res, 500, {
+          error: 'ERP-Export konnte nicht vorbereitet werden.',
+          details: (stageError as Error).message
+        });
+      }
 
       if (typeof ctx?.db?.transaction === 'function' && typeof ctx?.logEvent === 'function') {
         try {
@@ -2373,9 +2387,14 @@ const action = defineHttpAction({
         }
       }
 
-      console.info('[sync-erp] Starting ERP curl import', {
+      console.info('[sync-erp] Starting ERP sync import', {
         mode: ERP_IMPORT_POLLING_ENABLED ? 'polling-enabled' : 'script-parity',
-        requestContract: ERP_IMPORT_REQUEST_CONTRACT
+        requestContract: ERP_IMPORT_REQUEST_CONTRACT,
+        exportRegime,
+        csvPath: stagedExport.itemsPath,
+        csvName: path.basename(stagedExport.itemsPath),
+        profileId: ERP_IMPORT_PROFILE_ID,
+        tmpProfileId: ERP_IMPORT_TMP_PROFILE_ID
       });
       let curlResult: ImportExecutionResult;
       try {
