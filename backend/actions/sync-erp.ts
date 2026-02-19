@@ -7,6 +7,7 @@ import { MEDIA_DIR } from '../lib/media';
 import { mirrorDirectoryTree } from '../lib/mediaMirror';
 import { stageItemsExport, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
+import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED } from '../config';
 
 // TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
 // TODO(sync-erp-media-mirror): Add targeted tests for media mirror failure handling inside ERP sync flow.
@@ -75,9 +76,18 @@ interface ScriptExecutionResult {
   stderr: string;
 }
 
-async function runErpSyncScript(scriptPath: string, csvPath: string): Promise<ScriptExecutionResult> {
+async function runErpSyncScript(
+  scriptPath: string,
+  csvPath: string,
+  mediaMirrorDir: string | null
+): Promise<ScriptExecutionResult> {
   return new Promise<ScriptExecutionResult>((resolve, reject) => {
-    const proc = spawn('bash', [scriptPath, csvPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn('bash', [scriptPath, csvPath], {
+      env: mediaMirrorDir
+        ? { ...process.env, ERP_MEDIA_MIRROR_DIR: mediaMirrorDir }
+        : process.env,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
 
     let stdout = '';
     let stderr = '';
@@ -102,6 +112,14 @@ async function runErpSyncScript(scriptPath: string, csvPath: string): Promise<Sc
   });
 }
 
+// TODO(sync-erp-media-mirror-runtime): Add filesystem readiness checks for mirror destination once script-side mirroring is reintroduced.
+function logMediaMirrorRuntime(logger: Pick<Console, 'info'>): void {
+  logger.info('[sync-erp] media_mirroring_runtime', {
+    enabled: ERP_MEDIA_MIRROR_ENABLED,
+    destination: ERP_MEDIA_MIRROR_DIR || null
+  });
+}
+
 function resolveErpSyncScriptPath(logger: Pick<Console, 'info' | 'warn'>): string {
   const scriptPath = path.resolve(process.cwd(), 'docs/erp-sync.sh');
   logger.info('[sync-erp] script_path_resolved', { scriptPath });
@@ -118,6 +136,7 @@ const action = defineHttpAction({
 
     try {
       console.info('[sync-erp] request_received');
+      logMediaMirrorRuntime(console);
 
       let payload: unknown;
       try {
@@ -188,6 +207,7 @@ const action = defineHttpAction({
       }
 
       const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
+      // TODO(sync-erp-media-mirror-script): Keep export staging CSV-only; shell script owns optional media mirroring via ERP_MEDIA_MIRROR_DIR.
       stagedExport = await stageItemsExport({
         archiveBaseName: `erp-sync-${Date.now()}`,
         boxes: Array.isArray(boxes) ? boxes : [],
@@ -204,7 +224,11 @@ const action = defineHttpAction({
 
       const scriptPath = resolveErpSyncScriptPath(console);
       console.info('[sync-erp] script_started', { scriptPath });
-      const scriptResult = await runErpSyncScript(scriptPath, stagedExport.itemsPath);
+      const scriptResult = await runErpSyncScript(
+        scriptPath,
+        stagedExport.itemsPath,
+        ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null
+      );
       console.info('[sync-erp] script_finished', { exitCode: scriptResult.exitCode });
 
       if (scriptResult.exitCode === 0) {

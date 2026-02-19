@@ -259,6 +259,37 @@ export const IMPORTER_FORCE_ZERO_STOCK = importerForceZeroStockFlag;
 const erpImportIncludeMedia =
   parseBooleanFlag(process.env.ERP_IMPORT_INCLUDE_MEDIA, 'ERP_IMPORT_INCLUDE_MEDIA') ?? false;
 export const ERP_IMPORT_INCLUDE_MEDIA = erpImportIncludeMedia;
+// TODO(sync-erp-media-mirror-config): Move ERP media mirror path validation into shared config schema coverage.
+const defaultErpMediaBaseDir = rawMediaDir
+  ? path.isAbsolute(rawMediaDir)
+    ? rawMediaDir
+    : path.resolve(process.cwd(), rawMediaDir)
+  : path.join(__dirname, 'media');
+const defaultErpMediaMirrorDir = path.join(defaultErpMediaBaseDir, 'shopbilder-import');
+const rawErpMediaMirrorDir = (process.env.ERP_MEDIA_MIRROR_DIR || defaultErpMediaMirrorDir).trim();
+let resolvedErpMediaMirrorDir = rawErpMediaMirrorDir;
+
+if (!resolvedErpMediaMirrorDir) {
+  console.warn('[config] ERP_MEDIA_MIRROR_DIR is empty; media mirroring will be disabled.');
+} else if (WEB_DAV_URL_PATTERN.test(resolvedErpMediaMirrorDir)) {
+  console.error(
+    `[config] ERP_MEDIA_MIRROR_DIR must be a filesystem path (not a URL). Received "${resolvedErpMediaMirrorDir}".`
+  );
+  resolvedErpMediaMirrorDir = '';
+} else if (!path.isAbsolute(resolvedErpMediaMirrorDir)) {
+  const absoluteMirrorPath = path.resolve(process.cwd(), resolvedErpMediaMirrorDir);
+  console.warn(
+    `[config] ERP_MEDIA_MIRROR_DIR should be absolute; resolving relative value "${resolvedErpMediaMirrorDir}" to "${absoluteMirrorPath}".`
+  );
+  resolvedErpMediaMirrorDir = absoluteMirrorPath;
+}
+
+export const ERP_MEDIA_MIRROR_DIR = resolvedErpMediaMirrorDir;
+export const ERP_MEDIA_MIRROR_ENABLED = ERP_IMPORT_INCLUDE_MEDIA && Boolean(ERP_MEDIA_MIRROR_DIR);
+
+if (ERP_IMPORT_INCLUDE_MEDIA && !ERP_MEDIA_MIRROR_ENABLED) {
+  console.error('[config] ERP_IMPORT_INCLUDE_MEDIA=true but ERP_MEDIA_MIRROR_DIR is invalid; mirroring is disabled.');
+}
 // TODO(agent): Add startup healthcheck coverage for ERP_SYNC_ENABLED + ERP_IMPORT_URL combinations.
 export const ERP_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_SYNC_ENABLED, 'ERP_SYNC_ENABLED') ?? true;
 export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || '').trim());
@@ -391,6 +422,11 @@ export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').tri
 if (!ERP_SYNC_ENABLED) {
   console.info('[config] ERP sync disabled via ERP_SYNC_ENABLED flag.');
 }
+
+console.info('[config] ERP media mirroring runtime configuration.', {
+  enabled: ERP_MEDIA_MIRROR_ENABLED,
+  destination: ERP_MEDIA_MIRROR_DIR || null
+});
 
 export interface ShopwareCredentialsConfig {
   clientId?: string;

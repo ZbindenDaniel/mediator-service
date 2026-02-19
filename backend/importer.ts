@@ -11,6 +11,7 @@
 // TODO(agent): Capture events.csv import telemetry once event ingestion volumes are known.
 // TODO(suchbegriff-import): Confirm Suchbegriff fallback normalization aligns with search-term defaults.
 // TODO(agent): Confirm Artikel_Nummer normalization rules (e.g., hyphen handling) with CSV partners.
+// TODO(agent): Revisit agentic_runs parent-reference lookup batching if import volumes make per-row checks too expensive.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
@@ -23,7 +24,8 @@ import {
   upsertAgenticRun,
   findByMaterial,
   getMaxArtikelNummer,
-  insertEventLogEntry
+  insertEventLogEntry,
+  hasItemReferenceByArtikelNummer
 } from './db';
 import { IMPORTER_FORCE_ZERO_STOCK } from './config';
 import { Box, Item, ItemEinheit, normalizeEventLogLevel, normalizeItemEinheit } from '../models';
@@ -1736,13 +1738,14 @@ function normalizeAgenticRunField(value: unknown): string {
   }
 }
 
-export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ count: number }> {
+export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ count: number; skippedMissingReferences: number }> {
   console.log('[importer] Ingesting agentic_runs.csv payload');
   const now = new Date().toISOString();
   try {
     const content = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
     const records = parseCsvSync(content, { columns: true, skip_empty_lines: true }) as Array<Record<string, unknown>>;
     let count = 0;
+    let skippedMissingReferences = 0;
 
     if (records.length === 0) {
       console.info('[importer] agentic_runs.csv contained zero rows');
@@ -1785,6 +1788,28 @@ export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ cou
           LastSearchLinksJson: normalizeAgenticRunField(record.LastSearchLinksJson) || null
         };
 
+        let hasParentItemReference = false;
+        try {
+          hasParentItemReference = hasItemReferenceByArtikelNummer(artikelNummer);
+        } catch (lookupError) {
+          console.error('[importer] Failed to verify item_refs parent for agentic_runs row', {
+            rowNumber,
+            artikelNummer,
+            error: lookupError,
+          });
+          continue;
+        }
+
+        if (!hasParentItemReference) {
+          skippedMissingReferences++;
+          console.warn('[importer] Skipping agentic_runs row with missing parent item_refs reference', {
+            rowNumber,
+            artikelNummer,
+            reason: 'missing_item_ref_for_agentic_run',
+          });
+          continue;
+        }
+
         try {
           upsertAgenticRun.run(run);
           count++;
@@ -1803,7 +1828,7 @@ export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ cou
       }
     }
 
-    return { count };
+    return { count, skippedMissingReferences };
   } catch (err) {
     console.error('[importer] Failed to ingest agentic_runs CSV payload', err);
     throw err;

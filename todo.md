@@ -100,3 +100,8 @@ Objective: turn the collected ideas into an execution-ready backlog with clear p
 12. For **PWA**, is offline capability required now or is installability enough for first phase?
 13. For **embeddings**, which primary use case should the spike optimize for (search relevance, deduplication, or review assistance)?
 14. For the **price formula**, where should it apply first (UI preview, export pipeline, ERP sync, or all)?
+
+
+## not yet expressed
+
+- Allow in box view to relocate a selection of items. (Basically another ned to use the itemlist in the boxdetail)

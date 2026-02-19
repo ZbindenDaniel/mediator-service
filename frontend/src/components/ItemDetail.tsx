@@ -594,7 +594,7 @@ export function AgenticStatusCard({
           {needsReview ? (
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onReview}>
-                Review run
+                Review
               </button>
             </div>
           ) : null}
