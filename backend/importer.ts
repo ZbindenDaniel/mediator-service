@@ -40,7 +40,6 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
 // TODO(agent): Seed Artikelnummer-based ItemUUID sequences from the database for high-concurrency imports.
 const ITEM_ID_PREFIX = 'I-';
-const BOX_ID_PREFIX = 'B-';
 const ID_SEQUENCE_WIDTH = 4;
 const ARTIKEL_NUMMER_WIDTH = 5;
 
@@ -1004,8 +1003,6 @@ export async function ingestCsvFile(
     const boxesTouched = new Set<string>();
     const itemSequenceByArtikelNummer = new Map<string, number>();
     const itemSequenceByDate = new Map<string, number>();
-    const boxSequenceByDate = new Map<string, number>();
-    const mintedBoxByOriginal = new Map<string, string>();
     const runState = new Map<string, unknown>();
     const artikelNummerMintState = resolveArtikelNummerMintState();
 
@@ -1117,18 +1114,35 @@ export async function ingestCsvFile(
       let normalizedBoxId: string | null = null;
       const providedBoxId = typeof final.BoxID === 'string' ? final.BoxID.trim() : '';
       if (providedBoxId) {
-        let mintedBoxId = mintedBoxByOriginal.get(providedBoxId);
-        if (!mintedBoxId) {
-          mintedBoxId = mintSequentialIdentifier(BOX_ID_PREFIX, identifierDate, boxSequenceByDate);
-          mintedBoxByOriginal.set(providedBoxId, mintedBoxId);
-          console.log('[importer] Minted BoxID for CSV row', {
+        try {
+          const hasShelfPrefix = providedBoxId.startsWith('S-');
+          const isValidBoxId = hasShelfPrefix
+            ? isValidShelfBoxId(providedBoxId, { rowNumber })
+            : isValidNonShelfBoxId(providedBoxId, { rowNumber });
+          if (!isValidBoxId) {
+            console.warn('[importer] Skipping CSV row due to invalid provided BoxID', {
+              rowNumber,
+              providedBoxId,
+              reason: hasShelfPrefix ? 'invalid-shelf-box-id-format' : 'invalid-box-id-format',
+            });
+            continue;
+          }
+          normalizedBoxId = providedBoxId;
+          final.BoxID = providedBoxId;
+          console.info('[importer] Preserving provided BoxID for CSV row', {
             rowNumber,
-            originalBoxId: providedBoxId,
-            mintedBoxId,
+            providedBoxId,
+            reason: hasShelfPrefix ? 'valid-shelf-box-id' : 'valid-box-id',
           });
+        } catch (validationError) {
+          console.error('[importer] Skipping CSV row after BoxID validation error', {
+            rowNumber,
+            providedBoxId,
+            reason: 'box-id-validation-error',
+            error: validationError,
+          });
+          continue;
         }
-        normalizedBoxId = mintedBoxId;
-        final.BoxID = mintedBoxId;
       } else {
         final.BoxID = '';
       }
@@ -1625,13 +1639,27 @@ function normalizeBoxField(value: unknown): string {
   }
 }
 
-const SHELF_BOX_ID_PATTERN = /^S-\w{4}-\d-\d{4}-\d{4}/;
+const SHELF_BOX_ID_PATTERN = /^S-\w{4}-\d-\d{4}-\d{4}$/;
+const NON_SHELF_BOX_ID_PATTERN = /^(?:B-\d{6}-\d{4}|BIN-[A-Za-z0-9][A-Za-z0-9_-]*|[A-Za-z0-9]+(?:[._:-][A-Za-z0-9]+)*)$/;
 
 function isValidShelfBoxId(value: string, context: { rowNumber: number }): boolean {
   try {
     return SHELF_BOX_ID_PATTERN.test(value);
   } catch (error) {
     console.error('[importer] Failed to validate shelf BoxID format', {
+      ...context,
+      boxId: value,
+      error,
+    });
+    return false;
+  }
+}
+
+function isValidNonShelfBoxId(value: string, context: { rowNumber: number }): boolean {
+  try {
+    return NON_SHELF_BOX_ID_PATTERN.test(value);
+  } catch (error) {
+    console.error('[importer] Failed to validate non-shelf BoxID format', {
       ...context,
       boxId: value,
       error,
