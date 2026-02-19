@@ -73,7 +73,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-dialog): Reconfirm section/question emphasis styling in the review modal after reviewer validation.
 // TODO(agentic-review-spec-fields): Revisit field normalization if Langtext parsing contracts change.
 // TODO(agentic-review-price): Add localized currency formatting/parsing if operators request stricter price validation.
-// TODO(agentic-review-single-spec-modal): Revisit whether secondary spec section needs independent sorting/weighting hints.
+// TODO(agentic-review-spec-input): Keep single spec modal copy aligned with reviewer workflow wording.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -2282,33 +2282,28 @@ export default function ItemDetail({ itemId }: Props) {
 
     const specSelection = await promptSpecFieldReviewSelection({
       title: 'Schritt 3 · Spezifikationen',
-      description: 'Bitte unnötige und fehlende Spezifikationsfelder erfassen.',
+      description: 'Unnötige Felder markieren und fehlende Felder unten als Freitext eintragen.',
       fieldOptions: normalizedSpecFieldOptions,
       includeAdditionalInput: true,
-      additionalInputPlaceholder: 'Unnötig: z. B. interne Hinweise, irrelevante Marketingtexte',
-      secondaryTitle: 'Fehlende Spezifikationen',
-      secondaryDescription: 'Bitte fehlende Spezifikationsfelder auswählen oder ergänzen.',
-      secondaryFieldOptions: normalizedSpecFieldOptions,
-      includeSecondaryAdditionalInput: true,
-      secondaryAdditionalInputPlaceholder: 'Fehlend: z. B. Spannung, Material, Schutzklasse'
+      additionalInputPlaceholder: 'Fehlende Felder: z. B. Spannung, Material, Schutzklasse'
     });
     if (specSelection === null) {
       logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
         itemId,
-        stepKey: 'specSelection',
+        stepKey: 'specSelectionSingleInput',
         completed: false
       });
       return null;
     }
 
-    const unneededSpecRaw = mergeSpecFieldSelection(specSelection.selectedFields, specSelection.additionalInput);
-    const missingSpecRaw = mergeSpecFieldSelection(specSelection.secondarySelectedFields ?? [], specSelection.secondaryAdditionalInput ?? '');
+    const unneededSpecRaw = mergeSpecFieldSelection(specSelection.selectedFields, '');
+    const missingSpecRaw = mergeSpecFieldSelection([], specSelection.additionalInput);
     const hasUnnecessarySpecs = parseReviewSpecTokenList(unneededSpecRaw).length > 0;
     const hasMissingSpecs = parseReviewSpecTokenList(missingSpecRaw).length > 0;
 
     logger.info?.('ItemDetail: Agentic review checklist step completed', {
       itemId,
-      stepKey: 'specSelection',
+      stepKey: 'specSelectionSingleInput',
       completed: true,
       unneededSpecCount: parseReviewSpecTokenList(unneededSpecRaw).length,
       missingSpecCount: parseReviewSpecTokenList(missingSpecRaw).length

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { logError } from '../utils/logger';
 
 // TODO(agentic-review-spec-modal): Revisit keyboard shortcuts if reviewers request faster bulk selection.
-// TODO(agentic-review-spec-dual): Consider rendering these two sections as tabs if reviewer feedback flags vertical density.
+// TODO(agentic-review-spec-input): Validate missing-field token parsing UX once reviewers provide examples.
 export interface AgenticSpecFieldOption {
   value: string;
   label: string;
@@ -58,9 +58,6 @@ export default function AgenticSpecFieldReviewModal({
 }: Props) {
   const [selectedFields, setSelectedFields] = useState<string[]>(defaultSelectedFields);
   const [additionalInput, setAdditionalInput] = useState<string>(defaultAdditionalInput);
-  const [secondarySelectedFields, setSecondarySelectedFields] = useState<string[]>(defaultSecondarySelectedFields);
-  const [secondaryAdditionalInput, setSecondaryAdditionalInput] = useState<string>(defaultSecondaryAdditionalInput);
-
   const selectedSet = useMemo(() => new Set(selectedFields), [selectedFields]);
   const secondarySelectedSet = useMemo(() => new Set(secondarySelectedFields), [secondarySelectedFields]);
 
@@ -137,7 +134,7 @@ export default function AgenticSpecFieldReviewModal({
         </div>
         {includeAdditionalInput ? (
           <div className="review-dialog__additional-input">
-            <label htmlFor="agentic-spec-field-review-additional-input">Weitere Felder (kommagetrennt)</label>
+            <label htmlFor="agentic-spec-field-review-additional-input">Fehlende Felder (kommagetrennt)</label>
             <input
               id="agentic-spec-field-review-additional-input"
               type="text"
