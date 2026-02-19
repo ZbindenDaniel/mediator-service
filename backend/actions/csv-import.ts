@@ -56,6 +56,8 @@ const action = defineHttpAction({
         boxesProcessed: 0,
         eventsProcessed: 0,
         agenticRunsProcessed: 0,
+        agenticRunsDeferred: false,
+        agenticRunsSkippedMissingRefs: false,
         agenticRunsSkippedMissingReferences: 0,
         mediaFiles: 0,
         message: ''
@@ -345,6 +347,7 @@ const action = defineHttpAction({
       if (itemsBuffer) {
         const checksum = computeChecksum(itemsBuffer);
         const duplicate = findArchiveDuplicate(ARCHIVE_DIR, normalizedCsvName, checksum);
+        // TODO(agent): Keep duplicate-path agentic_runs.csv handling aligned with inbox deferred-ingestion behavior.
         if (duplicate) {
           uploadContext.duplicate = true;
           uploadContext.duplicateReason = duplicate.reason;
@@ -358,15 +361,23 @@ const action = defineHttpAction({
           });
           if (agenticRunsBuffer) {
             try {
-              const { count, skippedMissingReferences } = await ingestAgenticRunsCsv(agenticRunsBuffer);
-              uploadContext.agenticRunsProcessed = count;
-              uploadContext.agenticRunsSkippedMissingReferences = skippedMissingReferences;
-              console.info('[csv-import] Completed agentic_runs.csv ingestion for duplicate items payload', {
-                rowsProcessed: count,
-                skippedMissingReferences,
+              const deferredAgenticRunsPath = path.join(ctx.INBOX_DIR, `${Date.now()}_${normalizedCsvName}.agentic_runs.csv`);
+              fs.writeFileSync(deferredAgenticRunsPath, agenticRunsBuffer);
+              uploadContext.agenticRunsDeferred = true;
+              console.info('[csv-import] Duplicate branch agentic_runs.csv decision', {
+                duplicate: true,
+                agenticRunsAction: 'deferred',
+                deferredPath: deferredAgenticRunsPath,
+                rowsProcessed: uploadContext.agenticRunsProcessed,
+                skippedMissingReferences: uploadContext.agenticRunsSkippedMissingReferences,
               });
             } catch (agenticError) {
-              console.error('[csv-import] Failed to ingest agentic_runs.csv for duplicate items payload', agenticError);
+              uploadContext.agenticRunsSkippedMissingRefs = true;
+              console.error('[csv-import] Duplicate branch failed to defer agentic_runs.csv; skipping immediate ingestion to avoid FK violations', {
+                duplicate: true,
+                agenticRunsAction: 'skipped',
+                error: agenticError,
+              });
             }
           }
         } else {
@@ -390,10 +401,14 @@ const action = defineHttpAction({
               const deferredAgenticRunsPath = `${tmpPath}.agentic_runs.csv`;
               try {
                 fs.writeFileSync(deferredAgenticRunsPath, agenticRunsBuffer);
+                uploadContext.agenticRunsDeferred = true;
                 console.info('[csv-import] Deferred agentic_runs.csv ingestion until inbox CSV is processed', {
+                  duplicate: false,
+                  agenticRunsAction: 'deferred',
                   deferredPath: deferredAgenticRunsPath,
                 });
               } catch (agenticWriteError) {
+                uploadContext.agenticRunsSkippedMissingRefs = true;
                 console.error('[csv-import] Failed to stage deferred agentic_runs.csv ingestion', agenticWriteError);
               }
             }
@@ -417,6 +432,8 @@ const action = defineHttpAction({
           uploadContext.agenticRunsProcessed = count;
           uploadContext.agenticRunsSkippedMissingReferences = skippedMissingReferences;
           console.info('[csv-import] Completed agentic_runs.csv ingestion', {
+            duplicate: false,
+            agenticRunsAction: 'ingested',
             rowsProcessed: count,
             skippedMissingReferences,
           });
