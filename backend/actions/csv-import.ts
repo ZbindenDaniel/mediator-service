@@ -56,6 +56,7 @@ const action = defineHttpAction({
         boxesProcessed: 0,
         eventsProcessed: 0,
         agenticRunsProcessed: 0,
+        agenticRunsSkippedMissingReferences: 0,
         mediaFiles: 0,
         message: ''
       };
@@ -357,10 +358,12 @@ const action = defineHttpAction({
           });
           if (agenticRunsBuffer) {
             try {
-              const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
+              const { count, skippedMissingReferences } = await ingestAgenticRunsCsv(agenticRunsBuffer);
               uploadContext.agenticRunsProcessed = count;
+              uploadContext.agenticRunsSkippedMissingReferences = skippedMissingReferences;
               console.info('[csv-import] Completed agentic_runs.csv ingestion for duplicate items payload', {
                 rowsProcessed: count,
+                skippedMissingReferences,
               });
             } catch (agenticError) {
               console.error('[csv-import] Failed to ingest agentic_runs.csv for duplicate items payload', agenticError);
@@ -410,10 +413,12 @@ const action = defineHttpAction({
 
       if (!itemsBuffer && agenticRunsBuffer) {
         try {
-          const { count } = await ingestAgenticRunsCsv(agenticRunsBuffer);
+          const { count, skippedMissingReferences } = await ingestAgenticRunsCsv(agenticRunsBuffer);
           uploadContext.agenticRunsProcessed = count;
+          uploadContext.agenticRunsSkippedMissingReferences = skippedMissingReferences;
           console.info('[csv-import] Completed agentic_runs.csv ingestion', {
             rowsProcessed: count,
+            skippedMissingReferences,
           });
         } catch (agenticError) {
           console.error('[csv-import] Failed to ingest agentic_runs.csv from archive', agenticError);
