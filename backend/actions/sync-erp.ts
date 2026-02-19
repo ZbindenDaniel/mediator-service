@@ -5,6 +5,7 @@ import { stageItemsExport, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
 
 // TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
+// TODO(sync-erp): Keep this action script-parity only unless an explicit future requirement reintroduces API-side continuation orchestration.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -80,6 +81,12 @@ async function runErpSyncScript(scriptPath: string, csvPath: string): Promise<Sc
   });
 }
 
+function resolveErpSyncScriptPath(logger: Pick<Console, 'info' | 'warn'>): string {
+  const scriptPath = path.resolve(process.cwd(), 'docs/erp-sync.sh');
+  logger.info('[sync-erp] script_path_resolved', { scriptPath });
+  return scriptPath;
+}
+
 const action = defineHttpAction({
   key: 'sync-erp',
   label: 'Sync ERP',
@@ -143,7 +150,7 @@ const action = defineHttpAction({
         itemCount: items.length
       });
 
-      const scriptPath = path.resolve(process.cwd(), 'docs/erp-sync.sh');
+      const scriptPath = resolveErpSyncScriptPath(console);
       console.info('[sync-erp] script_started', { scriptPath });
       const scriptResult = await runErpSyncScript(scriptPath, stagedExport.itemsPath);
       console.info('[sync-erp] script_finished', { exitCode: scriptResult.exitCode });
@@ -175,7 +182,11 @@ const action = defineHttpAction({
       });
     } finally {
       if (stagedExport) {
-        await stagedExport.cleanup();
+        try {
+          await stagedExport.cleanup();
+        } catch (error) {
+          console.warn('[sync-erp] cleanup_failed', { error });
+        }
       }
       console.info('[sync-erp] cleanup_done');
     }
