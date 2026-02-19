@@ -895,6 +895,11 @@ export default function ItemDetail({ itemId }: Props) {
     fieldOptions: AgenticSpecFieldOption[];
     includeAdditionalInput: boolean;
     additionalInputPlaceholder?: string;
+    secondaryTitle?: string;
+    secondaryDescription?: string;
+    secondaryFieldOptions?: AgenticSpecFieldOption[];
+    includeSecondaryAdditionalInput?: boolean;
+    secondaryAdditionalInputPlaceholder?: string;
     resolve: (result: AgenticSpecFieldReviewResult | null) => void;
   } | null>(null);
   const [agenticReviewAutomation, setAgenticReviewAutomation] = useState<ItemDetailReviewAutomationSignal | null>(null);
@@ -2136,6 +2141,11 @@ export default function ItemDetail({ itemId }: Props) {
     fieldOptions: AgenticSpecFieldOption[];
     includeAdditionalInput?: boolean;
     additionalInputPlaceholder?: string;
+    secondaryTitle?: string;
+    secondaryDescription?: string;
+    secondaryFieldOptions?: AgenticSpecFieldOption[];
+    includeSecondaryAdditionalInput?: boolean;
+    secondaryAdditionalInputPlaceholder?: string;
   }): Promise<AgenticSpecFieldReviewResult | null> {
     try {
       return await new Promise<AgenticSpecFieldReviewResult | null>((resolve) => {
@@ -2145,6 +2155,11 @@ export default function ItemDetail({ itemId }: Props) {
           fieldOptions: options.fieldOptions,
           includeAdditionalInput: options.includeAdditionalInput ?? false,
           additionalInputPlaceholder: options.additionalInputPlaceholder,
+          secondaryTitle: options.secondaryTitle,
+          secondaryDescription: options.secondaryDescription,
+          secondaryFieldOptions: options.secondaryFieldOptions,
+          includeSecondaryAdditionalInput: options.includeSecondaryAdditionalInput ?? false,
+          secondaryAdditionalInputPlaceholder: options.secondaryAdditionalInputPlaceholder,
           resolve
         });
       });
@@ -3394,6 +3409,11 @@ export default function ItemDetail({ itemId }: Props) {
                 fieldOptions={specFieldReviewModalState.fieldOptions}
                 includeAdditionalInput={specFieldReviewModalState.includeAdditionalInput}
                 additionalInputPlaceholder={specFieldReviewModalState.additionalInputPlaceholder}
+                secondaryTitle={specFieldReviewModalState.secondaryTitle}
+                secondaryDescription={specFieldReviewModalState.secondaryDescription}
+                secondaryFieldOptions={specFieldReviewModalState.secondaryFieldOptions}
+                includeSecondaryAdditionalInput={specFieldReviewModalState.includeSecondaryAdditionalInput}
+                secondaryAdditionalInputPlaceholder={specFieldReviewModalState.secondaryAdditionalInputPlaceholder}
                 onCancel={() => {
                   try {
                     specFieldReviewModalState.resolve(null);

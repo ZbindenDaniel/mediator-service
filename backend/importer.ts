@@ -12,6 +12,7 @@
 // TODO(suchbegriff-import): Confirm Suchbegriff fallback normalization aligns with search-term defaults.
 // TODO(agent): Confirm Artikel_Nummer normalization rules (e.g., hyphen handling) with CSV partners.
 // TODO(agent): Revisit agentic_runs parent-reference lookup batching if import volumes make per-row checks too expensive.
+// TODO(agent): Revisit strict import ItemUUID format constraints if backup export contract expands accepted patterns.
 import fs from 'fs';
 import path from 'path';
 import { parse as parseCsvStream } from 'csv-parse';
@@ -955,6 +956,48 @@ const ops = loadOps();
 
 export interface IngestCsvFileOptions {
   zeroStock?: boolean;
+  strictImport?: boolean;
+}
+
+type RowFailureCode =
+  | 'missing-artikel-nummer'
+  | 'invalid-artikel-nummer'
+  | 'missing-item-uuid'
+  | 'invalid-item-uuid'
+  | 'split-requires-generated-item-uuid';
+
+function logRowFailure(
+  rowNumber: number,
+  failureCode: RowFailureCode,
+  artikelNummer: string | null,
+  itemUUID: string | null
+): void {
+  console.warn('[importer] Skipping CSV row due to strict import validation failure', {
+    rowNumber,
+    artikelNummer,
+    itemUUID,
+    failureCode,
+  });
+}
+
+type ItemUuidNormalizationStatus = 'ok' | 'missing' | 'invalid';
+
+type ItemUuidNormalizationResult = {
+  value: string;
+  status: ItemUuidNormalizationStatus;
+};
+
+function normalizeItemUuidValue(rawValue: unknown): ItemUuidNormalizationResult {
+  const rawText =
+    rawValue === undefined || rawValue === null ? '' : typeof rawValue === 'string' ? rawValue : String(rawValue);
+  const trimmed = rawText.trim();
+  if (!trimmed) {
+    return { value: '', status: 'missing' };
+  }
+  if (/\s/.test(trimmed)) {
+    return { value: trimmed, status: 'invalid' };
+  }
+  return { value: trimmed, status: 'ok' };
 }
 
 function applyOps(row: Record<string, string>, runState: Map<string, unknown>): Record<string, string> {
@@ -999,6 +1042,7 @@ export async function ingestCsvFile(
       });
     }
     const zeroStockRequested = options.zeroStock ?? IMPORTER_FORCE_ZERO_STOCK;
+    const strictImportRequested = options.strictImport ?? false;
     let count = 0;
     const boxesTouched = new Set<string>();
     const itemSequenceByArtikelNummer = new Map<string, number>();
@@ -1170,6 +1214,16 @@ export async function ingestCsvFile(
       let artikelNummer = artikelNummerNormalization.value;
       let artikelNummerForMinting = artikelNummerNormalization.mintableValue;
       let artikelNummerStatus = artikelNummerNormalization.status;
+      if (strictImportRequested) {
+        if (artikelNummerStatus === 'missing') {
+          logRowFailure(rowNumber, 'missing-artikel-nummer', null, null);
+          continue;
+        }
+        if (artikelNummerStatus === 'invalid') {
+          logRowFailure(rowNumber, 'invalid-artikel-nummer', artikelNummer || null, null);
+          continue;
+        }
+      }
       if (!artikelNummer) {
         try {
           artikelNummer = mintArtikelNummerFromState(artikelNummerMintState);
@@ -1190,10 +1244,24 @@ export async function ingestCsvFile(
       } else {
         final['Artikel-Nummer'] = artikelNummer;
       }
+      const itemUuidNormalization = normalizeItemUuidValue(final.itemUUID);
+      const csvItemUUID = itemUuidNormalization.value;
+      if (strictImportRequested) {
+        if (itemUuidNormalization.status === 'missing') {
+          logRowFailure(rowNumber, 'missing-item-uuid', artikelNummer || null, null);
+          continue;
+        }
+        if (itemUuidNormalization.status === 'invalid') {
+          logRowFailure(rowNumber, 'invalid-item-uuid', artikelNummer || null, csvItemUUID || null);
+          continue;
+        }
+      }
+      if (csvItemUUID) {
+        final.itemUUID = csvItemUUID;
+      }
       const grafikname = grafiknameCanonical;
       const artikelbeschreibung = final['Artikelbeschreibung'] || '';
       const kurzbeschreibung = final['Kurzbeschreibung'] || '';
-      const csvItemUUID = typeof final.itemUUID === 'string' ? final.itemUUID.trim() : '';
       const suchbegriff = resolveSuchbegriffValue(final['Suchbegriff'], artikelbeschreibung, {
         rowNumber,
         artikelNummer: artikelNummer || null,
@@ -1375,6 +1443,10 @@ export async function ingestCsvFile(
       }
 
       if (!baseItemUUID) {
+        if (strictImportRequested) {
+          logRowFailure(rowNumber, 'missing-item-uuid', artikelNummer || null, null);
+          continue;
+        }
         try {
           if (!artikelNummerForMinting) {
             console.warn('[importer] Falling back to date-based ItemUUID minting due to missing/invalid Artikel_Nummer', {
@@ -1411,6 +1483,16 @@ export async function ingestCsvFile(
           artikelNummer,
           itemUUID: baseItemUUID,
         });
+      }
+
+      if (strictImportRequested && instancePlan.instanceCount > 1) {
+        logRowFailure(
+          rowNumber,
+          'split-requires-generated-item-uuid',
+          artikelNummer || null,
+          baseItemUUID || null
+        );
+        continue;
       }
 
       let skipRemainingInstances = false;

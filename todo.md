@@ -105,3 +105,4 @@ Objective: turn the collected ideas into an execution-ready backlog with clear p
 ## not yet expressed
 
 - Allow in box view to relocate a selection of items. (Basically another ned to use the itemlist in the boxdetail)
+- update this so the itemFLow actually produces a listPrice and then calculate the sellprice  (which we askto be confirmed in the review)
