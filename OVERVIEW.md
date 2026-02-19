@@ -16,6 +16,7 @@
 9. ✅ Extend export mode handling to support import-specific mode identifiers (`manual_import`/`automatic_import`) while reusing existing backup/erp serialization paths and adding structured mode/header logging.
 10. ✅ Split export header contracts by import regime: keep `manual_import` legacy labels/order, add dedicated ERP-compatible `automatic_import` labels/order, and enforce CSV header/row field-count parity with fail-fast logging.
 11. ✅ Force ERP sync export staging to explicit `automatic_import` regime, add start telemetry (`exportRegime`, CSV path/name, profile identifiers), and emit structured `phase: export-stage` errors when staging fails.
+12. ✅ Replace `backend/actions/sync-erp.ts` with a minimal flow: request parsing (`itemIds`), CSV staging, `docs/erp-sync.sh` execution, structured JSON response handling, and guaranteed staging cleanup telemetry.
 
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
