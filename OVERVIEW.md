@@ -22,6 +22,8 @@
 15. ✅ Refresh `.env.example` coverage for backend/agentic ERP config keys (including mirror destination + browser-parity import toggles) to reduce hidden runtime defaults.
 14. ✅ Preserve duplicate-import reliability by deferring `agentic_runs.csv` in duplicate item uploads (instead of immediate ingestion), with structured action telemetry and additive response flags for operator visibility.
 
+15. ✅ Preserve incoming `BoxID` values during CSV ingestion (no remint), add strict shelf/non-shelf format validation with structured skip logging, and keep box/item persistence flow unchanged for valid rows.
+
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
 - ✅ Default ERP import runtime now expects `polling-enabled` mode with `browser-parity` contract and logs both flags at import start to surface misconfiguration early.
