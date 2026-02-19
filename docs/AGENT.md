@@ -38,6 +38,11 @@ These planning responses should be explicit enough that another developer can im
 - Tie device guidance directly to schema keys (`Langtext`, `Kurzbeschreibung`, `Artikelbeschreibung`) so downstream validators stay consistent and the prompt remains concise.
 - Do not expose system-only identifiers like `itemUUid` in prompts; the item flow injects them automatically.
 
+
+## Export mode usage (operator-facing)
+- Use `mode=manual_import` for human-reviewed/manual CSV workflows; this emits the legacy labeled header set used by manual operators.
+- Use `mode=automatic_import` for ERP automation only; this is pinned to the ERP import baseline header contract (`data/archive/test_import.csv`) to keep sync payloads deterministic.
+
 ## Planned Work Log
 
 ### Stabilize test harness + align log expectations (planned)
