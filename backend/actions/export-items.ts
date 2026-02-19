@@ -108,7 +108,7 @@ const automaticImportHeaderContract: readonly HeaderContractColumn[] = [
   { key: 'width_mm', header: 'cvar_vm_product_width' },
   { key: 'height_mm', header: 'cvar_vm_product_height' },
   { key: 'weight_kg', header: 'weight' },
-  { key: 'sellprice', header: 'listprice' },
+  // { key: 'sellprice', header: 'listprice' }, // update this so the itemFLow actually produces a listPrice and then calculate the sellprice  (which we askto be confirmed in the review)
   { key: 'sellprice', header: 'sellprice' },
   { key: 'onhand', header: 'onhand' },
   { key: 'published_status', header: 'cvar_published' },
@@ -661,37 +661,6 @@ function logMissingMetadataValue(
 }
 
 // TODO(agent): Revisit CSV media derivation when asset manifests are queryable via API.
-// TODO(agent): Consolidate published flag normalization with importer helpers if shared CSV contracts expand.
-function normalizePublishedFlagForExport(rawValue: unknown): '1' | '0' {
-  try {
-    if (typeof rawValue === 'boolean') {
-      return rawValue ? '1' : '0';
-    }
-
-    if (typeof rawValue === 'number') {
-      return rawValue === 0 ? '0' : '1';
-    }
-
-    if (typeof rawValue === 'string') {
-      const normalized = rawValue.trim().toLowerCase();
-      if (['1', 'true', 'yes', 'ja', 'y', 'on'].includes(normalized)) {
-        return '1';
-      }
-      if (['0', 'false', 'no', 'nein', 'n', 'off', ''].includes(normalized)) {
-        return '0';
-      }
-    }
-  } catch (error) {
-    console.error('[export-items] Failed to normalize published flag for export; defaulting to 0.', {
-      rawValue,
-      error
-    });
-    return '0';
-  }
-
-  return rawValue ? '1' : '0';
-}
-
 function formatKurzbeschreibungForHtmlExport(
   value: unknown,
   context: { artikelNummer: string | null; itemUUID: string | null }
@@ -764,7 +733,7 @@ function resolveExportValue(
   if (field === 'Veröffentlicht_Status') {
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
     const agenticStatus = typeof rawRow.AgenticStatus === 'string' ? rawRow.AgenticStatus : null;
-    const storedPublished = normalizePublishedFlagForExport(value) === '1';
+    const storedPublished = Boolean(value);
     const gatedPublished = storedPublished && agenticStatus === 'reviewed';
 
     if (storedPublished && !gatedPublished) {
@@ -776,7 +745,7 @@ function resolveExportValue(
       });
     }
 
-    return gatedPublished ? '1' : '0';
+    return gatedPublished;
   }
 
   if (column === 'image_names') {
