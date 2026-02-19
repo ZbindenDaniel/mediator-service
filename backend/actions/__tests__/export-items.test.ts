@@ -205,7 +205,7 @@ describe('export-items published status gating', () => {
     const [, dataLine] = csv.split('\n');
     const values = dataLine.split(',');
     const publishedIndex = 15;
-    expect(values[publishedIndex]).toBe('true');
+    expect(values[publishedIndex]).toBe('1');
   });
 
   test('drops published status when agentic status is not reviewed', () => {
@@ -216,7 +216,7 @@ describe('export-items published status gating', () => {
     const values = dataLine.split(',');
     const publishedIndex = 15;
 
-    expect(values[publishedIndex]).toBe('false');
+    expect(values[publishedIndex]).toBe('0');
     expect(logSpy).toHaveBeenCalledWith(
       '[export-items] Agentic review gate suppressed published status during export.',
       expect.objectContaining({ agenticStatus: 'inProgress', itemUUID: 'item-uuid-1' })
@@ -231,7 +231,20 @@ describe('export-items published status gating', () => {
     const values = dataLine.split(',');
     const publishedIndex = 15;
 
-    expect(values[publishedIndex]).toBe('false');
+    expect(values[publishedIndex]).toBe('0');
+  });
+
+
+  test('normalizes string published flags to numeric export values', () => {
+    const { csv } = serializeItemsToCsv([
+      { ...baseRow, Veröffentlicht_Status: 'true', AgenticStatus: 'reviewed' },
+      { ...baseRow, ItemUUID: 'item-uuid-2', Veröffentlicht_Status: 'false', AgenticStatus: 'reviewed' }
+    ]);
+    const [, firstDataLine, secondDataLine] = csv.split('\n');
+    const publishedIndex = 15;
+
+    expect(firstDataLine.split(',')[publishedIndex]).toBe('1');
+    expect(secondDataLine.split(',')[publishedIndex]).toBe('0');
   });
 });
 
