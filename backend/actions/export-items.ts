@@ -92,7 +92,7 @@ const columnHeaderMap = new Map<ExportColumn, string>(
 );
 type HeaderContractColumn = { key: ExportColumn; header: string };
 
-// TODO(export-items-header-contract): Keep automatic import header contract aligned with validated ERP captures.
+// TODO(export-items-header-contract): Keep automatic_import headers aligned with ERP script expectations (order and naming) whenever docs/erp-sync.sh contract changes.
 // TODO(export-items-header-contract): Confirm whether listprice should diverge from sellprice source when upstream adds a dedicated key.
 const automaticImportHeaderContract: readonly HeaderContractColumn[] = [
   { key: 'partnumber', header: 'partnumber' },
