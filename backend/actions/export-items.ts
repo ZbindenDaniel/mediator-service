@@ -174,7 +174,19 @@ function normalizeMediaStringForExport(
 }
 
 type ExportMode = 'backup' | 'erp';
+type ExportModeInput = ExportMode | 'manual_import' | 'automatic_import';
+type HeaderRegime = 'manual_import' | 'automatic_import';
+
+const EXPORT_MODE_ALIASES: Record<ExportModeInput, ExportMode> = {
+  backup: 'backup',
+  erp: 'erp',
+  manual_import: 'backup',
+  automatic_import: 'erp'
+};
+
+const EXPORT_MODE_INPUTS = new Set<ExportModeInput>(Object.keys(EXPORT_MODE_ALIASES) as ExportModeInput[]);
 const EXPORT_MODES = new Set<ExportMode>(['backup', 'erp']);
+// TODO(export-items-mode): Remove legacy backup/erp mode inputs once all clients migrate to manual_import/automatic_import.
 
 function formatArtikelnummerForExport(value: unknown, itemUUID: string | null): unknown {
   if (value === null || value === undefined) {
@@ -495,30 +507,41 @@ function groupExportRows(
 function parseExportMode(
   rawMode: string | null,
   logger: Pick<Console, 'error' | 'info' | 'warn'> = console
-): { mode: ExportMode; source: 'default' | 'explicit' } {
+): { mode: ExportMode; source: 'default' | 'explicit'; requestedMode: ExportModeInput | null } {
   const defaultMode: ExportMode = 'backup';
   if (!rawMode) {
-    return { mode: defaultMode, source: 'default' };
+    return { mode: defaultMode, source: 'default', requestedMode: null };
   }
 
   const trimmed = rawMode.trim();
   if (!trimmed) {
-    return { mode: defaultMode, source: 'default' };
+    return { mode: defaultMode, source: 'default', requestedMode: null };
   }
 
   try {
-    const normalized = trimmed.toLowerCase();
-    if (!EXPORT_MODES.has(normalized as ExportMode)) {
+    const normalized = trimmed.toLowerCase() as ExportModeInput;
+    if (!EXPORT_MODE_INPUTS.has(normalized)) {
       throw new Error(`Unsupported export mode: ${rawMode}`);
     }
-    return { mode: normalized as ExportMode, source: 'explicit' };
+    return { mode: EXPORT_MODE_ALIASES[normalized], source: 'explicit', requestedMode: normalized };
   } catch (error) {
-    logger.error?.('[export-items] Failed to parse export mode; expected backup or erp.', {
+    logger.error?.('[export-items] Failed to parse export mode; expected backup, erp, manual_import, or automatic_import.', {
       rawMode,
       error
     });
     throw error;
   }
+}
+
+function resolveExportColumns(exportMode: ExportMode): readonly ExportColumn[] {
+  if (exportMode === 'erp') {
+    return columns.filter((column) => column !== 'itemUUID');
+  }
+  return columns;
+}
+
+function resolveHeaderRegime(exportMode: ExportMode): HeaderRegime {
+  return exportMode === 'erp' ? 'automatic_import' : 'manual_import';
 }
 
 function toCsvValue(val: any): string {
@@ -985,9 +1008,8 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
       }
     }
 
-    let exportColumns = columns;
+    const exportColumns = resolveExportColumns(exportMode);
     if (groupingActive) {
-      exportColumns = columns.filter((column) => column !== 'itemUUID');
       try {
         logger.info?.('[export-items] Omitting ItemUUID column for grouped export output.', {
           mergedCount,
@@ -998,20 +1020,6 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
         logger.error?.('[export-items] Failed to log grouped export column adjustment.', logError);
       }
     }
-
-    try {
-      const schemaHeaders = exportColumns.map((column) => columnHeaderMap.get(column) ?? column);
-      logger.info?.('[export-items] Export schema selected for CSV output.', {
-        exportMode,
-        groupingActive,
-        columnCount: exportColumns.length,
-        columns: exportColumns,
-        headers: schemaHeaders
-      });
-    } catch (logError) {
-      logger.error?.('[export-items] Failed to log export schema selection.', logError);
-    }
-
     const { csv } = serializeItemsToCsv(groupedRows, exportColumns, { exportMode, logger });
     const boxesCsv = serializeBoxes(options.boxes ?? []);
     const itemsPath = path.join(tempDir, 'items.csv');
@@ -1061,24 +1069,36 @@ const action = defineHttpAction({
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       let exportMode: ExportMode;
       let modeSource: 'default' | 'explicit';
+      let requestedMode: ExportModeInput | null;
+      let exportColumns: readonly ExportColumn[];
+      let headerRegime: HeaderRegime;
       try {
-        ({ mode: exportMode, source: modeSource } = parseExportMode(url.searchParams.get('mode'), console));
+        ({ mode: exportMode, source: modeSource, requestedMode } = parseExportMode(
+          url.searchParams.get('mode'),
+          console
+        ));
+        exportColumns = resolveExportColumns(exportMode);
+        headerRegime = resolveHeaderRegime(exportMode);
       } catch (modeError) {
-        console.error('[export-items] Invalid export mode provided.', {
+        console.error('[export-items] Invalid export mode/header regime provided.', {
           mode: url.searchParams.get('mode'),
           error: modeError
         });
-        return sendJson(res, 400, { error: 'mode must be backup or erp' });
+        return sendJson(res, 400, {
+          error: 'mode must be one of backup, erp, manual_import, automatic_import'
+        });
       }
       const groupingActive = exportMode === 'erp';
       try {
-        console.info('[export-items] Export mode resolved.', {
+        console.info('[export-items] Export mode and header regime resolved.', {
           mode: exportMode,
+          requestedMode,
           modeSource,
-          groupingActive
+          headerRegime,
+          columnCount: exportColumns.length
         });
       } catch (logError) {
-        console.error('[export-items] Failed to log export mode selection.', logError);
+        console.error('[export-items] Failed to log export mode/header regime selection.', logError);
       }
       const createdAfter = url.searchParams.get('createdAfter');
       const updatedAfter = url.searchParams.get('updatedAfter');
