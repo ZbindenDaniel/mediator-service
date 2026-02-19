@@ -15,6 +15,8 @@ export interface AgenticReviewInput {
   missing_spec: string[];
   unneeded_spec: string[];
   notes: string | null;
+  review_price: number | null;
+  shop_article: boolean | null;
   reviewedBy: string | null;
 }
 
@@ -38,8 +40,17 @@ export function parseMissingSpecInput(value: string | null): string[] {
 
 export function mapReviewAnswersToInput(
   answers: AgenticReviewQuestionAnswers,
-  options: { missingSpecRaw: string | null; unneededSpecRaw?: string | null; unneededSpecKeys?: string[]; notes: string; reviewedBy?: string | null }
+  options: {
+    missingSpecRaw: string | null;
+    unneededSpecRaw?: string | null;
+    unneededSpecKeys?: string[];
+    notes?: string;
+    reviewPrice?: number | null;
+    shopArticle?: boolean | null;
+    reviewedBy?: string | null;
+  }
 ): AgenticReviewInput {
+  const noteValue = typeof options.notes === 'string' ? options.notes.trim() : '';
   return {
     information_present: !answers.hasMissingSpecs,
     bad_format: !answers.descriptionMatches || !answers.shortTextMatches,
@@ -49,7 +60,11 @@ export function mapReviewAnswersToInput(
     unneeded_spec: Array.isArray(options.unneededSpecKeys)
       ? parseMissingSpecInput(options.unneededSpecKeys.join(","))
       : parseMissingSpecInput(options.unneededSpecRaw ?? null),
-    notes: options.notes.trim() ? options.notes.trim() : null,
+    notes: noteValue ? noteValue : null,
+    review_price: typeof options.reviewPrice === 'number' && Number.isFinite(options.reviewPrice)
+      ? options.reviewPrice
+      : null,
+    shop_article: typeof options.shopArticle === 'boolean' ? options.shopArticle : null,
     reviewedBy: options.reviewedBy ?? null
   };
 }

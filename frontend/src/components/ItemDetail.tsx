@@ -72,6 +72,8 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-preview): Revalidate review modal preview compactness after operator feedback on readability.
 // TODO(agentic-review-dialog): Reconfirm section/question emphasis styling in the review modal after reviewer validation.
 // TODO(agentic-review-spec-fields): Revisit field normalization if Langtext parsing contracts change.
+// TODO(agentic-review-price): Add localized currency formatting/parsing if operators request stricter price validation.
+// TODO(agentic-review-spec-input): Keep single spec modal copy aligned with reviewer workflow wording.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -233,6 +235,8 @@ export function buildAgenticReviewSubmissionPayload(
     missing_spec: reviewInput.missing_spec,
     unneeded_spec: reviewInput.unneeded_spec,
     notes: reviewInput.notes,
+    review_price: reviewInput.review_price,
+    shop_article: reviewInput.shop_article,
     reviewedBy: actor
   };
 }
@@ -2192,33 +2196,11 @@ export default function ItemDetail({ itemId }: Props) {
       </div>
     );
 
-    const unnecessarySpecsPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 3 · Spezifikationen',
-          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
-          'Spezifikationen: unnötige Infos?'
-        )}
-      </div>
-    );
-
-    const missingSpecsPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 4 · Spezifikationen',
-          buildLangtextReviewPreviewFields(item?.Langtext ?? null, itemId),
-          'Spezifikationen: fehlende Infos?'
-        )}
-      </div>
-    );
-
     const dimensionsPreviewMessage = (
       <div className="review-dialog__sections">
         {buildReviewDialogSection(
           itemId,
-          'Schritt 5 · Dimensionen',
+          'Schritt 4 · Dimensionen',
           [
             { label: 'Länge_mm', value: item?.Länge_mm ?? null },
             { label: 'Breite_mm', value: item?.Breite_mm ?? null },
@@ -2283,23 +2265,34 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    const hasUnnecessarySpecs = await askFlag(
-      'hasUnnecessarySpecs',
-      'Schitt 3 · Spezifikationen',
-      unnecessarySpecsPreviewMessage
-    );
-    if (hasUnnecessarySpecs === null) {
+    const specSelection = await promptSpecFieldReviewSelection({
+      title: 'Schritt 3 · Spezifikationen',
+      description: 'Unnötige Felder markieren und fehlende Felder unten als Freitext eintragen.',
+      fieldOptions: normalizedSpecFieldOptions,
+      includeAdditionalInput: true,
+      additionalInputPlaceholder: 'Fehlende Felder: z. B. Spannung, Material, Schutzklasse'
+    });
+    if (specSelection === null) {
+      logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
+        itemId,
+        stepKey: 'specSelectionSingleInput',
+        completed: false
+      });
       return null;
     }
 
-    const hasMissingSpecs = await askFlag(
-      'hasMissingSpecs',
-      'Schritt 3 · Spezifikationen',
-      missingSpecsPreviewMessage
-    );
-    if (hasMissingSpecs === null) {
-      return null;
-    }
+    const unneededSpecRaw = mergeSpecFieldSelection(specSelection.selectedFields, '');
+    const missingSpecRaw = mergeSpecFieldSelection([], specSelection.additionalInput);
+    const hasUnnecessarySpecs = parseReviewSpecTokenList(unneededSpecRaw).length > 0;
+    const hasMissingSpecs = parseReviewSpecTokenList(missingSpecRaw).length > 0;
+
+    logger.info?.('ItemDetail: Agentic review checklist step completed', {
+      itemId,
+      stepKey: 'specSelectionSingleInput',
+      completed: true,
+      unneededSpecCount: parseReviewSpecTokenList(unneededSpecRaw).length,
+      missingSpecCount: parseReviewSpecTokenList(missingSpecRaw).length
+    });
 
     const dimensionsPlausible = await askFlag(
       'dimensionsPlausible',
@@ -2310,61 +2303,79 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    let missingSpecRaw: string | null = '';
-    let unneededSpecRaw: string | null = '';
-    if (hasUnnecessarySpecs) {
-      const selection = await promptSpecFieldReviewSelection({
-        title: 'Unnötige Spezifikationen',
-        description: 'Bitte unnötige Spezifikationsfelder auswählen.',
-        fieldOptions: normalizedSpecFieldOptions,
-        includeAdditionalInput: true,
-        additionalInputPlaceholder: 'z. B. interne Hinweise, irrelevante Marketingtexte'
+    let reviewPrice: number | null = null;
+    try {
+      const defaultPrice = typeof item?.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis)
+        ? String(item.Verkaufspreis)
+        : '';
+      const priceInput = await dialogService.prompt({
+        title: 'Schritt 5 · Preis',
+        message: 'Verkaufspreis prüfen und bei Bedarf anpassen.',
+        confirmLabel: 'Ok',
+        cancelLabel: 'Abbrechen',
+        placeholder: 'z. B. 199.99',
+        defaultValue: defaultPrice
       });
-      if (selection === null) {
+      if (priceInput === null) {
         logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
           itemId,
-          stepKey: 'unneededSpecRaw',
+          stepKey: 'review_price',
           completed: false
         });
         return null;
       }
-      unneededSpecRaw = mergeSpecFieldSelection(selection.selectedFields, selection.additionalInput);
-      logger.info?.('ItemDetail: Agentic review checklist step completed', {
-        itemId,
-        stepKey: 'unneededSpecRaw',
-        completed: true,
-        unneededSpecCount: parseReviewSpecTokenList(unneededSpecRaw).length
-      });
-    }
-
-    if (hasMissingSpecs) {
-      const selection = await promptSpecFieldReviewSelection({
-        title: 'Fehlende Spezifikationen',
-        description: 'Bitte fehlende Spezifikationsfelder auswählen oder ergänzen.',
-        fieldOptions: normalizedSpecFieldOptions,
-        includeAdditionalInput: true,
-        additionalInputPlaceholder: 'z. B. Spannung, Material, Schutzklasse'
-      });
-      if (selection === null) {
-        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-          itemId,
-          stepKey: 'missingSpecRaw',
-          completed: false
-        });
-        return null;
+      const normalizedInput = priceInput.replace(',', '.').trim();
+      if (normalizedInput.length > 0) {
+        const parsedPrice = Number(normalizedInput);
+        if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
+          reviewPrice = parsedPrice;
+        }
       }
-      missingSpecRaw = mergeSpecFieldSelection(selection.selectedFields, selection.additionalInput);
       logger.info?.('ItemDetail: Agentic review checklist step completed', {
         itemId,
-        stepKey: 'missingSpecRaw',
+        stepKey: 'review_price',
         completed: true,
-        missingSpecCount: parseReviewSpecTokenList(missingSpecRaw).length
+        reviewPrice
       });
-    }
-
-    const notes = await promptAgenticReviewNote();
-    if (notes === null) {
+    } catch (error) {
+      logError('ItemDetail: Failed to capture review price', error, { itemId });
       return null;
+    }
+
+    const reviewPositiveSoFar = descriptionMatches
+      && shortTextMatches
+      && dimensionsPlausible
+      && !hasMissingSpecs
+      && !hasUnnecessarySpecs;
+
+    let shopArticle: boolean | null = null;
+    if (reviewPositiveSoFar) {
+      try {
+        shopArticle = await dialogService.confirm({
+          title: 'Schritt 6 · Shop',
+          message: 'Artikel in den Shop stellen?',
+          confirmLabel: 'Ja',
+          cancelLabel: 'Nein'
+        });
+        logger.info?.('ItemDetail: Agentic review checklist step completed', {
+          itemId,
+          stepKey: 'shop_article',
+          completed: true,
+          shopArticle
+        });
+      } catch (error) {
+        logError('ItemDetail: Failed to capture shop article decision', error, { itemId });
+        return null;
+      }
+    }
+
+    let notes = '';
+    if (!reviewPositiveSoFar) {
+      const noteValue = await promptAgenticReviewNote();
+      if (noteValue === null) {
+        return null;
+      }
+      notes = noteValue;
     }
 
     const mappedInput = mapReviewAnswersToInput(
@@ -2379,6 +2390,8 @@ export default function ItemDetail({ itemId }: Props) {
         missingSpecRaw,
         unneededSpecRaw,
         notes,
+        reviewPrice,
+        shopArticle,
         reviewedBy: null
       }
     );
@@ -2404,7 +2417,9 @@ export default function ItemDetail({ itemId }: Props) {
       ].filter(Boolean).length,
       missingSpecCount: mappedInput.missing_spec.length,
       unneededSpecCount: mappedInput.unneeded_spec.length,
-      hasNote: Boolean(mappedInput.notes)
+      hasNote: Boolean(mappedInput.notes),
+      reviewPrice: mappedInput.review_price,
+      shopArticle: mappedInput.shop_article
     });
 
     return mappedInput;

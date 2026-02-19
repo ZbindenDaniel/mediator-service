@@ -15,6 +15,7 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 // TODO(agentic-review-history-source): Add explicit source column if review history needs first-class path attribution.
 // TODO(agentic-review-noop): Consider storing an explicit review-update reason when state remains unchanged.
 // TODO(agentic-review-decision-threshold): Revisit implicit reject/approve checklist thresholding if operators request weighted scoring.
+// TODO(agentic-review-manual-updates): Revisit whether manual review should persist shop/price updates when decision is rejected.
 export function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
@@ -188,6 +189,69 @@ export function pruneUnneededSpecsAfterReview(
 }
 
 
+export function applyManualReviewReferenceUpdates(
+  artikelNummer: string,
+  reviewMetadata: { review_price: number | null; shop_article: boolean | null },
+  ctx: {
+    getItemReference: { get: (id: string) => ItemRef | undefined };
+    persistItemReference?: (ref: ItemRef) => void;
+  },
+  logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
+): void {
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  const shouldSetPrice = typeof reviewMetadata.review_price === 'number' && Number.isFinite(reviewMetadata.review_price);
+  const shouldSetShop = typeof reviewMetadata.shop_article === 'boolean';
+
+  if (!trimmedArtikelNummer || (!shouldSetPrice && !shouldSetShop)) {
+    return;
+  }
+
+  let reference: ItemRef | undefined;
+  try {
+    reference = ctx.getItemReference.get(trimmedArtikelNummer);
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to load reference for manual review updates', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+    return;
+  }
+
+  if (!reference) {
+    logger.warn?.('[agentic-review] Artikelnummer reference not found for manual review updates', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  if (typeof ctx.persistItemReference !== 'function') {
+    logger.error?.('[agentic-review] Persistence helper unavailable; cannot apply manual review updates', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  try {
+    const nextReference: ItemRef = {
+      ...reference,
+      ...(shouldSetPrice ? { Verkaufspreis: reviewMetadata.review_price } : {}),
+      ...(shouldSetShop ? { Shopartikel: reviewMetadata.shop_article ? 1 : 0 } : {})
+    };
+    ctx.persistItemReference(nextReference);
+    logger.info?.('[agentic-review] Applied manual review reference updates', {
+      artikelNummer: trimmedArtikelNummer,
+      priceUpdated: shouldSetPrice,
+      shopUpdated: shouldSetShop
+    });
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to persist manual review reference updates', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+  }
+}
+
+
 
 type NormalizedReviewMetadata = {
   information_present: boolean | null;
@@ -197,6 +261,8 @@ type NormalizedReviewMetadata = {
   wrong_information: boolean | null;
   wrong_physical_dimensions: boolean | null;
   notes: string | null;
+  review_price: number | null;
+  shop_article: boolean | null;
   reviewedBy: string | null;
 };
 
@@ -252,6 +318,9 @@ function normalizeSpecList(value: unknown): string[] {
 function normalizeReviewMetadataPayload(data: Record<string, unknown>): NormalizedReviewMetadata {
   const notesRaw = typeof data.notes === 'string' ? data.notes.trim() : '';
   const reviewedByRaw = typeof data.reviewedBy === 'string' ? data.reviewedBy.trim() : '';
+  const reviewPrice = typeof data.review_price === 'number' && Number.isFinite(data.review_price)
+    ? data.review_price
+    : null;
   return {
     information_present: normalizeNullableBoolean(data.information_present),
     missing_spec: normalizeSpecList(data.missing_spec),
@@ -260,6 +329,8 @@ function normalizeReviewMetadataPayload(data: Record<string, unknown>): Normaliz
     wrong_information: normalizeNullableBoolean(data.wrong_information),
     wrong_physical_dimensions: normalizeNullableBoolean(data.wrong_physical_dimensions),
     notes: notesRaw || null,
+    review_price: reviewPrice,
+    shop_article: normalizeNullableBoolean(data.shop_article),
     reviewedBy: reviewedByRaw || null
   };
 }
@@ -696,6 +767,12 @@ const action = defineHttpAction({
           decision,
           negativeSignalDetected: hasNegativeChecklistSignal
         });
+      }
+
+      try {
+        applyManualReviewReferenceUpdates(artikelNummer, reviewMetadata, ctx, console);
+      } catch (err) {
+        console.error('Failed to apply manual review reference updates for Artikelnummer', err);
       }
 
       if (decision === 'approved') {
