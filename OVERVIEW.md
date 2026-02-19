@@ -20,6 +20,7 @@
 13. ✅ Make `agentic_runs.csv` imports deterministic by skipping known `item_refs` FK-mismatch rows with structured skip telemetry (`rowNumber`, `artikelNummer`, reason) and explicit skipped-count reporting.
 14. ✅ Add explicit ERP media mirror destination config (`ERP_MEDIA_MIRROR_DIR`) with path validation + runtime logging, and consume it in sync orchestration instead of hardcoded mirror destination assumptions.
 15. ✅ Refresh `.env.example` coverage for backend/agentic ERP config keys (including mirror destination + browser-parity import toggles) to reduce hidden runtime defaults.
+14. ✅ Preserve duplicate-import reliability by deferring `agentic_runs.csv` in duplicate item uploads (instead of immediate ingestion), with structured action telemetry and additive response flags for operator visibility.
 
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
