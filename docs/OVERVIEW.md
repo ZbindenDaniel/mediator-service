@@ -114,6 +114,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 - **Extraction spec telemetry**: added Langtext/Spezifikationen key-count logging to detect placeholder-only payload regressions earlier.
 - **Box list filter/sort parity**: aligned box list search with Box-ID/location terms, added date-based sorting options, and surfaced per-box item-count plus total-weight aggregates for faster inventory triage.
 - **ERP import completion verification loop**: kept test/import flow unchanged while adding a short bounded continuation check so completion is only reported after processing leaves `Import Status`, with structured per-attempt telemetry and explicit completion/timed-out outcome fields.
+- **ERP sync script-first simplification**: completed ERP sync path now stages automatic-import export data and executes `docs/erp-sync.sh` directly, with no continuation polling path kept in the API action.
 
 Detailed progress notes have been moved to `docs/RECENT_HIGHLIGHTS.md`.
 
