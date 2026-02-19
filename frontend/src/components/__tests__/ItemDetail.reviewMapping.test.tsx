@@ -15,7 +15,9 @@ describe('mapReviewAnswersToInput', () => {
       {
         missingSpecRaw: ' Spannung, material,Spannung , ',
         unneededSpecRaw: 'intern, Intern,  ',
-        notes: '  please review  '
+        notes: '  please review  ',
+        reviewPrice: 12.5,
+        shopArticle: true
       }
     );
 
@@ -27,6 +29,8 @@ describe('mapReviewAnswersToInput', () => {
       missing_spec: ['Spannung', 'material'],
       unneeded_spec: ['intern'],
       notes: 'please review',
+      review_price: 12.5,
+      shop_article: true,
       reviewedBy: null
     });
   });
@@ -45,7 +49,9 @@ describe('mapReviewAnswersToInput', () => {
       {
         missingSpecRaw: mergeSpecFieldSelection(['Spannung', 'Leistung'], ' Schutzklasse , '),
         unneededSpecRaw: mergeSpecFieldSelection(['Marketing'], ' intern ,'),
-        notes: ''
+        notes: '',
+        reviewPrice: null,
+        shopArticle: null
       }
     );
 
@@ -65,7 +71,9 @@ describe('mapReviewAnswersToInput', () => {
       {
         missingSpecRaw: '',
         unneededSpecRaw: '',
-        notes: '  '
+        notes: '  ',
+        reviewPrice: null,
+        shopArticle: null
       }
     );
 
@@ -77,6 +85,8 @@ describe('mapReviewAnswersToInput', () => {
       missing_spec: [],
       unneeded_spec: [],
       notes: null,
+      review_price: null,
+      shop_article: null,
       reviewedBy: null
     });
   });

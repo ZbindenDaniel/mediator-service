@@ -235,6 +235,50 @@ describe('agentic-status lifecycle transitions', () => {
       })
     );
   });
+
+
+  it('applies manual review price and shop article updates when provided', async () => {
+    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
+    const getAgenticRun = {
+      get: jest
+        .fn()
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' })
+    };
+    const persistItemReference = jest.fn();
+    const ctx = {
+      db: {},
+      getAgenticRun,
+      getItemReference: { get: jest.fn(() => ({ Artikel_Nummer: 'A-100', Verkaufspreis: null, Shopartikel: 0 })) },
+      persistItemReference,
+      upsertAgenticRun: { run: jest.fn() },
+      updateAgenticRunStatus: { run: jest.fn() },
+      updateAgenticReview,
+      logEvent: jest.fn(),
+      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+    };
+
+    const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
+      actor: 'qa-user',
+      action: 'review',
+      review_price: 123.45,
+      shop_article: true,
+      notes: 'checklist complete'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx as any);
+
+    expect(getStatus()).toBe(200);
+    expect(persistItemReference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'A-100',
+        Verkaufspreis: 123.45,
+        Shopartikel: 1
+      })
+    );
+  });
+
   it('does not fail review when history insert throws', async () => {
     const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
     const getAgenticRun = { get: jest.fn(() => baseRun) };

@@ -25,6 +25,8 @@
 15. ✅ Preserve incoming `BoxID` values during CSV ingestion (no remint), add strict shelf/non-shelf format validation with structured skip logging, and keep box/item persistence flow unchanged for valid rows.
 
 16. ✅ Refactor `backend/actions/csv-import.ts` archive stage flow to enforce deterministic execution order (`ingestBoxesCsv` -> `ingestCsvFile` -> `ingestAgenticRunsCsv` -> `ingestEventsCsv`) across duplicate/non-item branches with stage-level try/catch telemetry and partial-failure response summaries.
+17. ✅ Streamline manual review checklist flow by replacing spec pre-check yes/no prompts with direct selection modals, adding explicit price confirmation input, and adding conditional shop/notiz steps based on overall review outcome.
+18. ✅ Consolidate manual specification review into a single modal containing both unnecessary and missing field sections to reduce reviewer clicks while preserving existing payload mapping.
 
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
