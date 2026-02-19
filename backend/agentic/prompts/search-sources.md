@@ -16,6 +16,7 @@
 - https://www.bhphotovideo.com
 
 ## Price Comparison / Aggregators (spec-rich, older products)
+- https://www.budgetcomputer.ch/
 - https://www.toppreise.ch
 - https://www.geizhals.de
 - https://www.geizhals.eu
@@ -47,7 +48,6 @@
 - https://www.alternate.de
 
 ## Printers & Peripherals
-- https://www.digitec.ch
 - https://www.galaxus.ch
 - https://www.brack.ch
 - https://www.conrad.ch
