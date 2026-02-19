@@ -395,14 +395,20 @@ const action = defineHttpAction({
           }
         } else {
           const tmpPath = path.join(ctx.INBOX_DIR, `${Date.now()}_${normalizedCsvName}`);
-          if (zeroStockRequested && typeof ctx?.registerCsvIngestionOptions === 'function') {
+          if (typeof ctx?.registerCsvIngestionOptions === 'function') {
             try {
-              ctx.registerCsvIngestionOptions(tmpPath, { zeroStock: true });
-              console.info('[csv-import] Zero stock override requested for uploaded CSV', {
+              ctx.registerCsvIngestionOptions(tmpPath, { zeroStock: zeroStockRequested, strictImport: true });
+              if (zeroStockRequested) {
+                console.info('[csv-import] Zero stock override requested for uploaded CSV', {
+                  filename: normalizedCsvName,
+                });
+              }
+              console.info('[csv-import] Registered strict import mode for archive CSV ingestion', {
                 filename: normalizedCsvName,
+                strictImport: true,
               });
             } catch (registrationError) {
-              console.error('[csv-import] Failed to register zero stock ingestion option', registrationError);
+              console.error('[csv-import] Failed to register CSV ingestion options', registrationError);
             }
           }
 
@@ -430,11 +436,11 @@ const action = defineHttpAction({
           } catch (e) {
             stageOutcomes.ingestCsvFile.error = e instanceof Error ? e.message : 'Unknown CSV queueing error';
             console.error('CSV write failed', e);
-            if (zeroStockRequested && typeof ctx?.clearCsvIngestionOptions === 'function') {
+            if (typeof ctx?.clearCsvIngestionOptions === 'function') {
               try {
                 ctx.clearCsvIngestionOptions(tmpPath);
               } catch (cleanupError) {
-                console.error('[csv-import] Failed to clear zero stock ingestion option after write error', cleanupError);
+                console.error('[csv-import] Failed to clear CSV ingestion options after write error', cleanupError);
               }
             }
           }
