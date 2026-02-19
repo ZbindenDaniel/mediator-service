@@ -224,9 +224,10 @@ async function handleCsv(absPath: string): Promise<void> {
       });
       try {
         const deferredBuffer = fs.readFileSync(deferredAgenticRunsPath);
-        const { count: agenticCount } = await ingestAgenticRunsCsv(deferredBuffer);
+        const { count: agenticCount, skippedMissingReferences } = await ingestAgenticRunsCsv(deferredBuffer);
         console.info('[watcher] Completed deferred agentic_runs.csv ingestion', {
           rowsProcessed: agenticCount,
+          skippedMissingReferences,
           file: deferredAgenticRunsPath,
         });
       } catch (agenticError) {

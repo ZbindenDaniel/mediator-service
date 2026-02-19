@@ -1988,6 +1988,33 @@ export function getAgenticRequestLog(uuid: string): AgenticRequestLog | null {
   }
 }
 
+const hasItemReferenceByArtikelNummerStatement = db.prepare(`
+  SELECT 1 AS ExistsFlag
+  FROM item_refs
+  WHERE Artikel_Nummer = ?
+  LIMIT 1
+`);
+
+export function hasItemReferenceByArtikelNummer(artikelNummer: string): boolean {
+  const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalizedArtikelNummer) {
+    return false;
+  }
+
+  try {
+    const row = hasItemReferenceByArtikelNummerStatement.get(normalizedArtikelNummer) as
+      | { ExistsFlag?: number }
+      | undefined;
+    return Boolean(row?.ExistsFlag);
+  } catch (err) {
+    console.error('[db] Failed to check item_refs parent for Artikel_Nummer', {
+      artikelNummer: normalizedArtikelNummer,
+      error: err,
+    });
+    throw err;
+  }
+}
+
 export const upsertAgenticRun = db.prepare(
   `
     INSERT INTO agentic_runs (
