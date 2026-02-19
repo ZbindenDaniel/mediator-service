@@ -302,3 +302,76 @@ describe('export-items Langtext quality enrichment', () => {
     expect(row.Langtext).toEqual({ Specs: 'Detail block' });
   });
 });
+
+describe('export-items import contract header regimes', () => {
+  const baseRow = {
+    Artikel_Nummer: 'A-1000',
+    Artikeltyp: 'Laptop',
+    Datum_erfasst: '2024-01-01',
+    Grafikname: 'primary.png',
+    Artikelbeschreibung: 'Test item',
+    Kurzbeschreibung: 'Short',
+    Langtext: 'Detail',
+    Hersteller: 'Example Inc',
+    Länge_mm: 100,
+    Breite_mm: 50,
+    Höhe_mm: 25,
+    Gewicht_kg: 2,
+    Verkaufspreis: 199.99,
+    Auf_Lager: 4,
+    Veröffentlicht_Status: true,
+    Shopartikel: 'shop-article',
+    Einheit: 'Stk',
+    Hauptkategorien_A: 10,
+    Unterkategorien_A: 101,
+    Hauptkategorien_B: 50,
+    Unterkategorien_B: 503,
+    ItemUUID: 'item-uuid-1',
+    BoxID: 'box-123',
+    LocationId: 'loc-9',
+    Label: 'box label',
+    UpdatedAt: '2024-02-02T00:00:00.000Z'
+  };
+
+  test('uses key-based automatic_import labels/order while keeping manual_import headers unchanged', () => {
+    const manual = serializeItemsToCsv([baseRow], undefined, { exportMode: 'backup' });
+    const automatic = serializeItemsToCsv([baseRow], undefined, { exportMode: 'erp' });
+
+    const [manualHeader] = manual.csv.split('\n');
+    const [automaticHeader] = automatic.csv.split('\n');
+    const manualHeaders = manualHeader.split(',');
+    const automaticHeaders = automaticHeader.split(',');
+
+    expect(manualHeaders.slice(0, 5)).toEqual([
+      'Artikel-Nummer',
+      'Artikeltyp',
+      'CreatedAt',
+      'Grafikname(n)',
+      'Artikelbeschreibung'
+    ]);
+    expect(automaticHeaders.slice(0, 6)).toEqual([
+      'partnumber',
+      'type',
+      'CreatedAt',
+      'image',
+      'description',
+      'Suchbegriff'
+    ]);
+    expect(automaticHeaders).not.toContain('itemUUID');
+  });
+
+  test('logs selected contract and preserves header/field count parity', () => {
+    const logSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { csv } = serializeItemsToCsv([baseRow], undefined, { exportMode: 'erp' });
+    const [header, row] = csv.split('\n');
+
+    expect(header.split(',')).toHaveLength(row.split(',').length);
+    expect(logSpy).toHaveBeenCalledWith(
+      '[export-items] CSV serialization header contract selected.',
+      expect.objectContaining({ contract: 'automatic_import', sampleHeaders: ['partnumber', 'type', 'CreatedAt'] })
+    );
+
+    logSpy.mockRestore();
+  });
+});

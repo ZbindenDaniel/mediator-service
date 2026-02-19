@@ -90,6 +90,40 @@ const columns = columnDescriptors.map((descriptor) => descriptor.key) as readonl
 const columnHeaderMap = new Map<ExportColumn, string>(
   columnDescriptors.map((descriptor) => [descriptor.key, descriptor.header])
 );
+type HeaderContractColumn = { key: ExportColumn; header: string };
+
+// TODO(export-items-header-contract): Keep automatic import header contract aligned with validated ERP captures.
+// TODO(export-items-header-contract): Confirm whether listprice should diverge from sellprice source when upstream adds a dedicated key.
+const automaticImportHeaderContract: readonly HeaderContractColumn[] = [
+  { key: 'partnumber', header: 'partnumber' },
+  { key: 'type_and_classific', header: 'type' },
+  { key: 'entrydate', header: 'CreatedAt' },
+  { key: 'image_names', header: 'image' },
+  { key: 'description', header: 'description' },
+  { key: 'suchbegriff', header: 'Suchbegriff' },
+  { key: 'notes', header: 'cvar_vm_product_s_desc' },
+  { key: 'longdescription', header: 'cvar_vm_product_desc' },
+  { key: 'manufacturer', header: 'cvar_vm_product_mf_name' },
+  { key: 'length_mm', header: 'cvar_vm_product_length' },
+  { key: 'width_mm', header: 'cvar_vm_product_width' },
+  { key: 'height_mm', header: 'cvar_vm_product_height' },
+  { key: 'weight_kg', header: 'weight' },
+  { key: 'sellprice', header: 'listprice' },
+  { key: 'sellprice', header: 'sellprice' },
+  { key: 'onhand', header: 'onhand' },
+  { key: 'published_status', header: 'cvar_published' },
+  { key: 'shoparticle', header: 'shop' },
+  { key: 'unit', header: 'unit' },
+  { key: 'ean', header: 'ean' },
+  { key: 'cvar_categories_A1', header: 'cvar_categories_A1' },
+  { key: 'cvar_categories_A2', header: 'cvar_categories_A2' },
+  { key: 'cvar_categories_B1', header: 'cvar_categories_B1' },
+  { key: 'cvar_categories_B2', header: 'cvar_categories_B2' },
+  { key: 'BoxID', header: 'BoxID' },
+  { key: 'LocationId', header: 'Location' },
+  { key: 'Label', header: 'Label' },
+  { key: 'UpdatedAt', header: 'UpdatedAt' }
+];
 
 const boxColumns = [
   'BoxID',
@@ -544,6 +578,28 @@ function resolveHeaderRegime(exportMode: ExportMode): HeaderRegime {
   return exportMode === 'erp' ? 'automatic_import' : 'manual_import';
 }
 
+function resolveColumnsForHeaderRegime(
+  exportColumns: readonly ExportColumn[],
+  headerRegime: HeaderRegime
+): readonly HeaderContractColumn[] {
+  if (headerRegime !== 'automatic_import') {
+    return exportColumns.map((column) => ({
+      key: column,
+      header: columnHeaderMap.get(column) ?? column
+    }));
+  }
+
+  const selected = automaticImportHeaderContract.filter((entry) => exportColumns.includes(entry.key));
+  const selectedKeys = new Set(selected.map((entry) => entry.key));
+  if (selectedKeys.size !== exportColumns.length) {
+    const remainder = exportColumns
+      .filter((column) => !selectedKeys.has(column))
+      .map((column) => ({ key: column, header: column }));
+    return [...selected, ...remainder];
+  }
+  return selected;
+}
+
 function toCsvValue(val: any): string {
   if (val === null || val === undefined) return '';
   const s = String(val);
@@ -912,21 +968,52 @@ export function serializeItemsToCsv(
   exportColumns: readonly ExportColumn[] = columns,
   options: { exportMode?: ExportMode; logger?: Pick<Console, 'error' | 'info' | 'warn'> } = {}
 ): { csv: string; columns: readonly ExportColumn[] } {
-  const header = exportColumns.map((column) => columnHeaderMap.get(column) ?? column).join(',');
   const exportMode = options.exportMode ?? 'backup';
-  const langtextFormat = resolveLangtextExportFormat(exportMode, options.logger);
-  const lines = rows.map((row: any) =>
-    exportColumns
-      .map((column: ExportColumn) => {
-        const resolvedValue = resolveExportValue(column, row, langtextFormat);
+  const logger = options.logger ?? console;
+  const headerRegime = resolveHeaderRegime(exportMode);
+  const regimeColumns = exportMode === 'erp'
+    ? exportColumns.filter((column) => column !== 'itemUUID')
+    : exportColumns;
+  const headerContract = resolveColumnsForHeaderRegime(regimeColumns, headerRegime);
+
+  try {
+    const headers = headerContract.map((entry) => entry.header);
+    logger.info?.('[export-items] CSV serialization header contract selected.', {
+      contract: headerRegime,
+      sampleHeaders: headers.slice(0, 3)
+    });
+
+    const langtextFormat = resolveLangtextExportFormat(exportMode, logger);
+    const lines = rows.map((row: any, rowIndex: number) => {
+      const fields = headerContract.map((entry) => {
+        const resolvedValue = resolveExportValue(entry.key, row, langtextFormat);
         return toCsvValue(resolvedValue);
-      })
-      .join(',')
-  );
-  return {
-    csv: [header, ...lines].join('\n'),
-    columns: exportColumns
-  };
+      });
+
+      if (headers.length !== fields.length) {
+        logger.error?.('[export-items] Header/data field count mismatch during CSV serialization.', {
+          contract: headerRegime,
+          headerCount: headers.length,
+          fieldCount: fields.length,
+          rowIndex
+        });
+        throw new Error('CSV header/data column count mismatch');
+      }
+
+      return fields.join(',');
+    });
+
+    return {
+      csv: [headers.join(','), ...lines].join('\n'),
+      columns: headerContract.map((entry) => entry.key)
+    };
+  } catch (error) {
+    logger.error?.('[export-items] Failed to serialize item rows to CSV.', {
+      contract: headerRegime,
+      error
+    });
+    throw error;
+  }
 }
 
 interface ZipArchiveOptions {
