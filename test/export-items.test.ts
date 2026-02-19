@@ -9,6 +9,7 @@ import { MEDIA_DIR } from '../backend/lib/media';
 // TODO(export-items-mode): Add coverage for default mode behavior once export mode negotiation evolves.
 const TEST_DB_FILE = path.join(__dirname, 'export-items.test.sqlite');
 const ROUNDTRIP_CSV_FILE = path.join(__dirname, 'export-items-roundtrip.csv');
+const ERP_IMPORT_FIXTURE = path.join(__dirname, '..', 'data', 'archive', 'test_import.csv');
 const ORIGINAL_DB_PATH = process.env.DB_PATH;
 const EXPECTED_ITEMS_HEADER = [
   'Artikel-Nummer',
@@ -39,6 +40,14 @@ const EXPECTED_ITEMS_HEADER = [
   'Label',
   'UpdatedAt'
 ];
+
+// TODO(export-items-regimes): Keep fixture-backed ERP header assertion aligned with data/archive/test_import.csv updates.
+function readFixtureHeaderRow(filePath: string): string[] {
+  const [headerLine = ''] = fs.readFileSync(filePath, 'utf8').split(/\r?\n/, 1);
+  return headerLine.split(',').map((value) => value.trim());
+}
+
+const EXPECTED_ERP_HEADER = readFixtureHeaderRow(ERP_IMPORT_FIXTURE);
 
 function removeTestDatabase(): void {
   for (const suffix of ['', '-wal', '-shm']) {
@@ -170,7 +179,7 @@ describe('export-items action', () => {
     }
   });
 
-  test('appends metadata columns so importer round-trips retain placement context', async () => {
+  test('mode=manual_import returns the manual header baseline and metadata columns', async () => {
     const now = new Date('2024-07-01T10:00:00.000Z');
     const placement = {
       BoxID: 'B-EXPORT-001',
@@ -204,7 +213,7 @@ describe('export-items action', () => {
 
     const response = await runAction(
       exportItems,
-      mockRequest('/api/export/items?actor=tester'),
+      mockRequest('/api/export/items?actor=tester&mode=manual_import'),
       { db, listItemsForExport, logEvent }
     );
 
@@ -230,7 +239,7 @@ describe('export-items action', () => {
     expect(rowColumns[headerIndex.UpdatedAt]).toBe(now.toISOString());
   });
 
-  test('mode=erp groups rows and omits ItemUUID column', async () => {
+  test('mode=automatic_import uses ERP baseline header and grouped payload semantics', async () => {
     const now = new Date('2024-07-02T10:00:00.000Z');
     const placement = {
       BoxID: 'B-ERP-001',
@@ -277,7 +286,7 @@ describe('export-items action', () => {
 
     const response = await runAction(
       exportItems,
-      mockRequest('/api/export/items?actor=tester&mode=erp'),
+      mockRequest('/api/export/items?actor=tester&mode=automatic_import'),
       { db, listItemsForExport, logEvent }
     );
 
@@ -289,22 +298,39 @@ describe('export-items action', () => {
     expect(parsedRows.length).toBe(2);
 
     const headerColumns = parsedRows[0].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
+    expect(headerColumns).toEqual(EXPECTED_ERP_HEADER);
     expect(headerColumns).not.toContain('ItemUUID');
 
     const dataColumns = parsedRows[1].map((value: unknown) => (value === null || value === undefined ? '' : String(value)));
-    const onHandIndex = headerColumns.indexOf('Auf Lager');
+    const onHandIndex = headerColumns.indexOf('onhand');
     expect(onHandIndex).toBeGreaterThan(-1);
     expect(Number(dataColumns[onHandIndex])).toBe(3);
 
-    const kurzbeschreibungIndex = headerColumns.indexOf('Kurzbeschreibung');
+    const kurzbeschreibungIndex = headerColumns.indexOf('cvar_vm_product_s_desc');
     expect(kurzbeschreibungIndex).toBeGreaterThan(-1);
     expect(dataColumns[kurzbeschreibungIndex]).toBe('<p>ERP short text</p>');
 
-    const langtextIndex = headerColumns.indexOf('Langtext');
+    const langtextIndex = headerColumns.indexOf('cvar_vm_product_desc');
     expect(langtextIndex).toBeGreaterThan(-1);
     expect(dataColumns[langtextIndex]).toBe(
       '<table><tbody><tr><th scope="row">Specs</th><td>Fanless</td></tr><tr><th scope="row">Ports</th><td>USB-C<br />HDMI</td></tr></tbody></table>'
     );
+  });
+
+
+  test('returns a clear error when mode is not a supported regime alias', async () => {
+    const response = await runAction(
+      exportItems,
+      mockRequest('/api/export/items?actor=tester&mode=invalid_regime'),
+      { db, listItemsForExport, logEvent }
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers['Content-Type']).toContain('application/json');
+    const payload = JSON.parse((response.body as Buffer).toString('utf8'));
+    expect(payload).toEqual({
+      error: 'mode must be one of backup, erp, manual_import, automatic_import'
+    });
   });
 
   // TODO(agent): Broaden round-trip assertions to cover Langtext payload objects once exporters emit structured content.
