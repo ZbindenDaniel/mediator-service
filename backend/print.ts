@@ -33,6 +33,8 @@ export interface PrintFileResult {
   artifactPath?: string;
 }
 
+// TODO(agent): Keep print retry behaviour minimal and shared across lp/lpstat operations.
+
 export type PrintLabelType = 'box' | 'item' | 'shelf' | 'smallitem';
 export type PrinterQueueSource = 'label' | 'default' | 'missing';
 
@@ -92,6 +94,221 @@ function validateFilePath(filePath: string): { ok: boolean; reason?: string } {
   }
 
   return { ok: true };
+}
+
+function parsePositiveIntEnv(raw: string | undefined, fallback: number, label: string): number {
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  if (raw && raw.trim()) {
+    console.warn('[print] Invalid retry env value; using fallback', { label, raw, fallback });
+  }
+
+  return fallback;
+}
+
+function resolveRetryConfig(): { attempts: number; baseDelayMs: number } {
+  return {
+    attempts: parsePositiveIntEnv(process.env.PRINT_RETRY_ATTEMPTS, 3, 'PRINT_RETRY_ATTEMPTS'),
+    baseDelayMs: parsePositiveIntEnv(process.env.PRINT_RETRY_BASE_MS, 200, 'PRINT_RETRY_BASE_MS')
+  };
+}
+
+function computeRetryDelayMs(baseDelayMs: number, attempt: number): number {
+  const exponentialDelay = baseDelayMs * Math.pow(2, Math.max(0, attempt - 1));
+  const jitterMs = Math.floor(Math.random() * Math.max(1, Math.floor(baseDelayMs / 2)));
+  return exponentialDelay + jitterMs;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientPrintFailure(reason: string | undefined): boolean {
+  if (!reason) {
+    return false;
+  }
+
+  const normalized = reason.toLowerCase();
+  return (
+    normalized.includes('connection refused') ||
+    normalized.includes('timed out') ||
+    normalized.includes('timeout') ||
+    normalized.includes('network is unreachable') ||
+    normalized.includes('cups unavailable') ||
+    normalized.includes('cups is unavailable') ||
+    normalized.includes('econnrefused') ||
+    normalized.includes('etimedout') ||
+    normalized.includes('enetunreach') ||
+    normalized.includes('ehostunreach') ||
+    normalized.includes('eai_again') ||
+    normalized === 'print_timeout' ||
+    normalized === 'status_timeout'
+  );
+}
+
+async function runWithRetry<T>(options: {
+  queue: string;
+  printerHost: string;
+  operation: 'printFile' | 'testPrinterConnection';
+  attemptOnce: () => Promise<T>;
+  isSuccess: (result: T) => boolean;
+  getReason: (result: T) => string | undefined;
+}): Promise<T> {
+  const { attempts: maxAttempts, baseDelayMs } = resolveRetryConfig();
+  const { queue, printerHost, operation, attemptOnce, isSuccess, getReason } = options;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = await attemptOnce();
+    if (isSuccess(result)) {
+      console.log('[print] Print operation completed', {
+        operation,
+        attempt,
+        maxAttempts,
+        queue,
+        printerHost,
+        outcome: 'success'
+      });
+      return result;
+    }
+
+    const reason = getReason(result) || 'unknown_error';
+    const transient = isTransientPrintFailure(reason);
+    console.warn('[print] Print operation attempt failed', {
+      operation,
+      attempt,
+      maxAttempts,
+      queue,
+      printerHost,
+      reason,
+      transient
+    });
+
+    if (!transient || attempt >= maxAttempts) {
+      console.error('[print] Print operation failed', {
+        operation,
+        attempt,
+        maxAttempts,
+        queue,
+        printerHost,
+        reason,
+        outcome: 'failed'
+      });
+      return result;
+    }
+
+    const delayMs = computeRetryDelayMs(baseDelayMs, attempt);
+    console.log('[print] Retrying transient print operation failure', {
+      operation,
+      attempt,
+      maxAttempts,
+      queue,
+      printerHost,
+      reason,
+      delayMs
+    });
+    await wait(delayMs);
+  }
+
+  return await attemptOnce();
+}
+
+async function runPrintFileAttempt(options: {
+  args: string[];
+  command: string;
+  timeoutMs: number;
+  artifactPath: string;
+}): Promise<PrintFileResult> {
+  const { args, command, timeoutMs, artifactPath } = options;
+
+  return await new Promise<PrintFileResult>((resolve) => {
+    try {
+      const child = spawn(command, args, {
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      const timer = setTimeout(() => {
+        console.error('[print] Print command timed out; terminating process', {
+          command,
+          args,
+          timeoutMs
+        });
+        try {
+          child.kill('SIGKILL');
+        } catch (killError) {
+          console.error('[print] Failed to terminate timed-out print process', killError);
+        }
+        if (!settled) {
+          settled = true;
+          resolve({ sent: false, reason: 'print_timeout' });
+        }
+      }, timeoutMs);
+
+      const finish = (result: PrintFileResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.once('error', (err) => {
+        console.error('[print] Print process failed to start', {
+          command,
+          args,
+          error: err
+        });
+        finish({ sent: false, reason: err.message, artifactPath });
+      });
+
+      child.once('close', (code, signal) => {
+        if (code === 0) {
+          console.log('[print] Print command completed successfully', {
+            command,
+            args,
+            stdout: stdout.trim()
+          });
+          finish({ sent: true, code, signal: signal ?? null, artifactPath });
+          return;
+        }
+
+        console.error('[print] Print command exited with failure', {
+          command,
+          args,
+          code,
+          signal,
+          stdout: stdout.trim(),
+          stderr: stderr.trim()
+        });
+        finish({
+          sent: false,
+          reason: stderr.trim() || stdout.trim() || `exit_code_${code ?? 'unknown'}`,
+          code,
+          signal: signal ?? null,
+          artifactPath
+        });
+      });
+    } catch (err) {
+      console.error('[print] Unexpected error while spawning print command', {
+        command,
+        args,
+        error: err
+      });
+      resolve({ sent: false, reason: (err as Error).message, artifactPath });
+    }
+  });
 }
 
 export async function printFile(options: PrintFileOptions): Promise<PrintFileResult> {
@@ -163,107 +380,31 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
     timeoutMs: resolvedTimeout
   });
 
-  return await new Promise<PrintFileResult>((resolve) => {
-    try {
-      const child = spawn(LP_COMMAND, args, {
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-
-      let stdout = '';
-      let stderr = '';
-      let settled = false;
-      const timer = setTimeout(() => {
-        console.error('[print] Print command timed out; terminating process', {
-          command: LP_COMMAND,
-          args,
-          timeoutMs: resolvedTimeout
-        });
-        try {
-          child.kill('SIGKILL');
-        } catch (killError) {
-          console.error('[print] Failed to terminate timed-out print process', killError);
-        }
-        if (!settled) {
-          settled = true;
-          resolve({ sent: false, reason: 'print_timeout' });
-        }
-      }, resolvedTimeout);
-
-      const finish = (result: PrintFileResult) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(result);
-      };
-
-      child.stdout?.on('data', (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-
-      child.stderr?.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-
-      child.once('error', (err) => {
-        console.error('[print] Print process failed to start', {
-          command: LP_COMMAND,
-          args,
-          error: err
-        });
-        finish({ sent: false, reason: err.message, artifactPath: absolute });
-      });
-
-      child.once('close', (code, signal) => {
-        if (code === 0) {
-          console.log('[print] Print command completed successfully', {
-            command: LP_COMMAND,
-            args,
-            stdout: stdout.trim()
-          });
-          finish({ sent: true, code, signal: signal ?? null, artifactPath: absolute });
-          return;
-        }
-
-        console.error('[print] Print command exited with failure', {
-          command: LP_COMMAND,
-          args,
-          code,
-          signal,
-          stdout: stdout.trim(),
-          stderr: stderr.trim()
-        });
-        finish({
-          sent: false,
-          reason: stderr.trim() || stdout.trim() || `exit_code_${code ?? 'unknown'}`,
-          code,
-          signal: signal ?? null,
-          artifactPath: absolute
-        });
-      });
-    } catch (err) {
-      console.error('[print] Unexpected error while spawning print command', {
-        command: LP_COMMAND,
+  return await runWithRetry<PrintFileResult>({
+    operation: 'printFile',
+    queue: effectiveQueue,
+    printerHost,
+    attemptOnce: async () =>
+      await runPrintFileAttempt({
         args,
-        error: err
-      });
-      resolve({ sent: false, reason: (err as Error).message, artifactPath: absolute });
-    }
+        command: LP_COMMAND,
+        timeoutMs: resolvedTimeout,
+        artifactPath: absolute
+      }),
+    isSuccess: (result) => result.sent,
+    getReason: (result) => result.reason
   });
 }
 
-export function testPrinterConnection(
-  queue: string = PRINTER_QUEUE,
-  timeoutMs: number = PRINT_TIMEOUT_MS
-): Promise<{ ok: boolean; reason?: string }> {
-  const normalizedQueue = (queue || '').trim();
-  if (!normalizedQueue) {
-    console.warn('[print] testPrinterConnection invoked without a configured queue');
-    return Promise.resolve({ ok: false, reason: 'printer_queue_not_configured' });
-  }
+async function runPrinterConnectionAttempt(options: {
+  queue: string;
+  timeoutMs: number;
+}): Promise<{ ok: boolean; reason?: string }> {
+  const { queue, timeoutMs } = options;
 
-  return new Promise((resolve) => {
+  return await new Promise((resolve) => {
     try {
-      const child = spawn(LPSTAT_COMMAND, ['-p', normalizedQueue], {
+      const child = spawn(LPSTAT_COMMAND, ['-p', queue], {
         stdio: ['ignore', 'pipe', 'pipe']
       });
       let stdout = '';
@@ -273,7 +414,7 @@ export function testPrinterConnection(
       const timer = setTimeout(() => {
         console.error('[print] lpstat command timed out', {
           command: LPSTAT_COMMAND,
-          queue: normalizedQueue,
+          queue,
           timeoutMs
         });
         try {
@@ -305,7 +446,7 @@ export function testPrinterConnection(
       child.once('error', (err) => {
         console.error('[print] lpstat failed to start', {
           command: LPSTAT_COMMAND,
-          queue: normalizedQueue,
+          queue,
           error: err
         });
         finish({ ok: false, reason: err.message });
@@ -321,7 +462,7 @@ export function testPrinterConnection(
 
         console.error('[print] lpstat command failed', {
           command: LPSTAT_COMMAND,
-          queue: normalizedQueue,
+          queue,
           code,
           stderr: stderr.trim()
         });
@@ -331,6 +472,27 @@ export function testPrinterConnection(
       console.error('[print] Unexpected error during printer status probe', err);
       resolve({ ok: false, reason: (err as Error).message });
     }
+  });
+}
+
+export async function testPrinterConnection(
+  queue: string = PRINTER_QUEUE,
+  timeoutMs: number = PRINT_TIMEOUT_MS
+): Promise<{ ok: boolean; reason?: string }> {
+  const normalizedQueue = (queue || '').trim();
+  if (!normalizedQueue) {
+    console.warn('[print] testPrinterConnection invoked without a configured queue');
+    return Promise.resolve({ ok: false, reason: 'printer_queue_not_configured' });
+  }
+
+  const printerHost = (PRINTER_SERVER || '').trim();
+  return await runWithRetry<{ ok: boolean; reason?: string }>({
+    operation: 'testPrinterConnection',
+    queue: normalizedQueue,
+    printerHost,
+    attemptOnce: async () => await runPrinterConnectionAttempt({ queue: normalizedQueue, timeoutMs }),
+    isSuccess: (result) => result.ok,
+    getReason: (result) => result.reason
   });
 }
 
