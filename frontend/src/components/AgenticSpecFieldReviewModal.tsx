@@ -58,6 +58,8 @@ export default function AgenticSpecFieldReviewModal({
 }: Props) {
   const [selectedFields, setSelectedFields] = useState<string[]>(defaultSelectedFields);
   const [additionalInput, setAdditionalInput] = useState<string>(defaultAdditionalInput);
+  const [secondarySelectedFields, setSecondarySelectedFields] = useState<string[]>(defaultSecondarySelectedFields);
+  const [secondaryAdditionalInput, setSecondaryAdditionalInput] = useState<string>(defaultSecondaryAdditionalInput);
   const selectedSet = useMemo(() => new Set(selectedFields), [selectedFields]);
   const secondarySelectedSet = useMemo(() => new Set(secondarySelectedFields), [secondarySelectedFields]);
 
