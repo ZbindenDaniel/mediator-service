@@ -1,3 +1,4 @@
+import { AgenticReviewInput } from 'frontend/src/lib/agenticReviewMapping';
 import {
   AGENTIC_REVIEW_PROMPT_SEQUENCE,
   buildAgenticReviewSubmissionPayload
@@ -18,7 +19,7 @@ describe('agentic review flow ordering and payload contract', () => {
       unneeded_spec: ['Interner Hinweis'],
       notes: 'Optional note',
       reviewedBy: null
-    });
+    } as AgenticReviewInput);
 
     expect(payload).toEqual({
       actor: 'Reviewer',
