@@ -13,7 +13,7 @@
 3. Flip `SHOPWARE_ENABLED=true` only after all required values are in place. Leaving it as `false` keeps Shopware search disabled even if credentials are present.
 4. Leave the queue-related flags (`SHOPWARE_SYNC_ENABLED`, `SHOPWARE_API_BASE_URL`, `SHOPWARE_QUEUE_POLL_INTERVAL_MS`) at their defaults. The background worker is intentionally disabled until the HTTP dispatch client is implemented.
 5. Set `IMPORTER_FORCE_ZERO_STOCK=true` to automatically override all CSV row quantities to zero during ingestion. When this flag is omitted or left `false`, operators can trigger a single zero-stock upload by calling `/api/import?zeroStock=true`.
-6. Media storage defaults to local for development (`MEDIA_STORAGE_MODE=local`), using the backend `media/` directory unless `MEDIA_DIR_OVERRIDE` (or `MEDIA_DIR`) is set; container deployments can point to WebDAV by setting `MEDIA_STORAGE_MODE=webdav` and `WEB_DAV_DIR` to an absolute mounted filesystem path (not a URL).
+6. Media storage defaults to local for development (`MEDIA_STORAGE_MODE=local`), using the backend `media/` directory unless `MEDIA_DIR_OVERRIDE` (or `MEDIA_DIR`) is set; container deployments should set `MEDIA_STORAGE_MODE=webdav` and `MEDIA_ROOT_DIR` to an absolute mounted filesystem path (not a URL). The backend then uses fixed subfolders: `<root>/shopbilder` for WebDAV and `<root>/shopbilder-import` for ERP media mirroring.
 
 ## printing 
 the print job need to renderPDFs from the html templates. This need to happen headless --> chromium
