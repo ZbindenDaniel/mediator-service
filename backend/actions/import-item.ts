@@ -414,28 +414,6 @@ function resolveRequestPath(req: IncomingMessage): string {
   }
 }
 
-function extractItemUUIDFromPath(pathname: string): string | null {
-  if (!pathname) {
-    return null;
-  }
-
-  const match = pathname.match(/^\/api\/items\/([^/]+)$/);
-  if (!match) {
-    return null;
-  }
-
-  try {
-    return decodeURIComponent(match[1]);
-  } catch (error) {
-    console.error('[import-item] Failed to decode ItemUUID from request path', {
-      pathname,
-      segment: match[1],
-      error
-    });
-    return match[1];
-  }
-}
-
 const action = defineHttpAction({
   key: 'import-item',
   label: 'Import item',
@@ -457,8 +435,7 @@ const action = defineHttpAction({
       const incomingItemUUID = (p.get('ItemUUID') || '').trim();
       const incomingArtikelNummer = (p.get('Artikel_Nummer') || '').trim();
       const requestPath = resolveRequestPath(req);
-      const pathItemUUID = extractItemUUIDFromPath(requestPath);
-      const isUpdateRequest = Boolean(pathItemUUID);
+      const isUpdateRequest = false;
 
       type BranchResolution = {
         itemUUID: string;
@@ -502,39 +479,73 @@ const action = defineHttpAction({
         };
       };
 
-      if (isUpdateRequest && pathItemUUID) {
-        try {
-          branch = {
-            itemUUID: pathItemUUID,
-            artikelNummer: incomingArtikelNummer || null,
-            skipReferencePersistence: false,
-            referenceOverride: null
-          };
-
-          if (incomingItemUUID && incomingItemUUID !== pathItemUUID) {
-            console.warn('[import-item] Ignoring mismatched ItemUUID in payload for update request', {
-              requestPath,
-              incomingItemUUID,
-              pathItemUUID
-            });
-          } else {
-            console.info('[import-item] Processing item update based on request path', { ItemUUID: pathItemUUID });
-          }
-        } catch (branchErr) {
-          console.error('[import-item] Failed to resolve update branch context', {
-            pathItemUUID,
-            error: branchErr
-          });
-          return sendJson(res, 500, { error: 'Failed to resolve update request context' });
-        }
-      } else if (incomingItemUUID && !incomingArtikelNummer) {
+      if (incomingItemUUID && !incomingArtikelNummer) {
         console.warn('[import-item] Rejecting new item import due to missing Artikel_Nummer for provided ItemUUID', {
+          actor,
           incomingItemUUID,
           requestPath
         });
         return sendJson(res, 400, {
           error: 'Artikel_Nummer is required when providing ItemUUID for new item imports'
         });
+      } else if (incomingItemUUID && incomingArtikelNummer) {
+        try {
+          let existing: unknown = null;
+          try {
+            const lookup = ctx?.getItem?.get ? ctx.getItem.get(incomingItemUUID) : null;
+            existing = typeof (lookup as Promise<unknown>)?.then === 'function' ? await lookup : lookup;
+          } catch (lookupError) {
+            console.error('[import-item] Failed to verify caller-provided ItemUUID for new import', {
+              actor,
+              requestPath,
+              incomingItemUUID,
+              Artikel_Nummer: incomingArtikelNummer,
+              error: lookupError
+            });
+            return sendJson(res, 500, {
+              error: 'Failed to verify ItemUUID uniqueness for item import'
+            });
+          }
+
+          if (existing) {
+            console.warn('[import-item] Rejecting new import due to conflicting caller-provided ItemUUID', {
+              actor,
+              requestPath,
+              incomingItemUUID,
+              Artikel_Nummer: incomingArtikelNummer
+            });
+            return sendJson(res, 409, {
+              error: 'ItemUUID already exists for new item import',
+              details: {
+                ItemUUID: incomingItemUUID,
+                Artikel_Nummer: incomingArtikelNummer
+              }
+            });
+          }
+
+          console.info('[import-item] Accepting caller-provided ItemUUID for new item import', {
+            actor,
+            requestPath,
+            ItemUUID: incomingItemUUID,
+            Artikel_Nummer: incomingArtikelNummer
+          });
+
+          branch = {
+            itemUUID: incomingItemUUID,
+            artikelNummer: incomingArtikelNummer,
+            skipReferencePersistence: false,
+            referenceOverride: null
+          };
+        } catch (branchErr) {
+          console.error('[import-item] Failed to resolve caller-provided ItemUUID branch', {
+            actor,
+            requestPath,
+            incomingItemUUID,
+            Artikel_Nummer: incomingArtikelNummer,
+            error: branchErr
+          });
+          return sendJson(res, 500, { error: 'Failed to resolve ItemUUID import branch' });
+        }
       } else if (incomingArtikelNummer && !incomingItemUUID) {
         try {
           if (!ctx?.getItemReference?.get) {
@@ -626,14 +637,25 @@ const action = defineHttpAction({
       }
 
       let ItemUUID = branch.itemUUID;
-      try {
-        ItemUUID = await ensureUniqueItemUUID(branch.itemUUID, ctx);
-      } catch (collisionError) {
-        console.error('[import-item] Aborting import due to repeated ItemUUID collisions', {
-          requestedItemUUID: branch.itemUUID,
-          error: collisionError
-        });
-        return sendJson(res, 500, { error: 'Failed to mint unique ItemUUID for item import' });
+      if (!incomingItemUUID) {
+        try {
+          ItemUUID = await ensureUniqueItemUUID(branch.itemUUID, ctx);
+          if (ItemUUID !== branch.itemUUID) {
+            console.info('[import-item] Reminted ItemUUID after collision for new item import', {
+              actor,
+              requestPath,
+              requestedItemUUID: branch.itemUUID,
+              remintedItemUUID: ItemUUID,
+              Artikel_Nummer: branch.artikelNummer
+            });
+          }
+        } catch (collisionError) {
+          console.error('[import-item] Aborting import due to repeated ItemUUID collisions', {
+            requestedItemUUID: branch.itemUUID,
+            error: collisionError
+          });
+          return sendJson(res, 500, { error: 'Failed to mint unique ItemUUID for item import' });
+        }
       }
       const resolvedArtikelNummer = branch.artikelNummer ?? '';
       const referenceDefaults = branch.referenceOverride;
