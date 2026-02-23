@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { stageItemsExport, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
 import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED } from '../config';
+import { MEDIA_DIR } from '../lib/media';
 
 // TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
 // TODO(sync-erp): Keep this action script-parity only unless an explicit future requirement reintroduces API-side continuation orchestration.
@@ -55,16 +56,22 @@ interface ScriptExecutionResult {
   stderr: string;
 }
 
+interface MediaCopyMarker {
+  status: 'success' | 'failed' | 'skipped' | 'unknown';
+  detail: string | null;
+}
+
 async function runErpSyncScript(
   scriptPath: string,
   csvPath: string,
-  mediaMirrorDir: string | null
+  mediaMirrorDir: string | null,
+  mediaSourceDir: string
 ): Promise<ScriptExecutionResult> {
   return new Promise<ScriptExecutionResult>((resolve, reject) => {
     const proc = spawn('bash', [scriptPath, csvPath], {
       env: mediaMirrorDir
-        ? { ...process.env, ERP_MEDIA_MIRROR_DIR: mediaMirrorDir }
-        : process.env,
+        ? { ...process.env, ERP_MEDIA_MIRROR_DIR: mediaMirrorDir, ERP_MEDIA_SOURCE_DIR: mediaSourceDir }
+        : { ...process.env, ERP_MEDIA_SOURCE_DIR: mediaSourceDir },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -99,6 +106,35 @@ function logMediaMirrorRuntime(logger: Pick<Console, 'info'>): void {
   });
 }
 
+
+
+// TODO(sync-erp-media-marker): Switch this parser to machine-readable JSON if docs/erp-sync.sh emits JSON markers in future.
+function parseMediaCopyMarker(output: string): MediaCopyMarker {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const mediaLine = lines.find((line) => line.startsWith('[erp-sync] media_copy_result'));
+  if (!mediaLine) {
+    return { status: 'unknown', detail: null };
+  }
+
+  if (mediaLine.includes('status=success')) {
+    return { status: 'success', detail: mediaLine };
+  }
+
+  if (mediaLine.includes('status=failed')) {
+    return { status: 'failed', detail: mediaLine };
+  }
+
+  if (mediaLine.includes('status=skipped')) {
+    return { status: 'skipped', detail: mediaLine };
+  }
+
+  return { status: 'unknown', detail: mediaLine };
+}
+
 function resolveErpSyncScriptPath(logger: Pick<Console, 'info' | 'warn'>): string {
   const scriptPath = path.resolve(process.cwd(), 'docs/erp-sync.sh');
   logger.info('[sync-erp] script_path_resolved', { scriptPath });
@@ -116,6 +152,11 @@ const action = defineHttpAction({
     try {
       console.info('[sync-erp] request_received');
       logMediaMirrorRuntime(console);
+      console.info('[sync-erp] media_copy_expectation', {
+        expected: ERP_MEDIA_MIRROR_ENABLED ? 'enabled' : 'disabled',
+        destination: ERP_MEDIA_MIRROR_DIR || null,
+        source: MEDIA_DIR
+      });
 
       let payload: unknown;
       try {
@@ -175,9 +216,15 @@ const action = defineHttpAction({
       const scriptResult = await runErpSyncScript(
         scriptPath,
         stagedExport.itemsPath,
-        ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null
+        ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null,
+        MEDIA_DIR
       );
-      console.info('[sync-erp] script_finished', { exitCode: scriptResult.exitCode });
+      const mediaCopyMarker = parseMediaCopyMarker(`${scriptResult.stdout}\n${scriptResult.stderr}`);
+      console.info('[sync-erp] script_finished', {
+        exitCode: scriptResult.exitCode,
+        mediaCopyStatus: mediaCopyMarker.status,
+        mediaCopyDetail: mediaCopyMarker.detail
+      });
 
       if (scriptResult.exitCode === 0) {
         return sendJson(res, 200, {
