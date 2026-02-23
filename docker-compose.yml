@@ -47,9 +47,10 @@ services:
     expose:
       - "8080"
     volumes:
+      # TODO(media-root-contract): Mount only the parent host media root; backend derives fixed subfolders.
       - mediator-data:/var/lib/mediator
       - mediator-media:/app/dist/backend/media
-      - /mnt/shopbilder:/app/dist/backend/webDav
+      - /mnt:/app/dist/backend/host-media
       - /run/cups/cups.sock:/run/cups/cups.sock
     restart: unless-stopped
     extra_hosts:

@@ -82,7 +82,8 @@ if (rawDatabaseUrl && rawDbPathEnv) {
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
 // TODO(media-storage): Review media storage environment names once WebDAV rollout is finalized.
-// TODO(config-tests): Add config validation tests for WEB_DAV_DIR format checks.
+// TODO(media-root-contract): Keep MEDIA_ROOT_DIR-derived subfolder contract (`shopbilder`, `shopbilder-import`) synchronized with compose/docs examples.
+// TODO(config-tests): Add config validation tests for MEDIA_ROOT_DIR format checks.
 const MEDIA_STORAGE_MODE_VALUES = new Set(['local', 'webdav']);
 const rawMediaStorageMode = (process.env.MEDIA_STORAGE_MODE || '').trim().toLowerCase();
 let resolvedMediaStorageMode: 'local' | 'webdav' = 'local';
@@ -100,24 +101,26 @@ if (rawMediaStorageMode) {
 export const MEDIA_STORAGE_MODE = resolvedMediaStorageMode;
 const rawMediaDir = (process.env.MEDIA_DIR || '').trim();
 export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || rawMediaDir).trim();
-const rawWebDavDir = (process.env.WEB_DAV_DIR || rawMediaDir).trim();
+const rawMediaRootDir = (process.env.MEDIA_ROOT_DIR || rawMediaDir).trim();
 const WEB_DAV_URL_PATTERN = /^[a-z]+:\/\//i;
-let resolvedWebDavDir = rawWebDavDir;
+let resolvedMediaRootDir = rawMediaRootDir;
+
 // TODO(webdav-feedback): Confirm log wording and examples with operations once WebDAV deployment guidance is finalized.
 
 if (MEDIA_STORAGE_MODE === 'webdav') {
-  if (!resolvedWebDavDir) {
-    console.warn('[config] MEDIA_STORAGE_MODE=webdav requires WEB_DAV_DIR; default media directory will be used.');
-  } else if (WEB_DAV_URL_PATTERN.test(resolvedWebDavDir) || !path.isAbsolute(resolvedWebDavDir)) {
+  if (!resolvedMediaRootDir) {
+    console.warn('[config] MEDIA_STORAGE_MODE=webdav requires MEDIA_ROOT_DIR; default media directory will be used.');
+  } else if (WEB_DAV_URL_PATTERN.test(resolvedMediaRootDir) || !path.isAbsolute(resolvedMediaRootDir)) {
     console.error(
-      `[config] WEB_DAV_DIR must be a mounted filesystem path (absolute, not a URL). ` +
-        `Example: "/mnt/webdav/media". Received "${resolvedWebDavDir}".`
+      `[config] MEDIA_ROOT_DIR must be a mounted filesystem path (absolute, not a URL). ` +
+        `Example: "/mnt". Received "${resolvedMediaRootDir}".`
     );
-    resolvedWebDavDir = '';
+    resolvedMediaRootDir = '';
   }
 }
 
-export const WEB_DAV_DIR = resolvedWebDavDir;
+const WEB_DAV_SUBDIR = 'shopbilder';
+const ERP_MEDIA_MIRROR_SUBDIR = 'shopbilder-import';
 
 // TODO(print-queues): Confirm per-label printer queue overrides once label routing settles for all templates.
 const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || '').trim();
@@ -260,32 +263,31 @@ const erpImportIncludeMedia =
   parseBooleanFlag(process.env.ERP_IMPORT_INCLUDE_MEDIA, 'ERP_IMPORT_INCLUDE_MEDIA') ?? false;
 export const ERP_IMPORT_INCLUDE_MEDIA = erpImportIncludeMedia;
 // TODO(sync-erp-media-mirror-config): Move ERP media mirror path validation into shared config schema coverage.
-const defaultErpMediaBaseDir = rawMediaDir
-  ? path.isAbsolute(rawMediaDir)
-    ? rawMediaDir
-    : path.resolve(process.cwd(), rawMediaDir)
-  : path.join(__dirname, 'media');
-const defaultErpMediaMirrorDir = path.join(defaultErpMediaBaseDir, 'shopbilder-import');
-const rawErpMediaMirrorDir = (process.env.ERP_MEDIA_MIRROR_DIR || defaultErpMediaMirrorDir).trim();
-let resolvedErpMediaMirrorDir = rawErpMediaMirrorDir;
-
-if (!resolvedErpMediaMirrorDir) {
-  console.warn('[config] ERP_MEDIA_MIRROR_DIR is empty; media mirroring will be disabled.');
-} else if (WEB_DAV_URL_PATTERN.test(resolvedErpMediaMirrorDir)) {
+if (!resolvedMediaRootDir) {
+  console.warn('[config] MEDIA_ROOT_DIR is empty; ERP media mirroring will be disabled.');
+} else if (WEB_DAV_URL_PATTERN.test(resolvedMediaRootDir)) {
   console.error(
-    `[config] ERP_MEDIA_MIRROR_DIR must be a filesystem path (not a URL). Received "${resolvedErpMediaMirrorDir}".`
+    `[config] MEDIA_ROOT_DIR must be a filesystem path (not a URL). Received "${resolvedMediaRootDir}".`
   );
-  resolvedErpMediaMirrorDir = '';
-} else if (!path.isAbsolute(resolvedErpMediaMirrorDir)) {
-  const absoluteMirrorPath = path.resolve(process.cwd(), resolvedErpMediaMirrorDir);
+  resolvedMediaRootDir = '';
+} else if (!path.isAbsolute(resolvedMediaRootDir)) {
+  const absoluteMediaRootPath = path.resolve(process.cwd(), resolvedMediaRootDir);
   console.warn(
-    `[config] ERP_MEDIA_MIRROR_DIR should be absolute; resolving relative value "${resolvedErpMediaMirrorDir}" to "${absoluteMirrorPath}".`
+    `[config] MEDIA_ROOT_DIR should be absolute; resolving relative value "${resolvedMediaRootDir}" to "${absoluteMediaRootPath}".`
   );
-  resolvedErpMediaMirrorDir = absoluteMirrorPath;
+  resolvedMediaRootDir = absoluteMediaRootPath;
 }
 
-export const ERP_MEDIA_MIRROR_DIR = resolvedErpMediaMirrorDir;
-export const ERP_MEDIA_MIRROR_ENABLED = ERP_IMPORT_INCLUDE_MEDIA && Boolean(ERP_MEDIA_MIRROR_DIR);
+const derivedWebDavDir = resolvedMediaRootDir ? path.join(resolvedMediaRootDir, WEB_DAV_SUBDIR) : '';
+const derivedErpMediaMirrorDir = resolvedMediaRootDir ? path.join(resolvedMediaRootDir, ERP_MEDIA_MIRROR_SUBDIR) : '';
+
+if (MEDIA_STORAGE_MODE === 'webdav' && !derivedWebDavDir) {
+  console.warn('[config] MEDIA_STORAGE_MODE=webdav but MEDIA_ROOT_DIR is invalid; WebDAV directory is disabled.');
+}
+
+export const WEB_DAV_DIR = derivedWebDavDir;
+export const ERP_MEDIA_MIRROR_DIR = derivedErpMediaMirrorDir;
+export const ERP_MEDIA_MIRROR_ENABLED = ERP_IMPORT_INCLUDE_MEDIA && Boolean(derivedErpMediaMirrorDir);
 
 if (ERP_IMPORT_INCLUDE_MEDIA && !ERP_MEDIA_MIRROR_ENABLED) {
   console.error('[config] ERP_IMPORT_INCLUDE_MEDIA=true but ERP_MEDIA_MIRROR_DIR is invalid; mirroring is disabled.');
@@ -422,9 +424,11 @@ if (!ERP_SYNC_ENABLED) {
   console.info('[config] ERP sync disabled via ERP_SYNC_ENABLED flag.');
 }
 
-console.info('[config] ERP media mirroring runtime configuration.', {
-  enabled: ERP_MEDIA_MIRROR_ENABLED,
-  destination: ERP_MEDIA_MIRROR_DIR || null
+console.info('[config] Media root runtime configuration.', {
+  mediaRootDir: resolvedMediaRootDir || null,
+  webDavDir: WEB_DAV_DIR || null,
+  erpMediaMirrorDir: ERP_MEDIA_MIRROR_DIR || null,
+  erpMediaMirrorEnabled: ERP_MEDIA_MIRROR_ENABLED
 });
 
 export interface ShopwareCredentialsConfig {

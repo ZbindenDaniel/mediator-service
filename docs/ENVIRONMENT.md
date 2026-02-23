@@ -23,6 +23,8 @@ This document enumerates all environment variables consumed by the mediator serv
 
 ## Database and file storage
 
+<!-- TODO(media-root-contract): Document only root-level media mount env and fixed subfolder names. -->
+
 <!-- TODO(webdav-docs): Confirm WebDAV mount path examples with operations before finalizing guidance. -->
 
 | Variable | Default / Example | Notes |
@@ -34,9 +36,9 @@ This document enumerates all environment variables consumed by the mediator serv
 | `MEDIA_STORAGE_MODE` | `local` | `local` or `webdav` media storage backend. |
 | `MEDIA_DIR` | (unset) | Base media directory used for local storage. |
 | `MEDIA_DIR_OVERRIDE` | (unset) | Overrides `MEDIA_DIR` if provided. |
-| `WEB_DAV_DIR` | (unset) | WebDAV directory used when `MEDIA_STORAGE_MODE=webdav`. Must be an absolute mounted filesystem path (not a URL). |
+| `MEDIA_ROOT_DIR` | (unset) | Absolute mounted media root directory used to derive fixed paths: `<root>/shopbilder` (WebDAV) and `<root>/shopbilder-import` (ERP mirror). URLs are rejected. |
 
-Example mounted WebDAV path: `/mnt/webdav/media` (Linux) or `/Volumes/webdav/media` (macOS). `davs://` URLs are not accepted; the service only accepts a local filesystem mount path.
+Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The service derives WebDAV at `<root>/shopbilder` and ERP mirror at `<root>/shopbilder-import`. `davs://` URLs are not accepted; only local filesystem mount paths are supported.
 
 ## Printing
 
