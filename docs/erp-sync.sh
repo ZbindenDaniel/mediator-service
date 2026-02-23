@@ -22,6 +22,8 @@ function fail {
   exit 1
 }
 
+# TODO(erp-sync-media-copy): Consider checksum-based verification when mirror destinations are remote mounts with delayed writes.
+
 test -z "$1" && fail "Kein CSV-Dateiname angegeben."
 test -f "$1" || fail "Datei '$1' nicht gefunden."
 file="$1"
@@ -186,3 +188,54 @@ else
   echo "Test-Import nicht OK. Ausgabe befindet sich in ${tmpf}"
   exit 2
 fi
+
+
+copy_media_if_configured() {
+  local mirror_dir="${ERP_MEDIA_MIRROR_DIR:-}"
+  local source_dir="${ERP_MEDIA_SOURCE_DIR:-${MEDIA_DIR:-}}"
+
+  if [ -z "$mirror_dir" ]; then
+    echo "[erp-sync] media_copy_result status=skipped reason=ERP_MEDIA_MIRROR_DIR_unset"
+    return 0
+  fi
+
+  if [ -z "$source_dir" ] || [ ! -d "$source_dir" ]; then
+    echo "[erp-sync] media_copy_result status=failed reason=source_media_path_unavailable source=${source_dir:-unset} destination=$mirror_dir" >&2
+    return 1
+  fi
+
+  mkdir -p "$mirror_dir" || {
+    echo "[erp-sync] media_copy_result status=failed reason=destination_unwritable destination=$mirror_dir" >&2
+    return 1
+  }
+
+  local copied_count=0
+  local source_count=0
+  source_count=$(find "$source_dir" -type f | wc -l | tr -d ' ')
+
+  if command -v rsync >/dev/null 2>&1; then
+    if ! rsync -a --stats "$source_dir"/ "$mirror_dir"/ >"$tmpf_media" 2>&1; then
+      echo "[erp-sync] media_copy_result status=failed reason=rsync_failed source=$source_dir destination=$mirror_dir details_file=$tmpf_media" >&2
+      cat "$tmpf_media" >&2
+      return 1
+    fi
+  else
+    if ! cp -a "$source_dir"/. "$mirror_dir"/ >"$tmpf_media" 2>&1; then
+      echo "[erp-sync] media_copy_result status=failed reason=cp_failed source=$source_dir destination=$mirror_dir details_file=$tmpf_media" >&2
+      cat "$tmpf_media" >&2
+      return 1
+    fi
+  fi
+
+  copied_count=$(find "$mirror_dir" -type f | wc -l | tr -d ' ')
+  echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=$source_count destination_count=$copied_count"
+  return 0
+}
+
+tmpf_media=$(mktemp)
+if ! copy_media_if_configured; then
+  rm -f "$tmpf" "$tmpf_media"
+  echo "[erp-sync] media_copy_result status=failed reason=copy_step_failed" >&2
+  exit 3
+fi
+rm -f "$tmpf_media"

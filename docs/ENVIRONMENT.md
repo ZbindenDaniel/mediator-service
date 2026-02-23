@@ -75,6 +75,10 @@ Example mounted WebDAV path: `/mnt/webdav/media` (Linux) or `/Volumes/webdav/med
 | `ERP_IMPORT_FORM_FIELD` | `file` | Form field name used to upload the import file. |
 | `ERP_IMPORT_TIMEOUT_MS` | `30000` | Timeout for ERP import requests. |
 | `ERP_IMPORT_CLIENT_ID` | (unset) | Optional client identifier for ERP imports. |
+| `ERP_MEDIA_MIRROR_DIR` | (unset) | Optional destination directory for `/api/sync/erp` media mirror copy stage. When set, `docs/erp-sync.sh` copies media from `ERP_MEDIA_SOURCE_DIR` (injected by backend) or `MEDIA_DIR`; failures exit non-zero and surface in API stdout/stderr. |
+
+
+Operator check: look for `[erp-sync] media_copy_result status=success` in script output and `[sync-erp] script_finished` with `mediaCopyStatus: 'success'` in backend logs to confirm images were mirrored.
 
 ## Agentic model configuration
 

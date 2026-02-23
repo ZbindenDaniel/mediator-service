@@ -14,6 +14,7 @@
 4. Leave the queue-related flags (`SHOPWARE_SYNC_ENABLED`, `SHOPWARE_API_BASE_URL`, `SHOPWARE_QUEUE_POLL_INTERVAL_MS`) at their defaults. The background worker is intentionally disabled until the HTTP dispatch client is implemented.
 5. Set `IMPORTER_FORCE_ZERO_STOCK=true` to automatically override all CSV row quantities to zero during ingestion. When this flag is omitted or left `false`, operators can trigger a single zero-stock upload by calling `/api/import?zeroStock=true`.
 6. Media storage defaults to local for development (`MEDIA_STORAGE_MODE=local`), using the backend `media/` directory unless `MEDIA_DIR_OVERRIDE` (or `MEDIA_DIR`) is set; container deployments can point to WebDAV by setting `MEDIA_STORAGE_MODE=webdav` and `WEB_DAV_DIR` to an absolute mounted filesystem path (not a URL).
+7. For `/api/sync/erp` image mirroring validation, set `ERP_MEDIA_MIRROR_DIR` to the desired destination and confirm the backend logs include `[sync-erp] script_finished` with `mediaCopyStatus: 'success'` plus script output line `[erp-sync] media_copy_result status=success ... source_count=<n> destination_count=<n>`. If `ERP_MEDIA_MIRROR_DIR` is unset, expect one line: `[erp-sync] media_copy_result status=skipped reason=ERP_MEDIA_MIRROR_DIR_unset`.
 
 ## printing 
 the print job need to renderPDFs from the html templates. This need to happen headless --> chromium
