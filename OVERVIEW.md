@@ -5,6 +5,8 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+28. ✅ Refine item edit binary controls by replacing range sliders with styled switch toggles for `Shopartikel` and `Veröffentlich-Status`, while preserving 0/1 payload semantics and adding focused switch rendering assertions.
+27. ✅ Enable binary edit controls for `Shopartikel` and `Veröffentlich-Status` in the item edit form by adding 0/1 slider inputs, preserving reference payload contracts, and adding focused UI rendering coverage for truthy/falsy source values.
 26. ✅ Tighten `backend/ops/10-validate.ts` validation telemetry: resolve `itemUUID`/`ItemUUID` aliases before warning, guard alias extraction with try/catch, and include `rowNumber` + `Artikel-Nummer` + key-variant metadata in missing-UUID warnings without changing persistence behavior.
 26. ✅ Make export publication gating deterministic by using canonical `AgenticReviewState==='approved'` semantics with guarded status fallback (`AgenticStatus==='approved'`), enriched suppression telemetry (`agenticStatus`, `agenticReviewState`, `itemUUID`), try/catch fallback logging, and focused tests for approved/non-approved/status-only cases.
 25. ✅ Fix export projection parity by joining `agentic_runs` in export item queries, selecting `AgenticStatus`/`AgenticReviewState` defaults, adding export diagnostics when metadata is absent, and covering the projection with a focused DB export test.

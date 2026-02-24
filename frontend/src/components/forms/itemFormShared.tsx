@@ -13,6 +13,8 @@ import { metaDataKeys } from '../../data/metaDataKeys';
 // TODO(edit-quality-stock): Confirm whether Quality/Auf_Lager should stay hidden on edits once access roles are defined.
 // TODO(reference-only-edit): Keep reference-only form mode aligned with ItemReferenceEdit fields.
 // TODO(einheit-immutability): Keep Einheit locked on edit forms while backend enforces immutability.
+// TODO(reference-flag-controls): Keep Shopartikel/Veröffentlicht_Status controls restricted to binary 0/1 semantics.
+// TODO(binary-switch-a11y): Revisit switch labels if we add translated aria-live status hints.
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -520,6 +522,42 @@ export function ItemDetailsFields({
 
   const einheitHidden = isFieldLocked(lockedFields, 'Einheit', 'hidden');
   const einheitReadonly = isFieldLocked(lockedFields, 'Einheit', 'readonly');
+  const publishedStatusSwitchValue = useMemo(() => {
+    try {
+      const raw = form.Veröffentlicht_Status;
+      if (typeof raw === 'number') {
+        return raw > 0 ? 1 : 0;
+      }
+      if (typeof raw === 'boolean') {
+        return raw ? 1 : 0;
+      }
+      if (typeof raw === 'string') {
+        const normalized = raw.trim().toLowerCase();
+        return ['yes', 'ja', 'true', '1', 'published'].includes(normalized) ? 1 : 0;
+      }
+    } catch (error) {
+      console.error('[itemForm] Failed to resolve Veröffentlicht_Status switch value', error);
+    }
+    return 0;
+  }, [form.Veröffentlicht_Status]);
+  const shopartikelSwitchValue = useMemo(() => {
+    try {
+      const raw = form.Shopartikel as unknown;
+      if (typeof raw === 'number') {
+        return raw > 0 ? 1 : 0;
+      }
+      if (typeof raw === 'boolean') {
+        return raw ? 1 : 0;
+      }
+      if (typeof raw === 'string') {
+        const normalized = raw.trim().toLowerCase();
+        return ['1', 'true', 'yes', 'ja'].includes(normalized) ? 1 : 0;
+      }
+    } catch (error) {
+      console.error('[itemForm] Failed to resolve Shopartikel switch value', error);
+    }
+    return 0;
+  }, [form.Shopartikel]);
 
   // TODO(langtext-observability): Revisit Langtext rendering once parser mode stabilizes across
   // sanitized payloads and legacy fallbacks.
@@ -1407,6 +1445,50 @@ export function ItemDetailsFields({
       </div>
 
       <hr></hr>
+
+      <div className="row">
+        <label>
+          Veröffentlich-Status
+        </label>
+        <input
+          type="checkbox"
+          role="switch"
+          className="item-form__binary-switch"
+          checked={publishedStatusSwitchValue === 1}
+          onChange={(event) => {
+            try {
+              const nextValue = event.target.checked ? 1 : 0;
+              console.log('[itemForm] Updated Veröffentlicht_Status switch', { nextValue });
+              onUpdate('Veröffentlicht_Status', nextValue);
+            } catch (error) {
+              console.error('[itemForm] Failed to update Veröffentlicht_Status switch', error);
+              onUpdate('Veröffentlicht_Status', 0);
+            }
+          }}
+        />
+      </div>
+
+      <div className="row">
+        <label>
+          Shopartikel
+        </label>
+        <input
+          type="checkbox"
+          role="switch"
+          className="item-form__binary-switch"
+          checked={shopartikelSwitchValue === 1}
+          onChange={(event) => {
+            try {
+              const nextValue = event.target.checked ? 1 : 0;
+              console.log('[itemForm] Updated Shopartikel switch', { nextValue });
+              onUpdate('Shopartikel', nextValue);
+            } catch (error) {
+              console.error('[itemForm] Failed to update Shopartikel switch', error);
+              onUpdate('Shopartikel', 0);
+            }
+          }}
+        />
+      </div>
 
       {einheitHidden ? (
         <input type="hidden" value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT} readOnly />
