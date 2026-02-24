@@ -84,3 +84,37 @@ describe('ItemDetailsFields Langtext rendering', () => {
     expect(parsed).toEqual({ Details: 'Mehr Informationen' });
   });
 });
+
+
+describe('ItemDetailsFields binary switches', () => {
+  it('renders publication and shoparticle switches as checked when source data is truthy', () => {
+    const markup = renderToStaticMarkup(
+      <ItemDetailsFields
+        form={{ Veröffentlicht_Status: 'yes', Shopartikel: 1 } as Partial<ItemFormData>}
+        onUpdate={jest.fn()}
+      />
+    );
+
+    expect(markup).toContain('Veröffentlich-Status');
+    expect(markup).toContain('Shopartikel');
+    expect(markup).toContain('type="checkbox"');
+    expect(markup).toContain('role="switch"');
+    expect(markup).toContain('class="item-form__binary-switch"');
+    expect(markup.match(/role=\"switch\"/g)?.length ?? 0).toBe(2);
+    expect(markup.match(/checked=\"\"/g)?.length ?? 0).toBe(2);
+  });
+
+  it('renders publication and shoparticle switches as unchecked when source data is falsy', () => {
+    const markup = renderToStaticMarkup(
+      <ItemDetailsFields
+        form={{ Veröffentlicht_Status: 'no', Shopartikel: 0 } as Partial<ItemFormData>}
+        onUpdate={jest.fn()}
+      />
+    );
+
+    expect(markup).toContain('Veröffentlich-Status');
+    expect(markup).toContain('Shopartikel');
+    expect(markup.match(/role=\"switch\"/g)?.length ?? 0).toBe(2);
+    expect(markup.match(/checked=\"\"/g)?.length ?? 0).toBe(0);
+  });
+});
