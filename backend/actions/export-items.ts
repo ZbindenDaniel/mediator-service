@@ -729,12 +729,47 @@ function resolveExportValue(
     return formatArtikelnummerForExport(value, itemUUID);
   }
 
+  // TODO(agent): Consolidate boolean normalizers across export/import actions when shared helpers are introduced.
+  const normalizePublishedStatus = (input: unknown): boolean | null => {
+    if (typeof input === 'boolean') {
+      return input;
+    }
+    if (typeof input === 'number') {
+      if (input === 1) return true;
+      if (input === 0) return false;
+      return null;
+    }
+    if (typeof input === 'string') {
+      const normalized = input.trim().toLowerCase();
+      if (!normalized || ['0', 'false', 'no', 'nein'].includes(normalized)) {
+        return false;
+      }
+      if (['1', 'true', 'yes', 'ja'].includes(normalized)) {
+        return true;
+      }
+      return null;
+    }
+    if (input === null || input === undefined) {
+      return false;
+    }
+    return null;
+  };
+
   // TODO(agent): Revisit published status gating once agentic review policies evolve beyond reviewed/notReviewed.
   if (field === 'Veröffentlicht_Status') {
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
     const agenticStatus = typeof rawRow.AgenticStatus === 'string' ? rawRow.AgenticStatus : null;
-    const storedPublished = Boolean(value);
+    const normalizedPublished = normalizePublishedStatus(value);
+    const storedPublished = normalizedPublished ?? false;
     const gatedPublished = storedPublished && agenticStatus === 'reviewed';
+
+    if (normalizedPublished === null) {
+      console.warn('[export-items] Unknown published status value encountered during export; defaulting to unpublished.', {
+        agenticStatus,
+        itemUUID,
+        rawPublishedValue: value
+      });
+    }
 
     if (storedPublished && !gatedPublished) {
       console.info('[export-items] Agentic review gate suppressed published status during export.', {
@@ -745,7 +780,7 @@ function resolveExportValue(
       });
     }
 
-    return gatedPublished;
+    return gatedPublished ? 1 : 0;
   }
 
   if (column === 'image_names') {
