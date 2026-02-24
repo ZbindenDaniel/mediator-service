@@ -254,14 +254,38 @@ describe('export-items published status gating', () => {
 
   test('normalizes string published flags to numeric export values', () => {
     const { csv } = serializeItemsToCsv([
-      { ...baseRow, Veröffentlicht_Status: 'true', AgenticStatus: 'reviewed' },
-      { ...baseRow, ItemUUID: 'item-uuid-2', Veröffentlicht_Status: 'false', AgenticStatus: 'reviewed' }
+      { ...baseRow, Veröffentlicht_Status: '1', AgenticStatus: 'reviewed' },
+      { ...baseRow, ItemUUID: 'item-uuid-2', Veröffentlicht_Status: 'true', AgenticStatus: 'reviewed' },
+      { ...baseRow, ItemUUID: 'item-uuid-3', Veröffentlicht_Status: '0', AgenticStatus: 'reviewed' },
+      { ...baseRow, ItemUUID: 'item-uuid-4', Veröffentlicht_Status: 'false', AgenticStatus: 'reviewed' }
     ]);
-    const [, firstDataLine, secondDataLine] = csv.split('\n');
+    const [, firstDataLine, secondDataLine, thirdDataLine, fourthDataLine] = csv.split('\n');
     const publishedIndex = 15;
 
     expect(firstDataLine.split(',')[publishedIndex]).toBe('1');
-    expect(secondDataLine.split(',')[publishedIndex]).toBe('0');
+    expect(secondDataLine.split(',')[publishedIndex]).toBe('1');
+    expect(thirdDataLine.split(',')[publishedIndex]).toBe('0');
+    expect(fourthDataLine.split(',')[publishedIndex]).toBe('0');
+  });
+
+  test('logs and defaults to unpublished for unknown string published values', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { csv } = serializeItemsToCsv([{ ...baseRow, Veröffentlicht_Status: 'published', AgenticStatus: 'reviewed' }]);
+    const [, dataLine] = csv.split('\n');
+    const publishedIndex = 15;
+
+    expect(dataLine.split(',')[publishedIndex]).toBe('0');
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[export-items] Unknown published status value encountered during export; defaulting to unpublished.',
+      expect.objectContaining({
+        itemUUID: 'item-uuid-1',
+        agenticStatus: 'reviewed',
+        rawPublishedValue: 'published'
+      })
+    );
+
+    warnSpy.mockRestore();
   });
 });
 
