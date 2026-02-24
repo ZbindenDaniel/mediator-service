@@ -6,6 +6,7 @@
 
 ## Next steps
 26. ✅ Tighten `backend/ops/10-validate.ts` validation telemetry: resolve `itemUUID`/`ItemUUID` aliases before warning, guard alias extraction with try/catch, and include `rowNumber` + `Artikel-Nummer` + key-variant metadata in missing-UUID warnings without changing persistence behavior.
+26. ✅ Make export publication gating deterministic by using canonical `AgenticReviewState==='approved'` semantics with guarded status fallback (`AgenticStatus==='approved'`), enriched suppression telemetry (`agenticStatus`, `agenticReviewState`, `itemUUID`), try/catch fallback logging, and focused tests for approved/non-approved/status-only cases.
 25. ✅ Fix export projection parity by joining `agentic_runs` in export item queries, selecting `AgenticStatus`/`AgenticReviewState` defaults, adding export diagnostics when metadata is absent, and covering the projection with a focused DB export test.
 25. ✅ Fix `backend/actions/export-items.ts` published flag normalization by replacing truthy coercion with explicit true/false token handling (`1/true/yes/ja` vs `0/false/no/nein/empty`), keep CSV `0/1` output semantics stable, add unknown-value warning telemetry, and extend export action tests for `'0'/'false'/'1'/'true'` handling.
 25. ✅ Preserve source `UpdatedAt` chronology during `/api/import/item`: parse optional payload timestamps with guarded fallback logging, keep shared persistence path via `data.UpdatedAt`, add import-action tests for valid/invalid timestamp handling, and annotate DB upsert semantics near `UpdatedAt=excluded.UpdatedAt`.
@@ -41,6 +42,8 @@
 17. ✅ Add strict archive import identifier semantics in `backend/importer.ts`: reject rows missing/invalid `Artikel-Nummer` or `itemUUID`, disable identifier minting in strict mode (including split rows), and emit structured row-failure telemetry (`rowNumber`, `artikelNummer`, `itemUUID`, `failureCode`).
 
 20. ✅ Add bounded print/lpstat transient retry wrapper with structured attempt/final logs and env-configurable backoff, plus targeted retry behavior tests.
+
+26. ✅ Add focused importer coverage for duplicate Artikel-Nummer CSV rows with distinct ItemUUID persistence checks (instance count + exact UUID set + single item_refs row), plus a companion missing-ItemUUID fallback/mint regression test using existing DB harness patterns.
 
 ## Notes
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
