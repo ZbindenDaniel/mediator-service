@@ -208,6 +208,23 @@ describe('export-items published status gating', () => {
     expect(values[publishedIndex]).toBe('1');
   });
 
+  test('logs when agentic metadata columns are absent during published gating', () => {
+    const logSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticStatus: undefined, AgenticReviewState: undefined }]);
+    const [, dataLine] = csv.split('\n');
+    const values = dataLine.split(',');
+    const publishedIndex = 15;
+
+    expect(values[publishedIndex]).toBe('false');
+    expect(logSpy).toHaveBeenCalledWith(
+      '[export-items] Missing agentic export metadata while evaluating published status gate.',
+      expect.objectContaining({ itemUUID: 'item-uuid-1', artikelNummer: 'A-1000', storedPublished: true })
+    );
+
+    logSpy.mockRestore();
+  });
+
   test('drops published status when agentic status is not reviewed', () => {
     const logSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
 

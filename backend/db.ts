@@ -3030,8 +3030,12 @@ export const listItemReferencesWithFilters = wrapLangtextAwareStatement(
 // TODO(agent): Capture real-world export sorting expectations once Artikel_Nummer coverage is universal.
 // TODO(agent): Add export-level item ID filtering to reduce payload size for targeted ERP syncs.
 const listItemsForExportStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
+  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
+])}
 ${ITEM_JOIN_WITH_BOX}
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
 WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
   AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
 -- Maintain Artikel_Nummer ordering for predictable export manifests and use ItemUUID as a stable tie-breaker.
@@ -3083,8 +3087,12 @@ function getListItemsForExportStatement(itemIdCount: number): Database.Statement
   const placeholderList = Array.from({ length: itemIdCount }, (_value, index) => `@itemId${index}`).join(', ');
   const filteredStatement = wrapLangtextAwareStatement(
     db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
+${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
+  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
+])}
 ${ITEM_JOIN_WITH_BOX}
+LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
 WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
   AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
   AND i.ItemUUID IN (${placeholderList})
