@@ -5,6 +5,7 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+23. ✅ Improve `backend/importer.ts` persistence observability with explicit reference-skip and per-instance decision logs (`rowNumber`, `artikelNummer`, `itemUUID`, `refAction`, `instanceAction`) while keeping item/ref payload contracts unchanged.
 22. ✅ Align `backend/actions/import-item.ts` deterministic import identity behavior: accept caller-provided `ItemUUID` + `Artikel_Nummer` for new imports, reject UUID conflicts with explicit 409 logs, remove dead update-path branching, and add focused import action tests for accepted/conflict/minted flows.
 21. ✅ Collapse media path configuration to a single mounted root and derive fixed `shopbilder` / `shopbilder-import` subfolders for WebDAV + ERP mirror usage.
 1. ✅ Add explicit ERP sync media mirroring flow telemetry: pre-run expectation logging in `/api/sync/erp`, script-level media copy execution/skipping markers, and fail-fast propagation when mirroring is expected but copy fails.
