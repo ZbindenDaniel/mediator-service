@@ -1027,6 +1027,7 @@ const action = defineHttpAction({
       const einheit = einheitParam ? coalesceEinheit(einheitParam) : referenceDefaults?.Einheit ?? DEFAULT_EINHEIT;
 
       // TODO(timestamp-normalization): Audit creation defaults once dedicated created/updated columns exist.
+      // TODO(import-updated-at): Revisit source-vs-ingestion timestamp precedence if import contracts change again.
       let datumErfasst: Date | undefined;
       if (datumErfasstRaw) {
         try {
@@ -1050,6 +1051,30 @@ const action = defineHttpAction({
         }
       } else {
         datumErfasst = new Date(nowDate.getTime());
+      }
+
+      let resolvedUpdatedAt = new Date(nowDate.getTime());
+      const updatedAtRaw = p.get('UpdatedAt');
+      if (updatedAtRaw) {
+        try {
+          const parsedUpdatedAt = new Date(updatedAtRaw);
+          if (Number.isNaN(parsedUpdatedAt.getTime())) {
+            console.warn('[import-item] Invalid UpdatedAt provided; defaulting to ingestion timestamp', {
+              ItemUUID,
+              Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+              updatedAtRaw
+            });
+          } else {
+            resolvedUpdatedAt = parsedUpdatedAt;
+          }
+        } catch (parseErr) {
+          console.warn('[import-item] Failed to parse UpdatedAt provided; defaulting to ingestion timestamp', {
+            ItemUUID,
+            Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+            updatedAtRaw,
+            error: parseErr
+          });
+        }
       }
 
       let requestedQuantityRaw: string | null = null;
@@ -1104,7 +1129,7 @@ const action = defineHttpAction({
       const data = {
         BoxID,
         Location: normalizedLocation,
-        UpdatedAt: nowDate,
+        UpdatedAt: resolvedUpdatedAt,
         Datum_erfasst: datumErfasst,
         Artikel_Nummer: resolvedArtikelNummer,
         Grafikname: firstImage || referenceDefaults?.Grafikname || '',
