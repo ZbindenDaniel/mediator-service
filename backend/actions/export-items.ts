@@ -758,11 +758,19 @@ function resolveExportValue(
   // TODO(agent): Revisit published status gating once agentic review policies evolve beyond reviewed/notReviewed.
   if (field === 'Veröffentlicht_Status') {
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
+    const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
     const agenticStatus = typeof rawRow.AgenticStatus === 'string' ? rawRow.AgenticStatus : null;
-    const normalizedPublished = normalizePublishedStatus(value);
-    const storedPublished = normalizedPublished ?? false;
+    const agenticReviewState = typeof rawRow.AgenticReviewState === 'string' ? rawRow.AgenticReviewState : null;
+    const storedPublished = Boolean(value);
     const gatedPublished = storedPublished && agenticStatus === 'reviewed';
+    const normalizedPublished = normalizePublishedStatus(value);
 
+    if (agenticStatus === null && agenticReviewState === null) {
+      console.info('[export-items] Missing agentic export metadata while evaluating published status gate.', {
+        itemUUID,
+        artikelNummer,
+        storedPublished
+              });
     if (normalizedPublished === null) {
       console.warn('[export-items] Unknown published status value encountered during export; defaulting to unpublished.', {
         agenticStatus,
@@ -774,6 +782,7 @@ function resolveExportValue(
     if (storedPublished && !gatedPublished) {
       console.info('[export-items] Agentic review gate suppressed published status during export.', {
         agenticStatus,
+        agenticReviewState,
         itemUUID,
         storedPublished,
         gatedPublished
