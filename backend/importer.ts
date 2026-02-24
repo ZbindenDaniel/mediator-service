@@ -1368,6 +1368,13 @@ export async function ingestCsvFile(
       });
 
       if (instancePlan.instanceCount <= 0 || instancePlan.quantityPerItem <= 0) {
+        const refLogContext = {
+          rowNumber,
+          artikelNummer: artikelNummer || null,
+          itemUUID: csvItemUUID || null,
+          refAction: 'skipped-existing' as const,
+          instanceAction: 'skipped' as const,
+        };
         console.info('CSV ingestion: skipping item persistence due to non-positive quantity', {
           rowNumber,
           artikelNummer,
@@ -1381,6 +1388,11 @@ export async function ingestCsvFile(
           });
         } else {
           try {
+            const hasExistingRef = hasItemReferenceByArtikelNummer(artikelNummer);
+            if (hasExistingRef) {
+              console.info('[importer] Skipping item reference persistence because Artikel-Nummer already exists', refLogContext);
+              continue;
+            }
             persistItemReference({
               Artikel_Nummer: artikelNummer,
               Suchbegriff: suchbegriff,
@@ -1512,6 +1524,45 @@ export async function ingestCsvFile(
         continue;
       }
 
+      let refAction: 'created' | 'updated' | 'skipped-existing' = 'updated';
+      try {
+        if (artikelNummer) {
+          refAction = hasItemReferenceByArtikelNummer(artikelNummer) ? 'updated' : 'created';
+        }
+      } catch (error) {
+        console.error('[importer] Failed to resolve item reference action for instance persistence logs', {
+          rowNumber,
+          artikelNummer: artikelNummer || null,
+          itemUUID: baseItemUUID || null,
+          refAction,
+          instanceAction: 'skipped' as const,
+          error,
+        });
+      }
+
+      const existingItemUUIDs = new Set<string>();
+      if (artikelNummer) {
+        try {
+          const existingInstances = findByMaterial.all(artikelNummer) as Array<{ ItemUUID?: string | null }>;
+          for (const existingInstance of existingInstances) {
+            const existingItemUUID =
+              typeof existingInstance?.ItemUUID === 'string' ? existingInstance.ItemUUID.trim() : '';
+            if (existingItemUUID) {
+              existingItemUUIDs.add(existingItemUUID);
+            }
+          }
+        } catch (error) {
+          console.error('[importer] Failed to load existing item UUIDs for instance persistence logs', {
+            rowNumber,
+            artikelNummer: artikelNummer || null,
+            itemUUID: baseItemUUID || null,
+            refAction,
+            instanceAction: 'skipped' as const,
+            error,
+          });
+        }
+      }
+
       let skipRemainingInstances = false;
       for (let instanceIndex = 0; instanceIndex < instancePlan.instanceCount; instanceIndex += 1) {
         let itemUUID = baseItemUUID;
@@ -1577,9 +1628,50 @@ export async function ingestCsvFile(
           Einheit: einheit,
           ImageNames: serializedImageNames,
         };
+        let instanceAction: 'inserted' | 'updated' | 'skipped' = 'inserted';
+        try {
+          if (!item.ItemUUID || !item.ItemUUID.trim()) {
+            instanceAction = 'skipped';
+            console.info('[importer] Item instance persistence decision', {
+              rowNumber,
+              artikelNummer: artikelNummer || null,
+              itemUUID: item.ItemUUID || null,
+              refAction,
+              instanceAction,
+              instanceIndex: instanceIndex + 1,
+              reason: 'missing-item-uuid',
+            });
+            continue;
+          }
+
+          instanceAction = existingItemUUIDs.has(item.ItemUUID) ? 'updated' : 'inserted';
+        } catch (error) {
+          instanceAction = 'skipped';
+          console.error('[importer] Failed to resolve item instance persistence decision', {
+            rowNumber,
+            artikelNummer: artikelNummer || null,
+            itemUUID: item.ItemUUID || null,
+            refAction,
+            instanceAction,
+            instanceIndex: instanceIndex + 1,
+            error,
+          });
+          continue;
+        }
+
         persistItem({
           ...item,
           UpdatedAt: nowDate
+        });
+        existingItemUUIDs.add(item.ItemUUID);
+
+        console.info('[importer] Item instance persistence decision', {
+          rowNumber,
+          artikelNummer: artikelNummer || null,
+          itemUUID: item.ItemUUID || null,
+          refAction,
+          instanceAction,
+          instanceIndex: instanceIndex + 1,
         });
 
         if (normalizedBoxId) {
