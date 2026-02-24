@@ -435,6 +435,7 @@ const UPSERT_ITEM_INSTANCE_SQL = `
     Artikel_Nummer=excluded.Artikel_Nummer,
     BoxID=excluded.BoxID,
     Location=excluded.Location,
+    -- TODO(import-updated-at): Import action may pass source timestamps; keep this propagation aligned with import-item fallback semantics.
     UpdatedAt=excluded.UpdatedAt,
     Datum_erfasst=excluded.Datum_erfasst,
     Auf_Lager=excluded.Auf_Lager,

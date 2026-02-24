@@ -158,6 +158,73 @@ describe('import-item action', () => {
     expect(ctx.persistItemWithinTransaction).not.toHaveBeenCalled();
   });
 
+  it('persists payload UpdatedAt when provided with a valid timestamp', async () => {
+    const ctx = createTestContext({
+      getItem: {
+        get: jest
+          .fn()
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce({ Artikel_Nummer: 'ART-4', BoxID: null })
+      }
+    });
+
+    const req = createFormRequest('/api/import/item', {
+      actor: 'Tester',
+      Artikel_Nummer: 'ART-4',
+      UpdatedAt: '2024-01-15T12:34:56.000Z'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(ctx.persistItemWithinTransaction).toHaveBeenCalled();
+    const persistedPayload = ctx.persistItemWithinTransaction.mock.calls[0][0];
+    expect((persistedPayload.UpdatedAt as Date).toISOString()).toBe('2024-01-15T12:34:56.000Z');
+  });
+
+  it('falls back to ingestion UpdatedAt and logs warning when payload UpdatedAt is invalid', async () => {
+    const ctx = createTestContext({
+      getItem: {
+        get: jest
+          .fn()
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce({ Artikel_Nummer: 'ART-5', BoxID: null })
+      }
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const req = createFormRequest('/api/import/item', {
+      actor: 'Tester',
+      Artikel_Nummer: 'ART-5',
+      UpdatedAt: 'not-a-date'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(ctx.persistItemWithinTransaction).toHaveBeenCalled();
+    const persistedPayload = ctx.persistItemWithinTransaction.mock.calls[0][0];
+    expect(persistedPayload.UpdatedAt).toBeInstanceOf(Date);
+    expect(Number.isNaN((persistedPayload.UpdatedAt as Date).getTime())).toBe(false);
+    expect(warnSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          '[import-item] Invalid UpdatedAt provided; defaulting to ingestion timestamp',
+          expect.objectContaining({
+            ItemUUID: 'I-ART-0001',
+            updatedAtRaw: 'not-a-date'
+          })
+        ]
+      ])
+    );
+
+    warnSpy.mockRestore();
+  });
+
   it('preserves minted path behavior when payload ItemUUID is not provided', async () => {
     const ctx = createTestContext({
       generateItemUUID: jest.fn(() => 'I-ART-3-0001'),
