@@ -755,41 +755,66 @@ function resolveExportValue(
     return null;
   };
 
-  // TODO(agent): Revisit published status gating once agentic review policies evolve beyond reviewed/notReviewed.
+  // TODO(agent): Keep published export gating aligned with canonical agentic review-state semantics.
   if (field === 'Veröffentlicht_Status') {
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
     const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
-    const agenticStatus = typeof rawRow.AgenticStatus === 'string' ? rawRow.AgenticStatus : null;
-    const agenticReviewState = typeof rawRow.AgenticReviewState === 'string' ? rawRow.AgenticReviewState : null;
-    const storedPublished = Boolean(value);
-    const gatedPublished = storedPublished && agenticStatus === 'reviewed';
-    const normalizedPublished = normalizePublishedStatus(value);
+    const parseAgenticState = (state: unknown): string | null => {
+      if (typeof state !== 'string') {
+        return null;
+      }
+      const normalized = state.trim().toLowerCase();
+      return normalized || null;
+    };
 
-    if (agenticStatus === null && agenticReviewState === null) {
-      console.info('[export-items] Missing agentic export metadata while evaluating published status gate.', {
+    try {
+      const agenticStatus = parseAgenticState(rawRow.AgenticStatus);
+      const agenticReviewState = parseAgenticState(rawRow.AgenticReviewState);
+      const normalizedPublished = normalizePublishedStatus(value);
+
+      if (agenticStatus === null && agenticReviewState === null) {
+        console.info('[export-items] Missing agentic export metadata while evaluating published status gate.', {
+          itemUUID,
+          artikelNummer,
+          agenticStatus,
+          agenticReviewState
+        });
+      }
+
+      if (normalizedPublished === null) {
+        console.warn('[export-items] Unknown published status value encountered during export; defaulting to unpublished.', {
+          agenticStatus,
+          agenticReviewState,
+          itemUUID,
+          rawPublishedValue: value
+        });
+        return 0;
+      }
+
+      const isApproved = agenticReviewState !== null ? agenticReviewState === 'approved' : agenticStatus === 'approved';
+      const gatedPublished = normalizedPublished && isApproved;
+
+      if (normalizedPublished && !gatedPublished) {
+        console.info('[export-items] Agentic review gate suppressed published status during export.', {
+          agenticStatus,
+          agenticReviewState,
+          itemUUID,
+          storedPublished: normalizedPublished,
+          gatedPublished
+        });
+      }
+
+      return gatedPublished ? 1 : 0;
+    } catch (error) {
+      console.error('[export-items] Failed to normalize published status gate values; defaulting to unpublished.', {
+        agenticStatus: rawRow.AgenticStatus,
+        agenticReviewState: rawRow.AgenticReviewState,
         itemUUID,
         artikelNummer,
-        storedPublished
-              });
-    if (normalizedPublished === null) {
-      console.warn('[export-items] Unknown published status value encountered during export; defaulting to unpublished.', {
-        agenticStatus,
-        itemUUID,
-        rawPublishedValue: value
+        error
       });
+      return 0;
     }
-
-    if (storedPublished && !gatedPublished) {
-      console.info('[export-items] Agentic review gate suppressed published status during export.', {
-        agenticStatus,
-        agenticReviewState,
-        itemUUID,
-        storedPublished,
-        gatedPublished
-      });
-    }
-
-    return gatedPublished ? 1 : 0;
   }
 
   if (column === 'image_names') {

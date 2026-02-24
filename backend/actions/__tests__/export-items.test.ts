@@ -200,8 +200,16 @@ describe('export-items published status gating', () => {
     UpdatedAt: '2024-02-02T00:00:00.000Z'
   };
 
-  test('preserves published status when agentic status is reviewed', () => {
-    const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticStatus: 'reviewed' }]);
+  test('allows published status when canonical agentic review state is approved', () => {
+    const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticReviewState: 'approved', AgenticStatus: 'inProgress' }]);
+    const [, dataLine] = csv.split('\n');
+    const values = dataLine.split(',');
+    const publishedIndex = 15;
+    expect(values[publishedIndex]).toBe('1');
+  });
+
+  test('allows backward-compat status-only rows when agentic status is approved', () => {
+    const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticReviewState: undefined, AgenticStatus: 'approved' }]);
     const [, dataLine] = csv.split('\n');
     const values = dataLine.split(',');
     const publishedIndex = 15;
@@ -216,27 +224,46 @@ describe('export-items published status gating', () => {
     const values = dataLine.split(',');
     const publishedIndex = 15;
 
-    expect(values[publishedIndex]).toBe('false');
+    expect(values[publishedIndex]).toBe('0');
     expect(logSpy).toHaveBeenCalledWith(
       '[export-items] Missing agentic export metadata while evaluating published status gate.',
-      expect.objectContaining({ itemUUID: 'item-uuid-1', artikelNummer: 'A-1000', storedPublished: true })
+      expect.objectContaining({
+        itemUUID: 'item-uuid-1',
+        artikelNummer: 'A-1000',
+        agenticStatus: null,
+        agenticReviewState: null
+      })
     );
 
     logSpy.mockRestore();
   });
 
-  test('drops published status when agentic status is not reviewed', () => {
+  test('suppresses published status for non-approved review states', () => {
     const logSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
 
-    const { csv } = serializeItemsToCsv([{ ...baseRow, AgenticStatus: 'inProgress' }]);
-    const [, dataLine] = csv.split('\n');
-    const values = dataLine.split(',');
+    const rows = [
+      { ...baseRow, ItemUUID: 'item-uuid-1', AgenticReviewState: 'pending' },
+      { ...baseRow, ItemUUID: 'item-uuid-2', AgenticReviewState: 'rejected' },
+      { ...baseRow, ItemUUID: 'item-uuid-3', AgenticReviewState: 'not_required' }
+    ];
+    const { csv } = serializeItemsToCsv(rows);
+    const [, ...dataLines] = csv.split('\n');
     const publishedIndex = 15;
 
-    expect(values[publishedIndex]).toBe('0');
+    expect(dataLines[0].split(',')[publishedIndex]).toBe('0');
+    expect(dataLines[1].split(',')[publishedIndex]).toBe('0');
+    expect(dataLines[2].split(',')[publishedIndex]).toBe('0');
     expect(logSpy).toHaveBeenCalledWith(
       '[export-items] Agentic review gate suppressed published status during export.',
-      expect.objectContaining({ agenticStatus: 'inProgress', itemUUID: 'item-uuid-1' })
+      expect.objectContaining({ agenticReviewState: 'pending', itemUUID: 'item-uuid-1' })
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      '[export-items] Agentic review gate suppressed published status during export.',
+      expect.objectContaining({ agenticReviewState: 'rejected', itemUUID: 'item-uuid-2' })
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      '[export-items] Agentic review gate suppressed published status during export.',
+      expect.objectContaining({ agenticReviewState: 'not_required', itemUUID: 'item-uuid-3' })
     );
 
     logSpy.mockRestore();
@@ -254,10 +281,10 @@ describe('export-items published status gating', () => {
 
   test('normalizes string published flags to numeric export values', () => {
     const { csv } = serializeItemsToCsv([
-      { ...baseRow, Veröffentlicht_Status: '1', AgenticStatus: 'reviewed' },
-      { ...baseRow, ItemUUID: 'item-uuid-2', Veröffentlicht_Status: 'true', AgenticStatus: 'reviewed' },
-      { ...baseRow, ItemUUID: 'item-uuid-3', Veröffentlicht_Status: '0', AgenticStatus: 'reviewed' },
-      { ...baseRow, ItemUUID: 'item-uuid-4', Veröffentlicht_Status: 'false', AgenticStatus: 'reviewed' }
+      { ...baseRow, Veröffentlicht_Status: '1', AgenticReviewState: 'approved' },
+      { ...baseRow, ItemUUID: 'item-uuid-2', Veröffentlicht_Status: 'true', AgenticReviewState: 'approved' },
+      { ...baseRow, ItemUUID: 'item-uuid-3', Veröffentlicht_Status: '0', AgenticReviewState: 'approved' },
+      { ...baseRow, ItemUUID: 'item-uuid-4', Veröffentlicht_Status: 'false', AgenticReviewState: 'approved' }
     ]);
     const [, firstDataLine, secondDataLine, thirdDataLine, fourthDataLine] = csv.split('\n');
     const publishedIndex = 15;
@@ -271,7 +298,9 @@ describe('export-items published status gating', () => {
   test('logs and defaults to unpublished for unknown string published values', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const { csv } = serializeItemsToCsv([{ ...baseRow, Veröffentlicht_Status: 'published', AgenticStatus: 'reviewed' }]);
+    const { csv } = serializeItemsToCsv([
+      { ...baseRow, Veröffentlicht_Status: 'published', AgenticReviewState: 'approved', AgenticStatus: 'approved' }
+    ]);
     const [, dataLine] = csv.split('\n');
     const publishedIndex = 15;
 
@@ -280,7 +309,8 @@ describe('export-items published status gating', () => {
       '[export-items] Unknown published status value encountered during export; defaulting to unpublished.',
       expect.objectContaining({
         itemUUID: 'item-uuid-1',
-        agenticStatus: 'reviewed',
+        agenticStatus: 'approved',
+        agenticReviewState: 'approved',
         rawPublishedValue: 'published'
       })
     );
