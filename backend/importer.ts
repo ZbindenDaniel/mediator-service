@@ -1440,32 +1440,36 @@ export async function ingestCsvFile(
       }
       // TODO(agent): Keep UUID source precedence deterministic: CSV row value first, Artikel-Nummer fallback only when missing.
       let baseItemUUID = csvItemUUID;
+      let uuidSource: 'csv-row' | 'artikelnummer-fallback' | 'minted' | null = null;
       if (baseItemUUID) {
+        uuidSource = 'csv-row';
         console.info('[importer] Resolved ItemUUID source for CSV row', {
           rowNumber,
           artikelNummer: artikelNummer || null,
           itemUUID: baseItemUUID,
-          uuidSource: 'csv-row',
+          uuidSource,
         });
-      } else {
+      }
+
+      if (!baseItemUUID && artikelNummer) {
         try {
-          if (artikelNummer) {
-            const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;
-            if (existing?.ItemUUID) {
-              baseItemUUID = existing.ItemUUID;
-              console.info('[importer] Resolved ItemUUID source for CSV row', {
-                rowNumber,
-                artikelNummer: artikelNummer || null,
-                itemUUID: baseItemUUID,
-                uuidSource: 'artikelnummer-fallback',
-              });
-            }
+          const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;
+          if (existing?.ItemUUID) {
+            baseItemUUID = existing.ItemUUID;
+            uuidSource = 'artikelnummer-fallback';
+            console.info('[importer] Resolved ItemUUID source for CSV row', {
+              rowNumber,
+              artikelNummer: artikelNummer || null,
+              itemUUID: baseItemUUID,
+              uuidSource,
+            });
           }
         } catch (error) {
           console.error('[importer] Failed to resolve ItemUUID via Artikel-Nummer fallback', {
             rowNumber,
             artikelNummer: artikelNummer || null,
             itemUUID: csvItemUUID || null,
+            uuidSource: 'artikelnummer-fallback',
             error,
           });
         }
@@ -1491,7 +1495,9 @@ export async function ingestCsvFile(
             rowNumber,
             artikelNummer: artikelNummer || null,
             itemUUID: baseItemUUID,
+            uuidSource: 'minted',
           });
+          uuidSource = 'minted';
           final.itemUUID = baseItemUUID;
         } catch (error) {
           console.error('[importer] Failed to mint ItemUUID for CSV row', {
@@ -1504,6 +1510,17 @@ export async function ingestCsvFile(
         }
       } else if (final.itemUUID !== baseItemUUID) {
         final.itemUUID = baseItemUUID;
+      }
+
+      if (baseItemUUID) {
+        console.info('[importer] Selected ItemUUID carried into item persistence', {
+          rowNumber,
+          artikelNummer: artikelNummer || null,
+          itemUUID: baseItemUUID,
+          uuidSource,
+          finalItemUUID: final.itemUUID || null,
+          itemUUIDMatchesSelection: final.itemUUID === baseItemUUID,
+        });
       }
 
       if (instancePlan.instanceCount > 1 && baseItemUUID) {
