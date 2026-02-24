@@ -6,7 +6,7 @@ export function formatMetricWithSample(
   sampleSize: number,
   sampleTarget: number
 ): string {
-  return `${metric.pct.toFixed(1)}% (${metric.count}/${sampleSize}; Fenster ${sampleTarget})`;
+  return `${metric.count}/${sampleSize}`; //  ${metric.pct.toFixed(1)}% (${metric.count}/${sampleSize}; Fenster ${sampleTarget})
 }
 
 export function buildAgenticReviewMetricRows(
@@ -24,8 +24,8 @@ export function buildAgenticReviewMetricRows(
   const sampleSize = signal.sampleSize;
   const sampleTarget = signal.sampleTarget;
   const rows: [string, React.ReactNode][] = [
-    ['Review-Metriken (Stichprobe)', `${sampleSize}/${sampleTarget}`],
-    ['Bad Format', formatMetricWithSample(signal.metrics.bad_format_true, sampleSize, sampleTarget)],
+    // ['Review-Metriken (Stichprobe)', `${sampleSize}/${sampleTarget}`],
+    ['Schlecht formatiert', formatMetricWithSample(signal.metrics.bad_format_true, sampleSize, sampleTarget)],
     ['Falsche Information', formatMetricWithSample(signal.metrics.wrong_information_true, sampleSize, sampleTarget)],
     [
       'Falsche phys. Maße',
@@ -45,7 +45,7 @@ export function buildAgenticReviewMetricRows(
     .filter(([, enabled]) => enabled)
     .map(([key]) => key)
     .join(', ');
-  rows.push(['Trigger aktiv', activeTriggers || 'Keine']);
+  // rows.push(['Trigger aktiv', activeTriggers || 'Keine']);
 
   if (signal.lowConfidence) {
     rows.push(['Metrik-Hinweis', 'Niedrige Sicherheit (kleine Stichprobe).']);

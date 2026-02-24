@@ -574,7 +574,8 @@ export function AgenticStatusCard({
               </button>
             </div>
           ) : null}
-          {canClose && onClose ? (
+          {false && canClose && onClose ? (
+            //  temporarely disabled until clear flow is defined. This action is probably better reserved for admins
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onClose}>
                 Ki Suche abschliessen

@@ -401,12 +401,12 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
   //     sampleItems: missingKeySamples
   //   });
   // }
-  if (qualityFallbackCount > 0) {
-    logger.info?.(`[${logContext}] Applied null-quality grouping fallback`, {
-      qualityFallbackCount,
-      sampleItems: qualityFallbackSamples
-    });
-  }
+  // if (qualityFallbackCount > 0) {
+  //   logger.info?.(`[${logContext}] Applied null-quality grouping fallback`, {
+  //     qualityFallbackCount,
+  //     sampleItems: qualityFallbackSamples
+  //   });
+  // }
   if (unplacedCount > 0) {
     logger.info?.(`[${logContext}] Grouped unplaced items in batch`, {
       unplacedCount

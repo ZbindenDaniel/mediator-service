@@ -717,7 +717,7 @@ export default function BulkItemActionBar({
           type="button"
         >
           <GoSync aria-hidden="true" />
-          <span>Sync to ERP</span>
+          <span>Kivi Sync 🥝</span>
         </button>
 
         <button

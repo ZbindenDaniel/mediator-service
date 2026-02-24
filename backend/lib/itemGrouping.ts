@@ -201,12 +201,12 @@ export function groupItemsForResponse(
   //     sampleItems: missingKeySamples
   //   });
   // }
-  if (qualityFallbackCount > 0) {
-    logger.info?.('[item-grouping] Applied null-quality grouping fallback', {
-      qualityFallbackCount,
-      sampleItems: qualityFallbackSamples
-    });
-  }
+  // if (qualityFallbackCount > 0) {
+  //   logger.info?.('[item-grouping] Applied null-quality grouping fallback', {
+  //     qualityFallbackCount,
+  //     sampleItems: qualityFallbackSamples
+  //   });
+  // }
   if (unplacedCount > 0) {
     logger.info?.('[item-grouping] Grouped unplaced items in batch', {
       unplacedCount
