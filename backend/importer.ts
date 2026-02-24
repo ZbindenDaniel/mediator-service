@@ -1426,17 +1426,34 @@ export async function ingestCsvFile(
           einheit,
         });
       }
+      // TODO(agent): Keep UUID source precedence deterministic: CSV row value first, Artikel-Nummer fallback only when missing.
       let baseItemUUID = csvItemUUID;
-      if (artikelNummer) {
+      if (baseItemUUID) {
+        console.info('[importer] Resolved ItemUUID source for CSV row', {
+          rowNumber,
+          artikelNummer: artikelNummer || null,
+          itemUUID: baseItemUUID,
+          uuidSource: 'csv-row',
+        });
+      } else {
         try {
-          const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;
-          if (existing?.ItemUUID) {
-            baseItemUUID = existing.ItemUUID;
+          if (artikelNummer) {
+            const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;
+            if (existing?.ItemUUID) {
+              baseItemUUID = existing.ItemUUID;
+              console.info('[importer] Resolved ItemUUID source for CSV row', {
+                rowNumber,
+                artikelNummer: artikelNummer || null,
+                itemUUID: baseItemUUID,
+                uuidSource: 'artikelnummer-fallback',
+              });
+            }
           }
         } catch (error) {
-          console.error('[importer] Failed to lookup existing item by Artikel_Nummer', {
+          console.error('[importer] Failed to resolve ItemUUID via Artikel-Nummer fallback', {
             rowNumber,
-            artikelNummer,
+            artikelNummer: artikelNummer || null,
+            itemUUID: csvItemUUID || null,
             error,
           });
         }
