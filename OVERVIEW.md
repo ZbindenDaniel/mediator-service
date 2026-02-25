@@ -5,6 +5,8 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+30. ✅ Expand `README.md` with an aligned functionality overview (inventory, CSV/ERP, agentic, QR/print), keeping quick-start concise while restoring enough depth for onboarding context.
+29. ✅ Refresh `README.md` so onboarding highlights current mediator goals (inventory + ERP + agentic review), links canonical docs, and removes stale deep-dive runtime guidance that drifts from maintained setup documentation.
 28. ✅ Refine item edit binary controls by replacing range sliders with styled switch toggles for `Shopartikel` and `Veröffentlich-Status`, while preserving 0/1 payload semantics and adding focused switch rendering assertions.
 27. ✅ Enable binary edit controls for `Shopartikel` and `Veröffentlich-Status` in the item edit form by adding 0/1 slider inputs, preserving reference payload contracts, and adding focused UI rendering coverage for truthy/falsy source values.
 26. ✅ Tighten `backend/ops/10-validate.ts` validation telemetry: resolve `itemUUID`/`ItemUUID` aliases before warning, guard alias extraction with try/catch, and include `rowNumber` + `Artikel-Nummer` + key-variant metadata in missing-UUID warnings without changing persistence behavior.
