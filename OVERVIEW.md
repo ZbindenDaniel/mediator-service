@@ -5,6 +5,10 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+34. ✅ Clean documentation inputs for v2.4: move stale plan/input docs to `docs/archive/plans`, add `docs/PLANNING_V_2_4.md`, and keep current bugs scoped in `docs/BUGS.md` for actionable release work.
+33. ✅ Introduce versioned highlights process: split `docs/RECENT_HIGHLIGHTS.md` into v2.3 historical notes and a v2.4 upcoming section so release history stays auditable between versions.
+32. ✅ Re-baseline planning documentation: clear active plan backlog in `docs/PLANS.md` (no current plans) and centralize implementation change logs in `docs/RECENT_HIGHLIGHTS.md` to keep release docs concise and auditable.
+31. ✅ Build a release-documentation audit map and complete the `docs/ARCHITECTURE.md` release-alignment pass (backend/frontend layout, export mode naming, and Langtext contract wording) so doc refresh can proceed in small, reviewable batches with minimal structural churn.
 30. ✅ Expand `README.md` with an aligned functionality overview (inventory, CSV/ERP, agentic, QR/print), keeping quick-start concise while restoring enough depth for onboarding context.
 29. ✅ Refresh `README.md` so onboarding highlights current mediator goals (inventory + ERP + agentic review), links canonical docs, and removes stale deep-dive runtime guidance that drifts from maintained setup documentation.
 28. ✅ Refine item edit binary controls by replacing range sliders with styled switch toggles for `Shopartikel` and `Veröffentlich-Status`, while preserving 0/1 payload semantics and adding focused switch rendering assertions.

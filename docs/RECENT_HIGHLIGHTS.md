@@ -1,5 +1,9 @@
 # Recent Highlights
 
+## Version 2.3 (historical)
+
+> Planning inputs for upcoming work are tracked in `docs/PLANNING_V_2_4.md`.
+
 - Preserved Einheit/Quality/Auf_Lager values during match-selection item creation and logged creation-by-reference payload fields for observability.
 - Cleared ItemUUID values for grouped CSV export rows and omit the ItemUUID column when grouping merges rows to prevent inconsistent instance references, with logging for dropped IDs.
 - Added a Langtext JSON editor and detail viewer so key/value metadata renders clearly in the UI while falling back to the legacy text renderer when parsing fails.
