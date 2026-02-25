@@ -5,6 +5,9 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+37. ✅ Place `ShopBadge` exactly where requested: replace Item Detail header Quality badge with Shop badge and add a `Shop` column next to `Qualität` in Item List only.
+36. ✅ Scope ShopBadge placement to Item Detail only (remove unrequested list/box table columns) to keep UI changes minimal until explicit placement confirmation.
+35. ✅ Add Shop/Veröffentlichung visualization via a compact `ShopBadge` in item/box/detail views, map existing `khaki`/`--head` palette to `--negative`/`--positive` tokens, and keep status parsing resilient with guarded fallback logging.
 36. ✅ Drop shelf-ID legacy compatibility: enforce only `S-<location>-<floor>-<index>` in print/import/relocation and remove shelf category filtering/selection from create/list flows.
 35. ✅ Remove shelf category from minted/default shelf IDs (now `S-<location>-<floor>-<index>`), keep legacy parsing compatibility for print/import flows, and relax shelf-create payload category requirement while preserving logging/error handling.
 34. ✅ Clean documentation inputs for v2.4: move stale plan/input docs to `docs/archive/plans`, add `docs/PLANNING_V_2_4.md`, and keep current bugs scoped in `docs/BUGS.md` for actionable release work.
