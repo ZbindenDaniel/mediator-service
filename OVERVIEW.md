@@ -5,6 +5,8 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+36. ✅ Drop shelf-ID legacy compatibility: enforce only `S-<location>-<floor>-<index>` in print/import/relocation and remove shelf category filtering/selection from create/list flows.
+35. ✅ Remove shelf category from minted/default shelf IDs (now `S-<location>-<floor>-<index>`), keep legacy parsing compatibility for print/import flows, and relax shelf-create payload category requirement while preserving logging/error handling.
 34. ✅ Clean documentation inputs for v2.4: move stale plan/input docs to `docs/archive/plans`, add `docs/PLANNING_V_2_4.md`, and keep current bugs scoped in `docs/BUGS.md` for actionable release work.
 33. ✅ Introduce versioned highlights process: split `docs/RECENT_HIGHLIGHTS.md` into v2.3 historical notes and a v2.4 upcoming section so release history stays auditable between versions.
 32. ✅ Re-baseline planning documentation: clear active plan backlog in `docs/PLANS.md` (no current plans) and centralize implementation change logs in `docs/RECENT_HIGHLIGHTS.md` to keep release docs concise and auditable.

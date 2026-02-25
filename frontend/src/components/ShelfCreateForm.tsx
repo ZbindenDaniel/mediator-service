@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { itemCategories } from '../data/itemCategories';
 import { shelfLocations } from '../data/shelfLocations';
 import { ensureUser } from '../lib/user';
 import { logger, logError } from '../utils/logger';
 import { dialogService } from './dialog';
 
 // TODO(agent): Confirm shelf creation copy once warehouse naming conventions are finalized.
-// TODO(agent): Consolidate shelf category selectors with the item filter UI when shared controls are available.
+// TODO(agent): Remove stale category references from any shelf-create docs and screenshots.
 // TODO(agent): Review shelf label/notes defaults once shelf creation UX is finalized.
 
 interface ShelfCreateResponse {
@@ -19,8 +18,6 @@ interface ShelfCreateResponse {
 export default function ShelfCreateForm() {
   const [location, setLocation] = useState('');
   const [floor, setFloor] = useState('');
-  const [category, setCategory] = useState('');
-  const [subcategory, setSubcategory] = useState('');
   const [label, setLabel] = useState('');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState('');
@@ -46,43 +43,6 @@ export default function ShelfCreateForm() {
       setFloor(floorOptions[0]);
     }
   }, [floor, floorOptions, location]);
-
-  const categoryOptions = useMemo(
-    () =>
-      itemCategories.map((categoryOption) => ({
-        code: String(categoryOption.code),
-        label: categoryOption.label
-      })),
-    []
-  );
-  const activeCategory = useMemo(
-    () => itemCategories.find((categoryOption) => String(categoryOption.code) === category),
-    [category]
-  );
-  const subcategoryOptions = useMemo(
-    () =>
-      activeCategory?.subcategories.map((subcategoryOption) => ({
-        code: String(subcategoryOption.code),
-        label: subcategoryOption.label
-      })) ?? [],
-    [activeCategory]
-  );
-
-  useEffect(() => {
-    if (!category) {
-      setSubcategory('');
-      return;
-    }
-
-    if (subcategoryOptions.length === 0) {
-      setSubcategory('');
-      return;
-    }
-
-    if (!subcategoryOptions.some((option) => option.code === subcategory)) {
-      setSubcategory(subcategoryOptions[0].code);
-    }
-  }, [category, subcategory, subcategoryOptions]);
 
   useEffect(() => {
     if (!location) {
@@ -111,55 +71,24 @@ export default function ShelfCreateForm() {
     }
   }, [floor, floorOptions, location]);
 
-  useEffect(() => {
-    if (!category) {
-      return;
-    }
-
-    if (!categoryOptions.some((option) => option.code === category)) {
-      logger.warn('[shelf-create] Invalid category selection', {
-        category,
-        availableCategories: categoryOptions.map((option) => option.code)
-      });
-    }
-  }, [category, categoryOptions]);
-
-  useEffect(() => {
-    if (!subcategory) {
-      return;
-    }
-
-    if (!subcategoryOptions.some((option) => option.code === subcategory)) {
-      logger.warn('[shelf-create] Invalid subcategory selection', {
-        category,
-        subcategory,
-        availableSubcategories: subcategoryOptions.map((option) => option.code)
-      });
-    }
-  }, [category, subcategory, subcategoryOptions]);
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const selectedLocation = location.trim();
     const selectedFloor = floor.trim();
-    const selectedCategory = category.trim();
-    const selectedSubcategory = subcategory.trim();
     const trimmedLabel = label.trim();
     const trimmedNotes = notes.trim();
 
-    if (!selectedLocation || !selectedFloor || !selectedCategory || !selectedSubcategory) {
-      setStatus('Bitte alle Felder auswählen.');
+    if (!selectedLocation || !selectedFloor) {
+      setStatus('Bitte Standort und Ebene auswählen.');
       logger.warn('[shelf-create] Missing selection before submit', {
         selectedLocation,
-        selectedFloor,
-        selectedCategory,
-        selectedSubcategory
+        selectedFloor
       });
       try {
         await dialogService.alert({
           title: 'Eingaben fehlen',
-          message: 'Bitte Standort, Ebene, Kategorie und Unterkategorie auswählen.'
+          message: 'Bitte Standort und Ebene auswählen.'
         });
       } catch (error) {
         logError('Failed to display missing selection alert for shelf creation', error);
@@ -206,65 +135,6 @@ export default function ShelfCreateForm() {
       return;
     }
 
-    if (!categoryOptions.some((option) => option.code === selectedCategory)) {
-      setStatus('Ungültige Kategorie ausgewählt.');
-      logger.warn('[shelf-create] Invalid category before submit', {
-        selectedCategory
-      });
-      try {
-        await dialogService.alert({
-          title: 'Ungültige Kategorie',
-          message: 'Bitte eine gültige Kategorie auswählen.'
-        });
-      } catch (error) {
-        logError('Failed to display invalid category alert for shelf creation', error, {
-          selectedCategory
-        });
-      }
-      return;
-    }
-
-    if (!subcategoryOptions.some((option) => option.code === selectedSubcategory)) {
-      setStatus('Ungültige Unterkategorie ausgewählt.');
-      logger.warn('[shelf-create] Invalid subcategory before submit', {
-        selectedCategory,
-        selectedSubcategory
-      });
-      try {
-        await dialogService.alert({
-          title: 'Ungültige Unterkategorie',
-          message: 'Bitte eine gültige Unterkategorie auswählen.'
-        });
-      } catch (error) {
-        logError('Failed to display invalid subcategory alert for shelf creation', error, {
-          selectedCategory,
-          selectedSubcategory
-        });
-      }
-      return;
-    }
-
-    const selectedSubcategoryCode = Number.parseInt(selectedSubcategory, 10);
-    if (!Number.isFinite(selectedSubcategoryCode)) {
-      setStatus('Ungültige Unterkategorie ausgewählt.');
-      logger.warn('[shelf-create] Non-numeric subcategory code selected', {
-        selectedCategory,
-        selectedSubcategory
-      });
-      try {
-        await dialogService.alert({
-          title: 'Ungültige Unterkategorie',
-          message: 'Bitte eine gültige Unterkategorie auswählen.'
-        });
-      } catch (error) {
-        logError('Failed to display invalid subcategory alert for shelf creation', error, {
-          selectedCategory,
-          selectedSubcategory
-        });
-      }
-      return;
-    }
-
     let actor: string | undefined;
     try {
       actor = await ensureUser({
@@ -275,8 +145,6 @@ export default function ShelfCreateForm() {
       logError('Failed to resolve user for shelf creation', error, {
         selectedLocation,
         selectedFloor,
-        selectedCategory,
-        selectedSubcategory
       });
       setStatus('Benutzer konnte nicht geladen werden.');
       try {
@@ -311,8 +179,7 @@ export default function ShelfCreateForm() {
         actor,
         type: 'shelf',
         location: selectedLocation,
-        floor: selectedFloor,
-        category: selectedSubcategoryCode
+        floor: selectedFloor
       };
       if (trimmedLabel) {
         payload.label = trimmedLabel;
@@ -323,7 +190,6 @@ export default function ShelfCreateForm() {
       logger.info('[shelf-create] Submitting shelf creation', {
         location: selectedLocation,
         floor: selectedFloor,
-        category: selectedSubcategory,
         hasLabel: Boolean(trimmedLabel),
         hasNotes: Boolean(trimmedNotes)
       });
@@ -342,8 +208,6 @@ export default function ShelfCreateForm() {
           id: data.id,
           location: selectedLocation,
           floor: selectedFloor,
-          category: selectedCategory,
-          subcategory: selectedSubcategory,
           status: response.status
         });
         try {
@@ -363,8 +227,6 @@ export default function ShelfCreateForm() {
           error: data.error ?? data,
           location: selectedLocation,
           floor: selectedFloor,
-          category: selectedCategory,
-          subcategory: selectedSubcategory
         });
         try {
           await dialogService.alert({
@@ -375,7 +237,6 @@ export default function ShelfCreateForm() {
           logError('Failed to display shelf error dialog', error, {
             location: selectedLocation,
             floor: selectedFloor,
-            category: selectedCategory,
             status: response.status
           });
         }
@@ -384,8 +245,6 @@ export default function ShelfCreateForm() {
       logError('Shelf creation request failed', error, {
         location: selectedLocation,
         floor: selectedFloor,
-        category: selectedCategory,
-        subcategory: selectedSubcategory
       });
       setStatus('Regal-Erstellung fehlgeschlagen.');
       setMintedId('');
@@ -398,8 +257,6 @@ export default function ShelfCreateForm() {
         logError('Failed to display shelf request failure alert', dialogError, {
           location: selectedLocation,
           floor: selectedFloor,
-          category: selectedCategory,
-          subcategory: selectedSubcategory
         });
       }
     } finally {
@@ -446,42 +303,6 @@ export default function ShelfCreateForm() {
                 {floorOptions.map((floorOption) => (
                   <option key={floorOption} value={floorOption}>
                     {floorOption}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Kategorie
-              <select
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                required
-                disabled={isSubmitting}
-              >
-                <option value="" disabled>
-                  Kategorie wählen
-                </option>
-                {categoryOptions.map((categoryOption) => (
-                  <option key={categoryOption.code} value={categoryOption.code}>
-                    {categoryOption.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Unterkategorie
-              <select
-                value={subcategory}
-                onChange={(event) => setSubcategory(event.target.value)}
-                required
-                disabled={!category || subcategoryOptions.length === 0 || isSubmitting}
-              >
-                <option value="" disabled>
-                  Unterkategorie wählen
-                </option>
-                {subcategoryOptions.map((subcategoryOption) => (
-                  <option key={subcategoryOption.code} value={subcategoryOption.code}>
-                    {subcategoryOption.label}
                   </option>
                 ))}
               </select>

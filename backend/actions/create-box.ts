@@ -2,10 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
-import { resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
-// TODO(agent): Share shelf category validation with model-level helpers for consistency.
+// TODO(agent): Remove category-based shelf label fallback assumptions from any remaining admin tooling.
 // TODO(agent): Standardize shelf label/note normalization rules with frontend validation.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -42,29 +41,6 @@ function normalizeShelfField(value: unknown): string | null {
 
 function isMissingShelfValue(value: unknown): boolean {
   return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
-}
-
-function normalizeShelfCategory(value: unknown): string | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const normalized = Math.trunc(value);
-    if (normalized <= 0) {
-      return null;
-    }
-    return String(normalized);
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-    if (!/^\d+$/.test(trimmed)) {
-      return null;
-    }
-    return trimmed;
-  }
-
-  return null;
 }
 
 const action = defineHttpAction({
@@ -123,19 +99,11 @@ const action = defineHttpAction({
           invalidFields.push('floor');
         }
 
-        const rawCategory = shelfPayload.category;
-        const category = normalizeShelfCategory(rawCategory);
-        if (isMissingShelfValue(rawCategory)) {
-          missingFields.push('category');
-        } else if (!category) {
-          invalidFields.push('category');
-        }
-
         if (missingFields.length > 0 || invalidFields.length > 0) {
           console.error('[shelf] Invalid shelf payload', {
             missingFields,
             invalidFields,
-            provided: { location: rawLocation, floor: rawFloor, category: rawCategory }
+            provided: { location: rawLocation, floor: rawFloor }
           });
           const messages: string[] = [];
           if (missingFields.length > 0) {
@@ -146,34 +114,6 @@ const action = defineHttpAction({
           }
           return sendJson(res, 400, { error: messages.join('. ') });
         }
-
-        if (!category) {
-          console.error('[shelf] Category normalization failed after validation', {
-            rawCategory
-          });
-          return sendJson(res, 400, { error: 'Invalid category field' });
-        }
-
-        const categorySegment = category.padStart(4, '0');
-        const fallbackCategoryLabel = `Kategorie ${categorySegment}`;
-        let categoryLabel = fallbackCategoryLabel;
-        try {
-          const resolvedCategoryLabel = resolveCategoryCodeToLabel(categorySegment, 'unter');
-          if (resolvedCategoryLabel) {
-            categoryLabel = resolvedCategoryLabel;
-          } else {
-            console.warn('[shelf] Missing category label for shelf creation; using fallback', {
-              category: categorySegment,
-              fallback: fallbackCategoryLabel
-            });
-          }
-        } catch (error) {
-          console.error('[shelf] Failed to resolve category label for shelf creation; using fallback', {
-            category: categorySegment,
-            fallback: fallbackCategoryLabel,
-            error
-          });
-        }
         const rawLabel =
           typeof shelfPayload.label === 'string'
             ? shelfPayload.label
@@ -183,16 +123,15 @@ const action = defineHttpAction({
         const normalizedLabel = rawLabel.trim();
         const rawNotes = typeof shelfPayload.notes === 'string' ? shelfPayload.notes : '';
         const normalizedNotes = rawNotes.trim();
-        const resolvedShelfLabel = normalizedLabel || `Regal ${categoryLabel}`;
+        const resolvedShelfLabel = normalizedLabel || `Regal ${location}-${floor}`;
         const resolvedNotes = normalizedNotes ? normalizedNotes : null;
         console.info('[shelf] Resolved shelf label/notes for create', {
           location,
           floor,
-          category: categorySegment,
           hasCustomLabel: Boolean(normalizedLabel),
           hasNotes: Boolean(normalizedNotes)
         });
-        const prefix = `S-${location}-${floor}-${categorySegment}-`;
+        const prefix = `S-${location}-${floor}-`;
         const nowDate = new Date();
         const now = nowDate.toISOString();
         const shelfTxn = ctx.db.transaction(
@@ -201,7 +140,6 @@ const action = defineHttpAction({
             prefix: string;
             location: string;
             floor: string;
-            category: string;
             label: string;
             notes: string | null;
             now: string;
@@ -222,8 +160,7 @@ const action = defineHttpAction({
                 console.warn('[shelf] Shelf ID collision detected, retrying', {
                   candidate,
                   location: payload.location,
-                  floor: payload.floor,
-                  category: payload.category
+                  floor: payload.floor
                 });
                 attempts += 1;
                 nextIndex += 1;
@@ -249,8 +186,7 @@ const action = defineHttpAction({
                 Meta: JSON.stringify({
                   type: 'shelf',
                   location: payload.location,
-                  floor: payload.floor,
-                  category: payload.category
+                  floor: payload.floor
                 })
               });
               return candidate;
@@ -265,12 +201,11 @@ const action = defineHttpAction({
           prefix,
           location,
           floor,
-          category: categorySegment,
           label: resolvedShelfLabel,
           notes: resolvedNotes,
           now
         });
-        console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, category: categorySegment, actor });
+        console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, actor });
         return sendJson(res, 200, { ok: true, id: shelfId });
       }
 
