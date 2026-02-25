@@ -72,6 +72,8 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-preview): Revalidate review modal preview compactness after operator feedback on readability.
 // TODO(agentic-review-dialog): Reconfirm section/question emphasis styling in the review modal after reviewer validation.
 // TODO(agentic-review-spec-fields): Revisit field normalization if Langtext parsing contracts change.
+// TODO(shop-badge-detail): Revisit ShopBadge placement if detail rows move to grouped metadata cards.
+// TODO(shop-badge-detail-header): Reconfirm compact header badge spacing if title layout changes.
 // TODO(agentic-review-price): Add localized currency formatting/parsing if operators request stricter price validation.
 // TODO(agentic-review-spec-input): Keep single spec modal copy aligned with reviewer workflow wording.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
@@ -80,6 +82,7 @@ import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './I
 import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
+import ShopBadge from './ShopBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
 import {
   buildNormalizedReviewSpecFields,
@@ -3151,7 +3154,12 @@ export default function ItemDetail({ itemId }: Props) {
               <h2 className="item-detail__title">
                 Artikel <span className="muted">({item.ItemUUID})</span>
                 <span style={{ marginLeft: '8px' }}>
-                  <QualityBadge compact value={qualitySummary.value} />
+                  <ShopBadge
+                    compact
+                    labelPrefix="Shop/Veröffentlichung"
+                    shopartikel={item.Shopartikel ?? null}
+                    publishedStatus={item.Veröffentlicht_Status ?? null}
+                  />
                 </span>
               </h2>
               <h3>Referenz</h3>

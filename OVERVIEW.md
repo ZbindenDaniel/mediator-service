@@ -5,6 +5,9 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+37. ✅ Place `ShopBadge` exactly where requested: replace Item Detail header Quality badge with Shop badge and add a `Shop` column next to `Qualität` in Item List only.
+36. ✅ Scope ShopBadge placement to Item Detail only (remove unrequested list/box table columns) to keep UI changes minimal until explicit placement confirmation.
+35. ✅ Add Shop/Veröffentlichung visualization via a compact `ShopBadge` in item/box/detail views, map existing `khaki`/`--head` palette to `--negative`/`--positive` tokens, and keep status parsing resilient with guarded fallback logging.
 34. ✅ Clean documentation inputs for v2.4: move stale plan/input docs to `docs/archive/plans`, add `docs/PLANNING_V_2_4.md`, and keep current bugs scoped in `docs/BUGS.md` for actionable release work.
 33. ✅ Introduce versioned highlights process: split `docs/RECENT_HIGHLIGHTS.md` into v2.3 historical notes and a v2.4 upcoming section so release history stays auditable between versions.
 32. ✅ Re-baseline planning documentation: clear active plan backlog in `docs/PLANS.md` (no current plans) and centralize implementation change logs in `docs/RECENT_HIGHLIGHTS.md` to keep release docs concise and auditable.

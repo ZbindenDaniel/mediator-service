@@ -4,6 +4,7 @@ import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import type { Item } from '../../../models';
 import LocationTag from './LocationTag';
 import QualityBadge from './QualityBadge';
+import ShopBadge from './ShopBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import type { GroupedItemDisplay } from '../lib/itemGrouping';
 import { logError, logger } from '../utils/logger';
@@ -13,6 +14,7 @@ import { logError, logger } from '../utils/logger';
 // TODO(agentic): Expand item list columns and responsive styling for enriched item metadata.
 // TODO(agentic-status-ui): Replace plain status text with badges once status icons are available.
 // TODO(agent): Keep BoxID (Behälter) and Location (Lagerort) normalization separate in this table.
+// TODO(shop-badge-list-column): Revalidate Shop column visibility rules once mobile column collapsing is updated.
 // TODO(agent): Validate shelf label formatting in the item list Lagerort column.
 // TODO(agent): Revisit item list shelf label fallbacks once shelf metadata is editable.
 // TODO(grouped-item-table): Validate grouped row actions once bulk operations are updated.
@@ -125,6 +127,7 @@ export default function ItemList({
             <th className="col-agentic optional-column">Ki</th>
             <th className="col-stock optional-column">Anzahl</th>
             <th className="col-quality optional-column">Qualität</th>
+            <th className="col-shop optional-column">Shop</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
           </tr>
         </thead>
@@ -199,6 +202,8 @@ export default function ItemList({
             const qualityValue = typeof group.summary.Quality === 'number'
               ? group.summary.Quality
               : (typeof representative?.Quality === 'number' ? representative.Quality : null);
+            const shopartikelValue = representative?.Shopartikel ?? null;
+            const publishedStatusValue = representative?.Veröffentlicht_Status ?? null;
 
             return (
               <tr
@@ -274,6 +279,9 @@ export default function ItemList({
                 <td className="col-stock optional-column">{countValue}</td>
                 <td className="col-quality optional-column">
                   <QualityBadge compact value={qualityValue} />
+                </td>
+                <td className="col-shop optional-column">
+                  <ShopBadge compact shopartikel={shopartikelValue} publishedStatus={publishedStatusValue} />
                 </td>
                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
               </tr>

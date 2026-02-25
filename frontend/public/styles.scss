@@ -28,6 +28,8 @@ $activity-color: #804db4;
     --acc: #747372;
     /* accent */
     --nav: khaki;
+    --positive: var(--head);
+    --negative: khaki;
 
     font-family: "Share Tech Mono", monospace !important;
     font-weight: 400;
@@ -2252,6 +2254,27 @@ button:focus {
 }
 
 .quality-badge--compact {
+    padding: 2px 6px;
+    font-size: 10px;
+}
+
+.shop-badge {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    min-width: 25px;
+    height: 25px;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--fg);
+}
+
+.shop-badge--compact {
     padding: 2px 6px;
     font-size: 10px;
 }
