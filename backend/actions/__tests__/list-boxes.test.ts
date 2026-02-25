@@ -30,18 +30,18 @@ describe('list-boxes action', () => {
     expect(action.matches('/api/boxes', 'GET')).toBe(true);
   });
 
-  it('filters shelf boxes by category', async () => {
+  it('returns shelf boxes when type filter is used', async () => {
     const ctx = {
       listBoxes: {
         all: jest.fn(() => []),
         byType: jest.fn(() => [
-          { BoxID: 'S-01-02-0012-03', LocationId: null, ItemCount: 5, TotalWeightKg: 12.5 },
-          { BoxID: 'S-01-02-9999-01', LocationId: null, ItemCount: 0, TotalWeightKg: 0 }
+          { BoxID: 'S-01-02-0003', LocationId: null, ItemCount: 5, TotalWeightKg: 12.5 },
+          { BoxID: 'S-01-02-0001', LocationId: null, ItemCount: 0, TotalWeightKg: 0 }
         ])
       }
     };
 
-    const req = createRequest('/api/boxes?type=S&category=12');
+    const req = createRequest('/api/boxes?type=S');
     const { res, getStatus, getBody } = createMockResponse();
 
     try {
@@ -53,7 +53,7 @@ describe('list-boxes action', () => {
 
     const body = getBody();
     expect(getStatus()).toBe(200);
-    expect(body.boxes).toHaveLength(1);
-    expect(body.boxes[0]).toEqual(expect.objectContaining({ BoxID: 'S-01-02-0012-03', ItemCount: 5, TotalWeightKg: 12.5 }));
+    expect(body.boxes).toHaveLength(2);
+    expect(body.boxes[0]).toEqual(expect.objectContaining({ BoxID: 'S-01-02-0003', ItemCount: 5, TotalWeightKg: 12.5 }));
   });
 });

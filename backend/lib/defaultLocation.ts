@@ -8,6 +8,7 @@ interface EnsureDefaultLocationOptions {
 }
 
 // TODO(agent): Validate default shelf mapping entries against a canonical warehouse layout source.
+// TODO(agent): Remove legacy category-bearing shelf IDs from existing records via a dedicated migration.
 function normalizeSubcategoryCode(raw: unknown): number | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) {
     return Math.trunc(raw);
@@ -27,9 +28,9 @@ function formatLegacyLocationId(code: number): string {
   return `S-${String(code).padStart(4, '0')}-0001`;
 }
 
-function formatLocationId(input: { location: string; floor: string; category: string; index: number }): string {
-  const { location, floor, category, index } = input;
-  return `S-${location}-${floor}-${category}-${String(index).padStart(4, '0')}`;
+function formatLocationId(input: { location: string; floor: string; index: number }): string {
+  const { location, floor, index } = input;
+  return `S-${location}-${floor}-${String(index).padStart(4, '0')}`;
 }
 
 function normalizeShelfSegment(value: unknown): string | null {
@@ -89,8 +90,7 @@ export function ensureDefaultLocationForSubcategory(
     return null;
   }
 
-  const categorySegment = String(normalizedCode).padStart(4, '0');
-  const locationId = formatLocationId({ location, floor, category: categorySegment, index: 1 });
+  const locationId = formatLocationId({ location, floor, index: 1 });
 
   try {
     const existing = database
@@ -151,6 +151,5 @@ export function deriveLocationIdFromSubcategory(subcategoryCode: unknown): strin
     return null;
   }
 
-  const categorySegment = String(normalizedCode).padStart(4, '0');
-  return formatLocationId({ location, floor, category: categorySegment, index: 1 });
+  return formatLocationId({ location, floor, index: 1 });
 }

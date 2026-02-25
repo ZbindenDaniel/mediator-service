@@ -87,48 +87,25 @@ try {
 function parseShelfIdSegments(shelfId: string): {
   location: string;
   floor: string;
-  category: string;
   index: string;
 } | null {
-  const match = shelfId.match(/^S-([A-Z0-9_]+)-([A-Z0-9_]+)-([A-Z0-9_]+)-([A-Z0-9_]+)$/i);
+  const match = shelfId.match(/^S-([A-Z0-9_]+)-([A-Z0-9_]+)-([A-Z0-9_]+)$/i);
   if (!match) return null;
   return {
     location: match[1].toUpperCase(),
     floor: match[2].toUpperCase(),
-    category: match[3].toUpperCase(),
-    index: match[4].toUpperCase()
+    index: match[3].toUpperCase()
   };
 }
 
 function resolveShelfCategoryLabel(shelfId: string): { label: string | null; source: string; segment: string | null } {
   const segments = parseShelfIdSegments(shelfId);
   if (!segments) {
-    return { label: null, source: 'missing_segments', segment: null };
+    console.warn('[print-unified] Invalid shelf ID format for shelf label payload', { shelfId });
+    return { label: null, source: 'invalid_shelf_id', segment: null };
   }
 
-  const rawSegment = segments.category;
-  if (/^\d+$/.test(rawSegment)) {
-    try {
-      const numeric = Number.parseInt(rawSegment, 10);
-      const fromSubcategory = Number.isFinite(numeric) ? getSubcategoryLabelFromCode(numeric) : undefined;
-      if (fromSubcategory) {
-        return { label: fromSubcategory, source: 'subcategory_code_lookup', segment: rawSegment };
-      }
-      const fromCategory = Number.isFinite(numeric) ? getCategoryLabelFromCode(numeric) : undefined;
-      if (fromCategory) {
-        return { label: fromCategory, source: 'category_code_lookup', segment: rawSegment };
-      }
-    } catch (error) {
-      console.error('[print-unified] Failed to parse shelf category segment', { shelfId, error });
-    }
-  }
-
-  const fromLabel = shelfCategoryLookup.get(rawSegment);
-  if (fromLabel) {
-    return { label: fromLabel, source: 'label_lookup', segment: rawSegment };
-  }
-
-  return { label: rawSegment, source: 'segment_fallback', segment: rawSegment };
+  return { label: null, source: 'category_removed', segment: null };
 }
 
 // TODO(print-unified): consider caching item category lookups if this becomes a hot path.
