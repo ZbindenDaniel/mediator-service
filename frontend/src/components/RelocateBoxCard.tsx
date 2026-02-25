@@ -38,10 +38,10 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
         .split('-')
         .map((segment) => segment.trim())
         .filter(Boolean);
-      if (segments.length < 5 || segments[0] !== LOCATION_BOX_TYPE) {
-        logger.warn('[relocate-box] Unexpected shelf id format for label', { locationId });
+      if (segments.length !== 4 || segments[0] !== LOCATION_BOX_TYPE) {
+        logger.warn('[relocate-box] Unexpected shelf id format for label', { locationId, segments });
       } else {
-        const shelfNumber = segments[4];
+        const shelfNumber = segments[3];
         const formattedBase = formatShelfLabel(locationId);
         if (formattedBase && shelfNumber) {
           parsedLabel = `${formattedBase} · Regal ${shelfNumber}`;

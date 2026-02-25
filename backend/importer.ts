@@ -1847,7 +1847,7 @@ function normalizeBoxField(value: unknown): string {
   }
 }
 
-const SHELF_BOX_ID_PATTERN = /^S-\w{4}-\d-\d{4}-\d{4}$/;
+const SHELF_BOX_ID_PATTERN = /^S-[A-Za-z0-9_]+-[A-Za-z0-9_]+-\d{4}$/;
 const NON_SHELF_BOX_ID_PATTERN = /^(?:B-\d{6}-\d{4}|BIN-[A-Za-z0-9][A-Za-z0-9_-]*|[A-Za-z0-9]+(?:[._:-][A-Za-z0-9]+)*)$/;
 
 function isValidShelfBoxId(value: string, context: { rowNumber: number }): boolean {
