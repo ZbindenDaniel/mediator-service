@@ -792,7 +792,7 @@ function resolveExportValue(
       }
 
       const isApproved = agenticReviewState !== null ? agenticReviewState === 'approved' : agenticStatus === 'approved';
-      const gatedPublished = normalizedPublished && isApproved;
+      const gatedPublished = normalizedPublished || isApproved;
 
       if (normalizedPublished && !gatedPublished) {
         console.info('[export-items] Agentic review gate suppressed published status during export.', {

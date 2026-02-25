@@ -603,7 +603,8 @@ export function AgenticStatusCard({
               </button>
             </div>
           ) : null}
-          {canDelete && onDelete ? (
+          {false && canDelete && onDelete ? (
+            // disabled for now. Might be smarter to only expose this to admins
             <div className='row'>
               <button type="button" className="btn danger" disabled={actionPending} onClick={onDelete}>
                 Lauf löschen
