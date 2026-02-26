@@ -7,8 +7,9 @@
 > - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
 
 ## In short
-- Business goal: Provide one canonical item-domain reference so item features, imports/exports, and agentic enrichment flows share the same assumptions.
-- User value: Fewer regressions caused by mixed usage of `Artikel_Nummer` (reference identity) vs. `ItemUUID` (instance identity), especially during edits, imports, and review workflows.
+- Business goal: Keep the item domain understandable as the central data object that connects storage, enrichment, import/export, and shop synchronization workflows.
+- In short: Items relate to most operational classes (boxes, media, events, agentic runs, export records) and are intentionally split into reference identity (`Artikel_Nummer`) and instance identity (`ItemUUID`).
+- User value: Fewer regressions caused by mixed identity usage and clearer expectations for ERP/shop synchronization boundaries.
 
 ## Scope
 - In scope:
@@ -87,7 +88,7 @@
 - `Verkaufspreis`: Sell price field used in edit/review/export contracts.
 - `Veröffentlicht_Status`: Publish toggle/status used by shop/export and visibility logic.
 - `Shopartikel`: Shop relevance flag indicating whether the item is considered a shop article.
-- `Langtext`: Structured or legacy text payload for detailed specs and enrichment content.
+- `Langtext`: Structured/legacy specification payload that the item enrichment flow primarily builds, validates, and reviews before downstream export/sync.
 
 ## Backend action map
 | Flow | Endpoint/action | File | Notes |
@@ -149,3 +150,4 @@
 ## Changelog
 - 2026-02-26: Replaced template draft with full item-domain reference (identity, contracts, backend/frontend maps, and logging/error handling notes).
 - 2026-02-26: Incorporated review feedback: switched intro heading to "In short", clarified `Stk` vs `Menge`, and added one-line field glossary.
+- 2026-02-26: Clarified "In short" to describe item centrality/relations and refined `Langtext` purpose for enrichment-flow motivation.

@@ -7,6 +7,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+43. ✅ Refine `docs/detailed/items.md` summary to explicitly describe item centrality/relations (refs vs instances, ERP/shop sync context) and clarify `Langtext` as enrichment-flow core output.
 42. ✅ Address item-doc review feedback: rename intro section to "In short", clarify `Einheit` semantics (`Stk` vs `Menge`), and add one-line purpose glossary for key fields.
 41. ✅ Expand `docs/detailed/items.md` from template into a complete item-domain reference covering identity, contracts, backend/frontend maps, and mutation/import logging expectations.
 40. ✅ Add `docs/detailed/_candidates.md` listing additional high-value doc split targets (Shopware queue, ingestion pipeline, search, label rendering, prompt contracts, observability, bulk ops, runtime config) for small parallel follow-ups.
