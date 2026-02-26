@@ -1,5 +1,7 @@
 # Agent Guidelines
 
+Deep-dive operational and implementation docs are indexed at [`docs/detailed/README.md`](./detailed/README.md).
+
 Get an overview of the project in `OVERVIEW.md`. There you will see what changes are in progress. You will also track your progress in this file. If you find parts of the application undocumented add them in `OVERVIEW.md` or a linked file.
 
 When implementing always assure logging and error handling is present. Yet don't overdo it. When updating code try **updating** logs and handling rather then adding anew
