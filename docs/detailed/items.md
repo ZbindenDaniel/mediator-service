@@ -146,8 +146,3 @@
 - [ ] Should `ImageNames` remain a serialized reference field long-term, or be fully replaced by media table/file metadata (several TODO markers suggest migration intent)?
 - [ ] Audit follow-up: are there any remaining flows that still rely on `Auf_Lager` for `Einheit=Stk` despite the contract expectation of `Auf_Lager=1` per instance?
 - [ ] Is there a documented compatibility policy for `entityFilter=references` list behavior, or is it considered internal/experimental?
-
-## Changelog
-- 2026-02-26: Replaced template draft with full item-domain reference (identity, contracts, backend/frontend maps, and logging/error handling notes).
-- 2026-02-26: Incorporated review feedback: switched intro heading to "In short", clarified `Stk` vs `Menge`, and added one-line field glossary.
-- 2026-02-26: Clarified "In short" to describe item centrality/relations and refined `Langtext` purpose for enrichment-flow motivation.

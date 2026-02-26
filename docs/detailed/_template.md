@@ -77,6 +77,3 @@
 
 ## Open questions / TODO
 - [ ] TODO:
-
-## Changelog
-- YYYY-MM-DD: Initial draft.
