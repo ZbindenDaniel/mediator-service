@@ -5,6 +5,7 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+38. ✅ Inject aggregated review-automation trigger fragments into extraction/supervisor prompt placeholders with guarded fallback logging in `backend/agentic/flow/item-flow-extraction.ts`.
 37. ✅ Place `ShopBadge` exactly where requested: replace Item Detail header Quality badge with Shop badge and add a `Shop` column next to `Qualität` in Item List only.
 36. ✅ Scope ShopBadge placement to Item Detail only (remove unrequested list/box table columns) to keep UI changes minimal until explicit placement confirmation.
 35. ✅ Add Shop/Veröffentlichung visualization via a compact `ShopBadge` in item/box/detail views, map existing `khaki`/`--head` palette to `--negative`/`--positive` tokens, and keep status parsing resilient with guarded fallback logging.
