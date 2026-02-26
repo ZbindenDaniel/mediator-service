@@ -7,6 +7,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+42. ✅ Address item-doc review feedback: rename intro section to "In short", clarify `Einheit` semantics (`Stk` vs `Menge`), and add one-line purpose glossary for key fields.
+41. ✅ Expand `docs/detailed/items.md` from template into a complete item-domain reference covering identity, contracts, backend/frontend maps, and mutation/import logging expectations.
 40. ✅ Add `docs/detailed/_candidates.md` listing additional high-value doc split targets (Shopware queue, ingestion pipeline, search, label rendering, prompt contracts, observability, bulk ops, runtime config) for small parallel follow-ups.
 39. ✅ Scaffold `docs/detailed/` domain docs (`items`, `boxes`, `printing`, `import_export`, `qr_codes`, `agentic-basics`, `item-flow`, `review-flow`) from template with draft status, single-owner fields, core concepts, and likely code pointers for parallel authoring.
 40. ✅ Simplify `docs/detailed/README.md` by removing ownership/status/TODO sections and keep only concise audience + canonical navigation links per review feedback.

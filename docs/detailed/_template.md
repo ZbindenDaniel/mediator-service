@@ -6,7 +6,7 @@
 > - Keep each section short and contract-focused.
 > - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
 
-## Why this exists
+## In short
 - Business goal:
 - User value:
 
@@ -27,6 +27,11 @@
 - Key fields:
 - Enums:
 - Sync requirements across layers:
+
+
+### Field glossary (one-line purpose per field)
+- `<FieldName>`: <Purpose>.
+- `<FieldName>`: <Purpose>.
 
 ## API/actions
 - Endpoint/action names:
