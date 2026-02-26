@@ -9,6 +9,8 @@ import { AgentOutputSchema, TargetSchema, logSchemaKeyTelemetry, normalizeSpezif
 import { runCategorizerStage } from './item-flow-categorizer';
 import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
+import { listRecentAgenticRunReviewHistoryBySubcategory, getItemReference } from '../../db';
+import { loadSubcategoryReviewAutomationSignals } from '../review-automation-signals';
 import {
   appendPlaceholderFragment,
   PROMPT_PLACEHOLDERS,
@@ -649,8 +651,77 @@ export async function runExtractionAttempts({
     return 'continue';
   };
 
-  // TODO(agentic-review-prompts): Route review automation signals into placeholder fragments as triggers expand.
+  // TODO(agentic-review-prompts): Keep bad_format and information_present_low trigger handling log-only until flow risk is acceptable.
   const basePromptFragments: PromptPlaceholderFragments = new Map();
+  let injectedExtractionSignalFragmentCount = 0;
+  let injectedSupervisorSignalFragmentCount = 0;
+  try {
+    const aggregatedSignals = loadSubcategoryReviewAutomationSignals(itemId, {
+      getItemReference,
+      listRecentReviewHistoryBySubcategory: listRecentAgenticRunReviewHistoryBySubcategory,
+      logger: logger ?? console
+    });
+    const activeTriggers = [
+      aggregatedSignals.wrong_information_trigger ? 'wrong_information_trigger' : null,
+      aggregatedSignals.wrong_physical_dimensions_trigger ? 'wrong_physical_dimensions_trigger' : null,
+      aggregatedSignals.missing_spec_trigger ? 'missing_spec_trigger' : null,
+      aggregatedSignals.bad_format_trigger ? 'bad_format_trigger' : null,
+      aggregatedSignals.information_present_low_trigger ? 'information_present_low_trigger' : null
+    ].filter((entry): entry is string => Boolean(entry));
+
+    if (aggregatedSignals.wrong_information_trigger) {
+      appendPlaceholderFragment(
+        basePromptFragments,
+        PROMPT_PLACEHOLDERS.extractionReview,
+        'Caution: cross-check factual claims against gathered evidence before final extraction.'
+      );
+      injectedExtractionSignalFragmentCount += 1;
+    }
+
+    if (aggregatedSignals.wrong_physical_dimensions_trigger) {
+      appendPlaceholderFragment(
+        basePromptFragments,
+        PROMPT_PLACEHOLDERS.extractionReview,
+        'Caution: extract only physically plausible dimensions and units from explicit evidence.'
+      );
+      injectedExtractionSignalFragmentCount += 1;
+      appendPlaceholderFragment(
+        basePromptFragments,
+        PROMPT_PLACEHOLDERS.supervisorReview,
+        'Check physical-dimension plausibility and reject impossible size/weight combinations.'
+      );
+      injectedSupervisorSignalFragmentCount += 1;
+    }
+
+    if (aggregatedSignals.missing_spec_trigger) {
+      const missingSpecKeys = aggregatedSignals.missingSpecTopKeys
+        .map((entry) => entry.key)
+        .filter((entry) => Boolean(entry));
+      const missingSpecSummary = missingSpecKeys.length > 0 ? missingSpecKeys.join(', ') : 'critical specification keys from prior reviews';
+      appendPlaceholderFragment(
+        basePromptFragments,
+        PROMPT_PLACEHOLDERS.extractionReview,
+        `Prioritize extracting these frequently missing specification keys when evidence exists: ${missingSpecSummary}.`
+      );
+      injectedExtractionSignalFragmentCount += 1;
+    }
+
+    logger?.info?.({
+      msg: 'review automation signal prompt injection complete',
+      itemId,
+      subcategory: getItemReference.get(itemId)?.Unterkategorien_A ?? null,
+      sampleSize: aggregatedSignals.sampleSize,
+      activeTriggers,
+      injectedPlaceholderFragments: {
+        extractionReview: injectedExtractionSignalFragmentCount,
+        supervisorReview: injectedSupervisorSignalFragmentCount,
+        total: injectedExtractionSignalFragmentCount + injectedSupervisorSignalFragmentCount
+      }
+    });
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to inject review automation signal placeholder fragments', itemId });
+  }
+
   // TODO(agentic-schema-injection): Revisit whether categorizer/supervisor require reduced schema slices once prompt sizes are measured.
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.categorizerReview, sanitizedReviewerNotes);
