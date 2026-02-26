@@ -5,6 +5,8 @@
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+40. ✅ Add `docs/detailed/_candidates.md` listing additional high-value doc split targets (Shopware queue, ingestion pipeline, search, label rendering, prompt contracts, observability, bulk ops, runtime config) for small parallel follow-ups.
+39. ✅ Scaffold `docs/detailed/` domain docs (`items`, `boxes`, `printing`, `import_export`, `qr_codes`, `agentic-basics`, `item-flow`, `review-flow`) from template with draft status, single-owner fields, core concepts, and likely code pointers for parallel authoring.
 38. ✅ Inject aggregated review-automation trigger fragments into extraction/supervisor prompt placeholders with guarded fallback logging in `backend/agentic/flow/item-flow-extraction.ts`.
 37. ✅ Place `ShopBadge` exactly where requested: replace Item Detail header Quality badge with Shop badge and add a `Shop` column next to `Qualität` in Item List only.
 36. ✅ Scope ShopBadge placement to Item Detail only (remove unrequested list/box table columns) to keep UI changes minimal until explicit placement confirmation.
