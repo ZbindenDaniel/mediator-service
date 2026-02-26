@@ -2,6 +2,8 @@
 
 This document details the structure and data flow of the mediator service across backend services, frontend UI, shared models, and legacy assets.
 
+See the detailed-docs index for deep-dive runbooks and implementation notes: [`docs/detailed/README.md`](./detailed/README.md).
+
 _Diagram follow-up:_ Import, agentic, and printing sequence diagrams remain outstanding. Track this under `docs/` with
 Design:owner@mediator and target the ongoing release documentation refresh.
 
