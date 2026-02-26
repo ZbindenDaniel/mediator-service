@@ -35,6 +35,7 @@ When implementing a plan:
 
 
 ## Agentic Prompt Best Practices
+- Value LLM context efficiency: avoid bloated documentation/prompt text and keep only content necessary for current behaviour and implementation safety.
 - Keep prompt sections aligned with `backend/agentic/flow/item-flow-schemas.ts::TargetSchema`; update both together when fields change.
 - Emphasise JSON-only output, locked field preservation, and the limited `__searchQueries` allowance when revising extraction instructions.
 - Tie device guidance directly to schema keys (`Langtext`, `Kurzbeschreibung`, `Artikelbeschreibung`) so downstream validators stay consistent and the prompt remains concise.
