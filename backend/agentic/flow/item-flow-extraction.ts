@@ -51,6 +51,8 @@ export interface RunExtractionOptions {
   searchInvoker: SearchInvoker;
   target: AgenticTarget;
   reviewNotes?: string | null;
+  missingSpecFields?: string[];
+  unneededSpecFields?: string[];
   skipSearch?: boolean;
   exampleItemBlock?: string | null;
   transcriptWriter?: AgentTranscriptWriter | null;
@@ -76,6 +78,8 @@ const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
 const ACCUMULATOR_TEXT_MAX_LENGTH = 280;
 const ACCUMULATOR_SUMMARY_MAX_LENGTH = 2400;
 const ACCUMULATOR_OUTLINE_VALUE_MAX_LENGTH = 90;
+const REVIEW_SPEC_FIELD_LIMIT = 20;
+const REVIEW_SPEC_SAMPLE_LIMIT = 5;
 const INTERNAL_ACCUMULATOR_KEYS = new Set<string>(['__searchQueries', ...LEGACY_IDENTIFIER_KEYS]);
 const NULL_TARGET_TEMPLATE = Object.freeze(
   Object.keys(TargetSchema.shape).reduce<Record<string, null>>((acc, key) => {
@@ -503,6 +507,79 @@ function mapLangtextToSpezifikationenForLlm(
 
 // TODO(agentic-spezifikationen): Keep boundary normalization in item-flow-schemas.ts as the single Spezifikationen ingestion path.
 
+
+function normalizeReviewSpecGuidanceFields(value: unknown): string[] {
+  try {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return Array.from(
+      new Set(
+        value
+          .filter((entry): entry is string => typeof entry === 'string')
+          .map((entry) => entry.replace(/\s+/g, ' ').trim())
+          .filter((entry) => entry.length > 0)
+      )
+    )
+      .sort((left, right) => left.localeCompare(right, 'de', { sensitivity: 'base' }))
+      .slice(0, REVIEW_SPEC_FIELD_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function deriveReviewAdjustedTargetSchemaFormat(params: {
+  targetFormat: string;
+  missingSpecFields: unknown;
+  unneededSpecFields: unknown;
+  itemId: string;
+  logger?: ExtractionLogger;
+}): string {
+  const { targetFormat, missingSpecFields, unneededSpecFields, itemId, logger } = params;
+  const baselineFormat = typeof targetFormat === 'string' ? targetFormat : '';
+
+  try {
+    const normalizedMissingSpecFields = normalizeReviewSpecGuidanceFields(missingSpecFields);
+    const normalizedUnneededSpecFields = normalizeReviewSpecGuidanceFields(unneededSpecFields);
+    const hasGuidance = normalizedMissingSpecFields.length > 0 || normalizedUnneededSpecFields.length > 0;
+
+    logger?.info?.({
+      msg: 'resolved review-enforced target schema guidance',
+      itemId,
+      missingSpecCount: normalizedMissingSpecFields.length,
+      unneededSpecCount: normalizedUnneededSpecFields.length,
+      missingSpecSample: normalizedMissingSpecFields.slice(0, REVIEW_SPEC_SAMPLE_LIMIT),
+      unneededSpecSample: normalizedUnneededSpecFields.slice(0, REVIEW_SPEC_SAMPLE_LIMIT),
+      adjustedFormatApplied: hasGuidance
+    });
+
+    if (!hasGuidance) {
+      return baselineFormat;
+    }
+
+    const reviewGuidanceLines: string[] = [
+      'Review-enforced spec guidance:',
+      `- missing_spec: expected keys to include when evidence exists${normalizedMissingSpecFields.length > 0 ? ` (${normalizedMissingSpecFields.join(', ')})` : ''}`,
+      `- unneeded_spec: keys to avoid/remove unless explicitly required by evidence${normalizedUnneededSpecFields.length > 0 ? ` (${normalizedUnneededSpecFields.join(', ')})` : ''}`
+    ];
+
+    return `${baselineFormat}\n\n${reviewGuidanceLines.join('\n')}`;
+  } catch (err) {
+    logger?.warn?.({
+      err,
+      msg: 'failed to derive review-adjusted target schema format; using baseline schema format',
+      itemId,
+      adjustedFormatApplied: false,
+      missingSpecCount: Array.isArray(missingSpecFields) ? missingSpecFields.length : 0,
+      unneededSpecCount: Array.isArray(unneededSpecFields) ? unneededSpecFields.length : 0,
+      missingSpecSample: Array.isArray(missingSpecFields) ? missingSpecFields.slice(0, REVIEW_SPEC_SAMPLE_LIMIT) : [],
+      unneededSpecSample: Array.isArray(unneededSpecFields) ? unneededSpecFields.slice(0, REVIEW_SPEC_SAMPLE_LIMIT) : []
+    });
+    return baselineFormat;
+  }
+}
+
+
 // TODO(agent): Refactor extraction attempt orchestration into explicit iteration pipeline.
 export async function runExtractionAttempts({
   llm,
@@ -524,6 +601,8 @@ export async function runExtractionAttempts({
   searchInvoker,
   target,
   reviewNotes,
+  missingSpecFields,
+  unneededSpecFields,
   skipSearch,
   exampleItemBlock,
   transcriptWriter
@@ -568,6 +647,13 @@ export async function runExtractionAttempts({
     logger?.warn?.({ err, msg: 'failed to log resolved agent search limit', itemId });
   }
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
+  const adjustedTargetSchemaFormat = deriveReviewAdjustedTargetSchemaFormat({
+    targetFormat,
+    missingSpecFields,
+    unneededSpecFields,
+    itemId,
+    logger
+  });
   const searchSkipped = Boolean(skipSearch);
   const advanceAttempt = () => {
     attempt += 1;
@@ -726,7 +812,7 @@ export async function runExtractionAttempts({
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.categorizerReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, sanitizedReviewerNotes);
-  appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.targetSchemaFormat, targetFormat);
+  appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.targetSchemaFormat, adjustedTargetSchemaFormat);
   const resolvedExampleItemBlock = typeof exampleItemBlock === 'string' ? exampleItemBlock.trim() : '';
   if (resolvedExampleItemBlock) {
     basePromptFragments.set(PROMPT_PLACEHOLDERS.exampleItem, [resolvedExampleItemBlock]);
