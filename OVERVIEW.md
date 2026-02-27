@@ -8,6 +8,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 
 ## Next steps
 45. ✅ Expand `docs/detailed/import_export.md` from template into a concrete contract reference covering API surfaces, CSV/ZIP structure requirements, alias mapping, validation/error reporting behavior, logging points, and backend/shared-model sync checklist.
+45. ✅ Expand `docs/detailed/printing.md` into an operational print reference covering label concepts, preview-vs-dispatch flow, template/route mappings, config dependencies, retry/error diagnostics, and operator troubleshooting checklist.
+45. ✅ Expand `docs/detailed/qr_codes.md` from template into a current-state QR reference covering generation, scanner lifecycle, route/action mapping, payload contracts, and scan observability/error handling expectations.
 45. ✅ Expand `docs/detailed/boxes.md` from template into a current-state reference covering hierarchy/identifiers, contracts, relocation flows, UI mappings, and logging-backed failure modes for move/print/import behavior consistency.
 44. ✅ Apply doc-context efficiency follow-up: remove detailed-doc changelog sections and add explicit Agent prompt guidance to avoid bloated documentation context.
 43. ✅ Refine `docs/detailed/items.md` summary to explicitly describe item centrality/relations (refs vs instances, ERP/shop sync context) and clarify `Langtext` as enrichment-flow core output.
