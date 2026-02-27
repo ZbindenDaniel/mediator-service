@@ -139,10 +139,10 @@ describe('agentic result handler integration', () => {
       SearchQuery: 'example search',
       Status: AGENTIC_RUN_STATUS_QUEUED,
       LastModified: '2024-01-01T00:00:00.000Z',
-      ReviewState: 'not_required',
-      ReviewedBy: null,
-      LastReviewDecision: null,
-      LastReviewNotes: null,
+      ReviewState: 'rejected',
+      ReviewedBy: 'reviewer-a',
+      LastReviewDecision: 'rejected',
+      LastReviewNotes: 'old reviewer notes',
       RetryCount: 0,
       NextRetryAt: null,
       LastError: null,
@@ -213,7 +213,7 @@ describe('agentic result handler integration', () => {
       expect.objectContaining({
         Status: AGENTIC_RUN_STATUS_REVIEW,
         LastReviewDecision: null,
-        LastReviewNotes: 'auto generated supervisor note',
+        LastReviewNotes: null,
         ReviewedBy: null
       })
     );

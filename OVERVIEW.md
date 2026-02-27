@@ -7,6 +7,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+50. ✅ Simplify restart review lifecycle semantics: preserve prior review only when restart omits `review`, apply provided review payload without field-level merge fallbacks, and clear prior decision/notes/reviewer when a rerun returns to pending review (`needs_review`) so each completed review cycle starts fresh.
+49. ✅ Preserve agentic restart review context by default with explicit `replaceReviewMetadata` clear semantics, partial review merges, structured restart transition logging, action-level full review payload forwarding, and focused restart service/action tests for preservation/merge/clear + structured field pass-through.
 50. ✅ Treat item-list deep-link query sessions as URL-authoritative (skip localStorage restoration when URL filters are present) and highlight active filter indicator with box-color background for provenance clarity.
 49. ✅ Add URL query filter bootstrap on item list mount (URL `box`/`boxFilter` takes precedence over stored/default filters), with defensive parsing/logging and staged-input consistency preserved.
 52. ✅ Align muted status text rows horizontally across the `Statistiken` card and further prioritize the pie by shrinking legend footprint to hover-only color dots.
