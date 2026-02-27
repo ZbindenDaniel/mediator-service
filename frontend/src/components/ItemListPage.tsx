@@ -37,6 +37,8 @@ import LoadingPage from './LoadingPage';
 // TODO(subcategory-input-logging): Confirm datalist input logging after feedback from warehouse users.
 // TODO(grouped-item-list): Confirm grouping keys and filter behavior once backend grouped payloads are live.
 // TODO(entrydate-sort): Confirm entry date ordering expectations for the list view.
+// TODO(placement-filter-ui): Validate whether placement filter should expose shelf-level placement states in future.
+// TODO(filter-order-ui): Keep quality slider rendered after categorical filters unless UX feedback changes.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 const resolveItemQuality = (value: unknown) => normalizeQuality(value, console) ?? QUALITY_MIN;
@@ -70,15 +72,79 @@ const resolveEntryTimestamp = (
 
 export interface ItemListComputationOptions {
   items: Item[];
-  showUnplaced: boolean;
+  placementFilter: ItemListFilters['placementFilter'];
   normalizedSearch: string;
   normalizedSubcategoryFilter: string;
   normalizedBoxFilter: string;
   stockFilter: 'any' | 'instock' | 'outofstock';
   normalizedAgenticFilter: AgenticRunStatus | null;
+  shopPublicationFilter: ItemListFilters['shopPublicationFilter'];
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   qualityThreshold: number;
+}
+
+function resolveBinaryFlag(value: unknown, context: { field: 'Shopartikel' | 'Veröffentlicht_Status'; itemId: string | null }): 0 | 1 | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  try {
+    if (typeof value === 'number') {
+      return value === 1 ? 1 : value === 0 ? 0 : null;
+    }
+    if (typeof value === 'boolean') {
+      return value ? 1 : 0;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === '1' || normalized === 'true' || normalized === 'yes') {
+        return 1;
+      }
+      if (normalized === '0' || normalized === 'false' || normalized === 'no') {
+        return 0;
+      }
+    }
+    logger.warn?.('Item list filter received unexpected binary flag value', {
+      field: context.field,
+      value,
+      itemId: context.itemId
+    });
+    return null;
+  } catch (error) {
+    logError('Failed to normalize shop/publication flag for item list filtering', error, {
+      field: context.field,
+      value,
+      itemId: context.itemId
+    });
+    return null;
+  }
+}
+
+function matchesShopPublicationFilter(
+  group: GroupedItemDisplay,
+  filter: ItemListFilters['shopPublicationFilter']
+): boolean {
+  if (filter === 'all') {
+    return true;
+  }
+  const representative = group.representative;
+  const itemId = group.summary.representativeItemId ?? representative?.ItemUUID ?? null;
+  const shopartikelFlag = resolveBinaryFlag(representative?.Shopartikel, {
+    field: 'Shopartikel',
+    itemId
+  });
+  const publicationFlag = resolveBinaryFlag(representative?.Veröffentlicht_Status, {
+    field: 'Veröffentlicht_Status',
+    itemId
+  });
+
+  if (filter === 'inShop') {
+    return shopartikelFlag === 1 && publicationFlag === 1;
+  }
+  if (filter === 'notPublished') {
+    return shopartikelFlag === 1 && publicationFlag === 0;
+  }
+  return shopartikelFlag === 0;
 }
 
 interface SubcategoryOption {
@@ -90,18 +156,23 @@ interface SubcategoryOption {
 export function filterAndSortItems(options: ItemListComputationOptions): GroupedItemDisplay[] {
   const {
     items,
-    showUnplaced,
+    placementFilter,
     normalizedSearch,
     normalizedSubcategoryFilter,
     normalizedBoxFilter,
     stockFilter,
     normalizedAgenticFilter,
+    shopPublicationFilter,
     sortKey,
     sortDirection,
     qualityThreshold
   } = options;
 
-  const baseItems = showUnplaced ? items.filter((it) => !it.BoxID) : items;
+  const baseItems = placementFilter === 'unplaced'
+    ? items.filter((it) => !it.BoxID)
+    : placementFilter === 'placed'
+      ? items.filter((it) => Boolean(it.BoxID))
+      : items;
   const groupedItems = groupItemsForDisplay(baseItems, { logContext: 'item-list-grouping' });
   const searched = groupedItems.filter((group) => {
     const representative = group.representative;
@@ -137,10 +208,17 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     const matchesAgenticStatus = normalizedAgenticFilter
       ? agenticStatus === normalizedAgenticFilter
       : true;
+    const matchesShopPublication = matchesShopPublicationFilter(group, shopPublicationFilter);
     const groupQuality = group.summary.Quality ?? representative?.Quality;
     const matchesQuality = resolveItemQuality(groupQuality) >= qualityThreshold;
 
-    return matchesSearch && matchesSubcategory && matchesBox && matchesStock && matchesAgenticStatus && matchesQuality;
+    return matchesSearch
+      && matchesSubcategory
+      && matchesBox
+      && matchesStock
+      && matchesAgenticStatus
+      && matchesShopPublication
+      && matchesQuality;
   });
 
   const sorted = [...searched].sort((a, b) => {
@@ -239,7 +317,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 
 export default function ItemListPage() {
   const [items, setItems] = useState<Item[]>([]);
-  const [showUnplaced, setShowUnplaced] = useState(ITEM_LIST_DEFAULT_FILTERS.showUnplaced);
+  const [placementFilter, setPlacementFilter] = useState<ItemListFilters['placementFilter']>(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -255,6 +333,8 @@ export default function ItemListPage() {
   const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
   const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
+  // TODO(shop-publication-filter-ui): Consider replacing dropdown with segmented quick filter if additional states are introduced.
+  const [shopPublicationFilter, setShopPublicationFilter] = useState<ItemListFilters['shopPublicationFilter']>(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
   const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
   const [filtersReady, setFiltersReady] = useState(false);
@@ -270,7 +350,8 @@ export default function ItemListPage() {
       setSubcategoryInput(storedFilters.subcategoryFilter);
       setBoxFilter(storedFilters.boxFilter);
       setAgenticStatusFilter(storedFilters.agenticStatusFilter);
-      setShowUnplaced(storedFilters.showUnplaced);
+      setShopPublicationFilter(storedFilters.shopPublicationFilter);
+      setPlacementFilter(storedFilters.placementFilter);
       setSortKey(storedFilters.sortKey);
       setSortDirection(storedFilters.sortDirection);
       setEntityFilter(storedFilters.entityFilter);
@@ -289,7 +370,8 @@ export default function ItemListPage() {
       setSubcategoryInput(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
       setBoxFilter(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
       setAgenticStatusFilter(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
-      setShowUnplaced(ITEM_LIST_DEFAULT_FILTERS.showUnplaced);
+      setShopPublicationFilter(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
+      setPlacementFilter(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
       setSortKey(ITEM_LIST_DEFAULT_FILTERS.sortKey);
       setSortDirection(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
       setEntityFilter(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
@@ -308,7 +390,8 @@ export default function ItemListPage() {
     subcategoryFilter,
     boxFilter,
     agenticStatusFilter,
-    showUnplaced,
+    shopPublicationFilter,
+    placementFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -318,7 +401,8 @@ export default function ItemListPage() {
     subcategoryFilter,
     boxFilter,
     agenticStatusFilter,
-    showUnplaced,
+    shopPublicationFilter,
+    placementFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -543,12 +627,13 @@ export default function ItemListPage() {
     () =>
       filterAndSortItems({
         items,
-        showUnplaced,
+        placementFilter,
         normalizedSearch,
         normalizedSubcategoryFilter,
         normalizedBoxFilter,
         stockFilter,
         normalizedAgenticFilter,
+        shopPublicationFilter,
         sortKey,
         sortDirection,
         qualityThreshold
@@ -559,10 +644,11 @@ export default function ItemListPage() {
       normalizedAgenticFilter,
       normalizedSearch,
       normalizedSubcategoryFilter,
-      showUnplaced,
+      placementFilter,
       sortDirection,
       sortKey,
       stockFilter,
+      shopPublicationFilter,
       qualityThreshold
     ]
   );
@@ -790,21 +876,17 @@ export default function ItemListPage() {
 
               <div className="filter-grid__item">
                 <label className="filter-control">
-                  <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
-                  <input
-                    type="range"
-                    min={QUALITY_MIN}
-                    max={5}
-                    step={1}
-                    value={qualityThreshold}
-                    onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console) ?? QUALITY_MIN)}
-                    aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
-                  />
-                  {/* <div className="quality-slider__labels">
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <span key={`filter-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
-                ))}
-              </div> */}
+                  <span>Shopstatus</span>
+                  <select
+                    aria-label="Shopstatus filtern"
+                    onChange={(event) => setShopPublicationFilter(event.target.value as ItemListFilters['shopPublicationFilter'])}
+                    value={shopPublicationFilter}
+                  >
+                    <option value="all">Alle</option>
+                    <option value="inShop">im Shop (1/1)</option>
+                    <option value="notPublished">nicht veröffentlicht (1/0)</option>
+                    <option value="noShopArticle">kein Shopartikel (0/X)</option>
+                  </select>
                 </label>
               </div>
 
@@ -824,15 +906,37 @@ export default function ItemListPage() {
               </div>
 
               <div className="filter-grid__item">
-                <label className="unplaced-filter" htmlFor="unplaced">
-                  <span>unplatziert</span>
+                <label className="filter-control">
+                  <span>Platzierung</span>
+                  <select
+                    aria-label="Platzierung filtern"
+                    onChange={(event) => setPlacementFilter(event.target.value as ItemListFilters['placementFilter'])}
+                    value={placementFilter}
+                  >
+                    <option value="all">Alle</option>
+                    <option value="unplaced">unplatziert</option>
+                    <option value="placed">platziert</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="filter-grid__item">
+                <label className="filter-control">
+                  <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
                   <input
-                    checked={showUnplaced}
-                    id="unplaced"
-                    name="unplaced"
-                    onChange={(event) => setShowUnplaced(event.target.checked)}
-                    type="checkbox"
+                    type="range"
+                    min={QUALITY_MIN}
+                    max={5}
+                    step={1}
+                    value={qualityThreshold}
+                    onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console) ?? QUALITY_MIN)}
+                    aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
                   />
+                  {/* <div className="quality-slider__labels">
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <span key={`filter-quality-${level}`}>{QUALITY_LABELS[level] ?? level}</span>
+                ))}
+              </div> */}
                 </label>
               </div>
             </div>

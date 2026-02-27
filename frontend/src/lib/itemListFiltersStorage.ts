@@ -26,7 +26,8 @@ export type ItemListFilters = {
   subcategoryFilter: string;
   boxFilter: string;
   agenticStatusFilter: AgenticRunStatus | 'any';
-  showUnplaced: boolean;
+  shopPublicationFilter: 'all' | 'inShop' | 'notPublished' | 'noShopArticle';
+  placementFilter: 'all' | 'unplaced' | 'placed';
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   entityFilter: 'all' | 'instances' | 'references';
@@ -59,7 +60,10 @@ const DEFAULT_FILTERS: ItemListFilters = {
   subcategoryFilter: '',
   boxFilter: '',
   agenticStatusFilter: 'any',
-  showUnplaced: false,
+  // TODO(shop-publication-filter): Revisit labels/states if ERP introduces additional publication combinations.
+  shopPublicationFilter: 'all',
+  // TODO(placement-filter): Revisit placement filter states if shelf-level placement state is introduced.
+  placementFilter: 'all',
   sortKey: 'artikelbeschreibung',
   sortDirection: 'asc',
   entityFilter: 'instances',
@@ -79,7 +83,8 @@ export function hasNonDefaultFilters(
     || filters.subcategoryFilter !== defaults.subcategoryFilter
     || filters.boxFilter !== defaults.boxFilter
     || filters.agenticStatusFilter !== defaults.agenticStatusFilter
-    || filters.showUnplaced !== defaults.showUnplaced
+    || filters.shopPublicationFilter !== defaults.shopPublicationFilter
+    || filters.placementFilter !== defaults.placementFilter
     || filters.sortKey !== defaults.sortKey
     || filters.sortDirection !== defaults.sortDirection
     || filters.entityFilter !== defaults.entityFilter
@@ -107,12 +112,26 @@ export function getActiveFilterDescriptions(
       : describeAgenticStatus(filters.agenticStatusFilter);
     active.push(`Ki: ${statusLabel}`);
   }
+  if (filters.shopPublicationFilter !== defaults.shopPublicationFilter) {
+    const filterLabels: Record<ItemListFilters['shopPublicationFilter'], string> = {
+      all: 'Alle Shop-/Publikationsstatus',
+      inShop: 'Im Shop (1/1)',
+      notPublished: 'Nicht veröffentlicht (1/0)',
+      noShopArticle: 'Kein Shopartikel (0/X)'
+    };
+    active.push(`Shopstatus: ${filterLabels[filters.shopPublicationFilter]}`);
+  }
   if (filters.qualityThreshold > defaults.qualityThreshold) {
     const label = QUALITY_LABELS[filters.qualityThreshold] ?? `mind. ${filters.qualityThreshold}`;
     active.push(`Qualität: ${label} oder besser`);
   }
-  if (filters.showUnplaced !== defaults.showUnplaced) {
-    active.push('Nur unplatzierte Artikel');
+  if (filters.placementFilter !== defaults.placementFilter) {
+    const placementLabels: Record<ItemListFilters['placementFilter'], string> = {
+      all: 'Alle',
+      unplaced: 'Unplatziert',
+      placed: 'Platziert'
+    };
+    active.push(`Platzierung: ${placementLabels[filters.placementFilter]}`);
   }
   if (filters.entityFilter !== defaults.entityFilter) {
     const filterLabels: Record<ItemListFilters['entityFilter'], string> = {
@@ -145,7 +164,10 @@ export function buildItemListQueryParams(filters: ItemListFilters): URLSearchPar
     if (filters.agenticStatusFilter !== 'any') {
       query.set('agenticStatus', filters.agenticStatusFilter);
     }
-    if (filters.showUnplaced) {
+    if (filters.shopPublicationFilter !== 'all') {
+      query.set('shopPublicationFilter', filters.shopPublicationFilter);
+    }
+    if (filters.placementFilter === 'unplaced') {
       query.set('showUnplaced', 'true');
     }
     if (filters.entityFilter !== 'all') {
@@ -164,7 +186,7 @@ export function buildItemListQueryParams(filters: ItemListFilters): URLSearchPar
 
 export function loadItemListFilters(
   defaults: ItemListFilters = DEFAULT_FILTERS,
-  logger: Pick<Console, 'warn' | 'error'> = defaultLogger
+  logger: Pick<Console, 'info' | 'warn' | 'error'> = defaultLogger
 ): ItemListFilters | null {
   try {
     const raw = localStorage.getItem(ITEM_LIST_FILTERS_STORAGE_KEY);
@@ -202,8 +224,26 @@ export function loadItemListFilters(
       logger.warn?.('Ignoring invalid stored agentic status filter', parsed.agenticStatusFilter);
     }
 
-    if (typeof parsed.showUnplaced === 'boolean') {
-      merged.showUnplaced = parsed.showUnplaced;
+    if (
+      parsed.shopPublicationFilter === 'all'
+      || parsed.shopPublicationFilter === 'inShop'
+      || parsed.shopPublicationFilter === 'notPublished'
+      || parsed.shopPublicationFilter === 'noShopArticle'
+    ) {
+      merged.shopPublicationFilter = parsed.shopPublicationFilter;
+    } else if (parsed.shopPublicationFilter !== undefined) {
+      logger.warn?.('Ignoring invalid stored shop publication filter', parsed.shopPublicationFilter);
+    }
+
+    if (parsed.placementFilter === 'all' || parsed.placementFilter === 'unplaced' || parsed.placementFilter === 'placed') {
+      merged.placementFilter = parsed.placementFilter;
+    } else if (typeof (parsed as { showUnplaced?: unknown }).showUnplaced === 'boolean') {
+      merged.placementFilter = (parsed as { showUnplaced?: boolean }).showUnplaced ? 'unplaced' : 'all';
+      logger.info?.('Migrated legacy showUnplaced boolean filter to placementFilter', {
+        showUnplaced: (parsed as { showUnplaced?: boolean }).showUnplaced
+      });
+    } else if (parsed.placementFilter !== undefined) {
+      logger.warn?.('Ignoring invalid stored placement filter', parsed.placementFilter);
     }
 
     if (typeof parsed.sortKey === 'string' && SORT_KEYS.includes(parsed.sortKey as ItemListSortKey)) {

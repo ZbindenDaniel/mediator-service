@@ -1032,7 +1032,7 @@ export default function ItemDetail({ itemId }: Props) {
         const items: Item[] = Array.isArray(data.items) ? data.items : [];
         const filtered = filterAndSortItems({
           items,
-          showUnplaced: effectiveFilters.showUnplaced,
+          placementFilter: effectiveFilters.placementFilter,
           normalizedSearch: effectiveFilters.searchTerm.trim().toLowerCase(),
           normalizedSubcategoryFilter: effectiveFilters.subcategoryFilter.trim().toLowerCase(),
           normalizedBoxFilter: effectiveFilters.boxFilter.trim().toLowerCase(),
@@ -1040,6 +1040,8 @@ export default function ItemDetail({ itemId }: Props) {
           normalizedAgenticFilter: effectiveFilters.agenticStatusFilter === 'any'
             ? null
             : effectiveFilters.agenticStatusFilter,
+          // TODO(shop-publication-neighbors): Revisit adjacent navigation semantics if detail page gets independent shop-status controls.
+          shopPublicationFilter: effectiveFilters.shopPublicationFilter,
           sortKey: effectiveFilters.sortKey,
           sortDirection: effectiveFilters.sortDirection,
           qualityThreshold: effectiveFilters.qualityThreshold
