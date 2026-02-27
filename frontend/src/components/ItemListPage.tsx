@@ -801,7 +801,7 @@ export default function ItemListPage() {
                 </label>
               </div>
 
-              {/* <div className="filter-grid__item">
+              <div className="filter-grid__item">
                 <label className="sort-control sort-control--box">
                   <span>Behälter</span>
                   <div className="sort-control__input">
@@ -815,7 +815,7 @@ export default function ItemListPage() {
                     />
                   </div>
                 </label>
-              </div> */}
+              </div>
             </div>
           </div>
 
