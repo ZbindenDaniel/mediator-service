@@ -8,6 +8,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 - Agents: task execution context and deep-dive references.
 
 ## Canonical references
+- [`docs/detailed/traceability-matrix.md`](./traceability-matrix.md) (canonical doc-to-code path mapping for all detailed domains)
 - [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)
 - [`docs/AGENT.md`](../AGENT.md)
 - [`OVERVIEW.md`](../../OVERVIEW.md)
