@@ -9,6 +9,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 
 ## Canonical references
 - [`docs/detailed/traceability-matrix.md`](./traceability-matrix.md) (canonical doc-to-code path mapping for all detailed domains)
+- [`docs/detailed/diagrams/README.md`](./diagrams/README.md) (text-first placeholders for future flow diagrams)
 - [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)
 - [`docs/AGENT.md`](../AGENT.md)
 - [`OVERVIEW.md`](../../OVERVIEW.md)
