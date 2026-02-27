@@ -528,6 +528,64 @@ function normalizeReviewSpecGuidanceFields(value: unknown): string[] {
   }
 }
 
+
+function applyReviewSpecGuidanceToPromptTarget(params: {
+  promptTarget: Record<string, unknown>;
+  missingSpecFields: unknown;
+  unneededSpecFields: unknown;
+  itemId: string;
+  logger?: ExtractionLogger;
+}): Record<string, unknown> {
+  const { promptTarget, missingSpecFields, unneededSpecFields, itemId, logger } = params;
+  try {
+    const normalizedMissingSpecFields = normalizeReviewSpecGuidanceFields(missingSpecFields);
+    const normalizedUnneededSpecFields = normalizeReviewSpecGuidanceFields(unneededSpecFields);
+    if (normalizedMissingSpecFields.length === 0 && normalizedUnneededSpecFields.length === 0) {
+      return promptTarget;
+    }
+
+    const nextPromptTarget: Record<string, unknown> = { ...promptTarget };
+    const existingSpecs = nextPromptTarget.Spezifikationen;
+    const baseSpecs = existingSpecs && typeof existingSpecs === 'object' && !Array.isArray(existingSpecs)
+      ? { ...(existingSpecs as Record<string, unknown>) }
+      : {};
+
+    let addedSpecKeyCount = 0;
+    let removedSpecKeyCount = 0;
+
+    for (const key of normalizedMissingSpecFields) {
+      if (!(key in baseSpecs)) {
+        baseSpecs[key] = null;
+        addedSpecKeyCount += 1;
+      }
+    }
+
+    for (const key of normalizedUnneededSpecFields) {
+      if (key in baseSpecs) {
+        delete baseSpecs[key];
+        removedSpecKeyCount += 1;
+      }
+    }
+
+    nextPromptTarget.Spezifikationen = baseSpecs;
+
+    logger?.info?.({
+      msg: 'applied review spec guidance to extraction target snapshot',
+      itemId,
+      missingSpecGuidanceCount: normalizedMissingSpecFields.length,
+      unneededSpecGuidanceCount: normalizedUnneededSpecFields.length,
+      addedSpecKeyCount,
+      removedSpecKeyCount,
+      resultingSpecKeyCount: Object.keys(baseSpecs).length
+    });
+
+    return nextPromptTarget;
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to apply review spec guidance to extraction target snapshot', itemId });
+    return promptTarget;
+  }
+}
+
 function deriveReviewAdjustedTargetSchemaFormat(params: {
   targetFormat: string;
   missingSpecFields: unknown;
@@ -628,7 +686,14 @@ export async function runExtractionAttempts({
   let passInvalidJsonPlaceholderIssues: string[] = [];
   let extractionAccumulator: AgenticOutput | null = null;
   const { Artikel_Nummer: _promptHiddenItemId, ...promptFacingTargetRaw } = target;
-  const promptFacingTarget = mapLangtextToSpezifikationenForLlm(promptFacingTargetRaw, { itemId, logger, context: 'extraction-target-snapshot' }) as Record<string, unknown>;
+  const promptFacingTargetBase = mapLangtextToSpezifikationenForLlm(promptFacingTargetRaw, { itemId, logger, context: 'extraction-target-snapshot' }) as Record<string, unknown>;
+  const promptFacingTarget = applyReviewSpecGuidanceToPromptTarget({
+    promptTarget: promptFacingTargetBase,
+    missingSpecFields,
+    unneededSpecFields,
+    itemId,
+    logger
+  });
   const numericSearchLimit = Number(maxAgentSearchesPerRequest);
   const searchesPerRequestLimit = Number.isFinite(numericSearchLimit) && numericSearchLimit > 0
     ? Math.floor(numericSearchLimit)
@@ -737,10 +802,19 @@ export async function runExtractionAttempts({
     return 'continue';
   };
 
-  // TODO(agentic-review-prompts): Keep bad_format and information_present_low trigger handling log-only until flow risk is acceptable.
+  // TODO(agentic-review-prompts): Revisit wording/threshold tuning for bad_format and information_present_low prompt fragments after telemetry stabilizes.
   const basePromptFragments: PromptPlaceholderFragments = new Map();
   let injectedExtractionSignalFragmentCount = 0;
   let injectedSupervisorSignalFragmentCount = 0;
+  let injectedUserSignalNoteCount = 0;
+  const reviewSignalUserNotes: string[] = [];
+  const injectedSignalFragmentCountersByTrigger: Record<string, { extraction: number; supervisor: number; user: number }> = {
+    wrong_information_trigger: { extraction: 0, supervisor: 0, user: 0 },
+    wrong_physical_dimensions_trigger: { extraction: 0, supervisor: 0, user: 0 },
+    missing_spec_trigger: { extraction: 0, supervisor: 0, user: 0 },
+    bad_format_trigger: { extraction: 0, supervisor: 0, user: 0 },
+    information_present_low_trigger: { extraction: 0, supervisor: 0, user: 0 }
+  };
   try {
     const aggregatedSignals = loadSubcategoryReviewAutomationSignals(itemId, {
       getItemReference,
@@ -762,6 +836,10 @@ export async function runExtractionAttempts({
         'Caution: cross-check factual claims against gathered evidence before final extraction.'
       );
       injectedExtractionSignalFragmentCount += 1;
+      injectedSignalFragmentCountersByTrigger.wrong_information_trigger.extraction += 1;
+      reviewSignalUserNotes.push('Signal note: current data may contain wrong information; consolidate sources before finalizing claims.');
+      injectedUserSignalNoteCount += 1;
+      injectedSignalFragmentCountersByTrigger.wrong_information_trigger.user += 1;
     }
 
     if (aggregatedSignals.wrong_physical_dimensions_trigger) {
@@ -777,6 +855,8 @@ export async function runExtractionAttempts({
         'Check physical-dimension plausibility and reject impossible size/weight combinations.'
       );
       injectedSupervisorSignalFragmentCount += 1;
+      injectedSignalFragmentCountersByTrigger.wrong_physical_dimensions_trigger.extraction += 1;
+      injectedSignalFragmentCountersByTrigger.wrong_physical_dimensions_trigger.supervisor += 1;
     }
 
     if (aggregatedSignals.missing_spec_trigger) {
@@ -790,6 +870,43 @@ export async function runExtractionAttempts({
         `Prioritize extracting these frequently missing specification keys when evidence exists: ${missingSpecSummary}.`
       );
       injectedExtractionSignalFragmentCount += 1;
+      injectedSignalFragmentCountersByTrigger.missing_spec_trigger.extraction += 1;
+    }
+
+    if (aggregatedSignals.bad_format_trigger) {
+      try {
+        appendPlaceholderFragment(
+          basePromptFragments,
+          PROMPT_PLACEHOLDERS.extractionReview,
+          'Strict output contract: return only one valid JSON object that matches the exact target schema. Do not emit markdown, prose, comments, or placeholder tokens.'
+        );
+        injectedExtractionSignalFragmentCount += 1;
+        injectedSignalFragmentCountersByTrigger.bad_format_trigger.extraction += 1;
+        appendPlaceholderFragment(
+          basePromptFragments,
+          PROMPT_PLACEHOLDERS.supervisorReview,
+          'Reject responses that are not strict schema-conformant JSON payloads (single object, no markdown/prose, no extraneous keys, no placeholders).'
+        );
+        injectedSupervisorSignalFragmentCount += 1;
+        injectedSignalFragmentCountersByTrigger.bad_format_trigger.supervisor += 1;
+        reviewSignalUserNotes.push('Signal note: prior reviews flagged formatting risk. Keep output strictly valid JSON and avoid markdown wrappers/comments.');
+        injectedUserSignalNoteCount += 1;
+        injectedSignalFragmentCountersByTrigger.bad_format_trigger.user += 1;
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to assemble bad_format_trigger placeholder fragments', itemId });
+      }
+    }
+
+    if (aggregatedSignals.information_present_low_trigger) {
+      try {
+        reviewSignalUserNotes.push(
+          'Signal note: prior reviews found missing evidence coverage. Prefer explicit unknown/null values over omissions and include every field supported by evidence.'
+        );
+        injectedUserSignalNoteCount += 1;
+        injectedSignalFragmentCountersByTrigger.information_present_low_trigger.user += 1;
+      } catch (err) {
+        logger?.warn?.({ err, msg: 'failed to assemble information_present_low_trigger user signal notes', itemId });
+      }
     }
 
     logger?.info?.({
@@ -801,7 +918,9 @@ export async function runExtractionAttempts({
       injectedPlaceholderFragments: {
         extractionReview: injectedExtractionSignalFragmentCount,
         supervisorReview: injectedSupervisorSignalFragmentCount,
-        total: injectedExtractionSignalFragmentCount + injectedSupervisorSignalFragmentCount
+        userSignalNotes: injectedUserSignalNoteCount,
+        total: injectedExtractionSignalFragmentCount + injectedSupervisorSignalFragmentCount + injectedUserSignalNoteCount,
+        byTrigger: injectedSignalFragmentCountersByTrigger
       }
     });
   } catch (err) {
@@ -910,6 +1029,22 @@ export async function runExtractionAttempts({
       reviewerInstructionBlock = '';
     }
 
+    let reviewSignalInstructionBlock = '';
+    try {
+      if (reviewSignalUserNotes.length > 0) {
+        reviewSignalInstructionBlock = ['Review signals:', ...reviewSignalUserNotes].join('\n');
+        logger?.debug?.({
+          msg: 'appended review signal user instructions to extraction prompt',
+          attempt,
+          itemId,
+          reviewSignalNoteCount: reviewSignalUserNotes.length
+        });
+      }
+    } catch (err) {
+      logger?.warn?.({ err, msg: 'failed to assemble review signal user instructions', attempt, itemId });
+      reviewSignalInstructionBlock = '';
+    }
+
     try {
       logger?.info?.({
         msg: 'extraction context pass',
@@ -974,6 +1109,9 @@ export async function runExtractionAttempts({
 
     if (reviewerInstructionBlock) {
       contextSections.push(reviewerInstructionBlock);
+    }
+    if (reviewSignalInstructionBlock) {
+      contextSections.push(reviewSignalInstructionBlock);
     }
     contextSections.push('Current search context:', singleContextText || 'None.');
     contextSections.push('Accumulated candidate (compact JSON):', compactAccumulator);
