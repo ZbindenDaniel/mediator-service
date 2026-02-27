@@ -7,6 +7,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+47. ✅ Add standalone `docs/detailed/glossary.md` with canonical terminology (items/instances, boxes/shelves, printing, QR events, agentic states/review outcomes), explicit Use/Avoid pairs, and contract-sensitive model-field mapping; link glossary in `docs/detailed/_template.md` for reuse.
 47. ✅ Add `docs/detailed/traceability-matrix.md` with domain-to-code mappings (backend/frontend/models + data-structure checks), and link it from `docs/detailed/README.md` as the canonical path index.
 47. ✅ Expand `docs/detailed/review-flow.md` from template into a current-state reviewer lifecycle reference covering statuses/transitions, reviewer actions, restart/retrigger paths, contract-verified artifact fields, UI/backend action mappings, audit logging, and explicit open questions for unresolved policy behavior.
 47. ✅ Expand `docs/detailed/item-flow.md` from template into a current-state implementation safety reference documenting stage transitions, policy gates, field-level contracts, validation behavior, and stage logging/error maps for extraction/categorization/pricing/review handoffs.
