@@ -82,6 +82,8 @@ type NormalizedRequestContext = {
 
 type NormalizedReviewMetadata = AgenticRunReviewMetadata & { state: string | null };
 
+type RestartReviewDecision = 'preserved' | 'merged' | 'cleared' | 'replaced';
+
 const REQUEST_STATUS_SUCCESS = 'SUCCESS';
 const REQUEST_STATUS_FAILED = 'FAILED';
 const REQUEST_STATUS_DECLINED = 'DECLINED';
@@ -509,6 +511,37 @@ function normalizeReviewMetadata(
       state: fallback?.ReviewState?.trim() || null
     };
   }
+}
+
+function toReviewSnapshot(
+  review: NormalizedReviewMetadata | null,
+  fallback: AgenticRun | null
+): Record<string, unknown> {
+  const snapshot = review ?? {
+    state: fallback?.ReviewState ?? null,
+    decision: fallback?.LastReviewDecision ?? null,
+    notes: fallback?.LastReviewNotes ?? null,
+    reviewedBy: fallback?.ReviewedBy ?? null,
+    information_present: null,
+    missing_spec: [],
+    unneeded_spec: [],
+    bad_format: null,
+    wrong_information: null,
+    wrong_physical_dimensions: null
+  };
+
+  return {
+    state: snapshot.state ?? null,
+    decisionPresent: Boolean(snapshot.decision),
+    notesPresent: Boolean(snapshot.notes),
+    reviewedByPresent: Boolean(snapshot.reviewedBy),
+    information_present: snapshot.information_present ?? null,
+    bad_format: snapshot.bad_format ?? null,
+    wrong_information: snapshot.wrong_information ?? null,
+    wrong_physical_dimensions: snapshot.wrong_physical_dimensions ?? null,
+    missing_spec_count: Array.isArray(snapshot.missing_spec) ? snapshot.missing_spec.length : 0,
+    unneeded_spec_count: Array.isArray(snapshot.unneeded_spec) ? snapshot.unneeded_spec.length : 0
+  };
 }
 
 // TODO(agentic-transcript-shared): Consider moving transcript attachment to a shared helper module.
@@ -1463,27 +1496,81 @@ export async function restartAgenticRun(
     return { agentic: existing, queued: false, created: false, reason: 'missing-reference' };
   }
 
-  // TODO(agentic-restart): Keep review metadata reset aligned with queued restart behavior.
+  // TODO(agentic-review-restart): Keep explicit review replace semantics aligned with action payload contracts.
+  // TODO(agentic-review-lifecycle): Keep restart-time guidance retention aligned with review-stage cleanup behavior.
+  const replaceReviewMetadata = input.replaceReviewMetadata === true;
   const hasReviewPayload = input.review != null;
-  const review = hasReviewPayload ? normalizeReviewMetadata(input.review ?? null, existing, logger) : null;
+  const review = replaceReviewMetadata
+    ? normalizeReviewMetadata(input.review ?? null, null, logger)
+    : hasReviewPayload
+      ? normalizeReviewMetadata(input.review ?? null, null, logger)
+      : normalizeReviewMetadata(null, existing, logger);
   const nowIso = resolveNow(deps).toISOString();
   const actor = input.actor?.trim() || null;
   const context = input.context?.trim() || null;
-  const shouldClearReviewMetadata = !hasReviewPayload;
+  const shouldClearReviewMetadata = replaceReviewMetadata && !hasReviewPayload;
+  const shouldApplyProvidedReview = !shouldClearReviewMetadata && hasReviewPayload;
   const reviewState = shouldClearReviewMetadata
     ? 'not_required'
-    : review?.state ?? existing?.ReviewState ?? 'not_required';
-  const reviewedBy = shouldClearReviewMetadata ? null : review?.reviewedBy ?? existing?.ReviewedBy ?? null;
-  const lastReviewDecision = shouldClearReviewMetadata ? null : review?.decision ?? null;
-  const lastReviewNotes = shouldClearReviewMetadata ? null : review?.notes ?? null;
+    : shouldApplyProvidedReview
+      ? review?.state ?? existing?.ReviewState ?? 'not_required'
+      : existing?.ReviewState ?? 'not_required';
+  const reviewedBy = shouldClearReviewMetadata
+    ? null
+    : shouldApplyProvidedReview
+      ? review?.reviewedBy ?? null
+      : existing?.ReviewedBy ?? null;
+  const lastReviewDecision = shouldClearReviewMetadata
+    ? null
+    : shouldApplyProvidedReview
+      ? review?.decision ?? null
+      : existing?.LastReviewDecision ?? null;
+  const lastReviewNotes = shouldClearReviewMetadata
+    ? null
+    : shouldApplyProvidedReview
+      ? review?.notes ?? null
+      : existing?.LastReviewNotes ?? null;
+  const reviewDecision: RestartReviewDecision = shouldClearReviewMetadata
+    ? 'cleared'
+    : replaceReviewMetadata
+      ? 'replaced'
+      : hasReviewPayload
+        ? 'merged'
+        : 'preserved';
   recordRequestLogStart(request, searchQuery, logger);
 
-  if (shouldClearReviewMetadata) {
-    logger.info?.('[agentic-service] Clearing review metadata for queued restart', {
-      artikelNummer,
-      context
-    });
-  }
+  logger.info?.('[agentic-service] Restart review metadata transition', {
+    artikelNummer,
+    context,
+    reviewPreserved: reviewDecision === 'preserved',
+    reviewMerged: reviewDecision === 'merged',
+    reviewCleared: reviewDecision === 'cleared',
+    reason: shouldClearReviewMetadata
+      ? 'explicit-replace-without-review'
+      : replaceReviewMetadata
+        ? 'explicit-replace-with-review'
+        : hasReviewPayload
+          ? 'review-provided'
+          : 'review-omitted',
+    previous: toReviewSnapshot(null, existing),
+    next: toReviewSnapshot(
+      shouldClearReviewMetadata
+        ? {
+            decision: null,
+            information_present: null,
+            missing_spec: [],
+            unneeded_spec: [],
+            bad_format: null,
+            wrong_information: null,
+            wrong_physical_dimensions: null,
+            notes: null,
+            reviewedBy: null,
+            state: 'not_required'
+          }
+        : review,
+      existing
+    )
+  });
   const txn = deps.db.transaction(() => {
     if (existing) {
       const updateResult = deps.updateAgenticRunStatus.run(

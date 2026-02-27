@@ -645,14 +645,19 @@ export function handleAgenticResult(
               : 'not_required';
       const effectiveReviewedBy =
         effectiveReviewState === 'pending' ? null : review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
+      // TODO(agentic-review-lifecycle): Revisit whether pending runs should keep any machine-generated transient note.
       const normalizedReviewDecision =
-        typeof review.Decision === 'string' && review.Decision.trim()
-          ? review.Decision.trim().toLowerCase()
-          : existingRun?.LastReviewDecision ?? null;
+        effectiveReviewState === 'pending'
+          ? null
+          : typeof review.Decision === 'string' && review.Decision.trim()
+            ? review.Decision.trim().toLowerCase()
+            : existingRun?.LastReviewDecision ?? null;
       const normalizedReviewNotes =
-        typeof review.Notes === 'string' && review.Notes.trim()
-          ? review.Notes.trim()
-          : existingRun?.LastReviewNotes ?? null;
+        effectiveReviewState === 'pending'
+          ? null
+          : typeof review.Notes === 'string' && review.Notes.trim()
+            ? review.Notes.trim()
+            : existingRun?.LastReviewNotes ?? null;
       const searchQueryUpdate =
         typeof agenticPayload?.searchQuery === 'string' && agenticPayload.searchQuery.trim()
           ? agenticPayload.searchQuery.trim()

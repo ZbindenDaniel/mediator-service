@@ -7,6 +7,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+50. ✅ Simplify restart review lifecycle semantics: preserve prior review only when restart omits `review`, apply provided review payload without field-level merge fallbacks, and clear prior decision/notes/reviewer when a rerun returns to pending review (`needs_review`) so each completed review cycle starts fresh.
+49. ✅ Preserve agentic restart review context by default with explicit `replaceReviewMetadata` clear semantics, partial review merges, structured restart transition logging, action-level full review payload forwarding, and focused restart service/action tests for preservation/merge/clear + structured field pass-through.
 48. ✅ Add `docs/detailed/diagrams/README.md` placeholder backlog (item lifecycle, box relocation, import/export, agentic item-flow, review-flow) and link it from `docs/detailed/README.md` for text-first diagram planning without tooling overhead.
 47. ✅ Add standalone `docs/detailed/glossary.md` with canonical terminology (items/instances, boxes/shelves, printing, QR events, agentic states/review outcomes), explicit Use/Avoid pairs, and contract-sensitive model-field mapping; link glossary in `docs/detailed/_template.md` for reuse.
 47. ✅ Add `docs/detailed/traceability-matrix.md` with domain-to-code mappings (backend/frontend/models + data-structure checks), and link it from `docs/detailed/README.md` as the canonical path index.

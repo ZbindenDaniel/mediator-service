@@ -58,6 +58,7 @@ const action = defineHttpAction({
       return sendJson(res, 400, { error: 'Invalid request body' });
     }
 
+    // TODO(agentic-restart-contract): Keep restart payload normalization aligned with review metadata schema updates.
     let payload: any = {};
     if (rawBody) {
       try {
@@ -99,6 +100,24 @@ const action = defineHttpAction({
     const normalizedReviewDecision = reviewDecisionRaw ? reviewDecisionRaw.trim().toLowerCase() : '';
     const normalizedReviewNotes = reviewNotesRaw ? reviewNotesRaw.trim() : '';
     const normalizedReviewActor = reviewActorRaw ? reviewActorRaw.trim() : '';
+    const normalizedReview = reviewPayload
+      ? {
+          decision: normalizedReviewDecision || null,
+          information_present:
+            typeof reviewPayload.information_present === 'boolean' ? reviewPayload.information_present : null,
+          missing_spec: Array.isArray(reviewPayload.missing_spec) ? reviewPayload.missing_spec : [],
+          unneeded_spec: Array.isArray(reviewPayload.unneeded_spec) ? reviewPayload.unneeded_spec : [],
+          bad_format: typeof reviewPayload.bad_format === 'boolean' ? reviewPayload.bad_format : null,
+          wrong_information: typeof reviewPayload.wrong_information === 'boolean' ? reviewPayload.wrong_information : null,
+          wrong_physical_dimensions:
+            typeof reviewPayload.wrong_physical_dimensions === 'boolean'
+              ? reviewPayload.wrong_physical_dimensions
+              : null,
+          notes: normalizedReviewNotes || null,
+          reviewedBy: normalizedReviewActor || null
+        }
+      : null;
+    const replaceReviewMetadata = payload.replaceReviewMetadata === true;
     const requestContext = resolveAgenticRequestContext(payload, itemId);
 
     try {
@@ -107,17 +126,8 @@ const action = defineHttpAction({
           itemId,
           searchQuery: providedSearch,
           actor,
-          review: {
-            decision: normalizedReviewDecision || null,
-            information_present: null,
-            missing_spec: [],
-            unneeded_spec: [],
-            bad_format: null,
-            wrong_information: null,
-            wrong_physical_dimensions: null,
-            notes: normalizedReviewNotes || null,
-            reviewedBy: normalizedReviewActor || null
-          },
+          review: normalizedReview,
+          replaceReviewMetadata,
           context: 'agentic-restart',
           request: requestContext
         },

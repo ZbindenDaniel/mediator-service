@@ -72,6 +72,7 @@ export interface AgenticRunDeleteResult {
 
 export interface AgenticRunRestartInput extends AgenticRunStartInput {
   previousStatus?: string | null;
+  replaceReviewMetadata?: boolean;
 }
 
 export interface AgenticRunStatusResult {
