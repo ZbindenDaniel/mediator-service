@@ -775,6 +775,8 @@ export class AgenticModelInvoker {
           target: typedTarget,
           search: input.searchQuery ?? null,
           reviewNotes: normalizedReviewNotes,
+          missingSpecFields: normalizedMissingSpecFields,
+          unneededSpecFields: normalizedUnneededSpecFields,
           skipSearch,
           exampleItemBlock
         },

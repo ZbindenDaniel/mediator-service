@@ -136,6 +136,56 @@ describe('runExtractionAttempts iteration schema key guard', () => {
     );
   });
 
+
+  it('injects review-enforced schema guidance into TARGET_SCHEMA_FORMAT placeholder', async () => {
+    const target = buildTarget();
+    const extractionComplete = JSON.stringify(target);
+    let capturedExtractionSystemPrompt = '';
+
+    const llm: ChatModel = {
+      invoke: jest.fn(async (messages) => {
+        const systemPrompt = String(messages?.[0]?.content ?? '');
+        if (systemPrompt === 'supervisor') {
+          return { content: 'pass' };
+        }
+        if (!capturedExtractionSystemPrompt) {
+          capturedExtractionSystemPrompt = systemPrompt;
+        }
+        return { content: extractionComplete };
+      })
+    };
+
+    const result = await runExtractionAttempts({
+      llm,
+      logger: console,
+      itemId: target.Artikel_Nummer,
+      maxAttempts: 2,
+      maxAgentSearchesPerRequest: 1,
+      searchContexts: [{ query: 'initial', text: 'initial context', sources: [] }],
+      aggregatedSources: [],
+      recordSources: jest.fn(),
+      buildAggregatedSearchText: () => 'initial context',
+      extractPrompt: 'extract using schema:\n{{TARGET_SCHEMA_FORMAT}}',
+      correctionPrompt: 'repair json',
+      targetFormat: '{"Artikel_Nummer": "string"}',
+      supervisorPrompt: 'supervisor',
+      categorizerPrompt: 'categorizer',
+      pricingPrompt: 'pricing',
+      searchInvoker: jest.fn(async () => ({ text: 'extra context', sources: [] })),
+      target,
+      reviewNotes: null,
+      missingSpecFields: ['Gewicht_kg', 'Breite_mm', 'Gewicht_kg'],
+      unneededSpecFields: ['InterneNotiz', 'InterneNotiz'],
+      skipSearch: false,
+      transcriptWriter: null
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedExtractionSystemPrompt).toContain('Review-enforced spec guidance:');
+    expect(capturedExtractionSystemPrompt).toContain('missing_spec: expected keys to include when evidence exists (Breite_mm, Gewicht_kg)');
+    expect(capturedExtractionSystemPrompt).toContain('unneeded_spec: keys to avoid/remove unless explicitly required by evidence (InterneNotiz)');
+  });
+
   it('continues iteration when supervisor returns not-pass', async () => {
     const target = buildTarget();
     const extractionComplete = JSON.stringify(target);
