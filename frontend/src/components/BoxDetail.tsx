@@ -32,6 +32,7 @@ import QualityBadge from './QualityBadge';
 // TODO(agent): Reassess shelf label/notes editing once shelf tagging conventions stabilize.
 // TODO(mobile-box-detail): Keep box detail container width constrained to the viewport on small screens.
 // TODO(qr-relocate): Add explicit QR return intents in scanner navigation state once relocation/add-item ownership is fully formalized.
+// TODO(box-detail-link-style): Revisit shared box-accent link styling once card header action tokens are centralized.
 
 interface Props {
   boxId: string;
@@ -118,6 +119,39 @@ export default function BoxDetail({ boxId }: Props) {
       logError('Failed to navigate to item detail from box detail row', error, { boxId, itemId, source });
     }
   }, [boxId, navigate]);
+
+  const handleNavigateToItems = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    const resolvedBoxId = box?.BoxID || boxId;
+    try {
+      const encodedBoxId = encodeURIComponent(resolvedBoxId);
+      const targetRoute = `/items?box=${encodedBoxId}`;
+      logger.info('Navigating from box detail to item list with box filter', {
+        source: 'box-detail',
+        boxId: resolvedBoxId,
+        targetRoute
+      });
+      navigate(targetRoute);
+    } catch (error) {
+      logError('Failed to navigate from box detail to item list with box filter', error, {
+        source: 'box-detail',
+        boxId: resolvedBoxId
+      });
+    }
+  }, [box?.BoxID, boxId, navigate]);
+
+  const itemsListRoute = useMemo(() => {
+    const resolvedBoxId = box?.BoxID || boxId;
+    try {
+      return `/items?box=${encodeURIComponent(resolvedBoxId)}`;
+    } catch (error) {
+      logError('Failed to build box-detail item list route', error, {
+        source: 'box-detail',
+        boxId: resolvedBoxId
+      });
+      return '/items';
+    }
+  }, [box?.BoxID, boxId]);
 
   useEffect(() => {
     if (!location.state || typeof location.state !== 'object') {
@@ -879,7 +913,10 @@ export default function BoxDetail({ boxId }: Props) {
             ) : null}
 
             <div className="card grid-span-2">
-              <h3>Artikel</h3>
+              <div className='row' style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0 }}>Artikel</h3>
+                <Link to={itemsListRoute} onClick={handleNavigateToItems} style={{ color: 'rgb(221, 60, 114)', fontWeight: 600 }}>Detail-Liste</Link>
+              </div>
               <div className=''>
                 <div className='row'>
                   <div className="item-list-wrapper">
