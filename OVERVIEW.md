@@ -7,6 +7,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+47. ✅ Expand `docs/detailed/review-flow.md` from template into a current-state reviewer lifecycle reference covering statuses/transitions, reviewer actions, restart/retrigger paths, contract-verified artifact fields, UI/backend action mappings, audit logging, and explicit open questions for unresolved policy behavior.
 46. ✅ Expand `docs/detailed/agentic-basics.md` from template into an operator/developer orchestration reference covering lifecycle stages, backend module map, persisted run/request/review contracts, observability/failure surfacing, guardrails, and links to specialized item/review deep-dives.
 45. ✅ Expand `docs/detailed/import_export.md` from template into a concrete contract reference covering API surfaces, CSV/ZIP structure requirements, alias mapping, validation/error reporting behavior, logging points, and backend/shared-model sync checklist.
 45. ✅ Expand `docs/detailed/printing.md` into an operational print reference covering label concepts, preview-vs-dispatch flow, template/route mappings, config dependencies, retry/error diagnostics, and operator troubleshooting checklist.
