@@ -951,9 +951,9 @@ export default function ItemListPage() {
                     value={shopPublicationFilter}
                   >
                     <option value="all">Alle</option>
-                    <option value="inShop">im Shop (1/1)</option>
-                    <option value="notPublished">nicht veröffentlicht (1/0)</option>
-                    <option value="noShopArticle">kein Shopartikel (0/X)</option>
+                    <option value="inShop">im Shop</option>
+                    <option value="notPublished">nicht veröffentlicht</option>
+                    <option value="noShopArticle">kein Shopartikel</option>
                   </select>
                 </label>
               </div>
