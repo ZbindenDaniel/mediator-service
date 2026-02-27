@@ -7,7 +7,7 @@ import RecentBoxesCard from './RecentBoxesCard';
 import RecentEventsCard, { RecentEventsList } from './RecentEventsCard';
 import ImportCard from './ImportCard';
 import LoadingPage from './LoadingPage';
-import type { Box, EventLog } from '../../../models';
+import type { AgenticRunStatus, Box, EventLog } from '../../../models';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 
 interface OverviewCounts {
@@ -16,10 +16,16 @@ interface OverviewCounts {
   itemsNoBox: number;
 }
 
+interface OverviewAgenticStats {
+  stateCounts?: Partial<Record<AgenticRunStatus, number>>;
+  enrichedItems?: number;
+}
+
 interface OverviewData {
   counts: OverviewCounts;
   recentBoxes: Box[];
   recentEvents: EventLog[];
+  agentic?: OverviewAgenticStats;
 }
 
 interface PrinterStatusResponse {
@@ -121,6 +127,7 @@ export default function LandingPage() {
           printerOk={printerOk}
           printerReason={printerReason}
           health={health}
+          agentic={overview?.agentic}
           className="stats-card desktop-only"
         />
 

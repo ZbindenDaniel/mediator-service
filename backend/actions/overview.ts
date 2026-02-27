@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { AGENTIC_RUN_STATUSES, AGENTIC_RUN_STATUS_NOT_STARTED, normalizeAgenticRunStatus, type AgenticRunStatus } from '../../models';
 import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -22,6 +23,25 @@ const action = defineHttpAction({
       };
       const recentBoxes = ctx.listRecentBoxes.all();
       const recentEvents = ctx.listRecentEvents.all();
+
+      let agenticStateCounts: Record<AgenticRunStatus, number> = AGENTIC_RUN_STATUSES.reduce((acc, status) => {
+        acc[status] = 0;
+        return acc;
+      }, {} as Record<AgenticRunStatus, number>);
+      let enrichedItems = 0;
+      try {
+        const rawStateCounts = (ctx.countAgenticRunsByStatus?.all?.() ?? []) as Array<{ status?: string | null; c?: number }>;
+        agenticStateCounts = rawStateCounts.reduce((acc, row) => {
+          const normalizedStatus = normalizeAgenticRunStatus(row?.status ?? AGENTIC_RUN_STATUS_NOT_STARTED);
+          const nextCount = typeof row?.c === 'number' && Number.isFinite(row.c) ? row.c : 0;
+          acc[normalizedStatus] = (acc[normalizedStatus] ?? 0) + nextCount;
+          return acc;
+        }, agenticStateCounts);
+        enrichedItems = ctx.countEnrichedItemReferences?.get?.()?.c || 0;
+      } catch (err) {
+        console.error('Failed to load agentic overview aggregates', err);
+      }
+
       try {
         const totalEvents = ctx.countEvents.get().c || 0;
         if (totalEvents > OVERVIEW_EVENT_LIMIT) {
@@ -33,7 +53,7 @@ const action = defineHttpAction({
       } catch (err) {
         console.error('Failed to determine total event count for overview', err);
       }
-      sendJson(res, 200, { counts, recentBoxes, recentEvents });
+      sendJson(res, 200, { counts, recentBoxes, recentEvents, agentic: { stateCounts: agenticStateCounts, enrichedItems } });
     } catch (err) {
       console.error('Overview endpoint failed', err);
       sendJson(res, 500, { error: (err as Error).message });

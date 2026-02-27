@@ -9,6 +9,10 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 ## Next steps
 50. ✅ Treat item-list deep-link query sessions as URL-authoritative (skip localStorage restoration when URL filters are present) and highlight active filter indicator with box-color background for provenance clarity.
 49. ✅ Add URL query filter bootstrap on item list mount (URL `box`/`boxFilter` takes precedence over stored/default filters), with defensive parsing/logging and staged-input consistency preserved.
+52. ✅ Align muted status text rows horizontally across the `Statistiken` card and further prioritize the pie by shrinking legend footprint to hover-only color dots.
+51. ✅ Enlarge the `Statistiken` pie chart and compact the legend into bottom color-coded chips with hover-only value display to improve at-a-glance readability while keeping layout minimal.
+50. ✅ Adjust `Statistiken` card layout so the agentic pie chart occupies the right half of the card at desktop widths, while preserving compact stacked behavior on smaller screens.
+49. ✅ Add a minimal `Statistiken` pie-chart slice overview for agentic run states in `frontend/src/components/StatsCard.tsx` backed by a small aggregate payload in `backend/actions/overview.ts`, with guarded logging/error handling and a follow-up-ready shape for optional future layers (`shopArtikel`, quality).
 48. ✅ Add `docs/detailed/diagrams/README.md` placeholder backlog (item lifecycle, box relocation, import/export, agentic item-flow, review-flow) and link it from `docs/detailed/README.md` for text-first diagram planning without tooling overhead.
 47. ✅ Add standalone `docs/detailed/glossary.md` with canonical terminology (items/instances, boxes/shelves, printing, QR events, agentic states/review outcomes), explicit Use/Avoid pairs, and contract-sensitive model-field mapping; link glossary in `docs/detailed/_template.md` for reuse.
 47. ✅ Add `docs/detailed/traceability-matrix.md` with domain-to-code mappings (backend/frontend/models + data-structure checks), and link it from `docs/detailed/README.md` as the canonical path index.
