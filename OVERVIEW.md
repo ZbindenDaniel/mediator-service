@@ -7,6 +7,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+50. ✅ Treat item-list deep-link query sessions as URL-authoritative (skip localStorage restoration when URL filters are present) and highlight active filter indicator with box-color background for provenance clarity.
+49. ✅ Add URL query filter bootstrap on item list mount (URL `box`/`boxFilter` takes precedence over stored/default filters), with defensive parsing/logging and staged-input consistency preserved.
 52. ✅ Align muted status text rows horizontally across the `Statistiken` card and further prioritize the pie by shrinking legend footprint to hover-only color dots.
 51. ✅ Enlarge the `Statistiken` pie chart and compact the legend into bottom color-coded chips with hover-only value display to improve at-a-glance readability while keeping layout minimal.
 50. ✅ Adjust `Statistiken` card layout so the agentic pie chart occupies the right half of the card at desktop widths, while preserving compact stacked behavior on smaller screens.

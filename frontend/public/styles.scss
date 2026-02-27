@@ -255,6 +255,17 @@ textarea {
     background: #0000000d;
 }
 
+.header-filter-indicator--deeplink {
+    background-color: #dd3c72;
+    border-color: #dd3c72;
+    color: #fff;
+}
+
+.header-filter-indicator--deeplink:hover,
+.header-filter-indicator--deeplink:focus-visible {
+    background-color: #c83465;
+}
+
 .item-media-section {
     margin-bottom: 1rem;
 }

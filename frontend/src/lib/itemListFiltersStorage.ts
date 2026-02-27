@@ -37,6 +37,7 @@ export type ItemListFilters = {
 export type ItemListFilterChangeDetail = {
   activeFilters: string[];
   hasOverrides: boolean;
+  isDeepLinkFilterSession?: boolean;
 };
 
 export const ITEM_LIST_FILTERS_STORAGE_KEY = 'mediator-item-list-filters';

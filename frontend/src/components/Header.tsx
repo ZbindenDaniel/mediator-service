@@ -16,12 +16,14 @@ import { GoArchive, GoFilter, GoHome, GoListUnordered, GoPlus, GoPulse } from 'r
 import { logError } from '../utils/logger';
 
 // TODO(filter-indicator): Surface stored filter state changes in the header and allow quick reset.
+// TODO(filter-indicator-accessibility): Validate whether deep-link filter color needs a text label for screen-reader parity.
 export default function Header() {
   const dialog = useDialog();
   const navigate = useNavigate();
   const [user, setUserState] = useState(() => getUser().trim());
   const [filterSummaries, setFilterSummaries] = useState<string[]>([]);
   const [hasStoredFilters, setHasStoredFilters] = useState(false);
+  const [hasDeepLinkFilters, setHasDeepLinkFilters] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +61,7 @@ export default function Header() {
         setFilterSummaries([]);
         setHasStoredFilters(false);
       }
+      setHasDeepLinkFilters(false);
     };
 
     syncFromStorage();
@@ -67,8 +70,10 @@ export default function Header() {
       const customEvent = event as CustomEvent<ItemListFilterChangeDetail>;
       const activeFilters = customEvent.detail?.activeFilters ?? [];
       const hasOverrides = customEvent.detail?.hasOverrides ?? false;
+      const isDeepLinkFilterSession = customEvent.detail?.isDeepLinkFilterSession ?? false;
       setFilterSummaries(activeFilters);
       setHasStoredFilters(hasOverrides);
+      setHasDeepLinkFilters(isDeepLinkFilterSession);
     };
 
     window.addEventListener(ITEM_LIST_FILTERS_CHANGED_EVENT, handleFilterChange as EventListener);
@@ -117,6 +122,7 @@ export default function Header() {
       window.dispatchEvent(new Event(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT));
       setFilterSummaries([]);
       setHasStoredFilters(false);
+      setHasDeepLinkFilters(false);
       console.info('Stored item list filters cleared from header control.');
     } catch (err) {
       console.error('Failed to clear stored filters from header control', err);
@@ -124,8 +130,10 @@ export default function Header() {
   }, []);
 
   const filterTooltip = filterSummaries.length
-    ? `Aktive Filter:\n- ${filterSummaries.join('\n- ')}`
-    : 'Gespeicherte Filter zurücksetzen';
+    ? `Aktive Filter:\n- ${filterSummaries.join('\n- ')}${hasDeepLinkFilters ? '\n(Hinweis: Deep-Link überschreibt lokale Speicherung)' : ''}`
+    : hasDeepLinkFilters
+      ? 'Deep-Link-Filter aktiv (lokale Speicherung übersprungen)'
+      : 'Gespeicherte Filter zurücksetzen';
 
   return (
     <header className="header">
@@ -176,7 +184,7 @@ export default function Header() {
         {hasStoredFilters ? (
           <button
             aria-label="Gespeicherte Filter löschen"
-            className="header-filter-indicator"
+            className={`header-filter-indicator${hasDeepLinkFilters ? ' header-filter-indicator--deeplink' : ''}`}
             onClick={handleClearFiltersClick}
             title={filterTooltip}
             type="button"
