@@ -255,6 +255,17 @@ textarea {
     background: #0000000d;
 }
 
+.header-filter-indicator--deeplink {
+    background-color: #dd3c72;
+    border-color: #dd3c72;
+    color: #fff;
+}
+
+.header-filter-indicator--deeplink:hover,
+.header-filter-indicator--deeplink:focus-visible {
+    background-color: #c83465;
+}
+
 .item-media-section {
     margin-bottom: 1rem;
 }
@@ -578,7 +589,7 @@ div {
 .qr-scanner .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
 }
 
 /* Dialog */
@@ -626,7 +637,7 @@ div {
     background: rgba(255, 255, 255, 0.65);
     padding: 10px;
     display: grid;
-    gap: 8px;
+    gap: 10px;
 }
 
 .review-dialog__section-title {
@@ -667,7 +678,7 @@ div {
 .review-dialog__chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
 }
 
 .review-dialog__chip {
@@ -682,7 +693,7 @@ div {
 
 .review-dialog__additional-input {
     display: grid;
-    gap: 8px;
+    gap: 10px;
 }
 
 @media (max-width: 720px) {
@@ -1069,10 +1080,65 @@ input[type="checkbox"] {
 
 
 .status-info {
-    width: 30%;
+    width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.stats-card-status-row {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+}
+
+
+.stats-card-main {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.stats-card-right {
+    display: grid;
+    gap: 10px;
+}
+
+.agentic-stats-chart {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.agentic-pie {
+    width: 182px;
+    height: 182px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    flex-shrink: 0;
+}
+
+.agentic-stats-summary {
+    display: grid;
+    gap: 6px;
+}
+
+.agentic-pie-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    min-height: 16px;
+}
+
+.agentic-pie-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 1px solid rgba(0, 0, 0, 0.12);
 }
 
 button {
@@ -1212,7 +1278,7 @@ button:focus {
 .langtext-editor {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .langtext-editor__hint {
@@ -1310,7 +1376,7 @@ button:focus {
 .row.status-row {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 
 .suggestion-list {
@@ -1426,7 +1492,7 @@ button:focus {
 .bulk-item-action-bar__buttons {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
 }
 
 .bulk-item-action-bar__button {
@@ -1486,7 +1552,7 @@ button:focus {
 .bulk-item-action-bar__confirm-content {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .bulk-item-action-bar__confirm-content ul {
@@ -2180,6 +2246,26 @@ button:focus {
     }
 }
 
+
+@media (min-width: 960px) {
+    .stats-card-main {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .stats-card-right {
+        border-left: 1px solid var(--line);
+        padding-left: 12px;
+    }
+
+    // TODO(stats-card-status-row): Reconfirm horizontal status alignment if desktop card spacing shifts.
+    .stats-card-status-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: start;
+        column-gap: 12px;
+    }
+}
+
 .grid-span-2 {
     grid-column: span 2;
 }
@@ -2319,7 +2405,7 @@ button:focus {
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    border: 1px solid var(--line);
+    border: 5px solid var(--line);
     border-radius: 12px;
     min-width: 25px;
     height: 25px;

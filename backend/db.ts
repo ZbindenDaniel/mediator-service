@@ -2837,6 +2837,17 @@ export const countEvents = db.prepare(
 export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
+// TODO(agentic-overview): Extend overview aggregates with shop/quality splits once chart layering is prioritized.
+export const countAgenticRunsByStatus = db.prepare(`
+  SELECT COALESCE(NULLIF(TRIM(Status), ''), 'notStarted') AS status, COUNT(*) as c
+  FROM agentic_runs
+  GROUP BY COALESCE(NULLIF(TRIM(Status), ''), 'notStarted')
+`);
+export const countEnrichedItemReferences = db.prepare(`
+  SELECT COUNT(*) as c
+  FROM item_refs
+  WHERE Langtext IS NOT NULL AND TRIM(Langtext) != ''
+`);
 export const listRecentBoxes = db.prepare(
   `SELECT BoxID, LocationId, Label, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
 );

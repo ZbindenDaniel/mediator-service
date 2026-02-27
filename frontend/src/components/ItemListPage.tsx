@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoContainer, GoSearch } from 'react-icons/go';
+import { useSearchParams } from 'react-router-dom';
 import type { AgenticRunStatus, Item } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
@@ -39,8 +40,47 @@ import LoadingPage from './LoadingPage';
 // TODO(entrydate-sort): Confirm entry date ordering expectations for the list view.
 // TODO(placement-filter-ui): Validate whether placement filter should expose shelf-level placement states in future.
 // TODO(filter-order-ui): Keep quality slider rendered after categorical filters unless UX feedback changes.
+// TODO(item-list-url-filters): Extend URL parsing beyond box filter after deep-link requirements are confirmed.
+// TODO(item-list-deeplink-indicator): Revisit whether deep-link indicator should persist after users clear all active filters.
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
+
+function parseItemListFiltersFromUrl(searchParams: URLSearchParams): Partial<ItemListFilters> {
+  const parsed: Partial<ItemListFilters> = {};
+  try {
+    const boxValues = searchParams.getAll('box');
+    const boxAliasValues = searchParams.getAll('boxFilter');
+    if (boxValues.length > 1 || boxAliasValues.length > 1) {
+      logger.warn?.('Ignoring extra box query param values for item list filters', {
+        boxValues,
+        boxAliasValues
+      });
+    }
+    if (boxValues.length > 0 && boxAliasValues.length > 0 && boxValues[0] !== boxAliasValues[0]) {
+      logger.warn?.('Item list URL contains conflicting box query params; preferring box over boxFilter', {
+        box: boxValues[0],
+        boxFilter: boxAliasValues[0]
+      });
+    }
+    const rawBox = boxValues[0] ?? boxAliasValues[0] ?? null;
+    if (rawBox !== null) {
+      parsed.boxFilter = rawBox;
+    }
+  } catch (error) {
+    logError('Failed to parse item list filters from URL', error);
+  }
+  return parsed;
+}
+
+function hasItemListUrlFilterParams(searchParams: URLSearchParams): boolean {
+  try {
+    return searchParams.has('box') || searchParams.has('boxFilter');
+  } catch (error) {
+    logError('Failed to detect item list URL filter params', error);
+    return false;
+  }
+}
+
 const resolveItemQuality = (value: unknown) => normalizeQuality(value, console) ?? QUALITY_MIN;
 const resolveEntryTimestamp = (
   value: unknown,
@@ -316,6 +356,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 }
 
 export default function ItemListPage() {
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState<Item[]>([]);
   const [placementFilter, setPlacementFilter] = useState<ItemListFilters['placementFilter']>(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
   const [isLoading, setIsLoading] = useState(true);
@@ -340,27 +381,53 @@ export default function ItemListPage() {
   const [filtersReady, setFiltersReady] = useState(false);
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
+  const [isDeepLinkFilterSession, setIsDeepLinkFilterSession] = useState(false);
 
   useEffect(() => {
-    const storedFilters = loadItemListFilters(ITEM_LIST_DEFAULT_FILTERS);
-    if (storedFilters) {
-      setSearchTerm(storedFilters.searchTerm);
-      setSearchInput(storedFilters.searchTerm);
-      setSubcategoryFilter(storedFilters.subcategoryFilter);
-      setSubcategoryInput(storedFilters.subcategoryFilter);
-      setBoxFilter(storedFilters.boxFilter);
-      setAgenticStatusFilter(storedFilters.agenticStatusFilter);
-      setShopPublicationFilter(storedFilters.shopPublicationFilter);
-      setPlacementFilter(storedFilters.placementFilter);
-      setSortKey(storedFilters.sortKey);
-      setSortDirection(storedFilters.sortDirection);
-      setEntityFilter(storedFilters.entityFilter);
-      setQualityThreshold(storedFilters.qualityThreshold);
-      console.info('Restored item list filters from localStorage');
+    try {
+      const hasUrlFilterParams = hasItemListUrlFilterParams(searchParams);
+      const urlFilters = parseItemListFiltersFromUrl(searchParams);
+      const storedFilters = hasUrlFilterParams ? null : loadItemListFilters(ITEM_LIST_DEFAULT_FILTERS);
+      const mergedFilters: ItemListFilters = {
+        ...ITEM_LIST_DEFAULT_FILTERS,
+        ...(storedFilters || {}),
+        ...urlFilters
+      };
+
+      setSearchTerm(mergedFilters.searchTerm);
+      setSearchInput(mergedFilters.searchTerm);
+      setSubcategoryFilter(mergedFilters.subcategoryFilter);
+      setSubcategoryInput(mergedFilters.subcategoryFilter);
+      setBoxFilter(mergedFilters.boxFilter);
+      setAgenticStatusFilter(mergedFilters.agenticStatusFilter);
+      setShopPublicationFilter(mergedFilters.shopPublicationFilter);
+      setPlacementFilter(mergedFilters.placementFilter);
+      setSortKey(mergedFilters.sortKey);
+      setSortDirection(mergedFilters.sortDirection);
+      setEntityFilter(mergedFilters.entityFilter);
+      setQualityThreshold(mergedFilters.qualityThreshold);
+      setIsDeepLinkFilterSession(hasUrlFilterParams);
+
+      if (storedFilters) {
+        logger.info?.('Restored item list filters from localStorage');
+      }
+      if (hasUrlFilterParams) {
+        logger.info?.('Skipping stored item list filters because URL deep-link params are present');
+      }
+      const appliedUrlKeys = Object.keys(urlFilters);
+      if (appliedUrlKeys.length > 0) {
+        logger.info?.('Applied item list filters from URL query params', { keys: appliedUrlKeys });
+      }
+
+      latestFiltersRef.current = mergedFilters;
+    } catch (error) {
+      logError('Failed to initialize item list filters', error);
+      latestFiltersRef.current = ITEM_LIST_DEFAULT_FILTERS;
+      setIsDeepLinkFilterSession(false);
+    } finally {
+      setFiltersReady(true);
     }
-    latestFiltersRef.current = storedFilters || ITEM_LIST_DEFAULT_FILTERS;
-    setFiltersReady(true);
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     const handleFilterReset = () => {
@@ -599,7 +666,8 @@ export default function ItemListPage() {
     const hasOverrides = hasNonDefaultFilters(currentFilters, ITEM_LIST_DEFAULT_FILTERS);
     const detail: ItemListFilterChangeDetail = {
       activeFilters,
-      hasOverrides
+      hasOverrides,
+      isDeepLinkFilterSession
     };
     window.dispatchEvent(new CustomEvent<ItemListFilterChangeDetail>(ITEM_LIST_FILTERS_CHANGED_EVENT, { detail }));
 
@@ -621,7 +689,7 @@ export default function ItemListPage() {
         persistTimeoutRef.current = null;
       }
     };
-  }, [currentFilters, filtersReady]);
+  }, [currentFilters, filtersReady, isDeepLinkFilterSession]);
 
   const filtered = useMemo(
     () =>
@@ -883,9 +951,9 @@ export default function ItemListPage() {
                     value={shopPublicationFilter}
                   >
                     <option value="all">Alle</option>
-                    <option value="inShop">im Shop (1/1)</option>
-                    <option value="notPublished">nicht veröffentlicht (1/0)</option>
-                    <option value="noShopArticle">kein Shopartikel (0/X)</option>
+                    <option value="inShop">im Shop</option>
+                    <option value="notPublished">nicht veröffentlicht</option>
+                    <option value="noShopArticle">kein Shopartikel</option>
                   </select>
                 </label>
               </div>

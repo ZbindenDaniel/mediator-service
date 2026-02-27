@@ -37,6 +37,7 @@ export type ItemListFilters = {
 export type ItemListFilterChangeDetail = {
   activeFilters: string[];
   hasOverrides: boolean;
+  isDeepLinkFilterSession?: boolean;
 };
 
 export const ITEM_LIST_FILTERS_STORAGE_KEY = 'mediator-item-list-filters';
@@ -115,9 +116,9 @@ export function getActiveFilterDescriptions(
   if (filters.shopPublicationFilter !== defaults.shopPublicationFilter) {
     const filterLabels: Record<ItemListFilters['shopPublicationFilter'], string> = {
       all: 'Alle Shop-/Publikationsstatus',
-      inShop: 'Im Shop (1/1)',
-      notPublished: 'Nicht veröffentlicht (1/0)',
-      noShopArticle: 'Kein Shopartikel (0/X)'
+      inShop: 'Im Shop',
+      notPublished: 'Nicht veröffentlicht',
+      noShopArticle: 'Kein Shopartikel'
     };
     active.push(`Shopstatus: ${filterLabels[filters.shopPublicationFilter]}`);
   }

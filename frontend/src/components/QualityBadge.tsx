@@ -9,7 +9,7 @@ const QUALITY_COLOR_HEX: Record<(typeof QUALITY_COLOR_MAP)[number] | typeof QUAL
   yellow: '#e3b341',
   orange: '#fb8c00',
   green: '#2da44e',
-  gray: '#94a3b800'
+  gray: '#ffffff00'
 };
 
 interface Props {

@@ -107,3 +107,6 @@ Objective: turn the collected ideas into an execution-ready backlog with clear p
 - Allow in box view to relocate a selection of items. (Basically another ned to use the itemlist in the boxdetail)
 - update this so the itemFLow actually produces a listPrice and then calculate the sellprice  (which we askto be confirmed in the review)
 - warning when to many items are unplaced (when attempting to create a new item)
+- new filter for shop (no-no, no-yes, yes-yes)
+- add  WebLinks to itemRef: {"Manual":"https://...", "Heise":"https://...", "Dell":"..."}
+- populate EAN number

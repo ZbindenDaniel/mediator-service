@@ -95,6 +95,8 @@ export interface RunItemFlowInput {
   // TODO(agent): Align RunItemFlowInput with stronger target typing once downstream callers are updated.
   search?: string | null;
   reviewNotes?: string | null;
+  missingSpecFields?: string[];
+  unneededSpecFields?: string[];
   skipSearch?: boolean;
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
@@ -390,6 +392,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       searchInvoker,
       target,
       reviewNotes: reviewerNotes,
+      missingSpecFields: Array.isArray(input.missingSpecFields) ? input.missingSpecFields : [],
+      unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
       skipSearch,
       exampleItemBlock: input.exampleItemBlock ?? null,
       correctionModel: deps.correctionLlm,
