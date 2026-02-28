@@ -187,6 +187,102 @@ describe('agentic-status lifecycle transitions', () => {
     );
   });
 
+  it('keeps checklist decision approved when only unnecessary specs are marked', async () => {
+    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
+    const getAgenticRun = {
+      get: jest
+        .fn()
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' })
+    };
+    const ctx = {
+      db: {},
+      getAgenticRun,
+      getItemReference: { get: jest.fn() },
+      upsertAgenticRun: { run: jest.fn() },
+      updateAgenticRunStatus: { run: jest.fn() },
+      updateAgenticReview,
+      logEvent: jest.fn(),
+      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+    };
+
+    const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
+      actor: 'qa-user',
+      action: 'review',
+      unneeded_spec: ['InterneNotiz', 'AltesFeld'],
+      notes: 'removed unnecessary specs only'
+    });
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'A-100',
+        ReviewState: 'approved',
+        Status: AGENTIC_RUN_STATUS_APPROVED,
+        LastReviewDecision: 'approved'
+      })
+    );
+    expect(getBody().agentic?.ReviewState).toBe('approved');
+    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'A-100',
+        ReviewState: 'approved',
+        ReviewDecision: 'approved'
+      })
+    );
+  });
+
+  it('keeps checklist decision approved when only manual price is updated', async () => {
+    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
+    const getAgenticRun = {
+      get: jest
+        .fn()
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
+        .mockReturnValueOnce({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' })
+    };
+    const ctx = {
+      db: {},
+      getAgenticRun,
+      getItemReference: { get: jest.fn(() => ({ Artikel_Nummer: 'A-100', Verkaufspreis: null, Shopartikel: 0 })) },
+      persistItemReference: jest.fn(),
+      upsertAgenticRun: { run: jest.fn() },
+      updateAgenticRunStatus: { run: jest.fn() },
+      updateAgenticReview,
+      logEvent: jest.fn(),
+      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+    };
+
+    const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
+      actor: 'qa-user',
+      action: 'review',
+      review_price: 199.99,
+      notes: 'price adjusted only'
+    });
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx as any);
+
+    expect(getStatus()).toBe(200);
+    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'A-100',
+        ReviewState: 'approved',
+        Status: AGENTIC_RUN_STATUS_APPROVED,
+        LastReviewDecision: 'approved'
+      })
+    );
+    expect(getBody().agentic?.ReviewState).toBe('approved');
+    expect(ctx.persistItemReference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'A-100',
+        Verkaufspreis: 199.99
+      })
+    );
+  });
+
   it('accepts explicit final decision and clears pending by rejecting', async () => {
     const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
     const getAgenticRun = {
