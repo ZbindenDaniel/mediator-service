@@ -2,6 +2,7 @@ import { mapReviewAnswersToInput } from '../../lib/agenticReviewMapping';
 import { mergeSpecFieldSelection } from '../agenticReviewSpecFields';
 
 describe('mapReviewAnswersToInput', () => {
+  // TODO(agentic-review-flow-tests): Keep review-flow coverage aligned with ItemDetail checklist gating semantics.
   // TODO(agentic-review-semantics): Re-check mapping if checklist wording changes again.
   it('maps explicit german checklist intent to existing review payload fields', () => {
     const payload = mapReviewAnswersToInput(
@@ -57,6 +58,34 @@ describe('mapReviewAnswersToInput', () => {
 
     expect(payload.unneeded_spec).toEqual(['Marketing', 'intern']);
     expect(payload.missing_spec).toEqual(['Spannung', 'Leistung', 'Schutzklasse']);
+  });
+
+
+  it('keeps review flow positive when only unnecessary specs are selected and a review price is set', () => {
+    const payload = mapReviewAnswersToInput(
+      {
+        descriptionMatches: true,
+        shortTextMatches: true,
+        hasUnnecessarySpecs: true,
+        hasMissingSpecs: false,
+        dimensionsPlausible: true
+      },
+      {
+        missingSpecRaw: '',
+        unneededSpecRaw: mergeSpecFieldSelection(['Marketing'], ' interne Notiz '),
+        notes: '',
+        reviewPrice: 129.95,
+        shopArticle: true
+      }
+    );
+
+    expect(payload.information_present).toBe(true);
+    expect(payload.bad_format).toBe(false);
+    expect(payload.wrong_information).toBe(false);
+    expect(payload.wrong_physical_dimensions).toBe(false);
+    expect(payload.unneeded_spec).toEqual(['Marketing', 'interne Notiz']);
+    expect(payload.review_price).toBe(129.95);
+    expect(payload.shop_article).toBe(true);
   });
 
 
