@@ -101,6 +101,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 26. ✅ Add focused importer coverage for duplicate Artikel-Nummer CSV rows with distinct ItemUUID persistence checks (instance count + exact UUID set + single item_refs row), plus a companion missing-ItemUUID fallback/mint regression test using existing DB harness patterns.
 
 ## Notes
+- ✅ Bulk item-list agentic start now retries via restart when canonical runs already exist (`already-exists`), preserving minimal trigger flow and reducing failed bulk re-run attempts.
 - ✅ Review mapping now supports an explicit `wrong_information` override (for future dedicated UI input) while defaulting to `false` when absent, with submission logging that records explicit-vs-default source and final value.
 - ✅ Review payload mapping now keeps `wrong_information` independent from unnecessary-spec cleanup in frontend checklist mapping/tests, while preserving `unneeded_spec` intent and adding submission-stage mapping-source logging.
 - ✅ Review checklist prompt isolation: dialog prompt inputs now remount per request so the optional review note starts empty instead of carrying over the previously entered price value.

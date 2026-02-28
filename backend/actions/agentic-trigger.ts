@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { startAgenticRun, type AgenticServiceDependencies } from '../agentic';
+import { restartAgenticRun, startAgenticRun, type AgenticServiceDependencies } from '../agentic';
 import type { AgenticRunReviewMetadata } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 // TODO(agentic-start-flow): Extract shared agentic start/restart validation once UI start flows stabilize.
+// TODO(agentic-bulk-restart): Revisit whether already-existing runs from non-bulk contexts should be restart-eligible.
 
 export interface AgenticRunTriggerPayload {
   // TODO(agentic-trigger-input): Reconfirm all callers send artikelNummer-only payloads post-migration.
@@ -152,6 +153,67 @@ export async function forwardAgenticTrigger(
         logger: serviceDeps.logger ?? options.logger ?? console
       }
     );
+
+    if (!result.queued && result.reason === 'already-exists' && context === 'item-list-bulk') {
+      logger.info?.('[agentic-trigger] Existing run detected for bulk trigger; attempting restart', {
+        context,
+        artikelNummer
+      });
+
+      try {
+        const restartResult = await restartAgenticRun(
+          {
+            itemId: artikelNummer,
+            searchQuery: artikelbeschreibung,
+            actor,
+            review,
+            context,
+            request: requestContext
+          },
+          {
+            ...serviceDeps,
+            logger: serviceDeps.logger ?? options.logger ?? console
+          }
+        );
+
+        if (restartResult.queued) {
+          logger.info?.('[agentic-trigger] Agentic run restarted from bulk trigger', {
+            context,
+            artikelNummer
+          });
+          return {
+            ok: true,
+            status: 202,
+            body: { agentic: restartResult.agentic },
+            rawBody: null
+          };
+        }
+
+        logger.warn?.('[agentic-trigger] Agentic run restart declined after existing-run bulk trigger', {
+          context,
+          artikelNummer,
+          reason: restartResult.reason
+        });
+        return {
+          ok: false,
+          status: 409,
+          body: { reason: restartResult.reason },
+          rawBody: null
+        };
+      } catch (restartError) {
+        logger.error?.('[agentic-trigger] Failed to restart existing agentic run from bulk trigger', {
+          context,
+          artikelNummer,
+          error: restartError instanceof Error ? restartError.message : restartError
+        });
+        return {
+          ok: false,
+          status: 500,
+          body: { error: 'agentic-restart-failed' },
+          rawBody: null
+        };
+      }
+    }
 
     if (!result.queued) {
       logger.warn?.('[agentic-trigger] Agentic run start declined', {
