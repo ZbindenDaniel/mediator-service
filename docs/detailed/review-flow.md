@@ -65,6 +65,21 @@
    - Restart endpoint re-queues run and can clear/carry review metadata depending on provided payload.
    - Item detail restart flow may retrigger `/api/agentic/run`; if trigger fails, UI auto-cancels the run to avoid zombie queued state.
 
+
+## Restart metadata preservation/replacement policy
+<!-- TODO(agentic-doc-sync): Keep this truth table aligned with restart action/service/result-handler lifecycle updates. -->
+
+Current restart semantics are intentionally explicit and deterministic:
+
+| Restart input shape | Persisted review metadata outcome | Operator impact |
+| --- | --- | --- |
+| `review` omitted, `replaceReviewMetadata=false` (default) | Existing `ReviewState` / `ReviewedBy` / `LastReviewDecision` / `LastReviewNotes` are preserved. | Restart continues with prior reviewer guidance context. |
+| `review` provided, `replaceReviewMetadata=false` | Provided review payload is normalized and applied for restart fields. | Allows reviewer guidance refresh without requiring explicit full clear. |
+| `review` provided, `replaceReviewMetadata=true` | Provided review payload is treated as explicit replacement. | Enforces intentional overwrite behavior. |
+| `replaceReviewMetadata=true` and `review` omitted | Review metadata is cleared and `ReviewState` resets to `not_required`. | Explicit clear/reset path before next run. |
+
+Additionally, when model-result processing transitions a run into pending review (`Status=review`), previous reviewer attribution/decision/notes are cleared (`ReviewedBy`, `LastReviewDecision`, `LastReviewNotes`) so each review cycle starts cleanly.
+
 ## API/actions
 - Status fetch:
   - `GET /api/item-refs/:artikelNummer/agentic` (legacy `/api/items/:id/agentic` still accepted).

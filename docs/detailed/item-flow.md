@@ -66,6 +66,34 @@
    - Any dispatch failure marks notification failure and surfaces error.
    - Downstream manual review endpoint (`agentic-status`) decides approve/reject/close and may update fallback price/spec fields.
 
+
+## Trigger-to-prompt injection matrix
+<!-- TODO(agentic-doc-sync): Keep trigger mapping aligned with `item-flow-extraction.ts` placeholder injection logic. -->
+
+| Trigger | Extraction prompt fragment | Supervisor prompt fragment | User/reviewer instruction note |
+| --- | --- | --- | --- |
+| `wrong_information_trigger` | Adds caution to cross-check factual claims against evidence. | — | Adds signal note to consolidate sources before final claims. |
+| `wrong_physical_dimensions_trigger` | Adds caution to extract only physically plausible dimensions/units. | Adds explicit plausibility rejection instruction. | — |
+| `missing_spec_trigger` | Adds top missing spec-key prioritization guidance. | — | — |
+| `bad_format_trigger` | Adds strict JSON-only output contract reminder. | Adds strict schema-conformance rejection reminder. | Adds formatting-risk note (avoid markdown/comments/wrappers). |
+| `information_present_low_trigger` | — | — | Adds coverage note (prefer explicit unknown/null over silent omissions). |
+
+## No-search enforcement behavior (current state)
+- Initial search collection is gated by `finalShouldSearch = !skipSearch && plannerShouldSearch`.
+- Reviewer no-search instructions can therefore block planner-driven initial search collection.
+- Follow-up `__searchQueries` emitted by extraction currently still run through iteration search expansion; this is not yet hard-blocked by `skipSearch` in the extraction dispatcher path.
+- Operators should treat no-search as **initial-gate enforced** and **follow-up hard block pending** until dispatcher-level enforcement is introduced.
+
+## Troubleshooting
+### Why did a rerun still search?
+- Check search-gating logs first (`reviewerSkip`, `plannerShouldSearch`, `finalShouldSearch`) to verify initial gate behavior.
+- If initial gate was false but search still happened, inspect extraction iteration logs for `__searchQueries` expansion (follow-up path).
+
+### Why was a missing spec not enforced?
+- Confirm review payload carried normalized `missing_spec` entries after dedupe/cap limits.
+- Confirm injected prompt guidance logs show `missing_spec_trigger` and schema-format adjustments where expected.
+- If absent, inspect restart payload normalization and invoker review normalization logs for dropped/trimmed entries.
+
 ## Policy gates and fallback behavior
 - **Search gate**:
   - Inputs: `skipSearch`, planner outcome, missing fields.

@@ -8,6 +8,10 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 
 ## Next steps
 56. ✅ Add a compact item-list selection export control that downloads the current selection as `filtered-items.csv`, and split the action-bar controls into an 80/20 field+export layout for clearer bulk-action ergonomics.
+- 54. ✅ Apply the minimal restart review-handoff safeguard: when a run transitions into `Status=review` (`needs_review`), explicitly clear previous review decision/notes/reviewer metadata in the result-update path with structured transition logging and guarded try/catch around normalization to keep reruns deterministic and easy to audit.
+- 55. ✅ Align review-spec normalization caps/dedupe across frontend mapping, restart action normalization, and service/invoker composition to prevent prompt bloat and silent contract drift while minimizing structural changes.
+- 56. ✅ Update detailed docs for operator reliability contracts: restart preservation/replacement truth table (`docs/detailed/review-flow.md`), trigger-to-prompt injection + no-search enforcement matrix with troubleshooting (`docs/detailed/item-flow.md`), and cross-link these guarantees from overview notes.
+54. ✅ Gate queued agentic dispatch to a single concurrent running slot so scheduled runs remain `queued`/waiting until capacity frees up, with focused dispatch concurrency tests and structured slot-occupancy logging.
 55. ✅ Treat manual-review-only `review_price` updates as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts`, so price corrections can still finish as approved unless blocking review signals exist.
 54. ✅ Treat manual-review-only `unneeded_spec` selections as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts` (still persisted for context), so removing unnecessary specs alone no longer forces rejection.
 53. ✅ Add lightweight frontend tests covering BoxDetail item-list deep-link route wiring (`/items?box=<BoxID>`) plus ItemListPage box-filter initialization precedence (URL `box` bootstrap, URL-over-storage override) and Behälter input state editing with minimal routing/storage/fetch mocks.
@@ -92,6 +96,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 26. ✅ Add focused importer coverage for duplicate Artikel-Nummer CSV rows with distinct ItemUUID persistence checks (instance count + exact UUID set + single item_refs row), plus a companion missing-ItemUUID fallback/mint regression test using existing DB harness patterns.
 
 ## Notes
+- ✅ Review checklist prompt isolation: dialog prompt inputs now remount per request so the optional review note starts empty instead of carrying over the previously entered price value.
 - ✅ Documentation clarity: moved review-loop trigger rollout status from `docs/AGENT.md` into dedicated `docs/detailed/Review_loop.md` to keep agent instructions focused and roadmap details separate.
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
 - ✅ Default ERP import runtime now expects `polling-enabled` mode with `browser-parity` contract and logs both flags at import start to surface misconfiguration early.
