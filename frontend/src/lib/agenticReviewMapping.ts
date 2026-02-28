@@ -48,14 +48,17 @@ export function mapReviewAnswersToInput(
     notes?: string;
     reviewPrice?: number | null;
     shopArticle?: boolean | null;
+    wrongInformation?: boolean | null;
     reviewedBy?: string | null;
   }
 ): AgenticReviewInput {
+  // TODO(agentic-review-wrong-information): Wire a dedicated checklist input when reviewers need to flag factually wrong content.
   const noteValue = typeof options.notes === 'string' ? options.notes.trim() : '';
+  const wrongInformation = typeof options.wrongInformation === 'boolean' ? options.wrongInformation : false;
   return {
     information_present: !answers.hasMissingSpecs,
     bad_format: !answers.descriptionMatches || !answers.shortTextMatches,
-    wrong_information: answers.hasUnnecessarySpecs,
+    wrong_information: wrongInformation,
     wrong_physical_dimensions: !answers.dimensionsPlausible,
     missing_spec: parseMissingSpecInput(options.missingSpecRaw),
     unneeded_spec: Array.isArray(options.unneededSpecKeys)

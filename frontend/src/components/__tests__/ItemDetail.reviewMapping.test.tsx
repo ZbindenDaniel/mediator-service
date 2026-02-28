@@ -24,7 +24,7 @@ describe('mapReviewAnswersToInput', () => {
     expect(payload).toEqual({
       information_present: false,
       bad_format: true,
-      wrong_information: true,
+      wrong_information: false,
       wrong_physical_dimensions: true,
       missing_spec: ['Spannung', 'material'],
       unneeded_spec: ['intern'],
@@ -57,6 +57,26 @@ describe('mapReviewAnswersToInput', () => {
 
     expect(payload.unneeded_spec).toEqual(['Marketing', 'intern']);
     expect(payload.missing_spec).toEqual(['Spannung', 'Leistung', 'Schutzklasse']);
+  });
+
+
+  it('uses explicit wrong-information flag when provided by checklist UI', () => {
+    const payload = mapReviewAnswersToInput(
+      {
+        descriptionMatches: true,
+        shortTextMatches: true,
+        hasUnnecessarySpecs: false,
+        hasMissingSpecs: false,
+        dimensionsPlausible: true
+      },
+      {
+        missingSpecRaw: '',
+        unneededSpecRaw: '',
+        wrongInformation: true
+      }
+    );
+
+    expect(payload.wrong_information).toBe(true);
   });
 
   it('keeps positive checklist answers non-blocking and trims free text safely', () => {
