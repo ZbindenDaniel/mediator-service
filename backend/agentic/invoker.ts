@@ -1,4 +1,4 @@
-import type { AgenticModelInvocationInput, AgenticModelInvocationResult, LangtextPayload } from '../../models';
+import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, type AgenticModelInvocationInput, type AgenticModelInvocationResult, type LangtextPayload } from '../../models';
 import {
   db,
   getItem,
@@ -57,7 +57,7 @@ function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
 }
 
-const REVIEW_SPEC_FIELD_LIMIT = 20;
+const REVIEW_SPEC_FIELD_LIMIT = AGENTIC_REVIEW_SPEC_MAX_ENTRIES;
 const REVIEW_SPEC_PREVIEW_LIMIT = 5;
 
 // TODO(agentic-review-normalization): Revisit review directive phrasing if prompt transport adds structured review metadata.

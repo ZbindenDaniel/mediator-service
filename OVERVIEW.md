@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+- 54. ✅ Apply the minimal restart review-handoff safeguard: when a run transitions into `Status=review` (`needs_review`), explicitly clear previous review decision/notes/reviewer metadata in the result-update path with structured transition logging and guarded try/catch around normalization to keep reruns deterministic and easy to audit.
+- 55. ✅ Align review-spec normalization caps/dedupe across frontend mapping, restart action normalization, and service/invoker composition to prevent prompt bloat and silent contract drift while minimizing structural changes.
+- 56. ✅ Update detailed docs for operator reliability contracts: restart preservation/replacement truth table (`docs/detailed/review-flow.md`), trigger-to-prompt injection + no-search enforcement matrix with troubleshooting (`docs/detailed/item-flow.md`), and cross-link these guarantees from overview notes.
 54. ✅ Gate queued agentic dispatch to a single concurrent running slot so scheduled runs remain `queued`/waiting until capacity frees up, with focused dispatch concurrency tests and structured slot-occupancy logging.
 55. ✅ Treat manual-review-only `review_price` updates as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts`, so price corrections can still finish as approved unless blocking review signals exist.
 54. ✅ Treat manual-review-only `unneeded_spec` selections as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts` (still persisted for context), so removing unnecessary specs alone no longer forces rejection.

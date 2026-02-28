@@ -1,3 +1,4 @@
+import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES } from '../../../models';
 // TODO(agentic-review-mapping): Keep question semantics and payload field mapping aligned across checklist UI revisions.
 export interface AgenticReviewQuestionAnswers {
   descriptionMatches: boolean;
@@ -35,7 +36,7 @@ export function parseMissingSpecInput(value: string | null): string[] {
         deduped.set(key, entry);
       }
     });
-  return Array.from(deduped.values()).slice(0, 10);
+  return Array.from(deduped.values()).slice(0, AGENTIC_REVIEW_SPEC_MAX_ENTRIES);
 }
 
 export function mapReviewAnswersToInput(

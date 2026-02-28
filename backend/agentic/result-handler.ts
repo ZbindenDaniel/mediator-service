@@ -643,21 +643,52 @@ export function handleAgenticResult(
             : status === AGENTIC_RUN_STATUS_REJECTED
               ? 'rejected'
               : 'not_required';
-      const effectiveReviewedBy =
-        effectiveReviewState === 'pending' ? null : review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
-      // TODO(agentic-review-lifecycle): Revisit whether pending runs should keep any machine-generated transient note.
-      const normalizedReviewDecision =
-        effectiveReviewState === 'pending'
+      // TODO(agentic-review-handoff-observability): Keep pending-review metadata reset logging aligned with restart/retrigger lifecycle semantics.
+      let effectiveReviewedBy: string | null = null;
+      let normalizedReviewDecision: string | null = null;
+      let normalizedReviewNotes: string | null = null;
+
+      try {
+        const transitionedToPending = effectiveReviewState === 'pending';
+        effectiveReviewedBy = transitionedToPending ? null : review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
+        // TODO(agentic-review-lifecycle): Revisit whether pending runs should keep any machine-generated transient note.
+        normalizedReviewDecision = transitionedToPending
           ? null
           : typeof review.Decision === 'string' && review.Decision.trim()
             ? review.Decision.trim().toLowerCase()
             : existingRun?.LastReviewDecision ?? null;
-      const normalizedReviewNotes =
-        effectiveReviewState === 'pending'
+        normalizedReviewNotes = transitionedToPending
           ? null
           : typeof review.Notes === 'string' && review.Notes.trim()
             ? review.Notes.trim()
             : existingRun?.LastReviewNotes ?? null;
+
+        if (transitionedToPending) {
+          logger?.info?.('Agentic result cleared prior review metadata on pending transition', {
+            artikelNummer: artikelNummerInput,
+            previousReviewState: existingRun?.ReviewState ?? null,
+            previousDecisionPresent: Boolean(existingRun?.LastReviewDecision),
+            previousNotesPresent: Boolean(existingRun?.LastReviewNotes),
+            previousReviewedByPresent: Boolean(existingRun?.ReviewedBy),
+            status
+          });
+        }
+      } catch (err) {
+        logger?.warn?.('Agentic result failed to normalize review metadata transition; applying safe fallback', {
+          artikelNummer: artikelNummerInput,
+          effectiveReviewState,
+          error: err instanceof Error ? err.message : err
+        });
+        if (effectiveReviewState === 'pending') {
+          effectiveReviewedBy = null;
+          normalizedReviewDecision = null;
+          normalizedReviewNotes = null;
+        } else {
+          effectiveReviewedBy = review.ReviewedBy ?? existingRun?.ReviewedBy ?? null;
+          normalizedReviewDecision = existingRun?.LastReviewDecision ?? null;
+          normalizedReviewNotes = existingRun?.LastReviewNotes ?? null;
+        }
+      }
       const searchQueryUpdate =
         typeof agenticPayload?.searchQuery === 'string' && agenticPayload.searchQuery.trim()
           ? agenticPayload.searchQuery.trim()
