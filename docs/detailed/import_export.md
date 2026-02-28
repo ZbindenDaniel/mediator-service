@@ -177,7 +177,7 @@ Keep these in sync whenever contracts change:
   - Re-check shared model fields after any import/export field rename.
 
 ## Open questions / TODO
-- [ ] TODO: If importer/exporter contracts change, update this doc and `OVERVIEW.md` in the same patch.
+- [ ] TODO: If importer/exporter contracts change, update this doc and `docs/OVERVIEW.md` in the same patch.
 
 ## Recommendations (minimal, current-behavior focused)
 - Keep import/export field changes paired: update serializer headers, importer aliases, and shared model fields together.

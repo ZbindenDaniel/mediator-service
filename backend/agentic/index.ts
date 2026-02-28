@@ -1000,7 +1000,7 @@ export function dispatchQueuedAgenticRuns(
   const logger = resolveLogger(deps);
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
   // TODO(agentic-queue-fairness): Revisit slot selection policy if we later prioritize runs beyond FIFO ordering.
-  const maxConcurrentRunningRuns = 1;
+  const maxConcurrentRunningRuns = 3;
   let runningCount = 0;
 
   try {

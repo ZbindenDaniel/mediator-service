@@ -1,6 +1,8 @@
 # Recent Highlights
 
-## Version 2.3 (historical)
+## Version 2.3
+
+## Versions before 2.3 (historical)
 
 > Planning inputs for upcoming work are tracked in `docs/PLANNING_V_2_4.md`.
 

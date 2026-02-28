@@ -1,6 +1,6 @@
 # Open Bugs & Issues
 
-This list tracks defects that require fixes. Cross-reference the planning context in [OVERVIEW.md](OVERVIEW.md) and the component guidance in [../AGENTS.md](../AGENTS.md). When fixing a Bug remove it from this list.
+This list tracks defects that require fixes. Cross-reference the planning context in [OVERVIEW.md](/docs/OVERVIEW.md) and the component guidance in [../AGENTS.md](../AGENTS.md). When fixing a Bug remove it from this list.
 
 ## Current bug focus (v2.4)
 
