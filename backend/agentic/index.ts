@@ -999,14 +999,39 @@ export function dispatchQueuedAgenticRuns(
   validateDependencies(deps);
   const logger = resolveLogger(deps);
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
+  // TODO(agentic-queue-fairness): Revisit slot selection policy if we later prioritize runs beyond FIFO ordering.
+  const maxConcurrentRunningRuns = 1;
+  let runningCount = 0;
+
+  try {
+    const runningRow = deps.db
+      .prepare(`SELECT COUNT(*) as runningCount FROM agentic_runs WHERE Status = @status`)
+      .get({ status: AGENTIC_RUN_STATUS_RUNNING }) as { runningCount?: number } | undefined;
+    runningCount = Number.isFinite(runningRow?.runningCount) ? Number(runningRow?.runningCount) : 0;
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to determine currently running agentic run count', {
+      error: toErrorMessage(err)
+    });
+    return { scheduled: 0, skipped: 0, failed: 0 };
+  }
+
+  const availableSlots = Math.max(0, maxConcurrentRunningRuns - runningCount);
+  if (availableSlots <= 0) {
+    logger.info?.('[agentic-service] Skipping queued dispatch because running slot is occupied', {
+      runningCount,
+      maxConcurrentRunningRuns
+    });
+    return { scheduled: 0, skipped: 0, failed: 0 };
+  }
+
   let queuedRuns: AgenticRun[] = [];
 
   try {
-    queuedRuns = fetchQueuedAgenticRuns(effectiveLimit);
+    queuedRuns = fetchQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
   } catch (err) {
     logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
       error: toErrorMessage(err),
-      limit: effectiveLimit
+      limit: Math.min(effectiveLimit, availableSlots)
     });
     return { scheduled: 0, skipped: 0, failed: 0 };
   }

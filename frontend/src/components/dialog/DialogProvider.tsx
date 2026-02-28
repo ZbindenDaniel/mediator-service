@@ -335,7 +335,9 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
             role="dialog"
           >
             {activeRequest.type === 'prompt' && (
+              // TODO(review-prompt-input-control): Revisit keyed remount once prompt input becomes fully controlled.
               <input
+                key={activeRequest.id}
                 aria-label="Dialog prompt input"
                 defaultValue={activeRequest.options.defaultValue ?? ''}
                 onChange={(event) => handlePromptChange(event.target.value)}
