@@ -77,6 +77,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-price): Add localized currency formatting/parsing if operators request stricter price validation.
 // TODO(agentic-review-spec-input): Keep single spec modal copy aligned with reviewer workflow wording.
 // TODO(agentic-review-wrong-information): Add dedicated wrong-information prompt before mapping once checklist UX requires it.
+// TODO(agentic-review-positive-criteria): Keep review-positive gating aligned with checklist blocking criteria and explicit wrong-information signals only.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -2365,11 +2366,27 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    const reviewPositiveSoFar = descriptionMatches
-      && shortTextMatches
-      && dimensionsPlausible
-      && !hasMissingSpecs
-      && !hasUnnecessarySpecs;
+    const explicitWrongInformationFlag: boolean | null = null;
+    const hasExplicitWrongInformation = explicitWrongInformationFlag === true;
+    const reviewPositiveContributors = {
+      descriptionMatches,
+      shortTextMatches,
+      dimensionsPlausible,
+      hasMissingSpecs,
+      hasExplicitWrongInformation,
+      hasUnnecessarySpecs
+    };
+    const reviewPositiveSoFar = reviewPositiveContributors.descriptionMatches
+      && reviewPositiveContributors.shortTextMatches
+      && reviewPositiveContributors.dimensionsPlausible
+      && !reviewPositiveContributors.hasMissingSpecs
+      && !reviewPositiveContributors.hasExplicitWrongInformation;
+
+    logger.info?.('ItemDetail: Computed reviewPositiveSoFar gating', {
+      itemId,
+      reviewPositiveSoFar,
+      ...reviewPositiveContributors
+    });
 
     let shopArticle: boolean | null = null;
     if (reviewPositiveSoFar) {
@@ -2400,8 +2417,6 @@ export default function ItemDetail({ itemId }: Props) {
       }
       notes = noteValue;
     }
-
-    const explicitWrongInformationFlag: boolean | null = null;
 
     const mappedInput = mapReviewAnswersToInput(
       {
