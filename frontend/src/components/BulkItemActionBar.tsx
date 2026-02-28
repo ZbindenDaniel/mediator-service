@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { GoMoveToEnd, GoPackageDependents, GoSync, GoTrash, GoXCircle } from 'react-icons/go';
+import { GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTrash, GoXCircle } from 'react-icons/go';
 import type { Item } from '../../../models';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { dialogService } from './dialog';
@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
 // TODO(agent): Show ERP sync availability from a dedicated status endpoint when available.
+// TODO(item-list-export): Keep selection export column compact in the action bar and reuse this serialization helper for future bulk exports.
 
 interface BulkItemActionBarProps {
   selectedIds: string[];
@@ -22,6 +23,41 @@ interface BulkItemActionBarProps {
 interface FeedbackState {
   type: 'error' | 'info';
   message: string;
+}
+
+const FILTERED_ITEM_EXPORT_COLUMNS = [
+  'ItemUUID',
+  'Artikel_Nummer',
+  'Artikelbeschreibung',
+  'BoxID',
+  'Location',
+  'Menge',
+  'Quality',
+  'Shopartikel',
+  'Veröffentlicht_Status',
+  'Unterkategorien_A',
+  'Datum_erfasst'
+] as const;
+
+function escapeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const text = String(value);
+  if (text.includes(',') || text.includes('"') || text.includes('\n') || text.includes('\r')) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function buildFilteredItemsCsv(items: readonly Item[]): string {
+  const headers = FILTERED_ITEM_EXPORT_COLUMNS.join(',');
+  const rows = items.map((item) => (
+    FILTERED_ITEM_EXPORT_COLUMNS
+      .map((column) => escapeCsvValue(item[column]))
+      .join(',')
+  ));
+  return [headers, ...rows].join('\n');
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -652,24 +688,77 @@ export default function BulkItemActionBar({
     }
   }
 
+  function handleExportSelection(): void {
+    if (!hasSelection) {
+      setFeedback({ type: 'error', message: 'Keine Artikel für den Export ausgewählt.' });
+      return;
+    }
+
+    try {
+      const selectedLookup = new Set(selectedIds);
+      const selectedRows = selectedItems.filter((item) => selectedLookup.has(item.ItemUUID));
+      const csv = buildFilteredItemsCsv(selectedRows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'filtered-items.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setFeedback({
+        type: 'info',
+        message: `${selectedRows.length} Artikel als filtered-items.csv exportiert.`
+      });
+      logger.info?.('Item list selection exported', {
+        selectedCount,
+        exportedCount: selectedRows.length,
+        fileName: 'filtered-items.csv'
+      });
+    } catch (error) {
+      logger.error?.('Failed to export selected items as CSV', {
+        selectedCount,
+        error
+      });
+      setFeedback({
+        type: 'error',
+        message: 'Export fehlgeschlagen. Bitte erneut versuchen.'
+      });
+    }
+  }
+
   return (
     <div id="bulk-item-action-bar" className="card relocate-card bulk-item-action-bar" data-testid="bulk-item-action-bar">
       <div className="bulk-item-action-bar__summary">
         <strong>{selectionLabel}</strong>
         {isProcessing ? <span className="muted"> Verarbeitung…</span> : null}
       </div>
-      <div className="bulk-item-action-bar__field row">
-        <BoxSearchInput
-          value={targetBoxId}
-          onValueChange={setTargetBoxId}
-          onSuggestionSelected={setSelectedBoxSuggestion}
-          placeholder="Box-ID oder Standort suchen"
-          label="Ziel Behälter-ID"
-          disabled={isProcessing}
-          allowCreate={false}
-          className="bulk-item-action-bar__target"
-          inputClassName="bulk-item-action-bar__target-input"
-        />
+      <div className="bulk-item-action-bar__controls">
+        <div className="bulk-item-action-bar__field row">
+          <BoxSearchInput
+            value={targetBoxId}
+            onValueChange={setTargetBoxId}
+            onSuggestionSelected={setSelectedBoxSuggestion}
+            placeholder="Box-ID oder Standort suchen"
+            label="Ziel Behälter-ID"
+            disabled={isProcessing}
+            allowCreate={false}
+            className="bulk-item-action-bar__target"
+            inputClassName="bulk-item-action-bar__target-input"
+          />
+        </div>
+        <div className="bulk-item-action-bar__export-column">
+          <button
+            className="bulk-item-action-bar__button bulk-item-action-bar__button--export"
+            disabled={isProcessing || !hasSelection}
+            onClick={handleExportSelection}
+            type="button"
+          >
+            <GoDownload aria-hidden="true" />
+            <span>Export CSV</span>
+          </button>
+        </div>
       </div>
 
       <div className="bulk-item-action-bar__buttons row">

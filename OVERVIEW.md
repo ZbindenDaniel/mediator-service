@@ -7,6 +7,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+56. ✅ Add a compact item-list selection export control that downloads the current selection as `filtered-items.csv`, and split the action-bar controls into an 80/20 field+export layout for clearer bulk-action ergonomics.
 55. ✅ Treat manual-review-only `review_price` updates as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts`, so price corrections can still finish as approved unless blocking review signals exist.
 54. ✅ Treat manual-review-only `unneeded_spec` selections as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts` (still persisted for context), so removing unnecessary specs alone no longer forces rejection.
 53. ✅ Add lightweight frontend tests covering BoxDetail item-list deep-link route wiring (`/items?box=<BoxID>`) plus ItemListPage box-filter initialization precedence (URL `box` bootstrap, URL-over-storage override) and Behälter input state editing with minimal routing/storage/fetch mocks.
