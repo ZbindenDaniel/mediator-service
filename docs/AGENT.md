@@ -1,42 +1,41 @@
-# Agent Guidelines
+# Agent Execution Guide (Detailed)
 
-Deep-dive operational and implementation docs are indexed at [`docs/detailed/README.md`](./detailed/README.md).
+This file contains the **detailed workflow guidance** for implementation work.
 
-Get an overview of the project in `OVERVIEW.md`. There you will see what changes are in progress. You will also track your progress in this file. If you find parts of the application undocumented add them in `OVERVIEW.md` or a linked file.
+For quick repository orientation, use the root [`AGENTS.md`](../AGENTS.md).
 
-When implementing always assure logging and error handling is present. Yet don't overdo it. When updating code try **updating** logs and handling rather then adding anew
+## Purpose
+- Keep implementation decisions consistent across agent and human contributors.
+- Maintain observability and recovery paths (logging + meaningful error handling).
+- Keep documentation and task tracking in sync with actual code changes.
 
-Before starting a task find relevant files and add TODOs to them.
+## Standard execution flow
+1. Read [`../OVERVIEW.md`](../OVERVIEW.md) and identify the active task.
+2. Identify relevant files and record task TODOs before implementing.
+3. Implement the smallest viable change.
+4. Validate with targeted checks.
+5. Update documentation/TODOs to reflect final behaviour.
 
-## Planning Mode Expectations
+## Planning mode expectations
+When asked to produce a plan without coding:
+1. Clarify goal, motivation, and expected value.
+2. Record the plan in repository docs so others can execute it.
+3. Target current behaviour (skip legacy compatibility unless requested).
+4. Prefer minimal, elegant solutions over broad rewrites.
+5. Provide actionable file-level steps with direct references.
+6. Structure work for parallel execution where possible.
+7. Challenge changes that create avoidable technical debt.
 
-When the user requests help with planning (without writing code):
+## Coding mode guardrails
+- Follow established architecture and mediator patterns.
+- Reuse shared utilities from backend/frontend common modules first.
+- Double-check contract changes in shared model files.
+- Add/update logging and try/catch paths where they provide recovery or diagnostics.
+- Keep diffs reviewable and tightly scoped.
+- Remove stale TODOs/notes when they are no longer accurate.
 
-1. **Clarify the goal and motivation** – begin by restating the objective, why the change is needed, and the value it brings to the application.
-2. **Document the plan** – record the proposed approach in the repository documentation (e.g., update this document or related planning notes) so future contributors can follow the reasoning.
-3. **Target current behaviour only** – ignore legacy checks and backwards compatibility concerns unless the user explicitly requires them.
-4. **Favour minimal, elegant solutions** – recommend the smallest viable change that satisfies the goal instead of broad or invasive rewrites.
-5. **Provide actionable steps with references** – list detailed instructions that point directly to the files, modules, or components involved (use fully qualified paths or distinctive identifiers).
-6. **Plan for parallel execution** – structure the work so that different contributors can implement separate steps without merge conflicts (e.g., isolate file ownership or stagger shared edits).
-7. **Be critique and far sighted** - check if the planed change is meaningfull and doe not add technical dept.
-
-These planning responses should be explicit enough that another developer can implement them without additional clarification.
-
-## Coding Mode Guardrails
-
-When implementing a plan:
-
-1. **Follow the documented architectural patterns** – prefer existing mediator patterns in `backend/` services and reuse shared utilities from `frontend/src/common/` before introducing new abstractions.
-2. **Respect data contracts** – double check changes to models under `models/` and `backend/src/models/` so API schemas and TypeScript types stay in sync.
-3. **Maintain observability** – extend the established logging helpers in `backend/src/lib/logger.ts` and `frontend/src/utils/logger.ts`; include try/catch blocks where they provide meaningful recovery paths.
-4. **Keep changes scoped** – update only the components, routes, or scripts necessary for the task, favouring incremental diffs that are easy to review.
-5. **Update TODOs and documentation** – resolve or refresh adjacent TODO comments and mirror substantive changes in this documentation so future planning stays accurate. When finding old stale remarks and todo notes remove them.
-6. Do not assume functionality or goals. Ask question by adding them to the planning document or ask the user directly without implementing unclear requirements.
-
-
-## Agentic Prompt Best Practices
-- Value LLM context efficiency: avoid bloated documentation/prompt text and keep only content necessary for current behaviour and implementation safety.
-- Keep prompt sections aligned with `backend/agentic/flow/item-flow-schemas.ts::TargetSchema`; update both together when fields change.
-- Emphasise JSON-only output, locked field preservation, and the limited `__searchQueries` allowance when revising extraction instructions.
-- Tie device guidance directly to schema keys (`Langtext`, `Kurzbeschreibung`, `Artikelbeschreibung`) so downstream validators stay consistent and the prompt remains concise.
-- Do not expose system-only identifiers like `itemUUid` in prompts; the item flow injects them automatically.
+## Related references
+- Architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+- Coding rules: [`CODING_GUIDELINES.md`](./CODING_GUIDELINES.md)
+- Detailed index: [`detailed/README.md`](./detailed/README.md)
+- Project status tracker: [`../OVERVIEW.md`](../OVERVIEW.md)

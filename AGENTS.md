@@ -1,32 +1,32 @@
-# Agent Guidelines
+# AGENTS.md
 
-Get an overview of the project in `OVERVIEW.md`. There you will see what tasks are up next. You will also track your progress in this file. If you find parts of the application missing in `OVERVIEW.md` add them.
+This file is the **quick-start guide** for both human contributors and coding agents.
 
-When implementing always assure logging and error handling is present.
+For deep implementation instructions, use [`docs/AGENT.md`](docs/AGENT.md).
 
-Before starting a task find relevant files and add TODOs to them.
+## Repository overview
+- `backend/`: API actions, services, agentic orchestration, persistence helpers.
+- `frontend/`: React UI, routing, feature components, and client-side utilities.
+- `models/`: shared TypeScript contracts used by backend and frontend.
+- `docs/`: architecture, planning, operations, and domain-specific implementation notes.
+- `OVERVIEW.md`: active task tracker and near-term priorities.
 
-Take one "next step" at a time and wait for user feedback before starting a new one.
+## Read these first
+1. [`OVERVIEW.md`](OVERVIEW.md) – current focus and next queued work.
+2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) – system boundaries and responsibilities.
+3. [`docs/AGENT.md`](docs/AGENT.md) – detailed agent workflow and guardrails.
+4. [`docs/CODING_GUIDELINES.md`](docs/CODING_GUIDELINES.md) – complete coding standards.
 
-## Planning Mode Expectations
-When the user requests help with planning (without writing code):
+## Basic coding guidelines (summary)
+- Keep changes minimal and scoped to the task.
+- Reuse existing mediator/service patterns before introducing new abstractions.
+- Preserve shared data contracts across `models/` and `backend/src/models/`.
+- Add or update logging and error handling where failures are actionable.
+- Prefer updating existing docs/TODO notes over creating parallel documentation paths.
 
-1. **Clarify the goal and motivation** – begin by restating the objective, why the change is needed, and the value it brings to the application.
-2. **Document the plan** – record the proposed approach in the repository documentation (e.g., update `docs/AGENT.md` or related planning notes) so future contributors can follow the reasoning.
-3. **Target current behaviour only** – ignore legacy checks and backwards compatibility concerns unless the user explicitly requires them.
-4. **Favour minimal, elegant solutions** – recommend the smallest viable change that satisfies the goal instead of broad or invasive rewrites.
-5. **Provide actionable steps with references** – list detailed instructions that point directly to the files, modules, or components involved (use fully qualified paths or distinctive identifiers).
-6. **Plan for parallel execution** – structure the work so that different contributors can implement separate steps without merge conflicts (e.g., isolate file ownership or stagger shared edits).
-
-These planning responses should be explicit enough that another developer can implement them without additional clarification.
-
-## Coding Mode Guardrails
-When implementing a plan:
-
-1. **Follow the documented architectural patterns** – prefer existing mediator patterns in `backend/` services and reuse shared utilities from `frontend/src/common/` before introducing new abstractions.
-2. **Respect data contracts** – double check changes to models under `models/` and `backend/src/models/` so API schemas and TypeScript types stay in sync.
-3. **Maintain observability** – extend the established logging helpers in `backend/src/lib/logger.ts` and `frontend/src/utils/logger.ts`; include try/catch blocks where they provide meaningful recovery paths.
-4. **Keep changes scoped** – update only the components, routes, or scripts necessary for the task, favouring incremental diffs that are easy to review.
-5. **Update TODOs and documentation** – resolve or refresh adjacent TODO comments and mirror substantive changes in `docs/` so future planning stays accurate.
-
-These planning responses should be explicit enough that another developer can implement them without additional clarification.
+## Documentation map
+- Project status: [`OVERVIEW.md`](OVERVIEW.md)
+- Documentation overview: [`docs/OVERVIEW.md`](docs/OVERVIEW.md)
+- Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Detailed runbooks/index: [`docs/detailed/README.md`](docs/detailed/README.md)
+- Planning backlog: [`docs/PLANS.md`](docs/PLANS.md)
