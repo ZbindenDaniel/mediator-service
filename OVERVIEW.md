@@ -91,6 +91,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 26. ✅ Add focused importer coverage for duplicate Artikel-Nummer CSV rows with distinct ItemUUID persistence checks (instance count + exact UUID set + single item_refs row), plus a companion missing-ItemUUID fallback/mint regression test using existing DB harness patterns.
 
 ## Notes
+- ✅ Review checklist prompt isolation: dialog prompt inputs now remount per request so the optional review note starts empty instead of carrying over the previously entered price value.
 - ✅ Documentation clarity: moved review-loop trigger rollout status from `docs/AGENT.md` into dedicated `docs/detailed/Review_loop.md` to keep agent instructions focused and roadmap details separate.
 - ✅ ERP readiness parser now treats HAR-observed `CsvImport/report` headings `Import-Vorschau` and `Import-Ergebnis` as terminal ready markers with explicit evidence flags in logs.
 - ✅ Default ERP import runtime now expects `polling-enabled` mode with `browser-parity` contract and logs both flags at import start to surface misconfiguration early.
