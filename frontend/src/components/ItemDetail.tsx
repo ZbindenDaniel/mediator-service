@@ -76,6 +76,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(shop-badge-detail-header): Reconfirm compact header badge spacing if title layout changes.
 // TODO(agentic-review-price): Add localized currency formatting/parsing if operators request stricter price validation.
 // TODO(agentic-review-spec-input): Keep single spec modal copy aligned with reviewer workflow wording.
+// TODO(agentic-review-wrong-information): Add dedicated wrong-information prompt before mapping once checklist UX requires it.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -2400,6 +2401,8 @@ export default function ItemDetail({ itemId }: Props) {
       notes = noteValue;
     }
 
+    const explicitWrongInformationFlag: boolean | null = null;
+
     const mappedInput = mapReviewAnswersToInput(
       {
         descriptionMatches,
@@ -2414,14 +2417,20 @@ export default function ItemDetail({ itemId }: Props) {
         notes,
         reviewPrice,
         shopArticle,
+        wrongInformation: explicitWrongInformationFlag,
         reviewedBy: null
       }
     );
 
+    const wrongInformationExplicitlyFlagged = typeof explicitWrongInformationFlag === 'boolean';
+
     logger.info?.('ItemDetail: Agentic review submission stage', {
       checklistStarted: true,
       checklistSubmitted: true,
-      noteProvided: Boolean(mappedInput.notes)
+      noteProvided: Boolean(mappedInput.notes),
+      wrongInformationExplicitlyFlagged,
+      wrongInformationValue: mappedInput.wrong_information,
+      wrongInformationMappingSource: wrongInformationExplicitlyFlagged ? 'explicit' : 'default_false'
     });
 
     logger.info?.('ItemDetail: Mapped review checklist answers to structured payload', {
