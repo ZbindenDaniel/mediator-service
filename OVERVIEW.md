@@ -7,6 +7,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+55. ✅ Treat manual-review-only `review_price` updates as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts`, so price corrections can still finish as approved unless blocking review signals exist.
+54. ✅ Treat manual-review-only `unneeded_spec` selections as non-blocking for checklist decision derivation in `backend/actions/agentic-status.ts` (still persisted for context), so removing unnecessary specs alone no longer forces rejection.
 53. ✅ Add lightweight frontend tests covering BoxDetail item-list deep-link route wiring (`/items?box=<BoxID>`) plus ItemListPage box-filter initialization precedence (URL `box` bootstrap, URL-over-storage override) and Behälter input state editing with minimal routing/storage/fetch mocks.
 50. ✅ Simplify restart review lifecycle semantics: preserve prior review only when restart omits `review`, apply provided review payload without field-level merge fallbacks, and clear prior decision/notes/reviewer when a rerun returns to pending review (`needs_review`) so each completed review cycle starts fresh.
 49. ✅ Preserve agentic restart review context by default with explicit `replaceReviewMetadata` clear semantics, partial review merges, structured restart transition logging, action-level full review payload forwarding, and focused restart service/action tests for preservation/merge/clear + structured field pass-through.

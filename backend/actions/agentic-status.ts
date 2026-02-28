@@ -544,13 +544,15 @@ const action = defineHttpAction({
       const decisionInput = typeof data.decision === 'string' ? data.decision.trim().toLowerCase() : '';
       const isChecklistReview = action === 'review' && requestedAction === 'review' && !decisionInput;
       const hasExplicitFinalDecision = decisionInput === 'approved' || decisionInput === 'rejected';
+      // TODO(agentic-review-decision): Keep checklist-derived decision inputs aligned with reviewer guidance for negative signals.
       const hasNegativeChecklistSignal =
         reviewMetadata.information_present === false ||
         reviewMetadata.bad_format === true ||
         reviewMetadata.wrong_information === true ||
         reviewMetadata.wrong_physical_dimensions === true ||
-        reviewMetadata.missing_spec.length > 0 ||
-        reviewMetadata.unneeded_spec.length > 0;
+        reviewMetadata.missing_spec.length > 0;
+      const hasUnneededSpecFeedback = reviewMetadata.unneeded_spec.length > 0;
+      const hasManualPriceFeedback = typeof reviewMetadata.review_price === 'number' && Number.isFinite(reviewMetadata.review_price);
       const derivedChecklistDecision = isChecklistReview
         ? (hasNegativeChecklistSignal ? 'rejected' : 'approved')
         : null;
@@ -566,6 +568,16 @@ const action = defineHttpAction({
       }
       if (!isFinalizeTransition || !decision) {
         return sendJson(res, 400, { error: 'decision could not be resolved from review payload' });
+      }
+
+      if (isChecklistReview && (hasUnneededSpecFeedback || hasManualPriceFeedback)) {
+        console.info('[agentic-review] Ignoring non-blocking review metadata for checklist decision derivation', {
+          artikelNummer: itemId,
+          unneededSpecCount: reviewMetadata.unneeded_spec.length,
+          hasManualPriceFeedback,
+          derivedChecklistDecision,
+          hasNegativeChecklistSignal
+        });
       }
 
       const reviewedAt = new Date().toISOString();
