@@ -7,6 +7,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+58. ✅ Audit and align `ItemDetailsFields` dimension/weight parsing so empty input stays optional (`undefined`), invalid numeric entries are rejected with warning logs, and inputs render blank instead of silently coercing to `0`.
 57. ✅ Agentic extraction prompts now inject up to two latest approved reviewed same-subcategory example items (instead of one), renamed extract prompt `<example>` section to `<examples>`, and preserved static fallback behavior with selector telemetry for learning-loop reliability.
 57. ✅ Extend `ItemBasicInfoForm` with optional dimensions/weight inputs (`Länge_mm`, `Breite_mm`, `Höhe_mm`, `Gewicht_kg`) using existing form-state plumbing and guarded parse logging, while preserving null/undefined omission semantics for submit payloads.
 56. ✅ Add a compact item-list selection export control that downloads the current selection as `filtered-items.csv`, and split the action-bar controls into an 80/20 field+export layout for clearer bulk-action ergonomics.
