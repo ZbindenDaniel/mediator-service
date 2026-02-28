@@ -1480,6 +1480,42 @@ button:focus {
     width: 100%;
 }
 
+// TODO(item-list-export): Revisit 80/20 action-bar column split once additional compact controls are introduced.
+.bulk-item-action-bar__controls {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.bulk-item-action-bar__controls .bulk-item-action-bar__field {
+    flex: 0 1 80%;
+    width: auto;
+}
+
+.bulk-item-action-bar__export-column {
+    flex: 0 0 20%;
+    min-width: 160px;
+}
+
+.bulk-item-action-bar__button--export {
+    width: 100%;
+    justify-content: center;
+}
+
+@media (max-width: 920px) {
+    .bulk-item-action-bar__controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .bulk-item-action-bar__controls .bulk-item-action-bar__field,
+    .bulk-item-action-bar__export-column {
+        flex: 1 1 auto;
+        width: 100%;
+        min-width: 0;
+    }
+}
+
 .bulk-item-action-bar__target {
     flex: 1 1 auto;
     width: 100%;

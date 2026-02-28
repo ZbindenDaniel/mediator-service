@@ -7,6 +7,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+56. ✅ Add a compact item-list selection export control that downloads the current selection as `filtered-items.csv`, and split the action-bar controls into an 80/20 field+export layout for clearer bulk-action ergonomics.
 - 54. ✅ Apply the minimal restart review-handoff safeguard: when a run transitions into `Status=review` (`needs_review`), explicitly clear previous review decision/notes/reviewer metadata in the result-update path with structured transition logging and guarded try/catch around normalization to keep reruns deterministic and easy to audit.
 - 55. ✅ Align review-spec normalization caps/dedupe across frontend mapping, restart action normalization, and service/invoker composition to prevent prompt bloat and silent contract drift while minimizing structural changes.
 - 56. ✅ Update detailed docs for operator reliability contracts: restart preservation/replacement truth table (`docs/detailed/review-flow.md`), trigger-to-prompt injection + no-search enforcement matrix with troubleshooting (`docs/detailed/item-flow.md`), and cross-link these guarantees from overview notes.
