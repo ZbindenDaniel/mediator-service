@@ -15,6 +15,7 @@ import { metaDataKeys } from '../../data/metaDataKeys';
 // TODO(einheit-immutability): Keep Einheit locked on edit forms while backend enforces immutability.
 // TODO(reference-flag-controls): Keep Shopartikel/Veröffentlicht_Status controls restricted to binary 0/1 semantics.
 // TODO(binary-switch-a11y): Revisit switch labels if we add translated aria-live status hints.
+// TODO(optional-dimension-inputs): Keep dimension/weight inputs nullable so blank form values stay omitted in payloads.
 
 const PHOTO_FIELD_KEYS = ['picture1', 'picture2', 'picture3'] as const;
 export type PhotoFieldKey = (typeof PHOTO_FIELD_KEYS)[number];
@@ -1287,14 +1288,24 @@ export function ItemDetailsFields({
         </label>
         <input
           type="number"
-          value={form.Länge_mm ?? 0}
+          value={form.Länge_mm ?? ''}
           onChange={(e) => {
             try {
-              const parsed = Number.parseInt(e.target.value, 10);
-              onUpdate('Länge_mm', Number.isNaN(parsed) ? 0 : parsed);
+              const rawValue = e.target.value.trim();
+              if (!rawValue) {
+                onUpdate('Länge_mm', undefined);
+                return;
+              }
+
+              const parsed = Number.parseInt(rawValue, 10);
+              if (Number.isNaN(parsed)) {
+                console.warn('[itemForm] Rejecting invalid Länge_mm input', { rawValue });
+                return;
+              }
+
+              onUpdate('Länge_mm', parsed);
             } catch (error) {
               console.error('Failed to parse Länge_mm', error);
-              onUpdate('Länge_mm', 0);
             }
           }}
         />
@@ -1305,14 +1316,24 @@ export function ItemDetailsFields({
         </label>
         <input
           type="number"
-          value={form.Breite_mm ?? 0}
+          value={form.Breite_mm ?? ''}
           onChange={(e) => {
             try {
-              const parsed = Number.parseInt(e.target.value, 10);
-              onUpdate('Breite_mm', Number.isNaN(parsed) ? 0 : parsed);
+              const rawValue = e.target.value.trim();
+              if (!rawValue) {
+                onUpdate('Breite_mm', undefined);
+                return;
+              }
+
+              const parsed = Number.parseInt(rawValue, 10);
+              if (Number.isNaN(parsed)) {
+                console.warn('[itemForm] Rejecting invalid Breite_mm input', { rawValue });
+                return;
+              }
+
+              onUpdate('Breite_mm', parsed);
             } catch (error) {
               console.error('Failed to parse Breite_mm', error);
-              onUpdate('Breite_mm', 0);
             }
           }}
         />
@@ -1323,14 +1344,24 @@ export function ItemDetailsFields({
         </label>
         <input
           type="number"
-          value={form.Höhe_mm ?? 0}
+          value={form.Höhe_mm ?? ''}
           onChange={(e) => {
             try {
-              const parsed = Number.parseInt(e.target.value, 10);
-              onUpdate('Höhe_mm', Number.isNaN(parsed) ? 0 : parsed);
+              const rawValue = e.target.value.trim();
+              if (!rawValue) {
+                onUpdate('Höhe_mm', undefined);
+                return;
+              }
+
+              const parsed = Number.parseInt(rawValue, 10);
+              if (Number.isNaN(parsed)) {
+                console.warn('[itemForm] Rejecting invalid Höhe_mm input', { rawValue });
+                return;
+              }
+
+              onUpdate('Höhe_mm', parsed);
             } catch (error) {
               console.error('Failed to parse Höhe_mm', error);
-              onUpdate('Höhe_mm', 0);
             }
           }}
         />
@@ -1342,14 +1373,24 @@ export function ItemDetailsFields({
         <input
           type="number"
           step="0.01"
-          value={form.Gewicht_kg ?? 0}
+          value={form.Gewicht_kg ?? ''}
           onChange={(e) => {
             try {
-              const parsed = Number.parseFloat(e.target.value);
-              onUpdate('Gewicht_kg', Number.isNaN(parsed) ? 0 : parsed);
+              const rawValue = e.target.value.trim();
+              if (!rawValue) {
+                onUpdate('Gewicht_kg', undefined);
+                return;
+              }
+
+              const parsed = Number.parseFloat(rawValue);
+              if (Number.isNaN(parsed)) {
+                console.warn('[itemForm] Rejecting invalid Gewicht_kg input', { rawValue });
+                return;
+              }
+
+              onUpdate('Gewicht_kg', parsed);
             } catch (error) {
               console.error('Failed to parse Gewicht_kg', error);
-              onUpdate('Gewicht_kg', 0);
             }
           }}
         />
