@@ -23,7 +23,9 @@ import {
   type AgenticRequestContext,
   type AgenticHealthOptions,
   type AgenticRunReviewHistoryEntry,
-  normalizeAgenticRunStatus
+  normalizeAgenticRunStatus,
+  AGENTIC_REVIEW_SPEC_MAX_ENTRIES,
+  AGENTIC_REVIEW_SPEC_MAX_TOKENS_PER_ENTRY
 } from '../../models';
 // TODO(agentic-run-delete): Confirm deletion flows preserve observability requirements as APIs evolve.
 import { appendTranscriptSection, createTranscriptWriter } from './flow/transcript';
@@ -343,8 +345,8 @@ function hasAgenticReference(
 
 // TODO(agentic-review-state): Align review state semantics with upstream contract once schema is formalized.
 // TODO(agentic-review-caps): Keep missing_spec limits aligned with any future upstream reviewer payload policy.
-const REVIEW_MISSING_SPEC_MAX_COUNT = 8;
-const REVIEW_MISSING_SPEC_MAX_TOKENS_PER_ENTRY = 12;
+const REVIEW_MISSING_SPEC_MAX_COUNT = AGENTIC_REVIEW_SPEC_MAX_ENTRIES;
+const REVIEW_MISSING_SPEC_MAX_TOKENS_PER_ENTRY = AGENTIC_REVIEW_SPEC_MAX_TOKENS_PER_ENTRY;
 
 function normalizeNullableBoolean(value: unknown): boolean | null {
   if (value === null || value === undefined) {

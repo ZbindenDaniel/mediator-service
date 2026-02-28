@@ -74,6 +74,39 @@ describe('agentic-restart action', () => {
     );
   });
 
+
+
+  it('normalizes review spec arrays with shared cap and dedupe before handoff', async () => {
+    const req = createReq('/api/item-refs/R-100/agentic/restart', {
+      actor: 'tester',
+      search: 'query',
+      review: {
+        missing_spec: [' Höhe ', 'höhe', 'Breite', '', ' '.repeat(2)],
+        unneeded_spec: Array.from({ length: 14 }, (_, index) => `field ${index + 1}`)
+      }
+    });
+    const res = createRes();
+
+    await action.handle(req as any, res as any, {
+      db: {},
+      getAgenticRun: {},
+      getItemReference: {},
+      upsertAgenticRun: {},
+      updateAgenticRunStatus: {},
+      logEvent: jest.fn()
+    });
+
+    expect(restartAgenticRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        review: expect.objectContaining({
+          missing_spec: ['Höhe', 'Breite'],
+          unneeded_spec: ['field 1', 'field 2', 'field 3', 'field 4', 'field 5', 'field 6', 'field 7', 'field 8', 'field 9', 'field 10']
+        })
+      }),
+      expect.any(Object)
+    );
+  });
+
   it('forwards replaceReviewMetadata control flag', async () => {
     const req = createReq('/api/item-refs/R-100/agentic/restart', {
       actor: 'tester',

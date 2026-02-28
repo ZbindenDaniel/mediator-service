@@ -1,11 +1,59 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { restartAgenticRun } from '../agentic';
+import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, AGENTIC_REVIEW_SPEC_MAX_TOKENS_PER_ENTRY } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
+}
+
+
+
+// TODO(agentic-restart-review-spec-normalization): Keep restart-action spec normalization aligned with shared review metadata caps.
+function normalizeReviewSpecList(rawSpecList: unknown, fieldName: 'missing_spec' | 'unneeded_spec', itemId: string): string[] {
+  try {
+    if (!Array.isArray(rawSpecList) || rawSpecList.length === 0) {
+      return [];
+    }
+
+    const deduped = new Map<string, string>();
+    for (const rawEntry of rawSpecList) {
+      if (typeof rawEntry !== 'string') {
+        continue;
+      }
+
+      const trimmed = rawEntry.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const tokens = trimmed.split(/\s+/).slice(0, AGENTIC_REVIEW_SPEC_MAX_TOKENS_PER_ENTRY);
+      const cappedEntry = tokens.join(' ').trim();
+      if (!cappedEntry) {
+        continue;
+      }
+
+      const dedupeKey = cappedEntry.toLowerCase();
+      if (!deduped.has(dedupeKey)) {
+        deduped.set(dedupeKey, cappedEntry);
+      }
+
+      if (deduped.size >= AGENTIC_REVIEW_SPEC_MAX_ENTRIES) {
+        break;
+      }
+    }
+
+    return Array.from(deduped.values());
+  } catch (err) {
+    console.warn('[agentic-restart] Failed to normalize review spec list', {
+      itemId,
+      fieldName,
+      error: err instanceof Error ? err.message : err
+    });
+    return [];
+  }
 }
 
 function parseAgenticRestartRoute(path: string): { itemId: string; legacyRoute: boolean } | null {
@@ -105,8 +153,8 @@ const action = defineHttpAction({
           decision: normalizedReviewDecision || null,
           information_present:
             typeof reviewPayload.information_present === 'boolean' ? reviewPayload.information_present : null,
-          missing_spec: Array.isArray(reviewPayload.missing_spec) ? reviewPayload.missing_spec : [],
-          unneeded_spec: Array.isArray(reviewPayload.unneeded_spec) ? reviewPayload.unneeded_spec : [],
+          missing_spec: normalizeReviewSpecList(reviewPayload.missing_spec, 'missing_spec', itemId),
+          unneeded_spec: normalizeReviewSpecList(reviewPayload.unneeded_spec, 'unneeded_spec', itemId),
           bad_format: typeof reviewPayload.bad_format === 'boolean' ? reviewPayload.bad_format : null,
           wrong_information: typeof reviewPayload.wrong_information === 'boolean' ? reviewPayload.wrong_information : null,
           wrong_physical_dimensions:
@@ -117,6 +165,20 @@ const action = defineHttpAction({
           reviewedBy: normalizedReviewActor || null
         }
       : null;
+    try {
+      console.info('[agentic-restart] Normalized review metadata payload', {
+        itemId,
+        hasReviewPayload: Boolean(reviewPayload),
+        missingSpecCount: normalizedReview?.missing_spec.length ?? 0,
+        unneededSpecCount: normalizedReview?.unneeded_spec.length ?? 0
+      });
+    } catch (err) {
+      console.warn('[agentic-restart] Failed to log normalized review metadata payload', {
+        itemId,
+        error: err instanceof Error ? err.message : err
+      });
+    }
+
     const replaceReviewMetadata = payload.replaceReviewMetadata === true;
     const requestContext = resolveAgenticRequestContext(payload, itemId);
 

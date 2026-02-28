@@ -2,6 +2,10 @@ import type { AgenticRun } from './agentic-run';
 
 // TODO(agent): Monitor requestId propagation for model invocations to ensure downstream logging stays consistent.
 
+// TODO(agentic-review-spec-contract): Keep shared review spec limits synchronized across frontend/backend normalization paths.
+export const AGENTIC_REVIEW_SPEC_MAX_ENTRIES = 10;
+export const AGENTIC_REVIEW_SPEC_MAX_TOKENS_PER_ENTRY = 12;
+
 export interface AgenticRunReviewMetadata {
   decision: string | null;
   action?: string | null;
