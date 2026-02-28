@@ -1,10 +1,11 @@
 import { forwardAgenticTrigger } from '../agentic-trigger';
-import { startAgenticRun } from '../../agentic';
+import { restartAgenticRun, startAgenticRun } from '../../agentic';
 import type { AgenticRunTriggerPayload } from '../agentic-trigger';
 import type { AgenticRunReviewMetadata } from '../../../models';
 
 jest.mock('../../agentic', () => ({
-  startAgenticRun: jest.fn().mockResolvedValue({ queued: true, agentic: null })
+  startAgenticRun: jest.fn().mockResolvedValue({ queued: true, agentic: null }),
+  restartAgenticRun: jest.fn().mockResolvedValue({ queued: true, agentic: null })
 }));
 
 describe('forwardAgenticTrigger review metadata', () => {
@@ -53,6 +54,46 @@ describe('forwardAgenticTrigger review metadata', () => {
     expect(mockedStartAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({
         review: expectedReview
+      }),
+      expect.any(Object)
+    );
+  });
+
+
+  it('restarts existing runs for bulk trigger context when start declines as already-exists', async () => {
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+
+    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const mockedRestartAgenticRun = restartAgenticRun as jest.MockedFunction<typeof restartAgenticRun>;
+    mockedStartAgenticRun.mockResolvedValueOnce({
+      queued: false,
+      created: false,
+      agentic: null,
+      reason: 'already-exists'
+    });
+
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'Existing bulk run',
+      artikelNummer: 'item-bulk-existing'
+    };
+
+    const result = await forwardAgenticTrigger(payload, {
+      context: 'item-list-bulk',
+      logger,
+      service: { logger } as any
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(202);
+    expect(mockedRestartAgenticRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: 'item-bulk-existing',
+        context: 'item-list-bulk',
+        searchQuery: 'Existing bulk run'
       }),
       expect.any(Object)
     );
