@@ -1,12 +1,17 @@
+import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
+import { ERP_MEDIA_MIRROR_DIR } from '../config';
+import { MEDIA_DIR } from '../lib/media';
+import { mirrorDirectoryTree } from '../lib/mediaMirror';
 import { stageItemsExport, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
 import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED } from '../config';
 import { MEDIA_DIR } from '../lib/media';
 
 // TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
+// TODO(sync-erp-media-mirror): Add targeted tests for media mirror failure handling inside ERP sync flow.
 // TODO(sync-erp): Keep this action script-parity only unless an explicit future requirement reintroduces API-side continuation orchestration.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -48,6 +53,22 @@ function parseItemIds(payload: unknown): string[] {
   }
 
   return Array.from(new Set(normalized));
+}
+
+
+function resolveErpMediaMirrorTargetPath(): string {
+  const configured = ERP_MEDIA_MIRROR_DIR.trim();
+  if (configured) {
+    return path.isAbsolute(configured) ? configured : path.resolve(process.cwd(), configured);
+  }
+
+  const mediaBaseName = path.basename(MEDIA_DIR);
+  const mediaParent = path.dirname(MEDIA_DIR);
+  if (mediaBaseName === 'shopbilder') {
+    return path.join(mediaParent, 'shopbilder-import');
+  }
+
+  return path.join(mediaParent, `${mediaBaseName}-import`);
 }
 
 interface ScriptExecutionResult {
@@ -179,6 +200,37 @@ const action = defineHttpAction({
           phase: 'request_received',
           error: error instanceof Error ? error.message : 'Invalid itemIds payload.'
         });
+      }
+
+      const mediaMirrorSource = MEDIA_DIR;
+      const mediaMirrorDestination = resolveErpMediaMirrorTargetPath();
+      try {
+        if (!fs.existsSync(mediaMirrorSource)) {
+          console.warn('[sync-erp] media_mirror_source_missing', {
+            source: mediaMirrorSource,
+            destination: mediaMirrorDestination
+          });
+        } else {
+          console.info('[sync-erp] media_mirror_started', {
+            source: mediaMirrorSource,
+            destination: mediaMirrorDestination
+          });
+          const mirrorResult = await mirrorDirectoryTree(mediaMirrorSource, mediaMirrorDestination);
+          console.info('[sync-erp] media_mirror_finished', {
+            source: mediaMirrorSource,
+            destination: mediaMirrorDestination,
+            copiedFileCount: mirrorResult.copiedFileCount,
+            ensuredDirectoryCount: mirrorResult.ensuredDirectoryCount
+          });
+        }
+      } catch (error) {
+        console.error('[sync-erp] media_mirror_failed', {
+          source: mediaMirrorSource,
+          destination: mediaMirrorDestination,
+          message: error instanceof Error ? error.message : String(error),
+          error
+        });
+        throw new Error('Media mirror failed before ERP import execution.');
       }
 
       const items = ctx.listItemsForExport.all({
