@@ -22,7 +22,7 @@ export interface ReviewedExampleCandidate {
 
 export interface ExampleSelectionResult {
   exampleBlock: string;
-  selectedExampleId: string | null;
+  selectedExampleIds: string[];
   fallbackReason: string | null;
   wasTruncated: boolean;
 }
@@ -53,8 +53,12 @@ function redactExamplePayload(candidate: ReviewedExampleCandidate): Record<strin
   };
 }
 
-function serializeExamplePayload(payload: Record<string, unknown>): string {
-  return 'Reviewed example item (redacted):\n```json\n' + JSON.stringify(payload, null, 2) + '\n```';
+
+// TODO(agentic-examples): Revisit whether category-diverse fallback pairs improve extraction resilience when same-subcategory history is sparse.
+function serializeExamplePayloads(payloads: Array<Record<string, unknown>>): string {
+  return payloads
+    .map((payload, index) => `Reviewed example item ${index + 1} (redacted):\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``)
+    .join('\n\n');
 }
 
 export function selectExampleItemBlock({
@@ -80,8 +84,8 @@ export function selectExampleItemBlock({
       })
       .sort((left, right) => normalizeDate(right.ReviewedAt) - normalizeDate(left.ReviewedAt));
 
-    const selected = reviewedCandidates[0];
-    if (!selected) {
+    const selected = reviewedCandidates.slice(0, 2);
+    if (selected.length === 0) {
       logger?.info?.({
         msg: 'agentic example selector fallback to static block',
         itemId: normalizedCurrentItemId,
@@ -89,15 +93,17 @@ export function selectExampleItemBlock({
       });
       return {
         exampleBlock: STATIC_EXAMPLE_ITEM_BLOCK,
-        selectedExampleId: null,
+        selectedExampleIds: [],
         fallbackReason: 'no-reviewed-example',
         wasTruncated: false
       };
     }
 
-    const selectedExampleId = typeof selected.Artikel_Nummer === 'string' ? selected.Artikel_Nummer.trim() : null;
-    const payload = redactExamplePayload(selected);
-    const serialized = serializeExamplePayload(payload);
+    const selectedExampleIds = selected
+      .map((candidate) => (typeof candidate.Artikel_Nummer === 'string' ? candidate.Artikel_Nummer.trim() : ''))
+      .filter((value) => value.length > 0);
+    const payloads = selected.map((candidate) => redactExamplePayload(candidate));
+    const serialized = serializeExamplePayloads(payloads);
     const safeLimit = Number.isFinite(maxExampleChars) && maxExampleChars > 0 ? Math.floor(maxExampleChars) : DEFAULT_MAX_EXAMPLE_CHARS;
     const wasTruncated = serialized.length > safeLimit;
     const exampleBlock = wasTruncated ? `${serialized.slice(0, safeLimit)}\n…` : serialized;
@@ -105,7 +111,7 @@ export function selectExampleItemBlock({
     logger?.info?.({
       msg: 'agentic example selector chose reviewed example',
       itemId: normalizedCurrentItemId,
-      selectedExampleId,
+      selectedExampleIds,
       fallbackReason: null,
       wasTruncated,
       payloadLength: serialized.length,
@@ -114,7 +120,7 @@ export function selectExampleItemBlock({
 
     return {
       exampleBlock,
-      selectedExampleId,
+      selectedExampleIds,
       fallbackReason: null,
       wasTruncated
     };
@@ -127,7 +133,7 @@ export function selectExampleItemBlock({
     });
     return {
       exampleBlock: STATIC_EXAMPLE_ITEM_BLOCK,
-      selectedExampleId: null,
+      selectedExampleIds: [],
       fallbackReason: 'selector-error',
       wasTruncated: false
     };

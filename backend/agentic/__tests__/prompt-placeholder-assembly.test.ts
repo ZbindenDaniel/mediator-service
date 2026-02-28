@@ -50,7 +50,7 @@ describe('prompt placeholder assembly', () => {
 
   it('injects raw example placeholder blocks without sanitizing multiline JSON', () => {
     const fragments: PromptPlaceholderFragments = new Map();
-    const exampleBlock = 'Reviewed example item (redacted):\n```json\n{\n  "Spezifikationen": {"RAM": ["DDR5"]}\n}\n```';
+    const exampleBlock = 'Reviewed example item 1 (redacted):\n```json\n{\n  "Spezifikationen": {"RAM": ["DDR5"]}\n}\n```';
     fragments.set(PROMPT_PLACEHOLDERS.exampleItem, [exampleBlock]);
 
     const resolved = resolvePromptPlaceholders({
