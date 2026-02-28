@@ -8,6 +8,7 @@ exports[`prompt template composition snapshots renders categorizer.md with share
   Analyze the provided item JSON payload (plus any reviewer instructions and taxonomy reference) and return the most appropriate Haupt- and Unterkategorie codes.
 </task>
 <rules>
+  <!-- TODO(agentic-review-context): Keep categorizer reviewer placeholder adjacent to reviewer-priority rule. -->
   - Follow only the provided evidence and reviewer instructions.
 - Keep role-specific behavior scoped to this stage; do not perform other pipeline stages implicitly.
   - Return only the requested output payload.
@@ -20,6 +21,7 @@ exports[`prompt template composition snapshots renders categorizer.md with share
   - Always analyse the provided item JSON and prefer explicit signals (names, specs, usage) when selecting categories.
   - Treat Spezifikationen as supporting context when deciding categories.
   - Reviewer notes take priority. Follow any reviewer instructions about focus areas or constraints before applying other rules.
+  {{CATEGORIZER_REVIEW}}
   - The taxonomy reference supplied alongside the conversation is authoritative. Use it to map descriptions to valid codes.
   - Preserve locked values. If the payload includes a "__locked" array listing category fields, keep their existing values.
   - Return JSON with numeric codes (no text labels). Use null when no confident assignment can be made.
@@ -84,8 +86,10 @@ exports[`prompt template composition snapshots renders extract.md with shared fr
   - Fill every schema  provided; use the provided defaults when data is missing.
 </task>
 <rules>
+  <!-- TODO(agentic-review-context): Keep extraction reviewer guidance placeholder near rule preamble. -->
   - Follow only the provided evidence and reviewer instructions.
 - Keep role-specific behavior scoped to this stage; do not perform other pipeline stages implicitly.
+  {{EXTRACTION_REVIEW}}
   - Output must match <output_format> exactly.
   - Return only the requested output payload.
 - Do not prepend or append narrative text outside explicitly allowed sections.
@@ -102,9 +106,9 @@ exports[`prompt template composition snapshots renders extract.md with shared fr
     - Hersteller: Copy from sources or keep provided value.
     - reviewNotes: Treat as guidance.
 - format mm values with half milmeter steps (i.e. '13.5', '132')
-    - Add \`__searchQueries\` only if unresolved details block required fields: \`{"__searchQueries":["<Modellname> Datenblatt Gewicht kg"]}\`
+    - Add one \`__searchQueries\` entry only when needed: \`{"__searchQueries":["<Modellname> Datenblatt Gewicht kg"]}\`
   - Search policy:
-    - You do not perform searches. You may include "__searchQueries" only when vital details remain unresolved.
+    - You do not perform searches. Include exactly one "__searchQueries" entry only when vital details remain unresolved.
     - Each query must be precise enough to recover the missing schema data.
   - Respond with JSON only after verifying it matches the schema.
 </rules>
@@ -119,10 +123,10 @@ Your internal reasoning goes here.
 {{TARGET_SCHEMA_FORMAT}}
 </output_format>
 
-<example>
+<examples>
   - Treat included examples as style/shape references; never copy product-specific claims unless they are present in the current input.
 {{EXAMPLE_ITEM}}
-</example>
+</examples>
 "
 `;
 
@@ -162,15 +166,23 @@ exports[`prompt template composition snapshots renders pricing.md with shared fr
 - Do not prepend or append narrative text outside explicitly allowed sections.
   - If required information is missing, use the role-specific fallback (null/empty/fail) instead of inventing data.
 - Never fabricate unsupported facts.
-  - Respond with JSON only and use the exact key "Verkaufspreis".
-  - Use a numeric value (no currency symbols) or null.
-  - Do not modify or add any other fields.
+  - Respond with JSON only. Do not output prose, markdown, code fences, or explanatory text before/after the JSON object.
+  - Always return exactly one JSON object using the contract keys: \`directListingPrice\`, \`trustedHistoricalPrice\`, \`Verkaufspreis\`, \`confidence\`, \`evidenceCount\`, \`sourceUrl\`, \`parseStatus\`, \`zeroIsValid\`.
+  - Use numeric values (no currency symbols) for price outputs when possible, or \`null\`.
+  - Preserve the exact key names above and keep missing values as \`null\`, \`0\`, \`""\`, or \`false\` according to the schema example.
 </rules>
 <output_format>
 
 \`\`\`json
 {
-  "Verkaufspreis": null
+  "directListingPrice": null,
+  "trustedHistoricalPrice": null,
+  "Verkaufspreis": null,
+  "confidence": 0,
+  "evidenceCount": 0,
+  "sourceUrl": "",
+  "parseStatus": "no-signal",
+  "zeroIsValid": false
 }
 \`\`\`
 
@@ -206,8 +218,12 @@ exports[`prompt template composition snapshots renders search-planner.md with sh
     }
   - If reviewer notes forbid search, set "shouldSearch" to false and return an empty "plans" array.
   - Generate at most three targeted queries, focusing only on the most critical missing fields.
+  - Query construction priority:
+    1. \`<exact product name>\`
+    2. \`<exact product name> <missing attribute>\` (for example: dimensions, weight, specs, datasheet)
+    3. Only one fallback variant if the first two query shapes fail to cover required missing fields.
+  - Do not force \`site:\` filters or source-domain constraints when constructing queries.
   - Omit any explanations outside the JSON response.
-  - Prefer the curated IT hardware sources in the attached list when choosing search targets. Select only the most relevant sites for the product category.
 </rules>
 "
 `;
@@ -267,12 +283,14 @@ exports[`prompt template composition snapshots renders supervisor.md with shared
 {{TARGET_SCHEMA_FORMAT}}
 </task>
 <rules>
+  <!-- TODO(agentic-review-context): Keep supervisor reviewer placeholder in rule preamble. -->
   - Follow only the provided evidence and reviewer instructions.
 - Keep role-specific behavior scoped to this stage; do not perform other pipeline stages implicitly.
   - Return only the requested output payload.
 - Do not prepend or append narrative text outside explicitly allowed sections.
   - If required information is missing, use the role-specific fallback (null/empty/fail) instead of inventing data.
 - Never fabricate unsupported facts.
+  {{SUPERVISOR_REVIEW}}
   - Be strict: most values should be filled in unless the source material truly lacks the information.
   - Be fair: if you see an error and know how to correct it do so. You might fix invalid JSON formating for example.
   - Be reasonable: A missing price with otherwise good data does not mean it's failed. Most important is the decription. Be strict in the first attempt and become easier with the last attempt allthough inccorect data may never be passed.

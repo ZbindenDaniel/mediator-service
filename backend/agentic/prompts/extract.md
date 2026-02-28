@@ -41,7 +41,7 @@ Your internal reasoning goes here.
 {{TARGET_SCHEMA_FORMAT}}
 </output_format>
 
-<example>
+<examples>
   {{PRODUCT_EXAMPLE_POLICY}}
 {{EXAMPLE_ITEM}}
-</example>
+</examples>

@@ -1,7 +1,7 @@
 import { selectExampleItemBlock, STATIC_EXAMPLE_ITEM_BLOCK } from '../example-selector';
 
 describe('selectExampleItemBlock', () => {
-  it('uses latest approved reviewed example from the same candidate list', () => {
+  it('uses two latest approved reviewed examples from the same candidate list', () => {
     const result = selectExampleItemBlock({
       currentItemId: 'R-200',
       candidates: [
@@ -24,9 +24,10 @@ describe('selectExampleItemBlock', () => {
     });
 
     expect(result.fallbackReason).toBeNull();
-    expect(result.selectedExampleId).toBe('R-102');
+    expect(result.selectedExampleIds).toEqual(['R-102', 'R-101']);
     expect(result.wasTruncated).toBe(false);
-    expect(result.exampleBlock).toContain('Reviewed example item (redacted)');
+    expect(result.exampleBlock).toContain('Reviewed example item 1 (redacted)');
+    expect(result.exampleBlock).toContain('Reviewed example item 2 (redacted)');
     expect(result.exampleBlock).toContain('"Artikelbeschreibung": "Newest item"');
     expect(result.exampleBlock).not.toContain('R-102');
   });
@@ -43,7 +44,7 @@ describe('selectExampleItemBlock', () => {
       ]
     });
 
-    expect(result.selectedExampleId).toBeNull();
+    expect(result.selectedExampleIds).toEqual([]);
     expect(result.fallbackReason).toBe('no-reviewed-example');
     expect(result.wasTruncated).toBe(false);
     expect(result.exampleBlock).toBe(STATIC_EXAMPLE_ITEM_BLOCK);
@@ -64,7 +65,7 @@ describe('selectExampleItemBlock', () => {
       ]
     });
 
-    expect(result.selectedExampleId).toBe('R-999');
+    expect(result.selectedExampleIds).toEqual(['R-999']);
     expect(result.fallbackReason).toBeNull();
     expect(result.wasTruncated).toBe(true);
     expect(result.exampleBlock.endsWith('…')).toBe(true);
