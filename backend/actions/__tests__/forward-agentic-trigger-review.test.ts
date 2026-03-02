@@ -127,4 +127,103 @@ describe('forwardAgenticTrigger review metadata', () => {
       expect.any(Object)
     );
   });
+
+
+  it('restarts existing terminal runs outside bulk context when status is failed', async () => {
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+
+    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const mockedRestartAgenticRun = restartAgenticRun as jest.MockedFunction<typeof restartAgenticRun>;
+    const existingRun = {
+      Artikel_Nummer: '19290',
+      SearchQuery: 'existing failed query',
+      Status: 'failed'
+    };
+    const restartedRun = {
+      ...existingRun,
+      Status: 'queued'
+    };
+
+    mockedStartAgenticRun.mockResolvedValueOnce({
+      queued: false,
+      created: false,
+      agentic: existingRun as any,
+      reason: 'already-exists'
+    });
+    mockedRestartAgenticRun.mockResolvedValueOnce({
+      queued: true,
+      agentic: restartedRun as any,
+      reason: null as any
+    });
+
+    const result = await forwardAgenticTrigger(
+      {
+        artikelbeschreibung: 'Restart terminal run',
+        artikelNummer: '19290'
+      },
+      {
+        context: 'item detail start',
+        logger,
+        service: { logger } as any
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(202);
+    expect(result.body).toEqual({ agentic: restartedRun });
+    expect(mockedRestartAgenticRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: '19290',
+        context: 'item detail start',
+        searchQuery: 'Restart terminal run'
+      }),
+      expect.any(Object)
+    );
+  });
+
+
+  it('returns success with canonical run when a run already exists outside bulk context', async () => {
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
+
+    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const existingRun = {
+      Artikel_Nummer: '19290',
+      SearchQuery: 'test',
+      Status: 'running'
+    };
+    mockedStartAgenticRun.mockResolvedValueOnce({
+      queued: false,
+      created: false,
+      agentic: existingRun as any,
+      reason: 'already-exists'
+    });
+
+    const result = await forwardAgenticTrigger(
+      {
+        artikelbeschreibung: 'Existing run should be returned',
+        artikelNummer: '19290'
+      },
+      {
+        context: 'item detail start',
+        logger,
+        service: { logger } as any
+      }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ agentic: existingRun });
+    expect(logger.info).toHaveBeenCalledWith(
+      '[agentic-trigger] Existing active agentic run detected; returning canonical run',
+      expect.objectContaining({ context: 'item detail start', artikelNummer: '19290' })
+    );
+  });
 });
