@@ -95,7 +95,7 @@ async function runErpSyncScript(
       level: 'info' | 'error',
       tag: '[sync-erp] script_stdout' | '[sync-erp] script_stderr'
     ): string => {
-      const normalized = buffered.replace(/\r\n/g, '\n');
+      const normalized = buffered.replace(/\r\n|\r/g, '\n');
       const parts = normalized.split('\n');
       const trailing = parts.pop() ?? '';
       for (const line of parts) {
@@ -272,11 +272,22 @@ const action = defineHttpAction({
         MEDIA_DIR,
         normalizedScriptTimeoutMs
       );
-      const mediaCopyMarker = parseMediaCopyMarker(`${scriptResult.stdout}\n${scriptResult.stderr}`);
+      let mediaCopyMarker: MediaCopyMarker = { status: 'unknown', detail: null };
+      let mediaCopyMarkerPhase = 'script_finished';
+      try {
+        mediaCopyMarker = parseMediaCopyMarker(`${scriptResult.stdout}\n${scriptResult.stderr}`);
+      } catch (error) {
+        mediaCopyMarkerPhase = 'unknown';
+        console.error('[sync-erp] media_copy_marker_parse_failed', {
+          phase: mediaCopyMarkerPhase,
+          error
+        });
+      }
       console.info('[sync-erp] script_finished', {
         exitCode: scriptResult.exitCode,
         mediaCopyStatus: mediaCopyMarker.status,
-        mediaCopyDetail: mediaCopyMarker.detail
+        mediaCopyDetail: mediaCopyMarker.detail,
+        mediaCopyPhase: mediaCopyMarkerPhase
       });
 
       if (scriptResult.exitCode === 0) {

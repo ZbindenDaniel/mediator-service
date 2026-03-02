@@ -213,8 +213,10 @@ else
 fi
 
 
+echo "[erp-sync] phase=media_mirror_start" >&2
 if ! bash docs/erp-media-mirror.sh; then
   rm -f "$tmpf"
   echo "[erp-sync] media_copy_result status=failed reason=mirror_script_failed" >&2
   exit 3
 fi
+echo "[erp-sync] phase=media_mirror_done" >&2
