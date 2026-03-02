@@ -22,6 +22,19 @@ function fail {
   exit 1
 }
 
+
+resolve_positive_integer_or_default() {
+  local raw="$1"
+  local fallback="$2"
+
+  if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" -gt 0 ]; then
+    echo "$raw"
+    return 0
+  fi
+
+  echo "$fallback"
+}
+
 # TODO(erp-sync-media-copy): Consider checksum-based verification when mirror destinations are remote mounts with delayed writes.
 
 test -z "$1" && fail "Kein CSV-Dateiname angegeben."
@@ -31,7 +44,14 @@ file="$1"
 function do_curl {
   local action="$1"
 
-  echo "[erp-sync] phase=${action#action_} file=$(basename "$file")"
+  echo "[erp-sync] phase=${action#action_} file=$(basename "$file")" >&2
+
+  local curl_connect_timeout_s
+  curl_connect_timeout_s=$(resolve_positive_integer_or_default "${ERP_SYNC_CURL_CONNECT_TIMEOUT_S:-}" "15")
+  local curl_max_time_s
+  curl_max_time_s=$(resolve_positive_integer_or_default "${ERP_SYNC_CURL_MAX_TIME_S:-}" "240")
+
+  echo "[erp-sync] curl_runtime action=${action#action_} connect_timeout_s=${curl_connect_timeout_s} max_time_s=${curl_max_time_s}" >&2
 
   # ---- Hier ebenfalls die Parameter anpassen, falls notwendig. ----
   # Die anpassbaren Parameter und ihre Werte sind:
@@ -136,6 +156,8 @@ function do_curl {
     -X 'POST' \
     -H 'Content-Type:multipart/form-data' \
     --insecure \
+    --connect-timeout "$curl_connect_timeout_s" \
+    --max-time "$curl_max_time_s" \
     -F 'action=CsvImport/import' \
     -F "${action}=1" \
     -F 'profile.type=parts' \
