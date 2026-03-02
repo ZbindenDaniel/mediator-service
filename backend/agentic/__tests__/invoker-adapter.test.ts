@@ -174,10 +174,10 @@ describe('AgenticModelInvoker request payload merging', () => {
       const [payload] = runItemFlow.mock.calls[0];
       expect(payload.target.Artikelbeschreibung).toBe('User Description');
       expect(payload.target.Kurzbeschreibung).toBe('User Short');
-      expect(payload.target.Artikel_Nummer).toBe('LOCK-42');
+      expect(payload.target.Artikel_Nummer).toBe('123');
       expect(payload.target.__locked).toEqual(['Artikel_Nummer']);
       // TODO(agent): Extend Langtext serialization coverage when additional item fields require sanitization.
-      expect(payload.target.Langtext).toBe('{"short":"Base Long","extra":"5"}');
+      expect(payload.target.Langtext).toEqual({ short: 'Base Long', extra: 5 });
     });
   });
 
@@ -258,12 +258,8 @@ describe('AgenticModelInvoker request payload merging', () => {
       expect(runItemFlow).toHaveBeenCalledTimes(1);
       const [payload] = runItemFlow.mock.calls[0];
       // TODO(agent): Broaden override sanitization checks as new Langtext payload shapes emerge.
-      expect(typeof payload.target.Langtext).toBe('string');
-      expect(JSON.parse(payload.target.Langtext as string)).toEqual({
-        short: 'User Long',
-        details: '7'
-      });
-      expect(payload.target.Artikel_Nummer).toBe('OVERRIDE-99');
+      expect(payload.target.Langtext).toEqual({ short: 'User Long', details: 7, nullish: null });
+      expect(payload.target.Artikel_Nummer).toBe('456');
     });
   });
 
@@ -348,6 +344,222 @@ describe('AgenticModelInvoker request payload merging', () => {
       expect(payload.reviewNotes).toContain('Please double check details');
       expect(payload.reviewNotes).toContain('Missing spec fields to prioritize: Gewicht_kg, Höhe_mm.');
       expect(payload.reviewNotes).toContain('Spec fields to remove if present: Ausstattung, PlaceholderField.');
+    });
+  });
+});
+
+describe('AgenticModelInvoker item target lookup', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    process.env.MODEL_PROVIDER = 'ollama';
+  });
+
+  afterEach(() => {
+    jest.resetModules();
+    if (ORIGINAL_MODEL_PROVIDER === undefined) {
+      delete process.env.MODEL_PROVIDER;
+    } else {
+      process.env.MODEL_PROVIDER = ORIGINAL_MODEL_PROVIDER;
+    }
+    jest.clearAllMocks();
+  });
+
+  it('uses item_refs for Artikel_Nummer input when no instances exist', async () => {
+    const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
+    const getItem = { get: jest.fn(() => undefined) };
+    const getItemReference = {
+      get: jest.fn(() => ({
+        Artikel_Nummer: 'MAT-1000',
+        Artikelbeschreibung: 'Reference Description',
+        Verkaufspreis: 15.5,
+        Kurzbeschreibung: 'Reference Short',
+        Langtext: { spec: 'value' },
+        Hersteller: 'Reference Maker'
+      }))
+    };
+    const findByMaterial = { all: jest.fn(() => []) };
+
+    jest.doMock('../tools/tavily-client', () => ({
+      TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
+    }));
+    jest.doMock('../config', () => ({
+      modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+    }));
+    jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
+    jest.doMock('../../db', () => ({
+      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
+      getItem,
+      getItemReference,
+      findByMaterial,
+      getAgenticRun: jest.fn(),
+      updateAgenticRunStatus: { run: jest.fn() },
+      upsertAgenticRun: { run: jest.fn() },
+      logEvent: jest.fn(),
+      getAgenticRequestLog: jest.fn(),
+      saveAgenticRequestPayload: jest.fn(),
+      markAgenticRequestNotificationSuccess: jest.fn(),
+      markAgenticRequestNotificationFailure: jest.fn()
+    }));
+    jest.doMock(
+      '@langchain/ollama',
+      () => ({
+        ChatOllama: class {
+          public async invoke() {
+            return { content: null };
+          }
+        }
+      }),
+      { virtual: true }
+    );
+
+    await jest.isolateModulesAsync(async () => {
+      const { AgenticModelInvoker } = await import('../invoker');
+      const invoker = new AgenticModelInvoker({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } });
+
+      const result = await invoker.invoke({
+        itemId: 'MAT-1000',
+        searchQuery: 'reference lookup',
+        context: 'unit-test',
+        review: null,
+        requestId: null
+      });
+
+      expect(result).toEqual({ ok: true, message: 'ok' });
+      expect(getItem.get).not.toHaveBeenCalled();
+      expect(getItemReference.get).toHaveBeenCalledWith('MAT-1000');
+      expect(findByMaterial.all).not.toHaveBeenCalled();
+      const [payload] = runItemFlow.mock.calls[0];
+      expect(payload.target.Artikel_Nummer).toBe('MAT-1000');
+      expect(payload.target.Artikelbeschreibung).toBe('Reference Description');
+    });
+  });
+
+  it('returns item not found for missing Artikel_Nummer in item_refs and fallback rows', async () => {
+    const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
+    const getItemReference = { get: jest.fn(() => undefined) };
+    const findByMaterial = { all: jest.fn(() => []) };
+
+    jest.doMock('../tools/tavily-client', () => ({
+      TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
+    }));
+    jest.doMock('../config', () => ({
+      modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+    }));
+    jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
+    jest.doMock('../../db', () => ({
+      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
+      getItem: { get: jest.fn(() => undefined) },
+      getItemReference,
+      findByMaterial,
+      getAgenticRun: jest.fn(),
+      updateAgenticRunStatus: { run: jest.fn() },
+      upsertAgenticRun: { run: jest.fn() },
+      logEvent: jest.fn(),
+      getAgenticRequestLog: jest.fn(),
+      saveAgenticRequestPayload: jest.fn(),
+      markAgenticRequestNotificationSuccess: jest.fn(),
+      markAgenticRequestNotificationFailure: jest.fn()
+    }));
+    jest.doMock(
+      '@langchain/ollama',
+      () => ({
+        ChatOllama: class {
+          public async invoke() {
+            return { content: null };
+          }
+        }
+      }),
+      { virtual: true }
+    );
+
+    await jest.isolateModulesAsync(async () => {
+      const { AgenticModelInvoker } = await import('../invoker');
+      const invoker = new AgenticModelInvoker();
+
+      const result = await invoker.invoke({
+        itemId: 'MAT-MISSING',
+        searchQuery: 'reference lookup',
+        context: 'unit-test',
+        review: null,
+        requestId: null
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain('not found');
+      expect(getItemReference.get).toHaveBeenCalledWith('MAT-MISSING');
+      expect(findByMaterial.all).toHaveBeenCalledWith('MAT-MISSING');
+      expect(runItemFlow).not.toHaveBeenCalled();
+    });
+  });
+
+  it('keeps instance id lookup behaviour unchanged for true instance ids', async () => {
+    const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
+    const getItem = {
+      get: jest.fn(() => ({
+        ItemUUID: 'I-MAT2000-0001',
+        Artikel_Nummer: 'MAT2000',
+        Artikelbeschreibung: 'Instance Description',
+        Verkaufspreis: 99,
+        Kurzbeschreibung: 'Instance Short',
+        Langtext: { specs: 'instance' },
+        Hersteller: 'Instance Maker'
+      }))
+    };
+    const getItemReference = { get: jest.fn(() => undefined) };
+
+    jest.doMock('../tools/tavily-client', () => ({
+      TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
+    }));
+    jest.doMock('../config', () => ({
+      modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+    }));
+    jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
+    jest.doMock('../../db', () => ({
+      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
+      getItem,
+      getItemReference,
+      findByMaterial: { all: jest.fn(() => []) },
+      getAgenticRun: jest.fn(),
+      updateAgenticRunStatus: { run: jest.fn() },
+      upsertAgenticRun: { run: jest.fn() },
+      logEvent: jest.fn(),
+      getAgenticRequestLog: jest.fn(),
+      saveAgenticRequestPayload: jest.fn(),
+      markAgenticRequestNotificationSuccess: jest.fn(),
+      markAgenticRequestNotificationFailure: jest.fn()
+    }));
+    jest.doMock(
+      '@langchain/ollama',
+      () => ({
+        ChatOllama: class {
+          public async invoke() {
+            return { content: null };
+          }
+        }
+      }),
+      { virtual: true }
+    );
+
+    await jest.isolateModulesAsync(async () => {
+      const { AgenticModelInvoker } = await import('../invoker');
+      const invoker = new AgenticModelInvoker();
+
+      const result = await invoker.invoke({
+        itemId: 'I-MAT2000-0001',
+        searchQuery: 'instance lookup',
+        context: 'unit-test',
+        review: null,
+        requestId: null
+      });
+
+      expect(result).toEqual({ ok: true, message: 'ok' });
+      expect(getItem.get).toHaveBeenCalledWith('I-MAT2000-0001');
+      expect(getItemReference.get).not.toHaveBeenCalled();
+      const [payload] = runItemFlow.mock.calls[0];
+      expect(payload.target.Artikel_Nummer).toBe('MAT2000');
     });
   });
 });
