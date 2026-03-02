@@ -62,6 +62,43 @@ interface MediaCopyMarker {
   detail: string | null;
 }
 
+function deriveLastObservedPhase(output: string): string | null {
+  let lastObservedPhase: string | null = null;
+  const lines = output.split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    try {
+      if (line.includes('media_copy_result')) {
+        lastObservedPhase = 'media_copy_result';
+        continue;
+      }
+
+      if (line.includes('media_copy_discovery')) {
+        lastObservedPhase = 'media_copy_discovery';
+        continue;
+      }
+
+      if (line.includes('phase=import')) {
+        lastObservedPhase = 'import';
+        continue;
+      }
+
+      if (line.includes('phase=test')) {
+        lastObservedPhase = 'test';
+      }
+    } catch (error) {
+      console.warn('[sync-erp] phase_parse_failed', { error, line });
+    }
+  }
+
+  return lastObservedPhase;
+}
+
 async function runErpSyncScript(
   scriptPath: string,
   csvPath: string,
@@ -82,10 +119,11 @@ async function runErpSyncScript(
     let stdoutBuffer = '';
     let stderrBuffer = '';
     let timedOut = false;
+    let lastObservedPhase: string | null = null;
 
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
-      console.error('[sync-erp] script_timeout', { timeoutMs, scriptPath });
+      console.error('[sync-erp] script_timeout', { timeoutMs, scriptPath, lastObservedPhase });
       proc.kill('SIGTERM');
     }, timeoutMs);
 
@@ -103,6 +141,16 @@ async function runErpSyncScript(
         if (!trimmed) {
           continue;
         }
+
+        try {
+          const parsedPhase = deriveLastObservedPhase(trimmed);
+          if (parsedPhase) {
+            lastObservedPhase = parsedPhase;
+          }
+        } catch (error) {
+          console.warn('[sync-erp] phase_parse_failed', { error, line: trimmed });
+        }
+
         logger[level](tag, { line: trimmed });
       }
 
@@ -274,6 +322,7 @@ const action = defineHttpAction({
       );
       let mediaCopyMarker: MediaCopyMarker = { status: 'unknown', detail: null };
       let mediaCopyMarkerPhase = 'script_finished';
+      let lastObservedPhase: string | null = null;
       try {
         mediaCopyMarker = parseMediaCopyMarker(`${scriptResult.stdout}\n${scriptResult.stderr}`);
       } catch (error) {
@@ -283,8 +332,17 @@ const action = defineHttpAction({
           error
         });
       }
+
+      try {
+        lastObservedPhase = deriveLastObservedPhase(`${scriptResult.stdout}\n${scriptResult.stderr}`);
+      } catch (error) {
+        console.warn('[sync-erp] phase_parse_failed', { error });
+      }
+
       console.info('[sync-erp] script_finished', {
         exitCode: scriptResult.exitCode,
+        timedOut: scriptResult.timedOut,
+        lastObservedPhase,
         mediaCopyStatus: mediaCopyMarker.status,
         mediaCopyDetail: mediaCopyMarker.detail,
         mediaCopyPhase: mediaCopyMarkerPhase
