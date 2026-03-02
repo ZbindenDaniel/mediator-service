@@ -41,6 +41,7 @@ function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest(interactiveSelector));
 }
 
+
 function resolveDisplayCount(group: GroupedItemDisplay): number {
   try {
     if (typeof group.displayCount === 'number' && Number.isFinite(group.displayCount)) {
@@ -77,13 +78,14 @@ export default function ItemList({
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
-  const navigateToItemDetail = useCallback((itemId: string, source: 'click' | 'keyboard') => {
+  const navigateToItemDetail = useCallback((itemId: string, identifierType: 'itemUUID' | 'artikelNummer', source: 'click' | 'keyboard') => {
     try {
-      console.info('Navigating to item detail from item list row', { itemId, source });
+      console.info('Navigating to item detail from item list row', { itemId, identifierType, source });
       navigate(`/items/${encodeURIComponent(itemId)}`);
     } catch (navigationError) {
       console.error('Failed to navigate to item detail from item list row', {
         itemId,
+        identifierType,
         source,
         navigationError
       });
@@ -184,6 +186,42 @@ export default function ItemList({
             const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
             const checkboxLabel = `Artikelgruppe ${representativeLabel} auswählen`;
             const rowLabel = `Details für ${representativeLabel} öffnen`;
+            let rowNavigationIdentifier: string | null = null;
+            let rowNavigationIdentifierType: 'itemUUID' | 'artikelNummer' | null = null;
+            try {
+              const itemUUID = group.summary.representativeItemId?.trim() || representative?.ItemUUID?.trim() || '';
+              const artikelNummer = group.summary.Artikel_Nummer?.trim() || representative?.Artikel_Nummer?.trim() || '';
+              if (itemUUID) {
+                rowNavigationIdentifier = itemUUID;
+                rowNavigationIdentifierType = 'itemUUID';
+                logger.info?.('Selected grouped row navigation identifier', {
+                  identifierType: rowNavigationIdentifierType,
+                  identifier: rowNavigationIdentifier,
+                  groupKey: group.key
+                });
+              } else if (artikelNummer) {
+                rowNavigationIdentifier = artikelNummer;
+                rowNavigationIdentifierType = 'artikelNummer';
+                logger.info?.('Selected grouped row navigation identifier', {
+                  identifierType: rowNavigationIdentifierType,
+                  identifier: rowNavigationIdentifier,
+                  groupKey: group.key
+                });
+              }
+            } catch (error) {
+              logError('Failed to resolve grouped row navigation identifier', error, {
+                groupKey: group.key,
+                representativeItemId: group.summary.representativeItemId ?? null,
+                artikelNummer: group.summary.Artikel_Nummer ?? representative?.Artikel_Nummer ?? null
+              });
+            }
+            if (!rowNavigationIdentifier || !rowNavigationIdentifierType) {
+              logger.warn?.('Missing navigation identifier for grouped row', {
+                groupKey: group.key,
+                representativeItemId: group.summary.representativeItemId ?? null,
+                artikelNummer: group.summary.Artikel_Nummer ?? representative?.Artikel_Nummer ?? null
+              });
+            }
             const countValue = resolveDisplayCount(group);
             const locationItem: ItemLocationSource | null = representativeItemId
               ? {
@@ -218,10 +256,10 @@ export default function ItemList({
                     return;
                   }
                   event.preventDefault();
-                  if (group.summary.representativeItemId) {
-                    navigateToItemDetail(group.summary.representativeItemId, 'click');
+                  if (rowNavigationIdentifier && rowNavigationIdentifierType) {
+                    navigateToItemDetail(rowNavigationIdentifier, rowNavigationIdentifierType, 'click');
                   } else {
-                    logger.warn('Missing representative item id for grouped row', { groupKey: group.key });
+                    logger.warn('Missing navigation identifier for grouped row', { groupKey: group.key });
                   }
                 }}
                 onKeyDown={(event) => {
@@ -230,10 +268,10 @@ export default function ItemList({
                   }
                   if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
                     event.preventDefault();
-                    if (group.summary.representativeItemId) {
-                      navigateToItemDetail(group.summary.representativeItemId, 'keyboard');
+                    if (rowNavigationIdentifier && rowNavigationIdentifierType) {
+                      navigateToItemDetail(rowNavigationIdentifier, rowNavigationIdentifierType, 'keyboard');
                     } else {
-                      logger.warn('Missing representative item id for grouped row', {
+                      logger.warn('Missing navigation identifier for grouped row', {
                         groupKey: group.key,
                         source: 'keyboard'
                       });

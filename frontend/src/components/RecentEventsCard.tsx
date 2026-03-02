@@ -43,34 +43,37 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
     }
 
     if (event.EntityType === 'Item') {
-      if (event.EntityId) {
-        const rawEntityId = event.EntityId.trim();
-        if (!rawEntityId) {
-          console.warn('RecentEventsCard: Missing EntityId for Item event, falling back to /items.', event);
+      try {
+        const artikelNummer = typeof event.Artikel_Nummer === 'string' ? event.Artikel_Nummer.trim() : '';
+        if (artikelNummer) {
+          console.info('RecentEventsCard: Selected item identifier for event link', {
+            identifierType: 'artikelNummer',
+            identifier: artikelNummer,
+            eventId: event.Id,
+          });
           return {
-            path: '/items',
-            ariaSuffix: 'Artikelliste',
+            path: `/items/${encodeURIComponent(artikelNummer)}`,
+            ariaSuffix: `Artikel ${artikelNummer}`,
           };
         }
-        const matchesItemUUID =
-          rawEntityId.startsWith('I-') &&
-          (/^I-[^-]+-\d{4}$/.test(rawEntityId) || /^I-\d{6}-\d{4}$/.test(rawEntityId));
-        const resolvedItemId = matchesItemUUID ? rawEntityId : `I-${rawEntityId}-0001`;
 
-        if (!matchesItemUUID) {
-          console.warn('RecentEventsCard: EntityId did not match ItemUUID; using fallback instance link.', {
-            entityId: event.EntityId,
-            resolvedItemId,
+        const itemUUID = typeof event.EntityId === 'string' ? event.EntityId.trim() : '';
+        if (itemUUID) {
+          console.info('RecentEventsCard: Selected item identifier for event link', {
+            identifierType: 'itemUUID',
+            identifier: itemUUID,
+            eventId: event.Id,
           });
+          return {
+            path: `/items/${encodeURIComponent(itemUUID)}`,
+            ariaSuffix: `Artikel ${itemUUID}`,
+          };
         }
-
-        return {
-          path: `/items/${encodeURIComponent(resolvedItemId)}`,
-          ariaSuffix: `Artikel ${resolvedItemId}`,
-        };
+      } catch (itemIdentifierError) {
+        console.error('RecentEventsCard: Failed to resolve item identifier for event link.', itemIdentifierError, event);
       }
 
-      console.warn('RecentEventsCard: Missing EntityId for Item event, falling back to /items.', event);
+      console.warn('RecentEventsCard: Missing Artikel_Nummer and EntityId for Item event, falling back to /items.', event);
       return {
         path: '/items',
         ariaSuffix: 'Artikelliste',
