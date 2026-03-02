@@ -244,13 +244,16 @@ copy_media_if_configured() {
   local destination_file
   local destination_exists=0
 
+  echo "[erp-sync] media_copy_phase phase=destination_cleanup status=start destination=$mirror_dir" >&2
   if ! find "$mirror_dir" -mindepth 1 -exec rm -rf {} + >"$tmpf_media" 2>&1; then
     echo "[erp-sync] media_copy_result status=failed reason=destination_cleanup_failed destination=$mirror_dir details_file=$tmpf_media" >&2
     cat "$tmpf_media" >&2
     return 1
   fi
+  echo "[erp-sync] media_copy_phase phase=destination_cleanup status=done destination=$mirror_dir" >&2
 
-  echo "[erp-sync] media_copy_discovery source=$source_dir depth=parent-only pattern={artikelnummer}/<image>"
+  echo "[erp-sync] media_copy_phase phase=source_discovery status=start source=$source_dir" >&2
+  echo "[erp-sync] media_copy_discovery source=$source_dir depth=parent-only pattern={artikelnummer}/<image>" >&2
 
   while IFS= read -r -d '' image_path; do
     source_count=$((source_count + 1))
@@ -272,8 +275,11 @@ copy_media_if_configured() {
       collisions=$((collisions + 1))
     fi
   done < <(find "$source_dir" "${image_find_args[@]}" -print0)
+  echo "[erp-sync] media_copy_phase phase=source_discovery status=done source=$source_dir source_count=$source_count" >&2
 
+  echo "[erp-sync] media_copy_phase phase=final_count status=start destination=$mirror_dir" >&2
   copied_count=$(find "$mirror_dir" -type f | wc -l | tr -d ' ')
+  echo "[erp-sync] media_copy_phase phase=final_count status=done destination=$mirror_dir destination_count=$copied_count" >&2
   echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=$source_count destination_count=$copied_count flattened=true filename_collisions=$collisions"
   return 0
 }
