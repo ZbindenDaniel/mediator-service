@@ -548,28 +548,77 @@ export class AgenticModelInvoker {
   private async loadItemTarget(itemId: string): Promise<Record<string, unknown>> {
     let row: Record<string, unknown> | undefined;
     const parsed = parseSequentialItemUUID(itemId);
+    const artikelNummer = parsed?.kind === 'artikelnummer' ? parsed.artikelNummer : itemId;
+    let source: 'items' | 'item_refs' | 'findByMaterial fallback' | null = null;
+
     if (parsed?.kind === 'artikelnummer') {
       try {
         row = getItem.get(itemId) as Record<string, unknown> | undefined;
+        if (row) {
+          source = 'items';
+          this.logger.debug?.({
+            msg: 'loaded agentic target from item instance',
+            itemId,
+            artikelNummer,
+            source
+          });
+        }
       } catch (err) {
-        this.logger.error?.({ err, msg: 'failed to load item for agentic invocation', itemId });
-        throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details', 500, { cause: err });
-      }
-    } else {
-      try {
-        const results = findByMaterial?.all ? (findByMaterial.all(itemId) as Record<string, unknown>[]) : [];
-        row = Array.isArray(results) && results.length > 0 ? results[0] : undefined;
-      } catch (err) {
-        this.logger.error?.({ err, msg: 'failed to load item for agentic invocation by Artikel_Nummer', itemId });
-        throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details', 500, { cause: err });
+        this.logger.error?.({ err, msg: 'failed to load item instance for agentic invocation', itemId, artikelNummer, source: 'items' });
+        throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details (source: items)', 500, { cause: err });
       }
     }
 
     if (!row) {
-      throw new FlowError('ITEM_NOT_FOUND', `Item ${itemId} not found`, 404);
+      try {
+        row = getItemReference.get(artikelNummer) as Record<string, unknown> | undefined;
+        if (row) {
+          source = 'item_refs';
+          this.logger.debug?.({
+            msg: 'loaded agentic target from item reference',
+            itemId,
+            artikelNummer,
+            source
+          });
+        }
+      } catch (err) {
+        this.logger.error?.({ err, msg: 'failed to load item reference for agentic invocation', itemId, artikelNummer, source: 'item_refs' });
+        throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details (source: item_refs)', 500, { cause: err });
+      }
     }
 
-    return buildTargetFromRow(row, this.logger);
+    if (!row) {
+      try {
+        const results = findByMaterial?.all ? (findByMaterial.all(artikelNummer) as Record<string, unknown>[]) : [];
+        row = Array.isArray(results) && results.length > 0 ? results[0] : undefined;
+        if (row) {
+          source = 'findByMaterial fallback';
+          this.logger.info?.({
+            msg: 'loaded agentic target from fallback item lookup',
+            itemId,
+            artikelNummer,
+            source,
+            fallbackUsed: true
+          });
+        }
+      } catch (err) {
+        this.logger.error?.({ err, msg: 'failed to load fallback item rows for agentic invocation', itemId, artikelNummer, source: 'findByMaterial fallback' });
+        throw new FlowError('ITEM_LOOKUP_FAILED', 'Failed to load item details (source: findByMaterial fallback)', 500, {
+          cause: err
+        });
+      }
+    }
+
+    if (!row) {
+      this.logger.warn?.({ msg: 'agentic target lookup returned no rows', itemId, artikelNummer, source: source ?? 'none' });
+      throw new FlowError('ITEM_NOT_FOUND', `Item ${itemId} not found (sources: items,item_refs,findByMaterial fallback)`, 404);
+    }
+
+    const target = buildTargetFromRow(row, this.logger);
+    if (!target.Artikel_Nummer && artikelNummer) {
+      target.Artikel_Nummer = artikelNummer;
+    }
+    return target;
   }
 
   private mergeTargetWithRequestPayload(
@@ -723,16 +772,20 @@ export class AgenticModelInvoker {
       let target = await this.loadItemTarget(trimmedItemId);
       // TODO(agent): Confirm target Artikel_Nummer normalization rules once identifier formatting is centralized.
       try {
+        const parsedItemId = parseSequentialItemUUID(trimmedItemId);
+        const normalizedArtikelNummer =
+          parsedItemId?.kind === 'artikelnummer' ? parsedItemId.artikelNummer : trimmedItemId;
         const existingArtikelNummer =
           typeof target.Artikel_Nummer === 'string' ? target.Artikel_Nummer.trim() : null;
-        if (existingArtikelNummer && existingArtikelNummer !== trimmedItemId) {
+        if (existingArtikelNummer && existingArtikelNummer !== normalizedArtikelNummer) {
           this.logger.warn?.({
-            msg: 'agentic invocation target Artikel_Nummer mismatch; overwriting with request id',
+            msg: 'agentic invocation target Artikel_Nummer mismatch; overwriting with normalized artikel nummer',
             itemId: trimmedItemId,
-            existingArtikelNummer
+            existingArtikelNummer,
+            normalizedArtikelNummer
           });
         }
-        target.Artikel_Nummer = trimmedItemId;
+        target.Artikel_Nummer = normalizedArtikelNummer;
       } catch (err) {
         this.logger.warn?.({
           err,
