@@ -54,6 +54,7 @@ interface ScriptExecutionResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  timedOut: boolean;
 }
 
 interface MediaCopyMarker {
@@ -65,7 +66,8 @@ async function runErpSyncScript(
   scriptPath: string,
   csvPath: string,
   mediaMirrorDir: string | null,
-  mediaSourceDir: string
+  mediaSourceDir: string,
+  timeoutMs: number
 ): Promise<ScriptExecutionResult> {
   return new Promise<ScriptExecutionResult>((resolve, reject) => {
     const proc = spawn('bash', [scriptPath, csvPath], {
@@ -77,22 +79,70 @@ async function runErpSyncScript(
 
     let stdout = '';
     let stderr = '';
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+    let timedOut = false;
+
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      console.error('[sync-erp] script_timeout', { timeoutMs, scriptPath });
+      proc.kill('SIGTERM');
+    }, timeoutMs);
+
+    const flushBufferedLines = (
+      buffered: string,
+      logger: Pick<Console, 'info' | 'error'>,
+      level: 'info' | 'error',
+      tag: '[sync-erp] script_stdout' | '[sync-erp] script_stderr'
+    ): string => {
+      const normalized = buffered.replace(/\r\n/g, '\n');
+      const parts = normalized.split('\n');
+      const trailing = parts.pop() ?? '';
+      for (const line of parts) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        }
+        logger[level](tag, { line: trimmed });
+      }
+
+      return trailing;
+    };
 
     proc.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
+      const text = chunk.toString();
+      stdout += text;
+      stdoutBuffer += text;
+      stdoutBuffer = flushBufferedLines(stdoutBuffer, console, 'info', '[sync-erp] script_stdout');
     });
 
     proc.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
+      const text = chunk.toString();
+      stderr += text;
+      stderrBuffer += text;
+      stderrBuffer = flushBufferedLines(stderrBuffer, console, 'error', '[sync-erp] script_stderr');
     });
 
-    proc.on('error', reject);
+    proc.on('error', (error) => {
+      clearTimeout(timeoutHandle);
+      reject(error);
+    });
 
     proc.on('close', (exitCode) => {
+      clearTimeout(timeoutHandle);
+      const pendingStdout = stdoutBuffer.trim();
+      if (pendingStdout) {
+        console.info('[sync-erp] script_stdout', { line: pendingStdout });
+      }
+      const pendingStderr = stderrBuffer.trim();
+      if (pendingStderr) {
+        console.error('[sync-erp] script_stderr', { line: pendingStderr });
+      }
       resolve({
         exitCode: exitCode ?? -1,
         stdout: stdout.trim(),
-        stderr: stderr.trim()
+        stderr: stderr.trim(),
+        timedOut
       });
     });
   });
@@ -212,12 +262,15 @@ const action = defineHttpAction({
       });
 
       const scriptPath = resolveErpSyncScriptPath(console);
-      console.info('[sync-erp] script_started', { scriptPath });
+      const scriptTimeoutMs = Number.parseInt(process.env.ERP_SYNC_SCRIPT_TIMEOUT_MS || '300000', 10);
+      const normalizedScriptTimeoutMs = Number.isFinite(scriptTimeoutMs) && scriptTimeoutMs > 0 ? scriptTimeoutMs : 300000;
+      console.info('[sync-erp] script_started', { scriptPath, timeoutMs: normalizedScriptTimeoutMs });
       const scriptResult = await runErpSyncScript(
         scriptPath,
         stagedExport.itemsPath,
         ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null,
-        MEDIA_DIR
+        MEDIA_DIR,
+        normalizedScriptTimeoutMs
       );
       const mediaCopyMarker = parseMediaCopyMarker(`${scriptResult.stdout}\n${scriptResult.stderr}`);
       console.info('[sync-erp] script_finished', {
@@ -240,9 +293,12 @@ const action = defineHttpAction({
         ok: false,
         phase: 'script_finished',
         exitCode: scriptResult.exitCode,
+        timedOut: scriptResult.timedOut,
         stdout: scriptResult.stdout,
         stderr: scriptResult.stderr,
-        error: 'ERP sync script exited with a non-zero code.'
+        error: scriptResult.timedOut
+          ? 'ERP sync script exceeded execution timeout and was terminated.'
+          : 'ERP sync script exited with a non-zero code.'
       });
     } catch (error) {
       console.error('[sync-erp] script_finished runtime_exception', { error });
