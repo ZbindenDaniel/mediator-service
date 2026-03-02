@@ -488,10 +488,80 @@ const action = defineHttpAction({
 
     if (req.method === 'GET') {
       try {
-        const item = ctx.getItem.get(itemId);
+        let item = (ctx.getItem.get(itemId) as Item | undefined) ?? null;
+        let identifierMode: 'itemUUID' | 'artikelNummer' = 'itemUUID';
+        let resolvedItemId = itemId;
+        let fallbackReference: ItemRef | null = null;
+        let fallbackInstances: Item[] = [];
+
+        if (!item) {
+          identifierMode = 'artikelNummer';
+          try {
+            if (ctx.getItemReference?.get) {
+              fallbackReference = (ctx.getItemReference.get(itemId) as ItemRef | undefined) ?? null;
+            }
+            if (ctx.findByMaterial?.all) {
+              const materialInstances = ctx.findByMaterial.all(itemId) as Item[] | undefined;
+              fallbackInstances = Array.isArray(materialInstances) ? materialInstances : [];
+            }
+            if (fallbackInstances.length > 0) {
+              item = fallbackInstances[0];
+              resolvedItemId = item?.ItemUUID || itemId;
+            }
+            console.info('[save-item] GET detail identifier lookup resolved', {
+              identifierMode,
+              requestedIdentifier: itemId,
+              foundReference: Boolean(fallbackReference),
+              instanceCount: fallbackInstances.length
+            });
+          } catch (error) {
+            console.error('[save-item] GET detail fallback identifier lookup failed', {
+              identifierMode,
+              requestedIdentifier: itemId,
+              error,
+              stack: error instanceof Error ? error.stack : undefined
+            });
+            return sendJson(res, 404, { error: 'Not found' });
+          }
+
+          if (!item && fallbackReference && fallbackInstances.length === 0) {
+            console.warn('[save-item] Reference found without instances for detail lookup', {
+              identifierMode,
+              requestedIdentifier: itemId,
+              artikelNummer: fallbackReference.Artikel_Nummer
+            });
+            const referenceBackedItem: Item = {
+              ItemUUID: itemId,
+              Artikel_Nummer: fallbackReference.Artikel_Nummer,
+              BoxID: null,
+              Location: null,
+              ShelfLabel: null,
+              UpdatedAt: new Date(0),
+              Datum_erfasst: undefined,
+              ...fallbackReference,
+              Auf_Lager: null
+            };
+            return sendJson(res, 200, {
+              item: referenceBackedItem,
+              reference: fallbackReference,
+              box: null,
+              events: [],
+              agentic: null,
+              agenticReviewAutomation: null,
+              media: collectMediaAssets(itemId, fallbackReference.Grafikname, fallbackReference.Artikel_Nummer),
+              instances: []
+            });
+          }
+        }
+
         if (!item) return sendJson(res, 404, { error: 'Not found' });
+
         const box = ctx.getBox.get(item.BoxID);
-        const events = ctx.listEventsForItem.all(itemId);
+        const events = ctx.listEventsForItem.all(resolvedItemId);
+        console.info('[save-item] GET detail identifier mode in use', {
+          identifierMode,
+          requestedIdentifier: itemId
+        });
         let agentic: AgenticRun | null = null;
         let agenticArtikelNummer = '';
         try {

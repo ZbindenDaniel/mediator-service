@@ -57,17 +57,126 @@ describe('save-item action', () => {
     const req = createRequest('/api/items/ITEM-1');
     const { res, getStatus, getBody } = createMockResponse();
 
-    try {
-      await action.handle(req, res, ctx);
-    } catch (error) {
-      console.error('[save-item.test] handle failed', { error });
-      throw error;
-    }
+    await action.handle(req, res, ctx);
 
     const body = getBody();
     expect(getStatus()).toBe(200);
     expect(body.item).toEqual(expect.objectContaining({ ItemUUID: 'ITEM-1', Artikel_Nummer: 'ART-1' }));
     expect(body.reference).toEqual(expect.objectContaining({ Artikel_Nummer: 'ART-1' }));
     expect(Array.isArray(body.media)).toBe(true);
+  });
+
+  it('returns representative instance-backed detail for Artikelnummer lookups with instances', async () => {
+    const ctx = {
+      getItem: {
+        get: jest.fn(() => null)
+      },
+      findByMaterial: {
+        all: jest.fn(() => [
+          {
+            ItemUUID: 'ITEM-2',
+            Artikel_Nummer: 'ART-2',
+            BoxID: 'BOX-2',
+            Location: 'A-01',
+            Einheit: ItemEinheit.Stk,
+            Quality: 2,
+            UpdatedAt: new Date('2024-01-01T00:00:00.000Z')
+          }
+        ])
+      },
+      getItemReference: {
+        get: jest.fn(() => ({ Artikel_Nummer: 'ART-2', Kurzbeschreibung: 'Reference text' }))
+      },
+      getBox: {
+        get: jest.fn(() => ({ BoxID: 'BOX-2', Label: 'Box 2' }))
+      },
+      listEventsForItem: {
+        all: jest.fn(() => [])
+      },
+      getAgenticRun: {
+        get: jest.fn(() => null)
+      }
+    };
+
+    const req = createRequest('/api/items/ART-2');
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    const body = getBody();
+    expect(getStatus()).toBe(200);
+    expect(body.item).toEqual(expect.objectContaining({ ItemUUID: 'ITEM-2', Artikel_Nummer: 'ART-2' }));
+    expect(body.reference).toEqual(expect.objectContaining({ Artikel_Nummer: 'ART-2' }));
+    expect(Array.isArray(body.instances)).toBe(true);
+    expect(body.instances.length).toBe(1);
+    expect(ctx.listEventsForItem.all).toHaveBeenCalledWith('ITEM-2');
+  });
+
+  it('returns reference-backed detail and empty instances for Artikelnummer lookups without instances', async () => {
+    const ctx = {
+      getItem: {
+        get: jest.fn(() => null)
+      },
+      findByMaterial: {
+        all: jest.fn(() => [])
+      },
+      getItemReference: {
+        get: jest.fn(() => ({ Artikel_Nummer: 'ART-3', Kurzbeschreibung: 'Reference only' }))
+      },
+      getBox: {
+        get: jest.fn(() => null)
+      },
+      listEventsForItem: {
+        all: jest.fn(() => [])
+      }
+    };
+
+    const req = createRequest('/api/items/ART-3');
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    const body = getBody();
+    expect(getStatus()).toBe(200);
+    expect(body.item).toEqual(
+      expect.objectContaining({
+        ItemUUID: 'ART-3',
+        Artikel_Nummer: 'ART-3',
+        BoxID: null,
+        Location: null,
+        ShelfLabel: null
+      })
+    );
+    expect(body.reference).toEqual(expect.objectContaining({ Artikel_Nummer: 'ART-3' }));
+    expect(body.instances).toEqual([]);
+    expect(body.events).toEqual([]);
+  });
+
+  it('returns 404 when identifier is unknown', async () => {
+    const ctx = {
+      getItem: {
+        get: jest.fn(() => null)
+      },
+      findByMaterial: {
+        all: jest.fn(() => [])
+      },
+      getItemReference: {
+        get: jest.fn(() => null)
+      },
+      getBox: {
+        get: jest.fn(() => null)
+      },
+      listEventsForItem: {
+        all: jest.fn(() => [])
+      }
+    };
+
+    const req = createRequest('/api/items/UNKNOWN-ID');
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(404);
+    expect(getBody()).toEqual({ error: 'Not found' });
   });
 });
