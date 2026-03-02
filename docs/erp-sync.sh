@@ -156,6 +156,7 @@ function do_curl {
     -X 'POST' \
     -H 'Content-Type:multipart/form-data' \
     --insecure \
+    --no-progress-meter \
     --connect-timeout "$curl_connect_timeout_s" \
     --max-time "$curl_max_time_s" \
     -F 'action=CsvImport/import' \
