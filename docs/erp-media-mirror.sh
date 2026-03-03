@@ -65,7 +65,7 @@ while IFS= read -r raw_item_id; do
 done < <(printf '%s\n' "$item_ids_raw" | tr ',' '\n')
 
 if [ "$selected_dir_count" -eq 0 ]; then
-  echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=0 destination_count=0 flattened=true filename_collisions=0 selected_folder_count=0"
+  echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=0 destination_count=0 flattened=true selected_folder_count=0"
   exit 0
 fi
 
@@ -105,5 +105,5 @@ fi
 
 echo "[erp-sync] media_copy_phase phase=copy status=done source=$source_dir destination=$mirror_dir source_count=$source_count" >&2
 
-echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=$source_count destination_count=-1 flattened=true filename_collisions=-1 selected_folder_count=$selected_dir_count"
+echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=$source_count destination_count=-1 flattened=true selected_folder_count=$selected_dir_count"
 exit 0
