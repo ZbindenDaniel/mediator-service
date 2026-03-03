@@ -37,6 +37,28 @@ resolve_positive_integer_or_default() {
 
 # TODO(erp-sync-media-copy): Consider checksum-based verification when mirror destinations are remote mounts with delayed writes.
 
+
+normalize_item_ids() {
+  local raw="${ERP_SYNC_ITEM_IDS:-}"
+  local normalized=""
+  local entry=""
+
+  while IFS= read -r entry; do
+    entry="$(printf '%s' "$entry" | xargs)"
+    if [ -z "$entry" ]; then
+      continue
+    fi
+
+    if [ -z "$normalized" ]; then
+      normalized="$entry"
+    else
+      normalized+=$'\n'"$entry"
+    fi
+  done < <(printf '%s\n' "$raw" | tr ',' '\n')
+
+  printf '%s' "$normalized"
+}
+
 test -z "$1" && fail "Kein CSV-Dateiname angegeben."
 test -f "$1" || fail "Datei '$1' nicht gefunden."
 file="$1"
@@ -212,6 +234,15 @@ else
   exit 2
 fi
 
+
+normalized_item_ids="$(normalize_item_ids)"
+if [ -z "$normalized_item_ids" ]; then
+  rm -f "$tmpf"
+  echo "[erp-sync] media_copy_result status=failed reason=item_ids_missing" >&2
+  exit 3
+fi
+export ERP_SYNC_ITEM_IDS="$normalized_item_ids"
+echo "[erp-sync] media_copy_scope item_count=$(printf '%s\n' "$ERP_SYNC_ITEM_IDS" | sed '/^$/d' | wc -l | tr -d ' ')" >&2
 
 echo "[erp-sync] phase=media_mirror_start" >&2
 if ! bash docs/erp-media-mirror.sh; then
