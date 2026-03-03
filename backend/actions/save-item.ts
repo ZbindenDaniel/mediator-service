@@ -75,7 +75,15 @@ function mediaExists(relative: string): boolean {
   }
 }
 
-function normaliseMediaReference(
+function hasFolderPrefix(value: string, folder: string): boolean {
+  return value === folder || value.startsWith(`${folder}/`);
+}
+
+function hasPathSegment(value: string): boolean {
+  return value.includes('/');
+}
+
+export function normaliseMediaReference(
   itemId: string,
   artikelNummer: string | null | undefined,
   value?: string | null
@@ -110,38 +118,58 @@ function normaliseMediaReference(
     return `${MEDIA_PREFIX}${relative}`;
   }
 
-  const cleaned = trimmed.replace(/^\/+/g, '').replace(/\\/g, '/');
-  const candidates: string[] = [];
-  const pushCandidate = (relative: string | null) => {
-    if (!relative) return;
-    if (!candidates.includes(relative)) {
-      candidates.push(relative);
+  try {
+    const cleaned = trimmed.replace(/^\/+/g, '').replace(/\\/g, '/');
+    const candidates: string[] = [];
+    const pushCandidate = (relative: string | null) => {
+      if (!relative) return;
+      if (!candidates.includes(relative)) {
+        candidates.push(relative);
+      }
+    };
+
+    const cleanedRelative = buildRelativePath(cleaned);
+    if (cleanedRelative && hasFolderPrefix(cleanedRelative, mediaFolder)) {
+      console.info('[save-item] Input already uses canonical media folder prefix', {
+        itemId,
+        artikelNummer: artikelNummer ?? null,
+        candidate: cleanedRelative
+      });
     }
-  };
 
-  pushCandidate(buildRelativePath(`${mediaFolder}/${cleaned}`));
-  pushCandidate(buildRelativePath(cleaned));
-  const baseName = path.posix.basename(cleaned);
-  pushCandidate(buildRelativePath(`${mediaFolder}/${baseName}`));
-  if (mediaFolder !== itemId) {
-    pushCandidate(buildRelativePath(`${itemId}/${cleaned}`));
-    pushCandidate(buildRelativePath(`${itemId}/${baseName}`));
-  }
+    pushCandidate(cleanedRelative);
 
-  for (const relative of candidates) {
-    if (mediaExists(relative)) {
-      return `${MEDIA_PREFIX}${relative}`;
+    if (!hasPathSegment(cleaned)) {
+      pushCandidate(buildRelativePath(`${mediaFolder}/${cleaned}`));
+      if (mediaFolder !== itemId) {
+        pushCandidate(buildRelativePath(`${itemId}/${cleaned}`));
+      }
     }
-  }
 
-  if (candidates.length > 0) {
-    console.warn('Media asset missing on disk', {
+    for (const relative of candidates) {
+      if (mediaExists(relative)) {
+        return `${MEDIA_PREFIX}${relative}`;
+      }
+    }
+
+    if (candidates.length > 0) {
+      console.warn('Media asset missing on disk', {
+        itemId,
+        candidate: trimmed,
+        attemptedPath: path.join(MEDIA_DIR, candidates[0])
+      });
+      return `${MEDIA_PREFIX}${candidates[0]}`;
+    }
+  } catch (error) {
+    console.error('[save-item] Failed while generating media normalisation candidates', {
       itemId,
+      artikelNummer: artikelNummer ?? null,
       candidate: trimmed,
-      attemptedPath: path.join(MEDIA_DIR, candidates[0])
+      error
     });
-    return `${MEDIA_PREFIX}${candidates[0]}`;
+    return trimmed;
   }
+
 
   console.warn('Media asset missing on disk', { itemId, candidate: trimmed });
   return trimmed;
