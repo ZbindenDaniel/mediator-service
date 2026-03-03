@@ -102,15 +102,22 @@ function deriveLastObservedPhase(output: string): string | null {
 async function runErpSyncScript(
   scriptPath: string,
   csvPath: string,
+  itemIds: string[],
   mediaMirrorDir: string | null,
   mediaSourceDir: string,
   timeoutMs: number
 ): Promise<ScriptExecutionResult> {
   return new Promise<ScriptExecutionResult>((resolve, reject) => {
+    const itemIdsEnv = itemIds.join('\n');
     const proc = spawn('bash', [scriptPath, csvPath], {
       env: mediaMirrorDir
-        ? { ...process.env, ERP_MEDIA_MIRROR_DIR: mediaMirrorDir, ERP_MEDIA_SOURCE_DIR: mediaSourceDir }
-        : { ...process.env, ERP_MEDIA_SOURCE_DIR: mediaSourceDir },
+        ? {
+            ...process.env,
+            ERP_MEDIA_MIRROR_DIR: mediaMirrorDir,
+            ERP_MEDIA_SOURCE_DIR: mediaSourceDir,
+            ERP_SYNC_ITEM_IDS: itemIdsEnv
+          }
+        : { ...process.env, ERP_MEDIA_SOURCE_DIR: mediaSourceDir, ERP_SYNC_ITEM_IDS: itemIdsEnv },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -313,9 +320,11 @@ const action = defineHttpAction({
       const scriptTimeoutMs = Number.parseInt(process.env.ERP_SYNC_SCRIPT_TIMEOUT_MS || '300000', 10);
       const normalizedScriptTimeoutMs = Number.isFinite(scriptTimeoutMs) && scriptTimeoutMs > 0 ? scriptTimeoutMs : 300000;
       console.info('[sync-erp] script_started', { scriptPath, timeoutMs: normalizedScriptTimeoutMs });
+      console.info('[sync-erp] script_item_scope', { itemCount: itemIds.length });
       const scriptResult = await runErpSyncScript(
         scriptPath,
         stagedExport.itemsPath,
+        itemIds,
         ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null,
         MEDIA_DIR,
         normalizedScriptTimeoutMs
