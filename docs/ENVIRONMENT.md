@@ -34,8 +34,8 @@ This document enumerates all environment variables consumed by the mediator serv
 | `INBOX_DIR` | `backend/data/inbox` | Directory watched for CSV imports. |
 | `ARCHIVE_DIR` | `backend/data/archive` | Directory used to archive processed CSVs. |
 | `MEDIA_STORAGE_MODE` | `local` | `local` or `webdav` media storage backend. |
-| `MEDIA_DIR` | (unset) | Base media directory used for local storage. |
-| `MEDIA_DIR_OVERRIDE` | (unset) | Overrides `MEDIA_DIR` if provided. |
+| `MEDIA_DIR` | Deprecated | Legacy variable; ignored by runtime (local storage is fixed to `dist/media`). |
+| `MEDIA_DIR_OVERRIDE` | Deprecated | Legacy variable; ignored by runtime (local storage is fixed to `dist/media`). |
 | `MEDIA_ROOT_DIR` | (unset) | Absolute mounted media root directory used to derive fixed paths: `<root>/shopbilder` (WebDAV) and `<root>/shopbilder-import` (ERP mirror). URLs are rejected. |
 
 Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The service derives WebDAV at `<root>/shopbilder` and ERP mirror at `<root>/shopbilder-import`. `davs://` URLs are not accepted; only local filesystem mount paths are supported.
@@ -77,7 +77,7 @@ Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The servi
 | `ERP_IMPORT_FORM_FIELD` | `file` | Form field name used to upload the import file. |
 | `ERP_IMPORT_TIMEOUT_MS` | `30000` | Timeout for ERP import requests. |
 | `ERP_IMPORT_CLIENT_ID` | (unset) | Optional client identifier for ERP imports. |
-| `ERP_MEDIA_MIRROR_DIR` | (unset) | Optional destination directory for `/api/sync/erp` media mirror copy stage. When set, `docs/erp-sync.sh` copies media from `ERP_MEDIA_SOURCE_DIR` (injected by backend) or `MEDIA_DIR`; failures exit non-zero and surface in API stdout/stderr. |
+| `ERP_MEDIA_MIRROR_DIR` | Derived from `MEDIA_ROOT_DIR` | Mirror destination for `/api/sync/erp` media copy stage (`<root>/shopbilder-import`). Override only for controlled maintenance windows; keep runtime configuration aligned with the fixed root contract. |
 
 
 Operator check: look for `[erp-sync] media_copy_result status=success` in script output and `[sync-erp] script_finished` with `mediaCopyStatus: 'success'` in backend logs to confirm images were mirrored.
@@ -139,3 +139,10 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
 | `AUTO_PRINT_ITEM_LABEL` | `false` | Toggles auto-printing after item creation in the UI. |
+
+
+## Media cleanup guardrails
+
+- Runtime/API flows should avoid implicit bulk cleanup of mounted media roots.
+- Prefer explicit cleanup via dedicated shell scripts (manual or scheduled maintenance jobs) so deletion scope is reviewed before execution.
+- Keep structured logs for destructive operations and include resolved root/path context for incident recovery.

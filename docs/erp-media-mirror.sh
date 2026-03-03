@@ -1,7 +1,7 @@
 #!/bin/bash
 
 mirror_dir="${ERP_MEDIA_MIRROR_DIR:-}"
-source_dir="${ERP_MEDIA_SOURCE_DIR:-${MEDIA_DIR:-}}"
+source_dir="${ERP_MEDIA_SOURCE_DIR:-dist/media}"
 item_ids_raw="${ERP_SYNC_ITEM_IDS:-}"
 
 image_find_args=(
