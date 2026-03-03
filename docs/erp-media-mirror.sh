@@ -71,6 +71,7 @@ fi
 
 source_count=0
 copy_failed=0
+discovery_failed=0
 
 while IFS= read -r item_dir; do
   if [ -z "$item_dir" ]; then
@@ -79,10 +80,16 @@ while IFS= read -r item_dir; do
 
   if ! find "$item_dir" "${image_find_args[@]}" -print0 >>"$tmp_discovery" 2>>"$tmpf_media"; then
     echo "[erp-sync] media_copy_error reason=folder_discovery_failed folder=$item_dir details_file=$tmpf_media" >&2
-    cat "$tmpf_media" >&2
-    exit 1
+    discovery_failed=1
+    break
   fi
 done <"$tmp_selected_dirs"
+
+if [ "$discovery_failed" -ne 0 ]; then
+  cat "$tmpf_media" >&2
+  echo "[erp-sync] media_copy_result status=failed reason=source_discovery_failed source=$source_dir destination=$mirror_dir selected_folder_count=$selected_dir_count" >&2
+  exit 1
+fi
 
 echo "[erp-sync] media_copy_phase phase=source_discovery status=done source=$source_dir selected_folder_count=$selected_dir_count" >&2
 echo "[erp-sync] media_copy_phase phase=copy status=start source=$source_dir destination=$mirror_dir" >&2
