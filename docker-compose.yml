@@ -29,6 +29,16 @@ ervices:
 
   mediator:
     image: ghcr.io/zbindendaniel/mediator-service:2.1
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo '[mediator] Waiting for WebDAV mount at /mnt/shopbilder...';
+        until mountpoint -q /mnt/shopbilder; do
+          sleep 2;
+        done;
+        echo '[mediator] WebDAV mount detected. Starting mediator server.';
+        exec node dist/backend/server.js
     env_file: .env
     container_name: mediator
     expose:
