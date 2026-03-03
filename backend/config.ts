@@ -312,6 +312,7 @@ export const ERP_IMPORT_FORM_FULL_PREVIEW =
   parseBooleanFlag(process.env.ERP_IMPORT_FORM_FULL_PREVIEW, 'ERP_IMPORT_FORM_FULL_PREVIEW') ?? false;
 export const ERP_IMPORT_PROFILE_ID = (process.env.ERP_IMPORT_PROFILE_ID || '').trim();
 export const ERP_IMPORT_TMP_PROFILE_ID = (process.env.ERP_IMPORT_TMP_PROFILE_ID || '').trim();
+export const ERP_MEDIA_MIRROR_DIR = (process.env.ERP_MEDIA_MIRROR_DIR || '').trim();
 const rawErpImportRequestContract = (process.env.ERP_IMPORT_REQUEST_CONTRACT || '').trim().toLowerCase();
 export const ERP_IMPORT_REQUEST_CONTRACT =
   rawErpImportRequestContract === 'legacy' ? 'legacy' : 'browser-parity';
