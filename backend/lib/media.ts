@@ -1,13 +1,12 @@
 import path from 'path';
-import { MEDIA_DIR_OVERRIDE, MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
+import { LOCAL_MEDIA_DIR, MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
 import { parseSequentialItemUUID } from './itemIds';
 
 // TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
-// TODO(media-storage): Validate MEDIA_DIR_OVERRIDE relative path resolution conventions with deployments.
 // TODO(webdav-feedback): Confirm startup logging format with operators once WebDAV mounts are deployed.
 // TODO(media-storage): Ensure startup logs are consistently surfaced in container deployments.
 // TODO(media-tests): Cover media directory resolution error handling and overrides.
-const DEFAULT_MEDIA_DIR = path.join(__dirname, '..', 'media');
+const DEFAULT_MEDIA_DIR = LOCAL_MEDIA_DIR;
 
 function resolveMediaDir(): string {
   let resolved = DEFAULT_MEDIA_DIR;
@@ -18,23 +17,21 @@ function resolveMediaDir(): string {
         resolved = WEB_DAV_DIR;
       } else {
         console.warn(
-          '[media] WEB_DAV_DIR missing or invalid; falling back to default media directory. ' +
-            'Mount the WebDAV share and set WEB_DAV_DIR to that absolute path.'
+          '[media] WEB_DAV_DIR missing or invalid; falling back to fixed local media directory (dist/media). ' +
+            'Set MEDIA_ROOT_DIR to the mounted root for webdav mode.'
         );
       }
-    } else if (MEDIA_STORAGE_MODE === 'local' && MEDIA_DIR_OVERRIDE) {
-      resolved = path.isAbsolute(MEDIA_DIR_OVERRIDE)
-        ? MEDIA_DIR_OVERRIDE
-        : path.resolve(process.cwd(), MEDIA_DIR_OVERRIDE);
+    } else if (MEDIA_STORAGE_MODE === 'local') {
+      resolved = DEFAULT_MEDIA_DIR;
     }
   } catch (error) {
-    console.error('[media] Failed to resolve media directory override; using default media directory.', {
+    console.error('[media] Failed to resolve media directory; using fixed local media directory.', {
       error
     });
     resolved = DEFAULT_MEDIA_DIR;
   }
 
-  const overrideValue = MEDIA_STORAGE_MODE === 'webdav' ? WEB_DAV_DIR : MEDIA_DIR_OVERRIDE;
+  const overrideValue = MEDIA_STORAGE_MODE === 'webdav' ? WEB_DAV_DIR : null;
   console.info('[media] Media storage resolved', {
     mode: MEDIA_STORAGE_MODE,
     override: overrideValue || null,

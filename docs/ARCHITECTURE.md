@@ -84,8 +84,14 @@ Design:owner@mediator and target the ongoing release documentation refresh.
 
 ## Data & Media (`data/`)
 - `data/` contains CSV seeds and archive import/export payloads used by test and operational flows.
-- Runtime media storage is configurable (`MEDIA_STORAGE_MODE=local|webdav`) and is resolved through backend media helpers rather than a fixed repository `media/` folder.
+- Runtime media storage is selectable via `MEDIA_STORAGE_MODE=local|webdav`; local mode always uses `dist/media`, while webdav mode derives fixed folders from `MEDIA_ROOT_DIR`.
+- Mounted media roots are expected to expose two fixed subfolders: `shopbilder/` (source of truth, grouped by `Artikel_Nummer`) and `shopbilder-import/` (flat sync target for shop ingestion).
 - Item image naming conventions keep `Artikel_Nummer` + image index semantics so importer/exporter and print previews resolve assets consistently.
+
+### Media cleanup policy
+- Application cleanup should remain minimal by default: avoid recursive bulk deletion across `shopbilder/` and `shopbilder-import/` during routine API operations.
+- When operational cleanup is required, prefer explicit operator-run shell scripts over implicit runtime cleanup paths so scope and timing are auditable.
+- Destructive file operations should emit structured logs and keep `try/catch` boundaries close to filesystem calls to preserve incident forensics.
 
 ## Scripts & Root Utilities
 - `scripts/` hosts operational helpers and test/build wrappers (including `scripts/run-tests.js`).
