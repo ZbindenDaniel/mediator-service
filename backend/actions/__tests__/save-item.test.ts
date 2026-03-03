@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { ItemEinheit } from '../../../models';
-import action from '../save-item';
+import action, { normaliseMediaReference } from '../save-item';
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -178,5 +178,54 @@ describe('save-item action', () => {
 
     expect(getStatus()).toBe(404);
     expect(getBody()).toEqual({ error: 'Not found' });
+  });
+});
+
+
+describe('normaliseMediaReference', () => {
+  const itemId = 'ITEM-1';
+  const artikelNummer = '4735';
+
+
+  it('keeps single artikel-prefixed relative path when already prefixed', () => {
+    const existsSpy = jest
+      .spyOn(require('fs'), 'existsSync')
+      .mockImplementation((candidate: string) => String(candidate).endsWith('004735/file.jpg'));
+
+    const result = normaliseMediaReference(itemId, artikelNummer, '004735/file.jpg');
+
+    expect(result).toBe('/media/004735/file.jpg');
+    existsSpy.mockRestore();
+  });
+
+  it('prepends media folder for bare filenames', () => {
+    const existsSpy = jest
+      .spyOn(require('fs'), 'existsSync')
+      .mockImplementation((candidate: string) => String(candidate).endsWith('004735/file.jpg'));
+
+    const result = normaliseMediaReference(itemId, artikelNummer, 'file.jpg');
+
+    expect(result).toBe('/media/004735/file.jpg');
+    existsSpy.mockRestore();
+  });
+
+  it('keeps /media-prefixed paths unchanged', () => {
+    const existsSpy = jest
+      .spyOn(require('fs'), 'existsSync')
+      .mockImplementation((candidate: string) => String(candidate).endsWith('004735/file.jpg'));
+
+    const result = normaliseMediaReference(itemId, artikelNummer, '/media/004735/file.jpg');
+
+    expect(result).toBe('/media/004735/file.jpg');
+    existsSpy.mockRestore();
+  });
+
+  it('falls back without doubled folder prefixes when file is missing', () => {
+    const existsSpy = jest.spyOn(require('fs'), 'existsSync').mockReturnValue(false);
+
+    const result = normaliseMediaReference(itemId, artikelNummer, '004735/file.jpg');
+
+    expect(result).toBe('/media/004735/file.jpg');
+    existsSpy.mockRestore();
   });
 });
