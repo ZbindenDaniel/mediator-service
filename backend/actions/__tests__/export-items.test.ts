@@ -474,6 +474,90 @@ describe('export-items import contract header regimes', () => {
 
     logSpy.mockRestore();
   });
+
+  test('golden media-field contract keeps headers and serialized values for manual+automatic exports', () => {
+    const row = {
+      ...baseRow,
+      Grafikname: '/media/ART-1/ART-1-1.jpg',
+      ImageNames: '/media/ART-1/ART-1-1.jpg|/media/ART-1/ART-1-2.jpg',
+      ItemUUID: 'missing-media-uuid'
+    };
+
+    const manual = serializeItemsToCsv([row], undefined, { exportMode: 'backup' });
+    const automatic = serializeItemsToCsv([row], undefined, { exportMode: 'erp' });
+
+    const [manualHeader, manualValues] = manual.csv.split('\n');
+    const [automaticHeader, automaticValues] = automatic.csv.split('\n');
+
+    expect(manualHeader.split(',').slice(0, 5)).toEqual([
+      'Artikel-Nummer',
+      'Artikeltyp',
+      'CreatedAt',
+      'Grafikname(n)',
+      'Artikelbeschreibung'
+    ]);
+    expect(manualValues.split(',').slice(0, 5)).toEqual([
+      'A-1000',
+      'Laptop',
+      '2024-01-01',
+      'ART-1/ART-1-1.jpg',
+      'Test item'
+    ]);
+
+    expect(automaticHeader.split(',').slice(0, 5)).toEqual([
+      'partnumber',
+      'type',
+      'CreatedAt',
+      'image',
+      'description'
+    ]);
+    expect(automaticValues.split(',').slice(0, 5)).toEqual([
+      'A-1000',
+      'Laptop',
+      '2024-01-01',
+      'ART-1/ART-1-1.jpg',
+      'Test item'
+    ]);
+  });
+
+
+
+  test('preserves multi-image Grafikname lists as pipe-delimited values for export', () => {
+    const { csv } = serializeItemsToCsv([
+      {
+        ...baseRow,
+        Grafikname: '/media/ART-8/ART-8-1.jpg|/media/ART-8/ART-8-2.jpg',
+        ItemUUID: 'missing-multi-media-uuid'
+      }
+    ]);
+
+    const [header, values] = csv.split('\n');
+    const headers = header.split(',');
+    const mediaIndex = headers.indexOf('Grafikname(n)');
+
+    expect(values.split(',')[mediaIndex]).toBe('ART-8/ART-8-1.jpg|ART-8/ART-8-2.jpg');
+  });
+
+  test('preserves single primary Grafikname when no ImageNames list is present', () => {
+    const { csv } = serializeItemsToCsv(
+      [
+        {
+          ...baseRow,
+          Grafikname: '/media/ART-7/ART-7-1.png',
+          ImageNames: '',
+          ItemUUID: 'missing-single-media-uuid'
+        }
+      ],
+      undefined,
+      { exportMode: 'backup' }
+    );
+
+    const [header, values] = csv.split('\n');
+    const headers = header.split(',');
+    const mediaIndex = headers.indexOf('Grafikname(n)');
+
+    expect(values.split(',')[mediaIndex]).toBe('ART-7/ART-7-1.png');
+  });
 });
 
 
