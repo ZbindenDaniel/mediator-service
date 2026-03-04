@@ -5,6 +5,7 @@ import os from 'os';
 import { defineHttpAction } from './index';
 import { ARCHIVE_DIR } from '../config';
 import { MEDIA_DIR } from '../lib/media';
+import { emitMediaAudit } from '../lib/media-audit';
 import { ingestBoxesCsv, ingestEventsCsv, ingestAgenticRunsCsv } from '../importer';
 import {
   computeChecksum,
@@ -283,15 +284,43 @@ const action = defineHttpAction({
           const relative = normalizedPath.slice('media/'.length);
           const safeTarget = resolveSafePath(MEDIA_DIR, relative);
           if (!safeTarget) {
+            emitMediaAudit({
+              action: 'write',
+              scope: 'import',
+              identifier: { artikelNummer: null, itemUUID: null },
+              path: normalizedPath,
+              root: MEDIA_DIR,
+              outcome: 'blocked',
+              reason: 'outside-media-root',
+            });
             console.warn('[csv-import] Skipping media entry outside MEDIA_DIR bounds', { entry: normalizedPath });
             continue;
           }
+          emitMediaAudit({
+            action: 'write',
+            scope: 'import',
+            identifier: { artikelNummer: null, itemUUID: null },
+            path: safeTarget,
+            root: MEDIA_DIR,
+            outcome: 'start',
+            reason: 'archive-extract',
+          });
           try {
             const entryStartedAt = Date.now();
             await fs.promises.mkdir(path.dirname(safeTarget), { recursive: true });
             await extractZipEntryToPath(resolvedArchivePath, entryName, safeTarget, unzipOptions);
             const entryDuration = Date.now() - entryStartedAt;
             if (entryDuration > ENTRY_TIMEOUT_MS) {
+              emitMediaAudit({
+                action: 'write',
+                scope: 'import',
+                identifier: { artikelNummer: null, itemUUID: null },
+                path: safeTarget,
+                root: MEDIA_DIR,
+                outcome: 'error',
+                reason: 'entry-timeout',
+                error: `Media extraction exceeded time limit for ${normalizedPath}.`,
+              });
               console.warn('[csv-import] Media extraction exceeded time limit', {
                 entry: normalizedPath,
                 entryDuration,
@@ -300,12 +329,31 @@ const action = defineHttpAction({
               return sendJson(res, 408, { error: `Media extraction exceeded time limit for ${normalizedPath}.` });
             }
             uploadContext.mediaFiles += 1;
+            emitMediaAudit({
+              action: 'write',
+              scope: 'import',
+              identifier: { artikelNummer: null, itemUUID: null },
+              path: safeTarget,
+              root: MEDIA_DIR,
+              outcome: 'success',
+              reason: 'archive-extract',
+            });
             console.info('[csv-import] Extracted media asset', {
               entry: normalizedPath,
               entryDuration,
               mediaCount: uploadContext.mediaFiles,
             });
           } catch (mediaError) {
+            emitMediaAudit({
+              action: 'write',
+              scope: 'import',
+              identifier: { artikelNummer: null, itemUUID: null },
+              path: safeTarget,
+              root: MEDIA_DIR,
+              outcome: 'error',
+              reason: 'extract-failed',
+              error: mediaError,
+            });
             console.error('[csv-import] Failed to persist media asset from archive', { entry: normalizedPath, mediaError });
             const isClientZipIssue = mediaError instanceof ZipProcessError && ['password', 'timeout'].includes(mediaError.kind);
             const status = isClientZipIssue ? 400 : 500;

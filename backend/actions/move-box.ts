@@ -4,6 +4,7 @@ import path from 'path';
 import { defineHttpAction } from './index';
 import { resolveStandortLabel } from '../standort-label';
 import { MEDIA_DIR } from '../lib/media';
+import { emitMediaAudit } from '../lib/media-audit';
 
 const BOX_MEDIA_PREFIX = '/media/';
 const BOX_MEDIA_FOLDER = 'boxes';
@@ -29,25 +30,101 @@ function removeExistingBoxMedia(boxId: string): void {
     }
     const stat = fs.statSync(absoluteDir);
     if (!stat.isDirectory()) {
+      emitMediaAudit({
+        action: 'delete',
+        scope: 'box',
+        identifier: { artikelNummer: null, itemUUID: null },
+        path: absoluteDir,
+        root: MEDIA_DIR,
+        outcome: 'blocked',
+        reason: 'expected-directory',
+      });
       console.warn('Expected box media directory but found different file type', { boxId, absoluteDir });
       return;
     }
     const entries = fs.readdirSync(absoluteDir);
     for (const entry of entries) {
+      const absoluteEntry = path.join(absoluteDir, entry);
+      emitMediaAudit({
+        action: 'delete',
+        scope: 'box',
+        identifier: { artikelNummer: null, itemUUID: null },
+        path: absoluteEntry,
+        root: MEDIA_DIR,
+        outcome: 'start',
+        reason: 'replace-photo',
+      });
       try {
-        fs.unlinkSync(path.join(absoluteDir, entry));
+        fs.unlinkSync(absoluteEntry);
+        emitMediaAudit({
+          action: 'delete',
+          scope: 'box',
+          identifier: { artikelNummer: null, itemUUID: null },
+          path: absoluteEntry,
+          root: MEDIA_DIR,
+          outcome: 'success',
+          reason: 'replace-photo',
+        });
       } catch (unlinkErr) {
+        emitMediaAudit({
+          action: 'delete',
+          scope: 'box',
+          identifier: { artikelNummer: null, itemUUID: null },
+          path: absoluteEntry,
+          root: MEDIA_DIR,
+          outcome: 'error',
+          reason: 'unlink-failed',
+          error: unlinkErr,
+        });
         console.error('Failed to remove existing box photo', { boxId, entry, unlinkErr });
       }
     }
     if (fs.readdirSync(absoluteDir).length === 0) {
+      emitMediaAudit({
+        action: 'prune',
+        scope: 'box',
+        identifier: { artikelNummer: null, itemUUID: null },
+        path: absoluteDir,
+        root: MEDIA_DIR,
+        outcome: 'start',
+        reason: 'empty-directory',
+      });
       try {
         fs.rmdirSync(absoluteDir);
+        emitMediaAudit({
+          action: 'prune',
+          scope: 'box',
+          identifier: { artikelNummer: null, itemUUID: null },
+          path: absoluteDir,
+          root: MEDIA_DIR,
+          outcome: 'success',
+          reason: 'empty-directory',
+        });
       } catch (removeDirErr) {
+        emitMediaAudit({
+          action: 'prune',
+          scope: 'box',
+          identifier: { artikelNummer: null, itemUUID: null },
+          path: absoluteDir,
+          root: MEDIA_DIR,
+          outcome: 'error',
+          reason: 'rmdir-failed',
+          error: removeDirErr,
+        });
         console.warn('Failed to remove empty box media directory', { boxId, removeDirErr });
       }
     }
   } catch (err) {
+    emitMediaAudit({
+      action: 'delete',
+      scope: 'box',
+      identifier: { artikelNummer: null, itemUUID: null },
+      path: null,
+      root: MEDIA_DIR,
+      outcome: 'error',
+      reason: 'cleanup-failed',
+      error: err,
+    });
     console.error('Failed to clean up box media directory', { boxId, err });
   }
 }
@@ -69,12 +146,40 @@ function persistBoxPhoto(boxId: string, dataUrl: string): string | null {
 
   try {
     removeExistingBoxMedia(boxId);
+    emitMediaAudit({
+      action: 'write',
+      scope: 'box',
+      identifier: { artikelNummer: null, itemUUID: null },
+      path: absolutePath,
+      root: MEDIA_DIR,
+      outcome: 'start',
+      reason: 'persist-photo',
+    });
     fs.mkdirSync(absoluteDir, { recursive: true });
     const buffer = Buffer.from(base64Payload, 'base64');
     fs.writeFileSync(absolutePath, buffer);
+    emitMediaAudit({
+      action: 'write',
+      scope: 'box',
+      identifier: { artikelNummer: null, itemUUID: null },
+      path: absolutePath,
+      root: MEDIA_DIR,
+      outcome: 'success',
+      reason: 'persist-photo',
+    });
     console.info('Persisted box photo', { boxId, absolutePath });
     return `${BOX_MEDIA_PREFIX}${relativePath}`;
   } catch (err) {
+    emitMediaAudit({
+      action: 'write',
+      scope: 'box',
+      identifier: { artikelNummer: null, itemUUID: null },
+      path: absolutePath,
+      root: MEDIA_DIR,
+      outcome: 'error',
+      reason: 'persist-failed',
+      error: err,
+    });
     console.error('Failed to persist box photo', { boxId, err });
     return null;
   }
