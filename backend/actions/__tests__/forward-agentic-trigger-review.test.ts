@@ -4,8 +4,12 @@ import type { AgenticRunTriggerPayload } from '../agentic-trigger';
 import type { AgenticRunReviewMetadata } from '../../../models';
 
 jest.mock('../../agentic', () => ({
-  startAgenticRun: jest.fn().mockResolvedValue({ queued: true, agentic: null }),
-  restartAgenticRun: jest.fn().mockResolvedValue({ queued: true, agentic: null })
+  startAgenticRun: jest
+    .fn()
+    .mockResolvedValue({ queued: true, created: true, agentic: null }),
+  restartAgenticRun: jest
+    .fn()
+    .mockResolvedValue({ queued: true, created: true, agentic: null })
 }));
 
 describe('forwardAgenticTrigger review metadata', () => {
@@ -49,7 +53,8 @@ describe('forwardAgenticTrigger review metadata', () => {
       reviewedBy: null
     };
 
-    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
 
     expect(mockedStartAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -59,6 +64,95 @@ describe('forwardAgenticTrigger review metadata', () => {
     );
   });
 
+  it('passes through comprehensive review metadata unchanged when valid', async () => {
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'Full review',
+      artikelNummer: 'item-full-review',
+      review: {
+        decision: 'reject',
+        notes: 'needs work',
+        reviewedBy: 'bob',
+        information_present: true,
+        missing_spec: ['size'],
+        unneeded_spec: ['colour'],
+        bad_format: 'typo',
+        wrong_information: 'price',
+        wrong_physical_dimensions: 'weight'
+      } as unknown as AgenticRunReviewMetadata
+    };
+
+    await forwardAgenticTrigger(payload, {
+      context: 'unit-test',
+      logger,
+      service: { logger } as any
+    });
+
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+
+    expect(mockedStartAgenticRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        review: expect.objectContaining({
+          decision: 'reject',
+          notes: 'needs work',
+          reviewedBy: 'bob',
+          information_present: true,
+          missing_spec: ['size']
+        })
+      }),
+      expect.any(Object)
+    );
+  });
+
+  it('queues a new run and returns agentic info', async () => {
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+
+    const fakeRun = { Artikel_Nummer: '1234', Status: 'queued' };
+    mockedStartAgenticRun.mockResolvedValueOnce({
+      queued: true,
+      created: true,
+      agentic: fakeRun as any,
+      reason: null as any
+    });
+
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'New run',
+      artikelNummer: '1234'
+    };
+
+    const result = await forwardAgenticTrigger(payload, {
+      context: 'unit-test',
+      logger,
+      service: { logger } as any
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(202);
+    expect(result.body).toEqual({ agentic: fakeRun });
+  });
+
+  it('handles agentic start errors by propagating the rejection', async () => {
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    mockedStartAgenticRun.mockRejectedValueOnce(new Error('start failure'));
+
+    const payload: AgenticRunTriggerPayload = {
+      artikelbeschreibung: 'Oops',
+      artikelNummer: 'bad'
+    };
+
+    await expect(
+      forwardAgenticTrigger(payload, {
+        context: 'unit-test',
+        logger,
+        service: { logger } as any
+      })
+    ).rejects.toThrow('start failure');
+  });
 
   it('restarts existing runs for bulk trigger context when start declines as already-exists', async () => {
     const logger = {
@@ -67,8 +161,10 @@ describe('forwardAgenticTrigger review metadata', () => {
       error: jest.fn()
     };
 
-    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
-    const mockedRestartAgenticRun = restartAgenticRun as jest.MockedFunction<typeof restartAgenticRun>;
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const mockedRestartAgenticRun =
+      restartAgenticRun as jest.MockedFunction<typeof restartAgenticRun>;
     mockedStartAgenticRun.mockResolvedValueOnce({
       queued: false,
       created: false,
@@ -119,7 +215,8 @@ describe('forwardAgenticTrigger review metadata', () => {
       service: { logger } as any
     });
 
-    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
     expect(mockedStartAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({
         actor: 'alice'
@@ -128,7 +225,6 @@ describe('forwardAgenticTrigger review metadata', () => {
     );
   });
 
-
   it('restarts existing terminal runs outside bulk context when status is failed', async () => {
     const logger = {
       info: jest.fn(),
@@ -136,8 +232,10 @@ describe('forwardAgenticTrigger review metadata', () => {
       error: jest.fn()
     };
 
-    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
-    const mockedRestartAgenticRun = restartAgenticRun as jest.MockedFunction<typeof restartAgenticRun>;
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const mockedRestartAgenticRun =
+      restartAgenticRun as jest.MockedFunction<typeof restartAgenticRun>;
     const existingRun = {
       Artikel_Nummer: '19290',
       SearchQuery: 'existing failed query',
@@ -156,6 +254,7 @@ describe('forwardAgenticTrigger review metadata', () => {
     });
     mockedRestartAgenticRun.mockResolvedValueOnce({
       queued: true,
+      created: true,
       agentic: restartedRun as any,
       reason: null as any
     });
@@ -185,7 +284,6 @@ describe('forwardAgenticTrigger review metadata', () => {
     );
   });
 
-
   it('returns success with canonical run when a run already exists outside bulk context', async () => {
     const logger = {
       info: jest.fn(),
@@ -193,7 +291,8 @@ describe('forwardAgenticTrigger review metadata', () => {
       error: jest.fn()
     };
 
-    const mockedStartAgenticRun = startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
+    const mockedStartAgenticRun =
+      startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
     const existingRun = {
       Artikel_Nummer: '19290',
       SearchQuery: 'test',

@@ -617,14 +617,13 @@ const action = defineHttpAction({
             });
             const referenceBackedItem: Item = {
               ItemUUID: itemId,
-              Artikel_Nummer: fallbackReference.Artikel_Nummer,
               BoxID: null,
               Location: null,
               ShelfLabel: null,
               UpdatedAt: new Date(0),
               Datum_erfasst: undefined,
               ...fallbackReference,
-              Auf_Lager: null
+              Auf_Lager: undefined
             };
             return sendJson(res, 200, {
               item: referenceBackedItem,
@@ -735,7 +734,7 @@ const action = defineHttpAction({
                   ItemUUID: itemUUID,
                   AgenticStatus: instance.AgenticStatus ?? null,
                   Quality: resolveItemQualityValue(instance.Quality, 'fetchInstance'),
-                  Auf_Lager: instance.Auf_Lager ?? null,
+                  Auf_Lager: instance.Auf_Lager ?? undefined,
                   Location: instance.Location ?? null,
                   BoxID: instance.BoxID ?? null,
                   UpdatedAt: instance.UpdatedAt ? String(instance.UpdatedAt) : null,
@@ -791,10 +790,10 @@ const action = defineHttpAction({
           });
         }
         const normalisedCategories = {
-          Hauptkategorien_A: normaliseCategoryValue(itemId, 'Hauptkategorien_A', sanitizedItem.Hauptkategorien_A),
-          Unterkategorien_A: normaliseCategoryValue(itemId, 'Unterkategorien_A', sanitizedItem.Unterkategorien_A),
-          Hauptkategorien_B: normaliseCategoryValue(itemId, 'Hauptkategorien_B', sanitizedItem.Hauptkategorien_B),
-          Unterkategorien_B: normaliseCategoryValue(itemId, 'Unterkategorien_B', sanitizedItem.Unterkategorien_B)
+          Hauptkategorien_A: normaliseCategoryValue(itemId, 'Hauptkategorien_A', sanitizedItem.Hauptkategorien_A) ?? undefined,
+          Unterkategorien_A: normaliseCategoryValue(itemId, 'Unterkategorien_A', sanitizedItem.Unterkategorien_A) ?? undefined,
+          Hauptkategorien_B: normaliseCategoryValue(itemId, 'Hauptkategorien_B', sanitizedItem.Hauptkategorien_B) ?? undefined,
+          Unterkategorien_B: normaliseCategoryValue(itemId, 'Unterkategorien_B', sanitizedItem.Unterkategorien_B) ?? undefined
         };
         const hasCategoryMetadata = Object.values(normalisedCategories).some((value) => value !== null);
         if (!hasCategoryMetadata) {
