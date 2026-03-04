@@ -19,7 +19,7 @@ import { parseSequentialItemUUID } from '../lib/itemIds';
 import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
-import { resolveCategoryLabelToCode } from '../lib/categoryLabelLookup';
+import { resolveCategoryLabelToCode, resolveSubcategoryLabelToCodeWithParent } from '../lib/categoryLabelLookup';
 import { normalizeQuality, resolveQualityFromLabel } from '../../models/quality';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
@@ -941,6 +941,7 @@ const action = defineHttpAction({
       type IntegerResolverOptions = {
         fieldName: string;
         categoryType?: 'haupt' | 'unter';
+        parentCategoryCode?: number | null;
       };
 
       const resolveInteger = (
@@ -959,9 +960,20 @@ const action = defineHttpAction({
 
         if (options?.categoryType) {
           try {
-            const mapped = resolveCategoryLabelToCode(trimmed, options.categoryType);
+            const mapped =
+              options.categoryType === 'unter' && Number.isFinite(options.parentCategoryCode)
+                ? resolveSubcategoryLabelToCodeWithParent(trimmed, options.parentCategoryCode)
+                : resolveCategoryLabelToCode(trimmed, options.categoryType);
             if (typeof mapped === 'number') {
               return mapped;
+            }
+
+            if (options.categoryType === 'unter' && Number.isFinite(options.parentCategoryCode)) {
+              console.warn('[import-item] Unable to map subcategory label within Hauptkategorie', {
+                field: options.fieldName,
+                value: raw,
+                parentCategoryCode: options.parentCategoryCode,
+              });
             }
           } catch (error) {
             console.error('[import-item] Failed to resolve category label to code', {
@@ -997,7 +1009,8 @@ const action = defineHttpAction({
       });
       const unterkategorienA = resolveInteger(unterkategorieARaw, referenceDefaults?.Unterkategorien_A, {
         fieldName: 'Unterkategorien_A',
-        categoryType: 'unter'
+        categoryType: 'unter',
+        parentCategoryCode: hauptkategorienA ?? null,
       });
       const hauptkategorienB = resolveInteger(hauptkategorieBRaw, referenceDefaults?.Hauptkategorien_B, {
         fieldName: 'Hauptkategorien_B',
@@ -1005,7 +1018,8 @@ const action = defineHttpAction({
       });
       const unterkategorienB = resolveInteger(unterkategorieBRaw, referenceDefaults?.Unterkategorien_B, {
         fieldName: 'Unterkategorien_B',
-        categoryType: 'unter'
+        categoryType: 'unter',
+        parentCategoryCode: hauptkategorienB ?? null,
       });
 
       let shopartikel = referenceDefaults?.Shopartikel ?? 0;
