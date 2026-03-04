@@ -67,11 +67,28 @@ function resolveDisplayCount(group: ReturnType<typeof groupItemsForDisplay>[numb
   }
 }
 
+function resolveContainerLabel(group: ReturnType<typeof groupItemsForDisplay>[number]): string {
+  try {
+    const representative = group.representative;
+    const boxId = typeof group.summary.BoxID === 'string' && group.summary.BoxID.trim()
+      ? group.summary.BoxID.trim()
+      : (typeof representative?.BoxID === 'string' && representative.BoxID.trim() ? representative.BoxID.trim() : '');
+    return boxId || 'Lose im Regal';
+  } catch (error) {
+    logError('Failed to resolve grouped item container label in box detail row', error, {
+      groupKey: group.key,
+      summaryBoxId: group.summary.BoxID,
+      representativeItemId: group.representative?.ItemUUID
+    });
+    return 'Lose im Regal';
+  }
+}
+
+
 export default function BoxDetail({ boxId }: Props) {
   const [box, setBox] = useState<Box | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [events, setEvents] = useState<EventLog[]>([]);
-  const [containedBoxes, setContainedBoxes] = useState<Box[]>([]);
   type NoteFeedback = { type: 'info' | 'success' | 'error'; message: string } | null;
 
   const [note, setNote] = useState('');
@@ -346,7 +363,6 @@ export default function BoxDetail({ boxId }: Props) {
           setBox(null);
           setItems([]);
           setEvents([]);
-          setContainedBoxes([]);
           setNote('');
           setPhotoPreview('');
           setPhotoUpload(null);
@@ -365,15 +381,16 @@ export default function BoxDetail({ boxId }: Props) {
         setItems(data.items || []);
         setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
         if (Array.isArray(data.containedBoxes)) {
-          setContainedBoxes(data.containedBoxes);
+          logger.info?.('Box detail loaded contained boxes for shelf context', {
+            boxId,
+            containedBoxes: data.containedBoxes.length
+          });
         } else if (Array.isArray((data as any).boxes)) {
           console.warn('Box detail response used legacy boxes field', { boxId });
-          setContainedBoxes((data as any).boxes);
         } else {
           if (data.containedBoxes !== undefined) {
             console.warn('Box detail containedBoxes was not an array', { boxId });
           }
-          setContainedBoxes([]);
         }
         setLoadError(null);
       } else {
@@ -381,7 +398,6 @@ export default function BoxDetail({ boxId }: Props) {
         setBox(null);
         setItems([]);
         setEvents([]);
-        setContainedBoxes([]);
         setNote('');
         setPhotoPreview('');
         setPhotoUpload(null);
@@ -391,7 +407,6 @@ export default function BoxDetail({ boxId }: Props) {
     } catch (err) {
       console.error('Failed to fetch box', err);
       setLoadError('Behälter konnte nicht geladen werden.');
-      setContainedBoxes([]);
       setPhotoPreview('');
       setPhotoUpload(null);
       setPhotoRemoved(false);
@@ -887,31 +902,6 @@ export default function BoxDetail({ boxId }: Props) {
               </div>
             </div>
 
-            {isShelf ? (
-              <div className="card grid-span-2">
-                <h3>Behälter</h3>
-                <div className="item-cards">
-                  {containedBoxes.length ? (
-                    containedBoxes.map((containedBox) => (
-                      <div key={containedBox.BoxID} className="card item-card">
-                        <Link to={`/boxes/${encodeURIComponent(containedBox.BoxID)}`} className="linkcard">
-                          <div className="mono">{containedBox.BoxID}</div>
-                          <div>
-                            <LocationTag
-                              locationKey={containedBox.LocationId}
-                              labelOverride={containedBox.Label}
-                            />
-                          </div>
-                        </Link>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="muted">Keine Behälter in diesem Regal.</p>
-                  )}
-                </div>
-              </div>
-            ) : null}
-
             <div className="card grid-span-2">
               <div className='row' style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>Artikel</h3>
@@ -929,6 +919,7 @@ export default function BoxDetail({ boxId }: Props) {
                           <th className="col-quality optional-column">Qualität</th>
                           <th className="col-agentic optional-column">Ki</th>
                           <th className="col-subcategory optional-column">Unterkategorie A</th>
+                          <th className="optional-column">Behälter</th>
                           <th className="col-actions">Aktionen</th>
                         </tr>
                       </thead>
@@ -980,6 +971,7 @@ export default function BoxDetail({ boxId }: Props) {
                                 </td>
                                 <td className="col-agentic optional-column">{agenticLabel}</td>
                                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
+                                <td className="optional-column">{resolveContainerLabel(group)}</td>
                                 <td className="col-actions">
                                   {representativeId ? (
                                     <>
@@ -1007,7 +999,7 @@ export default function BoxDetail({ boxId }: Props) {
                           })
                         ) : (
                           <tr>
-                            <td className="muted" colSpan={7}>Keine Artikel in diesem Behälter.</td>
+                            <td className="muted" colSpan={8}>Keine Artikel in diesem Behälter.</td>
                           </tr>
                         )}
                       </tbody>
