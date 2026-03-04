@@ -7,6 +7,7 @@ import type { AgenticRun, Item, ItemDetailResponse, ItemInstanceSummary, ItemRef
 import { normalizeQuality } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
+import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { generateShopwareCorrelationId } from '../db';
 import { attachTranscriptReference } from '../agentic';
 import { loadSubcategoryReviewAutomationSignals } from '../agentic/review-automation-signals';
@@ -63,9 +64,11 @@ function buildRelativePath(relative: string): string | null {
 
 function mediaExists(relative: string): boolean {
   try {
-    const absolute = path.join(MEDIA_DIR, relative);
-    if (!absolute.startsWith(MEDIA_DIR)) {
-      console.warn('Refused to check media path outside MEDIA_DIR', { relative });
+    const absolute = resolvePathWithinRoot(MEDIA_DIR, relative, {
+      logger: console,
+      operation: 'save-item:media-exists'
+    });
+    if (!absolute) {
       return false;
     }
     return fs.existsSync(absolute);
@@ -185,7 +188,13 @@ export function collectMediaAssets(
       artikelPrefixes.add(formattedArtikelNummer);
     }
     for (const folder of foldersToScan) {
-      const dir = path.join(MEDIA_DIR, folder);
+      const dir = resolvePathWithinRoot(MEDIA_DIR, folder, {
+        logger: console,
+        operation: 'save-item:collect-media-assets'
+      });
+      if (!dir) {
+        continue;
+      }
       if (!fs.existsSync(dir)) {
         continue;
       }
@@ -263,15 +272,10 @@ function removeItemMediaAsset(itemId: string, asset: string): boolean {
     return false;
   }
   try {
-    const absolute = path.join(MEDIA_DIR, relative);
-    if (!absolute.startsWith(MEDIA_DIR)) {
-      console.warn('[save-item] Refused to remove media asset outside MEDIA_DIR', {
-        itemId,
-        asset: trimmed,
-        resolved: absolute
-      });
-      return false;
-    }
+    const absolute = assertPathWithinRoot(MEDIA_DIR, path.resolve(MEDIA_DIR, relative), {
+      logger: console,
+      operation: 'save-item:remove-media-asset'
+    });
     if (!fs.existsSync(absolute)) {
       console.info('[save-item] Media asset already removed', { itemId, asset: trimmed });
       return false;
@@ -290,7 +294,13 @@ function pruneEmptyItemMediaDirectory(itemId: string, artikelNummer?: string | n
     const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
     const foldersToCheck = mediaFolder === itemId ? [mediaFolder] : [mediaFolder, itemId];
     for (const folder of foldersToCheck) {
-      const dir = path.join(MEDIA_DIR, folder);
+      const dir = resolvePathWithinRoot(MEDIA_DIR, folder, {
+        logger: console,
+        operation: 'save-item:prune-media-directory'
+      });
+      if (!dir) {
+        continue;
+      }
       if (!fs.existsSync(dir)) {
         continue;
       }

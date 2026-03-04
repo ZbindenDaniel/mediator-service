@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
 import { execFileSync, spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
+import { resolvePathWithinRoot } from '../lib/path-guard';
 
 // TODO(agent): Evaluate migrating archive helpers into a dedicated module if ZIP handling expands beyond CSV ingestion.
 
@@ -67,13 +67,10 @@ export function computeChecksum(data: string | Buffer): string {
 }
 
 export function resolveSafePath(baseDir: string, candidate: string): string | null {
-  const normalised = path.normalize(candidate).replace(/^\.+/, '').replace(/^\/+/, '');
-  const absolute = path.resolve(baseDir, normalised);
-  const base = path.resolve(baseDir);
-  if (!absolute.startsWith(base)) {
-    return null;
-  }
-  return absolute;
+  return resolvePathWithinRoot(baseDir, candidate, {
+    logger: console,
+    operation: 'csv-utils:resolve-safe-path'
+  });
 }
 
 export function listZipEntries(zipPath: string): string[] {

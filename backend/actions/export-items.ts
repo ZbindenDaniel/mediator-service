@@ -10,6 +10,7 @@ import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLa
 import type { LangtextExportFormat } from '../lib/langtext';
 import { parseLangtext, serializeLangtextForExport } from '../lib/langtext';
 import { MEDIA_DIR } from '../lib/media';
+import { resolvePathWithinRoot } from '../lib/path-guard';
 import { defineHttpAction } from './index';
 import { collectMediaAssets, isAllowedMediaAsset } from './save-item';
 
@@ -314,12 +315,11 @@ function filterExistingMediaAssets(assets: string[]): string[] {
       continue;
     }
     const relative = trimmed.slice(MEDIA_PREFIX.length);
-    const absolute = path.join(MEDIA_DIR, relative);
-    if (!absolute.startsWith(MEDIA_DIR)) {
-      console.warn('[export-items] Refused to include media asset outside MEDIA_DIR during export', {
-        asset: trimmed,
-        resolved: absolute,
-      });
+    const absolute = resolvePathWithinRoot(MEDIA_DIR, relative, {
+      logger: console,
+      operation: 'export-items:filter-media-existence'
+    });
+    if (!absolute) {
       continue;
     }
     try {
