@@ -1,5 +1,3 @@
-import path from 'path';
-
 describe('media configuration resolution', () => {
   const baselineEnv = { ...process.env };
   const managedKeys = [
@@ -41,7 +39,7 @@ describe('media configuration resolution', () => {
     process.env = baselineEnv;
   });
 
-  it('keeps local storage fixed to dist/media regardless of MEDIA_ROOT_DIR', () => {
+  it('uses MEDIA_ROOT_DIR-derived shopbilder directory when MEDIA_ROOT_DIR is provided', () => {
     process.env.MEDIA_STORAGE_MODE = 'local';
     process.env.MEDIA_ROOT_DIR = '/mnt/media-root';
 
@@ -49,8 +47,9 @@ describe('media configuration resolution', () => {
     const media = loadMedia();
 
     expect(config.MEDIA_STORAGE_MODE).toBe('local');
-    expect(config.LOCAL_MEDIA_DIR).toBe(path.resolve(process.cwd(), 'dist/media'));
-    expect(media.MEDIA_DIR).toBe(config.LOCAL_MEDIA_DIR);
+    expect(config.MEDIA_ROOT_DIR).toBe('/mnt/media-root');
+    expect(config.MEDIA_SHOPBILDER_DIR).toBe('/mnt/media-root/shopbilder');
+    expect(media.MEDIA_DIR).toBe(config.MEDIA_SHOPBILDER_DIR);
   });
 
   it('derives webdav dir from an absolute MEDIA_ROOT_DIR', () => {
@@ -59,7 +58,7 @@ describe('media configuration resolution', () => {
 
     const config = loadConfig();
 
-    expect(config.WEB_DAV_DIR).toBe('/mnt/webdav/shopbilder');
+    expect(config.MEDIA_SHOPBILDER_DIR).toBe('/mnt/webdav/shopbilder');
   });
 
   it('disables webdav dir for invalid MEDIA_ROOT_DIR values', () => {
@@ -68,7 +67,7 @@ describe('media configuration resolution', () => {
 
     const config = loadConfig();
 
-    expect(config.WEB_DAV_DIR).toBe('');
+    expect(config.MEDIA_SHOPBILDER_DIR).toBe('');
   });
 
   it('enables ERP media mirror only when include flag and valid root are both set', () => {

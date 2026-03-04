@@ -2,7 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
 import type { IncomingMessage, ServerResponse } from 'http';
-import action, { resolveArtikelNummerMirrorScope, resolveExplicitMediaMirrorSources } from '../sync-erp';
+import action, {
+  buildErpSyncScriptEnv,
+  resolveArtikelNummerMirrorScope,
+  resolveExplicitMediaMirrorSources
+} from '../sync-erp';
 import { MEDIA_DIR } from '../../lib/media';
 
 function createMockResponse() {
@@ -158,5 +162,38 @@ describe('sync-erp payload normalization', () => {
         error: 'No Artikelnummer values resolved for media mirroring scope.'
       })
     );
+  });
+});
+
+
+describe('sync-erp script env building', () => {
+  const originalMirrorDir = process.env.ERP_MEDIA_MIRROR_DIR;
+
+  afterEach(() => {
+    if (originalMirrorDir === undefined) {
+      delete process.env.ERP_MEDIA_MIRROR_DIR;
+      return;
+    }
+    process.env.ERP_MEDIA_MIRROR_DIR = originalMirrorDir;
+  });
+
+  it('removes inherited ERP_MEDIA_MIRROR_DIR when mirroring is disabled', () => {
+    process.env.ERP_MEDIA_MIRROR_DIR = './media/mirror';
+
+    const env = buildErpSyncScriptEnv(['/mnt/media/a.jpg'], null, '/mnt/media/shopbilder');
+
+    expect(env.ERP_MEDIA_MIRROR_DIR).toBeUndefined();
+    expect(env.ERP_MEDIA_SOURCE_DIR).toBe('/mnt/media/shopbilder');
+    expect(env.ERP_SYNC_ITEM_IDS).toBe('/mnt/media/a.jpg');
+  });
+
+  it('sets ERP_MEDIA_MIRROR_DIR when mirroring is enabled', () => {
+    process.env.ERP_MEDIA_MIRROR_DIR = './media/mirror';
+
+    const env = buildErpSyncScriptEnv(['/mnt/media/a.jpg', '/mnt/media/b.png'], '/mnt/root/shopbilder-import', '/mnt/root/shopbilder');
+
+    expect(env.ERP_MEDIA_MIRROR_DIR).toBe('/mnt/root/shopbilder-import');
+    expect(env.ERP_MEDIA_SOURCE_DIR).toBe('/mnt/root/shopbilder');
+    expect(env.ERP_SYNC_ITEM_IDS).toBe('/mnt/media/a.jpg\n/mnt/media/b.png');
   });
 });
