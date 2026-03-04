@@ -247,6 +247,54 @@ describe('save-item action', () => {
     );
   });
 
+  it('does not prune media directory after removing the final file asset', async () => {
+    const folder = path.join(sandbox.distMediaDir, 'ART-10');
+    const asset = 'ART-10-1.jpg';
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, asset), 'fixture');
+
+    const persistItemReference = jest.fn();
+    const ctx = {
+      getItem: {
+        get: jest.fn(() => ({
+          ItemUUID: 'ITEM-10',
+          Artikel_Nummer: 'ART-10',
+          BoxID: null,
+          Location: null,
+          Grafikname: '/media/ART-10/ART-10-1.jpg',
+          Einheit: ItemEinheit.Stk
+        }))
+      },
+      getItemReference: {
+        get: jest.fn(() => ({
+          Artikel_Nummer: 'ART-10',
+          Grafikname: '/media/ART-10/ART-10-1.jpg',
+          ImageNames: '/media/ART-10/ART-10-1.jpg',
+          Artikelbeschreibung: 'Reference text'
+        }))
+      },
+      db: {
+        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
+      },
+      persistItemReference,
+      logEvent: jest.fn(),
+      enqueueShopwareSyncJob: jest.fn()
+    };
+
+    const req = createPutRequest('/api/items/ITEM-10', {
+      actor: 'Tester',
+      picture1: null
+    });
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(getBody()).toEqual({ ok: true, media: [] });
+    expect(fs.existsSync(path.join(folder, asset))).toBe(false);
+    expect(fs.existsSync(folder)).toBe(true);
+  });
+
   it('returns 404 when identifier is unknown', async () => {
     const ctx = {
       getItem: {

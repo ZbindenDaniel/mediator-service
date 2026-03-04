@@ -305,6 +305,23 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
       console.info('[save-item] Media asset already removed', { itemId, asset: trimmed });
       return false;
     }
+    const stat = fs.statSync(absolute);
+    if (!stat.isFile()) {
+      emitMediaAudit({
+        action: 'delete',
+        scope: 'item',
+        identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+        path: absolute,
+        root: MEDIA_DIR,
+        outcome: 'blocked',
+        reason: 'non-file-target',
+      });
+      console.warn('[save-item] Skipped removing non-file media asset target', {
+        itemId,
+        asset: trimmed,
+      });
+      return false;
+    }
     fs.unlinkSync(absolute);
     emitMediaAudit({
       action: 'delete',
@@ -330,64 +347,6 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
     });
     console.error('[save-item] Failed to remove media asset during item update', { itemId, asset: trimmed, err });
     return false;
-  }
-}
-
-function pruneEmptyItemMediaDirectory(itemId: string, artikelNummer?: string | null): void {
-  try {
-    const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
-    const foldersToCheck = mediaFolder === itemId ? [mediaFolder] : [mediaFolder, itemId];
-    for (const folder of foldersToCheck) {
-      const dir = resolvePathWithinRoot(MEDIA_DIR, folder, {
-        logger: console,
-        operation: 'save-item:prune-media-directory'
-      });
-      if (!dir) {
-        continue;
-      }
-      if (!fs.existsSync(dir)) {
-        continue;
-      }
-      const stat = fs.statSync(dir);
-      if (!stat.isDirectory()) {
-        continue;
-      }
-      const entries = fs.readdirSync(dir);
-      if (entries.length === 0) {
-        emitMediaAudit({
-          action: 'prune',
-          scope: 'item',
-          identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
-          path: dir,
-          root: MEDIA_DIR,
-          outcome: 'start',
-          reason: 'empty-directory',
-        });
-        fs.rmdirSync(dir);
-        emitMediaAudit({
-          action: 'prune',
-          scope: 'item',
-          identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
-          path: dir,
-          root: MEDIA_DIR,
-          outcome: 'success',
-          reason: 'empty-directory',
-        });
-        console.info('[save-item] Removed empty media directory after update', { itemId, folder });
-      }
-    }
-  } catch (err) {
-    emitMediaAudit({
-      action: 'prune',
-      scope: 'item',
-      identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
-      path: null,
-      root: MEDIA_DIR,
-      outcome: 'error',
-      reason: 'prune-failed',
-      error: err,
-    });
-    console.error('[save-item] Failed to prune empty media directory', { itemId, err });
   }
 }
 
@@ -1006,8 +965,6 @@ const action = defineHttpAction({
             }
           });
         }
-
-        pruneEmptyItemMediaDirectory(itemId, mediaArtikelNummer);
       } catch (e) {
         console.error('Failed to save item images', e);
       }
