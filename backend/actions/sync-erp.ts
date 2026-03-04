@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { stageItemsExport, type ItemsExportArtifact } from './export-items';
@@ -7,6 +8,7 @@ import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED } from '../config';
 import { formatArtikelNummerForMedia } from '../lib/media';
 import { MEDIA_DIR } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
+import { resolvePathWithinRoot } from '../lib/path-guard';
 
 // TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
 // TODO(sync-erp): Keep this action script-parity only unless an explicit future requirement reintroduces API-side continuation orchestration.
@@ -51,6 +53,140 @@ function parseItemIds(payload: unknown): string[] {
   }
 
   return Array.from(new Set(normalized));
+}
+
+function parsePipeDelimitedMediaEntries(rawValue: string): string[] {
+  return rawValue
+    .split('|')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function normalizeExplicitMediaEntry(rawEntry: string): string | null {
+  const normalized = rawEntry.replace(/\\/g, '/').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const withoutPrefix = normalized.startsWith('/media/')
+    ? normalized.slice('/media/'.length)
+    : normalized.replace(/^\/+/, '');
+
+  const relative = path.posix.normalize(withoutPrefix);
+  if (!relative || relative === '.' || relative.startsWith('..') || path.posix.isAbsolute(relative)) {
+    return null;
+  }
+
+  return relative;
+}
+
+interface MirrorMediaCandidateItem {
+  ItemUUID?: string | null;
+  Artikel_Nummer?: string | null;
+  Grafikname?: string | null;
+  ImageNames?: string | null;
+}
+
+export function resolveExplicitMediaMirrorSources(
+  items: MirrorMediaCandidateItem[],
+  logger: Pick<Console, 'warn' | 'info' | 'error'> = console
+): string[] {
+  const resolved = new Set<string>();
+
+  for (const item of items) {
+    const fromImageNames = typeof item.ImageNames === 'string' ? item.ImageNames.trim() : '';
+    const fromGrafikname = typeof item.Grafikname === 'string' ? item.Grafikname.trim() : '';
+    const rawEntries = fromImageNames
+      ? parsePipeDelimitedMediaEntries(fromImageNames)
+      : fromGrafikname
+        ? parsePipeDelimitedMediaEntries(fromGrafikname)
+        : [];
+
+    for (const rawEntry of rawEntries) {
+      const relativeEntry = normalizeExplicitMediaEntry(rawEntry);
+      if (!relativeEntry) {
+        logger.warn('[sync-erp] media_entry_invalid_skipped', {
+          itemId: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer ?? null,
+          entry: rawEntry
+        });
+        emitMediaAudit({
+          action: 'mirror-skip',
+          scope: 'erp-sync',
+          identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
+          path: rawEntry,
+          root: MEDIA_DIR,
+          outcome: 'blocked',
+          reason: 'invalid-media-entry',
+        });
+        continue;
+      }
+
+      const absolutePath = resolvePathWithinRoot(MEDIA_DIR, relativeEntry, {
+        logger,
+        operation: 'sync-erp:explicit-media-path'
+      });
+      if (!absolutePath) {
+        emitMediaAudit({
+          action: 'mirror-skip',
+          scope: 'erp-sync',
+          identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
+          path: relativeEntry,
+          root: MEDIA_DIR,
+          outcome: 'blocked',
+          reason: 'media-path-outside-root',
+        });
+        continue;
+      }
+
+      let stat: fs.Stats | null = null;
+      try {
+        stat = fs.statSync(absolutePath);
+      } catch (error) {
+        logger.warn('[sync-erp] media_entry_missing_skipped', {
+          itemId: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer ?? null,
+          entry: rawEntry,
+          resolvedPath: absolutePath,
+          error
+        });
+        emitMediaAudit({
+          action: 'mirror-skip',
+          scope: 'erp-sync',
+          identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
+          path: absolutePath,
+          root: MEDIA_DIR,
+          outcome: 'skipped',
+          reason: 'media-file-missing',
+          error: error instanceof Error ? error.message : String(error)
+        });
+        continue;
+      }
+
+      if (!stat.isFile()) {
+        logger.warn('[sync-erp] media_entry_not_file_skipped', {
+          itemId: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer ?? null,
+          entry: rawEntry,
+          resolvedPath: absolutePath
+        });
+        emitMediaAudit({
+          action: 'mirror-skip',
+          scope: 'erp-sync',
+          identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
+          path: absolutePath,
+          root: MEDIA_DIR,
+          outcome: 'blocked',
+          reason: 'media-path-not-file',
+        });
+        continue;
+      }
+
+      resolved.add(absolutePath);
+    }
+  }
+
+  return Array.from(resolved);
 }
 
 export function resolveArtikelNummerMirrorScope(
@@ -126,22 +262,22 @@ function deriveLastObservedPhase(output: string): string | null {
 async function runErpSyncScript(
   scriptPath: string,
   csvPath: string,
-  itemIds: string[],
+  mediaSourceFiles: string[],
   mediaMirrorDir: string | null,
   mediaSourceDir: string,
   timeoutMs: number
 ): Promise<ScriptExecutionResult> {
   return new Promise<ScriptExecutionResult>((resolve, reject) => {
-    const itemIdsEnv = itemIds.join('\n');
+    const mediaSourceFilesEnv = mediaSourceFiles.join('\n');
     const proc = spawn('bash', [scriptPath, csvPath], {
       env: mediaMirrorDir
         ? {
             ...process.env,
             ERP_MEDIA_MIRROR_DIR: mediaMirrorDir,
             ERP_MEDIA_SOURCE_DIR: mediaSourceDir,
-            ERP_SYNC_ITEM_IDS: itemIdsEnv
+            ERP_SYNC_ITEM_IDS: mediaSourceFilesEnv
           }
-        : { ...process.env, ERP_MEDIA_SOURCE_DIR: mediaSourceDir, ERP_SYNC_ITEM_IDS: itemIdsEnv },
+        : { ...process.env, ERP_MEDIA_SOURCE_DIR: mediaSourceDir, ERP_SYNC_ITEM_IDS: mediaSourceFilesEnv },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -326,9 +462,11 @@ const action = defineHttpAction({
 
       const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
       const scopedArtikelNummern = resolveArtikelNummerMirrorScope(items, console);
+      const explicitMediaSources = resolveExplicitMediaMirrorSources(items, console);
       console.info('[sync-erp] script_item_scope', {
         requestedInstanceCount: itemIds.length,
-        resolvedArtikelCount: scopedArtikelNummern.length
+        resolvedArtikelCount: scopedArtikelNummern.length,
+        resolvedMediaSourceCount: explicitMediaSources.length
       });
 
       if (scopedArtikelNummern.length === 0) {
@@ -379,7 +517,7 @@ const action = defineHttpAction({
       const scriptResult = await runErpSyncScript(
         scriptPath,
         stagedExport.itemsPath,
-        scopedArtikelNummern,
+        explicitMediaSources,
         ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null,
         MEDIA_DIR,
         normalizedScriptTimeoutMs
