@@ -73,10 +73,27 @@ function mediaExists(
       logger: console,
       operation: 'save-item:media-exists'
     });
-    if (!absolute) {
-      return false;
+    console.warn('[save-item] Media path blocked by guard', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      relativePath,
+      resolvedPath: null,
+      outcome: 'blocked'
+    });
+    return false;
+  }
+  try {
+    const exists = fs.existsSync(resolvedPath);
+    if (!exists) {
+      console.warn('[save-item] Media asset missing on disk', {
+        itemId,
+        artikelNummer: artikelNummer ?? null,
+        relativePath,
+        resolvedPath,
+        outcome: 'missing'
+      });
     }
-    return fs.existsSync(absolute);
+    return exists;
   } catch (err) {
     console.error('[save-item] Failed to check media existence', {
       itemId,
@@ -98,7 +115,12 @@ function normaliseMediaReference(
   if (!trimmed) return null;
 
   if (/^[a-zA-Z]+:\/\//.test(trimmed)) {
-    return trimmed;
+    console.warn('[save-item] Media reference discarded due to unsupported URL', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: trimmed
+    });
+    return null;
   }
 
   let relativeRaw = trimmed;
@@ -300,6 +322,23 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
         reason: 'already-missing',
       });
       console.info('[save-item] Media asset already removed', { itemId, asset: trimmed });
+      return false;
+    }
+    const stat = fs.statSync(absolute);
+    if (!stat.isFile()) {
+      emitMediaAudit({
+        action: 'delete',
+        scope: 'item',
+        identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+        path: absolute,
+        root: MEDIA_DIR,
+        outcome: 'blocked',
+        reason: 'non-file-target',
+      });
+      console.warn('[save-item] Skipped removing non-file media asset target', {
+        itemId,
+        asset: trimmed,
+      });
       return false;
     }
     fs.unlinkSync(absolute);
