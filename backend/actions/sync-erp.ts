@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { stageItemsExport, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
 import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED } from '../config';
+import { formatArtikelNummerForMedia } from '../lib/media';
 import { MEDIA_DIR } from '../lib/media';
 
 // TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
@@ -32,6 +33,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(raw);
 }
 
+
 function parseItemIds(payload: unknown): string[] {
   const itemIds = (payload as { itemIds?: unknown })?.itemIds;
   if (!Array.isArray(itemIds)) {
@@ -48,6 +50,27 @@ function parseItemIds(payload: unknown): string[] {
   }
 
   return Array.from(new Set(normalized));
+}
+
+export function resolveArtikelNummerMirrorScope(
+  items: Array<{ ItemUUID?: string | null; Artikel_Nummer?: string | null }>,
+  logger: Pick<Console, 'warn' | 'info' | 'error'> = console
+): string[] {
+  const resolved = new Set<string>();
+
+  for (const item of items) {
+    const formatted = formatArtikelNummerForMedia(item.Artikel_Nummer, logger);
+    if (!formatted) {
+      logger.warn('[sync-erp] artikelnummer_missing_for_media_scope', {
+        itemId: item.ItemUUID ?? null
+      });
+      continue;
+    }
+
+    resolved.add(formatted);
+  }
+
+  return Array.from(resolved);
 }
 
 interface ScriptExecutionResult {
@@ -301,6 +324,20 @@ const action = defineHttpAction({
       }
 
       const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
+      const scopedArtikelNummern = resolveArtikelNummerMirrorScope(items, console);
+      console.info('[sync-erp] script_item_scope', {
+        requestedInstanceCount: itemIds.length,
+        resolvedArtikelCount: scopedArtikelNummern.length
+      });
+
+      if (scopedArtikelNummern.length === 0) {
+        return sendJson(res, 422, {
+          ok: false,
+          phase: 'export_staged',
+          error: 'No Artikelnummer values resolved for media mirroring scope.'
+        });
+      }
+
       // TODO(sync-erp-media-mirror-script): Keep export staging CSV-only; shell script owns optional media mirroring via ERP_MEDIA_MIRROR_DIR.
       stagedExport = await stageItemsExport({
         archiveBaseName: `erp-sync-${Date.now()}`,
@@ -320,11 +357,10 @@ const action = defineHttpAction({
       const scriptTimeoutMs = Number.parseInt(process.env.ERP_SYNC_SCRIPT_TIMEOUT_MS || '300000', 10);
       const normalizedScriptTimeoutMs = Number.isFinite(scriptTimeoutMs) && scriptTimeoutMs > 0 ? scriptTimeoutMs : 300000;
       console.info('[sync-erp] script_started', { scriptPath, timeoutMs: normalizedScriptTimeoutMs });
-      console.info('[sync-erp] script_item_scope', { itemCount: itemIds.length });
       const scriptResult = await runErpSyncScript(
         scriptPath,
         stagedExport.itemsPath,
-        itemIds,
+        scopedArtikelNummern,
         ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null,
         MEDIA_DIR,
         normalizedScriptTimeoutMs

@@ -1,6 +1,5 @@
 import path from 'path';
 import { LOCAL_MEDIA_DIR, MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
-import { parseSequentialItemUUID } from './itemIds';
 
 // TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
 // TODO(webdav-feedback): Confirm startup logging format with operators once WebDAV mounts are deployed.
@@ -90,24 +89,13 @@ export function resolveMediaFolder(
   artikelNummer?: string | null,
   logger: Pick<Console, 'warn' | 'error' | 'info'> = console
 ): string {
-  // TODO(media-folder-migration): Remove ItemUUID fallback once media assets are migrated to Artikelnummer folders.
   const formatted = formatArtikelNummerForMedia(artikelNummer, logger);
   if (formatted) {
     return formatted;
   }
 
-  const parsed = parseSequentialItemUUID(itemId);
-  if (parsed?.kind === 'artikelnummer') {
-    const derived = formatArtikelNummerForMedia(parsed.artikelNummer, logger);
-    if (derived) {
-      logger.info?.('[media] Derived media folder from ItemUUID Artikel_Nummer segment', {
-        itemId,
-        artikelNummer: derived
-      });
-      return derived;
-    }
-  }
-
-  logger.warn?.('[media] Falling back to ItemUUID for media folder', { itemId });
+  logger.warn?.('[media] Missing Artikel_Nummer for media folder; using legacy ItemUUID fallback during migration window', {
+    itemId
+  });
   return itemId;
 }

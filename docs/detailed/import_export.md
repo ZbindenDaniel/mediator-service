@@ -70,7 +70,8 @@
   - Optional query: `mode` (`backup|erp|manual_import|automatic_import`), plus date filters (`createdAfter`, `updatedAfter`).
   - Returns staged export artifact for download (manual headers vs automatic ERP headers based on mode/header regime).
 - `/api/sync/erp` (`POST`, `backend/actions/sync-erp.ts`)
-  - Request JSON requires non-empty string array `itemIds`.
+  - Request JSON requires non-empty string array `itemIds` (instance ItemUUID selectors for export scope).
+  - `ERP_SYNC_ITEM_IDS` is derived from resolved `Artikel_Nummer` media-folder keys (deduplicated, formatted), not raw ItemUUID values.
   - Stages `automatic_import` CSV via `stageItemsExport`, then executes `docs/erp-sync.sh`.
   - Returns phase-aware JSON (`phase`, `ok`, `exitCode`, `stdout`, `stderr`, `error`).
 
