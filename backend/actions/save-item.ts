@@ -88,8 +88,6 @@ function normaliseMediaReference(
   const trimmed = value.trim();
   if (!trimmed) return null;
 
-  const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
-
   if (/^[a-zA-Z]+:\/\//.test(trimmed)) {
     return trimmed;
   }
@@ -114,41 +112,12 @@ function normaliseMediaReference(
     return `${MEDIA_PREFIX}${relative}`;
   }
 
-  const cleaned = trimmed.replace(/^\/+/g, '').replace(/\\/g, '/');
-  const candidates: string[] = [];
-  const pushCandidate = (relative: string | null) => {
-    if (!relative) return;
-    if (!candidates.includes(relative)) {
-      candidates.push(relative);
-    }
-  };
-
-  pushCandidate(buildRelativePath(`${mediaFolder}/${cleaned}`));
-  pushCandidate(buildRelativePath(cleaned));
-  const baseName = path.posix.basename(cleaned);
-  pushCandidate(buildRelativePath(`${mediaFolder}/${baseName}`));
-  if (mediaFolder !== itemId) {
-    pushCandidate(buildRelativePath(`${itemId}/${cleaned}`));
-    pushCandidate(buildRelativePath(`${itemId}/${baseName}`));
-  }
-
-  for (const relative of candidates) {
-    if (mediaExists(relative)) {
-      return `${MEDIA_PREFIX}${relative}`;
-    }
-  }
-
-  if (candidates.length > 0) {
-    console.warn('Media asset missing on disk', {
-      itemId,
-      candidate: trimmed,
-      attemptedPath: path.join(MEDIA_DIR, candidates[0])
-    });
-    return `${MEDIA_PREFIX}${candidates[0]}`;
-  }
-
-  console.warn('Media asset missing on disk', { itemId, candidate: trimmed });
-  return trimmed;
+  console.warn('Media asset reference ignored because only explicit /media/ paths are supported', {
+    itemId,
+    artikelNummer: artikelNummer ?? null,
+    candidate: trimmed
+  });
+  return null;
 }
 
 // TODO(media-enumeration): Confirm non-image files never leak into media folders once new sources are added.
@@ -333,64 +302,6 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
     });
     console.error('[save-item] Failed to remove media asset during item update', { itemId, asset: trimmed, err });
     return false;
-  }
-}
-
-function pruneEmptyItemMediaDirectory(itemId: string, artikelNummer?: string | null): void {
-  try {
-    const mediaFolder = resolveMediaFolder(itemId, artikelNummer, console);
-    const foldersToCheck = mediaFolder === itemId ? [mediaFolder] : [mediaFolder, itemId];
-    for (const folder of foldersToCheck) {
-      const dir = resolvePathWithinRoot(MEDIA_DIR, folder, {
-        logger: console,
-        operation: 'save-item:prune-media-directory'
-      });
-      if (!dir) {
-        continue;
-      }
-      if (!fs.existsSync(dir)) {
-        continue;
-      }
-      const stat = fs.statSync(dir);
-      if (!stat.isDirectory()) {
-        continue;
-      }
-      const entries = fs.readdirSync(dir);
-      if (entries.length === 0) {
-        emitMediaAudit({
-          action: 'prune',
-          scope: 'item',
-          identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
-          path: dir,
-          root: MEDIA_DIR,
-          outcome: 'start',
-          reason: 'empty-directory',
-        });
-        fs.rmdirSync(dir);
-        emitMediaAudit({
-          action: 'prune',
-          scope: 'item',
-          identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
-          path: dir,
-          root: MEDIA_DIR,
-          outcome: 'success',
-          reason: 'empty-directory',
-        });
-        console.info('[save-item] Removed empty media directory after update', { itemId, folder });
-      }
-    }
-  } catch (err) {
-    emitMediaAudit({
-      action: 'prune',
-      scope: 'item',
-      identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
-      path: null,
-      root: MEDIA_DIR,
-      outcome: 'error',
-      reason: 'prune-failed',
-      error: err,
-    });
-    console.error('[save-item] Failed to prune empty media directory', { itemId, err });
   }
 }
 
@@ -1010,7 +921,6 @@ const action = defineHttpAction({
           });
         }
 
-        pruneEmptyItemMediaDirectory(itemId, mediaArtikelNummer);
       } catch (e) {
         console.error('Failed to save item images', e);
       }

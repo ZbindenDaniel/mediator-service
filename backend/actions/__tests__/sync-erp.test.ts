@@ -47,6 +47,45 @@ describe('sync-erp payload normalization', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('generates explicit mirror scope list from normalized Artikelnummer values only', () => {
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+    const resolved = resolveArtikelNummerMirrorScope(
+      [
+        { ItemUUID: 'I-ALPHA-0001', Artikel_Nummer: '123' },
+        { ItemUUID: 'I-BETA-0001', Artikel_Nummer: '77' },
+        { ItemUUID: 'I-BETA-0002', Artikel_Nummer: '000077' }
+      ],
+      logger
+    );
+
+    expect(resolved).toEqual(['000123', '000077']);
+  });
+
+  it('rejects invalid path-like Artikelnummer values from mirror scope', () => {
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+    const resolved = resolveArtikelNummerMirrorScope(
+      [
+        { ItemUUID: 'I-PATH-0001', Artikel_Nummer: '../escape' },
+        { ItemUUID: 'I-PATH-0002', Artikel_Nummer: 'folder/name' },
+        { ItemUUID: 'I-VALID-0003', Artikel_Nummer: '88' }
+      ],
+      logger
+    );
+
+    expect(resolved).toEqual(['000088']);
+    expect(logger.warn).toHaveBeenCalledWith('[sync-erp] artikelnummer_invalid_for_media_scope', {
+      itemId: 'I-PATH-0001',
+      artikelNummer: '../escape'
+    });
+    expect(logger.warn).toHaveBeenCalledWith('[sync-erp] artikelnummer_invalid_for_media_scope', {
+      itemId: 'I-PATH-0002',
+      artikelNummer: 'folder/name'
+    });
+  });
+
+
   it('warns and safely skips instances without Artikel_Nummer', () => {
     const logger = { info: jest.fn(), warn: jest.fn() };
 

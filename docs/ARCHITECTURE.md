@@ -89,6 +89,7 @@ Design:owner@mediator and target the ongoing release documentation refresh.
   - `MEDIA_STORAGE_MODE=webdav` requires absolute filesystem `MEDIA_ROOT_DIR` (URLs/relative paths are rejected), then derives fixed paths `<MEDIA_ROOT_DIR>/shopbilder` and `<MEDIA_ROOT_DIR>/shopbilder-import`.
 - `MEDIA_DIR` and `MEDIA_DIR_OVERRIDE` are unsupported and ignored after the cutoff; with `CONFIG_STRICT=true` startup fails fast if either legacy variable is present.
 - Item image naming conventions keep `Artikel_Nummer` + image index semantics so importer/exporter and print previews resolve assets consistently.
+- `Grafikname`/`ImageNames` metadata is authoritative for media references; runtime actions do not synthesize dynamic fallback paths from bare filenames.
 
 ### Media environment matrix
 | Variable | Allowed values | Effect |
@@ -111,6 +112,7 @@ Examples:
 
 ### Media cleanup policy
 - Application cleanup should remain minimal by default: avoid recursive bulk deletion across `shopbilder/` and `shopbilder-import/` during routine API operations.
+- Runtime item-update flows must not prune media directories automatically; empty-folder cleanup is operator-driven only.
 - When operational cleanup is required, prefer explicit operator-run shell scripts over implicit runtime cleanup paths so scope and timing are auditable.
 - Destructive file operations should emit structured logs and keep `try/catch` boundaries close to filesystem calls to preserve incident forensics.
 

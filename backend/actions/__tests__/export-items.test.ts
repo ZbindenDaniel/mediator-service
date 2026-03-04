@@ -522,6 +522,29 @@ describe('export-items import contract header regimes', () => {
 
 
 
+  test('keeps serialized media field structure stable (pipe-delimited order and cardinality)', () => {
+    const row = {
+      ...baseRow,
+      Grafikname: '/media/ART-55/ART-55-1.jpg|/media/ART-55/ART-55-2.jpg|/media/ART-55/ART-55-3.jpg',
+      ImageNames: '/media/ART-55/ART-55-1.jpg|/media/ART-55/ART-55-2.jpg|/media/ART-55/ART-55-3.jpg',
+      ItemUUID: 'missing-structural-media-uuid'
+    };
+
+    const { csv } = serializeItemsToCsv([row], undefined, { exportMode: 'backup' });
+    const [header, values] = csv.split('\n');
+    const headers = header.split(',');
+    const mediaIndex = headers.indexOf('Grafikname(n)');
+    const serialized = values.split(',')[mediaIndex];
+
+    expect(serialized.split('|')).toEqual([
+      'ART-55/ART-55-1.jpg',
+      'ART-55/ART-55-2.jpg',
+      'ART-55/ART-55-3.jpg'
+    ]);
+    expect(serialized.includes('|')).toBe(true);
+  });
+
+
   test('preserves multi-image Grafikname lists as pipe-delimited values for export', () => {
     const { csv } = serializeItemsToCsv([
       {

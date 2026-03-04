@@ -134,6 +134,12 @@ Keep these in sync whenever contracts change:
   - Returns 404 when provided IDs do not resolve to exportable items.
   - Returns 502 on non-zero shell script exit and includes stdout/stderr for operator diagnosis.
 
+## Media path contract (current behavior)
+- Media root resolution is fixed by runtime mode (`dist/media` for local mode, `<MEDIA_ROOT_DIR>/shopbilder` for webdav mode).
+- `Grafikname` and `ImageNames` values are authoritative metadata for import/export media references.
+- Actions do not synthesize dynamic media paths from bare filenames; explicit `/media/...` references are required for direct path resolution.
+- Runtime import/export actions do not perform directory-pruning cleanup; folder cleanup is an explicit operator task.
+
 ## Logging points for diagnosis
 - Import ZIP buffering/staging/cleanup logs: `backend/actions/csv-import.ts`.
 - Stage-level ingestion completion/failure logs (`ingestBoxesCsv`, `ingestCsvFile`, `ingestAgenticRunsCsv`, `ingestEventsCsv`): `backend/actions/csv-import.ts`.
