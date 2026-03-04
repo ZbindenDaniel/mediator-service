@@ -292,14 +292,14 @@ if (!resolvedMediaRootDir) {
   resolvedMediaRootDir = absoluteMediaRootPath;
 }
 
-const derivedWebDavDir = resolvedMediaRootDir ? path.join(resolvedMediaRootDir, WEB_DAV_SUBDIR) : '';
-const derivedErpMediaMirrorDir = resolvedMediaRootDir ? path.join(resolvedMediaRootDir, ERP_MEDIA_MIRROR_SUBDIR) : '';
+export const MEDIA_ROOT_DIR = resolvedMediaRootDir;
+export const MEDIA_SHOPBILDER_DIR = MEDIA_ROOT_DIR ? path.join(MEDIA_ROOT_DIR, WEB_DAV_SUBDIR) : '';
+const derivedErpMediaMirrorDir = MEDIA_ROOT_DIR ? path.join(MEDIA_ROOT_DIR, ERP_MEDIA_MIRROR_SUBDIR) : '';
 
-if (MEDIA_STORAGE_MODE === 'webdav' && !derivedWebDavDir) {
+if (MEDIA_STORAGE_MODE === 'webdav' && !MEDIA_SHOPBILDER_DIR) {
   console.warn('[config] MEDIA_STORAGE_MODE=webdav but MEDIA_ROOT_DIR is invalid; WebDAV directory is disabled.');
 }
 
-export const WEB_DAV_DIR = derivedWebDavDir;
 export const ERP_MEDIA_MIRROR_DIR = derivedErpMediaMirrorDir;
 export const ERP_MEDIA_MIRROR_ENABLED = ERP_IMPORT_INCLUDE_MEDIA && Boolean(derivedErpMediaMirrorDir);
 
@@ -439,8 +439,8 @@ if (!ERP_SYNC_ENABLED) {
 }
 
 console.info('[config] Media root runtime configuration.', {
-  mediaRootDir: resolvedMediaRootDir || null,
-  webDavDir: WEB_DAV_DIR || null,
+  mediaRootDir: MEDIA_ROOT_DIR || null,
+  mediaShopbilderDir: MEDIA_SHOPBILDER_DIR || null,
   erpMediaMirrorDir: ERP_MEDIA_MIRROR_DIR || null,
   erpMediaMirrorEnabled: ERP_MEDIA_MIRROR_ENABLED
 });

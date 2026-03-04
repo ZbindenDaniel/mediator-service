@@ -1,5 +1,5 @@
 import path from 'path';
-import { LOCAL_MEDIA_DIR, MEDIA_STORAGE_MODE, WEB_DAV_DIR } from '../config';
+import { LOCAL_MEDIA_DIR, MEDIA_ROOT_DIR, MEDIA_SHOPBILDER_DIR, MEDIA_STORAGE_MODE } from '../config';
 
 // TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
 // TODO(webdav-feedback): Confirm startup logging format with operators once WebDAV mounts are deployed.
@@ -11,17 +11,13 @@ function resolveMediaDir(): string {
   let resolved = DEFAULT_MEDIA_DIR;
 
   try {
-    if (MEDIA_STORAGE_MODE === 'webdav') {
-      if (WEB_DAV_DIR) {
-        resolved = WEB_DAV_DIR;
-      } else {
-        console.warn(
-          '[media] WEB_DAV_DIR missing or invalid; falling back to fixed local media directory (dist/media). ' +
-            'Set MEDIA_ROOT_DIR to the mounted root for webdav mode.'
-        );
-      }
-    } else if (MEDIA_STORAGE_MODE === 'local') {
-      resolved = DEFAULT_MEDIA_DIR;
+    if (MEDIA_SHOPBILDER_DIR) {
+      resolved = MEDIA_SHOPBILDER_DIR;
+    } else {
+      console.warn(
+        '[media] MEDIA_ROOT_DIR not set or invalid; falling back to fixed local media directory (dist/media). ' +
+          'Set MEDIA_ROOT_DIR to use the fixed shopbilder/shopbilder-import contract.'
+      );
     }
   } catch (error) {
     console.error('[media] Failed to resolve media directory; using fixed local media directory.', {
@@ -30,10 +26,9 @@ function resolveMediaDir(): string {
     resolved = DEFAULT_MEDIA_DIR;
   }
 
-  const overrideValue = MEDIA_STORAGE_MODE === 'webdav' ? WEB_DAV_DIR : null;
   console.info('[media] Media storage resolved', {
     mode: MEDIA_STORAGE_MODE,
-    override: overrideValue || null,
+    mediaRootDir: MEDIA_ROOT_DIR || null,
     resolved,
     defaultDir: DEFAULT_MEDIA_DIR,
     baseDir: process.cwd()

@@ -267,6 +267,26 @@ function deriveLastObservedPhase(output: string): string | null {
   return lastObservedPhase;
 }
 
+export function buildErpSyncScriptEnv(
+  mediaSourceFiles: string[],
+  mediaMirrorDir: string | null,
+  mediaSourceDir: string
+): NodeJS.ProcessEnv {
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ERP_MEDIA_SOURCE_DIR: mediaSourceDir,
+    ERP_SYNC_ITEM_IDS: mediaSourceFiles.join('\n')
+  };
+
+  if (mediaMirrorDir) {
+    childEnv.ERP_MEDIA_MIRROR_DIR = mediaMirrorDir;
+  } else {
+    delete childEnv.ERP_MEDIA_MIRROR_DIR;
+  }
+
+  return childEnv;
+}
+
 async function runErpSyncScript(
   scriptPath: string,
   csvPath: string,
@@ -276,16 +296,21 @@ async function runErpSyncScript(
   timeoutMs: number
 ): Promise<ScriptExecutionResult> {
   return new Promise<ScriptExecutionResult>((resolve, reject) => {
-    const mediaSourceFilesEnv = mediaSourceFiles.join('\n');
+    let childEnv: NodeJS.ProcessEnv;
+    try {
+      childEnv = buildErpSyncScriptEnv(mediaSourceFiles, mediaMirrorDir, mediaSourceDir);
+    } catch (error) {
+      console.error('[sync-erp] script_env_prepare_failed', {
+        error,
+        mediaMirrorDir,
+        mediaSourceDir
+      });
+      reject(error);
+      return;
+    }
+
     const proc = spawn('bash', [scriptPath, csvPath], {
-      env: mediaMirrorDir
-        ? {
-            ...process.env,
-            ERP_MEDIA_MIRROR_DIR: mediaMirrorDir,
-            ERP_MEDIA_SOURCE_DIR: mediaSourceDir,
-            ERP_SYNC_ITEM_IDS: mediaSourceFilesEnv
-          }
-        : { ...process.env, ERP_MEDIA_SOURCE_DIR: mediaSourceDir, ERP_SYNC_ITEM_IDS: mediaSourceFilesEnv },
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
