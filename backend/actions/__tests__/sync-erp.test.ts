@@ -39,7 +39,11 @@ function createJsonRequest(payload: unknown): IncomingMessage {
 
 describe('sync-erp payload normalization', () => {
   it('maps mixed duplicate instances to a unique Artikelnummer mirror scope', () => {
-    const logger = { info: jest.fn(), warn: jest.fn() };
+    const logger: Pick<Console, 'info' | 'warn' | 'error'> = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
 
     const resolved = resolveArtikelNummerMirrorScope(
       [
@@ -94,7 +98,11 @@ describe('sync-erp payload normalization', () => {
 
 
   it('warns and safely skips instances without Artikel_Nummer', () => {
-    const logger = { info: jest.fn(), warn: jest.fn() };
+    const logger: Pick<Console, 'info' | 'warn' | 'error'> = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn()
+    };
 
     const resolved = resolveArtikelNummerMirrorScope(
       [
