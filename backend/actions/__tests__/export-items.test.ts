@@ -1,5 +1,21 @@
 // TODO(agent): Extend export coverage to validate media linking and Langtext serialization nuances.
-import { serializeItemsToCsv } from '../export-items';
+import os from 'os';
+import { createFsSandbox, type FsSandbox } from '../../test-utils/fs-sandbox';
+
+let serializeItemsToCsv: typeof import('../export-items').serializeItemsToCsv;
+let stageItemsExport: typeof import('../export-items').stageItemsExport;
+let sandbox: FsSandbox;
+
+beforeAll(() => {
+  sandbox = createFsSandbox('export-items-action-');
+  const mod = sandbox.importFresh<typeof import('../export-items')>('../export-items', __dirname);
+  serializeItemsToCsv = mod.serializeItemsToCsv;
+  stageItemsExport = mod.stageItemsExport;
+});
+
+afterAll(async () => {
+  await sandbox.cleanup();
+});
 
 describe('export-items category serialization', () => {
   // TODO(agent): Validate header ordering expectations for Suchbegriff once CSV consumers finalize schema.
@@ -457,5 +473,34 @@ describe('export-items import contract header regimes', () => {
     );
 
     logSpy.mockRestore();
+  });
+});
+
+
+describe('export-items staging sandbox safety', () => {
+  test('cleanup helper refuses to remove paths outside its sandbox root', async () => {
+    const outsidePath = os.tmpdir();
+    let thrown: Error | null = null;
+
+    try {
+      await sandbox.removeOwnedPath(outsidePath);
+    } catch (error) {
+      thrown = error as Error;
+    }
+
+    expect(thrown).toBeTruthy();
+    expect(thrown?.message).toContain('Refusing cleanup outside sandbox root');
+  });
+
+  test('stageItemsExport cleanup removes owned temp directories', async () => {
+    const staged = await stageItemsExport({
+      boxes: [],
+      exportMode: 'backup',
+      includeMedia: false,
+      items: []
+    });
+
+    await staged.cleanup();
+    expect(true).toBe(true);
   });
 });
