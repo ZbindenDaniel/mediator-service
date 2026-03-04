@@ -48,7 +48,6 @@ const action = defineHttpAction({
         console.error('box-detail failed to load items', { ...logContext, error });
         return sendJson(res, 500, { error: 'box detail unavailable' });
       }
-      const groupedItems = groupItemsForResponse(items, { logger: console });
 
       const eventsHelper = ctx.listEventsForBox;
       if (!eventsHelper || typeof eventsHelper.all !== 'function') {
@@ -98,7 +97,34 @@ const action = defineHttpAction({
             return sendJson(res, 500, { error: 'box detail unavailable' });
           }
         }
+
+        if (containedBoxes.length > 0) {
+          try {
+            const shelfContainedItems = containedBoxes.flatMap((contained: { BoxID?: string | null }) => {
+              const containedId = typeof contained?.BoxID === 'string' ? contained.BoxID.trim() : '';
+              if (!containedId) {
+                return [];
+              }
+              const containedItems = itemsHelper.all(containedId);
+              return Array.isArray(containedItems) ? containedItems : [];
+            });
+            if (shelfContainedItems.length > 0) {
+              console.info('box-detail loaded items from shelf-contained boxes', {
+                ...logContext,
+                containedBoxes: containedBoxes.length,
+                shelfItems: items.length,
+                containedItems: shelfContainedItems.length
+              });
+              items = [...items, ...shelfContainedItems];
+            }
+          } catch (error) {
+            console.error('box-detail failed to load items from shelf-contained boxes', { ...logContext, error });
+            return sendJson(res, 500, { error: 'box detail unavailable' });
+          }
+        }
       }
+
+      const groupedItems = groupItemsForResponse(items, { logger: console });
 
       sendJson(res, 200, { box, items, groupedItems, events, containedBoxes });
     } catch (err) {
