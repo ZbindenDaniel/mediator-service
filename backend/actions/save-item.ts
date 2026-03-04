@@ -63,7 +63,11 @@ function buildRelativePath(relative: string): string | null {
   return normalised;
 }
 
-function mediaExists(relative: string): boolean {
+function mediaExists(
+  itemId: string,
+  artikelNummer: string | null | undefined,
+  relative: string
+): boolean {
   try {
     const absolute = resolvePathWithinRoot(MEDIA_DIR, relative, {
       logger: console,
@@ -74,7 +78,12 @@ function mediaExists(relative: string): boolean {
     }
     return fs.existsSync(absolute);
   } catch (err) {
-    console.error('Failed to check media existence', { relative, error: err });
+    console.error('[save-item] Failed to check media existence', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      relative,
+      error: err
+    });
     return false;
   }
 }
@@ -92,32 +101,48 @@ function normaliseMediaReference(
     return trimmed;
   }
 
+  let relativeRaw = trimmed;
   if (trimmed.startsWith(MEDIA_PREFIX)) {
-    const relativeRaw = trimmed.slice(MEDIA_PREFIX.length);
-    const relative = buildRelativePath(relativeRaw);
-    if (!relative) {
-      console.warn('Media asset discarded due to unsafe relative path', {
-        itemId,
-        candidate: trimmed
-      });
-      return null;
-    }
-    if (!mediaExists(relative)) {
-      console.warn('Media asset missing on disk', {
-        itemId,
-        candidate: trimmed,
-        attemptedPath: path.join(MEDIA_DIR, relative)
-      });
-    }
-    return `${MEDIA_PREFIX}${relative}`;
+    relativeRaw = trimmed.slice(MEDIA_PREFIX.length);
+  } else if (trimmed.startsWith('/')) {
+    console.warn('[save-item] Media reference discarded due to unsupported absolute path', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: trimmed
+    });
+    return null;
   }
 
-  console.warn('Media asset reference ignored because only explicit /media/ paths are supported', {
-    itemId,
-    artikelNummer: artikelNummer ?? null,
-    candidate: trimmed
-  });
-  return null;
+  const relativePath = buildRelativePath(relativeRaw);
+  if (!relativePath) {
+    console.warn('[save-item] Media asset discarded due to unsafe relative path', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: trimmed,
+      relativePath: relativeRaw
+    });
+    return null;
+  }
+
+  if (!mediaExists(itemId, artikelNummer, relativePath)) {
+    console.warn('[save-item] Media asset missing on disk', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: trimmed,
+      attemptedPath: path.join(MEDIA_DIR, relativePath)
+    });
+  }
+
+  if (!trimmed.startsWith(MEDIA_PREFIX)) {
+    console.warn('Media asset reference ignored because only explicit /media/ paths are supported', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: trimmed
+    });
+    return null;
+  }
+
+  return `${MEDIA_PREFIX}${relativePath}`;
 }
 
 // TODO(media-enumeration): Confirm non-image files never leak into media folders once new sources are added.
