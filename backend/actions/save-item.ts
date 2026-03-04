@@ -63,12 +63,16 @@ function buildRelativePath(relative: string): string | null {
   return normalised;
 }
 
-function mediaExists(itemId: string, artikelNummer: string | null | undefined, relativePath: string): boolean {
-  const resolvedPath = resolvePathWithinRoot(MEDIA_DIR, relativePath, {
-    logger: console,
-    operation: 'save-item:media-exists'
-  });
-  if (!resolvedPath) {
+function mediaExists(
+  itemId: string,
+  artikelNummer: string | null | undefined,
+  relative: string
+): boolean {
+  try {
+    const absolute = resolvePathWithinRoot(MEDIA_DIR, relative, {
+      logger: console,
+      operation: 'save-item:media-exists'
+    });
     console.warn('[save-item] Media path blocked by guard', {
       itemId,
       artikelNummer: artikelNummer ?? null,
@@ -94,9 +98,7 @@ function mediaExists(itemId: string, artikelNummer: string | null | undefined, r
     console.error('[save-item] Failed to check media existence', {
       itemId,
       artikelNummer: artikelNummer ?? null,
-      relativePath,
-      resolvedPath,
-      outcome: 'error',
+      relative,
       error: err
     });
     return false;
@@ -144,7 +146,24 @@ function normaliseMediaReference(
     return null;
   }
 
-  mediaExists(itemId, artikelNummer, relativePath);
+  if (!mediaExists(itemId, artikelNummer, relativePath)) {
+    console.warn('[save-item] Media asset missing on disk', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: trimmed,
+      attemptedPath: path.join(MEDIA_DIR, relativePath)
+    });
+  }
+
+  if (!trimmed.startsWith(MEDIA_PREFIX)) {
+    console.warn('Media asset reference ignored because only explicit /media/ paths are supported', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: trimmed
+    });
+    return null;
+  }
+
   return `${MEDIA_PREFIX}${relativePath}`;
 }
 
@@ -965,6 +984,7 @@ const action = defineHttpAction({
             }
           });
         }
+
       } catch (e) {
         console.error('Failed to save item images', e);
       }

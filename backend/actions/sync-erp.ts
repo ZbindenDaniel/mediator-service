@@ -204,6 +204,14 @@ export function resolveArtikelNummerMirrorScope(
       continue;
     }
 
+    if (formatted.includes('/') || formatted.includes('\\') || formatted === '.' || formatted === '..') {
+      logger.warn('[sync-erp] artikelnummer_invalid_for_media_scope', {
+        itemId: item.ItemUUID ?? null,
+        artikelNummer: formatted
+      });
+      continue;
+    }
+
     resolved.add(formatted);
   }
 

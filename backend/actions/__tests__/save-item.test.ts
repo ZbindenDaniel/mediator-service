@@ -181,6 +181,35 @@ describe('save-item action', () => {
   });
 
 
+  it('does not synthesize /media paths from bare Grafikname values', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const assets = collectMediaAssets('ITEM-EXPLICIT-1', 'ART-EXPLICIT-1.jpg', 'ART-EXPLICIT');
+
+    expect(assets).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Media asset reference ignored because only explicit /media/ paths are supported',
+      expect.objectContaining({
+        itemId: 'ITEM-EXPLICIT-1',
+        artikelNummer: 'ART-EXPLICIT',
+        candidate: 'ART-EXPLICIT-1.jpg'
+      })
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('keeps explicit /media Grafikname paths authoritative without fallback synthesis', () => {
+    const folder = path.join(sandbox.distMediaDir, 'ART-10');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'ART-10-1.jpg'), 'fixture');
+
+    const assets = collectMediaAssets('ITEM-10', '/media/ART-10/ART-10-1.jpg', 'ART-10');
+
+    expect(assets[0]).toBe('/media/ART-10/ART-10-1.jpg');
+  });
+
+
   it('collects media assets from sandboxed media directory', () => {
     const folder = path.join(sandbox.distMediaDir, 'ART-1');
     const filename = 'ART-1-1.jpg';
