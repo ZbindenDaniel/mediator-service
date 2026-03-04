@@ -6,6 +6,7 @@ export type CategoryFieldType = 'haupt' | 'unter';
 interface CategoryLabelLookup {
   haupt: Map<string, number>;
   unter: Map<string, number>;
+  unterByHaupt: Map<number, Map<string, number>>;
 }
 
 interface CategoryNameLookup {
@@ -60,10 +61,42 @@ function registerLabel(target: Map<string, number>, label: string, code: number)
   target.set(normalized, code);
 }
 
+function registerLabelByParent(
+  target: Map<number, Map<string, number>>,
+  parentCode: number,
+  label: string,
+  code: number
+): void {
+  const normalized = normalizeCategoryLabelCandidate(label);
+  if (!normalized) {
+    return;
+  }
+
+  const scopedLookup = target.get(parentCode) ?? new Map<string, number>();
+  const existing = scopedLookup.get(normalized);
+
+  if (existing !== undefined && existing !== code) {
+    console.warn('[category-label-lookup] Conflicting scoped category mapping detected', {
+      parentCode,
+      normalized,
+      providedLabel: label,
+      existingCode: existing,
+      incomingCode: code,
+    });
+    return;
+  }
+
+  scopedLookup.set(normalized, code);
+  if (!target.has(parentCode)) {
+    target.set(parentCode, scopedLookup);
+  }
+}
+
 function buildCategoryLabelLookup(): CategoryLookupCache {
   const labelToCode: CategoryLabelLookup = {
     haupt: new Map<string, number>(),
     unter: new Map<string, number>(),
+    unterByHaupt: new Map<number, Map<string, number>>(),
   };
   let codeToLabel: CategoryNameLookup = { haupt: new Map<number, string>(), unter: new Map<number, string>() };
 
@@ -73,6 +106,7 @@ function buildCategoryLabelLookup(): CategoryLookupCache {
 
       for (const subCategory of category.subcategories) {
         registerLabel(labelToCode.unter, subCategory.label, subCategory.code);
+        registerLabelByParent(labelToCode.unterByHaupt, category.code, subCategory.label, subCategory.code);
       }
     }
   } catch (error) {
@@ -113,6 +147,28 @@ export function resolveCategoryLabelToCode(value: string, type: CategoryFieldTyp
 
   const lookup = type === 'haupt' ? ensureLookup().labelToCode.haupt : ensureLookup().labelToCode.unter;
   return lookup.get(normalized);
+}
+
+export function resolveSubcategoryLabelToCodeWithParent(
+  value: string,
+  parentCategoryCode: number | null | undefined
+): number | undefined {
+  if (!Number.isFinite(parentCategoryCode)) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const normalized = normalizeCategoryLabelCandidate(trimmed);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const scopedLookup = ensureLookup().labelToCode.unterByHaupt.get(Number(parentCategoryCode));
+  return scopedLookup?.get(normalized);
 }
 
 export function resolveCategoryCodeToLabel(value: number | string, type: CategoryFieldType): string | undefined {
