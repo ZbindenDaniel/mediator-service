@@ -6,6 +6,7 @@ import { defineHttpAction } from './index';
 import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED } from '../config';
 import { formatArtikelNummerForMedia } from '../lib/media';
 import { MEDIA_DIR } from '../lib/media';
+import { emitMediaAudit } from '../lib/media-audit';
 
 // TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
 // TODO(sync-erp): Keep this action script-parity only unless an explicit future requirement reintroduces API-side continuation orchestration.
@@ -331,6 +332,15 @@ const action = defineHttpAction({
       });
 
       if (scopedArtikelNummern.length === 0) {
+        emitMediaAudit({
+          action: 'mirror-skip',
+          scope: 'erp-sync',
+          identifier: { artikelNummer: null, itemUUID: itemIds.join(',') || null },
+          path: null,
+          root: MEDIA_DIR,
+          outcome: 'blocked',
+          reason: 'no-artikelnummer-scope',
+        });
         return sendJson(res, 422, {
           ok: false,
           phase: 'export_staged',
@@ -357,6 +367,15 @@ const action = defineHttpAction({
       const scriptTimeoutMs = Number.parseInt(process.env.ERP_SYNC_SCRIPT_TIMEOUT_MS || '300000', 10);
       const normalizedScriptTimeoutMs = Number.isFinite(scriptTimeoutMs) && scriptTimeoutMs > 0 ? scriptTimeoutMs : 300000;
       console.info('[sync-erp] script_started', { scriptPath, timeoutMs: normalizedScriptTimeoutMs });
+      emitMediaAudit({
+        action: ERP_MEDIA_MIRROR_ENABLED ? 'mirror-copy' : 'mirror-skip',
+        scope: 'erp-sync',
+        identifier: { artikelNummer: scopedArtikelNummern.join(','), itemUUID: itemIds.join(',') },
+        path: ERP_MEDIA_MIRROR_DIR || null,
+        root: MEDIA_DIR,
+        outcome: 'start',
+        reason: ERP_MEDIA_MIRROR_ENABLED ? 'script-start' : 'mirror-disabled',
+      });
       const scriptResult = await runErpSyncScript(
         scriptPath,
         stagedExport.itemsPath,
@@ -391,6 +410,23 @@ const action = defineHttpAction({
         mediaCopyStatus: mediaCopyMarker.status,
         mediaCopyDetail: mediaCopyMarker.detail,
         mediaCopyPhase: mediaCopyMarkerPhase
+      });
+      emitMediaAudit({
+        action: mediaCopyMarker.status === 'skipped' || !ERP_MEDIA_MIRROR_ENABLED ? 'mirror-skip' : 'mirror-copy',
+        scope: 'erp-sync',
+        identifier: { artikelNummer: scopedArtikelNummern.join(','), itemUUID: itemIds.join(',') },
+        path: ERP_MEDIA_MIRROR_DIR || null,
+        root: MEDIA_DIR,
+        outcome:
+          scriptResult.exitCode === 0
+            ? mediaCopyMarker.status === 'failed'
+              ? 'error'
+              : mediaCopyMarker.status === 'skipped'
+                ? 'skipped'
+                : 'success'
+            : 'error',
+        reason: mediaCopyMarker.detail,
+        error: scriptResult.exitCode === 0 ? null : scriptResult.stderr || 'script-exit-non-zero',
       });
 
       if (scriptResult.exitCode === 0) {

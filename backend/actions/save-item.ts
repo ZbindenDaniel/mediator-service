@@ -7,6 +7,7 @@ import type { AgenticRun, Item, ItemDetailResponse, ItemInstanceSummary, ItemRef
 import { normalizeQuality } from '../../models/quality';
 import { defineHttpAction } from './index';
 import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
+import { emitMediaAudit } from '../lib/media-audit';
 import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { generateShopwareCorrelationId } from '../db';
 import { attachTranscriptReference } from '../agentic';
@@ -257,14 +258,32 @@ export function collectMediaAssets(
   return assets;
 }
 
-function removeItemMediaAsset(itemId: string, asset: string): boolean {
+function removeItemMediaAsset(itemId: string, artikelNummer: string | null | undefined, asset: string): boolean {
   const trimmed = typeof asset === 'string' ? asset.trim() : '';
   if (!trimmed) {
     return false;
   }
+  emitMediaAudit({
+    action: 'delete',
+    scope: 'item',
+    identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+    path: trimmed,
+    root: MEDIA_DIR,
+    outcome: 'start',
+    reason: null,
+  });
   const relativeCandidate = trimmed.startsWith(MEDIA_PREFIX) ? trimmed.slice(MEDIA_PREFIX.length) : trimmed;
   const relative = buildRelativePath(relativeCandidate);
   if (!relative) {
+    emitMediaAudit({
+      action: 'delete',
+      scope: 'item',
+      identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+      path: trimmed,
+      root: MEDIA_DIR,
+      outcome: 'blocked',
+      reason: 'unsafe-relative-path',
+    });
     console.warn('[save-item] Skipped removing media asset with unsafe relative path', {
       itemId,
       asset: trimmed
@@ -277,13 +296,41 @@ function removeItemMediaAsset(itemId: string, asset: string): boolean {
       operation: 'save-item:remove-media-asset'
     });
     if (!fs.existsSync(absolute)) {
+      emitMediaAudit({
+        action: 'delete',
+        scope: 'item',
+        identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+        path: absolute,
+        root: MEDIA_DIR,
+        outcome: 'blocked',
+        reason: 'already-missing',
+      });
       console.info('[save-item] Media asset already removed', { itemId, asset: trimmed });
       return false;
     }
     fs.unlinkSync(absolute);
+    emitMediaAudit({
+      action: 'delete',
+      scope: 'item',
+      identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+      path: absolute,
+      root: MEDIA_DIR,
+      outcome: 'success',
+      reason: null,
+    });
     console.info('[save-item] Removed media asset during item update', { itemId, asset: trimmed });
     return true;
   } catch (err) {
+    emitMediaAudit({
+      action: 'delete',
+      scope: 'item',
+      identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+      path: trimmed,
+      root: MEDIA_DIR,
+      outcome: 'error',
+      reason: 'unlink-failed',
+      error: err,
+    });
     console.error('[save-item] Failed to remove media asset during item update', { itemId, asset: trimmed, err });
     return false;
   }
@@ -310,11 +357,39 @@ function pruneEmptyItemMediaDirectory(itemId: string, artikelNummer?: string | n
       }
       const entries = fs.readdirSync(dir);
       if (entries.length === 0) {
+        emitMediaAudit({
+          action: 'prune',
+          scope: 'item',
+          identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+          path: dir,
+          root: MEDIA_DIR,
+          outcome: 'start',
+          reason: 'empty-directory',
+        });
         fs.rmdirSync(dir);
+        emitMediaAudit({
+          action: 'prune',
+          scope: 'item',
+          identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+          path: dir,
+          root: MEDIA_DIR,
+          outcome: 'success',
+          reason: 'empty-directory',
+        });
         console.info('[save-item] Removed empty media directory after update', { itemId, folder });
       }
     }
   } catch (err) {
+    emitMediaAudit({
+      action: 'prune',
+      scope: 'item',
+      identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+      path: null,
+      root: MEDIA_DIR,
+      outcome: 'error',
+      reason: 'prune-failed',
+      error: err,
+    });
     console.error('[save-item] Failed to prune empty media directory', { itemId, err });
   }
 }
@@ -876,7 +951,7 @@ const action = defineHttpAction({
             }
           }
           for (const asset of assetsToRemove) {
-            if (removeItemMediaAsset(itemId, asset)) {
+            if (removeItemMediaAsset(itemId, mediaArtikelNummer, asset)) {
               removedCount += 1;
             }
           }
