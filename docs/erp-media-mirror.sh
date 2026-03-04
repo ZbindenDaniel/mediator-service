@@ -3,6 +3,7 @@
 mirror_dir="${ERP_MEDIA_MIRROR_DIR:-}"
 source_dir="${ERP_MEDIA_SOURCE_DIR:-dist/media}"
 item_ids_raw="${ERP_SYNC_ITEM_IDS:-}"
+# ERP_SYNC_ITEM_IDS must contain Artikelnummer media-folder keys (one per line or comma-separated), not ItemUUID instance IDs.
 
 image_find_args=(
   -maxdepth 1
