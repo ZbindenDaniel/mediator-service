@@ -1,6 +1,8 @@
+import fs from 'fs';
+import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { ItemEinheit } from '../../../models';
-import action from '../save-item';
+import { createFsSandbox, type FsSandbox } from '../../test-utils/fs-sandbox';
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -27,6 +29,21 @@ function createRequest(url: string): IncomingMessage {
 }
 
 describe('save-item action', () => {
+  let sandbox: FsSandbox;
+  let action: typeof import('../save-item').default;
+  let collectMediaAssets: typeof import('../save-item').collectMediaAssets;
+
+  beforeAll(() => {
+    sandbox = createFsSandbox('save-item-action-');
+    const mod = sandbox.importFresh<typeof import('../save-item')>('../save-item', __dirname);
+    action = mod.default;
+    collectMediaAssets = mod.collectMediaAssets;
+  });
+
+  afterAll(async () => {
+    await sandbox.cleanup();
+  });
+
   it('matches save item routes', () => {
     expect(action.matches('/api/items/ITEM-1', 'GET')).toBe(true);
   });
@@ -150,6 +167,18 @@ describe('save-item action', () => {
     expect(body.reference).toEqual(expect.objectContaining({ Artikel_Nummer: 'ART-3' }));
     expect(body.instances).toEqual([]);
     expect(body.events).toEqual([]);
+  });
+
+
+  it('collects media assets from sandboxed media directory', () => {
+    const folder = path.join(sandbox.distMediaDir, 'ART-1');
+    const filename = 'ART-1-1.jpg';
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, filename), 'fixture');
+
+    const assets = collectMediaAssets('ITEM-1', filename, 'ART-1');
+
+    expect(assets).toContain('/media/ART-1/ART-1-1.jpg');
   });
 
   it('returns 404 when identifier is unknown', async () => {

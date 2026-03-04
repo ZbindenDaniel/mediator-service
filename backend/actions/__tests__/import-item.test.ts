@@ -1,6 +1,8 @@
 // TODO(agent): Expand import-item route test coverage for mixed create/update semantics if endpoint contracts evolve.
+import fs from 'fs';
+import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
-import action from '../import-item';
+import { createFsSandbox, type FsSandbox } from '../../test-utils/fs-sandbox';
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -60,6 +62,17 @@ function createTestContext(overrides: TestCtxOverrides = {}) {
 }
 
 describe('import-item action', () => {
+  let sandbox: FsSandbox;
+  let action: typeof import('../import-item').default;
+
+  beforeAll(() => {
+    sandbox = createFsSandbox('import-item-action-');
+    ({ default: action } = sandbox.importFresh<typeof import('../import-item')>('../import-item', __dirname));
+  });
+
+  afterAll(async () => {
+    await sandbox.cleanup();
+  });
   it('matches import item route', () => {
     expect(action.matches('/api/import/item', 'POST')).toBe(true);
   });
@@ -223,6 +236,32 @@ describe('import-item action', () => {
     );
 
     warnSpy.mockRestore();
+  });
+
+
+  it('writes imported media files into the sandboxed media root', async () => {
+    const ctx = createTestContext({
+      getItem: {
+        get: jest
+          .fn()
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce({ Artikel_Nummer: 'ART-1', BoxID: null })
+      }
+    });
+
+    const req = createFormRequest('/api/import/item', {
+      actor: 'Tester',
+      Artikel_Nummer: 'ART-1',
+      picture1: 'data:image/png;base64,aGVsbG8='
+    });
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    const mediaPath = path.join(sandbox.distMediaDir, 'ART-1', 'ART-1-1.png');
+    expect(getStatus()).toBe(200);
+    expect(fs.existsSync(mediaPath)).toBe(true);
   });
 
   it('preserves minted path behavior when payload ItemUUID is not provided', async () => {
