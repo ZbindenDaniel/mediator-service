@@ -1,6 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import { Readable } from 'stream';
 import type { IncomingMessage, ServerResponse } from 'http';
-import action, { resolveArtikelNummerMirrorScope } from '../sync-erp';
+import action, { resolveArtikelNummerMirrorScope, resolveExplicitMediaMirrorSources } from '../sync-erp';
+import { MEDIA_DIR } from '../../lib/media';
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -63,6 +66,35 @@ describe('sync-erp payload normalization', () => {
     expect(logger.warn).toHaveBeenCalledWith('[sync-erp] artikelnummer_missing_for_media_scope', {
       itemId: 'I-MISSING-0001'
     });
+  });
+
+  it('resolves explicit media file paths from ImageNames and Grafikname fallback', () => {
+    const mediaFolderOne = `__test-sync-erp-${Date.now()}-1`;
+    const mediaFolderTwo = `__test-sync-erp-${Date.now()}-2`;
+    fs.mkdirSync(path.join(MEDIA_DIR, mediaFolderOne), { recursive: true });
+    fs.mkdirSync(path.join(MEDIA_DIR, mediaFolderTwo), { recursive: true });
+
+    const first = path.join(MEDIA_DIR, mediaFolderOne, 'A.jpg');
+    const second = path.join(MEDIA_DIR, mediaFolderTwo, 'B.png');
+    fs.writeFileSync(first, 'a');
+    fs.writeFileSync(second, 'b');
+
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const resolved = resolveExplicitMediaMirrorSources(
+      [
+        { ItemUUID: 'I-1', Artikel_Nummer: 'ART-1', ImageNames: `/media/${mediaFolderOne}/A.jpg|/media/${mediaFolderOne}/missing.jpg` },
+        { ItemUUID: 'I-2', Artikel_Nummer: 'ART-2', ImageNames: '   ', Grafikname: `/media/${mediaFolderTwo}/B.png` },
+        { ItemUUID: 'I-3', Artikel_Nummer: 'ART-3', ImageNames: '../escape.png' }
+      ],
+      logger
+    );
+
+    expect(resolved).toEqual(expect.arrayContaining([first, second]));
+    expect(resolved).toHaveLength(2);
+    expect(logger.warn).toHaveBeenCalled();
+
+    fs.rmSync(path.join(MEDIA_DIR, mediaFolderOne), { recursive: true, force: true });
+    fs.rmSync(path.join(MEDIA_DIR, mediaFolderTwo), { recursive: true, force: true });
   });
 
   it('fails fast with 422 when no Artikelnummer values can be resolved', async () => {
