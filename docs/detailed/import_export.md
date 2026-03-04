@@ -145,7 +145,27 @@ Keep these in sync whenever contracts change:
 ## Config & environment flags
 - Import-related:
   - `IMPORTER_FORCE_ZERO_STOCK` (forces zero-stock import behavior).
-- ERP/sync-related:
+- Media/ERP mirror runtime:
+
+| Variable | Allowed values | Runtime behavior |
+| --- | --- | --- |
+| `MEDIA_STORAGE_MODE` | `local` (default) / `webdav` | `local` writes media to fixed `dist/media`; `webdav` uses `<MEDIA_ROOT_DIR>/shopbilder`. |
+| `MEDIA_ROOT_DIR` | Absolute filesystem path | Required for active `webdav` media dir and for ERP media mirror derivation. Invalid URL/relative values disable derived dirs. |
+| `ERP_IMPORT_INCLUDE_MEDIA` | Boolean (`true`/`false`) | Enables mirror copy only when `MEDIA_ROOT_DIR` is valid, producing `<MEDIA_ROOT_DIR>/shopbilder-import`. |
+| `MEDIA_DIR`, `MEDIA_DIR_OVERRIDE` | Unsupported | Ignored after cutoff; error logged, or startup failure when `CONFIG_STRICT=true`. |
+
+Concrete examples:
+- Local import/export runtime without mirror:
+  - `MEDIA_STORAGE_MODE=local`
+  - `ERP_IMPORT_INCLUDE_MEDIA=false`
+  - Effective media source for import/export actions: `dist/media`
+- WebDAV runtime with ERP mirror enabled:
+  - `MEDIA_STORAGE_MODE=webdav`
+  - `MEDIA_ROOT_DIR=/mnt/media`
+  - `ERP_IMPORT_INCLUDE_MEDIA=true`
+  - Effective paths: source=`/mnt/media/shopbilder`, mirror=`/mnt/media/shopbilder-import`
+
+- ERP/sync-related (derived/exported):
   - `ERP_MEDIA_MIRROR_ENABLED`
   - `ERP_MEDIA_MIRROR_DIR`
   - Script/runtime env consumed by `docs/erp-sync.sh` (`ERP_MEDIA_SOURCE_DIR` injection, profile/mapping variables as documented in environment docs/script).

@@ -6,6 +6,7 @@ module.exports = {
     '**/backend/actions/__tests__/**/*.test.ts',
     '**/backend/agentic/__tests__/**/*.test.ts',
     '**/backend/integrations/**/__tests__/**/*.test.ts',
+    '**/backend/**/__tests__/**/*.test.ts',
     '**/frontend/src/components/__tests__/**/*.test.tsx',
     '**/scripts/__tests__/**/*.test.ts'
   ],
