@@ -81,9 +81,7 @@ if (rawDatabaseUrl && rawDbPathEnv) {
 
 export const INBOX_DIR = process.env.INBOX_DIR || path.join(__dirname, 'data/inbox');
 export const ARCHIVE_DIR = process.env.ARCHIVE_DIR || path.join(__dirname, 'data/archive');
-// TODO(media-storage): Review media storage environment names once WebDAV rollout is finalized.
 // TODO(media-root-contract): Keep MEDIA_ROOT_DIR-derived subfolder contract (`shopbilder`, `shopbilder-import`) synchronized with compose/docs examples.
-// TODO(config-tests): Add config validation tests for MEDIA_ROOT_DIR format checks.
 const MEDIA_STORAGE_MODE_VALUES = new Set(['local', 'webdav']);
 const rawMediaStorageMode = (process.env.MEDIA_STORAGE_MODE || '').trim().toLowerCase();
 let resolvedMediaStorageMode: 'local' | 'webdav' = 'local';
@@ -99,17 +97,23 @@ if (rawMediaStorageMode) {
 }
 
 export const MEDIA_STORAGE_MODE = resolvedMediaStorageMode;
-const LEGACY_MEDIA_DIR = (process.env.MEDIA_DIR || '').trim();
-export const MEDIA_DIR_OVERRIDE = (process.env.MEDIA_DIR_OVERRIDE || LEGACY_MEDIA_DIR).trim();
+const legacyMediaDir = (process.env.MEDIA_DIR || '').trim();
+const legacyMediaDirOverride = (process.env.MEDIA_DIR_OVERRIDE || '').trim();
 const rawMediaRootDir = (process.env.MEDIA_ROOT_DIR || '').trim();
 const WEB_DAV_URL_PATTERN = /^[a-z]+:\/\//i;
 let resolvedMediaRootDir = rawMediaRootDir;
 
-if (LEGACY_MEDIA_DIR || MEDIA_DIR_OVERRIDE) {
-  console.warn(
-    '[config] MEDIA_DIR and MEDIA_DIR_OVERRIDE are deprecated and ignored. ' +
-      'Use fixed local storage (dist/media) or set MEDIA_ROOT_DIR for webdav mode.'
-  );
+
+const CONFIG_STRICT = parseBooleanFlag(process.env.CONFIG_STRICT, 'CONFIG_STRICT') ?? false;
+
+if (legacyMediaDir || legacyMediaDirOverride) {
+  const legacyMediaMessage =
+    '[config] MEDIA_DIR and MEDIA_DIR_OVERRIDE are ignored and unsupported after 2026-01-15. ' +
+    'Use MEDIA_STORAGE_MODE=local (fixed dist/media) or MEDIA_STORAGE_MODE=webdav with MEDIA_ROOT_DIR.';
+  if (CONFIG_STRICT) {
+    throw new Error(`${legacyMediaMessage} Set CONFIG_STRICT=false to continue without startup failure.`);
+  }
+  console.error(legacyMediaMessage);
 }
 
 // TODO(webdav-feedback): Confirm log wording and examples with operations once WebDAV mounts are deployed.

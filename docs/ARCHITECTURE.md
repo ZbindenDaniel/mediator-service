@@ -84,9 +84,30 @@ Design:owner@mediator and target the ongoing release documentation refresh.
 
 ## Data & Media (`data/`)
 - `data/` contains CSV seeds and archive import/export payloads used by test and operational flows.
-- Runtime media storage is selectable via `MEDIA_STORAGE_MODE=local|webdav`; local mode always uses `dist/media`, while webdav mode derives fixed folders from `MEDIA_ROOT_DIR`.
-- Mounted media roots are expected to expose two fixed subfolders: `shopbilder/` (source of truth, grouped by `Artikel_Nummer`) and `shopbilder-import/` (flat sync target for shop ingestion).
+- Runtime media storage is controlled only by `MEDIA_STORAGE_MODE` and `MEDIA_ROOT_DIR`:
+  - `MEDIA_STORAGE_MODE=local` always uses fixed `dist/media` (no directory override variables are supported).
+  - `MEDIA_STORAGE_MODE=webdav` requires absolute filesystem `MEDIA_ROOT_DIR` (URLs/relative paths are rejected), then derives fixed paths `<MEDIA_ROOT_DIR>/shopbilder` and `<MEDIA_ROOT_DIR>/shopbilder-import`.
+- `MEDIA_DIR` and `MEDIA_DIR_OVERRIDE` are unsupported and ignored after the cutoff; with `CONFIG_STRICT=true` startup fails fast if either legacy variable is present.
 - Item image naming conventions keep `Artikel_Nummer` + image index semantics so importer/exporter and print previews resolve assets consistently.
+
+### Media environment matrix
+| Variable | Allowed values | Effect |
+| --- | --- | --- |
+| `MEDIA_STORAGE_MODE` | `local` (default) \| `webdav` | Selects fixed local storage (`dist/media`) or mounted root-derived storage. |
+| `MEDIA_ROOT_DIR` | Absolute filesystem path (required for `webdav`) | Root path used to derive `shopbilder` and `shopbilder-import`. Ignored in `local` mode for runtime media writes. |
+| `ERP_IMPORT_INCLUDE_MEDIA` | Boolean (`true`/`false`) | Enables ERP media mirror only when `MEDIA_ROOT_DIR` is valid. |
+| `MEDIA_DIR`, `MEDIA_DIR_OVERRIDE` | Unsupported | Ignored; emits error log or startup failure in strict mode. |
+
+Examples:
+- Local runtime + no mirror:
+  - `MEDIA_STORAGE_MODE=local`
+  - `ERP_IMPORT_INCLUDE_MEDIA=false`
+  - Effective directories: media=`dist/media`, mirror=disabled
+- WebDAV runtime + mirror:
+  - `MEDIA_STORAGE_MODE=webdav`
+  - `MEDIA_ROOT_DIR=/mnt/media`
+  - `ERP_IMPORT_INCLUDE_MEDIA=true`
+  - Effective directories: media=`/mnt/media/shopbilder`, mirror=`/mnt/media/shopbilder-import`
 
 ### Media cleanup policy
 - Application cleanup should remain minimal by default: avoid recursive bulk deletion across `shopbilder/` and `shopbilder-import/` during routine API operations.
