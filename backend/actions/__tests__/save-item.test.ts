@@ -28,6 +28,17 @@ function createRequest(url: string): IncomingMessage {
   return { url, method: 'GET' } as IncomingMessage;
 }
 
+function createPutRequest(url: string, body: Record<string, unknown>): IncomingMessage {
+  const payload = JSON.stringify(body);
+  return {
+    url,
+    method: 'PUT',
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.from(payload);
+    }
+  } as IncomingMessage;
+}
+
 describe('save-item action', () => {
   let sandbox: FsSandbox;
   let action: typeof import('../save-item').default;
@@ -179,6 +190,61 @@ describe('save-item action', () => {
     const assets = collectMediaAssets('ITEM-1', filename, 'ART-1');
 
     expect(assets).toContain('/media/ART-1/ART-1-1.jpg');
+  });
+
+
+
+  it('keeps fallback primary media stable after removing the previous primary asset', async () => {
+    const folder = path.join(sandbox.distMediaDir, 'ART-9');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'ART-9-1.jpg'), 'one');
+    fs.writeFileSync(path.join(folder, 'ART-9-2.jpg'), 'two');
+
+    const persistItemReference = jest.fn();
+    const ctx = {
+      getItem: {
+        get: jest.fn(() => ({
+          ItemUUID: 'ITEM-9',
+          Artikel_Nummer: 'ART-9',
+          BoxID: null,
+          Location: null,
+          Grafikname: '/media/ART-9/ART-9-1.jpg',
+          Einheit: ItemEinheit.Stk
+        }))
+      },
+      getItemReference: {
+        get: jest.fn(() => ({
+          Artikel_Nummer: 'ART-9',
+          Grafikname: '/media/ART-9/ART-9-1.jpg',
+          ImageNames: '/media/ART-9/ART-9-1.jpg|/media/ART-9/ART-9-2.jpg',
+          Artikelbeschreibung: 'Reference text'
+        }))
+      },
+      db: {
+        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
+      },
+      persistItemReference,
+      logEvent: jest.fn(),
+      enqueueShopwareSyncJob: jest.fn()
+    };
+
+    const req = createPutRequest('/api/items/ITEM-9', {
+      actor: 'Tester',
+      picture1: null
+    });
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(getBody()).toEqual({ ok: true, media: ['/media/ART-9/ART-9-2.jpg'] });
+    expect(persistItemReference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'ART-9',
+        Grafikname: '/media/ART-9/ART-9-2.jpg',
+        ImageNames: '/media/ART-9/ART-9-1.jpg|/media/ART-9/ART-9-2.jpg'
+      })
+    );
   });
 
   it('returns 404 when identifier is unknown', async () => {
