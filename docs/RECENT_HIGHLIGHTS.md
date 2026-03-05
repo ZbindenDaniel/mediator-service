@@ -2,9 +2,9 @@
 
 ## Version 2.3
 
-## Versions before 2.3 (historical)
+## Versions before 2.2 (historical)
 
-> Planning inputs for upcoming work are tracked in `docs/PLANNING_V_2_4.md`.
+> Planning inputs for upcoming work are tracked in `docs/PLANNING_V_2_3.md`.
 
 - Preserved Einheit/Quality/Auf_Lager values during match-selection item creation and logged creation-by-reference payload fields for observability.
 - Cleared ItemUUID values for grouped CSV export rows and omit the ItemUUID column when grouping merges rows to prevent inconsistent instance references, with logging for dropped IDs.

@@ -1,16 +1,16 @@
-# Planning v2.4
+# Planning v2.3
 
-This document tracks planning inputs for **version 2.4**.
+This document tracks planning inputs for **version 2.3**.
 
 ## Current status
 
-No v2.4 implementation work has started yet.
+No v2.3 implementation work has started yet.
 
-Reason: separate upcoming planning work from shipped v2.3 history to keep release coordination auditable and reduce stale-plan noise in active documentation.
+Reason: separate upcoming planning work from shipped v2.2 history to keep release coordination auditable and reduce stale-plan noise in active documentation.
 
-Higher-level goal: keep v2.4 planning minimal, explicit, and easy to execute in small reviewable steps.
+Higher-level goal: keep v2.3 planning minimal, explicit, and easy to execute in small reviewable steps.
 
-## Planning intake template (use when v2.4 work starts)
+## Planning intake template (use when v2.3 work starts)
 
 - Goal: what outcome is needed.
 - Reason: why this change is needed now.
@@ -18,7 +18,7 @@ Higher-level goal: keep v2.4 planning minimal, explicit, and easy to execute in 
 - Data contracts: confirm whether `models/` or API payloads are affected.
 - Logging/error handling expectations: where existing logs/try-catch paths should be extended.
 
-<!-- TODO(planning-v2.4): add first scoped v2.4 plan item when implementation begins. -->
+<!-- TODO(planning-v2.3): add first scoped v2.3 plan item when implementation begins. -->
 
 
 ## Intake: media handling simplification (pending)

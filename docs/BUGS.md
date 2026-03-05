@@ -2,7 +2,7 @@
 
 This list tracks defects that require fixes. Cross-reference the planning context in [OVERVIEW.md](/docs/OVERVIEW.md) and the component guidance in [../AGENTS.md](../AGENTS.md). When fixing a Bug remove it from this list.
 
-## Current bug focus (v2.4)
+## Current bug focus (v2.2)
 
 - Items in the items list in a box should display the shelf as location if the item is in a shelf or the item is in a box which is in a shelf.
   - Reason: current placement context is incomplete for operators during box workflows.
