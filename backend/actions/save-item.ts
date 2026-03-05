@@ -76,24 +76,10 @@ function mediaExists(
     console.warn('[save-item] Media path blocked by guard', {
       itemId,
       artikelNummer: artikelNummer ?? null,
-      relativePath,
       resolvedPath: null,
       outcome: 'blocked'
     });
     return false;
-  }
-  try {
-    const exists = fs.existsSync(resolvedPath);
-    if (!exists) {
-      console.warn('[save-item] Media asset missing on disk', {
-        itemId,
-        artikelNummer: artikelNummer ?? null,
-        relativePath,
-        resolvedPath,
-        outcome: 'missing'
-      });
-    }
-    return exists;
   } catch (err) {
     console.error('[save-item] Failed to check media existence', {
       itemId,

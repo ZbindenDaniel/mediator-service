@@ -19,6 +19,8 @@ README.md
 
 /.env
 .vscode/.env
+prod.env
+env.old
 backend/config.ts
 backend/data/mediator.sqlite
 data/mediator.db
@@ -26,6 +28,5 @@ data/mediator.db-shm
 data/mediator.db-wal
 dist_tmp/*
 coverage/*
-env.old
 secrets/
 dist_old*
