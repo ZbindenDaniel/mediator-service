@@ -71,6 +71,25 @@ describe('CSV import duplicate protections', () => {
     }
   });
 
+
+  test('detects checksum duplicates when archived filename does not match logical name', () => {
+    const normalizedName = normalizeCsvFilename('duplicate.csv');
+    const csvBody = ['ItemUUID,BoxID', 'I-DUP-CHK,B-DUP-CHK', ''].join('\n');
+    const archivedEntry = 'archived-other.csv';
+    const archivedPath = path.join(TEST_ARCHIVE, archivedEntry);
+
+    fs.writeFileSync(archivedPath, csvBody);
+
+    const duplicateProbe = findArchiveDuplicate(
+      TEST_ARCHIVE,
+      normalizedName,
+      computeChecksum(Buffer.from(csvBody))
+    );
+
+    expect(duplicateProbe).not.toBeNull();
+    expect(duplicateProbe).toEqual({ reason: 'checksum', entry: archivedEntry });
+  });
+
   test('rejects re-importing the same CSV once archived', async () => {
     const csvBody = ['ItemUUID,BoxID', 'I-DUP-001,B-DUP-001', ''].join('\n');
     const ctx = { INBOX_DIR: TEST_INBOX };
