@@ -175,6 +175,7 @@ Concrete examples:
   - `ERP_MEDIA_MIRROR_ENABLED`
   - `ERP_MEDIA_MIRROR_DIR`
   - Script/runtime env consumed by `backend/scripts/erp-sync.sh` (`ERP_MEDIA_SOURCE_DIR` injection, profile/mapping variables as documented in environment docs/script).
+  - ERP media mirror helper script path: `backend/scripts/erp-media-mirror.sh` (invoked by `erp-sync.sh` via script-relative resolution).
 - See also: `docs/ENVIRONMENT.md`.
 
 ## Failure modes & troubleshooting
