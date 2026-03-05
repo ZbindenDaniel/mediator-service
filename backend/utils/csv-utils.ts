@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 import { execFileSync, spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import { resolvePathWithinRoot } from '../lib/path-guard';
