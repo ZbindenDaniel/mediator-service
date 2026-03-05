@@ -17,6 +17,9 @@ password='B9kc!O-?b*w=i8<'
 client_id='1'
 url='https://revamp.kivitendo.ch/kivitendo-erp/controller.pl'
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MIRROR_SCRIPT_PATH="$SCRIPT_DIR/erp-media-mirror.sh"
+
 function fail {
   echo "$@"
   exit 1
@@ -241,7 +244,14 @@ export ERP_SYNC_ITEM_IDS="$normalized_media_files"
 echo "[erp-sync] media_copy_scope file_count=$(printf '%s\n' "$ERP_SYNC_ITEM_IDS" | sed '/^$/d' | wc -l | tr -d ' ')" >&2
 
 echo "[erp-sync] phase=media_mirror_start" >&2
-if ! bash docs/erp-media-mirror.sh; then
+if [ ! -r "$MIRROR_SCRIPT_PATH" ]; then
+  rm -f "$tmpf"
+  echo "[erp-sync] media_copy_error reason=mirror_script_unavailable path=$MIRROR_SCRIPT_PATH" >&2
+  echo "[erp-sync] media_copy_result status=failed reason=mirror_script_unavailable" >&2
+  exit 3
+fi
+
+if ! bash "$MIRROR_SCRIPT_PATH"; then
   rm -f "$tmpf"
   echo "[erp-sync] media_copy_result status=failed reason=mirror_script_failed" >&2
   exit 3
