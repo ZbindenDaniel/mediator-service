@@ -3,7 +3,7 @@
 mirror_dir="${ERP_MEDIA_MIRROR_DIR:-}"
 source_dir="${ERP_MEDIA_SOURCE_DIR:-dist/media}"
 item_ids_raw="${ERP_SYNC_ITEM_IDS:-}"
-# ERP_SYNC_ITEM_IDS must contain explicit media file paths (one per line or comma-separated).
+# ERP_SYNC_ITEM_IDS must contain explicit media file paths and is parsed newline-delimited only.
 # Copy policy: flatten into ERP_MEDIA_MIRROR_DIR by basename (last write wins when names collide).
 
 tmpf_media=$(mktemp)
@@ -41,6 +41,9 @@ echo "[erp-sync] media_copy_phase phase=copy status=start source=$source_dir des
 source_count=0
 copied_count=0
 failed_count=0
+parser_entry_count=$(printf '%s\n' "$item_ids_raw" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+
+echo "[erp-sync] media_copy_parser mode=newline-delimited entries=$parser_entry_count" >&2
 
 while IFS= read -r raw_entry; do
   source_path=$(printf '%s' "$raw_entry" | xargs)
@@ -71,7 +74,7 @@ while IFS= read -r raw_entry; do
   fi
 
   echo "[erp-sync] media_copy_file source=$source_path destination=$destination_file status=$copy_status error=${copy_error:-none}" >&2
-done < <(printf '%s\n' "$item_ids_raw" | tr ',' '\n')
+done < <(printf '%s\n' "$item_ids_raw")
 
 if [ "$failed_count" -gt 0 ]; then
   cat "$tmpf_media" >&2

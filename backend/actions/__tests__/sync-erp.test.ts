@@ -195,6 +195,16 @@ describe('sync-erp script env building', () => {
     expect(env.ERP_SYNC_ITEM_IDS).toBe('/mnt/media/a.jpg');
   });
 
+
+  it('preserves commas in ERP_SYNC_ITEM_IDS entries for WebDAV/GVFS-style paths', () => {
+    const env = buildErpSyncScriptEnv(
+      ['/run/user/1000/gvfs/dav:host=webdav.example,ssl=true/path/IMG_0001.jpg'],
+      '/mnt/root/shopbilder-import',
+      '/mnt/root/shopbilder'
+    );
+
+    expect(env.ERP_SYNC_ITEM_IDS).toBe('/run/user/1000/gvfs/dav:host=webdav.example,ssl=true/path/IMG_0001.jpg');
+  });
   it('sets ERP_MEDIA_MIRROR_DIR when mirroring is enabled', () => {
     process.env.ERP_MEDIA_MIRROR_DIR = './media/mirror';
 
