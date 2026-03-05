@@ -59,6 +59,9 @@ RUN npm ci --omit=dev
 # Copy build artifacts and static assets
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/public ./dist/frontend/public
+COPY --from=builder /app/backend/scripts ./backend/scripts
+
+RUN chmod +x /app/backend/scripts/erp-sync.sh
 
 # Ensure required directories exist AND fix ownership
 # TODO(media-storage): Revisit directory creation if media paths move outside /app.

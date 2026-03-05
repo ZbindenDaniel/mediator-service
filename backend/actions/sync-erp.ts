@@ -10,7 +10,7 @@ import { MEDIA_DIR } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { resolvePathWithinRoot } from '../lib/path-guard';
 
-// TODO(sync-erp): Extend script result parsing when docs/erp-sync.sh begins emitting structured machine-readable status fields.
+// TODO(sync-erp): Extend script result parsing when backend/scripts/erp-sync.sh begins emitting structured machine-readable status fields.
 // TODO(sync-erp): Keep this action script-parity only unless an explicit future requirement reintroduces API-side continuation orchestration.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -407,7 +407,7 @@ function logMediaMirrorRuntime(logger: Pick<Console, 'info'>): void {
 
 
 
-// TODO(sync-erp-media-marker): Switch this parser to machine-readable JSON if docs/erp-sync.sh emits JSON markers in future.
+// TODO(sync-erp-media-marker): Switch this parser to machine-readable JSON if backend/scripts/erp-sync.sh emits JSON markers in future.
 function parseMediaCopyMarker(output: string): MediaCopyMarker {
   const lines = output
     .split(/\r?\n/)
@@ -434,10 +434,52 @@ function parseMediaCopyMarker(output: string): MediaCopyMarker {
   return { status: 'unknown', detail: mediaLine };
 }
 
-function resolveErpSyncScriptPath(logger: Pick<Console, 'info' | 'warn'>): string {
-  const scriptPath = path.resolve(process.cwd(), 'docs/erp-sync.sh');
-  logger.info('[sync-erp] script_path_resolved', { scriptPath });
-  return scriptPath;
+const ERP_SYNC_SCRIPT_DEFAULT_RELATIVE_PATH = 'backend/scripts/erp-sync.sh';
+
+export function resolveErpSyncScriptPath(
+  logger: Pick<Console, 'info'>
+): { scriptPath: string; defaultPath: string; overridePath: string | null; cwd: string } {
+  const cwd = process.cwd();
+  const defaultPath = path.resolve(cwd, ERP_SYNC_SCRIPT_DEFAULT_RELATIVE_PATH);
+  const overridePath = process.env.ERP_SYNC_SCRIPT_PATH?.trim() || null;
+  const scriptPath = overridePath
+    ? (path.isAbsolute(overridePath) ? overridePath : path.resolve(cwd, overridePath))
+    : defaultPath;
+
+  logger.info('[sync-erp] script_path_resolved', {
+    cwd,
+    defaultPath,
+    overridePath,
+    scriptPath,
+  });
+
+  return { scriptPath, defaultPath, overridePath, cwd };
+}
+
+export function validateErpSyncScriptPath(
+  scriptPath: string,
+  logger: Pick<Console, 'error'>,
+  diagnostics: { cwd: string; defaultPath: string; overridePath: string | null }
+): string | null {
+  try {
+    const scriptStat = fs.statSync(scriptPath);
+    if (!scriptStat.isFile()) {
+      logger.error('[sync-erp] script_preflight_not_file', {
+        ...diagnostics,
+        scriptPath,
+      });
+      return 'ERP sync script path is invalid. Expected a regular file.';
+    }
+  } catch (error) {
+    logger.error('[sync-erp] script_preflight_stat_failed', {
+      ...diagnostics,
+      scriptPath,
+      error,
+    });
+    return 'ERP sync script is missing or not accessible.';
+  }
+
+  return null;
 }
 
 const action = defineHttpAction({
@@ -535,7 +577,31 @@ const action = defineHttpAction({
         itemCount: items.length
       });
 
-      const scriptPath = resolveErpSyncScriptPath(console);
+      let scriptPath: string;
+      try {
+        const scriptResolution = resolveErpSyncScriptPath(console);
+        scriptPath = scriptResolution.scriptPath;
+        const preflightError = validateErpSyncScriptPath(scriptPath, console, {
+          cwd: scriptResolution.cwd,
+          defaultPath: scriptResolution.defaultPath,
+          overridePath: scriptResolution.overridePath,
+        });
+        if (preflightError) {
+          return sendJson(res, 500, {
+            ok: false,
+            phase: 'script_started',
+            error: preflightError,
+          });
+        }
+      } catch (error) {
+        console.error('[sync-erp] script_preflight_failed', { error });
+        return sendJson(res, 500, {
+          ok: false,
+          phase: 'script_started',
+          error: 'Unexpected runtime error while preparing ERP sync script execution.',
+        });
+      }
+
       const scriptTimeoutMs = Number.parseInt(process.env.ERP_SYNC_SCRIPT_TIMEOUT_MS || '300000', 10);
       const normalizedScriptTimeoutMs = Number.isFinite(scriptTimeoutMs) && scriptTimeoutMs > 0 ? scriptTimeoutMs : 300000;
       console.info('[sync-erp] script_started', { scriptPath, timeoutMs: normalizedScriptTimeoutMs });

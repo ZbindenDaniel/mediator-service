@@ -5,7 +5,9 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import action, {
   buildErpSyncScriptEnv,
   resolveArtikelNummerMirrorScope,
-  resolveExplicitMediaMirrorSources
+  resolveExplicitMediaMirrorSources,
+  resolveErpSyncScriptPath,
+  validateErpSyncScriptPath
 } from '../sync-erp';
 import { MEDIA_DIR } from '../../lib/media';
 
@@ -213,5 +215,56 @@ describe('sync-erp script env building', () => {
     expect(env.ERP_MEDIA_MIRROR_DIR).toBe('/mnt/root/shopbilder-import');
     expect(env.ERP_MEDIA_SOURCE_DIR).toBe('/mnt/root/shopbilder');
     expect(env.ERP_SYNC_ITEM_IDS).toBe('/mnt/media/a.jpg\n/mnt/media/b.png');
+  });
+});
+
+
+describe('sync-erp script path resolution and preflight', () => {
+  const originalScriptPathOverride = process.env.ERP_SYNC_SCRIPT_PATH;
+
+  afterEach(() => {
+    if (originalScriptPathOverride === undefined) {
+      delete process.env.ERP_SYNC_SCRIPT_PATH;
+    } else {
+      process.env.ERP_SYNC_SCRIPT_PATH = originalScriptPathOverride;
+    }
+  });
+
+  it('resolves backend/scripts/erp-sync.sh as the default script path', () => {
+    delete process.env.ERP_SYNC_SCRIPT_PATH;
+    const logger = { info: jest.fn() };
+
+    const resolved = resolveErpSyncScriptPath(logger);
+
+    expect(resolved.overridePath).toBeNull();
+    expect(resolved.defaultPath).toBe(path.resolve(process.cwd(), 'backend/scripts/erp-sync.sh'));
+    expect(resolved.scriptPath).toBe(resolved.defaultPath);
+  });
+
+  it('prefers ERP_SYNC_SCRIPT_PATH override when provided', () => {
+    process.env.ERP_SYNC_SCRIPT_PATH = 'custom/erp-sync.sh';
+    const logger = { info: jest.fn() };
+
+    const resolved = resolveErpSyncScriptPath(logger);
+
+    expect(resolved.overridePath).toBe('custom/erp-sync.sh');
+    expect(resolved.scriptPath).toBe(path.resolve(process.cwd(), 'custom/erp-sync.sh'));
+  });
+
+  it('returns controlled preflight error when script path is missing', () => {
+    const logger = { error: jest.fn() };
+    const scriptPath = path.resolve(process.cwd(), 'backend/scripts/does-not-exist.sh');
+
+    const validationError = validateErpSyncScriptPath(scriptPath, logger, {
+      cwd: process.cwd(),
+      defaultPath: path.resolve(process.cwd(), 'backend/scripts/erp-sync.sh'),
+      overridePath: scriptPath
+    });
+
+    expect(validationError).toBe('ERP sync script is missing or not accessible.');
+    expect(logger.error).toHaveBeenCalledWith('[sync-erp] script_preflight_stat_failed', expect.objectContaining({
+      cwd: process.cwd(),
+      scriptPath
+    }));
   });
 });
