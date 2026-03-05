@@ -38,7 +38,7 @@
   - ZIP import staging and stage outcomes: `backend/actions/csv-import.ts`
   - ZIP validation route: `backend/actions/validate-csv.ts`
   - CSV parsing/ingestion + alias hydration + strict checks: `backend/importer.ts`
-  - ERP sync script handoff: `backend/actions/sync-erp.ts` and `docs/erp-sync.sh`
+  - ERP sync script handoff: `backend/actions/sync-erp.ts` and `backend/scripts/erp-sync.sh`
 - Sync requirements across layers:
   - Shared model field names in `models/` must stay aligned with importer targets (`Artikel_Nummer`, `Einheit`, `ItemUUID`, `BoxID`, category fields, status fields).
   - Export headers (manual vs automatic regimes) must remain aligned with importer alias coverage when renamed.
@@ -72,7 +72,7 @@
 - `/api/sync/erp` (`POST`, `backend/actions/sync-erp.ts`)
   - Request JSON requires non-empty string array `itemIds` (instance ItemUUID selectors for export scope).
   - `ERP_SYNC_ITEM_IDS` is derived from resolved `Artikel_Nummer` media-folder keys (deduplicated, formatted), not raw ItemUUID values; it is newline-delimited and must not be comma-split because valid GVFS/WebDAV paths can contain commas.
-  - Stages `automatic_import` CSV via `stageItemsExport`, then executes `docs/erp-sync.sh`.
+  - Stages `automatic_import` CSV via `stageItemsExport`, then executes `backend/scripts/erp-sync.sh` (override via `ERP_SYNC_SCRIPT_PATH`).
   - Returns phase-aware JSON (`phase`, `ok`, `exitCode`, `stdout`, `stderr`, `error`).
 
 ## Explicit file-structure contract (CSV/ZIP)
@@ -174,7 +174,7 @@ Concrete examples:
 - ERP/sync-related (derived/exported):
   - `ERP_MEDIA_MIRROR_ENABLED`
   - `ERP_MEDIA_MIRROR_DIR`
-  - Script/runtime env consumed by `docs/erp-sync.sh` (`ERP_MEDIA_SOURCE_DIR` injection, profile/mapping variables as documented in environment docs/script).
+  - Script/runtime env consumed by `backend/scripts/erp-sync.sh` (`ERP_MEDIA_SOURCE_DIR` injection, profile/mapping variables as documented in environment docs/script).
 - See also: `docs/ENVIRONMENT.md`.
 
 ## Failure modes & troubleshooting
@@ -189,7 +189,7 @@ Concrete examples:
   - Recovery: repair source identifiers before retrying strict imports.
 - ERP sync script failures
   - Signal: `502` with non-zero `exitCode`, stdout/stderr, and script phase logs.
-  - Recovery: inspect `docs/erp-sync.sh` output and profile/mapping config.
+  - Recovery: inspect `backend/scripts/erp-sync.sh` output and profile/mapping config.
 
 ## Test/validation checklist
 - Static checks:
