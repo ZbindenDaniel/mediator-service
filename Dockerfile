@@ -25,6 +25,8 @@ FROM node:20-bullseye-slim AS runtime
 # Install system dependencies required at runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        # curl is required by backend/scripts/erp-sync.sh
+        curl \
         python3 \
         build-essential \
         cups-client libcups2 \
