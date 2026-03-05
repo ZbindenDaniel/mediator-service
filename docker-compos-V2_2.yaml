@@ -1,38 +1,7 @@
-ervices:
-  # TODO(database-migration): Replace the transient Postgres bootstrap once production settings are finalised.
-#  postgres:
-#    image: postgres:16
-#    container_name: mediator-postgres
-#    environment:
-#      POSTGRES_USER: mediator
-#      POSTGRES_PASSWORD: mediator
-#      POSTGRES_DB: mediator
-#    volumes:
-#      - mediator-postgres:/var/lib/postgresql/data
-#    healthcheck:
-#      test: ['CMD-SHELL', 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
-#      interval: 5s
-#      timeout: 5s
-#      retries: 5
-#      start_period: 5s
-#    restart: unless-stopped
-#  
-#  pgadmin:
-#    image: dpage/pgadmin4
-#    environment:
-#      PGADMIN_DEFAULT_EMAIL: admin@revamp-it.ch
-#      PGADMIN_DEFAULT_PASSWORD: l1n2xk3rn4l!
-#    ports:
- #     - "5050:80"
- #   depends_on:
- #     - postgres
-
+services:
   mediator:
-    image: ghcr.io/zbindendaniel/mediator-service:2.1
+    image: ghcr.io/zbindendaniel/mediator-service:2.2
     env_file: .env
-    environment:
-      MEDIA_STORAGE_MODE: webdav
-      MEDIA_ROOT_DIR: /mnt
     container_name: mediator
     expose:
       - "8080"
@@ -44,11 +13,7 @@ ervices:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
 
-# TODO(ingress-auth): Keep the proxy configuration aligned with docs/setup.md and secrets rotation steps.
   proxy:
     image: nginx:1.25-alpine
     container_name: mediator-proxy

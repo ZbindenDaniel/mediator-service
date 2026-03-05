@@ -110,3 +110,4 @@ Objective: turn the collected ideas into an execution-ready backlog with clear p
 - new filter for shop (no-no, no-yes, yes-yes)
 - add  WebLinks to itemRef: {"Manual":"https://...", "Heise":"https://...", "Dell":"..."}
 - populate EAN number
+- add new box alias for 'Transport/Remporary' relocation with the extra field 'TargetLocation' to relocate added items when 'contract' is resolved
