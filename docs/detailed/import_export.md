@@ -71,7 +71,7 @@
   - Returns staged export artifact for download (manual headers vs automatic ERP headers based on mode/header regime).
 - `/api/sync/erp` (`POST`, `backend/actions/sync-erp.ts`)
   - Request JSON requires non-empty string array `itemIds` (instance ItemUUID selectors for export scope).
-  - `ERP_SYNC_ITEM_IDS` is derived from resolved `Artikel_Nummer` media-folder keys (deduplicated, formatted), not raw ItemUUID values.
+  - `ERP_SYNC_ITEM_IDS` is derived from resolved `Artikel_Nummer` media-folder keys (deduplicated, formatted), not raw ItemUUID values; it is newline-delimited and must not be comma-split because valid GVFS/WebDAV paths can contain commas.
   - Stages `automatic_import` CSV via `stageItemsExport`, then executes `docs/erp-sync.sh`.
   - Returns phase-aware JSON (`phase`, `ok`, `exitCode`, `stdout`, `stderr`, `error`).
 

@@ -40,6 +40,7 @@ resolve_positive_integer_or_default() {
 
 normalize_media_source_files() {
   local raw="${ERP_SYNC_ITEM_IDS:-}"
+  # Contract: ERP_SYNC_ITEM_IDS is newline-delimited only; do not comma-split (paths may contain commas).
   local normalized=""
   local entry=""
 
@@ -54,7 +55,7 @@ normalize_media_source_files() {
     else
       normalized+=$'\n'"$entry"
     fi
-  done < <(printf '%s\n' "$raw" | tr ',' '\n')
+  done < <(printf '%s\n' "$raw")
 
   printf '%s' "$normalized"
 }

@@ -275,6 +275,7 @@ export function buildErpSyncScriptEnv(
   const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ERP_MEDIA_SOURCE_DIR: mediaSourceDir,
+    // Contract: ERP_SYNC_ITEM_IDS is newline-delimited; entries may contain commas (e.g. GVFS/WebDAV paths).
     ERP_SYNC_ITEM_IDS: mediaSourceFiles.join('\n')
   };
 
