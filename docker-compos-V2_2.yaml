@@ -30,13 +30,16 @@ ervices:
   mediator:
     image: ghcr.io/zbindendaniel/mediator-service:2.1
     env_file: .env
+    environment:
+      MEDIA_STORAGE_MODE: webdav
+      MEDIA_ROOT_DIR: /mnt
     container_name: mediator
     expose:
       - "8080"
     volumes:
       - mediator-data:/var/lib/mediator
       - mediator-media:/app/dist/backend/media
-      - /mnt/shopbilder:/app/dist/backend/webDav
+      - /mnt:/mnt
       - /run/cups/cups.sock:/run/cups/cups.sock
     restart: unless-stopped
     extra_hosts:
@@ -74,4 +77,3 @@ volumes:
 secrets:
   mediator_htpasswd:
     file: ./secrets/htpasswd
-
