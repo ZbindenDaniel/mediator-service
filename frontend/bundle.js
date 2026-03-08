@@ -1,12 +1,18 @@
 async function bundle() {
   try {
     const { build } = require('esbuild');
+    const autoPrintItemLabel = process.env.AUTO_PRINT_ITEM_LABEL;
     await build({
       entryPoints: ['frontend/src/index.tsx'],
       bundle: true,
       outfile: 'frontend/public/bundle.js',
       sourcemap: true,
       logLevel: 'info',
+      define: {
+        __AUTO_PRINT_ITEM_LABEL__: JSON.stringify(
+          typeof autoPrintItemLabel === 'string' ? autoPrintItemLabel : null
+        )
+      },
       loader: {
         '.svg': 'file'
       }

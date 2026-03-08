@@ -138,7 +138,22 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `AUTO_PRINT_ITEM_LABEL` | `false` | Toggles auto-printing after item creation in the UI. |
+| `AUTO_PRINT_ITEM_LABEL` | `false` | Toggles auto-printing after item creation in the UI. Frontend resolution order is: esbuild `define` value, then optional `window.__APP_CONFIG__.AUTO_PRINT_ITEM_LABEL`, then legacy `process.env` fallback. |
+
+### `AUTO_PRINT_ITEM_LABEL` deployment instructions (current bundle flow)
+
+1. Set `AUTO_PRINT_ITEM_LABEL` in the shell environment before running `npm run bundle` or `npm run build`.
+2. `frontend/bundle.js` forwards this value into esbuild `define` as `__AUTO_PRINT_ITEM_LABEL__`, which becomes the browser-runtime source used by `frontend/src/utils/printSettings.ts`.
+3. Example build commands:
+   - Enable auto-print: `AUTO_PRINT_ITEM_LABEL=true npm run build`
+   - Disable auto-print: `AUTO_PRINT_ITEM_LABEL=false npm run build`
+4. If you cannot set compile-time env in your deployment pipeline, you may inject a runtime fallback in `frontend/public/index.html` before `bundle.js`:
+   ```html
+   <script>
+     window.__APP_CONFIG__ = { AUTO_PRINT_ITEM_LABEL: 'true' };
+   </script>
+   ```
+   The UI reads this only when the compile-time define is missing.
 
 
 ## Media cleanup guardrails
