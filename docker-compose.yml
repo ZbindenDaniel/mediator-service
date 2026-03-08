@@ -37,7 +37,7 @@ ervices:
       - mediator-data:/var/lib/mediator
       - mediator-media:/app/dist/backend/media
       - /mnt/shopbilder:/app/dist/backend/webDav
-      - /run/cups/cups.sock:/run/cups/cups.sock
+      - /run/cups:/run/cups:ro
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -74,4 +74,3 @@ volumes:
 secrets:
   mediator_htpasswd:
     file: ./secrets/htpasswd
-

@@ -21,7 +21,8 @@
 the print job need to renderPDFs from the html templates. This need to happen headless --> chromium
 > sudo apt-get install -y chromium
 > 
-After restarting the CUPS service, restart the mediator containers with `docker compose up -d --force-recreate`. The print volume otherwise keeps the old inode reference and the print job will fail because the inode number no longer matches the CUPS state.
+The Compose mount now binds `/run/cups` into the mediator container, so CUPS socket updates are usually visible without forcing container recreation.
+If printer checks fail after a CUPS restart, first verify `/run/cups` is visible inside the mediator container (for example `docker compose exec mediator ls -l /run/cups`) before restarting the container.
 
 ## Provisioning services
 
