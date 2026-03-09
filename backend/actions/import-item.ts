@@ -1713,7 +1713,8 @@ const action = defineHttpAction({
         console.info('[import-item] Multi-instance import response prepared', {
           primaryItemUUID: responseItems[0]?.ItemUUID,
           itemUUIDs: responseItems.map((item) => item.ItemUUID),
-          createdCount: responseItems.length
+          createdCount: responseItems.length,
+          mode: creationPlan.mode
         });
       }
       sendJson(res, 200, {
