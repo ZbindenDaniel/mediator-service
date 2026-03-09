@@ -489,7 +489,7 @@ function resolveAutoPrintEinheit(value: unknown): ItemEinheit {
   return ITEM_FORM_DEFAULT_EINHEIT;
 }
 
-function resolveAutoPrintTargets(options: {
+export function resolveAutoPrintTargets(options: {
   createdItem?: Item;
   responseItems: Array<{ ItemUUID?: string | null }>;
   einheit: ItemEinheit;
@@ -517,6 +517,79 @@ function resolveAutoPrintTargets(options: {
   }
 
   return { mode: 'instance', itemIds: Array.from(itemIds) };
+}
+
+export function parseCreateItemResponse(body: unknown): {
+  createdItem?: Item;
+  responseItems: Array<{ ItemUUID?: string | null }>;
+  createdCount: number | null;
+  backendDispatched: boolean;
+} {
+  let createdItem: Item | undefined;
+  let responseItems: Array<{ ItemUUID?: string | null }> = [];
+  let createdCount: number | null = null;
+  let backendDispatched = false;
+
+  try {
+    if (body && typeof body === 'object') {
+      const payload = body as {
+        item?: Item;
+        items?: Array<{ ItemUUID?: string | null }>;
+        createdCount?: number;
+        agenticTriggerDispatched?: boolean;
+      };
+      createdItem = payload.item;
+      if (Array.isArray(payload.items)) {
+        responseItems = payload.items;
+      }
+      if (typeof payload.createdCount === 'number') {
+        createdCount = payload.createdCount;
+      }
+      backendDispatched = payload.agenticTriggerDispatched === true;
+    }
+  } catch (payloadError) {
+    console.error('Failed to read item creation response payload', {
+      error: payloadError,
+      body
+    });
+  }
+
+  return {
+    createdItem,
+    responseItems,
+    createdCount,
+    backendDispatched
+  };
+}
+
+export function hasAutoPrintTargetMismatch(
+  createdCount: number | null,
+  resolvedIds: number,
+  mode: 'bulk' | 'instance',
+  einheit: ItemEinheit
+): boolean {
+  try {
+    const hasMismatch = typeof createdCount === 'number' && createdCount >= 0 && createdCount !== resolvedIds;
+    if (hasMismatch) {
+      console.warn('Auto-print target count mismatch detected; continuing with resolved item ids.', {
+        createdCount,
+        resolvedIds,
+        mode,
+        einheit
+      });
+      return true;
+    }
+    return false;
+  } catch (mismatchError) {
+    console.error('Failed to evaluate auto-print target mismatch handling', {
+      createdCount,
+      resolvedIds,
+      mode,
+      einheit,
+      error: mismatchError
+    });
+    return false;
+  }
 }
 
 interface ItemCreateProps {
@@ -1084,33 +1157,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         console.error('Failed to parse item creation response payload', parseError);
       }
 
-      let createdItem: Item | undefined;
-      let responseItems: Array<{ ItemUUID?: string | null }> = [];
-      let createdCount: number | null = null;
-      let backendDispatched = false;
-      try {
-        if (body && typeof body === 'object') {
-          const payload = body as {
-            item?: Item;
-            items?: Array<{ ItemUUID?: string | null }>;
-            createdCount?: number;
-            agenticTriggerDispatched?: boolean;
-          };
-          createdItem = payload.item;
-          if (Array.isArray(payload.items)) {
-            responseItems = payload.items;
-          }
-          if (typeof payload.createdCount === 'number') {
-            createdCount = payload.createdCount;
-          }
-          backendDispatched = payload.agenticTriggerDispatched === true;
-        }
-      } catch (payloadError) {
-        console.error('Failed to read item creation response payload', {
-          error: payloadError,
-          body
-        });
-      }
+      const {
+        createdItem,
+        responseItems,
+        createdCount,
+        backendDispatched
+      } = parseCreateItemResponse(body);
       const searchText = (createdItem?.Artikelbeschreibung || submissionData.Artikelbeschreibung || '')
         .toString()
         .trim();
@@ -1180,6 +1232,20 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
           einheit
         });
         try {
+          const hasAutoPrintMismatch = hasAutoPrintTargetMismatch(
+            createdCount,
+            autoPrintTargets.itemIds.length,
+            autoPrintTargets.mode,
+            einheit
+          );
+          if (hasAutoPrintMismatch) {
+            await dialog.alert({
+              title: 'Hinweis zum Labeldruck',
+              message:
+                'Es wurden nicht alle erwarteten Label-Ziele aufgelöst. Bitte Druckergebnis prüfen und ggf. fehlende Labels manuell drucken.'
+            });
+          }
+
           const printActor = (await ensureUser()).trim();
           if (!printActor) {
             console.warn('Auto-print skipped: no actor resolved for item label', {
