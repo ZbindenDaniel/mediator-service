@@ -1,4 +1,4 @@
-ervices:
+services:
   # TODO(database-migration): Replace the transient Postgres bootstrap once production settings are finalised.
 #  postgres:
 #    image: postgres:16
@@ -30,13 +30,15 @@ ervices:
   mediator:
     image: ghcr.io/zbindendaniel/mediator-service:2.1
     env_file: .env
+    environment:
+      MEDIA_ROOT_DIR: /app/dist/backend/webDav
     container_name: mediator
     expose:
       - "8080"
     volumes:
       - mediator-data:/var/lib/mediator
       - mediator-media:/app/dist/backend/media
-      - /mnt/shopbilder:/app/dist/backend/webDav
+      - /mnt:/app/dist/backend/webDav
       - /run/cups:/run/cups:ro
     restart: unless-stopped
     extra_hosts:
