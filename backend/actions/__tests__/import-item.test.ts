@@ -269,6 +269,71 @@ describe('import-item action', () => {
 
 
 
+
+  it('persists filename-only Grafikname reference input unchanged', async () => {
+    const ctx = createTestContext({
+      getItemReference: {
+        get: jest.fn(() => ({ Artikel_Nummer: 'ART-FILE', Artikelbeschreibung: 'Widget file', Grafikname: 'ART-FILE-1.png' }))
+      },
+      getItem: {
+        get: jest
+          .fn()
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce({ Artikel_Nummer: 'ART-FILE', BoxID: null })
+      }
+    });
+
+    const req = createFormRequest('/api/import/item', {
+      actor: 'Tester',
+      Artikel_Nummer: 'ART-FILE'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    const persistedPayload = ctx.persistItemWithinTransaction.mock.calls[0][0];
+    expect(persistedPayload).toEqual(
+      expect.objectContaining({
+        Artikel_Nummer: 'ART-FILE',
+        Grafikname: 'ART-FILE-1.png'
+      })
+    );
+  });
+
+  it('persists path-like Grafikname reference input as filename-only basename', async () => {
+    const ctx = createTestContext({
+      getItemReference: {
+        get: jest.fn(() => ({ Artikel_Nummer: 'ART-PATH', Artikelbeschreibung: 'Widget path', Grafikname: '/media/ART-PATH/ART-PATH-1.png' }))
+      },
+      getItem: {
+        get: jest
+          .fn()
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce({ Artikel_Nummer: 'ART-PATH', BoxID: null })
+      }
+    });
+
+    const req = createFormRequest('/api/import/item', {
+      actor: 'Tester',
+      Artikel_Nummer: 'ART-PATH'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    const persistedPayload = ctx.persistItemWithinTransaction.mock.calls[0][0];
+    expect(persistedPayload).toEqual(
+      expect.objectContaining({
+        Artikel_Nummer: 'ART-PATH',
+        Grafikname: 'ART-PATH-1.png'
+      })
+    );
+  });
+
   it('keeps shared model media fields stable by preserving persisted Grafikname on create', async () => {
     const ctx = createTestContext({
       getItemReference: {
@@ -305,7 +370,7 @@ describe('import-item action', () => {
   });
 
 
-  it('sanitizes legacy path-like reference Grafikname for new writes when no new image is uploaded', async () => {
+  it('normalizes legacy path-like reference Grafikname to filename-only for new writes when no new image is uploaded', async () => {
     const ctx = createTestContext({
       getItemReference: {
         get: jest.fn(() => ({ Artikel_Nummer: 'ART-LEGACY', Artikelbeschreibung: 'Legacy widget', Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.png' }))
@@ -333,7 +398,7 @@ describe('import-item action', () => {
     expect(persistedPayload).toEqual(
       expect.objectContaining({
         Artikel_Nummer: 'ART-LEGACY',
-        Grafikname: ''
+        Grafikname: 'ART-LEGACY-1.png'
       })
     );
   });
