@@ -133,6 +133,7 @@ if (MEDIA_STORAGE_MODE === 'webdav') {
 const WEB_DAV_SUBDIR = 'shopbilder';
 const ERP_MEDIA_MIRROR_SUBDIR = 'shopbilder-import';
 export const LOCAL_MEDIA_DIR = path.resolve(process.cwd(), 'dist/media');
+export const MEDIA_STAGING_DIR = LOCAL_MEDIA_DIR;
 
 // TODO(print-queues): Confirm per-label printer queue overrides once label routing settles for all templates.
 const resolvedQueue = (process.env.PRINTER_QUEUE || process.env.PRINTER_HOST || '').trim();
@@ -275,26 +276,53 @@ const erpImportIncludeMedia =
   parseBooleanFlag(process.env.ERP_IMPORT_INCLUDE_MEDIA, 'ERP_IMPORT_INCLUDE_MEDIA') ?? false;
 export const ERP_IMPORT_INCLUDE_MEDIA = erpImportIncludeMedia;
 // TODO(sync-erp-media-mirror-config): Move ERP media mirror path validation into shared config schema coverage.
-if (!resolvedMediaRootDir) {
-  if (MEDIA_STORAGE_MODE === 'webdav' || ERP_IMPORT_INCLUDE_MEDIA) {
-    console.warn('[config] MEDIA_ROOT_DIR is empty; webdav mode and ERP media mirroring will be disabled.');
+let derivedMediaRootDir = '';
+let derivedMediaErpRoot = MEDIA_STAGING_DIR;
+let derivedMediaSyncTargetDir = '';
+
+try {
+  if (!resolvedMediaRootDir) {
+    if (MEDIA_STORAGE_MODE === 'webdav' || ERP_IMPORT_INCLUDE_MEDIA) {
+      console.warn('[config] MEDIA_ROOT_DIR is empty; webdav mode and ERP media mirroring will be disabled.');
+    }
+  } else if (WEB_DAV_URL_PATTERN.test(resolvedMediaRootDir)) {
+    console.error(
+      `[config] MEDIA_ROOT_DIR must be a filesystem path (not a URL). Received "${resolvedMediaRootDir}". ` +
+        'Falling back to local staging for ERP reads and disabling sync target.'
+    );
+  } else {
+    derivedMediaRootDir =
+      path.isAbsolute(resolvedMediaRootDir)
+        ? resolvedMediaRootDir
+        : path.resolve(process.cwd(), resolvedMediaRootDir);
+
+    if (!path.isAbsolute(resolvedMediaRootDir)) {
+      console.warn(
+        `[config] MEDIA_ROOT_DIR should be absolute; resolving relative value "${resolvedMediaRootDir}" to "${derivedMediaRootDir}".`
+      );
+    }
+
+    derivedMediaSyncTargetDir = path.join(derivedMediaRootDir, ERP_MEDIA_MIRROR_SUBDIR);
+    if (MEDIA_STORAGE_MODE === 'webdav') {
+      derivedMediaErpRoot = path.join(derivedMediaRootDir, WEB_DAV_SUBDIR);
+    }
   }
-} else if (WEB_DAV_URL_PATTERN.test(resolvedMediaRootDir)) {
-  console.error(
-    `[config] MEDIA_ROOT_DIR must be a filesystem path (not a URL). Received "${resolvedMediaRootDir}".`
-  );
-  resolvedMediaRootDir = '';
-} else if (!path.isAbsolute(resolvedMediaRootDir)) {
-  const absoluteMediaRootPath = path.resolve(process.cwd(), resolvedMediaRootDir);
-  console.warn(
-    `[config] MEDIA_ROOT_DIR should be absolute; resolving relative value "${resolvedMediaRootDir}" to "${absoluteMediaRootPath}".`
-  );
-  resolvedMediaRootDir = absoluteMediaRootPath;
+} catch (error) {
+  console.error('[config] Failed to resolve media roots from MEDIA_ROOT_DIR; applying safe local fallback behavior.', {
+    error,
+    mediaRootDir: resolvedMediaRootDir || null,
+    mode: MEDIA_STORAGE_MODE
+  });
+  derivedMediaRootDir = '';
+  derivedMediaErpRoot = MEDIA_STAGING_DIR;
+  derivedMediaSyncTargetDir = '';
 }
 
-export const MEDIA_ROOT_DIR = resolvedMediaRootDir;
-export const MEDIA_SHOPBILDER_DIR = MEDIA_ROOT_DIR ? path.join(MEDIA_ROOT_DIR, WEB_DAV_SUBDIR) : '';
-const derivedErpMediaMirrorDir = MEDIA_ROOT_DIR ? path.join(MEDIA_ROOT_DIR, ERP_MEDIA_MIRROR_SUBDIR) : '';
+export const MEDIA_ROOT_DIR = derivedMediaRootDir;
+export const MEDIA_ERP_ROOT = derivedMediaErpRoot;
+export const MEDIA_SHOPBILDER_DIR = MEDIA_ERP_ROOT;
+export const MEDIA_SYNC_TARGET_DIR = derivedMediaSyncTargetDir;
+const derivedErpMediaMirrorDir = MEDIA_SYNC_TARGET_DIR;
 
 if (MEDIA_STORAGE_MODE === 'webdav' && !MEDIA_SHOPBILDER_DIR) {
   console.warn('[config] MEDIA_STORAGE_MODE=webdav but MEDIA_ROOT_DIR is invalid; WebDAV directory is disabled.');
@@ -440,7 +468,10 @@ if (!ERP_SYNC_ENABLED) {
 
 console.info('[config] Media root runtime configuration.', {
   mediaRootDir: MEDIA_ROOT_DIR || null,
-  mediaShopbilderDir: MEDIA_SHOPBILDER_DIR || null,
+  mediaErpRoot: MEDIA_ERP_ROOT || null,
+  mediaStagingDir: MEDIA_STAGING_DIR,
+  mediaSyncTargetDir: MEDIA_SYNC_TARGET_DIR || null,
+  writableRoot: MEDIA_STAGING_DIR,
   erpMediaMirrorDir: ERP_MEDIA_MIRROR_DIR || null,
   erpMediaMirrorEnabled: ERP_MEDIA_MIRROR_ENABLED
 });

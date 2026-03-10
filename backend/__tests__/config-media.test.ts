@@ -48,8 +48,10 @@ describe('media configuration resolution', () => {
 
     expect(config.MEDIA_STORAGE_MODE).toBe('local');
     expect(config.MEDIA_ROOT_DIR).toBe('/mnt/media-root');
-    expect(config.MEDIA_SHOPBILDER_DIR).toBe('/mnt/media-root/shopbilder');
-    expect(media.MEDIA_DIR).toBe(config.MEDIA_SHOPBILDER_DIR);
+    expect(config.MEDIA_SHOPBILDER_DIR).toBe(config.MEDIA_STAGING_DIR);
+    expect(config.MEDIA_STAGING_DIR).toBe(config.LOCAL_MEDIA_DIR);
+    expect(config.MEDIA_ERP_ROOT).toBe(config.MEDIA_STAGING_DIR);
+    expect(media.MEDIA_DIR).toBe(config.MEDIA_STAGING_DIR);
   });
 
   it('derives webdav dir from an absolute MEDIA_ROOT_DIR', () => {
@@ -58,7 +60,8 @@ describe('media configuration resolution', () => {
 
     const config = loadConfig();
 
-    expect(config.MEDIA_SHOPBILDER_DIR).toBe('/mnt/webdav/shopbilder');
+    expect(config.MEDIA_ERP_ROOT).toBe('/mnt/webdav/shopbilder');
+    expect(config.MEDIA_SYNC_TARGET_DIR).toBe('/mnt/webdav/shopbilder-import');
   });
 
   it('disables webdav dir for invalid MEDIA_ROOT_DIR values', () => {
@@ -67,7 +70,8 @@ describe('media configuration resolution', () => {
 
     const config = loadConfig();
 
-    expect(config.MEDIA_SHOPBILDER_DIR).toBe('');
+    expect(config.MEDIA_ERP_ROOT).toBe(config.MEDIA_STAGING_DIR);
+    expect(config.MEDIA_SYNC_TARGET_DIR).toBe('');
   });
 
   it('enables ERP media mirror only when include flag and valid root are both set', () => {
@@ -86,6 +90,23 @@ describe('media configuration resolution', () => {
 
     expect(disabledConfig.ERP_MEDIA_MIRROR_ENABLED).toBe(false);
     expect(disabledConfig.ERP_MEDIA_MIRROR_DIR).toBe('');
+  });
+
+
+
+  it('resolves fetch/upload/sync helpers with staging write root and ordered fetch roots', () => {
+    process.env.MEDIA_STORAGE_MODE = 'webdav';
+    process.env.MEDIA_ROOT_DIR = '/mnt/webdav';
+
+    const media = loadMedia();
+
+    expect(media.resolveFetchMediaPaths('000123', 'A.jpg')).toEqual([
+      `${process.cwd()}/dist/media/000123/A.jpg`,
+      '/mnt/webdav/shopbilder/000123/A.jpg'
+    ]);
+    expect(media.resolveUploadMediaPath('000123', 'A.jpg')).toBe(`${process.cwd()}/dist/media/000123/A.jpg`);
+    expect(media.resolveSyncSourceMediaPath('000123', 'A.jpg')).toBe(`${process.cwd()}/dist/media/000123/A.jpg`);
+    expect(media.resolveSyncTargetMediaPath('000123', 'A.jpg')).toBe('/mnt/webdav/shopbilder-import/000123/A.jpg');
   });
 
   it('fails startup in strict mode when unsupported MEDIA_DIR aliases are present', () => {

@@ -1,46 +1,69 @@
 import path from 'path';
-import { LOCAL_MEDIA_DIR, MEDIA_ROOT_DIR, MEDIA_SHOPBILDER_DIR, MEDIA_STORAGE_MODE } from '../config';
+import { MEDIA_ERP_ROOT, MEDIA_ROOT_DIR, MEDIA_STAGING_DIR, MEDIA_STORAGE_MODE, MEDIA_SYNC_TARGET_DIR } from '../config';
 
 // TODO(media-storage): Confirm resolved media directories once storage modes are in production use.
 // TODO(webdav-feedback): Confirm startup logging format with operators once WebDAV mounts are deployed.
 // TODO(media-storage): Ensure startup logs are consistently surfaced in container deployments.
 // TODO(media-tests): Cover media directory resolution error handling and overrides.
-const DEFAULT_MEDIA_DIR = LOCAL_MEDIA_DIR;
+function resolveMediaRoots(): {
+  fetchRoots: string[];
+  uploadRoot: string;
+  syncSourceRoot: string;
+  syncTargetRoot: string | null;
+  writableRoot: string;
+} {
+  const fetchRoots = Array.from(new Set([MEDIA_STAGING_DIR, MEDIA_ERP_ROOT].filter((value) => Boolean(value))));
+  const uploadRoot = MEDIA_STAGING_DIR;
+  const syncSourceRoot = MEDIA_STAGING_DIR;
+  const syncTargetRoot = MEDIA_SYNC_TARGET_DIR || null;
+  const writableRoot = MEDIA_STAGING_DIR;
 
-function resolveMediaDir(): string {
-  let resolved = DEFAULT_MEDIA_DIR;
-
-  try {
-    if (MEDIA_SHOPBILDER_DIR) {
-      resolved = MEDIA_SHOPBILDER_DIR;
-    } else {
-      console.warn(
-        '[media] MEDIA_ROOT_DIR not set or invalid; falling back to fixed local media directory (dist/media). ' +
-          'Set MEDIA_ROOT_DIR to use the fixed shopbilder/shopbilder-import contract.'
-      );
-    }
-  } catch (error) {
-    console.error('[media] Failed to resolve media directory; using fixed local media directory.', {
-      error
-    });
-    resolved = DEFAULT_MEDIA_DIR;
-  }
-
-  console.info('[media] Media storage resolved', {
+  console.info('[media] Media roots resolved', {
     mode: MEDIA_STORAGE_MODE,
     mediaRootDir: MEDIA_ROOT_DIR || null,
-    resolved,
-    defaultDir: DEFAULT_MEDIA_DIR,
+    mediaErpRoot: MEDIA_ERP_ROOT,
+    mediaStagingDir: MEDIA_STAGING_DIR,
+    mediaSyncTargetDir: syncTargetRoot,
+    fetchRoots,
+    writableRoot,
     baseDir: process.cwd()
   });
 
-  return resolved;
+  return {
+    fetchRoots,
+    uploadRoot,
+    syncSourceRoot,
+    syncTargetRoot,
+    writableRoot
+  };
 }
 
-export const MEDIA_DIR = resolveMediaDir();
+const resolvedMediaRoots = resolveMediaRoots();
+
+export const MEDIA_DIR = resolvedMediaRoots.uploadRoot;
 
 export function resolveMediaPath(...segments: string[]): string {
   return path.join(MEDIA_DIR, ...segments);
+}
+
+export function resolveFetchMediaPaths(...segments: string[]): string[] {
+  return resolvedMediaRoots.fetchRoots.map((root) => path.join(root, ...segments));
+}
+
+export function resolveUploadMediaPath(...segments: string[]): string {
+  return path.join(resolvedMediaRoots.uploadRoot, ...segments);
+}
+
+export function resolveSyncSourceMediaPath(...segments: string[]): string {
+  return path.join(resolvedMediaRoots.syncSourceRoot, ...segments);
+}
+
+export function resolveSyncTargetMediaPath(...segments: string[]): string | null {
+  if (!resolvedMediaRoots.syncTargetRoot) {
+    return null;
+  }
+
+  return path.join(resolvedMediaRoots.syncTargetRoot, ...segments);
 }
 
 export function formatArtikelNummerForMedia(
