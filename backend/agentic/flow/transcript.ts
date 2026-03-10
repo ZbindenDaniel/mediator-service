@@ -1,7 +1,8 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
-import { resolveMediaFolder, resolveMediaPath } from '../../lib/media';
+import { MEDIA_UPLOAD_STAGING_DIR, resolveMediaFolder, resolveUploadMediaPath } from '../../lib/media';
+import { assertPathWithinRoot } from '../../lib/path-guard';
 import type { ExtractionLogger } from './item-flow-extraction';
 
 // TODO(agent): Rotate transcript snapshots once multi-run history needs to be preserved for audits.
@@ -237,7 +238,11 @@ function buildTranscriptReference(itemId: string, logger?: AgentTranscriptLogger
     info: fallbackLogger.info ?? console.info
   };
   const mediaFolder = resolveMediaFolder(itemId, null, safeLogger);
-  const filePath = resolveMediaPath(mediaFolder, TRANSCRIPT_FILE_NAME);
+  const filePath = assertPathWithinRoot(
+    MEDIA_UPLOAD_STAGING_DIR,
+    path.resolve(resolveUploadMediaPath(mediaFolder, TRANSCRIPT_FILE_NAME)),
+    { logger: safeLogger, operation: 'agentic-transcript:resolve-path' }
+  );
   const publicUrl = `/media/${encodeURIComponent(mediaFolder)}/${TRANSCRIPT_FILE_NAME}`;
   return { filePath, publicUrl };
 }
@@ -245,11 +250,11 @@ function buildTranscriptReference(itemId: string, logger?: AgentTranscriptLogger
 export function locateTranscript(itemId: string, logger?: AgentTranscriptLogger | null): AgentTranscriptReference | null {
   const reference = buildTranscriptReference(itemId, logger);
   const legacyHtmlReference: AgentTranscriptReference = {
-    filePath: resolveMediaPath(itemId, TRANSCRIPT_FILE_NAME),
+    filePath: resolveUploadMediaPath(itemId, TRANSCRIPT_FILE_NAME),
     publicUrl: `/media/${encodeURIComponent(itemId)}/${TRANSCRIPT_FILE_NAME}`
   };
   const legacyReference: AgentTranscriptReference = {
-    filePath: resolveMediaPath(itemId, 'agentic-transcript.md'),
+    filePath: resolveUploadMediaPath(itemId, 'agentic-transcript.md'),
     publicUrl: `/media/${encodeURIComponent(itemId)}/agentic-transcript.md`
   };
   try {

@@ -41,9 +41,10 @@ function resolveMediaRoots(): {
 const resolvedMediaRoots = resolveMediaRoots();
 
 export const MEDIA_DIR = resolvedMediaRoots.uploadRoot;
+export const MEDIA_UPLOAD_STAGING_DIR = resolvedMediaRoots.uploadRoot;
 
 export function resolveMediaPath(...segments: string[]): string {
-  return path.join(MEDIA_DIR, ...segments);
+  return path.join(MEDIA_UPLOAD_STAGING_DIR, ...segments);
 }
 
 export function resolveFetchMediaPaths(...segments: string[]): string[] {
@@ -51,7 +52,7 @@ export function resolveFetchMediaPaths(...segments: string[]): string[] {
 }
 
 export function resolveUploadMediaPath(...segments: string[]): string {
-  return path.join(resolvedMediaRoots.uploadRoot, ...segments);
+  return path.join(MEDIA_UPLOAD_STAGING_DIR, ...segments);
 }
 
 export function resolveSyncSourceMediaPath(...segments: string[]): string {
