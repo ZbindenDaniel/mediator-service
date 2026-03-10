@@ -4,7 +4,7 @@ import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { stageItemsExport, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
-import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED, LOCAL_MEDIA_DIR } from '../config';
+import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED, LOCAL_MEDIA_DIR, MEDIA_ERP_ROOT } from '../config';
 import { formatArtikelNummerForMedia, resolveMediaFolder } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { resolvePathWithinRoot } from '../lib/path-guard';
@@ -61,7 +61,70 @@ function parsePipeDelimitedMediaEntries(rawValue: string): string[] {
     .filter(Boolean);
 }
 
-const ERP_MEDIA_SOURCE_ROOT = LOCAL_MEDIA_DIR;
+const ERP_MEDIA_STAGING_SOURCE_ROOT = LOCAL_MEDIA_DIR;
+const ERP_MEDIA_FETCH_SOURCE_ROOT = MEDIA_ERP_ROOT;
+const ERP_MEDIA_SOURCE_ROOT = ERP_MEDIA_STAGING_SOURCE_ROOT;
+
+type MediaSourceOrigin = 'staging' | 'erp-fetch-root';
+
+export interface ResolvedMediaSourceCandidate {
+  absolutePath: string;
+  origin: MediaSourceOrigin;
+  root: string;
+}
+
+// TODO(sync-erp-staged-fallback): Remove ERP fetch-root fallback once staging hydration guarantees all mirrored assets.
+export function resolveMediaSourceCandidate(
+  relativeEntry: string,
+  logger: Pick<Console, 'warn' | 'info' | 'error'> = console,
+  sourceRoots: Array<{ root: string; origin: MediaSourceOrigin }> = [
+    { root: ERP_MEDIA_STAGING_SOURCE_ROOT, origin: 'staging' },
+    { root: ERP_MEDIA_FETCH_SOURCE_ROOT, origin: 'erp-fetch-root' }
+  ]
+): ResolvedMediaSourceCandidate | null {
+
+  for (const sourceRoot of sourceRoots) {
+    let absolutePath: string | null = null;
+    try {
+      absolutePath = resolvePathWithinRoot(sourceRoot.root, relativeEntry, {
+        logger,
+        operation: 'sync-erp:explicit-media-path'
+      });
+    } catch (error) {
+      logger.warn('[sync-erp] media_entry_probe_failed', {
+        resolvedRelativePath: relativeEntry,
+        reason: 'path-resolution-threw',
+        sourceRoot: sourceRoot.root,
+        sourceOrigin: sourceRoot.origin,
+        error
+      });
+      continue;
+    }
+
+    if (!absolutePath) {
+      continue;
+    }
+
+    let stat: fs.Stats | null = null;
+    try {
+      stat = fs.statSync(absolutePath);
+    } catch {
+      continue;
+    }
+
+    if (!stat.isFile()) {
+      continue;
+    }
+
+    return {
+      absolutePath,
+      origin: sourceRoot.origin,
+      root: sourceRoot.root
+    };
+  }
+
+  return null;
+}
 
 type ExplicitMediaEntryNormalization =
   | { kind: 'filename-only'; value: string }
@@ -103,7 +166,8 @@ interface MirrorMediaCandidateItem {
 
 export function resolveExplicitMediaMirrorSources(
   items: MirrorMediaCandidateItem[],
-  logger: Pick<Console, 'warn' | 'info' | 'error'> = console
+  logger: Pick<Console, 'warn' | 'info' | 'error'> = console,
+  options?: { sourceRoots?: Array<{ root: string; origin: MediaSourceOrigin }> }
 ): string[] {
   const resolved = new Set<string>();
 
@@ -156,88 +220,46 @@ export function resolveExplicitMediaMirrorSources(
         });
       }
 
-      let absolutePath: string | null = null;
-      try {
-        absolutePath = resolvePathWithinRoot(ERP_MEDIA_SOURCE_ROOT, relativeEntry, {
-          logger,
-          operation: 'sync-erp:explicit-media-path'
-        });
-      } catch (error) {
-        logger.warn('[sync-erp] media_entry_probe_failed', {
-          itemId: item.ItemUUID ?? null,
-          artikelNummer: item.Artikel_Nummer ?? null,
-          entry: rawEntry,
-          resolvedRelativePath: relativeEntry,
-          reason: 'path-resolution-threw',
-          error
-        });
-      }
+      const candidate = resolveMediaSourceCandidate(relativeEntry, logger, options?.sourceRoots);
 
-      if (!absolutePath) {
-        logger.warn('[sync-erp] media_entry_blocked_skipped', {
+      if (!candidate) {
+        logger.warn('[sync-erp] media_entry_missing_skipped', {
           itemId: item.ItemUUID ?? null,
           artikelNummer: item.Artikel_Nummer ?? null,
           entry: rawEntry,
           resolvedRelativePath: relativeEntry,
-          reason: 'outside-source-root'
+          reason: 'missing-in-source-roots'
         });
         emitMediaAudit({
           action: 'mirror-skip',
           scope: 'erp-sync',
           identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
           path: relativeEntry,
-          root: ERP_MEDIA_SOURCE_ROOT,
+          root: ERP_MEDIA_STAGING_SOURCE_ROOT,
           outcome: 'blocked',
-          reason: 'media-path-outside-root',
-        });
-        continue;
-      }
-
-      let stat: fs.Stats | null = null;
-      try {
-        stat = fs.statSync(absolutePath);
-      } catch (error) {
-        logger.warn('[sync-erp] media_entry_missing_skipped', {
-          itemId: item.ItemUUID ?? null,
-          artikelNummer: item.Artikel_Nummer ?? null,
-          entry: rawEntry,
-          resolvedPath: absolutePath,
-          reason: 'missing-or-inaccessible-file',
-          error
-        });
-        emitMediaAudit({
-          action: 'mirror-skip',
-          scope: 'erp-sync',
-          identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
-          path: absolutePath,
-          root: ERP_MEDIA_SOURCE_ROOT,
-          outcome: 'skipped',
           reason: 'media-file-missing',
-          error: error instanceof Error ? error.message : String(error)
         });
         continue;
       }
 
-      if (!stat.isFile()) {
-        logger.warn('[sync-erp] media_entry_not_file_skipped', {
-          itemId: item.ItemUUID ?? null,
-          artikelNummer: item.Artikel_Nummer ?? null,
-          entry: rawEntry,
-          resolvedPath: absolutePath
-        });
-        emitMediaAudit({
-          action: 'mirror-skip',
-          scope: 'erp-sync',
-          identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
-          path: absolutePath,
-          root: ERP_MEDIA_SOURCE_ROOT,
-          outcome: 'blocked',
-          reason: 'media-path-not-file',
-        });
-        continue;
-      }
+      logger.info('[sync-erp] media_entry_source_selected', {
+        itemId: item.ItemUUID ?? null,
+        artikelNummer: item.Artikel_Nummer ?? null,
+        entry: rawEntry,
+        resolvedPath: candidate.absolutePath,
+        sourceOrigin: candidate.origin,
+      });
+      emitMediaAudit({
+        action: 'mirror-copy',
+        scope: 'erp-sync',
+        identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
+        path: candidate.absolutePath,
+        root: candidate.root,
+        outcome: 'success',
+        reason: `source-selected:${candidate.origin}`,
+      });
 
-      resolved.add(absolutePath);
+      resolved.add(candidate.absolutePath);
     }
   }
 
