@@ -4,9 +4,8 @@ import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { stageItemsExport, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
-import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED } from '../config';
-import { formatArtikelNummerForMedia } from '../lib/media';
-import { MEDIA_DIR } from '../lib/media';
+import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED, LOCAL_MEDIA_DIR } from '../config';
+import { formatArtikelNummerForMedia, resolveMediaFolder } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { resolvePathWithinRoot } from '../lib/path-guard';
 
@@ -62,10 +61,25 @@ function parsePipeDelimitedMediaEntries(rawValue: string): string[] {
     .filter(Boolean);
 }
 
-function normalizeExplicitMediaEntry(rawEntry: string): string | null {
+const ERP_MEDIA_SOURCE_ROOT = LOCAL_MEDIA_DIR;
+
+type ExplicitMediaEntryNormalization =
+  | { kind: 'filename-only'; value: string }
+  | { kind: 'legacy-path'; value: string }
+  | { kind: 'invalid'; reason: string };
+
+function normalizeExplicitMediaEntry(rawEntry: string): ExplicitMediaEntryNormalization {
   const normalized = rawEntry.replace(/\\/g, '/').trim();
   if (!normalized) {
-    return null;
+    return { kind: 'invalid', reason: 'empty-entry' };
+  }
+
+  if (!normalized.includes('/')) {
+    const fileName = path.posix.basename(normalized);
+    if (!fileName || fileName === '.' || fileName === '..') {
+      return { kind: 'invalid', reason: 'invalid-filename-entry' };
+    }
+    return { kind: 'filename-only', value: fileName };
   }
 
   const withoutPrefix = normalized.startsWith('/media/')
@@ -74,10 +88,10 @@ function normalizeExplicitMediaEntry(rawEntry: string): string | null {
 
   const relative = path.posix.normalize(withoutPrefix);
   if (!relative || relative === '.' || relative.startsWith('..') || path.posix.isAbsolute(relative)) {
-    return null;
+    return { kind: 'invalid', reason: 'invalid-legacy-path-entry' };
   }
 
-  return relative;
+  return { kind: 'legacy-path', value: relative };
 }
 
 interface MirrorMediaCandidateItem {
@@ -103,36 +117,76 @@ export function resolveExplicitMediaMirrorSources(
         : [];
 
     for (const rawEntry of rawEntries) {
-      const relativeEntry = normalizeExplicitMediaEntry(rawEntry);
-      if (!relativeEntry) {
+      const normalizedEntry = normalizeExplicitMediaEntry(rawEntry);
+      if (normalizedEntry.kind === 'invalid') {
         logger.warn('[sync-erp] media_entry_invalid_skipped', {
           itemId: item.ItemUUID ?? null,
           artikelNummer: item.Artikel_Nummer ?? null,
-          entry: rawEntry
+          entry: rawEntry,
+          reason: normalizedEntry.reason
         });
         emitMediaAudit({
           action: 'mirror-skip',
           scope: 'erp-sync',
           identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
           path: rawEntry,
-          root: MEDIA_DIR,
+          root: ERP_MEDIA_SOURCE_ROOT,
           outcome: 'blocked',
           reason: 'invalid-media-entry',
         });
         continue;
       }
 
-      const absolutePath = resolvePathWithinRoot(MEDIA_DIR, relativeEntry, {
-        logger,
-        operation: 'sync-erp:explicit-media-path'
-      });
+      let relativeEntry = normalizedEntry.value;
+      if (normalizedEntry.kind === 'filename-only') {
+        const mediaFolder = resolveMediaFolder(item.ItemUUID ?? 'unknown-item', item.Artikel_Nummer, logger);
+        relativeEntry = path.posix.join(mediaFolder.replace(/\\/g, '/'), normalizedEntry.value);
+        logger.info('[sync-erp] media_entry_filename_resolved', {
+          itemId: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer ?? null,
+          entry: rawEntry,
+          resolvedRelativePath: relativeEntry
+        });
+      } else {
+        logger.info('[sync-erp] media_entry_legacy_path_resolved', {
+          itemId: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer ?? null,
+          entry: rawEntry,
+          resolvedRelativePath: relativeEntry
+        });
+      }
+
+      let absolutePath: string | null = null;
+      try {
+        absolutePath = resolvePathWithinRoot(ERP_MEDIA_SOURCE_ROOT, relativeEntry, {
+          logger,
+          operation: 'sync-erp:explicit-media-path'
+        });
+      } catch (error) {
+        logger.warn('[sync-erp] media_entry_probe_failed', {
+          itemId: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer ?? null,
+          entry: rawEntry,
+          resolvedRelativePath: relativeEntry,
+          reason: 'path-resolution-threw',
+          error
+        });
+      }
+
       if (!absolutePath) {
+        logger.warn('[sync-erp] media_entry_blocked_skipped', {
+          itemId: item.ItemUUID ?? null,
+          artikelNummer: item.Artikel_Nummer ?? null,
+          entry: rawEntry,
+          resolvedRelativePath: relativeEntry,
+          reason: 'outside-source-root'
+        });
         emitMediaAudit({
           action: 'mirror-skip',
           scope: 'erp-sync',
           identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
           path: relativeEntry,
-          root: MEDIA_DIR,
+          root: ERP_MEDIA_SOURCE_ROOT,
           outcome: 'blocked',
           reason: 'media-path-outside-root',
         });
@@ -148,6 +202,7 @@ export function resolveExplicitMediaMirrorSources(
           artikelNummer: item.Artikel_Nummer ?? null,
           entry: rawEntry,
           resolvedPath: absolutePath,
+          reason: 'missing-or-inaccessible-file',
           error
         });
         emitMediaAudit({
@@ -155,7 +210,7 @@ export function resolveExplicitMediaMirrorSources(
           scope: 'erp-sync',
           identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
           path: absolutePath,
-          root: MEDIA_DIR,
+          root: ERP_MEDIA_SOURCE_ROOT,
           outcome: 'skipped',
           reason: 'media-file-missing',
           error: error instanceof Error ? error.message : String(error)
@@ -175,7 +230,7 @@ export function resolveExplicitMediaMirrorSources(
           scope: 'erp-sync',
           identifier: { artikelNummer: item.Artikel_Nummer ?? null, itemUUID: item.ItemUUID ?? null },
           path: absolutePath,
-          root: MEDIA_DIR,
+          root: ERP_MEDIA_SOURCE_ROOT,
           outcome: 'blocked',
           reason: 'media-path-not-file',
         });
@@ -496,7 +551,7 @@ const action = defineHttpAction({
       console.info('[sync-erp] media_copy_expectation', {
         expected: ERP_MEDIA_MIRROR_ENABLED ? 'enabled' : 'disabled',
         destination: ERP_MEDIA_MIRROR_DIR || null,
-        source: MEDIA_DIR
+        source: ERP_MEDIA_SOURCE_ROOT
       });
 
       let payload: unknown;
@@ -551,7 +606,7 @@ const action = defineHttpAction({
           scope: 'erp-sync',
           identifier: { artikelNummer: null, itemUUID: itemIds.join(',') || null },
           path: null,
-          root: MEDIA_DIR,
+          root: ERP_MEDIA_SOURCE_ROOT,
           outcome: 'blocked',
           reason: 'no-artikelnummer-scope',
         });
@@ -610,7 +665,7 @@ const action = defineHttpAction({
         scope: 'erp-sync',
         identifier: { artikelNummer: scopedArtikelNummern.join(','), itemUUID: itemIds.join(',') },
         path: ERP_MEDIA_MIRROR_DIR || null,
-        root: MEDIA_DIR,
+        root: ERP_MEDIA_SOURCE_ROOT,
         outcome: 'start',
         reason: ERP_MEDIA_MIRROR_ENABLED ? 'script-start' : 'mirror-disabled',
       });
@@ -619,7 +674,7 @@ const action = defineHttpAction({
         stagedExport.itemsPath,
         explicitMediaSources,
         ERP_MEDIA_MIRROR_ENABLED ? ERP_MEDIA_MIRROR_DIR : null,
-        MEDIA_DIR,
+        ERP_MEDIA_SOURCE_ROOT,
         normalizedScriptTimeoutMs
       );
       let mediaCopyMarker: MediaCopyMarker = { status: 'unknown', detail: null };
@@ -654,7 +709,7 @@ const action = defineHttpAction({
         scope: 'erp-sync',
         identifier: { artikelNummer: scopedArtikelNummern.join(','), itemUUID: itemIds.join(',') },
         path: ERP_MEDIA_MIRROR_DIR || null,
-        root: MEDIA_DIR,
+        root: ERP_MEDIA_SOURCE_ROOT,
         outcome:
           scriptResult.exitCode === 0
             ? mediaCopyMarker.status === 'failed'

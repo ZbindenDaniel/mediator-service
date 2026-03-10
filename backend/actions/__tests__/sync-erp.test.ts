@@ -121,33 +121,80 @@ describe('sync-erp payload normalization', () => {
     });
   });
 
-  it('resolves explicit media file paths from ImageNames and Grafikname fallback', () => {
-    const mediaFolderOne = `__test-sync-erp-${Date.now()}-1`;
-    const mediaFolderTwo = `__test-sync-erp-${Date.now()}-2`;
-    fs.mkdirSync(path.join(MEDIA_DIR, mediaFolderOne), { recursive: true });
-    fs.mkdirSync(path.join(MEDIA_DIR, mediaFolderTwo), { recursive: true });
-
-    const first = path.join(MEDIA_DIR, mediaFolderOne, 'A.jpg');
-    const second = path.join(MEDIA_DIR, mediaFolderTwo, 'B.png');
-    fs.writeFileSync(first, 'a');
-    fs.writeFileSync(second, 'b');
+  it('resolves filename-only metadata entries via Artikel_Nummer media folder conventions', () => {
+    const mediaFolder = '019865';
+    const mediaFile = path.join(MEDIA_DIR, mediaFolder, '019865-1.jpg');
+    fs.mkdirSync(path.dirname(mediaFile), { recursive: true });
+    fs.writeFileSync(mediaFile, 'a');
 
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
     const resolved = resolveExplicitMediaMirrorSources(
+      [{ ItemUUID: 'I-1', Artikel_Nummer: '19865', ImageNames: '019865-1.jpg' }],
+      logger
+    );
+
+    expect(resolved).toEqual([mediaFile]);
+    expect(logger.info).toHaveBeenCalledWith('[sync-erp] media_entry_filename_resolved', {
+      itemId: 'I-1',
+      artikelNummer: '19865',
+      entry: '019865-1.jpg',
+      resolvedRelativePath: '019865/019865-1.jpg'
+    });
+
+    fs.rmSync(path.join(MEDIA_DIR, mediaFolder), { recursive: true, force: true });
+  });
+
+  it('preserves legacy path-like metadata entries for compatibility', () => {
+    const mediaFolder = `__test-sync-erp-${Date.now()}-legacy`;
+    const mediaFile = path.join(MEDIA_DIR, mediaFolder, 'B.png');
+    fs.mkdirSync(path.dirname(mediaFile), { recursive: true });
+    fs.writeFileSync(mediaFile, 'b');
+
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const resolved = resolveExplicitMediaMirrorSources(
+      [{ ItemUUID: 'I-2', Artikel_Nummer: 'ART-2', Grafikname: `/media/${mediaFolder}/B.png` }],
+      logger
+    );
+
+    expect(resolved).toEqual([mediaFile]);
+    expect(logger.info).toHaveBeenCalledWith('[sync-erp] media_entry_legacy_path_resolved', {
+      itemId: 'I-2',
+      artikelNummer: 'ART-2',
+      entry: `/media/${mediaFolder}/B.png`,
+      resolvedRelativePath: `${mediaFolder}/B.png`
+    });
+
+    fs.rmSync(path.join(MEDIA_DIR, mediaFolder), { recursive: true, force: true });
+  });
+
+  it('logs and skips missing-file and invalid-entry metadata values', () => {
+    const mediaFolder = `__test-sync-erp-${Date.now()}-missing`;
+    fs.mkdirSync(path.join(MEDIA_DIR, mediaFolder), { recursive: true });
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+    const resolved = resolveExplicitMediaMirrorSources(
       [
-        { ItemUUID: 'I-1', Artikel_Nummer: 'ART-1', ImageNames: `/media/${mediaFolderOne}/A.jpg|/media/${mediaFolderOne}/missing.jpg` },
-        { ItemUUID: 'I-2', Artikel_Nummer: 'ART-2', ImageNames: '   ', Grafikname: `/media/${mediaFolderTwo}/B.png` },
-        { ItemUUID: 'I-3', Artikel_Nummer: 'ART-3', ImageNames: '../escape.png' }
+        { ItemUUID: 'I-3', Artikel_Nummer: 'ART-3', ImageNames: `/media/${mediaFolder}/missing.jpg` },
+        { ItemUUID: 'I-4', Artikel_Nummer: 'ART-4', ImageNames: '../escape.png' }
       ],
       logger
     );
 
-    expect(resolved).toEqual(expect.arrayContaining([first, second]));
-    expect(resolved).toHaveLength(2);
-    expect(logger.warn).toHaveBeenCalled();
+    expect(resolved).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith('[sync-erp] media_entry_missing_skipped', expect.objectContaining({
+      itemId: 'I-3',
+      artikelNummer: 'ART-3',
+      entry: `/media/${mediaFolder}/missing.jpg`,
+      reason: 'missing-or-inaccessible-file'
+    }));
+    expect(logger.warn).toHaveBeenCalledWith('[sync-erp] media_entry_invalid_skipped', {
+      itemId: 'I-4',
+      artikelNummer: 'ART-4',
+      entry: '../escape.png',
+      reason: 'invalid-legacy-path-entry'
+    });
 
-    fs.rmSync(path.join(MEDIA_DIR, mediaFolderOne), { recursive: true, force: true });
-    fs.rmSync(path.join(MEDIA_DIR, mediaFolderTwo), { recursive: true, force: true });
+    fs.rmSync(path.join(MEDIA_DIR, mediaFolder), { recursive: true, force: true });
   });
 
   it('fails fast with 422 when no Artikelnummer values can be resolved', async () => {
