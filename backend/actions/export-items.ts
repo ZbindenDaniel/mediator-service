@@ -167,6 +167,7 @@ const MEDIA_PREFIX = '/media/';
 // TODO(export-items-mode): Confirm default export mode expectations with ERP/backup consumers.
 
 let hasLoggedMediaPrefixStrip = false;
+let hasLoggedErpMediaBasenameNormalization = false;
 
 function stripMediaPrefixForExport(
   asset: string,
@@ -206,6 +207,80 @@ function normalizeMediaStringForExport(
     .split('|')
     .map((entry) => stripMediaPrefixForExport(entry, logger))
     .join('|');
+}
+
+function normalizeMediaEntryBasenameForErpExport(
+  entry: string,
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): string {
+  const normalizedEntry = stripMediaPrefixForExport(entry, logger);
+  const trimmedEntry = normalizedEntry.trim();
+
+  if (!trimmedEntry) {
+    logger.warn?.('[export-items] Encountered empty media entry during ERP media basename normalization; keeping original entry.', {
+      entry,
+    });
+    return normalizedEntry;
+  }
+
+  const basename = path.posix.basename(trimmedEntry);
+  if (!basename || basename === '.' || basename === '..') {
+    logger.warn?.('[export-items] Encountered malformed media entry during ERP media basename normalization; keeping original entry.', {
+      entry,
+      normalizedEntry,
+    });
+    return normalizedEntry;
+  }
+
+  return basename;
+}
+
+function normalizeMediaStringForErpExport(
+  value: string,
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): string {
+  const normalizedForExport = normalizeMediaStringForExport(value, logger);
+  try {
+    const normalizedEntries = normalizedForExport.split('|').map((entry) => normalizeMediaEntryBasenameForErpExport(entry, logger));
+    if (!hasLoggedErpMediaBasenameNormalization) {
+      logger.info?.('[export-items] Normalizing ERP media export entries to filename-only basenames.', {
+        sampleBefore: normalizedForExport,
+        sampleAfter: normalizedEntries.join('|'),
+      });
+      hasLoggedErpMediaBasenameNormalization = true;
+    }
+    return normalizedEntries.join('|');
+  } catch (error) {
+    logger.error?.('[export-items] Failed ERP media basename normalization; falling back to legacy normalized media values.', {
+      value,
+      error,
+    });
+    return normalizedForExport;
+  }
+}
+
+function normalizeMediaListForErpExport(
+  assets: string[],
+  logger: Pick<Console, 'error' | 'info' | 'warn'> = console
+): string[] {
+  const normalizedAssets = normalizeMediaListForExport(assets, logger);
+  try {
+    const basenameAssets = normalizedAssets.map((asset) => normalizeMediaEntryBasenameForErpExport(asset, logger));
+    if (!hasLoggedErpMediaBasenameNormalization) {
+      logger.info?.('[export-items] Normalizing ERP media export entries to filename-only basenames.', {
+        sampleBefore: normalizedAssets.join('|'),
+        sampleAfter: basenameAssets.join('|'),
+      });
+      hasLoggedErpMediaBasenameNormalization = true;
+    }
+    return basenameAssets;
+  } catch (error) {
+    logger.error?.('[export-items] Failed ERP media basename normalization for media list; falling back to legacy normalized media values.', {
+      assets,
+      error,
+    });
+    return normalizedAssets;
+  }
 }
 
 type ExportMode = 'backup' | 'erp';
@@ -708,6 +783,11 @@ function resolveExportValue(
   rawRow: Record<string, unknown>,
   langtextFormat: LangtextExportFormat
 ): unknown {
+  const normalizeMediaStringForBoundary = (mediaValue: string): string =>
+    langtextFormat === 'html' ? normalizeMediaStringForErpExport(mediaValue) : normalizeMediaStringForExport(mediaValue);
+  const normalizeMediaListForBoundary = (mediaAssets: string[]): string[] =>
+    langtextFormat === 'html' ? normalizeMediaListForErpExport(mediaAssets) : normalizeMediaListForExport(mediaAssets);
+
   const field = fieldMap[column];
   if (!field) {
     if (!missingFieldWarnings.has(column)) {
@@ -825,14 +905,14 @@ function resolveExportValue(
 
     if (!itemUUID) {
       console.warn('[export-items] Missing ItemUUID for media enumeration, falling back to original Grafikname.');
-      return typeof fallbackValue === 'string' ? normalizeMediaStringForExport(fallbackValue) : fallbackValue;
+      return typeof fallbackValue === 'string' ? normalizeMediaStringForBoundary(fallbackValue) : fallbackValue;
     }
 
     try {
       const mediaAssets = collectMediaAssets(itemUUID, grafikname, artikelNummer);
       const filteredMediaAssets = filterExistingMediaAssets(mediaAssets);
       if (Array.isArray(filteredMediaAssets) && filteredMediaAssets.length > 0) {
-        return normalizeMediaListForExport(filteredMediaAssets).join('|');
+        return normalizeMediaListForBoundary(filteredMediaAssets).join('|');
       }
       if (mediaAssets.length > 0 && filteredMediaAssets.length === 0) {
         console.info('[export-items] Media assets skipped after filtering; falling back to Grafikname.', {
@@ -852,7 +932,7 @@ function resolveExportValue(
         error
       });
     }
-    return typeof fallbackValue === 'string' ? normalizeMediaStringForExport(fallbackValue) : fallbackValue;
+    return typeof fallbackValue === 'string' ? normalizeMediaStringForBoundary(fallbackValue) : fallbackValue;
   }
 
   if (metadataColumnSet.has(column)) {
@@ -881,7 +961,7 @@ function resolveExportValue(
     }
     const existingMediaAssets = filterExistingMediaAssets(mediaAssets);
     if (existingMediaAssets.length > 0) {
-      return normalizeMediaListForExport(existingMediaAssets).join('|');
+      return normalizeMediaListForBoundary(existingMediaAssets).join('|');
     }
     if (mediaAssets.length > 0 && existingMediaAssets.length === 0) {
       console.info('[export-items] Media assets skipped after filtering existing files; using metadata fallbacks.', {
@@ -897,7 +977,7 @@ function resolveExportValue(
           itemUUID,
           artikelNummer,
         });
-        return normalizeMediaStringForExport(storedList);
+        return normalizeMediaStringForBoundary(storedList);
       }
     } catch (fallbackError) {
       console.error('[export-items] Failed to read ImageNames metadata fallback for CSV export.', {
@@ -906,7 +986,7 @@ function resolveExportValue(
         error: fallbackError,
       });
     }
-    return normalizeMediaStringForExport(canonicalGrafikname);
+    return normalizeMediaStringForBoundary(canonicalGrafikname);
   }
 
   if (field === 'Kurzbeschreibung' && langtextFormat === 'html') {
