@@ -258,11 +258,105 @@ describe('save-item action', () => {
     expect(persistItemReference).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'ART-9',
-        Grafikname: '/media/ART-9/ART-9-2.jpg',
+        Grafikname: 'ART-9-2.jpg',
         ImageNames: '/media/ART-9/ART-9-1.jpg|/media/ART-9/ART-9-2.jpg'
       })
     );
   });
+
+
+
+  it('ignores unsafe Grafikname payload values containing path separators', async () => {
+    const persistItemReference = jest.fn();
+    const ctx = {
+      getItem: {
+        get: jest.fn(() => ({
+          ItemUUID: 'ITEM-UNSAFE',
+          Artikel_Nummer: 'ART-UNSAFE',
+          BoxID: null,
+          Location: null,
+          Grafikname: 'ART-UNSAFE-1.jpg',
+          Einheit: ItemEinheit.Stk
+        }))
+      },
+      getItemReference: {
+        get: jest.fn(() => ({
+          Artikel_Nummer: 'ART-UNSAFE',
+          Grafikname: 'ART-UNSAFE-1.jpg',
+          Artikelbeschreibung: 'Reference text'
+        }))
+      },
+      db: {
+        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
+      },
+      persistItemReference,
+      logEvent: jest.fn(),
+      enqueueShopwareSyncJob: jest.fn()
+    };
+
+    const req = createPutRequest('/api/items/ITEM-UNSAFE', {
+      actor: 'Tester',
+      Grafikname: '/media/ART-UNSAFE/ART-UNSAFE-2.jpg'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(persistItemReference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'ART-UNSAFE',
+        Grafikname: 'ART-UNSAFE-1.jpg'
+      })
+    );
+  });
+
+
+  it('does not mutate legacy persisted Grafikname paths unless explicitly replaced', async () => {
+    const persistItemReference = jest.fn();
+    const ctx = {
+      getItem: {
+        get: jest.fn(() => ({
+          ItemUUID: 'ITEM-LEGACY',
+          Artikel_Nummer: 'ART-LEGACY',
+          BoxID: null,
+          Location: null,
+          Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.jpg',
+          Einheit: ItemEinheit.Stk
+        }))
+      },
+      getItemReference: {
+        get: jest.fn(() => ({
+          Artikel_Nummer: 'ART-LEGACY',
+          Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.jpg',
+          Artikelbeschreibung: 'Reference text'
+        }))
+      },
+      db: {
+        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
+      },
+      persistItemReference,
+      logEvent: jest.fn(),
+      enqueueShopwareSyncJob: jest.fn()
+    };
+
+    const req = createPutRequest('/api/items/ITEM-LEGACY', {
+      actor: 'Tester',
+      Artikelbeschreibung: 'Updated text'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(persistItemReference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Artikel_Nummer: 'ART-LEGACY',
+        Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.jpg'
+      })
+    );
+  });
+
 
   it('does not prune media directory after removing the final file asset', async () => {
     const folder = path.join(sandbox.distMediaDir, 'ART-10');

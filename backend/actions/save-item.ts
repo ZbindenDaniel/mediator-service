@@ -127,6 +127,10 @@ function normaliseMediaReference(
       candidate: trimmed
     });
     return null;
+  } else if (!trimmed.includes('/') && !trimmed.includes('\\')) {
+    const formattedArtikelNummer = formatArtikelNummerForMedia(artikelNummer ?? null, console);
+    const mediaFolder = resolveMediaFolder(itemId, formattedArtikelNummer, console);
+    relativeRaw = `${mediaFolder}/${trimmed}`;
   }
 
   const relativePath = buildRelativePath(relativeRaw);
@@ -150,6 +154,50 @@ function normaliseMediaReference(
   }
 
   return `${MEDIA_PREFIX}${relativePath}`;
+}
+
+function normalizeGrafiknameForPersistence(
+  value: unknown,
+  context: { itemId: string; artikelNummer: string | null; source: string }
+): { shouldUpdate: boolean; value: string | undefined } {
+  try {
+    if (typeof value !== 'string') {
+      return { shouldUpdate: false, value: undefined };
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return { shouldUpdate: true, value: '' };
+    }
+    if (trimmed.includes('/') || trimmed.includes('\\')) {
+      console.warn('[save-item] Incoming Grafikname contains path separators; ignoring payload value', {
+        itemId: context.itemId,
+        artikelNummer: context.artikelNummer,
+        source: context.source,
+        grafikname: trimmed
+      });
+      return { shouldUpdate: false, value: undefined };
+    }
+    if (trimmed === '.' || trimmed === '..') {
+      console.warn('[save-item] Incoming Grafikname rejected as unsafe filename token', {
+        itemId: context.itemId,
+        artikelNummer: context.artikelNummer,
+        source: context.source,
+        grafikname: trimmed
+      });
+      return { shouldUpdate: false, value: undefined };
+    }
+    return { shouldUpdate: true, value: path.posix.basename(trimmed) };
+  } catch (error) {
+    console.error('[save-item] Failed to normalize Grafikname for persistence', {
+      itemId: context.itemId,
+      artikelNummer: context.artikelNummer,
+      source: context.source,
+      grafikname: value,
+      error
+    });
+    return { shouldUpdate: false, value: undefined };
+  }
 }
 
 // TODO(media-enumeration): Confirm non-image files never leak into media folders once new sources are added.
@@ -875,6 +923,16 @@ const action = defineHttpAction({
       const existing = ctx.getItem.get(itemId) || {};
       const mediaArtikelNummer = data.Artikel_Nummer || existing.Artikel_Nummer || null;
       let grafik = existing.Grafikname || '';
+      let grafikWasExplicitlyUpdated = false;
+      const incomingGrafiknameNormalization = normalizeGrafiknameForPersistence(data.Grafikname, {
+        itemId,
+        artikelNummer: mediaArtikelNummer,
+        source: 'payload'
+      });
+      if (incomingGrafiknameNormalization.shouldUpdate) {
+        grafik = incomingGrafiknameNormalization.value ?? '';
+        grafikWasExplicitlyUpdated = true;
+      }
       try {
         const imgs = [data.picture1, data.picture2, data.picture3];
         // TODO(media-delete): Add coverage for removeAsset payload handling.
@@ -966,7 +1024,8 @@ const action = defineHttpAction({
             try {
               fs.writeFileSync(path.join(dir, file), buf);
               if (index === 0) {
-                grafik = `${MEDIA_PREFIX}${mediaFolder}/${file}`;
+                grafik = file;
+                grafikWasExplicitlyUpdated = true;
               }
             } catch (writeErr) {
               console.error('Failed to persist media file', {
@@ -991,7 +1050,13 @@ const action = defineHttpAction({
         if (fallbackMedia.length > 0) {
           const fallbackPrimary = fallbackMedia[0];
           normalisedGrafikname = normaliseMediaReference(itemId, mediaArtikelNummer, fallbackPrimary) ?? fallbackPrimary;
-          grafik = normalisedGrafikname ?? '';
+          const fallbackGrafiknameNormalization = normalizeGrafiknameForPersistence(path.posix.basename(fallbackPrimary), {
+            itemId,
+            artikelNummer: mediaArtikelNummer,
+            source: 'fallback-media'
+          });
+          grafik = fallbackGrafiknameNormalization.value ?? '';
+          grafikWasExplicitlyUpdated = true;
           console.info('[save-item] Updated primary graphic after removals', {
             itemId,
             fallbackPrimary
@@ -1112,10 +1177,13 @@ const action = defineHttpAction({
       if (Object.prototype.hasOwnProperty.call(referencePayload, 'Shopartikel')) {
         referenceUpdates.Shopartikel = resolveShopartikelFlag(incomingShopartikel, resolvedQuality);
       }
-      const resolvedGrafikname = typeof grafik === 'string' && grafik.trim() ? grafik.trim() : undefined;
+      const resolvedGrafikname =
+        grafikWasExplicitlyUpdated && typeof grafik === 'string'
+          ? (grafik.trim() ? grafik.trim() : '')
+          : existingReference?.Grafikname;
       referenceUpdates.Grafikname = resolvedGrafikname;
-      if (resolvedGrafikname !== normalisedGrafikname) {
-        console.info('[save-item] Preserving raw Grafikname for reference persistence', {
+      if (resolvedGrafikname !== normalisedGrafikname && grafikWasExplicitlyUpdated) {
+        console.info('[save-item] Persisting filename-only Grafikname while serving normalized media URLs', {
           itemId,
           artikelNummer,
           resolvedGrafikname,
