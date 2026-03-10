@@ -1489,7 +1489,8 @@ button:focus {
 }
 
 .bulk-item-action-bar__controls .bulk-item-action-bar__field {
-    flex: 0 1 80%;
+    flex: 0 1 100%;
+    flex-direction: row;
     width: auto;
 }
 
@@ -1524,11 +1525,13 @@ button:focus {
 
 .bulk-item-action-bar__target-input {
     min-width: 200px;
+    width: 67%;
 }
 
 .bulk-item-action-bar__buttons {
     display: flex;
     flex-wrap: wrap;
+    flex-direction: row;
     gap: 10px;
 }
 
@@ -1536,6 +1539,8 @@ button:focus {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    width: 29%;
+    min-width: 220px;;
     padding: var(--pad) 14px;
     border-radius: var(--radius);
     border: 1px solid var(--line);

@@ -747,32 +747,21 @@ export default function BulkItemActionBar({
             className="bulk-item-action-bar__target"
             inputClassName="bulk-item-action-bar__target-input"
           />
-        </div>
-        <div className="bulk-item-action-bar__export-column">
           <button
-            className="bulk-item-action-bar__button bulk-item-action-bar__button--export"
+            className="bulk-item-action-bar__button bulk-item-action-bar__button--primary"
             disabled={isProcessing || !hasSelection}
-            onClick={handleExportSelection}
+            onClick={() => {
+              void handleBulkMove();
+            }}
             type="button"
           >
-            <GoDownload aria-hidden="true" />
-            <span>Export CSV</span>
+            <GoMoveToEnd aria-hidden="true" />
+            <span>Verschieben</span>
           </button>
         </div>
       </div>
 
       <div className="bulk-item-action-bar__buttons row">
-        <button
-          className="bulk-item-action-bar__button bulk-item-action-bar__button--primary"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => {
-            void handleBulkMove();
-          }}
-          type="button"
-        >
-          <GoMoveToEnd aria-hidden="true" />
-          <span>Verschieben</span>
-        </button>
 
         <button
           className="bulk-item-action-bar__button"
@@ -820,6 +809,17 @@ export default function BulkItemActionBar({
           <GoTrash aria-hidden="true" />
           <span>Bestand entfernen</span>
         </button>
+
+        <button
+          className="bulk-item-action-bar__button bulk-item-action-bar__button--export"
+          disabled={isProcessing || !hasSelection}
+          onClick={handleExportSelection}
+          type="button"
+        >
+          <GoDownload aria-hidden="true" />
+          <span>Export CSV</span>
+        </button>
+
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--ghost"
           disabled={isProcessing}

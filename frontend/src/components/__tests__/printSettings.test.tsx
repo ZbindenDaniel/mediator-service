@@ -29,7 +29,7 @@ describe('AUTO_PRINT_ITEM_LABEL_CONFIG', () => {
 
     let loaded: {
       config: { enabled: boolean; hadInput: boolean; invalid: boolean; rawValue: string | null };
-      logger: { info: jest.Mock; warn: jest.Mock };
+      logger: { info: jest.Mock; warn: jest.Mock; error: jest.Mock };
     } | null = null;
 
     jest.isolateModules(() => {
@@ -45,7 +45,7 @@ describe('AUTO_PRINT_ITEM_LABEL_CONFIG', () => {
       const { logger } = require('../../utils/logger');
       loaded = {
         config: AUTO_PRINT_ITEM_LABEL_CONFIG,
-        logger
+        logger: logger as { info: jest.Mock; warn: jest.Mock; error: jest.Mock }
       };
     });
 
@@ -53,7 +53,10 @@ describe('AUTO_PRINT_ITEM_LABEL_CONFIG', () => {
       throw new Error('Failed to load printSettings module in isolation.');
     }
 
-    return loaded;
+    return loaded as {
+      config: { enabled: boolean; hadInput: boolean; invalid: boolean; rawValue: string | null };
+      logger: { info: jest.Mock; warn: jest.Mock; error: jest.Mock };
+    };
   }
 
   it('defaults to disabled with unset configuration', () => {
