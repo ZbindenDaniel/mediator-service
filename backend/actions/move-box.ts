@@ -3,8 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { defineHttpAction } from './index';
 import { resolveStandortLabel } from '../standort-label';
-import { MEDIA_DIR } from '../lib/media';
+import { MEDIA_UPLOAD_STAGING_DIR, resolveUploadMediaPath } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
+import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 
 const BOX_MEDIA_PREFIX = '/media/';
 const BOX_MEDIA_FOLDER = 'boxes';
@@ -18,7 +19,11 @@ function sanitizeBoxMediaSegment(segment: string): string {
 function resolveBoxMediaDirectory(boxId: string): { absoluteDir: string; relativeDir: string } {
   const safeId = sanitizeBoxMediaSegment(boxId);
   const relativeDir = path.posix.join(BOX_MEDIA_FOLDER, safeId);
-  const absoluteDir = path.join(MEDIA_DIR, relativeDir);
+  const absoluteDir = assertPathWithinRoot(
+    MEDIA_UPLOAD_STAGING_DIR,
+    path.resolve(resolveUploadMediaPath(relativeDir)),
+    { logger: console, operation: 'move-box:resolve-media-directory' }
+  );
   return { absoluteDir, relativeDir };
 }
 
@@ -35,7 +40,7 @@ function removeExistingBoxMedia(boxId: string): void {
         scope: 'box',
         identifier: { artikelNummer: null, itemUUID: null },
         path: absoluteDir,
-        root: MEDIA_DIR,
+        root: MEDIA_UPLOAD_STAGING_DIR,
         outcome: 'blocked',
         reason: 'expected-directory',
       });
@@ -44,13 +49,33 @@ function removeExistingBoxMedia(boxId: string): void {
     }
     const entries = fs.readdirSync(absoluteDir);
     for (const entry of entries) {
-      const absoluteEntry = path.join(absoluteDir, entry);
+      const absoluteEntry = resolvePathWithinRoot(MEDIA_UPLOAD_STAGING_DIR, path.join(absoluteDir, entry), {
+        logger: console,
+        operation: 'move-box:remove-existing-entry'
+      });
+      if (!absoluteEntry) {
+        console.warn('[move-box] Rejecting delete attempt outside staging root', {
+          boxId,
+          entry,
+          stagingRoot: MEDIA_UPLOAD_STAGING_DIR
+        });
+        emitMediaAudit({
+          action: 'delete',
+          scope: 'box',
+          identifier: { artikelNummer: null, itemUUID: null },
+          path: path.join(absoluteDir, entry),
+          root: MEDIA_UPLOAD_STAGING_DIR,
+          outcome: 'blocked',
+          reason: 'outside-staging-root',
+        });
+        continue;
+      }
       emitMediaAudit({
         action: 'delete',
         scope: 'box',
         identifier: { artikelNummer: null, itemUUID: null },
         path: absoluteEntry,
-        root: MEDIA_DIR,
+        root: MEDIA_UPLOAD_STAGING_DIR,
         outcome: 'start',
         reason: 'replace-photo',
       });
@@ -61,7 +86,7 @@ function removeExistingBoxMedia(boxId: string): void {
           scope: 'box',
           identifier: { artikelNummer: null, itemUUID: null },
           path: absoluteEntry,
-          root: MEDIA_DIR,
+          root: MEDIA_UPLOAD_STAGING_DIR,
           outcome: 'success',
           reason: 'replace-photo',
         });
@@ -71,7 +96,7 @@ function removeExistingBoxMedia(boxId: string): void {
           scope: 'box',
           identifier: { artikelNummer: null, itemUUID: null },
           path: absoluteEntry,
-          root: MEDIA_DIR,
+          root: MEDIA_UPLOAD_STAGING_DIR,
           outcome: 'error',
           reason: 'unlink-failed',
           error: unlinkErr,
@@ -80,23 +105,44 @@ function removeExistingBoxMedia(boxId: string): void {
       }
     }
     if (fs.readdirSync(absoluteDir).length === 0) {
-      emitMediaAudit({
-        action: 'prune',
-        scope: 'box',
-        identifier: { artikelNummer: null, itemUUID: null },
-        path: absoluteDir,
-        root: MEDIA_DIR,
-        outcome: 'start',
-        reason: 'empty-directory',
+      const safeAbsoluteDir = resolvePathWithinRoot(MEDIA_UPLOAD_STAGING_DIR, absoluteDir, {
+        logger: console,
+        operation: 'move-box:remove-empty-directory'
       });
-      try {
-        fs.rmdirSync(absoluteDir);
+      if (!safeAbsoluteDir) {
+        console.warn('[move-box] Rejecting directory prune attempt outside staging root', {
+          boxId,
+          absoluteDir,
+          stagingRoot: MEDIA_UPLOAD_STAGING_DIR
+        });
         emitMediaAudit({
           action: 'prune',
           scope: 'box',
           identifier: { artikelNummer: null, itemUUID: null },
           path: absoluteDir,
-          root: MEDIA_DIR,
+          root: MEDIA_UPLOAD_STAGING_DIR,
+          outcome: 'blocked',
+          reason: 'outside-staging-root',
+        });
+        return;
+      }
+      emitMediaAudit({
+        action: 'prune',
+        scope: 'box',
+        identifier: { artikelNummer: null, itemUUID: null },
+        path: absoluteDir,
+        root: MEDIA_UPLOAD_STAGING_DIR,
+        outcome: 'start',
+        reason: 'empty-directory',
+      });
+      try {
+        fs.rmdirSync(safeAbsoluteDir);
+        emitMediaAudit({
+          action: 'prune',
+          scope: 'box',
+          identifier: { artikelNummer: null, itemUUID: null },
+          path: safeAbsoluteDir,
+          root: MEDIA_UPLOAD_STAGING_DIR,
           outcome: 'success',
           reason: 'empty-directory',
         });
@@ -105,8 +151,8 @@ function removeExistingBoxMedia(boxId: string): void {
           action: 'prune',
           scope: 'box',
           identifier: { artikelNummer: null, itemUUID: null },
-          path: absoluteDir,
-          root: MEDIA_DIR,
+          path: safeAbsoluteDir,
+          root: MEDIA_UPLOAD_STAGING_DIR,
           outcome: 'error',
           reason: 'rmdir-failed',
           error: removeDirErr,
@@ -120,7 +166,7 @@ function removeExistingBoxMedia(boxId: string): void {
       scope: 'box',
       identifier: { artikelNummer: null, itemUUID: null },
       path: null,
-      root: MEDIA_DIR,
+      root: MEDIA_UPLOAD_STAGING_DIR,
       outcome: 'error',
       reason: 'cleanup-failed',
       error: err,
@@ -141,7 +187,11 @@ function persistBoxPhoto(boxId: string, dataUrl: string): string | null {
   const extension = mimeType.split('/')[1] || 'png';
   const { absoluteDir, relativeDir } = resolveBoxMediaDirectory(boxId);
   const filename = `photo.${extension}`;
-  const absolutePath = path.join(absoluteDir, filename);
+  const absolutePath = assertPathWithinRoot(
+    MEDIA_UPLOAD_STAGING_DIR,
+    path.resolve(absoluteDir, filename),
+    { logger: console, operation: 'move-box:persist-photo' }
+  );
   const relativePath = path.posix.join(relativeDir, filename);
 
   try {
@@ -151,7 +201,7 @@ function persistBoxPhoto(boxId: string, dataUrl: string): string | null {
       scope: 'box',
       identifier: { artikelNummer: null, itemUUID: null },
       path: absolutePath,
-      root: MEDIA_DIR,
+      root: MEDIA_UPLOAD_STAGING_DIR,
       outcome: 'start',
       reason: 'persist-photo',
     });
@@ -163,7 +213,7 @@ function persistBoxPhoto(boxId: string, dataUrl: string): string | null {
       scope: 'box',
       identifier: { artikelNummer: null, itemUUID: null },
       path: absolutePath,
-      root: MEDIA_DIR,
+      root: MEDIA_UPLOAD_STAGING_DIR,
       outcome: 'success',
       reason: 'persist-photo',
     });
@@ -175,7 +225,7 @@ function persistBoxPhoto(boxId: string, dataUrl: string): string | null {
       scope: 'box',
       identifier: { artikelNummer: null, itemUUID: null },
       path: absolutePath,
-      root: MEDIA_DIR,
+      root: MEDIA_UPLOAD_STAGING_DIR,
       outcome: 'error',
       reason: 'persist-failed',
       error: err,

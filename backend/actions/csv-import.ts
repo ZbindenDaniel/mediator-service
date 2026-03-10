@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { defineHttpAction } from './index';
 import { ARCHIVE_DIR } from '../config';
-import { MEDIA_DIR } from '../lib/media';
+import { MEDIA_UPLOAD_STAGING_DIR } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { ingestBoxesCsv, ingestEventsCsv, ingestAgenticRunsCsv } from '../importer';
 import {
@@ -282,18 +282,18 @@ const action = defineHttpAction({
 
         if (lowerPath.startsWith('media/')) {
           const relative = normalizedPath.slice('media/'.length);
-          const safeTarget = resolveSafePath(MEDIA_DIR, relative);
+          const safeTarget = resolveSafePath(MEDIA_UPLOAD_STAGING_DIR, relative);
           if (!safeTarget) {
             emitMediaAudit({
               action: 'write',
               scope: 'import',
               identifier: { artikelNummer: null, itemUUID: null },
               path: normalizedPath,
-              root: MEDIA_DIR,
+              root: MEDIA_UPLOAD_STAGING_DIR,
               outcome: 'blocked',
               reason: 'outside-media-root',
             });
-            console.warn('[csv-import] Skipping media entry outside MEDIA_DIR bounds', { entry: normalizedPath });
+            console.warn('[csv-import] Skipping media entry outside MEDIA_UPLOAD_STAGING_DIR bounds', { entry: normalizedPath });
             continue;
           }
           emitMediaAudit({
@@ -301,7 +301,7 @@ const action = defineHttpAction({
             scope: 'import',
             identifier: { artikelNummer: null, itemUUID: null },
             path: safeTarget,
-            root: MEDIA_DIR,
+            root: MEDIA_UPLOAD_STAGING_DIR,
             outcome: 'start',
             reason: 'archive-extract',
           });
@@ -316,7 +316,7 @@ const action = defineHttpAction({
                 scope: 'import',
                 identifier: { artikelNummer: null, itemUUID: null },
                 path: safeTarget,
-                root: MEDIA_DIR,
+                root: MEDIA_UPLOAD_STAGING_DIR,
                 outcome: 'error',
                 reason: 'entry-timeout',
                 error: `Media extraction exceeded time limit for ${normalizedPath}.`,
@@ -334,7 +334,7 @@ const action = defineHttpAction({
               scope: 'import',
               identifier: { artikelNummer: null, itemUUID: null },
               path: safeTarget,
-              root: MEDIA_DIR,
+              root: MEDIA_UPLOAD_STAGING_DIR,
               outcome: 'success',
               reason: 'archive-extract',
             });
@@ -349,7 +349,7 @@ const action = defineHttpAction({
               scope: 'import',
               identifier: { artikelNummer: null, itemUUID: null },
               path: safeTarget,
-              root: MEDIA_DIR,
+              root: MEDIA_UPLOAD_STAGING_DIR,
               outcome: 'error',
               reason: 'extract-failed',
               error: mediaError,

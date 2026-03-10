@@ -6,7 +6,12 @@ import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import type { AgenticRun, Item, ItemDetailResponse, ItemInstanceSummary, ItemRef } from '../../models';
 import { normalizeQuality } from '../../models/quality';
 import { defineHttpAction } from './index';
-import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
+import {
+  formatArtikelNummerForMedia,
+  MEDIA_UPLOAD_STAGING_DIR,
+  resolveMediaFolder,
+  resolveUploadMediaPath
+} from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { generateShopwareCorrelationId } from '../db';
@@ -69,7 +74,7 @@ function mediaExists(
   relative: string
 ): boolean {
   try {
-    const absolute = resolvePathWithinRoot(MEDIA_DIR, relative, {
+    const absolute = resolvePathWithinRoot(MEDIA_UPLOAD_STAGING_DIR, relative, {
       logger: console,
       operation: 'save-item:media-exists'
     });
@@ -140,7 +145,7 @@ function normaliseMediaReference(
       itemId,
       artikelNummer: artikelNummer ?? null,
       candidate: trimmed,
-      attemptedPath: path.join(MEDIA_DIR, relativePath)
+      attemptedPath: path.join(MEDIA_UPLOAD_STAGING_DIR, relativePath)
     });
   }
 
@@ -185,7 +190,7 @@ export function collectMediaAssets(
       artikelPrefixes.add(formattedArtikelNummer);
     }
     for (const folder of foldersToScan) {
-      const dir = resolvePathWithinRoot(MEDIA_DIR, folder, {
+      const dir = resolvePathWithinRoot(MEDIA_UPLOAD_STAGING_DIR, folder, {
         logger: console,
         operation: 'save-item:collect-media-assets'
       });
@@ -264,11 +269,19 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
     scope: 'item',
     identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
     path: trimmed,
-    root: MEDIA_DIR,
+    root: MEDIA_UPLOAD_STAGING_DIR,
     outcome: 'start',
     reason: null,
   });
   const relativeCandidate = trimmed.startsWith(MEDIA_PREFIX) ? trimmed.slice(MEDIA_PREFIX.length) : trimmed;
+  if (path.isAbsolute(relativeCandidate)) {
+    console.warn('[save-item] Rejecting removeAsset attempt targeting non-staging root', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      asset: trimmed,
+      stagingRoot: MEDIA_UPLOAD_STAGING_DIR
+    });
+  }
   const relative = buildRelativePath(relativeCandidate);
   if (!relative) {
     emitMediaAudit({
@@ -276,7 +289,7 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
       scope: 'item',
       identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
       path: trimmed,
-      root: MEDIA_DIR,
+      root: MEDIA_UPLOAD_STAGING_DIR,
       outcome: 'blocked',
       reason: 'unsafe-relative-path',
     });
@@ -287,7 +300,7 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
     return false;
   }
   try {
-    const absolute = assertPathWithinRoot(MEDIA_DIR, path.resolve(MEDIA_DIR, relative), {
+    const absolute = assertPathWithinRoot(MEDIA_UPLOAD_STAGING_DIR, path.resolve(MEDIA_UPLOAD_STAGING_DIR, relative), {
       logger: console,
       operation: 'save-item:remove-media-asset'
     });
@@ -297,7 +310,7 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
         scope: 'item',
         identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
         path: absolute,
-        root: MEDIA_DIR,
+        root: MEDIA_UPLOAD_STAGING_DIR,
         outcome: 'blocked',
         reason: 'already-missing',
       });
@@ -311,7 +324,7 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
         scope: 'item',
         identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
         path: absolute,
-        root: MEDIA_DIR,
+        root: MEDIA_UPLOAD_STAGING_DIR,
         outcome: 'blocked',
         reason: 'non-file-target',
       });
@@ -327,7 +340,7 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
       scope: 'item',
       identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
       path: absolute,
-      root: MEDIA_DIR,
+      root: MEDIA_UPLOAD_STAGING_DIR,
       outcome: 'success',
       reason: null,
     });
@@ -339,7 +352,7 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
       scope: 'item',
       identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
       path: trimmed,
-      root: MEDIA_DIR,
+      root: MEDIA_UPLOAD_STAGING_DIR,
       outcome: 'error',
       reason: 'unlink-failed',
       error: err,
@@ -938,7 +951,7 @@ const action = defineHttpAction({
         if (uploads.length > 0) {
           const resolvedArtikelNummer = formatArtikelNummerForMedia(mediaArtikelNummer, console);
           const mediaFolder = resolveMediaFolder(itemId, resolvedArtikelNummer, console);
-          const dir = path.join(MEDIA_DIR, mediaFolder);
+          const dir = resolveUploadMediaPath(mediaFolder);
           const artNr = resolvedArtikelNummer || mediaFolder;
           fs.mkdirSync(dir, { recursive: true });
           uploads.forEach(({ index, dataUrl }) => {

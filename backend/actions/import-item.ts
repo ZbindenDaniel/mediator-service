@@ -16,7 +16,7 @@ import { defineHttpAction } from './index';
 import { resolveStandortLabel, normalizeStandortCode } from '../standort-label';
 import { forwardAgenticTrigger, type AgenticRunTriggerPayload } from './agentic-trigger';
 import { parseSequentialItemUUID } from '../lib/itemIds';
-import { formatArtikelNummerForMedia, MEDIA_DIR, resolveMediaFolder } from '../lib/media';
+import { formatArtikelNummerForMedia, resolveMediaFolder, resolveUploadMediaPath } from '../lib/media';
 import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
 import { resolveCategoryLabelToCode, resolveSubcategoryLabelToCodeWithParent } from '../lib/categoryLabelLookup';
@@ -673,7 +673,7 @@ const action = defineHttpAction({
       try {
         const formattedArtikelNummer = formatArtikelNummerForMedia(resolvedArtikelNummer, console);
         const mediaFolder = resolveMediaFolder(ItemUUID, formattedArtikelNummer, console);
-        const dir = path.join(MEDIA_DIR, mediaFolder);
+        const dir = resolveUploadMediaPath(mediaFolder);
         fs.mkdirSync(dir, { recursive: true });
         const artNr = formattedArtikelNummer || mediaFolder;
         images.forEach((img, idx) => {
