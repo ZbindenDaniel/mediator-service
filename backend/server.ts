@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import https from 'https';
 import chokidar from 'chokidar';
 import { loadActions } from './actions';
-import { MEDIA_DIR } from './lib/media';
+import { MEDIA_DIR, resolveFetchMediaRoots } from './lib/media';
 
 export { MEDIA_DIR } from './lib/media';
 import { dispatchQueuedAgenticRuns, resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
@@ -97,6 +97,7 @@ import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
+import { resolveExistingMediaPaths, resolveSafeMediaRelativePath } from './lib/media-request';
 
 const actions = loadActions();
 
@@ -643,20 +644,47 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     }
 
     if (url.pathname.startsWith('/media/') && req.method === 'GET') {
-      const p = path.join(MEDIA_DIR, url.pathname.slice('/media/'.length));
+      const requestedRelativePath = url.pathname.slice('/media/'.length);
+      const safeRelativePath = resolveSafeMediaRelativePath(requestedRelativePath);
+      if (!safeRelativePath) {
+        console.warn('[media] Rejected unsafe media request path', { requestedPath: requestedRelativePath });
+        res.writeHead(404); return res.end('Not found');
+      }
+
+      const fetchRoots = resolveFetchMediaRoots();
+      const matches = resolveExistingMediaPaths(fetchRoots, safeRelativePath);
+      if (matches.length === 0) {
+        console.warn('[media] Media file not found in configured roots', {
+          requestedPath: safeRelativePath,
+          roots: fetchRoots
+        });
+        res.writeHead(404); return res.end('Not found');
+      }
+
+      const selected = matches[0];
       try {
-        // TODO: this does not work with newest WebDAV feature if (!p.startsWith(MEDIA_DIR)) throw new Error('bad path');
-        const data = fs.readFileSync(p);
-        const ext = path.extname(p).toLowerCase();
+        const data = fs.readFileSync(selected.filePath);
+        const ext = path.extname(selected.filePath).toLowerCase();
         const ct = ext === '.png'
           ? 'image/png'
           : ext === '.jpg' || ext === '.jpeg'
             ? 'image/jpeg'
             : 'application/octet-stream';
+        console.info('[media] Served media file from configured root', {
+          requestedPath: safeRelativePath,
+          servedFromRoot: selected.root,
+          filePath: selected.filePath,
+          matchCount: matches.length
+        });
         res.writeHead(200, { 'Content-Type': ct });
         return res.end(data);
       } catch (err) {
-        console.error('Failed to serve media', err);
+        console.error('[media] Failed to serve resolved media file', {
+          requestedPath: safeRelativePath,
+          servedFromRoot: selected.root,
+          filePath: selected.filePath,
+          error: err
+        });
         res.writeHead(404); return res.end('Not found');
       }
     }
