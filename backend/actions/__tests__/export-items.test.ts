@@ -515,11 +515,32 @@ describe('export-items import contract header regimes', () => {
       'A-1000',
       'Laptop',
       '2024-01-01',
-      'ART-1/ART-1-1.jpg',
+      'ART-1-1.jpg',
       'Test item'
     ]);
   });
 
+
+
+  test('normalizes ERP media serialization to filename-only entries while keeping backup export unchanged', () => {
+    const row = {
+      ...baseRow,
+      Grafikname: '/media/019204/019204-1.webp|019204/019204-2.webp|019204-3.webp',
+      ItemUUID: 'missing-erp-media-basename-uuid'
+    };
+
+    const backup = serializeItemsToCsv([row], undefined, { exportMode: 'backup' });
+    const erp = serializeItemsToCsv([row], undefined, { exportMode: 'erp' });
+
+    const [backupHeader, backupValues] = backup.csv.split('\n');
+    const [erpHeader, erpValues] = erp.csv.split('\n');
+
+    const backupMediaIndex = backupHeader.split(',').indexOf('Grafikname(n)');
+    const erpMediaIndex = erpHeader.split(',').indexOf('image');
+
+    expect(backupValues.split(',')[backupMediaIndex]).toBe('019204/019204-1.webp|019204/019204-2.webp|019204-3.webp');
+    expect(erpValues.split(',')[erpMediaIndex]).toBe('019204-1.webp|019204-2.webp|019204-3.webp');
+  });
 
 
   test('keeps serialized media field structure stable (pipe-delimited order and cardinality)', () => {
