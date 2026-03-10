@@ -279,7 +279,7 @@ describe('import-item action', () => {
           .fn()
           .mockReturnValueOnce(undefined)
           .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-MEDIA', BoxID: null, Grafikname: '/media/ART-MEDIA/ART-MEDIA-1.png' })
+          .mockReturnValueOnce({ Artikel_Nummer: 'ART-MEDIA', BoxID: null, Grafikname: 'ART-MEDIA-1.png' })
       }
     });
 
@@ -298,11 +298,46 @@ describe('import-item action', () => {
     expect(persistedPayload).toEqual(
       expect.objectContaining({
         Artikel_Nummer: 'ART-MEDIA',
-        Grafikname: '/media/ART-MEDIA/ART-MEDIA-1.png'
+        Grafikname: 'ART-MEDIA-1.png'
       })
     );
     expect(Object.prototype.hasOwnProperty.call(persistedPayload, 'ImageNames')).toBe(false);
   });
+
+
+  it('sanitizes legacy path-like reference Grafikname for new writes when no new image is uploaded', async () => {
+    const ctx = createTestContext({
+      getItemReference: {
+        get: jest.fn(() => ({ Artikel_Nummer: 'ART-LEGACY', Artikelbeschreibung: 'Legacy widget', Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.png' }))
+      },
+      getItem: {
+        get: jest
+          .fn()
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce(undefined)
+          .mockReturnValueOnce({ Artikel_Nummer: 'ART-LEGACY', BoxID: null })
+      }
+    });
+
+    const req = createFormRequest('/api/import/item', {
+      actor: 'Tester',
+      Artikel_Nummer: 'ART-LEGACY'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(ctx.persistItemWithinTransaction).toHaveBeenCalled();
+    const persistedPayload = ctx.persistItemWithinTransaction.mock.calls[0][0];
+    expect(persistedPayload).toEqual(
+      expect.objectContaining({
+        Artikel_Nummer: 'ART-LEGACY',
+        Grafikname: ''
+      })
+    );
+  });
+
 
   it('preserves minted path behavior when payload ItemUUID is not provided', async () => {
     const ctx = createTestContext({

@@ -252,6 +252,47 @@ function resolveRequestedQuantity(
   return quantity;
 }
 
+
+function normalizeGrafiknameForPersistence(
+  value: string | null,
+  context: { itemId: string; artikelNummer: string | null; source: string }
+): string {
+  try {
+    const trimmed = (value ?? '').trim();
+    if (!trimmed) {
+      return '';
+    }
+    if (trimmed.includes('/') || trimmed.includes('\\')) {
+      console.warn('[import-item] Incoming Grafikname contains path separators; ignoring payload value', {
+        itemId: context.itemId,
+        Artikel_Nummer: context.artikelNummer,
+        source: context.source,
+        Grafikname: trimmed
+      });
+      return '';
+    }
+    if (trimmed === '.' || trimmed === '..') {
+      console.warn('[import-item] Incoming Grafikname rejected as unsafe filename token', {
+        itemId: context.itemId,
+        Artikel_Nummer: context.artikelNummer,
+        source: context.source,
+        Grafikname: trimmed
+      });
+      return '';
+    }
+    return path.posix.basename(trimmed);
+  } catch (error) {
+    console.error('[import-item] Failed to normalize Grafikname for persistence', {
+      itemId: context.itemId,
+      Artikel_Nummer: context.artikelNummer,
+      source: context.source,
+      Grafikname: value,
+      error
+    });
+    return '';
+  }
+}
+
 function normalizeSearchTermInput(
   value: string | null,
   context: { itemUUID: string; artikelNummer: string | null; source: string }
@@ -1140,13 +1181,39 @@ const action = defineHttpAction({
         isUpdateRequest
       });
 
+      let grafiknameToPersist = '';
+      try {
+        const uploadedFilename = firstImage ? path.posix.basename(firstImage) : '';
+        if (uploadedFilename) {
+          grafiknameToPersist = normalizeGrafiknameForPersistence(uploadedFilename, {
+            itemId: ItemUUID,
+            artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+            source: 'uploaded-image'
+          });
+        } else {
+          grafiknameToPersist = normalizeGrafiknameForPersistence(referenceDefaults?.Grafikname ?? '', {
+            itemId: ItemUUID,
+            artikelNummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+            source: 'reference-default'
+          });
+        }
+      } catch (grafikError) {
+        console.error('[import-item] Failed to resolve Grafikname for persistence', {
+          ItemUUID,
+          Artikel_Nummer: resolvedArtikelNummer || incomingArtikelNummer || null,
+          rawGrafikname: firstImage || referenceDefaults?.Grafikname || '',
+          error: grafikError
+        });
+        grafiknameToPersist = '';
+      }
+
       const data = {
         BoxID,
         Location: normalizedLocation,
         UpdatedAt: resolvedUpdatedAt,
         Datum_erfasst: datumErfasst,
         Artikel_Nummer: resolvedArtikelNummer,
-        Grafikname: firstImage || referenceDefaults?.Grafikname || '',
+        Grafikname: grafiknameToPersist,
         Suchbegriff: suchbegriffToPersist,
         Artikelbeschreibung: artikelbeschreibung,
         Auf_Lager: creationPlan.quantityPerItem,
