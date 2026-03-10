@@ -22,6 +22,7 @@ the print job need to renderPDFs from the html templates. This need to happen he
 > sudo apt-get install -y chromium
 > 
 The Compose mount now binds `/run/cups` into the mediator container, so CUPS socket updates are usually visible without forcing container recreation.
+For WebDAV media roots, Compose should mount the host parent media root (for example `/mnt`) into `/app/dist/backend/webDav` and set `MEDIA_ROOT_DIR=/app/dist/backend/webDav` so runtime-derived fixed paths resolve to `/app/dist/backend/webDav/shopbilder` and `/app/dist/backend/webDav/shopbilder-import`.
 If printer checks fail after a CUPS restart, first verify `/run/cups` is visible inside the mediator container (for example `docker compose exec mediator ls -l /run/cups`) before restarting the container.
 
 ## Provisioning services

@@ -181,22 +181,10 @@ describe('save-item action', () => {
   });
 
 
-  it('does not synthesize /media paths from bare Grafikname values', () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  it('normalizes bare Grafikname values to explicit /media paths', () => {
+    const assets = collectMediaAssets('ITEM-EXPLICIT-1', 'ART-EXPLICIT/ART-EXPLICIT-1.jpg', 'ART-EXPLICIT');
 
-    const assets = collectMediaAssets('ITEM-EXPLICIT-1', 'ART-EXPLICIT-1.jpg', 'ART-EXPLICIT');
-
-    expect(assets).toEqual([]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      'Media asset reference ignored because only explicit /media/ paths are supported',
-      expect.objectContaining({
-        itemId: 'ITEM-EXPLICIT-1',
-        artikelNummer: 'ART-EXPLICIT',
-        candidate: 'ART-EXPLICIT-1.jpg'
-      })
-    );
-
-    warnSpy.mockRestore();
+    expect(assets).toEqual(expect.arrayContaining(['/media/ART-EXPLICIT/ART-EXPLICIT-1.jpg']));
   });
 
   it('keeps explicit /media Grafikname paths authoritative without fallback synthesis', () => {

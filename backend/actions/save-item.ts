@@ -73,13 +73,16 @@ function mediaExists(
       logger: console,
       operation: 'save-item:media-exists'
     });
-    console.warn('[save-item] Media path blocked by guard', {
-      itemId,
-      artikelNummer: artikelNummer ?? null,
-      resolvedPath: null,
-      outcome: 'blocked'
-    });
-    return false;
+    if (!absolute) {
+      console.warn('[save-item] Media path blocked by guard', {
+        itemId,
+        artikelNummer: artikelNummer ?? null,
+        relative,
+        outcome: 'blocked'
+      });
+      return false;
+    }
+    return fs.existsSync(absolute);
   } catch (err) {
     console.error('[save-item] Failed to check media existence', {
       itemId,
@@ -139,15 +142,6 @@ function normaliseMediaReference(
       candidate: trimmed,
       attemptedPath: path.join(MEDIA_DIR, relativePath)
     });
-  }
-
-  if (!trimmed.startsWith(MEDIA_PREFIX)) {
-    console.warn('Media asset reference ignored because only explicit /media/ paths are supported', {
-      itemId,
-      artikelNummer: artikelNummer ?? null,
-      candidate: trimmed
-    });
-    return null;
   }
 
   return `${MEDIA_PREFIX}${relativePath}`;
@@ -1105,8 +1099,16 @@ const action = defineHttpAction({
       if (Object.prototype.hasOwnProperty.call(referencePayload, 'Shopartikel')) {
         referenceUpdates.Shopartikel = resolveShopartikelFlag(incomingShopartikel, resolvedQuality);
       }
-      const resolvedGrafikname = normalisedGrafikname ?? undefined;
+      const resolvedGrafikname = typeof grafik === 'string' && grafik.trim() ? grafik.trim() : undefined;
       referenceUpdates.Grafikname = resolvedGrafikname;
+      if (resolvedGrafikname !== normalisedGrafikname) {
+        console.info('[save-item] Preserving raw Grafikname for reference persistence', {
+          itemId,
+          artikelNummer,
+          resolvedGrafikname,
+          responseGrafikname: normalisedGrafikname ?? null
+        });
+      }
       const reference: ItemRef = {
         ...referenceBase,
         ...referenceUpdates,
