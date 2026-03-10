@@ -169,25 +169,27 @@ function normalizeGrafiknameForPersistence(
     if (!trimmed) {
       return { shouldUpdate: true, value: '' };
     }
-    if (trimmed.includes('/') || trimmed.includes('\\')) {
-      console.warn('[save-item] Incoming Grafikname contains path separators; ignoring payload value', {
+    const hasPathSeparators = trimmed.includes('/') || trimmed.includes('\\');
+    if (hasPathSeparators) {
+      console.warn('[save-item] Incoming Grafikname contains path separators; normalizing to basename', {
         itemId: context.itemId,
         artikelNummer: context.artikelNummer,
         source: context.source,
         grafikname: trimmed
       });
-      return { shouldUpdate: false, value: undefined };
     }
-    if (trimmed === '.' || trimmed === '..') {
+    const basename = path.posix.basename(trimmed.replace(/\\/g, '/'));
+    if (!basename || basename === '.' || basename === '..') {
       console.warn('[save-item] Incoming Grafikname rejected as unsafe filename token', {
         itemId: context.itemId,
         artikelNummer: context.artikelNummer,
         source: context.source,
-        grafikname: trimmed
+        grafikname: trimmed,
+        basename
       });
       return { shouldUpdate: false, value: undefined };
     }
-    return { shouldUpdate: true, value: path.posix.basename(trimmed) };
+    return { shouldUpdate: true, value: basename };
   } catch (error) {
     console.error('[save-item] Failed to normalize Grafikname for persistence', {
       itemId: context.itemId,

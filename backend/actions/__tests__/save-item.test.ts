@@ -266,7 +266,7 @@ describe('save-item action', () => {
 
 
 
-  it('ignores unsafe Grafikname payload values containing path separators', async () => {
+  it('persists path-like Grafikname payload values as basename-only filenames', async () => {
     const persistItemReference = jest.fn();
     const ctx = {
       getItem: {
@@ -306,7 +306,7 @@ describe('save-item action', () => {
     expect(persistItemReference).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'ART-UNSAFE',
-        Grafikname: 'ART-UNSAFE-1.jpg'
+        Grafikname: 'ART-UNSAFE-2.jpg'
       })
     );
   });
@@ -344,11 +344,12 @@ describe('save-item action', () => {
       actor: 'Tester',
       Artikelbeschreibung: 'Updated text'
     });
-    const { res, getStatus } = createMockResponse();
+    const { res, getStatus, getBody } = createMockResponse();
 
     await action.handle(req, res, ctx);
 
     expect(getStatus()).toBe(200);
+    expect(getBody()).toEqual({ ok: true, media: ['/media/ART-LEGACY/ART-LEGACY-1.jpg'] });
     expect(persistItemReference).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'ART-LEGACY',

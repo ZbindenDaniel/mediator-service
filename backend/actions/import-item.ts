@@ -262,25 +262,27 @@ function normalizeGrafiknameForPersistence(
     if (!trimmed) {
       return '';
     }
-    if (trimmed.includes('/') || trimmed.includes('\\')) {
-      console.warn('[import-item] Incoming Grafikname contains path separators; ignoring payload value', {
+    const hasPathSeparators = trimmed.includes('/') || trimmed.includes('\\');
+    if (hasPathSeparators) {
+      console.warn('[import-item] Incoming Grafikname contains path separators; normalizing to basename', {
         itemId: context.itemId,
         Artikel_Nummer: context.artikelNummer,
         source: context.source,
         Grafikname: trimmed
       });
-      return '';
     }
-    if (trimmed === '.' || trimmed === '..') {
+    const basename = path.posix.basename(trimmed.replace(/\\/g, '/'));
+    if (!basename || basename === '.' || basename === '..') {
       console.warn('[import-item] Incoming Grafikname rejected as unsafe filename token', {
         itemId: context.itemId,
         Artikel_Nummer: context.artikelNummer,
         source: context.source,
-        Grafikname: trimmed
+        Grafikname: trimmed,
+        basename
       });
       return '';
     }
-    return path.posix.basename(trimmed);
+    return basename;
   } catch (error) {
     console.error('[import-item] Failed to normalize Grafikname for persistence', {
       itemId: context.itemId,
