@@ -51,6 +51,10 @@ export function resolveFetchMediaPaths(...segments: string[]): string[] {
   return resolvedMediaRoots.fetchRoots.map((root) => path.join(root, ...segments));
 }
 
+export function resolveFetchMediaRoots(): string[] {
+  return [...resolvedMediaRoots.fetchRoots];
+}
+
 export function resolveUploadMediaPath(...segments: string[]): string {
   return path.join(MEDIA_UPLOAD_STAGING_DIR, ...segments);
 }
