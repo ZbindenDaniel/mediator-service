@@ -18,7 +18,7 @@ const action = defineHttpAction({
       if (row && row.Artikel_Nummer) {
         max = parseInt(row.Artikel_Nummer, 10) || 0;
       }
-      const next = String(max + 1).padStart(5, '0');
+      const next = String(max + 1).padStart(6, '0');
       sendJson(res, 200, { nextArtikelNummer: next });
     } catch (err) {
       console.error('Material number endpoint failed', err);
