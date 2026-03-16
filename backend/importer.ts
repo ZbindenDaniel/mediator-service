@@ -46,7 +46,7 @@ const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 // TODO(agent): Seed Artikelnummer-based ItemUUID sequences from the database for high-concurrency imports.
 const ITEM_ID_PREFIX = 'I-';
 const ID_SEQUENCE_WIDTH = 4;
-const ARTIKEL_NUMMER_WIDTH = 5;
+const ARTIKEL_NUMMER_WIDTH = 6;
 
 // TODO(agent): Revisit shelf BoxID validation if location normalization rules evolve.
 // TODO(agent): Expand quantity field resolution when additional column spellings surface.
