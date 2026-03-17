@@ -122,6 +122,8 @@ const SELECT_STALE_AGENTIC_RUNS_SQL = `
    ORDER BY datetime(LastModified) ASC, Id ASC
 `;
 
+const MAX_CONCURRENT_RUNNING_RUNS = 3;
+
 function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -272,6 +274,15 @@ function resolveNow(deps: AgenticServiceDependencies): Date {
     });
     return new Date();
   }
+}
+
+function fetchRunningCount(deps: AgenticServiceDependencies, logger: AgenticServiceLogger): number {
+  const runningRow = deps.db
+    .prepare(`SELECT COUNT(*) as runningCount FROM agentic_runs WHERE Status = @status`)
+    .get({ status: AGENTIC_RUN_STATUS_RUNNING }) as { runningCount?: number } | undefined;
+  const count = Number.isFinite(runningRow?.runningCount) ? Number(runningRow?.runningCount) : 0;
+  logger.info?.('[agentic-service] Fetched running agentic run count', { runningCount: count });
+  return count;
 }
 
 function applyQueueUpdate(
@@ -1000,14 +1011,10 @@ export function dispatchQueuedAgenticRuns(
   const logger = resolveLogger(deps);
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
   // TODO(agentic-queue-fairness): Revisit slot selection policy if we later prioritize runs beyond FIFO ordering.
-  const maxConcurrentRunningRuns = 3;
   let runningCount = 0;
 
   try {
-    const runningRow = deps.db
-      .prepare(`SELECT COUNT(*) as runningCount FROM agentic_runs WHERE Status = @status`)
-      .get({ status: AGENTIC_RUN_STATUS_RUNNING }) as { runningCount?: number } | undefined;
-    runningCount = Number.isFinite(runningRow?.runningCount) ? Number(runningRow?.runningCount) : 0;
+    runningCount = fetchRunningCount(deps, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to determine currently running agentic run count', {
       error: toErrorMessage(err)
@@ -1015,11 +1022,11 @@ export function dispatchQueuedAgenticRuns(
     return { scheduled: 0, skipped: 0, failed: 0 };
   }
 
-  const availableSlots = Math.max(0, maxConcurrentRunningRuns - runningCount);
+  const availableSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount);
   if (availableSlots <= 0) {
     logger.info?.('[agentic-service] Skipping queued dispatch because running slot is occupied', {
       runningCount,
-      maxConcurrentRunningRuns
+      maxConcurrentRunningRuns: MAX_CONCURRENT_RUNNING_RUNS
     });
     return { scheduled: 0, skipped: 0, failed: 0 };
   }
@@ -1206,6 +1213,31 @@ export async function startAgenticRun(
       searchQuery,
       logger
     });
+
+    let runningCount = 0;
+    try {
+      runningCount = fetchRunningCount(deps, logger);
+    } catch (err) {
+      logger.warn?.('[agentic-service] Failed to check running count before invocation; deferring to dispatcher', {
+        artikelNummer,
+        error: toErrorMessage(err)
+      });
+      logger.info?.('[agentic-service] Agentic run queued; invocation deferred due to running count check failure', {
+        artikelNummer,
+        context: input.context ?? null
+      });
+      return { agentic, queued: true, created: true };
+    }
+
+    if (runningCount >= MAX_CONCURRENT_RUNNING_RUNS) {
+      logger.info?.('[agentic-service] Agentic run queued but invocation deferred — concurrency limit reached', {
+        artikelNummer,
+        runningCount,
+        maxConcurrentRunningRuns: MAX_CONCURRENT_RUNNING_RUNS,
+        context: input.context ?? null
+      });
+      return { agentic, queued: true, created: true };
+    }
 
     scheduleAgenticModelInvocation({
       artikelNummer,
