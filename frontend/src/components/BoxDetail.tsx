@@ -70,10 +70,13 @@ function resolveDisplayCount(group: ReturnType<typeof groupItemsForDisplay>[numb
 function resolveContainerLabel(group: ReturnType<typeof groupItemsForDisplay>[number]): string {
   try {
     const representative = group.representative;
+    const shelfLabel = (typeof group.summary.ShelfLabel === 'string' && group.summary.ShelfLabel.trim())
+      ? group.summary.ShelfLabel.trim()
+      : (typeof representative?.ShelfLabel === 'string' && representative.ShelfLabel?.trim() ? representative.ShelfLabel.trim() : '');
     const boxId = typeof group.summary.BoxID === 'string' && group.summary.BoxID.trim()
       ? group.summary.BoxID.trim()
       : (typeof representative?.BoxID === 'string' && representative.BoxID.trim() ? representative.BoxID.trim() : '');
-    return boxId || 'Lose im Regal';
+    return shelfLabel || boxId || 'Lose im Regal';
   } catch (error) {
     logError('Failed to resolve grouped item container label in box detail row', error, {
       groupKey: group.key,
