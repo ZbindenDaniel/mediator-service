@@ -61,6 +61,7 @@ function pushMedia(target: string[], value: string | null | undefined, seen: Set
 
 function buildRelativePath(relative: string): string | null {
   if (!relative) return null;
+  if (path.isAbsolute(relative)) return null;
   const normalised = path.posix.normalize(relative.replace(/\\/g, '/'));
   if (!normalised || normalised === '.' || normalised.startsWith('..')) {
     return null;
@@ -331,6 +332,16 @@ function removeItemMediaAsset(itemId: string, artikelNummer: string | null | und
       asset: trimmed,
       stagingRoot: MEDIA_UPLOAD_STAGING_DIR
     });
+    emitMediaAudit({
+      action: 'delete',
+      scope: 'item',
+      identifier: { itemUUID: itemId, artikelNummer: artikelNummer ?? null },
+      path: trimmed,
+      root: MEDIA_UPLOAD_STAGING_DIR,
+      outcome: 'blocked',
+      reason: 'absolute-path',
+    });
+    return false;
   }
   const relative = buildRelativePath(relativeCandidate);
   if (!relative) {
