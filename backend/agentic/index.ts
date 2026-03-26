@@ -281,7 +281,7 @@ function fetchRunningCount(deps: AgenticServiceDependencies, logger: AgenticServ
     .prepare(`SELECT COUNT(*) as runningCount FROM agentic_runs WHERE Status = @status`)
     .get({ status: AGENTIC_RUN_STATUS_RUNNING }) as { runningCount?: number } | undefined;
   const count = Number.isFinite(runningRow?.runningCount) ? Number(runningRow?.runningCount) : 0;
-  logger.info?.('[agentic-service] Fetched running agentic run count', { runningCount: count });
+  // logger.info?.('[agentic-service] Fetched running agentic run count', { runningCount: count });
   return count;
 }
 

@@ -84,13 +84,13 @@ const action = defineHttpAction({
                   return containedId !== normalizedId;
                 })
               : [];
-            if (filtered.length !== (rawContained?.length ?? 0)) {
-              console.info('box-detail filtered shelf-contained boxes', {
-                ...logContext,
-                total: rawContained?.length ?? 0,
-                remaining: filtered.length
-              });
-            }
+            // if (filtered.length !== (rawContained?.length ?? 0)) {
+            //   console.info('box-detail filtered shelf-contained boxes', {
+            //     ...logContext,
+            //     total: rawContained?.length ?? 0,
+            //     remaining: filtered.length
+            //   });
+            // }
             containedBoxes = filtered;
           } catch (error) {
             console.error('box-detail failed to load contained boxes', { ...logContext, error });

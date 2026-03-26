@@ -19,7 +19,33 @@ const FLYER_WORD = 'revamp';
 // const FLYER_LETTERS = ['😄', '😚', '👌🏿', ,'🦚', '🦜', '🐉', '🦥', '🐦‍🔥', '🍋']; // https://getemoji.com/
 
 
- const FLYER_LETTERS = [
+ const FLYER_LETTERS_SPRING = [
+'💻',
+'📟',
+'📦',
+'📠',
+'💾',
+'📦',
+'🗄️',
+'🖱️',
+'🐦',
+'⌨️',
+'🌼',
+'🖨️',
+'🖥️',
+'💻',
+'🌱',
+'🌾',
+'🌿',
+'🌱',
+'🪴',
+'🐦',
+'🕊️',
+'🌼',
+'🌷'
+]
+
+ const FLYER_LETTERS_WINTER = [
 '💻',
 '📟',
 '📦',
@@ -142,11 +168,12 @@ const LoadingPage: React.FC<LoadingPageProps> = ({
       const [minLeft, maxLeft] = safeArea.left;
 
       const randomWithinRange = (min: number, max: number) => min + Math.random() * (max - min);
+        const arrToUse = FLYER_LETTERS_SPRING; // TODO: make date dependent
 
       return Array.from({ length: FLYER_COUNT }).map((_, index) => ({
-        character: FLYER_LETTERS[index % FLYER_LETTERS.length],
+        character: arrToUse[index % arrToUse.length],
         variant: index % 6 + 1, // between 1 and 6
-        delay: Math.random() * FLYER_LETTERS.length * FLYER_FREQUENCY_SECONDS,
+        delay: Math.random() * arrToUse.length * FLYER_FREQUENCY_SECONDS,
         color: COLORES[Math.floor(Math.random() * COLORES.length)],
         position: {
           top: randomWithinRange(minTop, maxTop),
