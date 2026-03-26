@@ -15,15 +15,17 @@
 
 1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
 
-2. **Fix agentic runs for references.** Agentic runs are broken for reference items.
+2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started
 
-3. **Ensure waiting agentic runs restart on application restart.** All runs in a waiting state should automatically resume when the app restarts.
+3. **Ensure waiting agentic runs restart on application restart.** All runs in a waiting state should automatically resume when the app restarts. Waiting runs should wait (max. parallel runs has to be respected)
 
 4. **Fix AUTO_PRINT_ITEM_LABEL for multiple instances.** When multiple instances are created, multiple different labels should be printed; currently this does not work correctly.
 
-5. **Refine QR relocation flow.** Relocation still has edge-case issues in scan handoff/navigation. Moving an item to a box should behave consistently from both the box and item perspectives. Multi-scan and scan-until will be added in future iterations. **Goal:** stabilize intent and return-flow boundaries with targeted fixes, strong validation, and meaningful try/catch + logging at transition points.
+<!-- Not clarified:
+ 5. **Refine QR relocation flow.** Relocation still has edge-case issues in scan handoff/navigation. Moving an item to a box should behave consistently from both the box and item perspectives. Multi-scan and scan-until will be added in future iterations. **Goal:** stabilize intent and return-flow boundaries with targeted fixes, strong validation, and meaningful try/catch + logging at transition points. 
 
 6. **Fix multi-scan item relocation bug.** Scanning multiple items during relocation causes state conflicts or navigation problems. **Goal:** ensure reliable scan-based workflows with proper state management and error recovery.
+ -->
 
 7. **Transform transcript persistence from HTML to JSON.** Store transcripts in a new location. UI restructuring of the transcript viewer (collapsible, step-separated) follows after persistence is changed. **Goal:** improve debuggability and enable structured transcript rendering.
 
@@ -108,6 +110,7 @@
 ### Still Open
 
 - For **shelf totals**, should weight/item count include nested boxes only, loose items only, or both?
+> Actually, the weight of a shelf is not interesting. 
 - For **optional basic-form fields**, should contract changes be backend-first or can the frontend collect them before backend persistence is ready?
 - For **text-search relocation fallback**, should label search be exact-first, fuzzy-first, or reuse current global search behavior as-is?
 - For **search-query normalization**, where should canonical normalization live — frontend, backend, or both with backend as final authority?
