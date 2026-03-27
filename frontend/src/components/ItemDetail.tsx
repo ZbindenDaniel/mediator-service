@@ -3119,7 +3119,7 @@ export default function ItemDetail({ itemId }: Props) {
         });
         return;
       }
-      let payload: { quantity?: number; boxId?: string } = {};
+      let payload: { quantity?: number; boxId?: string; warning?: string } = {};
       try {
         payload = await res.json();
       } catch (error) {
@@ -3131,6 +3131,13 @@ export default function ItemDetail({ itemId }: Props) {
       const nextQuantity = typeof payload.quantity === 'number' ? payload.quantity : item.Auf_Lager;
       const nextBoxId = typeof payload.boxId === 'string' ? payload.boxId : item.BoxID;
       setItem({ ...item, Auf_Lager: nextQuantity, BoxID: nextBoxId });
+      if (typeof payload.warning === 'string' && payload.warning) {
+        try {
+          await dialogService.alert({ title: 'Hinweis', message: payload.warning });
+        } catch (alertErr) {
+          logError('ItemDetail: Failed to display unplaced items warning', alertErr, { itemId: item.ItemUUID });
+        }
+      }
       logger.info?.('ItemDetail: Item stock added', {
         itemId: item.ItemUUID,
         actor,
@@ -3263,7 +3270,12 @@ export default function ItemDetail({ itemId }: Props) {
                 {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
                 {/* TODO(confirm-withdrawal): Verify cancel behavior never triggers removal in the instance view. */}
                 {isOutOfStock ? (
-                  <p className="muted">Instanz nicht mehr eingelagert.</p>
+                  <>
+                    <p className="muted">Instanz nicht mehr eingelagert.</p>
+                    <button type="button" className="btn" onClick={handleAddItem}>
+                      Hinzufügen
+                    </button>
+                  </>
                 ) : (
                   <button type="button" className="btn" onClick={async () => {
                     let confirmed = false;
@@ -3326,7 +3338,24 @@ export default function ItemDetail({ itemId }: Props) {
                   </button>
                 )}
                 {resolvedQuantityEinheit === ItemEinheit.Menge ? (
-                  <button type="button" className="btn" onClick={handleAddItem}>
+                  <button type="button" className="btn" onClick={async () => {
+                    let confirmed = false;
+                    try {
+                      confirmed = await dialogService.confirm({
+                        title: 'Menge hinzufügen',
+                        message: 'Menge hinzufügen?',
+                        confirmLabel: 'Hinzufügen',
+                        cancelLabel: 'Abbrechen'
+                      });
+                    } catch (error) {
+                      console.error('Failed to confirm bulk add', error);
+                      return;
+                    }
+                    if (!confirmed) {
+                      return;
+                    }
+                    await handleAddItem();
+                  }}>
                     Hinzufügen
                   </button>
                 ) : null}

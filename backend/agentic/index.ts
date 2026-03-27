@@ -123,6 +123,7 @@ const SELECT_STALE_AGENTIC_RUNS_SQL = `
 `;
 
 const MAX_CONCURRENT_RUNNING_RUNS = 3;
+const STALE_RUN_TIMEOUT_MINUTES = 30;
 
 function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -1010,6 +1011,45 @@ export function dispatchQueuedAgenticRuns(
   validateDependencies(deps);
   const logger = resolveLogger(deps);
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
+
+  // Recover stale "running" runs that have been in-progress beyond the timeout.
+  // This unblocks the queue when a previous invocation hung or crashed without
+  // updating the run's status.
+  try {
+    const nowIso = resolveNow(deps).toISOString();
+    const staleRunsStatement = deps.db.prepare(
+      `SELECT Artikel_Nummer, RetryCount, LastAttemptAt
+         FROM agentic_runs
+        WHERE Status = 'running'
+          AND datetime(LastAttemptAt) < datetime('now', '-${STALE_RUN_TIMEOUT_MINUTES} minutes')`
+    );
+    const staleRuns = staleRunsStatement.all() as Array<{
+      Artikel_Nummer: string;
+      RetryCount: number | null;
+      LastAttemptAt: string | null;
+    }>;
+    for (const staleRun of staleRuns) {
+      logger.warn?.('[agentic-service] Recovering stale running agentic run', {
+        artikelNummer: staleRun.Artikel_Nummer,
+        lastAttemptAt: staleRun.LastAttemptAt,
+        staleTimeoutMinutes: STALE_RUN_TIMEOUT_MINUTES
+      });
+      applyQueueUpdate(deps, logger, {
+        Artikel_Nummer: staleRun.Artikel_Nummer,
+        Status: AGENTIC_RUN_STATUS_FAILED,
+        LastModified: nowIso,
+        RetryCount: staleRun.RetryCount ?? 0,
+        NextRetryAt: null,
+        LastError: 'stale-run-auto-cancelled',
+        LastAttemptAt: staleRun.LastAttemptAt ?? nowIso
+      });
+    }
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to recover stale running runs', {
+      error: toErrorMessage(err)
+    });
+  }
+
   // TODO(agentic-queue-fairness): Revisit slot selection policy if we later prioritize runs beyond FIFO ordering.
   let runningCount = 0;
 
@@ -1168,16 +1208,6 @@ export async function startAgenticRun(
     context: input.context ?? null
   });
 
-  const existing = fetchAgenticRun(artikelNummer, deps, logger);
-  if (existing) {
-    logger.info?.('[agentic-service] Skipping agentic run creation because canonical run already exists', {
-      artikelNummer,
-      context: input.context ?? null
-    });
-    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'already-exists', logger);
-    return { agentic: existing, queued: false, created: false, reason: 'already-exists' };
-  }
-
   const searchQuery = (input.searchQuery || '').trim();
   if (!searchQuery) {
     logger.warn?.('[agentic-service] startAgenticRun missing search query', {
@@ -1196,60 +1226,54 @@ export async function startAgenticRun(
   const review = normalizeReviewMetadata(input.review ?? null, null, logger);
   try {
     recordRequestLogStart(request, searchQuery, logger);
-    const agentic = persistQueuedRun(
-      {
+
+    // Atomically check for an existing run and create a new one if absent.
+    // Using a transaction prevents concurrent requests from both passing the
+    // existence check and scheduling duplicate invocations for the same item.
+    let agentic: AgenticRun | null = null;
+    let alreadyExists = false;
+
+    const createIfAbsent = deps.db.transaction(() => {
+      const existing = fetchAgenticRun(artikelNummer, deps, logger);
+      if (existing) {
+        alreadyExists = true;
+        agentic = existing;
+        return;
+      }
+      agentic = persistQueuedRun(
+        {
+          artikelNummer,
+          searchQuery,
+          actor: input.actor?.trim() || null,
+          context: input.context?.trim() || null,
+          review,
+          created: true
+        },
+        deps,
+        logger
+      );
+    });
+
+    createIfAbsent();
+
+    if (alreadyExists) {
+      logger.info?.('[agentic-service] Skipping agentic run creation because canonical run already exists', {
         artikelNummer,
-        searchQuery,
-        actor: input.actor?.trim() || null,
-        context: input.context?.trim() || null,
-        review,
-        created: true
-      },
-      deps,
-      logger
-    );
+        context: input.context ?? null
+      });
+      finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'already-exists', logger);
+      return { agentic, queued: false, created: false, reason: 'already-exists' };
+    }
 
     recordAgenticRequestLogUpdate(request, AGENTIC_RUN_STATUS_QUEUED, {
       searchQuery,
       logger
     });
 
-    let runningCount = 0;
-    try {
-      runningCount = fetchRunningCount(deps, logger);
-    } catch (err) {
-      logger.warn?.('[agentic-service] Failed to check running count before invocation; deferring to dispatcher', {
-        artikelNummer,
-        error: toErrorMessage(err)
-      });
-      logger.info?.('[agentic-service] Agentic run queued; invocation deferred due to running count check failure', {
-        artikelNummer,
-        context: input.context ?? null
-      });
-      return { agentic, queued: true, created: true };
-    }
-
-    if (runningCount >= MAX_CONCURRENT_RUNNING_RUNS) {
-      logger.info?.('[agentic-service] Agentic run queued but invocation deferred — concurrency limit reached', {
-        artikelNummer,
-        runningCount,
-        maxConcurrentRunningRuns: MAX_CONCURRENT_RUNNING_RUNS,
-        context: input.context ?? null
-      });
-      return { agentic, queued: true, created: true };
-    }
-
-    scheduleAgenticModelInvocation({
-      artikelNummer,
-      searchQuery,
-      context: input.context?.trim() || null,
-      review,
-      request,
-      deps,
-      logger
-    });
-
-    logger.info?.('[agentic-service] Agentic run queued for asynchronous execution', {
+    // Run is now queued. The background dispatcher (dispatchQueuedAgenticRuns,
+    // called on a fixed interval) will pick it up and transition it to running
+    // while respecting the MAX_CONCURRENT_RUNNING_RUNS limit.
+    logger.info?.('[agentic-service] Agentic run queued; dispatcher will schedule execution', {
       artikelNummer,
       context: input.context ?? null
     });
@@ -1714,17 +1738,9 @@ export async function restartAgenticRun(
     logger
   });
 
-  scheduleAgenticModelInvocation({
-    artikelNummer,
-    searchQuery,
-    context,
-    review,
-    request,
-    deps,
-    logger
-  });
-
-  logger.info?.('[agentic-service] Agentic run restart queued for asynchronous execution', {
+  // Run is now queued. The background dispatcher will pick it up and
+  // transition it to running while respecting the concurrency limit.
+  logger.info?.('[agentic-service] Agentic run restart queued; dispatcher will schedule execution', {
     artikelNummer,
     context
   });

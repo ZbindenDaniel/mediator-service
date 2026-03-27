@@ -185,10 +185,23 @@ const action = defineHttpAction({
           newItemId: result.createdItemId
         });
       }
+      let unplacedWarning: string | null = null;
+      try {
+        const unplacedRow = ctx.db.prepare(
+          `SELECT COUNT(*) AS cnt FROM items WHERE (BoxID IS NULL OR BoxID = '') AND (Location IS NULL OR Location = '') AND Auf_Lager > 0`
+        ).get() as { cnt: number } | undefined;
+        const unplacedCount = unplacedRow?.cnt ?? 0;
+        if (unplacedCount > 20) {
+          unplacedWarning = `${unplacedCount} Artikel haben noch keinen Lagerort.`;
+        }
+      } catch (warnErr) {
+        console.warn('[add-item] Failed to compute unplaced items count', { error: warnErr });
+      }
       sendJson(res, 200, {
         ok: true,
         quantity: isBulk ? result.updated?.Auf_Lager ?? 0 : 1,
-        createdItemId: result.createdItemId ?? null
+        createdItemId: result.createdItemId ?? null,
+        ...(unplacedWarning ? { warning: unplacedWarning } : {})
       });
     } catch (err) {
       console.error('Add item failed', err);

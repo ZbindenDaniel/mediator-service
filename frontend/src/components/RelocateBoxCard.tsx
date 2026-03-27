@@ -144,7 +144,15 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
       }
 
       if (!locationOption) {
-        logger.warn('RelocateBoxCard: scanned location not found in relocation options', { boxId, scannedId: trimmedId });
+        logger.warn('RelocateBoxCard: scanned location not found in preloaded options; using scanned id directly', { boxId, scannedId: trimmedId });
+        setSelectedLocation(trimmedId);
+        setStatus('Standort aus QR-Code übernommen');
+        qrReturnHandledRef.current = trimmedId;
+        try {
+          navigate(location.pathname, { replace: true, state: {} });
+        } catch (error) {
+          logError('RelocateBoxCard: failed to clear QR return location state after direct id fallback', error, { boxId, scannedId: trimmedId });
+        }
         return;
       }
 
@@ -310,6 +318,12 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
     const locationOption = locationLookup.get(locationId);
 
     if (!locationOption) {
+      const prefix = locationId.slice(0, 2).toUpperCase();
+      if (prefix === 'S-' || prefix === 'B-') {
+        logger.info('RelocateBoxCard: submitting with direct scanned id not in preloaded options', { boxId, locationId });
+        await submitRelocation({ id: locationId, label: locationId, sourceBoxId: locationId }, 'manual');
+        return;
+      }
       logger.warn('Invalid location selection for relocation', { boxId, locationId });
       setStatus('Bitte einen Standort wählen');
       return;

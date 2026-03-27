@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { GoLinkExternal } from 'react-icons/go';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
@@ -20,13 +20,50 @@ interface RelocateOptions {
 
 // TODO(agent): Confirm backend analytics don't require the default-location relocation flow.
 export default function RelocateItemCard({ itemId, onRelocated }: Props) {
-  // TODO(qr-relocate-item): Validate scanned box id prefill against relocation suggestion ranking.
   const location = useLocation();
+  const navigate = useNavigate();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const qrReturnHandledRef = useRef<string | null>(null);
   const [boxId, setBoxId] = useState('');
   const [status, setStatus] = useState('');
   const [boxLink, setBoxLink] = useState('');
   const [selectedSuggestion, setSelectedSuggestion] = useState<BoxSuggestion | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!location.state || typeof location.state !== 'object') {
+      return;
+    }
+    const state = location.state as { qrReturn?: { id?: unknown; rawPayload?: unknown; intent?: unknown } };
+    if (!state.qrReturn) {
+      return;
+    }
+    try {
+      const id = typeof state.qrReturn.id === 'string' ? state.qrReturn.id.trim() : '';
+      if (!id) {
+        return;
+      }
+      if (qrReturnHandledRef.current === id) {
+        return;
+      }
+      const rawIntent = typeof state.qrReturn.intent === 'string' ? state.qrReturn.intent.trim() : '';
+      if (rawIntent && rawIntent !== 'relocate-box') {
+        return;
+      }
+      qrReturnHandledRef.current = id;
+      setBoxId(id);
+      setSelectedSuggestion({ BoxID: id });
+      setStatus('Ziel aus QR-Code übernommen');
+      cardRef.current?.scrollIntoView({ behavior: 'smooth' });
+      try {
+        navigate(location.pathname, { replace: true, state: {} });
+      } catch {
+        // ignore navigation errors during state cleanup
+      }
+    } catch {
+      // ignore malformed qrReturn payloads
+    }
+  }, [location.pathname, location.state, navigate]);
 
   async function performRelocate(actor: string, destinationBoxId?: string, options?: RelocateOptions) {
     try {
@@ -247,7 +284,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
   }
 
   return (
-    <div className="card relocate-card">
+    <div className="card relocate-card" ref={cardRef}>
       <h3>Artikel umlagern</h3>
       <form onSubmit={handleRelocateSubmit}>
         <div className="row">
@@ -266,6 +303,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
             className="secondary relocate-qr"
             label="Zielbehälter scannen"
             returnTo={location.pathname}
+            scanIntent="relocate-box"
             onBeforeNavigate={() => setStatus('')}
           />
         </div>

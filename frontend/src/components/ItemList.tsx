@@ -223,6 +223,7 @@ export default function ItemList({
               });
             }
             const countValue = resolveDisplayCount(group);
+            const isOutOfStock = countValue === 0;
             const locationItem: ItemLocationSource | null = representativeItemId
               ? {
                   ItemUUID: representativeItemId,
@@ -247,7 +248,7 @@ export default function ItemList({
               <tr
                 key={group.key}
                 data-item-uuid={group.summary.representativeItemId ?? ''}
-                className="item-list-row"
+                className={['item-list-row', isOutOfStock ? 'item-row--out-of-stock' : ''].filter(Boolean).join(' ')}
                 role="button"
                 tabIndex={0}
                 aria-label={rowLabel}

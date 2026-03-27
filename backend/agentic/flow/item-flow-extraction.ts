@@ -396,7 +396,15 @@ function mergeAccumulatedCandidate(
   context: { logger?: ExtractionLogger; itemId: string; attempt: number; passIndex: number }
 ): { success: true; data: AgenticOutput } | { success: false; issues: unknown } {
   try {
-    const merged = { ...(accumulator ?? {}), ...nextCandidate };
+    const base: Record<string, unknown> = { ...(accumulator ?? {}) };
+    const candidate = nextCandidate as Record<string, unknown>;
+    for (const [key, value] of Object.entries(candidate)) {
+      const existing = base[key];
+      if (value != null || existing == null) {
+        base[key] = value;
+      }
+    }
+    const merged = base;
     const mergedParse = AgentOutputSchema.safeParse(merged);
     if (!mergedParse.success) {
       context.logger?.warn?.({

@@ -6,11 +6,10 @@ import { assertPathWithinRoot } from '../../lib/path-guard';
 import type { ExtractionLogger } from './item-flow-extraction';
 
 // TODO(agent): Rotate transcript snapshots once multi-run history needs to be preserved for audits.
-// TODO(agentic-html-transcript): Consider migrating legacy markdown transcripts to HTML when cleanup time permits.
-// TODO(agentic-transcript-blocks): Expand structured sections with markdown rendering when safe sanitization exists.
-export const TRANSCRIPT_FILE_NAME = 'agentic-transcript.html';
-const TRANSCRIPT_SECTION_MARKER = '<!-- transcript-sections -->';
-const TRANSCRIPT_FOOTER = '</main>\n</body>\n</html>\n';
+// TODO(agentic-transcript-blocks): Expand structured sections with additional metadata when needed.
+export const TRANSCRIPT_FILE_NAME = 'agentic-transcript.json';
+const TRANSCRIPT_LEGACY_HTML_FILE_NAME = 'agentic-transcript.html';
+const ITEMS_META_DATA_SUBDIR = 'items-meta-data';
 
 export interface AgentTranscriptLogger extends ExtractionLogger {}
 
@@ -20,7 +19,7 @@ export interface AgentTranscriptReference {
 }
 
 export interface AgentTranscriptWriter extends AgentTranscriptReference {
-  appendSection: (heading: string, body: string) => Promise<void>;
+  appendSection: (heading: string, payload: TranscriptSectionPayload | unknown, response: string) => Promise<void>;
 }
 
 export interface TranscriptMessageBlock {
@@ -37,6 +36,17 @@ export interface TranscriptToolInvocation {
 }
 
 export interface TranscriptSectionPayload {
+  request?: unknown;
+  response?: string;
+  messages?: TranscriptMessageBlock[];
+  toolInvocations?: TranscriptToolInvocation[];
+  logLines?: string[];
+  errors?: unknown[];
+}
+
+export interface AgentTranscriptSection {
+  heading: string;
+  timestamp: string;
   request?: unknown;
   response?: string;
   messages?: TranscriptMessageBlock[];
@@ -240,18 +250,29 @@ function buildTranscriptReference(itemId: string, logger?: AgentTranscriptLogger
   const mediaFolder = resolveMediaFolder(itemId, null, safeLogger);
   const filePath = assertPathWithinRoot(
     MEDIA_UPLOAD_STAGING_DIR,
-    path.resolve(resolveUploadMediaPath(mediaFolder, TRANSCRIPT_FILE_NAME)),
+    path.resolve(resolveUploadMediaPath(ITEMS_META_DATA_SUBDIR, mediaFolder, TRANSCRIPT_FILE_NAME)),
     { logger: safeLogger, operation: 'agentic-transcript:resolve-path' }
   );
-  const publicUrl = `/media/${encodeURIComponent(mediaFolder)}/${TRANSCRIPT_FILE_NAME}`;
+  const publicUrl = `/media/${ITEMS_META_DATA_SUBDIR}/${encodeURIComponent(mediaFolder)}/${TRANSCRIPT_FILE_NAME}`;
   return { filePath, publicUrl };
 }
 
 export function locateTranscript(itemId: string, logger?: AgentTranscriptLogger | null): AgentTranscriptReference | null {
   const reference = buildTranscriptReference(itemId, logger);
+  const fallbackLogger = logger ?? console;
+  const safeLogger: Pick<Console, 'warn' | 'error' | 'info'> = {
+    warn: fallbackLogger.warn ?? console.warn,
+    error: fallbackLogger.error ?? console.error,
+    info: fallbackLogger.info ?? console.info
+  };
+  const mediaFolder = resolveMediaFolder(itemId, null, safeLogger);
   const legacyHtmlReference: AgentTranscriptReference = {
-    filePath: resolveUploadMediaPath(itemId, TRANSCRIPT_FILE_NAME),
-    publicUrl: `/media/${encodeURIComponent(itemId)}/${TRANSCRIPT_FILE_NAME}`
+    filePath: resolveUploadMediaPath(mediaFolder, TRANSCRIPT_LEGACY_HTML_FILE_NAME),
+    publicUrl: `/media/${encodeURIComponent(mediaFolder)}/${TRANSCRIPT_LEGACY_HTML_FILE_NAME}`
+  };
+  const legacyHtmlByIdReference: AgentTranscriptReference = {
+    filePath: resolveUploadMediaPath(itemId, TRANSCRIPT_LEGACY_HTML_FILE_NAME),
+    publicUrl: `/media/${encodeURIComponent(itemId)}/${TRANSCRIPT_LEGACY_HTML_FILE_NAME}`
   };
   const legacyReference: AgentTranscriptReference = {
     filePath: resolveUploadMediaPath(itemId, 'agentic-transcript.md'),
@@ -268,6 +289,14 @@ export function locateTranscript(itemId: string, logger?: AgentTranscriptLogger 
         transcriptPath: legacyHtmlReference.filePath
       });
       return legacyHtmlReference;
+    }
+    if (fs.existsSync(legacyHtmlByIdReference.filePath)) {
+      logger?.warn?.({
+        msg: 'serving legacy html transcript (itemId path)',
+        itemId,
+        transcriptPath: legacyHtmlByIdReference.filePath
+      });
+      return legacyHtmlByIdReference;
     }
     if (fs.existsSync(legacyReference.filePath)) {
       logger?.warn?.({
@@ -289,9 +318,6 @@ export async function createTranscriptWriter(
   logger?: AgentTranscriptLogger | null
 ): Promise<AgentTranscriptWriter | null> {
   const reference = buildTranscriptReference(itemId, logger);
-  const nowIso = new Date().toISOString();
-  const header = `${buildTranscriptHeader(itemId, nowIso)}\n${TRANSCRIPT_SECTION_MARKER}\n${TRANSCRIPT_FOOTER}`;
-  let fileExists = false;
 
   try {
     await fsPromises.mkdir(path.dirname(reference.filePath), { recursive: true });
@@ -301,50 +327,60 @@ export async function createTranscriptWriter(
   }
 
   try {
-    fileExists = fs.existsSync(reference.filePath);
-  } catch (err) {
-    logger?.warn?.({ err, msg: 'failed to detect transcript presence before initialization', itemId });
-  }
-
-  try {
+    const fileExists = fs.existsSync(reference.filePath);
     if (!fileExists) {
-      await fsPromises.writeFile(reference.filePath, header);
+      await fsPromises.writeFile(reference.filePath, JSON.stringify([], null, 2));
     }
   } catch (err) {
     logger?.error?.({ err, msg: 'failed to initialize transcript file', itemId, transcriptPath: reference.filePath });
     return null;
   }
 
-  const appendSection = async (heading: string, body: string): Promise<void> => {
+  const appendSection = async (
+    heading: string,
+    payload: TranscriptSectionPayload | unknown,
+    response: string
+  ): Promise<void> => {
     try {
-      const timestampIso = new Date().toISOString();
-      const sectionLines = [
-        `<section class="transcript-section">`,
-        `  <h2>${escapeHtml(heading)}</h2>`,
-        `  <div class="transcript-meta">${escapeHtml(timestampIso)}</div>`,
-        body.trimEnd(),
-        '</section>',
-        ''
-      ];
+      const timestamp = new Date().toISOString();
+      const structured =
+        payload && typeof payload === 'object' && !Array.isArray(payload)
+          ? (payload as TranscriptSectionPayload)
+          : undefined;
 
-      let existingContent = await fsPromises.readFile(reference.filePath, 'utf8');
-      let markerIndex = existingContent.indexOf(TRANSCRIPT_SECTION_MARKER);
-      if (markerIndex === -1) {
-        logger?.warn?.({ msg: 'transcript section marker missing, rewriting file', itemId, transcriptPath: reference.filePath });
-        existingContent = `${buildTranscriptHeader(itemId, timestampIso)}\n${TRANSCRIPT_SECTION_MARKER}\n${TRANSCRIPT_FOOTER}`;
-        markerIndex = existingContent.indexOf(TRANSCRIPT_SECTION_MARKER);
+      const entry: AgentTranscriptSection = {
+        heading,
+        timestamp,
+        request: structured?.request ?? (structured ? undefined : payload),
+        response: structured?.response ?? response
+      };
+
+      if (structured?.messages?.length) {
+        entry.messages = structured.messages;
+      }
+      if (structured?.toolInvocations?.length) {
+        entry.toolInvocations = structured.toolInvocations;
+      }
+      if (structured?.logLines?.length) {
+        entry.logLines = structured.logLines;
+      }
+      if (structured?.errors?.length) {
+        entry.errors = structured.errors;
       }
 
-      const footerIndex = existingContent.lastIndexOf(TRANSCRIPT_FOOTER);
-      const withoutFooter = footerIndex === -1
-        ? existingContent
-        : existingContent.slice(0, footerIndex);
+      let sections: AgentTranscriptSection[] = [];
+      try {
+        const existing = await fsPromises.readFile(reference.filePath, 'utf8');
+        const parsed: unknown = JSON.parse(existing);
+        if (Array.isArray(parsed)) {
+          sections = parsed as AgentTranscriptSection[];
+        }
+      } catch (readErr) {
+        logger?.warn?.({ readErr, msg: 'failed to read existing transcript; starting fresh', itemId, transcriptPath: reference.filePath });
+      }
 
-      const updatedHeader = buildTranscriptHeader(itemId, timestampIso);
-      const preservedSections = withoutFooter.slice(markerIndex + TRANSCRIPT_SECTION_MARKER.length).trimStart();
-      const newSections = [preservedSections, sectionLines.join('\n')].filter(Boolean).join('\n');
-      const nextContent = [`${updatedHeader}`, TRANSCRIPT_SECTION_MARKER, newSections, TRANSCRIPT_FOOTER].join('\n');
-      await fsPromises.writeFile(reference.filePath, nextContent);
+      sections.push(entry);
+      await fsPromises.writeFile(reference.filePath, JSON.stringify(sections, null, 2));
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to append transcript section', itemId, heading, transcriptPath: reference.filePath });
     }
@@ -366,8 +402,7 @@ export async function appendTranscriptSection(
   }
 
   try {
-    const body = buildTranscriptBody(request, response, logger, { heading, itemId });
-    await writer.appendSection(heading, body);
+    await writer.appendSection(heading, request, response);
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to write transcript section', heading, itemId, transcriptPath: writer.filePath });
   }

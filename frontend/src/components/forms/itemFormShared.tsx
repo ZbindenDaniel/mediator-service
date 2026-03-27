@@ -137,7 +137,8 @@ const referenceFieldKeys: (keyof ItemReferenceEdit)[] = [
   'Shopartikel',
   'Artikeltyp',
   'Einheit',
-  'EntityType'
+  'EntityType',
+  'EAN'
 ];
 
 export function extractReferenceFields(
@@ -1279,6 +1280,22 @@ export function ItemDetailsFields({
         <input
           value={form.Hersteller || ''}
           onChange={(e) => onUpdate('Hersteller', e.target.value)}
+        />
+      </div>
+
+      <div className="row">
+        <label>
+          EAN
+        </label>
+        <input
+          value={(form as Partial<ItemFormPayload & { EAN?: string | null }>).EAN || ''}
+          onChange={(e) => {
+            const raw = e.target.value.trim();
+            onUpdate('EAN' as ItemFormFieldKey, raw || null);
+          }}
+          pattern="[0-9]{8}|[0-9]{12}|[0-9]{13}"
+          title="EAN-8 (8 Stellen), UPC-A (12 Stellen) oder EAN-13 (13 Stellen)"
+          placeholder="EAN-8, UPC-A oder EAN-13"
         />
       </div>
 

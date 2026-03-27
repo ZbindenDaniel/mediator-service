@@ -98,6 +98,7 @@ export interface ItemRef {
   Artikeltyp?: string;
   Einheit?: ItemEinheit;
   EntityType?: string;
+  EAN?: string | null;
   ShopwareProductId?: string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade (nullable when unknown).
   Quality?: QualityValue;

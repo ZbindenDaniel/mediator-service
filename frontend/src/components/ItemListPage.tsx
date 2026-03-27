@@ -373,6 +373,7 @@ export default function ItemListPage() {
   const [subcategoryInput, setSubcategoryInput] = useState(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
   const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
   const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
+  const [boxInput, setBoxInput] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
   // TODO(shop-publication-filter-ui): Consider replacing dropdown with segmented quick filter if additional states are introduced.
   const [shopPublicationFilter, setShopPublicationFilter] = useState<ItemListFilters['shopPublicationFilter']>(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
@@ -399,6 +400,7 @@ export default function ItemListPage() {
       setSubcategoryFilter(mergedFilters.subcategoryFilter);
       setSubcategoryInput(mergedFilters.subcategoryFilter);
       setBoxFilter(mergedFilters.boxFilter);
+      setBoxInput(mergedFilters.boxFilter);
       setAgenticStatusFilter(mergedFilters.agenticStatusFilter);
       setShopPublicationFilter(mergedFilters.shopPublicationFilter);
       setPlacementFilter(mergedFilters.placementFilter);
@@ -436,6 +438,7 @@ export default function ItemListPage() {
       setSubcategoryFilter(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
       setSubcategoryInput(ITEM_LIST_DEFAULT_FILTERS.subcategoryFilter);
       setBoxFilter(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
+      setBoxInput(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
       setAgenticStatusFilter(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
       setShopPublicationFilter(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
       setPlacementFilter(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
@@ -876,10 +879,17 @@ export default function ItemListPage() {
                     <GoContainer aria-hidden="true" />
                     <input
                       aria-label="Behälter filtern"
-                      onChange={(event) => setBoxFilter(event.target.value)}
+                      onBlur={() => setBoxFilter(boxInput)}
+                      onChange={(event) => setBoxInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          setBoxFilter(event.currentTarget.value);
+                        }
+                      }}
                       placeholder="Box-ID oder Standort"
                       type="search"
-                      value={boxFilter}
+                      value={boxInput}
                     />
                   </div>
                 </label>
