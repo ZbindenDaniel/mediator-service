@@ -4,9 +4,57 @@ This document tracks planning inputs for **version 2.3**. Details are also track
 
 ## Current status
 
-No v2.3 implementation work has started yet.
+**Branch:** `claude/update-sprint-planning-zZJLd`
 
-Reason: separate upcoming planning work from shipped v2.2 history to keep release coordination auditable and reduce stale-plan noise in active documentation.
+**Last updated:** 2026-03-27
+
+### Completed
+
+#### Phase 1 – Critical Bugs
+
+- **Agentic concurrency – transcript format**: `backend/agentic/flow/transcript.ts` rewritten. Transcripts now stored as JSON arrays in `items-meta-data/<folder>/agentic-transcript.json` instead of HTML in `shopbilder`. `AgentTranscriptWriter.appendSection` signature updated. `locateTranscript` handles both new JSON path and legacy HTML paths.
+- **Agentic concurrency – extractor null-preservation**: `mergeAccumulatedCandidate` in `backend/agentic/flow/item-flow-extraction.ts` now preserves existing non-null fields when the extracted candidate supplies `null`/`undefined`.
+- **QR relocation – item view**: `frontend/src/components/RelocateItemCard.tsx` now reads `location.state?.qrReturn` in a `useEffect`, sets `boxId`, shows `'Ziel aus QR-Code übernommen'` status, scrolls to the card, and clears state. `QrScanButton` passes `scanIntent="relocate-box"`.
+- **QR relocation – box view**: `frontend/src/components/RelocateBoxCard.tsx` QR return handler no longer silently drops scanned IDs that are not in the pre-loaded `locationOptions` list — it sets the location directly when the ID has a valid `S-`/`B-` prefix and falls through to backend validation.
+- **Shelf aggregation – Ki column**: removed AI run status column (`Ki`) from `BoxDetail.tsx` item list.
+- **Box filter debounce**: `frontend/src/components/ItemListPage.tsx` now uses staged `boxInput`/`boxFilter` pattern (commits on blur or Enter) matching the existing `searchInput`/`searchTerm` pattern.
+
+#### Phase 2 – Reliability
+
+- **Out-of-stock styling**: `ItemList.tsx` adds `item-row--out-of-stock` CSS class when `Auf_Lager === 0`. Rule added to `frontend/public/styles.scss`.
+- **Hinzufügen button (out-of-stock)**: `ItemDetail.tsx` shows `Hinzufügen` button when item is out of stock. Menge/Stück items require `dialogService.confirm` before calling the API.
+- **Unplaced items warning**: `backend/actions/add-item.ts` queries count of items with no `BoxID` and no `Location`; includes `warning` string in JSON response if count > 20. `ItemDetail.tsx` shows it via `dialogService.alert`.
+
+#### Phase 3 – Workflow & UX
+
+- **EAN field** added end-to-end:
+  - `models/item.ts` — `EAN?: string | null` on `ItemRef`
+  - `backend/db.ts` — `EAN TEXT` column in `item_refs`, migration via `ensureItemEanColumn`, upsert + select queries updated
+  - `backend/actions/save-item.ts` — `'EAN'` added to `referenceFieldKeys`
+  - `backend/actions/export-items.ts` — EAN field mapped from `field: null` → `field: 'EAN'`
+  - `frontend/src/components/forms/itemFormShared.tsx` — EAN input field with pattern validation (`[0-9]{8}|[0-9]{12}|[0-9]{13}`)
+- **BoxList shelf separation**: `BoxList.tsx` adds `box-list-row--shelf` CSS class to rows where `BoxID` starts with `S-`. Rule added to `styles.scss`.
+
+---
+
+### Remaining / Not Yet Started
+
+| Item | File(s) | Notes |
+|------|---------|-------|
+| Agentic concurrency – atomic check+create | `backend/agentic/index.ts` lines 1171–1210 | Wrap `fetchAgenticRun` + `persistQueuedRun` in `deps.db.transaction()`; stop calling `scheduleAgenticModelInvocation` inline from `startAgenticRun` |
+| Agentic concurrency – stats re-fetch after categorizer | `backend/agentic/flow/item-flow.ts` or `item-flow-categorizer.ts` | Re-fetch item stats before extraction stage |
+| EAN import pipeline | `backend/actions/import-item.ts` | Parse EAN from CSV rows; add duplicate EAN detection/warning |
+| EAN detail display | `frontend/src/components/ItemDetail.tsx` | Show EAN field in read-only detail view (currently only editable via form) |
+| LocationTag broken links | `frontend/src/components/BoxDetail.tsx` + `LocationTag.tsx` | Links use label text instead of ID — fix `to` prop to use `BoxID` / `LocationId` with `encodeURIComponent` |
+| BoxList extended filters | `frontend/src/components/BoxList.tsx` or `BoxListPage.tsx` | Boxes-only / shelves-only toggle; optional location dropdown |
+| Shelf nested item display | `frontend/src/components/BoxDetail.tsx` + `backend/actions/box-detail.ts` | Verify items in nested boxes appear in shelf detail list; may require filtering on both `BoxID` and `Location` fields |
+| AddItemToBoxDialog QR support | `frontend/src/components/AddItemToBoxDialog.tsx` | Check if it needs `scanIntent="shelf-add-box"` for box/shelf scans |
+| Create-box-from-scan | `frontend/src/components/RelocateItemCard.tsx` | When QR return `id` starts with `B-` and 404, prompt to create via `createBoxForRelocation` helper |
+| Scroll-to-card after relocation | `frontend/src/components/ItemDetail.tsx` | After `onRelocated` callback, scroll to relocation card section |
+| Agentic dispatch tests | `backend/agentic/__tests__/dispatch-queue-concurrency.test.ts` | Concurrent starts for same `Artikel_Nummer` → exactly one queued run |
+| Media handling docs | `docs/ARCHITECTURE.md` or `docs/detailed/media.md` | Document `shopbilder`/`shopbilder-import` path contract; structured logging around destructive file ops |
+
+---
 
 Higher-level goal: keep v2.3 planning minimal, explicit, and easy to execute in small reviewable steps.
 
