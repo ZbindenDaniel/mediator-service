@@ -23,9 +23,15 @@ prod.env
 env.old
 backend/config.ts
 backend/data/mediator.sqlite
+backend/data/*.sqlite
+backend/data/*.sqlite-shm
+backend/data/*.sqlite-wal
 data/mediator.db
 data/mediator.db-shm
 data/mediator.db-wal
+test/*.sqlite
+test/*.sqlite-shm
+test/*.sqlite-wal
 dist_tmp/*
 coverage/*
 secrets/
