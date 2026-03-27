@@ -1165,6 +1165,7 @@ const action = defineHttpAction({
         'Artikeltyp',
         'Einheit',
         'EntityType',
+        'EAN',
         'ShopwareProductId',
         'Quality'
       ];

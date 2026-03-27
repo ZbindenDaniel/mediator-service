@@ -519,7 +519,7 @@ function createAgenticServiceDependencies(
 }
 
 if (agenticServiceEnabled) {
-  console.info('[server] In-process agentic orchestrator active; agentic runs dispatch immediately.');
+  console.info('[server] In-process agentic orchestrator active; runs queue on start, dispatcher picks them up.');
   // TODO(agentic-queue-dispatch): Revisit dispatch cadence once agentic queue volume increases.
   const agenticQueueDispatchIntervalMs = 5000;
   const agenticQueueDispatchLimit = 5;

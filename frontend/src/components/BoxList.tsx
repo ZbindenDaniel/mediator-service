@@ -132,6 +132,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
             try {
               const normalizedLabel = normalizeLabelValue(box.Label, 'box label', box.BoxID);
               const normalizedShelfLabel = normalizeLabelValue(box.ShelfLabel, 'box shelf label', box.BoxID);
+              const isShelf = box.BoxID.slice(0, 2).toUpperCase() === 'S-';
               if (box.LocationId && !normalizedShelfLabel) {
                 logger.warn('Missing shelf label for box list row', {
                   boxId: box.BoxID,
@@ -146,7 +147,7 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
                 <tr
                   key={box.BoxID}
                   data-box-id={box.BoxID}
-                  className="box-list-row"
+                  className={['box-list-row', isShelf ? 'box-list-row--shelf' : ''].filter(Boolean).join(' ')}
                   role="button"
                   tabIndex={0}
                   aria-label={rowLabel}

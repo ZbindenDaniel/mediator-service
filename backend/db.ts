@@ -363,6 +363,7 @@ CREATE TABLE IF NOT EXISTS item_refs (
   Artikeltyp TEXT,
   Einheit TEXT,
   EntityType TEXT,
+  EAN TEXT,
   ShopwareProductId TEXT
 );
 `;
@@ -390,13 +391,13 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Artikel_Nummer, Suchbegriff, Grafikname, ImageNames, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
     Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
     Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
-    Veröffentlicht_Status, Quality, Shopartikel, Artikeltyp, Einheit, EntityType, ShopwareProductId
+    Veröffentlicht_Status, Quality, Shopartikel, Artikeltyp, Einheit, EntityType, EAN, ShopwareProductId
   )
   VALUES (
     @Artikel_Nummer, @Suchbegriff, @Grafikname, @ImageNames, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
     @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
     @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
-    @Veröffentlicht_Status, @Quality, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @ShopwareProductId
+    @Veröffentlicht_Status, @Quality, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @EAN, @ShopwareProductId
   )
   ON CONFLICT(Artikel_Nummer) DO UPDATE SET
     Suchbegriff=excluded.Suchbegriff,
@@ -421,6 +422,7 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     Artikeltyp=excluded.Artikeltyp,
     Einheit=excluded.Einheit,
     EntityType=excluded.EntityType,
+    EAN=excluded.EAN,
     ShopwareProductId=excluded.ShopwareProductId
 `;
 
@@ -479,6 +481,7 @@ type ItemRefRow = {
   Artikeltyp: string | null;
   Einheit: string | null;
   EntityType: string | null;
+  EAN: string | null;
   ShopwareProductId: string | null;
 };
 
@@ -672,6 +675,7 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
     Artikeltyp: asNullableString(ref.Artikeltyp),
     Einheit: asNullableString(ref.Einheit),
     EntityType: asNullableString(ref.EntityType),
+    EAN: asNullableString((ref as ItemRef & { EAN?: string | null }).EAN),
     ShopwareProductId: asNullableString((ref as ItemRef & { ShopwareProductId?: string | null }).ShopwareProductId)
   };
 }
@@ -888,6 +892,27 @@ function ensureItemQualityColumns(database: Database.Database = db): void {
 }
 
 ensureItemQualityColumns(db);
+
+function ensureItemEanColumn(database: Database.Database = db): void {
+  let refColumns: Array<{ name: string }> = [];
+  try {
+    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect item_refs schema for EAN column', err);
+    throw err;
+  }
+  if (!refColumns.some((column) => column.name === 'EAN')) {
+    try {
+      database.prepare('ALTER TABLE item_refs ADD COLUMN EAN TEXT').run();
+      console.info('[db] Added EAN column to item_refs');
+    } catch (err) {
+      console.error('Failed to add EAN column to item_refs', err);
+      throw err;
+    }
+  }
+}
+
+ensureItemEanColumn(db);
 ensureAgenticRunSchema(db);
 
 let upsertItemReferenceStatement: Database.Statement;
@@ -1058,6 +1083,7 @@ SELECT
   r.Artikeltyp AS Artikeltyp,
   r.Einheit AS Einheit,
   r.EntityType AS EntityType,
+  r.EAN AS EAN,
   r.ShopwareProductId AS ShopwareProductId${extras}
 `;
 }
@@ -2992,6 +3018,7 @@ SELECT
   r.Artikeltyp AS Artikeltyp,
   r.Einheit AS Einheit,
   r.EntityType AS EntityType,
+  r.EAN AS EAN,
   r.ShopwareProductId AS ShopwareProductId,
   COALESCE(ar.Status, 'notStarted') AS AgenticStatus,
   COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState

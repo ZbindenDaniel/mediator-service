@@ -5,7 +5,6 @@ import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
 import type { Box, Item, EventLog, BoxDetailResponse } from '../../../models';
 import { formatDateTime } from '../lib/format';
-import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import { groupItemsForDisplay } from '../lib/itemGrouping';
 import { ensureUser } from '../lib/user';
 import { eventLabel } from '../../../models/event-labels';
@@ -920,7 +919,6 @@ export default function BoxDetail({ boxId }: Props) {
                           <th className="col-desc">Artikel</th>
                           <th className="col-stock optional-column">Anzahl</th>
                           <th className="col-quality optional-column">Qualität</th>
-                          <th className="col-agentic optional-column">Ki</th>
                           <th className="col-subcategory optional-column">Unterkategorie A</th>
                           <th className="optional-column">Behälter</th>
                           <th className="col-actions">Aktionen</th>
@@ -940,7 +938,6 @@ export default function BoxDetail({ boxId }: Props) {
                             const qualityValue = typeof group.summary.Quality === 'number'
                               ? group.summary.Quality
                               : (typeof representative?.Quality === 'number' ? representative.Quality : null);
-                            const agenticLabel = describeAgenticStatus(group.agenticStatusSummary);
                             const removalMessage = representativeId ? removalStatus[representativeId] : null;
                             const itemNumber = group.summary.Artikel_Nummer || representative?.Artikel_Nummer;
                             const itemNumberLabel = itemNumber ?? 'Artikel';
@@ -972,7 +969,6 @@ export default function BoxDetail({ boxId }: Props) {
                                 <td className="col-quality optional-column">
                                   <QualityBadge compact value={qualityValue} />
                                 </td>
-                                <td className="col-agentic optional-column">{agenticLabel}</td>
                                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
                                 <td className="optional-column">{resolveContainerLabel(group)}</td>
                                 <td className="col-actions">

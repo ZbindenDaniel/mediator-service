@@ -52,7 +52,7 @@ const columnDescriptors = [
   { key: 'published_status', header: 'Veröffentlicht_Status', field: 'Veröffentlicht_Status' },
   { key: 'shoparticle', header: 'Shopartikel', field: 'Shopartikel' },
   { key: 'unit', header: 'Einheit', field: 'Einheit' },
-  { key: 'ean', header: 'EAN', field: null },
+  { key: 'ean', header: 'EAN', field: 'EAN' },
   {
     key: 'cvar_categories_A1',
     header: 'Hauptkategorien_A_(entsprechen_den_Kategorien_im_Shop)',
