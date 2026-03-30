@@ -60,7 +60,10 @@ export function prepareBoxesForDisplay(boxes: Box[], options: PrepareBoxesOption
   }
 
   if (locationFilter !== 'all') {
-    filtered = filtered.filter((box) => box.LocationId === locationFilter);
+    const prefix = `S-${locationFilter.toUpperCase()}-`;
+    filtered = filtered.filter((box) =>
+      box.LocationId != null && box.LocationId.toUpperCase().startsWith(prefix)
+    );
   }
 
   if (normalizedQuery) {
