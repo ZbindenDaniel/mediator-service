@@ -65,7 +65,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
     }
   }, [location.pathname, location.state, navigate]);
 
-  async function performRelocate(actor: string, destinationBoxId?: string, options?: RelocateOptions) {
+  async function performRelocate(actor: string, destinationBoxId?: string, options?: RelocateOptions): Promise<{ ok: boolean; status?: number }> {
     try {
       const payload: Record<string, unknown> = { actor };
       if (destinationBoxId) {
@@ -104,7 +104,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
             });
           }
         }
-        return true;
+        return { ok: true, status: response.status };
       } else {
         const errorMessage = 'Fehler: ' + (data.error || response.status);
         setStatus(errorMessage);
@@ -115,7 +115,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
           status: response.status,
           error: data.error ?? data
         });
-        return false;
+        return { ok: false, status: response.status };
       }
     } catch (error) {
       console.error('Relocate item request failed', {
@@ -125,7 +125,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
       });
       setStatus('Verschieben fehlgeschlagen');
       setBoxLink('');
-      return false;
+      return { ok: false };
     }
   }
 
@@ -150,7 +150,23 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
 
     setIsSubmitting(true);
     try {
-      await performRelocate(actor, destinationBoxId, options);
+      const result = await performRelocate(actor, destinationBoxId, options);
+      if (!result.ok && result.status === 404 && destinationBoxId.startsWith('B-')) {
+        const confirmed = await dialogService.confirm({
+          title: 'Behälter nicht gefunden',
+          message: `Behälter "${destinationBoxId}" existiert nicht. Jetzt anlegen und Artikel verschieben?`
+        }).catch(() => false);
+        if (confirmed) {
+          const createResult = await createBoxForRelocation({ actor, boxId: destinationBoxId, context: 'qr-scan create box' });
+          if (createResult.ok && createResult.boxId) {
+            setBoxId(createResult.boxId);
+            setSelectedSuggestion({ BoxID: createResult.boxId });
+            await performRelocate(actor, createResult.boxId, options);
+          } else {
+            setStatus(createResult.message ?? 'Behälter anlegen fehlgeschlagen');
+          }
+        }
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -242,8 +258,8 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
 
       setBoxId(newBoxId);
       setSelectedSuggestion({ BoxID: newBoxId });
-      const didRelocate = await performRelocate(actor, newBoxId);
-      if (!didRelocate) {
+      const relocateResult = await performRelocate(actor, newBoxId);
+      if (!relocateResult.ok) {
         console.warn('Create box and relocate stopped: relocation failed', {
           itemId,
           toBoxId: newBoxId

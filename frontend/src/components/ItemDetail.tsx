@@ -929,6 +929,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const relocateCardRef = useRef<HTMLDivElement | null>(null);
   const agenticOverrideLogRef = useRef<{ itemId: string | null; active: boolean }>({
     itemId: null,
     active: false
@@ -1311,6 +1312,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     rows.push(
       ['Hersteller', item.Hersteller ?? null],
+      ['EAN', item.EAN ?? null],
       ['Länge (mm)', item.Länge_mm ?? null],
       ['Breite (mm)', item.Breite_mm ?? null],
       ['Höhe (mm)', item.Höhe_mm ?? null],
@@ -3362,10 +3364,15 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
             </div>
 
-            <RelocateItemCard
-              itemId={item.ItemUUID}
-              onRelocated={() => load({ showSpinner: false })}
-            />
+            <div ref={relocateCardRef}>
+              <RelocateItemCard
+                itemId={item.ItemUUID}
+                onRelocated={() => {
+                  load({ showSpinner: false });
+                  relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              />
+            </div>
 
             <div className="card grid-span-2">
               <h3>Vorrat</h3>
