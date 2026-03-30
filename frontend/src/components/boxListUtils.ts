@@ -9,6 +9,7 @@ export interface PrepareBoxesOptions {
   searchText: string;
   sortKey: BoxSortKey;
   typeFilter?: BoxTypeFilter;
+  locationFilter?: string;
 }
 
 function compareBoxId(a: Box, b: Box): number {
@@ -47,7 +48,7 @@ function buildSearchCandidates(box: Box): string[] {
 }
 
 export function prepareBoxesForDisplay(boxes: Box[], options: PrepareBoxesOptions): Box[] {
-  const { searchText, sortKey, typeFilter = 'all' } = options;
+  const { searchText, sortKey, typeFilter = 'all', locationFilter = 'all' } = options;
   const normalizedQuery = searchText.trim().toLowerCase();
 
   let filtered = boxes;
@@ -56,6 +57,10 @@ export function prepareBoxesForDisplay(boxes: Box[], options: PrepareBoxesOption
     filtered = filtered.filter((box) => box.BoxID.slice(0, 2).toUpperCase() === 'S-');
   } else if (typeFilter === 'boxes') {
     filtered = filtered.filter((box) => box.BoxID.slice(0, 2).toUpperCase() !== 'S-');
+  }
+
+  if (locationFilter !== 'all') {
+    filtered = filtered.filter((box) => box.LocationId === locationFilter);
   }
 
   if (normalizedQuery) {

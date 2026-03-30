@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { EventLog } from '../../../models';
 import { RecentEventsList } from './RecentEventsCard';
@@ -16,6 +16,7 @@ export default function RecentActivitiesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [actorFilter, setActorFilter] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -89,6 +90,12 @@ export default function RecentActivitiesPage() {
     };
   }, [location.search, searchTerm]);
 
+  const displayedEvents = useMemo(() => {
+    const trimmed = actorFilter.trim().toLowerCase();
+    if (!trimmed) return events;
+    return events.filter((e) => (e.Actor ?? '').toLowerCase().includes(trimmed));
+  }, [events, actorFilter]);
+
   return (
     <div className="list-container activities">
       <div className="page-header">
@@ -110,6 +117,13 @@ export default function RecentActivitiesPage() {
         <button className="btn" onClick={handleSearchSubmit}>
           Suchen
         </button>
+        <input
+          type="search"
+          value={actorFilter}
+          onChange={event => setActorFilter(event.target.value)}
+          placeholder="Akteur filtern"
+          aria-label="Aktivitäten nach Akteur filtern"
+        />
       </div>
       {loading && <p className="muted">Aktivitäten werden geladen…</p>}
       {error && (
@@ -118,7 +132,7 @@ export default function RecentActivitiesPage() {
           <p className="muted">{error}</p>
         </div>
       )}
-      {!loading && !error && <RecentEventsList events={events} />}
+      {!loading && !error && <RecentEventsList events={displayedEvents} />}
     </div>
   );
 }

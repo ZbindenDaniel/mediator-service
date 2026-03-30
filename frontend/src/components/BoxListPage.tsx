@@ -10,6 +10,7 @@ export default function BoxListPage() {
   const [searchText, setSearchText] = useState('');
   const [sortKey, setSortKey] = useState<BoxSortKey>('updatedAt');
   const [typeFilter, setTypeFilter] = useState<BoxTypeFilter>('all');
+  const [locationFilter, setLocationFilter] = useState('all');
   // TODO: Evaluate server-side pagination when the number of boxes grows.
 
   useEffect(() => {
@@ -53,19 +54,20 @@ export default function BoxListPage() {
 
   const preparedBoxes = useMemo(() => {
     try {
-      const result = prepareBoxesForDisplay(boxes, { searchText, sortKey, typeFilter });
+      const result = prepareBoxesForDisplay(boxes, { searchText, sortKey, typeFilter, locationFilter });
       logger.info?.('[BoxListPage] prepared boxes', {
         originalCount: boxes.length,
         filteredCount: result.length,
         sortKey,
         typeFilter,
+        locationFilter,
       });
       return result;
     } catch (err) {
       logError('Failed to prepare box list', err);
       return boxes;
     }
-  }, [boxes, searchText, sortKey, typeFilter]);
+  }, [boxes, searchText, sortKey, typeFilter, locationFilter]);
 
   const handleSearchChange = (value: string) => {
     try {
@@ -91,6 +93,14 @@ export default function BoxListPage() {
     }
   };
 
+  const handleLocationFilterChange = (value: string) => {
+    try {
+      setLocationFilter(value);
+    } catch (err) {
+      logError('Failed to update box location filter', err);
+    }
+  };
+
   return (
     <div className="list-container box">
       <h2>Alle Behälter</h2>
@@ -102,9 +112,11 @@ export default function BoxListPage() {
           searchValue={searchText}
           sortKey={sortKey}
           typeFilter={typeFilter}
+          locationFilter={locationFilter}
           onSearchChange={handleSearchChange}
           onSortChange={handleSortChange}
           onTypeFilterChange={handleTypeFilterChange}
+          onLocationFilterChange={handleLocationFilterChange}
         />
       ) : (
         <div className="muted">Noch keine Behälter vorhanden.</div>
