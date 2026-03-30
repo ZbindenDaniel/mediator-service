@@ -952,6 +952,7 @@ try {
       Artikeltyp,
       Einheit,
       EntityType,
+      EAN,
       ShopwareProductId
     FROM item_refs
     WHERE Artikel_Nummer = ?

@@ -654,12 +654,28 @@ const action = defineHttpAction({
               ...fallbackReference,
               Auf_Lager: undefined
             };
+            const refArtikelNummer = (fallbackReference.Artikel_Nummer ?? itemId).trim();
+            let refAgentic: AgenticRun | null = null;
+            try {
+              refAgentic = ctx.getAgenticRun && refArtikelNummer
+                ? ((ctx.getAgenticRun.get(refArtikelNummer) as AgenticRun | undefined) ?? null)
+                : null;
+              if (refAgentic) {
+                refAgentic = attachTranscriptReference(refAgentic, refArtikelNummer, console);
+              }
+            } catch (error) {
+              console.error('[save-item] Failed to load agentic run for reference-only item', {
+                itemId,
+                refArtikelNummer,
+                error
+              });
+            }
             return sendJson(res, 200, {
               item: referenceBackedItem,
               reference: fallbackReference,
               box: null,
               events: [],
-              agentic: null,
+              agentic: refAgentic,
               agenticReviewAutomation: null,
               media: collectMediaAssets(itemId, fallbackReference.Grafikname, fallbackReference.Artikel_Nummer),
               instances: []

@@ -264,7 +264,7 @@ export default function AddItemToBoxDialog({ boxId, onAdded, onClose, qrReturnPa
               autoFocus
               aria-label="Artikel suchen"
             />
-            <QrScanButton className="add-item-dialog__search-qr" onBeforeNavigate={handleDismiss} />
+            <QrScanButton className="add-item-dialog__search-qr" scanIntent="add-item" onBeforeNavigate={handleDismiss} />
           </div>
           <button
             className="btn desktop-only add-item-dialog__search-submit"

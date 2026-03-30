@@ -399,6 +399,8 @@ function normalizeItemReferenceRow(row: unknown): ItemRef | null {
     }
   }
   if (typeof record.Hersteller === 'string') normalized.Hersteller = record.Hersteller;
+  const refEanRaw = typeof record.EAN === 'string' ? record.EAN.trim() : '';
+  if (refEanRaw && /^(\d{8}|\d{12}|\d{13})$/.test(refEanRaw)) normalized.EAN = refEanRaw;
   if (typeof record.Länge_mm === 'number' && Number.isFinite(record.Länge_mm)) normalized.Länge_mm = record.Länge_mm;
   if (typeof record.Breite_mm === 'number' && Number.isFinite(record.Breite_mm)) normalized.Breite_mm = record.Breite_mm;
   if (typeof record.Höhe_mm === 'number' && Number.isFinite(record.Höhe_mm)) normalized.Höhe_mm = record.Höhe_mm;

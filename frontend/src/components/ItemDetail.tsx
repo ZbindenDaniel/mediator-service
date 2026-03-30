@@ -60,6 +60,8 @@ import {
 import { logger, logError } from '../utils/logger';
 import { mapReviewAnswersToInput, type AgenticReviewInput } from '../lib/agenticReviewMapping';
 import { filterAndSortItems } from './ItemListPage';
+import { requestPrintLabel } from '../utils/printLabelRequest';
+import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
 // TODO(suchbegriff-override): Revisit Suchbegriff override logging once UI formalizes edit intent.
@@ -3138,6 +3140,19 @@ export default function ItemDetail({ itemId }: Props) {
           await dialogService.alert({ title: 'Hinweis', message: payload.warning });
         } catch (alertErr) {
           logError('ItemDetail: Failed to display unplaced items warning', alertErr, { itemId: item.ItemUUID });
+        }
+      }
+      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled) {
+        try {
+          const printResult = await requestPrintLabel({ itemId: item.ItemUUID, actor });
+          if (!printResult.ok) {
+            logError('ItemDetail: Auto-print label failed after Hinzufügen', null, {
+              itemId: item.ItemUUID,
+              status: printResult.status
+            });
+          }
+        } catch (printErr) {
+          logError('ItemDetail: Auto-print label threw after Hinzufügen', printErr, { itemId: item.ItemUUID });
         }
       }
       logger.info?.('ItemDetail: Item stock added', {
