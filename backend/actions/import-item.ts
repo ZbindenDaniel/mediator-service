@@ -774,6 +774,7 @@ const action = defineHttpAction({
         });
       }
       const herstellerInput = (p.get('Hersteller') || '').trim();
+      const eanRaw = (p.get('EAN') || '').trim();
       const verkaufspreisRaw = (p.get('Verkaufspreis') || '').replace(',', '.').trim();
       const gewichtRaw = (p.get('Gewicht_kg') || '').replace(',', '.').trim();
       const laengeRaw = (p.get('Länge_mm') || '').trim();
@@ -960,6 +961,30 @@ const action = defineHttpAction({
         });
       }
       const hersteller = herstellerInput || referenceDefaults?.Hersteller || '';
+
+      const EAN_VALID_RE = /^(\d{8}|\d{12}|\d{13})$/;
+      let ean: string | null = null;
+      if (eanRaw) {
+        if (EAN_VALID_RE.test(eanRaw)) {
+          const existingEanRow = ctx.db
+            .prepare(`SELECT Artikel_Nummer FROM item_refs WHERE EAN = ? LIMIT 1`)
+            .get(eanRaw) as { Artikel_Nummer: string } | undefined;
+          if (existingEanRow && existingEanRow.Artikel_Nummer !== resolvedArtikelNummer) {
+            console.warn('[import-item] EAN already assigned to a different Artikel_Nummer; skipping EAN field', {
+              ean: eanRaw,
+              existingArtikelNummer: existingEanRow.Artikel_Nummer,
+              incomingArtikelNummer: resolvedArtikelNummer
+            });
+          } else {
+            ean = eanRaw;
+          }
+        } else {
+          console.warn('[import-item] Invalid EAN format; skipping EAN field', {
+            ean: eanRaw,
+            artikelNummer: resolvedArtikelNummer
+          });
+        }
+      }
 
       let verkaufspreis = referenceDefaults?.Verkaufspreis ?? 0;
       if (verkaufspreisRaw) {
@@ -1230,6 +1255,7 @@ const action = defineHttpAction({
             ? (qualityFromPayload ?? null)
             : null,
         Hersteller: hersteller,
+        EAN: ean,
         Länge_mm: laenge,
         Breite_mm: breite,
         Höhe_mm: hoehe,

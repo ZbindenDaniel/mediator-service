@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { Box } from '../../../models';
 import BoxList, { BoxSortKey } from './BoxList';
-import { prepareBoxesForDisplay } from './boxListUtils';
+import { prepareBoxesForDisplay, type BoxTypeFilter } from './boxListUtils';
 import { logError, logger } from '../utils/logger';
 
 export default function BoxListPage() {
@@ -9,9 +9,8 @@ export default function BoxListPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [sortKey, setSortKey] = useState<BoxSortKey>('updatedAt');
+  const [typeFilter, setTypeFilter] = useState<BoxTypeFilter>('all');
   // TODO: Evaluate server-side pagination when the number of boxes grows.
-  // TODO(agent): Keep box list type filters aligned with shelf/box ID prefixes.
-  // TODO(agent): Confirm shelf creation entry point placement once box list UX is reviewed.
 
   useEffect(() => {
     let isMounted = true;
@@ -54,18 +53,19 @@ export default function BoxListPage() {
 
   const preparedBoxes = useMemo(() => {
     try {
-      const result = prepareBoxesForDisplay(boxes, { searchText, sortKey });
+      const result = prepareBoxesForDisplay(boxes, { searchText, sortKey, typeFilter });
       logger.info?.('[BoxListPage] prepared boxes', {
         originalCount: boxes.length,
         filteredCount: result.length,
         sortKey,
+        typeFilter,
       });
       return result;
     } catch (err) {
       logError('Failed to prepare box list', err);
       return boxes;
     }
-  }, [boxes, searchText, sortKey]);
+  }, [boxes, searchText, sortKey, typeFilter]);
 
   const handleSearchChange = (value: string) => {
     try {
@@ -83,6 +83,14 @@ export default function BoxListPage() {
     }
   };
 
+  const handleTypeFilterChange = (filter: BoxTypeFilter) => {
+    try {
+      setTypeFilter(filter);
+    } catch (err) {
+      logError('Failed to update box type filter', err);
+    }
+  };
+
   return (
     <div className="list-container box">
       <h2>Alle Behälter</h2>
@@ -93,8 +101,10 @@ export default function BoxListPage() {
           boxes={preparedBoxes}
           searchValue={searchText}
           sortKey={sortKey}
+          typeFilter={typeFilter}
           onSearchChange={handleSearchChange}
           onSortChange={handleSortChange}
+          onTypeFilterChange={handleTypeFilterChange}
         />
       ) : (
         <div className="muted">Noch keine Behälter vorhanden.</div>

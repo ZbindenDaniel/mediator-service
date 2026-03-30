@@ -4,6 +4,7 @@ import type { Box } from '../../../models/box';
 import { formatDate } from '../lib/format';
 import { logError, logger } from '../utils/logger';
 import LocationTag from './LocationTag';
+import type { BoxTypeFilter } from './boxListUtils';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 // TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
@@ -16,8 +17,10 @@ interface Props {
   boxes: Box[];
   searchValue: string;
   sortKey: BoxSortKey;
+  typeFilter: BoxTypeFilter;
   onSearchChange: (value: string) => void;
   onSortChange: (value: BoxSortKey) => void;
+  onTypeFilterChange: (value: BoxTypeFilter) => void;
 }
 
 const SORT_LABELS: Record<BoxSortKey, string> = {
@@ -54,7 +57,7 @@ function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest(interactiveSelector));
 }
 
-export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, onSortChange }: Props) {
+export default function BoxList({ boxes, searchValue, sortKey, typeFilter, onSearchChange, onSortChange, onTypeFilterChange }: Props) {
   logger.info?.('[BoxList] rendering boxes', { count: boxes.length });
 
   const navigate = useNavigate();
@@ -92,6 +95,16 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
     }
   };
 
+  const handleTypeFilterChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    try {
+      const nextFilter = event.target.value as BoxTypeFilter;
+      logger.info?.('[BoxList] type filter changed', { nextFilter });
+      onTypeFilterChange(nextFilter);
+    } catch (err) {
+      logError('Failed to handle box type filter change', err);
+    }
+  };
+
   return (
     <div className="box-list-wrapper">
       <div className="list-toolbar" aria-label="Behälterwerkzeuge">
@@ -105,6 +118,14 @@ export default function BoxList({ boxes, searchValue, sortKey, onSearchChange, o
             onChange={handleSearchChange}
             autoFocus
           />
+        </label>
+        <label className="toolbar-field" htmlFor="box-type-filter">
+          <span className="toolbar-label">Typ</span>
+          <select id="box-type-filter" value={typeFilter} onChange={handleTypeFilterChange}>
+            <option value="all">Alle</option>
+            <option value="shelves">Regale</option>
+            <option value="boxes">Behälter</option>
+          </select>
         </label>
         <label className="toolbar-field" htmlFor="box-sort">
           <span className="toolbar-label">Sortieren nach</span>

@@ -39,6 +39,7 @@ export async function ensureActorOrAlert({
 
 interface CreateBoxOptions {
   actor: string;
+  boxId?: string;
   fetchImpl?: typeof fetch;
   context?: string;
 }
@@ -53,14 +54,19 @@ interface CreateBoxResult {
 
 export async function createBoxForRelocation({
   actor,
+  boxId,
   fetchImpl = fetch,
   context = 'behälter anlegen'
 }: CreateBoxOptions): Promise<CreateBoxResult> {
   try {
+    const body: Record<string, unknown> = { actor };
+    if (boxId) {
+      body.boxId = boxId;
+    }
     const response = await fetchImpl('/api/boxes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor })
+      body: JSON.stringify(body)
     });
 
     const data = await response.json().catch((parseError) => {

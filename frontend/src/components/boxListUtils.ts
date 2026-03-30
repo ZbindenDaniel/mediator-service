@@ -3,9 +3,12 @@ import { logError, logger } from '../utils/logger';
 import type { BoxSortKey } from './BoxList';
 
 // TODO(agent): Revisit whether box list sorting should expose ascending/descending controls alongside the selected date field.
+export type BoxTypeFilter = 'all' | 'shelves' | 'boxes';
+
 export interface PrepareBoxesOptions {
   searchText: string;
   sortKey: BoxSortKey;
+  typeFilter?: BoxTypeFilter;
 }
 
 function compareBoxId(a: Box, b: Box): number {
@@ -44,15 +47,23 @@ function buildSearchCandidates(box: Box): string[] {
 }
 
 export function prepareBoxesForDisplay(boxes: Box[], options: PrepareBoxesOptions): Box[] {
-  const { searchText, sortKey } = options;
+  const { searchText, sortKey, typeFilter = 'all' } = options;
   const normalizedQuery = searchText.trim().toLowerCase();
 
-  const filtered = normalizedQuery
-    ? boxes.filter((box) => {
-        const candidates = buildSearchCandidates(box);
-        return candidates.some((candidate) => candidate.includes(normalizedQuery));
-      })
-    : boxes;
+  let filtered = boxes;
+
+  if (typeFilter === 'shelves') {
+    filtered = filtered.filter((box) => box.BoxID.slice(0, 2).toUpperCase() === 'S-');
+  } else if (typeFilter === 'boxes') {
+    filtered = filtered.filter((box) => box.BoxID.slice(0, 2).toUpperCase() !== 'S-');
+  }
+
+  if (normalizedQuery) {
+    filtered = filtered.filter((box) => {
+      const candidates = buildSearchCandidates(box);
+      return candidates.some((candidate) => candidate.includes(normalizedQuery));
+    });
+  }
 
   const sorted = [...filtered].sort((a, b) => {
     switch (sortKey) {

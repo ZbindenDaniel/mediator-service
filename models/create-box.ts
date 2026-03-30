@@ -11,5 +11,5 @@ export interface CreateShelfPayload {
 }
 
 export type CreateBoxPayload =
-  | { actor: string; type?: 'box' }
+  | { actor: string; type?: 'box'; boxId?: string }
   | CreateShelfPayload;

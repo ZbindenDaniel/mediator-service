@@ -209,6 +209,42 @@ const action = defineHttpAction({
         return sendJson(res, 200, { ok: true, id: shelfId });
       }
 
+      // If the caller provides a specific box ID (e.g. from a QR scan), validate and use it directly.
+      const requestedBoxId = typeof (data as { boxId?: unknown }).boxId === 'string'
+        ? (data as { boxId: string }).boxId.trim()
+        : '';
+      if (requestedBoxId) {
+        if (!/^B-[A-Za-z0-9]/.test(requestedBoxId)) {
+          return sendJson(res, 400, { error: 'boxId format invalid; must start with B-' });
+        }
+        const existingBox = ctx.getBox.get(requestedBoxId) as { BoxID?: string } | undefined;
+        if (existingBox?.BoxID) {
+          return sendJson(res, 409, { error: 'Box mit dieser ID existiert bereits' });
+        }
+        const nowDate = new Date();
+        const now = nowDate.toISOString();
+        ctx.runUpsertBox({
+          BoxID: requestedBoxId,
+          LocationId: null,
+          Label: null,
+          CreatedAt: now,
+          Notes: null,
+          PhotoPath: null,
+          PlacedBy: actor,
+          PlacedAt: null,
+          UpdatedAt: now
+        });
+        ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Box',
+          EntityId: requestedBoxId,
+          Event: 'Created',
+          Meta: JSON.stringify({ source: 'qr-scan' })
+        });
+        console.info('[create-box] Created box with provided ID', { boxId: requestedBoxId, actor });
+        return sendJson(res, 200, { ok: true, id: requestedBoxId });
+      }
+
       const last = ctx.getMaxBoxId.get() as { BoxID: string } | undefined;
       let seq = 0;
       if (last?.BoxID) {
