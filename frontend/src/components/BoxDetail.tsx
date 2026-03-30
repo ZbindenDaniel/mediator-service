@@ -1042,14 +1042,18 @@ export default function BoxDetail({ boxId }: Props) {
 
             <div className="card grid-span-2">
               <h3>Aktivitäten</h3>
-              <ul className="events">
-                {displayedEvents.map((ev) => (
-                  <li key={ev.Id}>
-                    <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
-                    {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
-                  </li>
-                ))}
-              </ul>
+              {displayedEvents.length > 0 ? (
+                <ul className="events">
+                  {displayedEvents.map((ev) => (
+                    <li key={ev.Id}>
+                      <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
+                      {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">Keine Aktivitäten vorhanden.</p>
+              )}
             </div>
           </>
         ) : (
