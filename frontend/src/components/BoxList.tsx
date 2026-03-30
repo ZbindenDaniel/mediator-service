@@ -129,7 +129,7 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
                 <input
                   id="box-search"
                   type="search"
-                  placeholder="Box-ID oder Standort finden"
+                  placeholder="Box-ID suchen"
                   value={searchValue}
                   onChange={handleSearchChange}
                   autoFocus
