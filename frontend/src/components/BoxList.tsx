@@ -5,6 +5,7 @@ import { formatDate } from '../lib/format';
 import { logError, logger } from '../utils/logger';
 import LocationTag from './LocationTag';
 import type { BoxTypeFilter } from './boxListUtils';
+import { shelfLocations } from '../data/shelfLocations';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 // TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
@@ -18,9 +19,11 @@ interface Props {
   searchValue: string;
   sortKey: BoxSortKey;
   typeFilter: BoxTypeFilter;
+  locationFilter: string;
   onSearchChange: (value: string) => void;
   onSortChange: (value: BoxSortKey) => void;
   onTypeFilterChange: (value: BoxTypeFilter) => void;
+  onLocationFilterChange: (value: string) => void;
 }
 
 const SORT_LABELS: Record<BoxSortKey, string> = {
@@ -57,7 +60,7 @@ function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest(interactiveSelector));
 }
 
-export default function BoxList({ boxes, searchValue, sortKey, typeFilter, onSearchChange, onSortChange, onTypeFilterChange }: Props) {
+export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locationFilter, onSearchChange, onSortChange, onTypeFilterChange, onLocationFilterChange }: Props) {
   logger.info?.('[BoxList] rendering boxes', { count: boxes.length });
 
   const navigate = useNavigate();
@@ -105,38 +108,69 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, onSea
     }
   };
 
+  const handleLocationFilterChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    try {
+      const nextLocation = event.target.value;
+      logger.info?.('[BoxList] location filter changed', { nextLocation });
+      onLocationFilterChange(nextLocation);
+    } catch (err) {
+      logError('Failed to handle box location filter change', err);
+    }
+  };
+
   return (
     <div className="box-list-wrapper">
-      <div className="list-toolbar" aria-label="Behälterwerkzeuge">
-        <label className="toolbar-field" htmlFor="box-search">
-          <span className="toolbar-label">Suche</span>
-          <input
-            id="box-search"
-            type="search"
-            placeholder="Box-ID oder Standort finden"
-            value={searchValue}
-            onChange={handleSearchChange}
-            autoFocus
-          />
-        </label>
-        <label className="toolbar-field" htmlFor="box-type-filter">
-          <span className="toolbar-label">Typ</span>
-          <select id="box-type-filter" value={typeFilter} onChange={handleTypeFilterChange}>
-            <option value="all">Alle</option>
-            <option value="shelves">Regale</option>
-            <option value="boxes">Behälter</option>
-          </select>
-        </label>
-        <label className="toolbar-field" htmlFor="box-sort">
-          <span className="toolbar-label">Sortieren nach</span>
-          <select id="box-sort" value={sortKey} onChange={handleSortChange}>
-            {Object.entries(SORT_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="filter-bar" aria-label="Behälterwerkzeuge">
+        <div className="filter-panel">
+          <div className="filter-grid">
+            <div className="filter-grid__item">
+              <label className="filter-control" htmlFor="box-search">
+                <span>Suche</span>
+                <input
+                  id="box-search"
+                  type="search"
+                  placeholder="Box-ID suchen"
+                  value={searchValue}
+                  onChange={handleSearchChange}
+                  autoFocus
+                />
+              </label>
+            </div>
+            <div className="filter-grid__item">
+              <label className="filter-control" htmlFor="box-type-filter">
+                <span>Typ</span>
+                <select id="box-type-filter" value={typeFilter} onChange={handleTypeFilterChange}>
+                  <option value="all">Alle</option>
+                  <option value="shelves">Regale</option>
+                  <option value="boxes">Behälter</option>
+                </select>
+              </label>
+            </div>
+            <div className="filter-grid__item">
+              <label className="filter-control" htmlFor="box-location-filter">
+                <span>Standort</span>
+                <select id="box-location-filter" value={locationFilter} onChange={handleLocationFilterChange}>
+                  <option value="all">Alle Standorte</option>
+                  {shelfLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>{loc.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="filter-grid__item">
+              <label className="filter-control" htmlFor="box-sort">
+                <span>Sortieren nach</span>
+                <select id="box-sort" value={sortKey} onChange={handleSortChange}>
+                  {Object.entries(SORT_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
       <table className="box-list">
         <thead>
