@@ -59,6 +59,7 @@ import {
   logEvent,
   bulkMoveItems,
   bulkRemoveItemStock,
+  bulkUpdateItemRefShopFields,
   listEventsForBox,
   listEventsForItem,
   listRecentActivities,
@@ -439,6 +440,7 @@ type ActionContext = {
   deleteBox: typeof deleteBox;
   bulkMoveItems: typeof bulkMoveItems;
   bulkRemoveItemStock: typeof bulkRemoveItemStock;
+  bulkUpdateItemRefShopFields: typeof bulkUpdateItemRefShopFields;
   upsertAgenticRun: typeof upsertAgenticRun;
   getAgenticRun: typeof getAgenticRun;
   updateAgenticRunStatus: typeof updateAgenticRunStatus;
@@ -762,6 +764,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           enqueueShopwareSyncJob,
           bulkMoveItems,
           bulkRemoveItemStock,
+          bulkUpdateItemRefShopFields,
           listItems,
           getAdjacentItemIds,
           htmlForBox,

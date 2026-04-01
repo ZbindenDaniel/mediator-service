@@ -61,4 +61,5 @@ export default { loadActions };
 
 export { default as bulkMoveItemsAction } from './bulk-move-items';
 export { default as bulkDeleteItemsAction } from './bulk-delete-items';
+export { default as bulkUpdateRefFieldsAction } from './bulk-update-ref-fields';
 export { default as syncErpAction } from './sync-erp';
