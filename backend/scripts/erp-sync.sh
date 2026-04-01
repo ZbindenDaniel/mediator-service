@@ -16,6 +16,7 @@ login='csvimport'
 password='B9kc!O-?b*w=i8<'
 client_id='1'
 url='https://revamp.kivitendo.ch/kivitendo-erp/controller.pl'
+webdav_shopbilder_url='https://revamp.kivitendo.ch/edit/shopbilder'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIRROR_SCRIPT_PATH="$SCRIPT_DIR/erp-media-mirror.sh"
@@ -250,6 +251,10 @@ if [ ! -r "$MIRROR_SCRIPT_PATH" ]; then
   echo "[erp-sync] media_copy_result status=failed reason=mirror_script_unavailable" >&2
   exit 3
 fi
+
+export ERP_WEBDAV_SHOPBILDER_URL="$webdav_shopbilder_url"
+export ERP_WEBDAV_USERNAME="$login"
+export ERP_WEBDAV_PASSWORD="$password"
 
 if ! bash "$MIRROR_SCRIPT_PATH"; then
   rm -f "$tmpf"

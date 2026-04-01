@@ -1,10 +1,12 @@
 #!/bin/bash
 
-mirror_dir="${ERP_MEDIA_MIRROR_DIR:-}"
+webdav_url="${ERP_WEBDAV_SHOPBILDER_URL:-}"
+webdav_user="${ERP_WEBDAV_USERNAME:-}"
+webdav_pass="${ERP_WEBDAV_PASSWORD:-}"
 source_dir="${ERP_MEDIA_SOURCE_DIR:-dist/media}"
 item_ids_raw="${ERP_SYNC_ITEM_IDS:-}"
 # ERP_SYNC_ITEM_IDS must contain explicit media file paths and is parsed newline-delimited only.
-# Copy policy: flatten into ERP_MEDIA_MIRROR_DIR by basename (last write wins when names collide).
+# Upload policy: PUT each file to WebDAV by basename (last write wins when names collide).
 
 tmpf_media=$(mktemp)
 
@@ -13,30 +15,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ -z "$mirror_dir" ]; then
-  echo "[erp-sync] media_copy_result status=skipped reason=ERP_MEDIA_MIRROR_DIR_unset"
+if [ -z "$webdav_url" ]; then
+  echo "[erp-sync] media_copy_result status=skipped reason=ERP_WEBDAV_SHOPBILDER_URL_unset"
   exit 0
 fi
 
 if [ -z "$source_dir" ] || [ ! -d "$source_dir" ]; then
-  echo "[erp-sync] media_copy_error reason=source_media_path_unavailable source=${source_dir:-unset} destination=$mirror_dir" >&2
+  echo "[erp-sync] media_copy_error reason=source_media_path_unavailable source=${source_dir:-unset} destination=$webdav_url" >&2
   exit 1
 fi
 
 if [ -z "$item_ids_raw" ]; then
-  echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=0 destination_count=0 flattened=true selected_file_count=0"
+  echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$webdav_url source_count=0 destination_count=0 flattened=true selected_file_count=0"
   exit 0
 fi
 
-echo "[erp-sync] media_copy_phase phase=destination_prepare status=start destination=$mirror_dir" >&2
-if ! mkdir -p "$mirror_dir" >>"$tmpf_media" 2>&1; then
-  echo "[erp-sync] media_copy_error reason=destination_unwritable destination=$mirror_dir details_file=$tmpf_media" >&2
-  cat "$tmpf_media" >&2
-  exit 1
-fi
-echo "[erp-sync] media_copy_phase phase=destination_prepare status=done destination=$mirror_dir" >&2
-
-echo "[erp-sync] media_copy_phase phase=copy status=start source=$source_dir destination=$mirror_dir" >&2
+echo "[erp-sync] media_copy_phase phase=copy status=start source=$source_dir destination=$webdav_url" >&2
 
 source_count=0
 copied_count=0
@@ -52,7 +46,8 @@ while IFS= read -r raw_entry; do
   fi
 
   source_count=$((source_count + 1))
-  destination_file="$mirror_dir/$(basename "$source_path")"
+  filename="$(basename "$source_path")"
+  target_url="${webdav_url%/}/${filename}"
 
   copy_status="success"
   copy_error=""
@@ -61,9 +56,15 @@ while IFS= read -r raw_entry; do
     copy_status="skipped"
     copy_error="source_missing"
   else
-    if ! cp -f "$source_path" "$destination_file" >>"$tmpf_media" 2>&1; then
+    if ! curl --upload-file "$source_path" "$target_url" \
+         --user "${webdav_user}:${webdav_pass}" \
+         --insecure \
+         --no-progress-meter \
+         --connect-timeout 15 \
+         --max-time 30 \
+         >>"$tmpf_media" 2>&1; then
       copy_status="failed"
-      copy_error="copy_failed"
+      copy_error="webdav_put_failed"
     fi
   fi
 
@@ -73,15 +74,15 @@ while IFS= read -r raw_entry; do
     failed_count=$((failed_count + 1))
   fi
 
-  echo "[erp-sync] media_copy_file source=$source_path destination=$destination_file status=$copy_status error=${copy_error:-none}" >&2
+  echo "[erp-sync] media_copy_file source=$source_path destination=$target_url status=$copy_status error=${copy_error:-none}" >&2
 done < <(printf '%s\n' "$item_ids_raw")
 
 if [ "$failed_count" -gt 0 ]; then
   cat "$tmpf_media" >&2
-  echo "[erp-sync] media_copy_result status=failed source=$source_dir destination=$mirror_dir source_count=$source_count destination_count=$copied_count flattened=true selected_file_count=$source_count" >&2
+  echo "[erp-sync] media_copy_result status=failed source=$source_dir destination=$webdav_url source_count=$source_count destination_count=$copied_count flattened=true selected_file_count=$source_count" >&2
   exit 1
 fi
 
-echo "[erp-sync] media_copy_phase phase=copy status=done source=$source_dir destination=$mirror_dir source_count=$source_count destination_count=$copied_count" >&2
-echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$mirror_dir source_count=$source_count destination_count=$copied_count flattened=true selected_file_count=$source_count"
+echo "[erp-sync] media_copy_phase phase=copy status=done source=$source_dir destination=$webdav_url source_count=$source_count destination_count=$copied_count" >&2
+echo "[erp-sync] media_copy_result status=success source=$source_dir destination=$webdav_url source_count=$source_count destination_count=$copied_count flattened=true selected_file_count=$source_count"
 exit 0
