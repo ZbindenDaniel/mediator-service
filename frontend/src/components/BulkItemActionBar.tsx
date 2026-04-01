@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTrash, GoXCircle } from 'react-icons/go';
 import type { Item } from '../../../models';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
@@ -82,6 +82,136 @@ async function readErrorMessage(response: Response): Promise<string> {
 
 type MoveContext = 'existing' | 'created';
 
+interface ShopStatusValues {
+  shopartikel: number | null;
+  veröffentlicht: string | null;
+  verkaufspreis: number | null;
+}
+
+interface ShopStatusFormProps {
+  onChange: (values: ShopStatusValues) => void;
+}
+
+function ShopStatusForm({ onChange }: ShopStatusFormProps) {
+  const [shopartikel, setShopartikel] = useState<number | null>(null);
+  const [veröffentlicht, setVeröffentlicht] = useState<string | null>(null);
+  const [verkaufspreis, setVerkaufspreis] = useState<number | null>(null);
+  const [shopartikelEnabled, setShopartikelEnabled] = useState(false);
+  const [veröffentlichtEnabled, setVeröffentlichtEnabled] = useState(false);
+  const [verkaufspreisEnabled, setVerkaufspreisEnabled] = useState(false);
+
+  function update(patch: Partial<ShopStatusValues>) {
+    const next: ShopStatusValues = {
+      shopartikel: patch.shopartikel !== undefined ? patch.shopartikel : shopartikel,
+      veröffentlicht: patch.veröffentlicht !== undefined ? patch.veröffentlicht : veröffentlicht,
+      verkaufspreis: patch.verkaufspreis !== undefined ? patch.verkaufspreis : verkaufspreis
+    };
+    onChange(next);
+  }
+
+  return (
+    <div className="shop-status-form">
+      <div className="shop-status-form__row">
+        <label className="shop-status-form__enable">
+          <input
+            type="checkbox"
+            checked={shopartikelEnabled}
+            onChange={(e) => {
+              const enabled = e.target.checked;
+              setShopartikelEnabled(enabled);
+              const val = enabled ? 1 : null;
+              setShopartikel(val);
+              update({ shopartikel: val });
+            }}
+          />
+          <span>Shopartikel</span>
+        </label>
+        {shopartikelEnabled ? (
+          <input
+            type="checkbox"
+            role="switch"
+            className="item-form__binary-switch"
+            checked={shopartikel === 1}
+            onChange={(e) => {
+              const val = e.target.checked ? 1 : 0;
+              setShopartikel(val);
+              update({ shopartikel: val });
+            }}
+          />
+        ) : (
+          <span className="muted shop-status-form__unchanged">nicht ändern</span>
+        )}
+      </div>
+
+      <div className="shop-status-form__row">
+        <label className="shop-status-form__enable">
+          <input
+            type="checkbox"
+            checked={veröffentlichtEnabled}
+            onChange={(e) => {
+              const enabled = e.target.checked;
+              setVeröffentlichtEnabled(enabled);
+              const val = enabled ? 'yes' : null;
+              setVeröffentlicht(val);
+              update({ veröffentlicht: val });
+            }}
+          />
+          <span>Veröffentlicht</span>
+        </label>
+        {veröffentlichtEnabled ? (
+          <input
+            type="checkbox"
+            role="switch"
+            className="item-form__binary-switch"
+            checked={veröffentlicht === 'yes'}
+            onChange={(e) => {
+              const val = e.target.checked ? 'yes' : 'no';
+              setVeröffentlicht(val);
+              update({ veröffentlicht: val });
+            }}
+          />
+        ) : (
+          <span className="muted shop-status-form__unchanged">nicht ändern</span>
+        )}
+      </div>
+
+      <div className="shop-status-form__row">
+        <label className="shop-status-form__enable">
+          <input
+            type="checkbox"
+            checked={verkaufspreisEnabled}
+            onChange={(e) => {
+              const enabled = e.target.checked;
+              setVerkaufspreisEnabled(enabled);
+              const val = enabled ? 0 : null;
+              setVerkaufspreis(val);
+              update({ verkaufspreis: val });
+            }}
+          />
+          <span>Verkaufspreis (CHF)</span>
+        </label>
+        {verkaufspreisEnabled ? (
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            className="shop-status-form__price-input"
+            value={verkaufspreis ?? 0}
+            onChange={(e) => {
+              const parsed = parseFloat(e.target.value);
+              const val = Number.isFinite(parsed) ? parsed : 0;
+              setVerkaufspreis(val);
+              update({ verkaufspreis: val });
+            }}
+          />
+        ) : (
+          <span className="muted shop-status-form__unchanged">nicht ändern</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function BulkItemActionBar({
   selectedIds,
   selectedItems = [],
@@ -93,6 +223,7 @@ export default function BulkItemActionBar({
   const [selectedBoxSuggestion, setSelectedBoxSuggestion] = useState<BoxSuggestion | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const shopFormRef = useRef<ShopStatusValues>({ shopartikel: null, veröffentlicht: null, verkaufspreis: null });
   const effectiveResolveActor = resolveActor ?? ensureUser;
   const selectedCount = selectedIds.length;
   const hasSelection = selectedCount > 0;
@@ -688,6 +819,92 @@ export default function BulkItemActionBar({
     }
   }
 
+  async function handleBulkUpdateShopStatus(): Promise<void> {
+    if (!hasSelection) {
+      setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
+      return;
+    }
+
+    setFeedback(null);
+    shopFormRef.current = { shopartikel: null, veröffentlicht: null, verkaufspreis: null };
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Shopstatus setzen',
+        message: (
+          <ShopStatusForm
+            onChange={(values) => {
+              shopFormRef.current = values;
+            }}
+          />
+        ),
+        confirmLabel: 'Setzen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (dialogError) {
+      console.error('Shop status confirmation dialog failed', dialogError);
+      setFeedback({ type: 'error', message: 'Bestätigung fehlgeschlagen. Bitte erneut versuchen.' });
+      return;
+    }
+
+    if (!confirmed) {
+      return;
+    }
+
+    const actor = await ensureActorOrAlert({
+      context: 'bulk update shop status',
+      resolveActor: effectiveResolveActor
+    });
+    if (!actor) {
+      setFeedback({ type: 'error', message: 'Aktion abgebrochen: Es wurde kein Benutzername angegeben.' });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const { shopartikel, veröffentlicht, verkaufspreis } = shopFormRef.current;
+      console.log('bulk update shop status requested', {
+        count: selectedCount,
+        shopartikel,
+        veröffentlicht,
+        verkaufspreis
+      });
+
+      const response = await fetch('/api/items/bulk/update-ref', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIds: selectedIds,
+          shopartikel,
+          veröffentlicht,
+          verkaufspreis,
+          actor,
+          confirm: true
+        })
+      });
+
+      if (!response.ok) {
+        const message = await readErrorMessage(response);
+        console.error('Bulk shop status update failed', { status: response.status, message });
+        setFeedback({ type: 'error', message });
+        return;
+      }
+
+      console.log('Bulk shop status update completed', { count: selectedCount });
+      await handleAfterSuccess();
+      setFeedback({ type: 'info', message: `Shopstatus für ${selectedCount} Artikel aktualisiert.` });
+    } catch (err) {
+      console.error('Bulk shop status update request failed', err);
+      setFeedback({
+        type: 'error',
+        message: (err as Error).message || 'Unbekannter Fehler beim Setzen des Shopstatus.'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   function handleExportSelection(): void {
     if (!hasSelection) {
       setFeedback({ type: 'error', message: 'Keine Artikel für den Export ausgewählt.' });
@@ -796,6 +1013,17 @@ export default function BulkItemActionBar({
         >
           <GoSync aria-hidden="true" />
           <span>Kivi Sync 🥝</span>
+        </button>
+
+        <button
+          className="bulk-item-action-bar__button"
+          disabled={isProcessing || !hasSelection}
+          onClick={() => {
+            void handleBulkUpdateShopStatus();
+          }}
+          type="button"
+        >
+          <span>Shopstatus</span>
         </button>
 
         <button

@@ -2551,6 +2551,13 @@ export const zeroItemStock = db.prepare(
 );
 export const deleteItem = db.prepare(`DELETE FROM items WHERE ItemUUID = ?`);
 export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
+const updateItemRefShopFieldsStatement = db.prepare(`
+  UPDATE item_refs
+     SET Verkaufspreis = @Verkaufspreis,
+         Shopartikel = @Shopartikel,
+         Veröffentlicht_Status = @Veröffentlicht_Status
+   WHERE Artikel_Nummer = @Artikel_Nummer
+`);
 const insertEventStatement = db.prepare(`
   INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
   VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
@@ -2801,6 +2808,80 @@ export function bulkRemoveItemStock(itemIds: string[], actor: string): BulkRemov
     throw err;
   }
 }
+
+export type BulkUpdateShopFieldsGroup = {
+  artikelNummer: string;
+  itemIds: string[];
+};
+
+export function bulkUpdateItemRefShopFields(
+  groups: BulkUpdateShopFieldsGroup[],
+  shopartikel: number | null,
+  veröffentlichtStatus: string | null,
+  verkaufspreis: number | null,
+  actor: string
+): string[] {
+  if (!Array.isArray(groups) || groups.length === 0) {
+    return [];
+  }
+
+  const runTxn = db.transaction((grps: BulkUpdateShopFieldsGroup[]): string[] => {
+    const updated: string[] = [];
+
+    for (const group of grps) {
+      const { artikelNummer, itemIds } = group;
+
+      updateItemRefShopFieldsStatement.run({
+        Artikel_Nummer: artikelNummer,
+        Shopartikel: shopartikel,
+        Veröffentlicht_Status: veröffentlichtStatus,
+        Verkaufspreis: verkaufspreis
+      });
+
+      logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: artikelNummer,
+        Event: 'ShopStatusUpdated',
+        Meta: JSON.stringify({ shopartikel, veröffentlichtStatus, verkaufspreis })
+      });
+
+      for (const itemId of itemIds) {
+        try {
+          const correlationId = generateShopwareCorrelationId('bulkUpdateShopStatus', itemId);
+          const payload = createShopwareQueuePayload(
+            {
+              artikelNummer,
+              itemUUID: itemId,
+              trigger: 'bulk-update-shop-status',
+              actor
+            },
+            'bulkUpdateShopStatus'
+          );
+          enqueueShopwareSyncJob({
+            CorrelationId: correlationId,
+            JobType: 'item-upsert',
+            Payload: payload
+          });
+        } catch (error) {
+          console.error('[db] Failed to enqueue Shopware sync job for bulk shop status update', { itemId, error });
+        }
+      }
+
+      updated.push(artikelNummer);
+    }
+
+    return updated;
+  });
+
+  try {
+    return runTxn(groups);
+  } catch (err) {
+    console.error('[db] bulkUpdateItemRefShopFields transaction failed', err);
+    throw err;
+  }
+}
+
 export const listEventsForBox = db.prepare(`
   SELECT *
   FROM events
