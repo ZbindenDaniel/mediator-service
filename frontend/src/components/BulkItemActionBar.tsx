@@ -1,6 +1,10 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTrash, GoXCircle } from 'react-icons/go';
 import type { Item } from '../../../models';
+import {
+  AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_RUNNING
+} from '../../../models';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { dialogService } from './dialog';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
@@ -81,6 +85,59 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 type MoveContext = 'existing' | 'created';
+
+type KiAction = 'start' | 'stop';
+
+interface KiActionFormProps {
+  selectedItems: Item[];
+  onChange: (action: KiAction) => void;
+}
+
+function KiActionForm({ selectedItems, onChange }: KiActionFormProps) {
+  const [action, setAction] = useState<KiAction>('start');
+
+  const startableCount = selectedItems.filter((item) =>
+    item.AgenticStatus !== AGENTIC_RUN_STATUS_RUNNING
+    && item.AgenticStatus !== AGENTIC_RUN_STATUS_QUEUED
+  ).length;
+  const stoppableCount = selectedItems.filter((item) =>
+    item.AgenticStatus === AGENTIC_RUN_STATUS_RUNNING
+  ).length;
+
+  function select(a: KiAction) {
+    setAction(a);
+    onChange(a);
+  }
+
+  return (
+    <div className="ki-action-form">
+      <label className="ki-action-form__option">
+        <input
+          type="radio"
+          name="ki-action"
+          checked={action === 'start'}
+          onChange={() => { select('start'); }}
+        />
+        <span className="ki-action-form__label">Starten</span>
+        <span className="muted ki-action-form__hint">
+          {startableCount} Artikel werden gestartet / wiederholt
+        </span>
+      </label>
+      <label className="ki-action-form__option">
+        <input
+          type="radio"
+          name="ki-action"
+          checked={action === 'stop'}
+          onChange={() => { select('stop'); }}
+        />
+        <span className="ki-action-form__label">Stoppen</span>
+        <span className="muted ki-action-form__hint">
+          {stoppableCount} laufende Artikel werden abgebrochen
+        </span>
+      </label>
+    </div>
+  );
+}
 
 interface ShopStatusValues {
   shopartikel: number | null;
@@ -224,6 +281,7 @@ export default function BulkItemActionBar({
   const [isProcessing, setIsProcessing] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const shopFormRef = useRef<ShopStatusValues>({ shopartikel: null, veröffentlicht: null, verkaufspreis: null });
+  const kiActionRef = useRef<KiAction>('start');
   const effectiveResolveActor = resolveActor ?? ensureUser;
   const selectedCount = selectedIds.length;
   const hasSelection = selectedCount > 0;
@@ -468,13 +526,15 @@ export default function BulkItemActionBar({
     }
   }
 
-  async function handleBulkAgenticStart(): Promise<void> {
+  async function handleBulkKi(): Promise<void> {
     if (!hasSelection) {
       setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
       return;
     }
 
     setFeedback(null);
+    kiActionRef.current = 'start';
+
     // TODO(agentic-bulk): Ensure bulk agentic triggers only use Artikel_Nummer once list payloads always include it.
     const itemMap = new Map<string, Item>();
     selectedItems.forEach((item) => {
@@ -483,47 +543,117 @@ export default function BulkItemActionBar({
       }
     });
 
-    const previewEntries = selectedIds.slice(0, 3).map((itemId) => {
-      const record = itemMap.get(itemId);
-      return record?.Artikelbeschreibung || record?.Artikel_Nummer || itemId;
-    });
-
     let confirmed = false;
     try {
       confirmed = await dialogService.confirm({
-        title: 'Ki starten',
+        title: 'KI',
         message: (
-          <div className="bulk-item-action-bar__confirm-content">
-            <p>Sollen KI Läufe für die Auswahl gestartet werden?</p>
-            <ul>
-              <li>{selectionLabel}</li>
-              {previewEntries.map((entry, index) => (
-                <li key={index}>{entry}</li>
-              ))}
-              {selectedIds.length > previewEntries.length ? (
-                <li>…und weitere {selectedIds.length - previewEntries.length}</li>
-              ) : null}
-            </ul>
-          </div>
+          <KiActionForm
+            selectedItems={selectedItems}
+            onChange={(action) => { kiActionRef.current = action; }}
+          />
         ),
-        confirmLabel: 'Starten',
+        confirmLabel: 'Ausführen',
         cancelLabel: 'Abbrechen'
       });
-      console.info('Bulk agentic confirmation resolved', {
+      console.info('Bulk KI action dialog resolved', {
         confirmed,
+        action: kiActionRef.current,
         selectionCount: selectedCount
       });
     } catch (dialogError) {
-      console.error('Bulk agentic confirmation dialog failed', dialogError);
+      console.error('Bulk KI action dialog failed', dialogError);
       setFeedback({ type: 'error', message: 'Bestätigung fehlgeschlagen. Bitte erneut versuchen.' });
       return;
     }
 
     if (!confirmed) {
-      console.info('Bulk agentic start cancelled via dialog', { selectionCount: selectedCount });
       return;
     }
 
+    const chosenAction = kiActionRef.current;
+
+    if (chosenAction === 'stop') {
+      // Stop: cancel only currently running runs; others are silently ignored.
+      const actor = await ensureActorOrAlert({
+        context: 'bulk agentic stop',
+        resolveActor: effectiveResolveActor
+      });
+      if (!actor) {
+        setFeedback({ type: 'error', message: 'Aktion abgebrochen: Es wurde kein Benutzername angegeben.' });
+        return;
+      }
+
+      const runningItems = selectedItems.filter(
+        (item) => item.AgenticStatus === AGENTIC_RUN_STATUS_RUNNING
+      );
+
+      if (runningItems.length === 0) {
+        setFeedback({ type: 'info', message: 'Keine laufenden Artikel in der Auswahl.' });
+        return;
+      }
+
+      setIsProcessing(true);
+      const failures: string[] = [];
+      let successCount = 0;
+
+      try {
+        for (const item of runningItems) {
+          const artikelNummer = item.Artikel_Nummer?.trim();
+          if (!artikelNummer) {
+            failures.push(`${item.ItemUUID}: fehlende Artikel_Nummer`);
+            continue;
+          }
+          try {
+            const response = await fetch(`/api/item-refs/${encodeURIComponent(artikelNummer)}/agentic/cancel`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actor, reason: 'bulk-stop' })
+            });
+            if (!response.ok) {
+              const message = await readErrorMessage(response);
+              console.error('Bulk agentic stop failed', { artikelNummer, status: response.status, message });
+              failures.push(`${artikelNummer}: ${message}`);
+              continue;
+            }
+            successCount += 1;
+            console.info('Bulk agentic stop dispatched', { artikelNummer });
+          } catch (requestError) {
+            console.error('Bulk agentic stop request failed', { artikelNummer, requestError });
+            failures.push(`${artikelNummer}: ${(requestError as Error).message || 'Request fehlgeschlagen'}`);
+          }
+        }
+
+        if (successCount) {
+          try {
+            onClearSelection();
+            if (onActionComplete) {
+              await onActionComplete();
+            }
+          } catch (afterSuccessError) {
+            console.error('Bulk agentic stop post-success handler failed', afterSuccessError);
+          }
+        }
+
+        if (failures.length && successCount) {
+          setFeedback({
+            type: 'error',
+            message: `${successCount} Läufe gestoppt, ${failures.length} fehlgeschlagen: ${failures.slice(0, 3).join('; ')}`
+          });
+          return;
+        }
+        if (failures.length) {
+          setFeedback({ type: 'error', message: `Ki-Stop fehlgeschlagen: ${failures.slice(0, 3).join('; ')}` });
+          return;
+        }
+        setFeedback({ type: 'info', message: `${successCount} KI-Läufe gestoppt.` });
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    // Start: queue new runs or re-queue finished/failed runs; already-active runs are ignored by the API.
     setIsProcessing(true);
     const failures: string[] = [];
     let successCount = 0;
@@ -554,9 +684,7 @@ export default function BulkItemActionBar({
         }
 
         if (!artikelNummer) {
-          logger.warn?.('Bulk agentic skipped: Artikel_Nummer missing', {
-            itemId
-          });
+          logger.warn?.('Bulk agentic skipped: Artikel_Nummer missing', { itemId });
           failures.push(`${itemId}: fehlende Artikel_Nummer`);
           continue;
         }
@@ -567,10 +695,7 @@ export default function BulkItemActionBar({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               context: 'item-list-bulk',
-              payload: {
-                artikelNummer,
-                artikelbeschreibung
-              }
+              payload: { artikelNummer, artikelbeschreibung }
             })
           });
 
@@ -607,19 +732,11 @@ export default function BulkItemActionBar({
         });
         return;
       }
-
       if (failures.length) {
-        setFeedback({
-          type: 'error',
-          message: `Ki-Start fehlgeschlagen: ${failures.slice(0, 3).join('; ')}`
-        });
+        setFeedback({ type: 'error', message: `Ki-Start fehlgeschlagen: ${failures.slice(0, 3).join('; ')}` });
         return;
       }
-
-      setFeedback({
-        type: 'info',
-        message: `Ki-Läufe für ${successCount} Artikel gestartet.`
-      });
+      setFeedback({ type: 'info', message: `Ki-Läufe für ${successCount} Artikel in die Warteschlange gestellt.` });
     } finally {
       setIsProcessing(false);
     }
@@ -996,11 +1113,11 @@ export default function BulkItemActionBar({
           className="bulk-item-action-bar__button"
           disabled={isProcessing || !hasSelection}
           onClick={() => {
-            void handleBulkAgenticStart();
+            void handleBulkKi();
           }}
           type="button"
         >
-          <span>Ki starten</span>
+          <span>KI</span>
         </button>
 
         <button
