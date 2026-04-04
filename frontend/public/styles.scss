@@ -1470,7 +1470,6 @@ button:focus {
 
 .bulk-item-action-bar__button--export {
     width: 100%;
-    justify-content: center;
 }
 
 @media (max-width: 920px) {
@@ -1569,6 +1568,55 @@ button:focus {
 .bulk-item-action-bar__confirm-content ul {
     margin: 0;
     padding-left: 18px;
+}
+
+.ki-action-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 260px;
+    padding: 4px 0;
+}
+
+.ki-action-form__option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+    user-select: none;
+
+    input[type="radio"] {
+        flex-shrink: 0;
+        accent-color: var(--acc);
+    }
+}
+
+.ki-action-form__option:hover {
+    background: #eef1f5;
+}
+
+.ki-action-form__option--selected {
+    border-color: var(--acc);
+    background: color-mix(in srgb, var(--acc) 6%, transparent);
+}
+
+.ki-action-form__option-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ki-action-form__label {
+    font-weight: 600;
+}
+
+.ki-action-form__count {
+    font-size: 0.82em;
+    color: #888;
 }
 
 .row-3 {
