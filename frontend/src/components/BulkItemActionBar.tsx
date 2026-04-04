@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTrash, GoXCircle } from 'react-icons/go';
+import { GoCpu, GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTag, GoTrash, GoXCircle } from 'react-icons/go';
 import type { Item } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_QUEUED,
@@ -111,30 +111,32 @@ function KiActionForm({ selectedItems, onChange }: KiActionFormProps) {
 
   return (
     <div className="ki-action-form">
-      <label className="ki-action-form__option">
+      <label className={`ki-action-form__option${action === 'start' ? ' ki-action-form__option--selected' : ''}`}>
         <input
           type="radio"
           name="ki-action"
           checked={action === 'start'}
           onChange={() => { select('start'); }}
         />
-        <span className="ki-action-form__label">Starten</span>
-        <span className="muted ki-action-form__hint">
-          {startableCount} Artikel werden gestartet / wiederholt
+        <span className="ki-action-form__option-body">
+          <span className="ki-action-form__label">Starten</span>
+          <span className="ki-action-form__count">{startableCount} Artikel starten</span>
         </span>
       </label>
-      <label className="ki-action-form__option">
-        <input
-          type="radio"
-          name="ki-action"
-          checked={action === 'stop'}
-          onChange={() => { select('stop'); }}
-        />
-        <span className="ki-action-form__label">Stoppen</span>
-        <span className="muted ki-action-form__hint">
-          {stoppableCount} laufende Artikel werden abgebrochen
-        </span>
-      </label>
+      {stoppableCount > 0 ? (
+        <label className={`ki-action-form__option${action === 'stop' ? ' ki-action-form__option--selected' : ''}`}>
+          <input
+            type="radio"
+            name="ki-action"
+            checked={action === 'stop'}
+            onChange={() => { select('stop'); }}
+          />
+          <span className="ki-action-form__option-body">
+            <span className="ki-action-form__label">Stoppen</span>
+            <span className="ki-action-form__count">{stoppableCount} laufende Artikel stoppen</span>
+          </span>
+        </label>
+      ) : null}
     </div>
   );
 }
@@ -1117,6 +1119,7 @@ export default function BulkItemActionBar({
           }}
           type="button"
         >
+          <GoCpu aria-hidden="true" />
           <span>KI</span>
         </button>
 
@@ -1140,6 +1143,7 @@ export default function BulkItemActionBar({
           }}
           type="button"
         >
+          <GoTag aria-hidden="true" />
           <span>Shopstatus</span>
         </button>
 
