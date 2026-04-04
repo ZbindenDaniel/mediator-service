@@ -765,54 +765,69 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
       });
     }
 
-    const nextRetryCount = (existingRun?.RetryCount ?? 0) + 1;
     const attemptTimestamp = nowIso;
+    const nextRetryCount = (existingRun?.RetryCount ?? 0) + 1;
 
-    applyQueueUpdate(deps, logger, {
-      Artikel_Nummer: payload.artikelNummer,
-      Status: AGENTIC_RUN_STATUS_RUNNING,
-      LastModified: nowIso,
-      RetryCount: nextRetryCount,
-      NextRetryAt: null,
-      LastError: null,
-      LastAttemptAt: attemptTimestamp
-    });
-
+    // Atomically verify the run is still queued and the concurrency cap has not been reached,
+    // then update to 'running' in the same transaction. This prevents multiple scheduled
+    // callbacks from all proceeding to 'running' if slots were exhausted between dispatch and
+    // execution, and closes the race window left by the dispatch-time cap check.
+    let promoted = false;
     try {
-      const updateResult = deps.updateAgenticRunStatus.run(
-        normalizeAgenticStatusUpdate({
-          Artikel_Nummer: payload.artikelNummer,
-          Status: AGENTIC_RUN_STATUS_RUNNING,
-          SearchQuery: payload.searchQuery,
-          LastModified: nowIso,
-          ReviewState: 'not_required',
-          ReviewedBy: payload.review?.reviewedBy ?? existingRun?.ReviewedBy ?? null,
-          ReviewedByIsSet: true,
-          LastReviewDecision: payload.review?.decision ?? null,
-          LastReviewDecisionIsSet: true,
-          LastReviewNotes: payload.review?.notes ?? null,
-          LastReviewNotesIsSet: true,
-          RetryCount: nextRetryCount,
-          RetryCountIsSet: true,
-          NextRetryAt: null,
-          NextRetryAtIsSet: true,
-          LastError: null,
-          LastErrorIsSet: true,
-          LastAttemptAt: attemptTimestamp,
-          LastAttemptAtIsSet: true
-        })
-      );
-
-      if (!updateResult?.changes) {
-        logger.warn?.('[agentic-service] Agentic run mark-running updated zero rows', {
-          artikelNummer: payload.artikelNummer
-        });
-      } else {
+      const promoteTransaction = deps.db.transaction(() => {
+        const currentRunningCount = fetchRunningCount(deps, logger);
+        if (currentRunningCount >= MAX_CONCURRENT_RUNNING_RUNS) {
+          logger.info?.('[agentic-service] Concurrency cap reached at promotion; leaving run queued', {
+            artikelNummer: payload.artikelNummer,
+            runningCount: currentRunningCount,
+            cap: MAX_CONCURRENT_RUNNING_RUNS
+          });
+          return false;
+        }
+        const latestRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
+        if (!latestRun || latestRun.Status !== AGENTIC_RUN_STATUS_QUEUED) {
+          logger.info?.('[agentic-service] Run no longer queued at promotion; skipping invocation', {
+            artikelNummer: payload.artikelNummer,
+            status: latestRun?.Status ?? 'not-found'
+          });
+          return false;
+        }
+        const updateResult = deps.updateAgenticRunStatus.run(
+          normalizeAgenticStatusUpdate({
+            Artikel_Nummer: payload.artikelNummer,
+            Status: AGENTIC_RUN_STATUS_RUNNING,
+            SearchQuery: payload.searchQuery,
+            LastModified: nowIso,
+            ReviewState: 'not_required',
+            ReviewedBy: payload.review?.reviewedBy ?? existingRun?.ReviewedBy ?? null,
+            ReviewedByIsSet: true,
+            LastReviewDecision: payload.review?.decision ?? null,
+            LastReviewDecisionIsSet: true,
+            LastReviewNotes: payload.review?.notes ?? null,
+            LastReviewNotesIsSet: true,
+            RetryCount: nextRetryCount,
+            RetryCountIsSet: true,
+            NextRetryAt: null,
+            NextRetryAtIsSet: true,
+            LastError: null,
+            LastErrorIsSet: true,
+            LastAttemptAt: attemptTimestamp,
+            LastAttemptAtIsSet: true
+          })
+        );
+        if (!updateResult?.changes) {
+          logger.warn?.('[agentic-service] Agentic run mark-running updated zero rows', {
+            artikelNummer: payload.artikelNummer
+          });
+          return false;
+        }
         logger.info?.('[agentic-service] Agentic run marked running prior to invocation', {
           artikelNummer: payload.artikelNummer,
           context: payload.context
         });
-      }
+        return true;
+      });
+      promoted = promoteTransaction();
     } catch (err) {
       const errorMessage = toErrorMessage(err);
       logger.error?.('[agentic-service] Failed to mark agentic run running prior to invocation', {
@@ -825,6 +840,11 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         searchQuery: payload.searchQuery,
         logger
       });
+      return;
+    }
+
+    if (!promoted) {
+      // The run was not promoted — leave it in queued state for the next dispatch cycle.
       return;
     }
 
@@ -1846,6 +1866,13 @@ export async function resumeStaleAgenticRuns(
     count: staleRuns.length
   });
 
+  // Respect concurrency cap: only schedule queued runs up to the number of available slots.
+  // Already-'running' runs (e.g. server crashed mid-run) get scheduled regardless because
+  // their slot was already counted — the atomic gate in runInBackground will re-verify.
+  const resumeRunningCount = fetchRunningCount(deps, logger);
+  const availableSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - resumeRunningCount);
+  let slotsUsed = 0;
+
   let resumed = 0;
   let skipped = 0;
   let failed = 0;
@@ -1859,6 +1886,20 @@ export async function resumeStaleAgenticRuns(
         status: run.Status
       });
       continue;
+    }
+
+    // Queued runs consume an available slot; skip if cap is already reached.
+    if (run.Status === AGENTIC_RUN_STATUS_QUEUED) {
+      if (slotsUsed >= availableSlots) {
+        skipped += 1;
+        logger.info?.('[agentic-service] Skipping queued stale run; no available slots at resume', {
+          artikelNummer: run.Artikel_Nummer,
+          slotsUsed,
+          availableSlots
+        });
+        continue;
+      }
+      slotsUsed += 1;
     }
 
     try {
