@@ -573,9 +573,7 @@ export default function BulkItemActionBar({
       return;
     }
 
-    const chosenAction = kiActionRef.current;
-
-    if (chosenAction === 'stop') {
+    if ((kiActionRef.current as KiAction) === 'stop') {
       // Stop: cancel only currently running runs; others are silently ignored.
       const actor = await ensureActorOrAlert({
         context: 'bulk agentic stop',
