@@ -5,6 +5,7 @@ import type { Item } from '../../../models';
 import LocationTag from './LocationTag';
 import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
+import ZubehoerBadge from './ZubehoerBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import type { GroupedItemDisplay } from '../lib/itemGrouping';
 import { logError, logger } from '../utils/logger';
@@ -130,6 +131,7 @@ export default function ItemList({
             <th className="col-stock optional-column">Anzahl</th>
             <th className="col-quality optional-column">Qualität</th>
             <th className="col-shop optional-column">Shop</th>
+            <th className="col-zubehoer optional-column">Zub.</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
           </tr>
         </thead>
@@ -243,6 +245,7 @@ export default function ItemList({
               : (typeof representative?.Quality === 'number' ? representative.Quality : null);
             const shopartikelValue = representative?.Shopartikel ?? null;
             const publishedStatusValue = representative?.Veröffentlicht_Status ?? null;
+            const zubehoerMode = (representative as any)?.ZubehoerMode ?? null;
 
             return (
               <tr
@@ -321,6 +324,9 @@ export default function ItemList({
                 </td>
                 <td className="col-shop optional-column">
                   <ShopBadge compact shopartikel={shopartikelValue} publishedStatus={publishedStatusValue} />
+                </td>
+                <td className="col-zubehoer optional-column">
+                  <ZubehoerBadge compact mode={zubehoerMode} />
                 </td>
                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
               </tr>

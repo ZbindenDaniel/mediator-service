@@ -111,6 +111,8 @@ export type ItemReferenceEdit = ItemRef;
 export type Item = ItemInstance & Partial<ItemRef> & {
   AgenticStatus?: AgenticRunStatus | null;
   AgenticReviewState?: string | null;
+  /** Derived from relation tables: 'connected' = instance relation exists, 'available' = ref-level compatibility only */
+  ZubehoerMode?: 'connected' | 'available' | null;
 };
 
 export interface GroupedItemSummary {

@@ -816,6 +816,51 @@ const ITEM_JOIN_BASE = `
 ensureItemTables(db);
 ensureItemImageNamesColumn(db);
 ensureItemSearchTermColumn(db);
+
+try {
+  db.exec(`
+CREATE TABLE IF NOT EXISTS item_ref_relations (
+  Id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  ParentArtikel_Nummer TEXT NOT NULL,
+  ChildArtikel_Nummer  TEXT NOT NULL,
+  RelationType         TEXT NOT NULL DEFAULT 'Zubehör',
+  Notes                TEXT,
+  CreatedAt            TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (ParentArtikel_Nummer, ChildArtikel_Nummer)
+);
+CREATE INDEX IF NOT EXISTS idx_item_ref_relations_parent ON item_ref_relations(ParentArtikel_Nummer);
+CREATE INDEX IF NOT EXISTS idx_item_ref_relations_child  ON item_ref_relations(ChildArtikel_Nummer);
+
+CREATE TABLE IF NOT EXISTS item_relations (
+  Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  ParentItemUUID TEXT NOT NULL,
+  ChildItemUUID  TEXT NOT NULL,
+  RelationType   TEXT NOT NULL DEFAULT 'Zubehör',
+  Notes          TEXT,
+  CreatedAt      TEXT NOT NULL DEFAULT (datetime('now')),
+  UpdatedAt      TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (ParentItemUUID, ChildItemUUID)
+);
+CREATE INDEX IF NOT EXISTS idx_item_relations_parent ON item_relations(ParentItemUUID);
+CREATE INDEX IF NOT EXISTS idx_item_relations_child  ON item_relations(ChildItemUUID);
+
+CREATE TABLE IF NOT EXISTS item_attachments (
+  Id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  ItemUUID  TEXT NOT NULL,
+  FileName  TEXT NOT NULL,
+  FilePath  TEXT NOT NULL,
+  MimeType  TEXT,
+  Label     TEXT,
+  FileSize  INTEGER,
+  CreatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_item_attachments_item ON item_attachments(ItemUUID);
+`);
+  console.info('[db] Accessory/attachment schema ensured');
+} catch (err) {
+  console.error('[db] Failed to create accessory/attachment schema', err);
+  throw err;
+}
 // TODO(agent): Keep shelf label joins aligned with box list payloads for location rendering.
 const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
   LEFT JOIN boxes b ON i.BoxID = b.BoxID
@@ -1084,7 +1129,13 @@ SELECT
   r.Einheit AS Einheit,
   r.EntityType AS EntityType,
   r.EAN AS EAN,
-  r.ShopwareProductId AS ShopwareProductId${extras}
+  r.ShopwareProductId AS ShopwareProductId,
+  CASE
+    WHEN EXISTS (SELECT 1 FROM item_relations ir WHERE ir.ChildItemUUID = i.ItemUUID) THEN 'connected'
+    WHEN i.Artikel_Nummer IS NOT NULL
+      AND EXISTS (SELECT 1 FROM item_ref_relations irr WHERE irr.ChildArtikel_Nummer = i.Artikel_Nummer) THEN 'available'
+    ELSE NULL
+  END AS ZubehoerMode${extras}
 `;
 }
 

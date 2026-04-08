@@ -880,6 +880,75 @@ const action = defineHttpAction({
           agenticReviewAutomation = null;
         }
 
+        // Relations: connected accessories (instance level) + compatible ref types (catalog level)
+        let connectedAccessories: unknown[] = [];
+        let connectedToDevices: unknown[] = [];
+        let compatibleAccessoryRefs: unknown[] = [];
+        let compatibleParentRefs: unknown[] = [];
+        let attachments: unknown[] = [];
+        try {
+          connectedAccessories = ctx.db.prepare(`
+            SELECT ir.Id, ir.ChildItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
+                   ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
+                   i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
+                   i.BoxID, i.Location
+            FROM item_relations ir
+            JOIN items i ON i.ItemUUID = ir.ChildItemUUID
+            LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+            WHERE ir.ParentItemUUID = ?
+            ORDER BY ir.CreatedAt
+          `).all(resolvedItemId) as unknown[];
+
+          connectedToDevices = ctx.db.prepare(`
+            SELECT ir.Id, ir.ParentItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
+                   ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
+                   i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
+                   i.BoxID, i.Location
+            FROM item_relations ir
+            JOIN items i ON i.ItemUUID = ir.ParentItemUUID
+            LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+            WHERE ir.ChildItemUUID = ?
+            ORDER BY ir.CreatedAt
+          `).all(resolvedItemId) as unknown[];
+
+          if (item.Artikel_Nummer) {
+            compatibleAccessoryRefs = ctx.db.prepare(`
+              SELECT irr.ChildArtikel_Nummer AS Artikel_Nummer,
+                     irr.RelationType, irr.Notes, irr.CreatedAt,
+                     r.Artikelbeschreibung, r.Kurzbeschreibung,
+                     (
+                       SELECT COUNT(*) FROM items i2
+                       WHERE i2.Artikel_Nummer = irr.ChildArtikel_Nummer
+                         AND i2.ItemUUID NOT IN (SELECT ChildItemUUID FROM item_relations)
+                     ) AS availableCount
+              FROM item_ref_relations irr
+              LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ChildArtikel_Nummer
+              WHERE irr.ParentArtikel_Nummer = ?
+              ORDER BY irr.CreatedAt
+            `).all(item.Artikel_Nummer) as unknown[];
+
+            compatibleParentRefs = ctx.db.prepare(`
+              SELECT irr.ParentArtikel_Nummer AS Artikel_Nummer,
+                     irr.RelationType, irr.Notes, irr.CreatedAt,
+                     r.Artikelbeschreibung, r.Kurzbeschreibung
+              FROM item_ref_relations irr
+              LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ParentArtikel_Nummer
+              WHERE irr.ChildArtikel_Nummer = ?
+              ORDER BY irr.CreatedAt
+            `).all(item.Artikel_Nummer) as unknown[];
+          }
+
+          attachments = ctx.db.prepare(`
+            SELECT Id, ItemUUID, FileName, FilePath, MimeType, Label, FileSize, CreatedAt
+            FROM item_attachments WHERE ItemUUID = ? ORDER BY CreatedAt DESC
+          `).all(resolvedItemId) as unknown[];
+        } catch (relationErr) {
+          console.error('[save-item] Failed to load relations/attachments for item detail', {
+            itemId,
+            error: relationErr
+          });
+        }
+
         let responsePayload: {
           item: Item;
           reference: ItemRef | null;
@@ -889,6 +958,11 @@ const action = defineHttpAction({
           agenticReviewAutomation: ItemDetailResponse['agenticReviewAutomation'];
           media: string[];
           instances: ItemInstanceSummary[];
+          connectedAccessories: unknown[];
+          connectedToDevices: unknown[];
+          compatibleAccessoryRefs: unknown[];
+          compatibleParentRefs: unknown[];
+          attachments: unknown[];
         };
         try {
           const responseItem =
@@ -903,7 +977,12 @@ const action = defineHttpAction({
             agentic,
             agenticReviewAutomation,
             media,
-            instances
+            instances,
+            connectedAccessories,
+            connectedToDevices,
+            compatibleAccessoryRefs,
+            compatibleParentRefs,
+            attachments
           };
         } catch (error) {
           console.error('[save-item] Failed to construct item detail response payload', {

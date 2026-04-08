@@ -85,6 +85,7 @@ import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
+import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
 import {
   buildNormalizedReviewSpecFields,
@@ -889,6 +890,293 @@ export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
   return AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedStatus);
 }
 
+// ── ZubehoerCard ─────────────────────────────────────────────────────────────
+
+interface ZubehoerCardProps {
+  itemUUID: string;
+  connectedAccessories: any[];
+  connectedToDevices: any[];
+  compatibleAccessoryRefs: any[];
+  compatibleParentRefs: any[];
+  onRelationChanged: () => void;
+}
+
+function ZubehoerCard({
+  itemUUID,
+  connectedAccessories,
+  connectedToDevices,
+  compatibleAccessoryRefs,
+  compatibleParentRefs,
+  onRelationChanged
+}: ZubehoerCardProps) {
+  const [linkInput, setLinkInput] = React.useState('');
+  const [linkPending, setLinkPending] = React.useState(false);
+  const [linkError, setLinkError] = React.useState<string | null>(null);
+
+  async function handleLink(e: React.FormEvent) {
+    e.preventDefault();
+    const uuid = linkInput.trim();
+    if (!uuid) return;
+    setLinkPending(true);
+    setLinkError(null);
+    try {
+      const res = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/relations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childItemUUID: uuid })
+      });
+      if (res.ok) {
+        setLinkInput('');
+        onRelationChanged();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setLinkError((err as any).error || 'Fehler beim Verknüpfen');
+      }
+    } catch {
+      setLinkError('Netzwerkfehler');
+    } finally {
+      setLinkPending(false);
+    }
+  }
+
+  async function handleUnlink(childItemUUID: string) {
+    try {
+      await fetch(`/api/item/${encodeURIComponent(itemUUID)}/relations/${encodeURIComponent(childItemUUID)}`, {
+        method: 'DELETE'
+      });
+      onRelationChanged();
+    } catch { /* noop */ }
+  }
+
+  const hasAny = connectedAccessories.length > 0 || connectedToDevices.length > 0
+    || compatibleAccessoryRefs.length > 0 || compatibleParentRefs.length > 0;
+
+  if (!hasAny && connectedAccessories.length === 0 && connectedToDevices.length === 0
+    && compatibleAccessoryRefs.length === 0 && compatibleParentRefs.length === 0) {
+    // Still show card so staff can link accessories
+  }
+
+  return (
+    <div className="card grid-span-2">
+      {connectedAccessories.length > 0 && (
+        <>
+          <h3>Verbundenes Zubehör ({connectedAccessories.length})</h3>
+          <table className="details">
+            <tbody>
+              {connectedAccessories.map((acc: any) => (
+                <tr key={acc.ItemUUID}>
+                  <td>
+                    <ZubehoerBadge mode="connected" compact />
+                  </td>
+                  <td>
+                    <Link to={`/items/${encodeURIComponent(acc.ItemUUID)}`}>
+                      {acc.Artikelbeschreibung || acc.Kurzbeschreibung || acc.Artikel_Nummer || acc.ItemUUID}
+                    </Link>
+                    {' '}<span className="muted">#{acc.ItemUUID}</span>
+                  </td>
+                  <td className="muted">{acc.RelationType}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="sml-btn btn"
+                      onClick={() => handleUnlink(acc.ItemUUID)}
+                    >
+                      Lösen
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {connectedToDevices.length > 0 && (
+        <>
+          <h3>Verbunden mit</h3>
+          <table className="details">
+            <tbody>
+              {connectedToDevices.map((dev: any) => (
+                <tr key={dev.ItemUUID}>
+                  <td>
+                    <Link to={`/items/${encodeURIComponent(dev.ItemUUID)}`}>
+                      {dev.Artikelbeschreibung || dev.Kurzbeschreibung || dev.Artikel_Nummer || dev.ItemUUID}
+                    </Link>
+                    {' '}<span className="muted">#{dev.ItemUUID}</span>
+                  </td>
+                  <td className="muted">{dev.RelationType}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {compatibleAccessoryRefs.length > 0 && (
+        <>
+          <h3>Passendes Zubehör (Artikeltypen)</h3>
+          <table className="details">
+            <tbody>
+              {compatibleAccessoryRefs.map((ref: any) => (
+                <tr key={ref.Artikel_Nummer}>
+                  <td>
+                    <ZubehoerBadge mode="available" compact />
+                  </td>
+                  <td>
+                    <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
+                      {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
+                    </Link>
+                  </td>
+                  <td className="muted">{ref.availableCount ?? 0} auf Lager</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {compatibleParentRefs.length > 0 && (
+        <>
+          <h3>Gehört zu (Artikeltyp)</h3>
+          <table className="details">
+            <tbody>
+              {compatibleParentRefs.map((ref: any) => (
+                <tr key={ref.Artikel_Nummer}>
+                  <td>
+                    {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
+                  </td>
+                  <td className="muted">{ref.RelationType}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      <h3>
+        {connectedAccessories.length > 0
+          ? `Weiteres Zubehör verknüpfen`
+          : `Zubehör verknüpfen`}
+      </h3>
+      <form onSubmit={handleLink} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder="ItemUUID des Zubehörs"
+          value={linkInput}
+          onChange={(e) => setLinkInput(e.target.value)}
+          style={{ flex: 1, minWidth: '200px' }}
+          disabled={linkPending}
+        />
+        <button type="submit" className="btn" disabled={linkPending || !linkInput.trim()}>
+          {linkPending ? '…' : 'Verbinden'}
+        </button>
+      </form>
+      {linkError && <p className="muted" style={{ color: 'var(--color-error, #d73a49)', marginTop: '4px' }}>{linkError}</p>}
+    </div>
+  );
+}
+
+// ── AttachmentsCard ───────────────────────────────────────────────────────────
+
+interface AttachmentsCardProps {
+  itemUUID: string;
+  attachments: any[];
+  onChanged: (next: any[]) => void;
+}
+
+function AttachmentsCard({ itemUUID, attachments, onChanged }: AttachmentsCardProps) {
+  const [uploading, setUploading] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const res = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-Filename': file.name
+        },
+        body: file
+      });
+      if (res.ok) {
+        const listRes = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`);
+        if (listRes.ok) {
+          const data = await listRes.json();
+          onChanged(Array.isArray(data.attachments) ? data.attachments : []);
+        }
+      }
+    } catch { /* noop */ } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function handleDelete(id: number) {
+    await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments/${id}`, { method: 'DELETE' });
+    onChanged(attachments.filter((a: any) => a.Id !== id));
+  }
+
+  function formatBytes(bytes: number | null): string {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return (
+    <div className="card grid-span-2">
+      <h3>Anhänge ({attachments.length})</h3>
+      {attachments.length > 0 && (
+        <table className="details">
+          <tbody>
+            {attachments.map((att: any) => (
+              <tr key={att.Id}>
+                <td>
+                  <a
+                    href={`/media/${att.FilePath}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {att.Label || att.FileName}
+                  </a>
+                </td>
+                <td className="muted">{att.MimeType || ''}</td>
+                <td className="muted">{formatBytes(att.FileSize)}</td>
+                <td className="muted">{att.CreatedAt ? att.CreatedAt.slice(0, 10) : ''}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="sml-btn btn"
+                    onClick={() => handleDelete(att.Id)}
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div style={{ marginTop: '8px' }}>
+        <input
+          ref={fileRef}
+          type="file"
+          onChange={handleUpload}
+          disabled={uploading}
+          style={{ display: 'none' }}
+          id={`attachment-upload-${itemUUID}`}
+        />
+        <label htmlFor={`attachment-upload-${itemUUID}`} className="btn" style={{ cursor: 'pointer' }}>
+          {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
+        </label>
+      </div>
+    </div>
+  );
+}
+
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -917,6 +1205,11 @@ export default function ItemDetail({ itemId }: Props) {
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [isMediaSaving, setIsMediaSaving] = useState(false);
   const [instances, setInstances] = useState<ItemInstanceSummary[]>([]);
+  const [connectedAccessories, setConnectedAccessories] = useState<any[]>([]);
+  const [connectedToDevices, setConnectedToDevices] = useState<any[]>([]);
+  const [compatibleAccessoryRefs, setCompatibleAccessoryRefs] = useState<any[]>([]);
+  const [compatibleParentRefs, setCompatibleParentRefs] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -1680,6 +1973,11 @@ export default function ItemDetail({ itemId }: Props) {
           : [];
         setMediaAssets(media);
         setInstances(normalizeInstanceList(data.instances));
+        setConnectedAccessories(Array.isArray((data as any).connectedAccessories) ? (data as any).connectedAccessories : []);
+        setConnectedToDevices(Array.isArray((data as any).connectedToDevices) ? (data as any).connectedToDevices : []);
+        setCompatibleAccessoryRefs(Array.isArray((data as any).compatibleAccessoryRefs) ? (data as any).compatibleAccessoryRefs : []);
+        setCompatibleParentRefs(Array.isArray((data as any).compatibleParentRefs) ? (data as any).compatibleParentRefs : []);
+        setAttachments(Array.isArray((data as any).attachments) ? (data as any).attachments : []);
         setAgenticError(null);
         setAgenticReviewIntent(null);
         setLoadError(null);
@@ -3196,6 +3494,18 @@ export default function ItemDetail({ itemId }: Props) {
                     publishedStatus={item.Veröffentlicht_Status ?? null}
                   />
                 </span>
+                <span style={{ marginLeft: '4px' }}>
+                  <ZubehoerBadge
+                    compact
+                    mode={
+                      connectedToDevices.length > 0
+                        ? 'connected'
+                        : compatibleParentRefs.length > 0
+                          ? 'available'
+                          : null
+                    }
+                  />
+                </span>
               </h2>
               <h3>Referenz</h3>
               {referenceDetailRows.length > 0 ? (
@@ -3508,6 +3818,36 @@ export default function ItemDetail({ itemId }: Props) {
             ) : null}
 
             <PrintLabelButton itemId={item.ItemUUID} />
+
+            <ZubehoerCard
+              itemUUID={item.ItemUUID}
+              connectedAccessories={connectedAccessories}
+              connectedToDevices={connectedToDevices}
+              compatibleAccessoryRefs={compatibleAccessoryRefs}
+              compatibleParentRefs={compatibleParentRefs}
+              onRelationChanged={() => {
+                // Re-fetch to refresh relation data
+                setConnectedAccessories([]);
+                setConnectedToDevices([]);
+                setCompatibleAccessoryRefs([]);
+                setCompatibleParentRefs([]);
+                fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}`)
+                  .then((r) => r.json())
+                  .then((d: any) => {
+                    setConnectedAccessories(Array.isArray(d.connectedAccessories) ? d.connectedAccessories : []);
+                    setConnectedToDevices(Array.isArray(d.connectedToDevices) ? d.connectedToDevices : []);
+                    setCompatibleAccessoryRefs(Array.isArray(d.compatibleAccessoryRefs) ? d.compatibleAccessoryRefs : []);
+                    setCompatibleParentRefs(Array.isArray(d.compatibleParentRefs) ? d.compatibleParentRefs : []);
+                  })
+                  .catch(() => {});
+              }}
+            />
+
+            <AttachmentsCard
+              itemUUID={item.ItemUUID}
+              attachments={attachments}
+              onChanged={(next) => setAttachments(next)}
+            />
 
             <div className="card grid-span-2">
               <h3>Aktivitäten</h3>

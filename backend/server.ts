@@ -667,11 +667,15 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       try {
         const data = fs.readFileSync(selected.filePath);
         const ext = path.extname(selected.filePath).toLowerCase();
-        const ct = ext === '.png'
-          ? 'image/png'
-          : ext === '.jpg' || ext === '.jpeg'
-            ? 'image/jpeg'
-            : 'application/octet-stream';
+        const ct = ext === '.png' ? 'image/png'
+          : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+          : ext === '.gif' ? 'image/gif'
+          : ext === '.webp' ? 'image/webp'
+          : ext === '.pdf' ? 'application/pdf'
+          : ext === '.svg' ? 'image/svg+xml'
+          : ext === '.txt' ? 'text/plain; charset=utf-8'
+          : ext === '.json' ? 'application/json'
+          : 'application/octet-stream';
         console.info('[media] Served media file from configured root', {
           requestedPath: safeRelativePath,
           servedFromRoot: selected.root,
