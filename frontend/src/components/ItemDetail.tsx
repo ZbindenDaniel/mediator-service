@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
+import RefSearchInput, { RefSuggestion } from './RefSearchInput';
 // TODO(agent): Validate instance navigation UX once instance detail reload behavior is reviewed.
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 // TODO(agent): Confirm instance inventory ordering requirements once detail UI feedback arrives.
@@ -894,6 +895,7 @@ export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
 
 interface ZubehoerCardProps {
   itemUUID: string;
+  artikelNummer?: string | null;
   connectedAccessories: any[];
   connectedToDevices: any[];
   compatibleAccessoryRefs: any[];
@@ -903,6 +905,7 @@ interface ZubehoerCardProps {
 
 function ZubehoerCard({
   itemUUID,
+  artikelNummer,
   connectedAccessories,
   connectedToDevices,
   compatibleAccessoryRefs,
@@ -912,6 +915,81 @@ function ZubehoerCard({
   const [linkInput, setLinkInput] = React.useState('');
   const [linkPending, setLinkPending] = React.useState(false);
   const [linkError, setLinkError] = React.useState<string | null>(null);
+
+  // Local state for ref-level relations (optimistic updates)
+  const [localCompatRefs, setLocalCompatRefs] = React.useState<any[]>(compatibleAccessoryRefs);
+  const [localParentRefs, setLocalParentRefs] = React.useState<any[]>(compatibleParentRefs);
+  const [refPending, setRefPending] = React.useState(false);
+  const [refError, setRefError] = React.useState<string | null>(null);
+
+  React.useEffect(() => { setLocalCompatRefs(compatibleAccessoryRefs); }, [compatibleAccessoryRefs]);
+  React.useEffect(() => { setLocalParentRefs(compatibleParentRefs); }, [compatibleParentRefs]);
+
+  async function handleAddCompatRef(ref: RefSuggestion) {
+    if (!artikelNummer) return;
+    setRefPending(true);
+    setRefError(null);
+    try {
+      const res = await fetch(`/api/ref/${encodeURIComponent(artikelNummer)}/relations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childArtikelNummer: ref.Artikel_Nummer })
+      });
+      if (res.ok) {
+        setLocalCompatRefs((prev) => [...prev, { ...ref, availableCount: 0 }]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setRefError((err as any).error || 'Fehler beim Hinzufügen');
+      }
+    } catch {
+      setRefError('Netzwerkfehler');
+    } finally {
+      setRefPending(false);
+    }
+  }
+
+  async function handleRemoveCompatRef(childArtikelNummer: string) {
+    if (!artikelNummer) return;
+    try {
+      await fetch(`/api/ref/${encodeURIComponent(artikelNummer)}/relations/${encodeURIComponent(childArtikelNummer)}`, {
+        method: 'DELETE'
+      });
+      setLocalCompatRefs((prev) => prev.filter((r) => r.Artikel_Nummer !== childArtikelNummer));
+    } catch { /* noop */ }
+  }
+
+  async function handleAddParentRef(ref: RefSuggestion) {
+    if (!artikelNummer) return;
+    setRefPending(true);
+    setRefError(null);
+    try {
+      const res = await fetch(`/api/ref/${encodeURIComponent(ref.Artikel_Nummer)}/relations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childArtikelNummer: artikelNummer })
+      });
+      if (res.ok) {
+        setLocalParentRefs((prev) => [...prev, { ...ref }]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setRefError((err as any).error || 'Fehler beim Hinzufügen');
+      }
+    } catch {
+      setRefError('Netzwerkfehler');
+    } finally {
+      setRefPending(false);
+    }
+  }
+
+  async function handleRemoveParentRef(parentArtikelNummer: string) {
+    if (!artikelNummer) return;
+    try {
+      await fetch(`/api/ref/${encodeURIComponent(parentArtikelNummer)}/relations/${encodeURIComponent(artikelNummer)}`, {
+        method: 'DELETE'
+      });
+      setLocalParentRefs((prev) => prev.filter((r) => r.Artikel_Nummer !== parentArtikelNummer));
+    } catch { /* noop */ }
+  }
 
   async function handleLink(e: React.FormEvent) {
     e.preventDefault();
@@ -1012,44 +1090,93 @@ function ZubehoerCard({
         </>
       )}
 
-      {compatibleAccessoryRefs.length > 0 && (
+      {(artikelNummer || localCompatRefs.length > 0) && (
         <>
           <h3>Passendes Zubehör (Artikeltypen)</h3>
-          <table className="details">
-            <tbody>
-              {compatibleAccessoryRefs.map((ref: any) => (
-                <tr key={ref.Artikel_Nummer}>
-                  <td>
-                    <ZubehoerBadge mode="available" compact />
-                  </td>
-                  <td>
-                    <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
-                      {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
-                    </Link>
-                  </td>
-                  <td className="muted">{ref.availableCount ?? 0} auf Lager</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {localCompatRefs.length > 0 && (
+            <table className="details">
+              <tbody>
+                {localCompatRefs.map((ref: any) => (
+                  <tr key={ref.Artikel_Nummer}>
+                    <td>
+                      <ZubehoerBadge mode="available" compact />
+                    </td>
+                    <td>
+                      <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
+                        {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
+                      </Link>
+                    </td>
+                    <td className="muted">{ref.availableCount ?? 0} auf Lager</td>
+                    {artikelNummer && (
+                      <td>
+                        <button
+                          type="button"
+                          className="sml-btn btn"
+                          onClick={() => handleRemoveCompatRef(ref.Artikel_Nummer)}
+                          title="Kompatibilität entfernen"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {artikelNummer && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '8px' }}>
+              <RefSearchInput
+                placeholder="Artikeltyp als Zubehör hinzufügen…"
+                disabled={refPending}
+                onSelected={handleAddCompatRef}
+              />
+              {refError && <span className="muted" style={{ color: 'var(--color-error, #d73a49)', alignSelf: 'center' }}>{refError}</span>}
+            </div>
+          )}
         </>
       )}
 
-      {compatibleParentRefs.length > 0 && (
+      {(artikelNummer || localParentRefs.length > 0) && (
         <>
           <h3>Gehört zu (Artikeltyp)</h3>
-          <table className="details">
-            <tbody>
-              {compatibleParentRefs.map((ref: any) => (
-                <tr key={ref.Artikel_Nummer}>
-                  <td>
-                    {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
-                  </td>
-                  <td className="muted">{ref.RelationType}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {localParentRefs.length > 0 && (
+            <table className="details">
+              <tbody>
+                {localParentRefs.map((ref: any) => (
+                  <tr key={ref.Artikel_Nummer}>
+                    <td>
+                      <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
+                        {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
+                      </Link>
+                    </td>
+                    <td className="muted">{ref.RelationType}</td>
+                    {artikelNummer && (
+                      <td>
+                        <button
+                          type="button"
+                          className="sml-btn btn"
+                          onClick={() => handleRemoveParentRef(ref.Artikel_Nummer)}
+                          title="Zugehörigkeit entfernen"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {artikelNummer && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '8px' }}>
+              <RefSearchInput
+                placeholder="Gerät hinzufügen, zu dem dieses Zubehör gehört…"
+                disabled={refPending}
+                onSelected={handleAddParentRef}
+              />
+            </div>
+          )}
         </>
       )}
 
@@ -3821,6 +3948,7 @@ export default function ItemDetail({ itemId }: Props) {
 
             <ZubehoerCard
               itemUUID={item.ItemUUID}
+              artikelNummer={item.Artikel_Nummer ?? null}
               connectedAccessories={connectedAccessories}
               connectedToDevices={connectedToDevices}
               compatibleAccessoryRefs={compatibleAccessoryRefs}
