@@ -978,7 +978,7 @@ function ZubehoerCard({
                   <td>
                     <button
                       type="button"
-                      className="sml-btn btn"
+                      className="btn"
                       onClick={() => handleUnlink(acc.ItemUUID)}
                     >
                       Lösen
@@ -1169,9 +1169,9 @@ function AttachmentsCard({ itemUUID, attachments, onChanged }: AttachmentsCardPr
           style={{ display: 'none' }}
           id={`attachment-upload-${itemUUID}`}
         />
-        <label htmlFor={`attachment-upload-${itemUUID}`} className="btn" style={{ cursor: 'pointer' }}>
+        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
           {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
-        </label>
+        </button>
       </div>
     </div>
   );
