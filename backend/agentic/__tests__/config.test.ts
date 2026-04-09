@@ -5,22 +5,23 @@ describe('agentic config environment resolution', () => {
   const managedKeys = [
     'AGENTIC_MODEL_PROVIDER',
     'MODEL_PROVIDER',
+    'MODEL_BASE_URL',
+    'AGENTIC_MODEL_BASE_URL',
     'AGENTIC_OLLAMA_BASE_URL',
     'OLLAMA_BASE_URL',
-    'AGENTIC_OLLAMA_MODEL',
-    'OLLAMA_MODEL',
-    'AGENTIC_OPENAI_API_KEY',
-    'OPENAI_API_KEY',
     'AGENTIC_OPENAI_BASE_URL',
     'OPENAI_BASE_URL',
+    'MODEL_NAME',
+    'AGENTIC_MODEL_NAME',
+    'AGENTIC_OLLAMA_MODEL',
+    'OLLAMA_MODEL',
     'AGENTIC_OPENAI_MODEL',
     'OPENAI_MODEL',
-    'AGENTIC_MODEL_BASE_URL',
-    'MODEL_BASE_URL',
-    'AGENTIC_MODEL_NAME',
-    'MODEL_NAME',
-    'AGENTIC_MODEL_API_KEY',
     'MODEL_API_KEY',
+    'AGENTIC_MODEL_API_KEY',
+    'AGENTIC_OPENAI_API_KEY',
+    'OPENAI_API_KEY',
+    'VISION_MODEL_NAME',
     'SHOPWARE_BASE_URL',
     'SHOPWARE_CLIENT_ID',
     'SHOPWARE_CLIENT_SECRET',
@@ -28,7 +29,6 @@ describe('agentic config environment resolution', () => {
     'SHOPWARE_ACCESS_TOKEN',
     'SHOPWARE_SALES_CHANNEL',
     'SHOPWARE_SALES_CHANNEL_ID',
-    'AGENTIC_SEARCH_MAX_AGENT_QUERIES_PER_REQUEST',
     'SEARCH_MAX_AGENT_QUERIES_PER_REQUEST'
   ];
 
@@ -53,7 +53,7 @@ describe('agentic config environment resolution', () => {
     process.env = baselineEnv;
   });
 
-  it('loads prefixed configuration when only AGENTIC_* keys are provided', () => {
+  it('loads prefixed AGENTIC_OLLAMA_* keys into flat modelConfig', () => {
     process.env.AGENTIC_MODEL_PROVIDER = 'ollama';
     process.env.AGENTIC_OLLAMA_BASE_URL = 'http://ollama-pref.example.com';
     process.env.AGENTIC_OLLAMA_MODEL = 'llama3';
@@ -61,11 +61,11 @@ describe('agentic config environment resolution', () => {
     const { modelConfig } = loadConfig();
 
     expect(modelConfig.provider).toBe('ollama');
-    expect(modelConfig.ollama.baseUrl).toBe('http://ollama-pref.example.com');
-    expect(modelConfig.ollama.model).toBe('llama3');
+    expect(modelConfig.baseUrl).toBe('http://ollama-pref.example.com');
+    expect(modelConfig.textModel).toBe('llama3');
   });
 
-  it('falls back to legacy keys when prefixed values are absent', () => {
+  it('falls back to legacy OPENAI_* keys', () => {
     process.env.MODEL_PROVIDER = 'openai';
     process.env.OPENAI_BASE_URL = 'https://legacy.openai.example.com';
     process.env.OPENAI_MODEL = 'gpt-3.5-turbo';
@@ -74,32 +74,47 @@ describe('agentic config environment resolution', () => {
     const { modelConfig } = loadConfig();
 
     expect(modelConfig.provider).toBe('openai');
-    expect(modelConfig.openai.baseUrl).toBe('https://legacy.openai.example.com');
-    expect(modelConfig.openai.model).toBe('gpt-3.5-turbo');
-    expect(modelConfig.openai.apiKey).toBe('legacy-key');
+    expect(modelConfig.baseUrl).toBe('https://legacy.openai.example.com');
+    expect(modelConfig.textModel).toBe('gpt-3.5-turbo');
+    expect(modelConfig.apiKey).toBe('legacy-key');
   });
 
-  it('prefers prefixed keys over legacy values when both are set', () => {
+  it('prefers canonical MODEL_* keys over legacy aliases when both are set', () => {
     process.env.AGENTIC_MODEL_PROVIDER = 'openai';
     process.env.MODEL_PROVIDER = 'ollama';
-    process.env.AGENTIC_OPENAI_BASE_URL = 'https://new.openai.example.com';
-    process.env.OPENAI_BASE_URL = 'https://old.openai.example.com';
+    process.env.MODEL_BASE_URL = 'https://new.example.com';
+    process.env.OPENAI_BASE_URL = 'https://old.example.com';
 
     const { modelConfig } = loadConfig();
 
     expect(modelConfig.provider).toBe('openai');
-    expect(modelConfig.openai.baseUrl).toBe('https://new.openai.example.com');
+    expect(modelConfig.baseUrl).toBe('https://new.example.com');
   });
 
-  it('reuses shared MODEL_* fallbacks when provider-specific keys are missing', () => {
+  it('resolves AGENTIC_MODEL_BASE_URL and AGENTIC_MODEL_NAME as shared fallbacks', () => {
     process.env.AGENTIC_MODEL_PROVIDER = 'ollama';
     process.env.AGENTIC_MODEL_BASE_URL = 'http://generic-base.example.com';
     process.env.AGENTIC_MODEL_NAME = 'generic-model';
 
     const { modelConfig } = loadConfig();
 
-    expect(modelConfig.ollama.baseUrl).toBe('http://generic-base.example.com');
-    expect(modelConfig.ollama.model).toBe('generic-model');
+    expect(modelConfig.baseUrl).toBe('http://generic-base.example.com');
+    expect(modelConfig.textModel).toBe('generic-model');
+  });
+
+  it('reads VISION_MODEL_NAME into modelConfig.visionModel', () => {
+    process.env.AGENTIC_MODEL_PROVIDER = 'ollama';
+    process.env.VISION_MODEL_NAME = 'llava:13b';
+
+    const { modelConfig } = loadConfig();
+
+    expect(modelConfig.visionModel).toBe('llava:13b');
+  });
+
+  it('leaves visionModel undefined when VISION_MODEL_NAME is absent', () => {
+    const { modelConfig } = loadConfig();
+
+    expect(modelConfig.visionModel).toBeUndefined();
   });
 
   it('defaults provider to ollama when neither key is provided', () => {
@@ -107,7 +122,6 @@ describe('agentic config environment resolution', () => {
 
     expect((modelConfig as AgenticModelConfig).provider).toBe('ollama');
   });
-
 
   it('defaults SEARCH_MAX_AGENT_QUERIES_PER_REQUEST to 3 when unset', () => {
     const { searchLimits } = loadConfig();

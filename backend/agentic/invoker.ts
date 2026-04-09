@@ -41,10 +41,6 @@ export interface AgenticModelInvokerOptions {
   logger?: AgenticModelInvokerLogger;
 }
 
-interface ChatModelFactory {
-  (): Promise<ChatModel>;
-}
-
 function normalizeNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -320,7 +316,7 @@ export class AgenticModelInvoker {
   private readonly logger: AgenticModelInvokerLogger;
   private readonly searchClient: TavilySearchClient;
   private chatModel?: ChatModel;
-  private chatModelFactory?: ChatModelFactory;
+  private visionChatModel?: ChatModel;
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
   private readonly persistAgenticRunError: (artikelNummer: string, errorMessage: string, attemptAt?: string) => void;
   // TODO(agentic-examples): Re-evaluate reviewed-example decision source if review lifecycle stores a dedicated final-decision field again.
@@ -448,101 +444,101 @@ export class AgenticModelInvoker {
     };
   }
 
-  private async loadOllamaModel(): Promise<ChatModel> {
-    try {
-      const module = await import('@langchain/ollama');
-      const ChatOllama = module.ChatOllama;
-      if (typeof ChatOllama !== 'function') {
-        throw new Error('ChatOllama constructor unavailable');
-      }
-      const client = new ChatOllama({
-        baseUrl: modelConfig.ollama.baseUrl,
-        model: modelConfig.ollama.model
-      });
-      const rawInvoke = (client as {
-        invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
-      }).invoke;
-      if (typeof rawInvoke !== 'function') {
-        const err = new Error('ChatOllama instance missing invoke method');
-        this.logger.error?.({ err, msg: 'ollama client missing invoke method' });
-        throw err;
-      }
-      const adapter = {
-        async invoke(messages: Array<{ role: string; content: unknown }>) {
-          const response = await rawInvoke.call(client, messages);
-          return { content: response?.content };
+  /** Load a model for the configured provider using the shared API settings and the given model name. */
+  private async loadModel(modelName: string | undefined): Promise<ChatModel> {
+    if (modelConfig.provider === 'ollama') {
+      try {
+        const module = await import('@langchain/ollama');
+        const ChatOllama = module.ChatOllama;
+        if (typeof ChatOllama !== 'function') {
+          throw new Error('ChatOllama constructor unavailable');
         }
-      } satisfies ChatModel;
-      return adapter;
-    } catch (err) {
-      this.logger.error?.({ err, msg: 'ollama provider requested but dependency unavailable' });
-      throw new FlowError(
-        'OLLAMA_UNAVAILABLE',
-        'Ollama provider requires the optional "@langchain/ollama" package to be installed.',
-        500,
-        { cause: err }
-      );
+        const client = new ChatOllama({
+          baseUrl: modelConfig.baseUrl,
+          model: modelName
+        });
+        const rawInvoke = (client as {
+          invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
+        }).invoke;
+        if (typeof rawInvoke !== 'function') {
+          const err = new Error('ChatOllama instance missing invoke method');
+          this.logger.error?.({ err, msg: 'ollama client missing invoke method' });
+          throw err;
+        }
+        return {
+          async invoke(messages) {
+            const response = await rawInvoke.call(client, messages);
+            return { content: response?.content };
+          }
+        } satisfies ChatModel;
+      } catch (err) {
+        this.logger.error?.({ err, msg: 'ollama provider requested but dependency unavailable' });
+        throw new FlowError(
+          'OLLAMA_UNAVAILABLE',
+          'Ollama provider requires the optional "@langchain/ollama" package to be installed.',
+          500,
+          { cause: err }
+        );
+      }
     }
-  }
 
-  private async loadOpenAIModel(): Promise<ChatModel> {
-    try {
-      const module = await import('@langchain/openai');
-      const ChatOpenAI = module.ChatOpenAI;
-      if (typeof ChatOpenAI !== 'function') {
-        throw new Error('ChatOpenAI constructor unavailable');
-      }
-      const configuration = modelConfig.openai.baseUrl
-        ? { baseURL: modelConfig.openai.baseUrl }
-        : undefined;
-      const client = new ChatOpenAI({
-        apiKey: modelConfig.openai.apiKey,
-        model: modelConfig.openai.model,
-        ...(configuration ? { configuration } : {})
-      });
-      const rawInvoke = (client as {
-        invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
-      }).invoke;
-      if (typeof rawInvoke !== 'function') {
-        const err = new Error('ChatOpenAI instance missing invoke method');
-        this.logger.error?.({ err, msg: 'openai client missing invoke method' });
-        throw err;
-      }
-      const adapter = {
-        async invoke(messages: Array<{ role: string; content: unknown }>) {
-          const response = await rawInvoke.call(client, messages);
-          return { content: response?.content };
+    if (modelConfig.provider === 'openai') {
+      try {
+        const module = await import('@langchain/openai');
+        const ChatOpenAI = module.ChatOpenAI;
+        if (typeof ChatOpenAI !== 'function') {
+          throw new Error('ChatOpenAI constructor unavailable');
         }
-      } satisfies ChatModel;
-      return adapter;
-    } catch (err) {
-      this.logger.error?.({ err, msg: 'openai provider requested but dependency unavailable' });
-      throw new FlowError(
-        'OPENAI_UNAVAILABLE',
-        'OpenAI provider requires the optional "@langchain/openai" package to be installed.',
-        500,
-        { cause: err }
-      );
+        const configuration = modelConfig.baseUrl ? { baseURL: modelConfig.baseUrl } : undefined;
+        const client = new ChatOpenAI({
+          apiKey: modelConfig.apiKey,
+          model: modelName,
+          ...(configuration ? { configuration } : {})
+        });
+        const rawInvoke = (client as {
+          invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
+        }).invoke;
+        if (typeof rawInvoke !== 'function') {
+          const err = new Error('ChatOpenAI instance missing invoke method');
+          this.logger.error?.({ err, msg: 'openai client missing invoke method' });
+          throw err;
+        }
+        return {
+          async invoke(messages) {
+            const response = await rawInvoke.call(client, messages);
+            return { content: response?.content };
+          }
+        } satisfies ChatModel;
+      } catch (err) {
+        this.logger.error?.({ err, msg: 'openai provider requested but dependency unavailable' });
+        throw new FlowError(
+          'OPENAI_UNAVAILABLE',
+          'OpenAI provider requires the optional "@langchain/openai" package to be installed.',
+          500,
+          { cause: err }
+        );
+      }
     }
+
+    throw new FlowError('MODEL_PROVIDER_UNSUPPORTED', `Unsupported model provider: ${modelConfig.provider}`, 500);
   }
 
   private async ensureChatModel(): Promise<ChatModel> {
     if (this.chatModel) {
       return this.chatModel;
     }
-
-    if (!this.chatModelFactory) {
-      if (modelConfig.provider === 'ollama') {
-        this.chatModelFactory = () => this.loadOllamaModel();
-      } else if (modelConfig.provider === 'openai') {
-        this.chatModelFactory = () => this.loadOpenAIModel();
-      } else {
-        throw new FlowError('MODEL_PROVIDER_UNSUPPORTED', `Unsupported model provider: ${modelConfig.provider}`, 500);
-      }
-    }
-
-    this.chatModel = await this.chatModelFactory();
+    this.chatModel = await this.loadModel(modelConfig.textModel);
     return this.chatModel;
+  }
+
+  private async ensureVisionChatModel(): Promise<ChatModel> {
+    if (this.visionChatModel) {
+      return this.visionChatModel;
+    }
+    // Use the dedicated vision model when configured; fall back to the text model.
+    const modelName = modelConfig.visionModel ?? modelConfig.textModel;
+    this.visionChatModel = await this.loadModel(modelName);
+    return this.visionChatModel;
   }
 
   private async loadItemTarget(itemId: string): Promise<Record<string, unknown>> {
@@ -807,6 +803,7 @@ export class AgenticModelInvoker {
       // Ensure target is typed as AgenticTarget for downstream usage
       const typedTarget: AgenticTarget = target as AgenticTarget;
       const llm = await this.ensureChatModel();
+      const visionLlm = await this.ensureVisionChatModel();
       const searchInvoker = this.ensureSearchInvoker();
 
       let exampleItemBlock: string | null = STATIC_EXAMPLE_ITEM_BLOCK;
@@ -831,10 +828,12 @@ export class AgenticModelInvoker {
           missingSpecFields: normalizedMissingSpecFields,
           unneededSpecFields: normalizedUnneededSpecFields,
           skipSearch,
-          exampleItemBlock
+          exampleItemBlock,
+          imageData: input.imageData ?? null
         },
         {
           llm,
+          visionLlm,
           logger: this.logger,
           searchInvoker: async (query, limit, metadata) => {
             const result = await searchInvoker(query, limit);

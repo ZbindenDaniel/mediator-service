@@ -28,4 +28,12 @@
     3. Only one fallback variant if the first two query shapes fail to cover required missing fields.
   - Do not force `site:` filters or source-domain constraints when constructing queries.
   - Omit any explanations outside the JSON response.
+  - When `deviceLabelText` is present in the input: it contains text extracted directly from a
+    device nameplate or label photographed by the user (manufacturer name, model/type designation,
+    part number, order number, technical ratings). Treat it as a high-confidence identification
+    source that is more precise than the generic `searchTerm`. When `deviceLabelText` is present:
+    1. Base your primary search query on the most specific identifier in the label text
+       (type code, order number, or manufacturer + model combination).
+    2. Use `searchTerm` only as a fallback or to fill remaining query slots.
+    3. Do not repeat the same identifier across multiple plans.
 </rules>

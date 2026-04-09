@@ -58,7 +58,7 @@ async function loadChatModel(logger: ChatFlowLogger): Promise<ChatModel> {
       if (!ChatOllama) {
         throw new Error('ChatOllama constructor missing');
       }
-      const client = new ChatOllama({ baseUrl: modelConfig.ollama.baseUrl, model: modelConfig.ollama.model });
+      const client = new ChatOllama({ baseUrl: modelConfig.baseUrl, model: modelConfig.textModel });
       return {
         async invoke(messages) {
           const response = await client.invoke(messages);
@@ -82,10 +82,10 @@ async function loadChatModel(logger: ChatFlowLogger): Promise<ChatModel> {
       if (!ChatOpenAI) {
         throw new Error('ChatOpenAI constructor missing');
       }
-      const configuration = modelConfig.openai.baseUrl ? { baseURL: modelConfig.openai.baseUrl } : undefined;
+      const configuration = modelConfig.baseUrl ? { baseURL: modelConfig.baseUrl } : undefined;
       const client = new ChatOpenAI({
-        apiKey: modelConfig.openai.apiKey,
-        model: modelConfig.openai.model,
+        apiKey: modelConfig.apiKey,
+        model: modelConfig.textModel,
         ...(configuration ? { configuration } : {})
       });
       return {

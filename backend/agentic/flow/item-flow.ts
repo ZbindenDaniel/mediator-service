@@ -14,6 +14,7 @@ import {
   type SearchInvokerMetadata
 } from './item-flow-search';
 import { runExtractionAttempts, type ChatModel, type ExtractionLogger } from './item-flow-extraction';
+import { runOcrExtraction } from './item-flow-ocr';
 import { searchShopwareRaw, isShopwareConfigured, type ShopwareSearchResult } from '../tools/shopware';
 import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
@@ -77,6 +78,7 @@ export interface ItemFlowLogger extends ExtractionLogger {
 
 export interface ItemFlowDependencies {
   llm: ChatModel;
+  visionLlm?: ChatModel;
   correctionLlm?: ChatModel;
   logger?: ItemFlowLogger;
   searchInvoker: SearchInvoker;
@@ -101,6 +103,7 @@ export interface RunItemFlowInput {
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
   exampleItemBlock?: string | null;
+  imageData?: string | null;
 }
 
 // TODO(agent): Revisit target guard expectations once agentic callers provide strict typing.
@@ -312,6 +315,19 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
+    let deviceLabelText: string | null = null;
+    if (input.imageData) {
+      try {
+        const ocrResult = await runOcrExtraction({ llm: deps.visionLlm ?? deps.llm, imageData: input.imageData, logger });
+        deviceLabelText = ocrResult?.text ?? null;
+        if (deviceLabelText) {
+          logger.info?.({ msg: 'OCR label extraction succeeded', itemId, chars: deviceLabelText.length });
+        }
+      } catch (err) {
+        logger.warn?.({ err, msg: 'OCR label extraction failed; continuing without label context', itemId });
+      }
+    }
+
     const missingSchemaFields = identifyMissingSchemaFields(target);
 
     // TODO(agent): Feed planner gating outcomes into telemetry once available.
@@ -329,6 +345,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
           reviewerNotes: reviewerNotes ?? '',
           target,
           missingFields: missingSchemaFields,
+          deviceLabelText,
           logger
         });
         checkCancellation();
