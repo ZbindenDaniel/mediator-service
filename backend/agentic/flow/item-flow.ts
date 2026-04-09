@@ -78,6 +78,7 @@ export interface ItemFlowLogger extends ExtractionLogger {
 
 export interface ItemFlowDependencies {
   llm: ChatModel;
+  visionLlm?: ChatModel;
   correctionLlm?: ChatModel;
   logger?: ItemFlowLogger;
   searchInvoker: SearchInvoker;
@@ -317,7 +318,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     let deviceLabelText: string | null = null;
     if (input.imageData) {
       try {
-        const ocrResult = await runOcrExtraction({ llm: deps.llm, imageData: input.imageData, logger });
+        const ocrResult = await runOcrExtraction({ llm: deps.visionLlm ?? deps.llm, imageData: input.imageData, logger });
         deviceLabelText = ocrResult?.text ?? null;
         if (deviceLabelText) {
           logger.info?.({ msg: 'OCR label extraction succeeded', itemId, chars: deviceLabelText.length });

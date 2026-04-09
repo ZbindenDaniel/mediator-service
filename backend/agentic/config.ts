@@ -5,14 +5,10 @@ const MODEL_PROVIDER_VALUES = ['ollama', 'openai'] as const;
 const envSchema = z.object({
   NODE_ENV: z.string().default('development'),
   MODEL_PROVIDER: z.enum(MODEL_PROVIDER_VALUES).default('ollama'),
-  OLLAMA_BASE_URL: z.string().url().optional(),
-  OLLAMA_MODEL: z.string().min(1).optional(),
-  OPENAI_API_KEY: z.string().min(1).optional(),
-  OPENAI_BASE_URL: z.string().url().optional(),
-  OPENAI_MODEL: z.string().min(1).optional(),
   MODEL_BASE_URL: z.string().url().optional(),
-  MODEL_NAME: z.string().min(1).optional(),
   MODEL_API_KEY: z.string().min(1).optional(),
+  MODEL_NAME: z.string().min(1).optional(),
+  VISION_MODEL_NAME: z.string().min(1).optional(),
   TAVILY_API_KEY: z.string().min(1).optional(),
   SEARCH_RATE_LIMIT_DELAY_MS: z.coerce.number().int().nonnegative().optional(),
   SEARCH_MAX_PLANS: z.coerce.number().int().min(1).optional(),
@@ -114,17 +110,42 @@ function sanitizeEnvForLogging(env: Record<string, unknown>): Record<string, unk
   }, {});
 }
 
+// Resolve each setting using the canonical var first, then legacy provider-specific aliases
+// so existing deployments continue to work unchanged.
 const envInput: EnvSchemaInput = {
   NODE_ENV: resolveEnvValue('NODE_ENV'),
-  MODEL_PROVIDER: resolveEnumValue(MODEL_PROVIDER_VALUES, 'AGENTIC_MODEL_PROVIDER', 'MODEL_PROVIDER'),
-  OLLAMA_BASE_URL: resolveEnvValue('AGENTIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'),
-  OLLAMA_MODEL: resolveEnvValue('AGENTIC_OLLAMA_MODEL', 'OLLAMA_MODEL'),
-  OPENAI_API_KEY: resolveEnvValue('AGENTIC_OPENAI_API_KEY', 'OPENAI_API_KEY'),
-  OPENAI_BASE_URL: resolveEnvValue('AGENTIC_OPENAI_BASE_URL', 'OPENAI_BASE_URL'),
-  OPENAI_MODEL: resolveEnvValue('AGENTIC_OPENAI_MODEL', 'OPENAI_MODEL'),
-  MODEL_BASE_URL: resolveEnvValue('AGENTIC_MODEL_BASE_URL', 'MODEL_BASE_URL'),
-  MODEL_NAME: resolveEnvValue('AGENTIC_MODEL_NAME', 'MODEL_NAME'),
-  MODEL_API_KEY: resolveEnvValue('AGENTIC_MODEL_API_KEY', 'MODEL_API_KEY'),
+  MODEL_PROVIDER: resolveEnumValue(
+    MODEL_PROVIDER_VALUES,
+    'AGENTIC_MODEL_PROVIDER',
+    'MODEL_PROVIDER'
+  ),
+  // Shared base URL — canonical, then legacy provider-specific aliases
+  MODEL_BASE_URL: resolveEnvValue(
+    'MODEL_BASE_URL',
+    'AGENTIC_MODEL_BASE_URL',
+    'AGENTIC_OLLAMA_BASE_URL',
+    'OLLAMA_BASE_URL',
+    'AGENTIC_OPENAI_BASE_URL',
+    'OPENAI_BASE_URL'
+  ),
+  // Shared API key — canonical, then legacy aliases
+  MODEL_API_KEY: resolveEnvValue(
+    'MODEL_API_KEY',
+    'AGENTIC_MODEL_API_KEY',
+    'AGENTIC_OPENAI_API_KEY',
+    'OPENAI_API_KEY'
+  ),
+  // Text model name — canonical, then legacy aliases
+  MODEL_NAME: resolveEnvValue(
+    'MODEL_NAME',
+    'AGENTIC_MODEL_NAME',
+    'AGENTIC_OLLAMA_MODEL',
+    'OLLAMA_MODEL',
+    'AGENTIC_OPENAI_MODEL',
+    'OPENAI_MODEL'
+  ),
+  // Vision model name for OCR — standalone only, falls back to MODEL_NAME in code
+  VISION_MODEL_NAME: resolveEnvValue('VISION_MODEL_NAME'),
   TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
   SEARCH_RATE_LIMIT_DELAY_MS: resolveNumber('SEARCH_RATE_LIMIT_DELAY_MS'),
   SEARCH_MAX_PLANS: resolveNumber('SEARCH_MAX_PLANS'),
@@ -154,21 +175,19 @@ const parsedEnv = parseEnvConfig();
 
 export type AgenticModelProvider = z.infer<typeof envSchema>['MODEL_PROVIDER'];
 
-export interface OllamaModelConfig {
-  baseUrl?: string;
-  model?: string;
-}
-
-export interface OpenAIModelConfig {
-  apiKey?: string;
-  baseUrl?: string;
-  model?: string;
-}
-
 export interface AgenticModelConfig {
   provider: AgenticModelProvider;
-  ollama: OllamaModelConfig;
-  openai: OpenAIModelConfig;
+  /** Base URL used for all model API calls (Ollama endpoint or OpenAI-compatible base). */
+  baseUrl?: string;
+  /** API key for OpenAI-compatible providers; unused for plain Ollama. */
+  apiKey?: string;
+  /** Model name for text tasks: extraction, planning, categorization, pricing. */
+  textModel?: string;
+  /**
+   * Model name for vision/OCR tasks (photographed device labels).
+   * Falls back to textModel when unset — requires the configured model to support vision input.
+   */
+  visionModel?: string;
 }
 
 export interface AgenticSearchConfig {
@@ -192,26 +211,16 @@ export interface ShopwareIntegrationConfig extends ShopwareCredentialsConfig {
   salesChannel: string;
 }
 
-const resolvedModelBaseUrl = parsedEnv.OLLAMA_BASE_URL ?? parsedEnv.MODEL_BASE_URL;
-const resolvedModelName = parsedEnv.OLLAMA_MODEL ?? parsedEnv.MODEL_NAME;
-const resolvedOpenAiBaseUrl = parsedEnv.OPENAI_BASE_URL ?? parsedEnv.MODEL_BASE_URL;
-const resolvedOpenAiModel = parsedEnv.OPENAI_MODEL ?? parsedEnv.MODEL_NAME;
-const resolvedOpenAiKey = parsedEnv.OPENAI_API_KEY ?? parsedEnv.MODEL_API_KEY;
 // TODO(agent): Validate configured search limits against production runbooks once env overrides are available.
 const resolvedSearchMaxPlans = parsedEnv.SEARCH_MAX_PLANS ?? 3;
 const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 3;
 
 export const modelConfig: AgenticModelConfig = {
   provider: parsedEnv.MODEL_PROVIDER,
-  ollama: {
-    baseUrl: resolvedModelBaseUrl,
-    model: resolvedModelName
-  },
-  openai: {
-    apiKey: resolvedOpenAiKey,
-    baseUrl: resolvedOpenAiBaseUrl,
-    model: resolvedOpenAiModel
-  }
+  baseUrl: parsedEnv.MODEL_BASE_URL,
+  apiKey: parsedEnv.MODEL_API_KEY,
+  textModel: parsedEnv.MODEL_NAME,
+  visionModel: parsedEnv.VISION_MODEL_NAME
 };
 
 export const searchConfig: AgenticSearchConfig = {
