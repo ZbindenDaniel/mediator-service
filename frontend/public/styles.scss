@@ -499,6 +499,60 @@ div {
     }
 }
 
+// Media column: Photos stacked above Attachments in the right column
+.item-detail__media-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+// Instance zone: stacked on mobile (display: contents makes wrapper transparent to grid),
+// side-by-side on desktop
+.item-detail__instance-zone {
+    display: contents;
+}
+
+@media (min-width: 720px) {
+    .item-detail__instance-zone {
+        display: flex;
+        flex-direction: row;
+        gap: 16px;
+        align-items: flex-start;
+
+        .item-detail__instance-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-width: 0;
+        }
+    }
+}
+
+// Activities collapsible toggle
+.item-detail__activities-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+
+    h3 {
+        margin: 0;
+    }
+
+    .item-detail__activities-chevron {
+        margin-left: auto;
+        font-size: 0.75em;
+        opacity: 0.6;
+    }
+}
+
 .card-header {
     display: flex;
     align-items: center;
