@@ -831,7 +831,8 @@ export class AgenticModelInvoker {
           missingSpecFields: normalizedMissingSpecFields,
           unneededSpecFields: normalizedUnneededSpecFields,
           skipSearch,
-          exampleItemBlock
+          exampleItemBlock,
+          imageData: input.imageData ?? null
         },
         {
           llm,

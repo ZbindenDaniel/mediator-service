@@ -91,6 +91,11 @@ const REQUEST_STATUS_FAILED = 'FAILED';
 const REQUEST_STATUS_DECLINED = 'DECLINED';
 const REQUEST_STATUS_CANCELLED = 'CANCELLED';
 
+// In-memory store for image data pending OCR extraction. Keyed by Artikel_Nummer.
+// Entries are written when a run is queued with imageData and consumed once by the dispatcher.
+// This is intentionally transient: if the server restarts before dispatch, OCR is simply skipped.
+const pendingOcrImageData = new Map<string, string>();
+
 // TODO(agentic-flag-normalization): Fold boolean-to-integer coercion into the shared DB layer
 // once SQLite bindings accept native booleans in our migration plan.
 type AgenticRunStatusFlag =
@@ -695,6 +700,7 @@ interface BackgroundInvocationPayload {
   request: NormalizedRequestContext | null;
   deps: AgenticServiceDependencies;
   logger: AgenticServiceLogger;
+  imageData?: string | null;
 }
 
 function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): void {
@@ -967,7 +973,8 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         searchQuery: payload.searchQuery,
         context: payload.context,
         review: payload.review,
-        requestId: payload.request?.id ?? null
+        requestId: payload.request?.id ?? null,
+        imageData: payload.imageData ?? null
       });
       if (!result?.ok) {
         const failureMessage = typeof result?.message === 'string' ? result.message : null;
@@ -1144,12 +1151,17 @@ export function dispatchQueuedAgenticRuns(
     }
 
     try {
+      const imageData = pendingOcrImageData.get(artikelNummer) ?? null;
+      if (imageData) {
+        pendingOcrImageData.delete(artikelNummer);
+      }
       scheduleAgenticModelInvocation({
         artikelNummer,
         searchQuery,
         context: null,
         review: null,
         request: null,
+        imageData,
         deps,
         logger
       });
@@ -1289,6 +1301,10 @@ export async function startAgenticRun(
       searchQuery,
       logger
     });
+
+    if (input.imageData && typeof input.imageData === 'string') {
+      pendingOcrImageData.set(artikelNummer, input.imageData);
+    }
 
     // Run is now queued. The background dispatcher (dispatchQueuedAgenticRuns,
     // called on a fixed interval) will pick it up and transition it to running
@@ -1757,6 +1773,10 @@ export async function restartAgenticRun(
     searchQuery,
     logger
   });
+
+  if (input.imageData && typeof input.imageData === 'string') {
+    pendingOcrImageData.set(artikelNummer, input.imageData);
+  }
 
   // Run is now queued. The background dispatcher will pick it up and
   // transition it to running while respecting the concurrency limit.

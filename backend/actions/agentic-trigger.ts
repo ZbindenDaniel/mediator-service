@@ -27,6 +27,7 @@ export interface AgenticRunTriggerPayload {
     notes?: string | null;
     reviewedBy?: string | null;
   } | null;
+  imageData?: string | null;
   [key: string]: unknown;
 }
 
@@ -68,6 +69,7 @@ export function buildAgenticRunRequestBody(payload: AgenticRunTriggerPayload) {
       || key === 'itemId'
       || key === 'id'
       || key === 'itemUUid'
+      || key === 'imageData'  // excluded: large base64 payload, not stored in DB
     ) {
       return;
     }
@@ -138,6 +140,7 @@ export async function forwardAgenticTrigger(
   const requestContext = resolveAgenticRequestContext(payload, artikelNummer);
   const actor = typeof payload.actor === 'string' && payload.actor.trim() ? payload.actor.trim() : null;
   const review = normalizeReviewMetadata(payload.review);
+  const imageData = typeof payload.imageData === 'string' && payload.imageData ? payload.imageData : null;
   if (!serviceDeps) {
     throw new Error('Agentic service dependencies are required');
   }
@@ -150,7 +153,8 @@ export async function forwardAgenticTrigger(
         actor,
         review,
         context,
-        request: requestContext
+        request: requestContext,
+        imageData
       },
       {
         ...serviceDeps,
@@ -190,7 +194,8 @@ export async function forwardAgenticTrigger(
             actor,
             review,
             context,
-            request: requestContext
+            request: requestContext,
+            imageData
           },
           {
             ...serviceDeps,

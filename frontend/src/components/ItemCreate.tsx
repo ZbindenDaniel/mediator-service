@@ -14,6 +14,7 @@ import ItemForm_Agentic from './ItemForm_agentic';
 import ItemForm from './ItemForm';
 import { ItemBasicInfoForm } from './ItemBasicInfoForm';
 import { ItemMatchSelection } from './ItemMatchSelection';
+import PhotoCaptureModal from './PhotoCaptureModal';
 import PrintLabelButton from './PrintLabelButton';
 import { useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
@@ -607,6 +608,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({}));
   const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [creating, setCreating] = useState(false);
+  const [ocrPhoto, setOcrPhoto] = useState<string | null>(null);
+  const [ocrCaptureOpen, setOcrCaptureOpen] = useState(false);
   const dialog = useDialog();
   const queryPrefilledBoxRef = useRef<string | null>(null);
 
@@ -1208,7 +1211,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
 
         const agenticPayload: AgenticRunTriggerPayload = {
           artikelNummer,
-          artikelbeschreibung: searchText
+          artikelbeschreibung: searchText,
+          ...(ocrPhoto ? { imageData: ocrPhoto } : {})
         };
 
         try {
@@ -1432,6 +1436,19 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
     }
   }
 
+  const handleOcrCapture = (photo: string) => {
+    setOcrPhoto(photo);
+    setOcrCaptureOpen(false);
+  };
+
+  const handleOcrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setOcrPhoto(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const handleBasicInfoNext = (data: Partial<ItemFormData>) => {
     try {
       const trimmedDescription = data.Artikelbeschreibung?.trim() || data.Artikelbeschreibung;
@@ -1634,6 +1651,46 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
   ) : null;
 
   if (creationStep === 'basicInfo') {
+    const ocrSection = (
+      <div style={{ marginBottom: '1rem' }}>
+        <p style={{ fontSize: '0.85em', color: '#666', margin: '0 0 0.5rem 0' }}>
+          Gerät fotografieren (optional) – Typenschild scannen für bessere KI-Suche
+        </p>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => setOcrCaptureOpen(true)}>
+            Foto aufnehmen
+          </button>
+          <label style={{ cursor: 'pointer' }}>
+            Datei wählen
+            <input
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleOcrFileChange}
+            />
+          </label>
+          {ocrPhoto && (
+            <>
+              <img
+                src={ocrPhoto}
+                alt="Typenschild Vorschau"
+                style={{ height: 48, objectFit: 'contain', borderRadius: 4, border: '1px solid #ccc' }}
+              />
+              <button type="button" onClick={() => setOcrPhoto(null)} aria-label="Foto entfernen">
+                ✕
+              </button>
+            </>
+          )}
+        </div>
+        <PhotoCaptureModal
+          isOpen={ocrCaptureOpen}
+          onClose={() => setOcrCaptureOpen(false)}
+          onCapture={handleOcrCapture}
+          title="Typenschild fotografieren"
+        />
+      </div>
+    );
+
     return (
       <>
         {blockingOverlay}
@@ -1641,7 +1698,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
           initialValues={basicInfo}
           onSubmit={handleBasicInfoNext}
           layout={layout}
-          headerContent={basicInfoHeader}
+          headerContent={<>{basicInfoHeader}{ocrSection}</>}
         />
       </>
     );
