@@ -28,6 +28,7 @@ export type ItemListFilters = {
   agenticStatusFilter: AgenticRunStatus | 'any';
   shopPublicationFilter: 'all' | 'inShop' | 'notPublished' | 'noShopArticle';
   placementFilter: 'all' | 'unplaced' | 'placed';
+  imageFilter: 'all' | 'noImages' | 'hasImages';
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   entityFilter: 'all' | 'instances' | 'references';
@@ -65,6 +66,7 @@ const DEFAULT_FILTERS: ItemListFilters = {
   shopPublicationFilter: 'all',
   // TODO(placement-filter): Revisit placement filter states if shelf-level placement state is introduced.
   placementFilter: 'all',
+  imageFilter: 'all',
   sortKey: 'artikelbeschreibung',
   sortDirection: 'asc',
   entityFilter: 'instances',
@@ -86,6 +88,7 @@ export function hasNonDefaultFilters(
     || filters.agenticStatusFilter !== defaults.agenticStatusFilter
     || filters.shopPublicationFilter !== defaults.shopPublicationFilter
     || filters.placementFilter !== defaults.placementFilter
+    || filters.imageFilter !== defaults.imageFilter
     || filters.sortKey !== defaults.sortKey
     || filters.sortDirection !== defaults.sortDirection
     || filters.entityFilter !== defaults.entityFilter
@@ -133,6 +136,14 @@ export function getActiveFilterDescriptions(
       placed: 'Platziert'
     };
     active.push(`Platzierung: ${placementLabels[filters.placementFilter]}`);
+  }
+  if (filters.imageFilter !== defaults.imageFilter) {
+    const imageFilterLabels: Record<ItemListFilters['imageFilter'], string> = {
+      all: 'Alle',
+      noImages: 'Ohne Bilder',
+      hasImages: 'Mit Bildern'
+    };
+    active.push(`Bilder: ${imageFilterLabels[filters.imageFilter]}`);
   }
   if (filters.entityFilter !== defaults.entityFilter) {
     const filterLabels: Record<ItemListFilters['entityFilter'], string> = {
@@ -245,6 +256,12 @@ export function loadItemListFilters(
       });
     } else if (parsed.placementFilter !== undefined) {
       logger.warn?.('Ignoring invalid stored placement filter', parsed.placementFilter);
+    }
+
+    if (parsed.imageFilter === 'all' || parsed.imageFilter === 'noImages' || parsed.imageFilter === 'hasImages') {
+      merged.imageFilter = parsed.imageFilter;
+    } else if (parsed.imageFilter !== undefined) {
+      logger.warn?.('Ignoring invalid stored image filter', parsed.imageFilter);
     }
 
     if (typeof parsed.sortKey === 'string' && SORT_KEYS.includes(parsed.sortKey as ItemListSortKey)) {

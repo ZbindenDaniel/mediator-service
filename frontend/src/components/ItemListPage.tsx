@@ -119,6 +119,7 @@ export interface ItemListComputationOptions {
   stockFilter: 'any' | 'instock' | 'outofstock';
   normalizedAgenticFilter: AgenticRunStatus | null;
   shopPublicationFilter: ItemListFilters['shopPublicationFilter'];
+  imageFilter: ItemListFilters['imageFilter'];
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   qualityThreshold: number;
@@ -193,6 +194,14 @@ interface SubcategoryOption {
   categoryLabel: string;
 }
 
+function groupHasImages(group: GroupedItemDisplay): boolean {
+  const rep = group.representative;
+  if (!rep) return false;
+  const hasImageNames = rep.ImageNames !== null && rep.ImageNames !== undefined && rep.ImageNames !== '';
+  const hasGrafikname = rep.Grafikname !== null && rep.Grafikname !== undefined && rep.Grafikname !== '';
+  return hasImageNames || hasGrafikname;
+}
+
 export function filterAndSortItems(options: ItemListComputationOptions): GroupedItemDisplay[] {
   const {
     items,
@@ -203,6 +212,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     stockFilter,
     normalizedAgenticFilter,
     shopPublicationFilter,
+    imageFilter,
     sortKey,
     sortDirection,
     qualityThreshold
@@ -251,6 +261,11 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     const matchesShopPublication = matchesShopPublicationFilter(group, shopPublicationFilter);
     const groupQuality = group.summary.Quality ?? representative?.Quality;
     const matchesQuality = resolveItemQuality(groupQuality) >= qualityThreshold;
+    const matchesImageFilter = imageFilter === 'all'
+      ? true
+      : imageFilter === 'noImages'
+        ? !groupHasImages(group)
+        : groupHasImages(group);
 
     return matchesSearch
       && matchesSubcategory
@@ -258,7 +273,8 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       && matchesStock
       && matchesAgenticStatus
       && matchesShopPublication
-      && matchesQuality;
+      && matchesQuality
+      && matchesImageFilter;
   });
 
   const sorted = [...searched].sort((a, b) => {
@@ -378,6 +394,7 @@ export default function ItemListPage() {
   // TODO(shop-publication-filter-ui): Consider replacing dropdown with segmented quick filter if additional states are introduced.
   const [shopPublicationFilter, setShopPublicationFilter] = useState<ItemListFilters['shopPublicationFilter']>(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
+  const [imageFilter, setImageFilter] = useState<ItemListFilters['imageFilter']>(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
   const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
   const [filtersReady, setFiltersReady] = useState(false);
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
@@ -407,6 +424,7 @@ export default function ItemListPage() {
       setSortKey(mergedFilters.sortKey);
       setSortDirection(mergedFilters.sortDirection);
       setEntityFilter(mergedFilters.entityFilter);
+      setImageFilter(mergedFilters.imageFilter);
       setQualityThreshold(mergedFilters.qualityThreshold);
       setIsDeepLinkFilterSession(hasUrlFilterParams);
 
@@ -445,6 +463,7 @@ export default function ItemListPage() {
       setSortKey(ITEM_LIST_DEFAULT_FILTERS.sortKey);
       setSortDirection(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
       setEntityFilter(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
+      setImageFilter(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
       setQualityThreshold(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
       clearItemListFilters();
       setSelectedIds(new Set());
@@ -462,6 +481,7 @@ export default function ItemListPage() {
     agenticStatusFilter,
     shopPublicationFilter,
     placementFilter,
+    imageFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -473,6 +493,7 @@ export default function ItemListPage() {
     agenticStatusFilter,
     shopPublicationFilter,
     placementFilter,
+    imageFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -705,6 +726,7 @@ export default function ItemListPage() {
         stockFilter,
         normalizedAgenticFilter,
         shopPublicationFilter,
+        imageFilter,
         sortKey,
         sortDirection,
         qualityThreshold
@@ -716,6 +738,7 @@ export default function ItemListPage() {
       normalizedSearch,
       normalizedSubcategoryFilter,
       placementFilter,
+      imageFilter,
       sortDirection,
       sortKey,
       stockFilter,
@@ -994,6 +1017,21 @@ export default function ItemListPage() {
                     <option value="all">Alle</option>
                     <option value="unplaced">unplatziert</option>
                     <option value="placed">platziert</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="filter-grid__item">
+                <label className="filter-control">
+                  <span>Bilder</span>
+                  <select
+                    aria-label="Bilderstatus filtern"
+                    onChange={(event) => setImageFilter(event.target.value as ItemListFilters['imageFilter'])}
+                    value={imageFilter}
+                  >
+                    <option value="all">Alle</option>
+                    <option value="noImages">Ohne Bilder</option>
+                    <option value="hasImages">Mit Bildern</option>
                   </select>
                 </label>
               </div>
