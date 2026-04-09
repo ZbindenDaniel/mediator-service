@@ -1209,10 +1209,9 @@ interface AttachmentsCardProps {
   itemUUID: string;
   attachments: any[];
   onChanged: (next: any[]) => void;
-  className?: string;
 }
 
-function AttachmentsCard({ itemUUID, attachments, onChanged, className = 'card grid-span-2' }: AttachmentsCardProps) {
+function AttachmentsCard({ itemUUID, attachments, onChanged }: AttachmentsCardProps) {
   const [uploading, setUploading] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
@@ -1255,7 +1254,7 @@ function AttachmentsCard({ itemUUID, attachments, onChanged, className = 'card g
   }
 
   return (
-    <div className={className}>
+    <div className="card grid-span-2">
       <h3>Anhänge ({attachments.length})</h3>
       {attachments.length > 0 && (
         <table className="details">
@@ -1308,7 +1307,6 @@ function AttachmentsCard({ itemUUID, attachments, onChanged, className = 'card g
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
-  const [activitiesExpanded, setActivitiesExpanded] = useState(false);
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
@@ -3661,230 +3659,157 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
             </div>
 
-            <div className="item-detail__media-col grid-span-row-2">
-              <div className="card">
-                <h3>Fotos</h3>
-                <section className="item-media-section">
-                  <input
-                    ref={mediaFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="item-media-gallery__input"
-                    onChange={handleMediaFileChange}
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    style={{ display: 'none' }}
-                  />
-                  <ItemMediaGallery
-                    itemId={item.ItemUUID}
-                    grafikname={item.Grafikname}
-                    mediaAssets={mediaAssets}
-                    className="item-media-gallery--stacked"
-                    onAdd={handleMediaAdd}
-                    onRemove={handleMediaRemove}
-                  />
-                </section>
-              </div>
-              <AttachmentsCard
-                itemUUID={item.ItemUUID}
-                attachments={attachments}
-                onChanged={(next) => setAttachments(next)}
-                className="card"
-              />
-            </div>
-
-            <div className="item-detail__instance-zone grid-span-2">
-              <div className="item-detail__instance-col">
-                <div className="card">
-                  <h3>dieser Artikel</h3>
-                  <div className="row">
-                    {instanceDetailRows.length > 0 ? (
-                      <table className="details">
-                        <tbody>
-                          {instanceDetailRows.map(([k, v], idx) => {
-                            const cell = normalizeDetailValue(v);
-                            return (
-                              <tr key={`${k}-${idx}`} className="responsive-row">
-                                <th className="responsive-th">{k}</th>
-                                <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                                  {cell.content}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <p className="muted">Keine Instanzdaten vorhanden.</p>
-                    )}
-                    {/* TODO(stock-visibility): Validate out-of-stock messaging for non-bulk withdrawals. */}
-                    {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
-                    {/* TODO(confirm-withdrawal): Verify cancel behavior never triggers removal in the instance view. */}
-                    {isOutOfStock ? (
-                      <>
-                        <p className="muted">Instanz nicht mehr eingelagert.</p>
-                        <button type="button" className="btn" onClick={handleAddItem}>
-                          Hinzufügen
-                        </button>
-                      </>
-                    ) : (
-                      <button type="button" className="btn" onClick={async () => {
-                        let confirmed = false;
-                        const actor = await ensureUser();
-                        if (!actor) {
-                          try {
-                            await dialogService.alert({
-                              title: 'Aktion nicht möglich',
-                              message: 'Bitte zuerst oben den Benutzer setzen.'
-                            });
-                          } catch (error) {
-                            console.error('Failed to display agentic cancel user alert', error);
-                          }
-                          return;
-                        }
-                        try {
-                          confirmed = await dialogService.confirm({
-                            title: 'Artikel entnehmen',
-                            message: 'Entnehmen?',
-                            confirmLabel: 'Entnehmen',
-                            cancelLabel: 'Abbrechen'
-                          });
-                        } catch (error) {
-                          console.error('Failed to confirm inline item removal', error);
-                          return;
-                        }
-                        if (!confirmed) {
-                          logger.info?.('ItemDetail: Item removal cancelled', { itemId: item.ItemUUID });
-                          return;
-                        }
-                        try {
-                          const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ actor })
-                          });
-                          if (res.ok) {
-                            const j = await res.json();
-                            logger.info?.('Item entnommen', {
-                              itemId: item.ItemUUID,
-                              quantity: j.quantity,
-                              boxId: j.boxId
-                            });
-                            try {
-                              await load({ showSpinner: false });
-                            } catch (reloadError) {
-                              logError('ItemDetail: Failed to reload after item removal', reloadError, {
-                                itemId: item.ItemUUID
-                              });
-                            }
-                          } else {
-                            console.error('Failed to remove item', res.status);
-                          }
-                        } catch (err) {
-                          console.error('Entnahme fehlgeschlagen', err);
-                        }
-                      }}
-                      >
-                        Entnehmen
-                      </button>
-                    )}
-                    {resolvedQuantityEinheit === ItemEinheit.Menge ? (
-                      <button type="button" className="btn" onClick={async () => {
-                        let confirmed = false;
-                        try {
-                          confirmed = await dialogService.confirm({
-                            title: 'Menge hinzufügen',
-                            message: 'Menge hinzufügen?',
-                            confirmLabel: 'Hinzufügen',
-                            cancelLabel: 'Abbrechen'
-                          });
-                        } catch (error) {
-                          console.error('Failed to confirm bulk add', error);
-                          return;
-                        }
-                        if (!confirmed) {
-                          return;
-                        }
-                        await handleAddItem();
-                      }}>
-                        Hinzufügen
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div ref={relocateCardRef}>
-                  <RelocateItemCard
-                    itemId={item.ItemUUID}
-                    onRelocated={() => {
-                      load({ showSpinner: false });
-                      relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="item-detail__instance-col">
-                <AgenticStatusCard
-                  status={agenticStatus}
-                  rows={agenticRows}
-                  actionPending={agenticActionPending}
-                  reviewIntent={agenticReviewIntent}
-                  error={agenticError}
-                  needsReview={agenticNeedsReview}
-                  searchTerm={agenticSearchTerm}
-                  searchTermError={agenticSearchError}
-                  onSearchTermChange={handleAgenticSearchTermChange}
-                  canCancel={agenticCanCancel}
-                  canClose={agenticCanClose}
-                  canStart={agenticCanStart}
-                  canRestart={agenticCanRestart}
-                  canDelete={agenticCanDelete}
-                  startLabel={agenticStartLabel}
-                  isInProgress={agenticIsInProgress}
-                  onStart={agenticCanStart ? agenticStartHandler : undefined}
-                  onRestart={handleAgenticRestart}
-                  onReview={handleAgenticReview}
-                  onCancel={handleAgenticCancel}
-                  onClose={agenticCanClose ? handleAgenticClose : undefined}
-                  onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
+            <div className="card grid-span-row-2">
+              <h3>Fotos</h3>
+              <section className="item-media-section">
+                <input
+                  ref={mediaFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="item-media-gallery__input"
+                  onChange={handleMediaFileChange}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  style={{ display: 'none' }}
                 />
-                <PrintLabelButton itemId={item.ItemUUID} />
+                <ItemMediaGallery
+                  itemId={item.ItemUUID}
+                  grafikname={item.Grafikname}
+                  mediaAssets={mediaAssets}
+                  className="item-media-gallery--stacked"
+                  onAdd={handleMediaAdd}
+                  onRemove={handleMediaRemove}
+                />
+              </section>
+            </div>
+
+            <div className="card">
+              <h3>dieser Artikel</h3>
+              <div className="row">
+                {instanceDetailRows.length > 0 ? (
+                  <table className="details">
+                    <tbody>
+                      {instanceDetailRows.map(([k, v], idx) => {
+                        const cell = normalizeDetailValue(v);
+                        return (
+                          <tr key={`${k}-${idx}`} className="responsive-row">
+                            <th className="responsive-th">{k}</th>
+                            <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                              {cell.content}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="muted">Keine Instanzdaten vorhanden.</p>
+                )}
+                {/* TODO(stock-visibility): Validate out-of-stock messaging for non-bulk withdrawals. */}
+                {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
+                {/* TODO(confirm-withdrawal): Verify cancel behavior never triggers removal in the instance view. */}
+                {isOutOfStock ? (
+                  <>
+                    <p className="muted">Instanz nicht mehr eingelagert.</p>
+                    <button type="button" className="btn" onClick={handleAddItem}>
+                      Hinzufügen
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" className="btn" onClick={async () => {
+                    let confirmed = false;
+                    const actor = await ensureUser();
+                    if (!actor) {
+                      try {
+                        await dialogService.alert({
+                          title: 'Aktion nicht möglich',
+                          message: 'Bitte zuerst oben den Benutzer setzen.'
+                        });
+                      } catch (error) {
+                        console.error('Failed to display agentic cancel user alert', error);
+                      }
+                      return;
+                    }
+                    try {
+                      confirmed = await dialogService.confirm({
+                        title: 'Artikel entnehmen',
+                        message: 'Entnehmen?',
+                        confirmLabel: 'Entnehmen',
+                        cancelLabel: 'Abbrechen'
+                      });
+                    } catch (error) {
+                      console.error('Failed to confirm inline item removal', error);
+                      return;
+                    }
+                    if (!confirmed) {
+                      logger.info?.('ItemDetail: Item removal cancelled', { itemId: item.ItemUUID });
+                      return;
+                    }
+                    try {
+                      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ actor })
+                      });
+                      if (res.ok) {
+                        const j = await res.json();
+                        logger.info?.('Item entnommen', {
+                          itemId: item.ItemUUID,
+                          quantity: j.quantity,
+                          boxId: j.boxId
+                        });
+                        try {
+                          await load({ showSpinner: false });
+                        } catch (reloadError) {
+                          logError('ItemDetail: Failed to reload after item removal', reloadError, {
+                            itemId: item.ItemUUID
+                          });
+                        }
+                      } else {
+                        console.error('Failed to remove item', res.status);
+                      }
+                    } catch (err) {
+                      console.error('Entnahme fehlgeschlagen', err);
+                    }
+                  }}
+                  >
+                    Entnehmen
+                  </button>
+                )}
+                {resolvedQuantityEinheit === ItemEinheit.Menge ? (
+                  <button type="button" className="btn" onClick={async () => {
+                    let confirmed = false;
+                    try {
+                      confirmed = await dialogService.confirm({
+                        title: 'Menge hinzufügen',
+                        message: 'Menge hinzufügen?',
+                        confirmLabel: 'Hinzufügen',
+                        cancelLabel: 'Abbrechen'
+                      });
+                    } catch (error) {
+                      console.error('Failed to confirm bulk add', error);
+                      return;
+                    }
+                    if (!confirmed) {
+                      return;
+                    }
+                    await handleAddItem();
+                  }}>
+                    Hinzufügen
+                  </button>
+                ) : null}
               </div>
             </div>
 
-            {specFieldReviewModalState ? (
-              <AgenticSpecFieldReviewModal
-                title={specFieldReviewModalState.title}
-                description={specFieldReviewModalState.description}
-                fieldOptions={specFieldReviewModalState.fieldOptions}
-                includeAdditionalInput={specFieldReviewModalState.includeAdditionalInput}
-                additionalInputPlaceholder={specFieldReviewModalState.additionalInputPlaceholder}
-                secondaryTitle={specFieldReviewModalState.secondaryTitle}
-                secondaryDescription={specFieldReviewModalState.secondaryDescription}
-                secondaryFieldOptions={specFieldReviewModalState.secondaryFieldOptions}
-                includeSecondaryAdditionalInput={specFieldReviewModalState.includeSecondaryAdditionalInput}
-                secondaryAdditionalInputPlaceholder={specFieldReviewModalState.secondaryAdditionalInputPlaceholder}
-                onCancel={() => {
-                  try {
-                    specFieldReviewModalState.resolve(null);
-                  } catch (error) {
-                    logError('ItemDetail: Failed to resolve cancelled spec field review modal', error, { itemId });
-                  } finally {
-                    setSpecFieldReviewModalState(null);
-                  }
-                }}
-                onConfirm={(result) => {
-                  try {
-                    specFieldReviewModalState.resolve(result);
-                  } catch (error) {
-                    logError('ItemDetail: Failed to resolve confirmed spec field review modal', error, { itemId });
-                  } finally {
-                    setSpecFieldReviewModalState(null);
-                  }
+            <div ref={relocateCardRef}>
+              <RelocateItemCard
+                itemId={item.ItemUUID}
+                onRelocated={() => {
+                  load({ showSpinner: false });
+                  relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }}
               />
-            ) : null}
+            </div>
 
             <div className="card grid-span-2">
               <h3>Vorrat</h3>
@@ -3960,6 +3885,67 @@ export default function ItemDetail({ itemId }: Props) {
               )}
             </div>
 
+            <AgenticStatusCard
+              status={agenticStatus}
+              rows={agenticRows}
+              actionPending={agenticActionPending}
+              reviewIntent={agenticReviewIntent}
+              error={agenticError}
+              needsReview={agenticNeedsReview}
+              searchTerm={agenticSearchTerm}
+              searchTermError={agenticSearchError}
+              onSearchTermChange={handleAgenticSearchTermChange}
+              canCancel={agenticCanCancel}
+              canClose={agenticCanClose}
+              canStart={agenticCanStart}
+              canRestart={agenticCanRestart}
+              canDelete={agenticCanDelete}
+              startLabel={agenticStartLabel}
+              isInProgress={agenticIsInProgress}
+              onStart={agenticCanStart ? agenticStartHandler : undefined}
+              onRestart={handleAgenticRestart}
+              onReview={handleAgenticReview}
+              onCancel={handleAgenticCancel}
+              onClose={agenticCanClose ? handleAgenticClose : undefined}
+              onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
+            />
+
+
+            {specFieldReviewModalState ? (
+              <AgenticSpecFieldReviewModal
+                title={specFieldReviewModalState.title}
+                description={specFieldReviewModalState.description}
+                fieldOptions={specFieldReviewModalState.fieldOptions}
+                includeAdditionalInput={specFieldReviewModalState.includeAdditionalInput}
+                additionalInputPlaceholder={specFieldReviewModalState.additionalInputPlaceholder}
+                secondaryTitle={specFieldReviewModalState.secondaryTitle}
+                secondaryDescription={specFieldReviewModalState.secondaryDescription}
+                secondaryFieldOptions={specFieldReviewModalState.secondaryFieldOptions}
+                includeSecondaryAdditionalInput={specFieldReviewModalState.includeSecondaryAdditionalInput}
+                secondaryAdditionalInputPlaceholder={specFieldReviewModalState.secondaryAdditionalInputPlaceholder}
+                onCancel={() => {
+                  try {
+                    specFieldReviewModalState.resolve(null);
+                  } catch (error) {
+                    logError('ItemDetail: Failed to resolve cancelled spec field review modal', error, { itemId });
+                  } finally {
+                    setSpecFieldReviewModalState(null);
+                  }
+                }}
+                onConfirm={(result) => {
+                  try {
+                    specFieldReviewModalState.resolve(result);
+                  } catch (error) {
+                    logError('ItemDetail: Failed to resolve confirmed spec field review modal', error, { itemId });
+                  } finally {
+                    setSpecFieldReviewModalState(null);
+                  }
+                }}
+              />
+            ) : null}
+
+            <PrintLabelButton itemId={item.ItemUUID} />
+
             <ZubehoerCard
               itemUUID={item.ItemUUID}
               artikelNummer={item.Artikel_Nummer ?? null}
@@ -3985,27 +3971,22 @@ export default function ItemDetail({ itemId }: Props) {
               }}
             />
 
+            <AttachmentsCard
+              itemUUID={item.ItemUUID}
+              attachments={attachments}
+              onChanged={(next) => setAttachments(next)}
+            />
+
             <div className="card grid-span-2">
-              <button
-                className="item-detail__activities-toggle"
-                onClick={() => setActivitiesExpanded(v => !v)}
-                aria-expanded={activitiesExpanded}
-              >
-                <h3>Aktivitäten ({displayedEvents.length})</h3>
-                <span className="item-detail__activities-chevron" aria-hidden="true">
-                  {activitiesExpanded ? '▲' : '▼'}
-                </span>
-              </button>
-              {activitiesExpanded && (
-                <ul className="events">
-                  {displayedEvents.map((ev) => (
-                    <li key={ev.Id}>
-                      <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
-                      {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <h3>Aktivitäten</h3>
+              <ul className="events">
+                {displayedEvents.map((ev) => (
+                  <li key={ev.Id}>
+                    <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
+                    {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
+                  </li>
+                ))}
+              </ul>
             </div>
           </>
         ) : (
