@@ -328,6 +328,24 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       }
     }
 
+    await appendTranscriptSection(
+      transcriptWriter,
+      'ocr-extraction',
+      {
+        imageProvided: Boolean(input.imageData),
+        extracted: Boolean(deviceLabelText),
+        chars: deviceLabelText?.length ?? 0,
+        text: deviceLabelText ?? null
+      },
+      deviceLabelText
+        ? `Typenschild erkannt (${deviceLabelText.length} Zeichen)`
+        : input.imageData
+          ? 'OCR ohne Ergebnis (kein Text erkannt oder Fehler)'
+          : 'Kein Bild bereitgestellt — OCR übersprungen',
+      logger,
+      itemId
+    );
+
     const missingSchemaFields = identifyMissingSchemaFields(target);
 
     // TODO(agent): Feed planner gating outcomes into telemetry once available.
@@ -357,6 +375,28 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
         plannerShouldSearch = true;
         logger.error?.({ err, msg: 'search planner evaluation failed', itemId });
       }
+    }
+
+    if (plannerDecision) {
+      await appendTranscriptSection(
+        transcriptWriter,
+        'search-planner',
+        {
+          shouldSearch: plannerDecision.shouldSearch,
+          planCount: plannerDecision.plans?.length ?? 0,
+          plans: plannerDecision.plans?.map((p) => ({
+            query: p.query,
+            context: p.metadata?.context ?? null,
+            missingFields: p.metadata?.missingFields ?? []
+          })) ?? [],
+          deviceLabelText: deviceLabelText ?? null
+        },
+        plannerDecision.shouldSearch
+          ? `Suche geplant: ${plannerDecision.plans?.length ?? 0} Abfrage(n)`
+          : 'Suche übersprungen laut Planer',
+        logger,
+        itemId
+      );
     }
 
     const finalShouldSearch = !skipSearch && plannerShouldSearch;
