@@ -1465,6 +1465,7 @@ export default function ItemDetail({ itemId }: Props) {
             : effectiveFilters.agenticStatusFilter,
           // TODO(shop-publication-neighbors): Revisit adjacent navigation semantics if detail page gets independent shop-status controls.
           shopPublicationFilter: effectiveFilters.shopPublicationFilter,
+          imageFilter: effectiveFilters.imageFilter,
           sortKey: effectiveFilters.sortKey,
           sortDirection: effectiveFilters.sortDirection,
           qualityThreshold: effectiveFilters.qualityThreshold
