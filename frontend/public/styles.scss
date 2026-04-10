@@ -2315,6 +2315,64 @@ button:focus {
     }
 }
 
+@media (min-width: 1280px) {
+    .landing-grid {
+        grid-template-columns: 1.4fr 1fr 0.8fr;
+        grid-template-areas:
+            "article instance actions"
+            "vorrat  vorrat   vorrat"
+            "zubehoer zubehoer zubehoer"
+            "anhaenge anhaenge anhaenge"
+            "activity activity activity";
+        align-items: start;
+    }
+
+    .item-detail__article  { grid-area: article;  grid-row: unset; grid-column: unset; }
+    .item-detail__instance { grid-area: instance; }
+    .item-detail__actions  { grid-area: actions; }
+    .item-detail__vorrat   { grid-area: vorrat;   grid-column: unset; }
+    .item-detail__zubehoer { grid-area: zubehoer; grid-column: unset; }
+    .item-detail__anhaenge { grid-area: anhaenge; grid-column: unset; }
+    .item-detail__activity { grid-area: activity; grid-column: unset; }
+
+    .item-detail__instance,
+    .item-detail__actions {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+}
+
+// Fixed-height photo section — prevents gallery from stretching the column
+.item-detail__instance .item-media-section {
+    max-height: 180px;
+    overflow: hidden;
+}
+
+// Collapsible activities toggle
+.item-detail__activities-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+
+    h3 {
+        margin: 0;
+    }
+
+    .item-detail__activities-chevron {
+        margin-left: auto;
+        font-size: 0.75em;
+        opacity: 0.6;
+    }
+}
+
 
 @media (min-width: 960px) {
     .stats-card-main {

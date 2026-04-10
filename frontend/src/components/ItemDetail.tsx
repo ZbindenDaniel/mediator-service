@@ -901,6 +901,7 @@ interface ZubehoerCardProps {
   compatibleAccessoryRefs: any[];
   compatibleParentRefs: any[];
   onRelationChanged: () => void;
+  className?: string;
 }
 
 function ZubehoerCard({
@@ -910,7 +911,8 @@ function ZubehoerCard({
   connectedToDevices,
   compatibleAccessoryRefs,
   compatibleParentRefs,
-  onRelationChanged
+  onRelationChanged,
+  className = 'card grid-span-2'
 }: ZubehoerCardProps) {
   const [linkInput, setLinkInput] = React.useState('');
   const [linkPending, setLinkPending] = React.useState(false);
@@ -1035,7 +1037,7 @@ function ZubehoerCard({
   }
 
   return (
-    <div className="card grid-span-2">
+    <div className={className}>
       {connectedAccessories.length > 0 && (
         <>
           <h3>Verbundenes Zubehör ({connectedAccessories.length})</h3>
@@ -1209,9 +1211,10 @@ interface AttachmentsCardProps {
   itemUUID: string;
   attachments: any[];
   onChanged: (next: any[]) => void;
+  className?: string;
 }
 
-function AttachmentsCard({ itemUUID, attachments, onChanged }: AttachmentsCardProps) {
+function AttachmentsCard({ itemUUID, attachments, onChanged, className = 'card grid-span-2' }: AttachmentsCardProps) {
   const [uploading, setUploading] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
@@ -1254,7 +1257,7 @@ function AttachmentsCard({ itemUUID, attachments, onChanged }: AttachmentsCardPr
   }
 
   return (
-    <div className="card grid-span-2">
+    <div className={className}>
       <h3>Anhänge ({attachments.length})</h3>
       {attachments.length > 0 && (
         <table className="details">
@@ -1344,6 +1347,7 @@ export default function ItemDetail({ itemId }: Props) {
     nextId: null
   });
   const [neighborsLoading, setNeighborsLoading] = useState(false);
+  const [activitiesExpanded, setActivitiesExpanded] = useState(false);
   const [neighborSource, setNeighborSource] = useState<'query' | 'fetch' | 'storage' | null>(null);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -3589,7 +3593,8 @@ export default function ItemDetail({ itemId }: Props) {
       <div className="grid landing-grid">
         {item ? (
           <>
-            <div className="card grid-span-row-2">
+            {/* ── Col 1: Article reference ────────────────────────────── */}
+            <div className="card item-detail__article">
               <div className='top-row'>
                 <button
                   type="button"
@@ -3659,33 +3664,34 @@ export default function ItemDetail({ itemId }: Props) {
               </div>
             </div>
 
-            <div className="card grid-span-row-2">
-              <h3>Fotos</h3>
-              <section className="item-media-section">
-                <input
-                  ref={mediaFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="item-media-gallery__input"
-                  onChange={handleMediaFileChange}
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  style={{ display: 'none' }}
-                />
-                <ItemMediaGallery
-                  itemId={item.ItemUUID}
-                  grafikname={item.Grafikname}
-                  mediaAssets={mediaAssets}
-                  className="item-media-gallery--stacked"
-                  onAdd={handleMediaAdd}
-                  onRemove={handleMediaRemove}
-                />
-              </section>
-            </div>
+            {/* ── Col 2: This specific copy (photo + instance data) ───── */}
+            <div className="item-detail__instance">
+              <div className="card">
+                <h3>Fotos</h3>
+                <section className="item-media-section">
+                  <input
+                    ref={mediaFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="item-media-gallery__input"
+                    onChange={handleMediaFileChange}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    style={{ display: 'none' }}
+                  />
+                  <ItemMediaGallery
+                    itemId={item.ItemUUID}
+                    grafikname={item.Grafikname}
+                    mediaAssets={mediaAssets}
+                    className="item-media-gallery--stacked"
+                    onAdd={handleMediaAdd}
+                    onRemove={handleMediaRemove}
+                  />
+                </section>
+              </div>
 
-            <div className="card">
-              <h3>dieser Artikel</h3>
-              <div className="row">
+              <div className="card">
+                <h3>dieser Artikel</h3>
                 {instanceDetailRows.length > 0 ? (
                   <table className="details">
                     <tbody>
@@ -3705,6 +3711,13 @@ export default function ItemDetail({ itemId }: Props) {
                 ) : (
                   <p className="muted">Keine Instanzdaten vorhanden.</p>
                 )}
+              </div>
+            </div>
+
+            {/* ── Col 3: Actions ──────────────────────────────────────── */}
+            <div className="item-detail__actions">
+              {/* Primary instance action */}
+              <div className="card">
                 {/* TODO(stock-visibility): Validate out-of-stock messaging for non-bulk withdrawals. */}
                 {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
                 {/* TODO(confirm-withdrawal): Verify cancel behavior never triggers removal in the instance view. */}
@@ -3799,19 +3812,80 @@ export default function ItemDetail({ itemId }: Props) {
                   </button>
                 ) : null}
               </div>
-            </div>
 
-            <div ref={relocateCardRef}>
-              <RelocateItemCard
-                itemId={item.ItemUUID}
-                onRelocated={() => {
-                  load({ showSpinner: false });
-                  relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
+              <div ref={relocateCardRef}>
+                <RelocateItemCard
+                  itemId={item.ItemUUID}
+                  onRelocated={() => {
+                    load({ showSpinner: false });
+                    relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                />
+              </div>
+
+              <AgenticStatusCard
+                status={agenticStatus}
+                rows={agenticRows}
+                actionPending={agenticActionPending}
+                reviewIntent={agenticReviewIntent}
+                error={agenticError}
+                needsReview={agenticNeedsReview}
+                searchTerm={agenticSearchTerm}
+                searchTermError={agenticSearchError}
+                onSearchTermChange={handleAgenticSearchTermChange}
+                canCancel={agenticCanCancel}
+                canClose={agenticCanClose}
+                canStart={agenticCanStart}
+                canRestart={agenticCanRestart}
+                canDelete={agenticCanDelete}
+                startLabel={agenticStartLabel}
+                isInProgress={agenticIsInProgress}
+                onStart={agenticCanStart ? agenticStartHandler : undefined}
+                onRestart={handleAgenticRestart}
+                onReview={handleAgenticReview}
+                onCancel={handleAgenticCancel}
+                onClose={agenticCanClose ? handleAgenticClose : undefined}
+                onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
               />
+
+              {specFieldReviewModalState ? (
+                <AgenticSpecFieldReviewModal
+                  title={specFieldReviewModalState.title}
+                  description={specFieldReviewModalState.description}
+                  fieldOptions={specFieldReviewModalState.fieldOptions}
+                  includeAdditionalInput={specFieldReviewModalState.includeAdditionalInput}
+                  additionalInputPlaceholder={specFieldReviewModalState.additionalInputPlaceholder}
+                  secondaryTitle={specFieldReviewModalState.secondaryTitle}
+                  secondaryDescription={specFieldReviewModalState.secondaryDescription}
+                  secondaryFieldOptions={specFieldReviewModalState.secondaryFieldOptions}
+                  includeSecondaryAdditionalInput={specFieldReviewModalState.includeSecondaryAdditionalInput}
+                  secondaryAdditionalInputPlaceholder={specFieldReviewModalState.secondaryAdditionalInputPlaceholder}
+                  onCancel={() => {
+                    try {
+                      specFieldReviewModalState.resolve(null);
+                    } catch (error) {
+                      logError('ItemDetail: Failed to resolve cancelled spec field review modal', error, { itemId });
+                    } finally {
+                      setSpecFieldReviewModalState(null);
+                    }
+                  }}
+                  onConfirm={(result) => {
+                    try {
+                      specFieldReviewModalState.resolve(result);
+                    } catch (error) {
+                      logError('ItemDetail: Failed to resolve confirmed spec field review modal', error, { itemId });
+                    } finally {
+                      setSpecFieldReviewModalState(null);
+                    }
+                  }}
+                />
+              ) : null}
+
+              <PrintLabelButton itemId={item.ItemUUID} />
             </div>
 
-            <div className="card grid-span-2">
+            {/* ── Full-width sections ──────────────────────────────────── */}
+            <div className="card grid-span-2 item-detail__vorrat">
               <h3>Vorrat</h3>
               {instanceRows.length > 0 ? (
                 <>
@@ -3885,68 +3959,8 @@ export default function ItemDetail({ itemId }: Props) {
               )}
             </div>
 
-            <AgenticStatusCard
-              status={agenticStatus}
-              rows={agenticRows}
-              actionPending={agenticActionPending}
-              reviewIntent={agenticReviewIntent}
-              error={agenticError}
-              needsReview={agenticNeedsReview}
-              searchTerm={agenticSearchTerm}
-              searchTermError={agenticSearchError}
-              onSearchTermChange={handleAgenticSearchTermChange}
-              canCancel={agenticCanCancel}
-              canClose={agenticCanClose}
-              canStart={agenticCanStart}
-              canRestart={agenticCanRestart}
-              canDelete={agenticCanDelete}
-              startLabel={agenticStartLabel}
-              isInProgress={agenticIsInProgress}
-              onStart={agenticCanStart ? agenticStartHandler : undefined}
-              onRestart={handleAgenticRestart}
-              onReview={handleAgenticReview}
-              onCancel={handleAgenticCancel}
-              onClose={agenticCanClose ? handleAgenticClose : undefined}
-              onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
-            />
-
-
-            {specFieldReviewModalState ? (
-              <AgenticSpecFieldReviewModal
-                title={specFieldReviewModalState.title}
-                description={specFieldReviewModalState.description}
-                fieldOptions={specFieldReviewModalState.fieldOptions}
-                includeAdditionalInput={specFieldReviewModalState.includeAdditionalInput}
-                additionalInputPlaceholder={specFieldReviewModalState.additionalInputPlaceholder}
-                secondaryTitle={specFieldReviewModalState.secondaryTitle}
-                secondaryDescription={specFieldReviewModalState.secondaryDescription}
-                secondaryFieldOptions={specFieldReviewModalState.secondaryFieldOptions}
-                includeSecondaryAdditionalInput={specFieldReviewModalState.includeSecondaryAdditionalInput}
-                secondaryAdditionalInputPlaceholder={specFieldReviewModalState.secondaryAdditionalInputPlaceholder}
-                onCancel={() => {
-                  try {
-                    specFieldReviewModalState.resolve(null);
-                  } catch (error) {
-                    logError('ItemDetail: Failed to resolve cancelled spec field review modal', error, { itemId });
-                  } finally {
-                    setSpecFieldReviewModalState(null);
-                  }
-                }}
-                onConfirm={(result) => {
-                  try {
-                    specFieldReviewModalState.resolve(result);
-                  } catch (error) {
-                    logError('ItemDetail: Failed to resolve confirmed spec field review modal', error, { itemId });
-                  } finally {
-                    setSpecFieldReviewModalState(null);
-                  }
-                }}
-              />
-            ) : null}
-
-            <PrintLabelButton itemId={item.ItemUUID} />
-
             <ZubehoerCard
+              className="card grid-span-2 item-detail__zubehoer"
               itemUUID={item.ItemUUID}
               artikelNummer={item.Artikel_Nummer ?? null}
               connectedAccessories={connectedAccessories}
@@ -3972,21 +3986,33 @@ export default function ItemDetail({ itemId }: Props) {
             />
 
             <AttachmentsCard
+              className="card grid-span-2 item-detail__anhaenge"
               itemUUID={item.ItemUUID}
               attachments={attachments}
               onChanged={(next) => setAttachments(next)}
             />
 
-            <div className="card grid-span-2">
-              <h3>Aktivitäten</h3>
-              <ul className="events">
-                {displayedEvents.map((ev) => (
-                  <li key={ev.Id}>
-                    <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
-                    {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
-                  </li>
-                ))}
-              </ul>
+            <div className="card grid-span-2 item-detail__activity">
+              <button
+                className="item-detail__activities-toggle"
+                onClick={() => setActivitiesExpanded(v => !v)}
+                aria-expanded={activitiesExpanded}
+              >
+                <h3>Aktivitäten ({displayedEvents.length})</h3>
+                <span className="item-detail__activities-chevron" aria-hidden="true">
+                  {activitiesExpanded ? '▲' : '▼'}
+                </span>
+              </button>
+              {activitiesExpanded && (
+                <ul className="events">
+                  {displayedEvents.map((ev) => (
+                    <li key={ev.Id}>
+                      <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
+                      {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </>
         ) : (
