@@ -37,8 +37,47 @@ This document enumerates all environment variables consumed by the mediator serv
 | `MEDIA_DIR` | Deprecated | Legacy variable; ignored by runtime (local storage is fixed to `dist/media`). |
 | `MEDIA_DIR_OVERRIDE` | Deprecated | Legacy variable; ignored by runtime (local storage is fixed to `dist/media`). |
 | `MEDIA_ROOT_DIR` | (unset) | Absolute mounted media root directory used to derive fixed paths: `<root>/shopbilder` (WebDAV) and `<root>/shopbilder-import` (ERP mirror). URLs are rejected. |
+| `ALT_DOC_DIRS` | (unset) | JSON array of alternative document directory configurations. Each entry links a WebDAV mount to a per-item identifier for retrieving documents (wipe reports, test results, certificates). See [Alternative document directories](#alternative-document-directories) below. |
 
 Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The service derives WebDAV at `<root>/shopbilder` and ERP mirror at `<root>/shopbilder-import`. `davs://` URLs are not accepted; only local filesystem mount paths are supported.
+
+## Alternative document directories
+
+`ALT_DOC_DIRS` enables retrieving files from additional WebDAV directories organized by an identifier other than Artikel_Nummer. Each directory configuration specifies which item field to use as the subdirectory name.
+
+### Entry schema
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `name` | Yes | Unique alphanumeric key (hyphens and underscores allowed). Used in API URLs: `/external-docs/<name>/…` |
+| `mountPath` | Yes | Absolute filesystem path to the mounted WebDAV root (must not be a URL). |
+| `identifierType` | Yes | `ean` (product-level), `serialNumber` (per-unit), or `macAddress` (per-unit). |
+| `normalize` | No | Optional transformation applied to the identifier before use as a path segment: `uppercase`, `lowercase`, or `strip-colons`. |
+| `docType` | No | Human-readable label shown in the API response (e.g. `Löschprotokoll`, `Prüfprotokoll`). |
+
+### Identifier scope
+
+- `ean` — resolves from `item_refs.EAN`. All instances of the same product share one EAN directory. Use for product-level documents (e.g. test certificates for a model).
+- `serialNumber` — resolves from `items.SerialNumber`. Per physical unit. Use for per-unit documents (e.g. wipe reports).
+- `macAddress` — resolves from `items.MacAddress`. Per physical unit. Use for per-unit network device documents.
+
+### Example
+
+```
+ALT_DOC_DIRS=[
+  {"name":"wipe-reports","mountPath":"/mnt/wipe-reports","identifierType":"serialNumber","docType":"Löschprotokoll"},
+  {"name":"test-results","mountPath":"/mnt/test-results","identifierType":"ean","normalize":"uppercase","docType":"Prüfprotokoll"}
+]
+```
+
+### API endpoints
+
+- `GET /api/items/:itemUUID/external-docs` — lists available files for all configured directories. Returns `available: false, reason: "identifier_not_set"` when the item is missing the required identifier.
+- `GET /external-docs/:name/:itemUUID/:fileName` — serves a single file (allowed extensions: `.pdf`, `.txt`, `.csv`, `.xml`, `.json`).
+
+### Security
+
+Identifier values are validated against allowlist regexes (EAN: alphanumeric; serial: alphanumeric + `-_`; MAC: hex + `:-`) and then checked with `resolvePathWithinRoot` to prevent path traversal.
 
 ## Printing
 
