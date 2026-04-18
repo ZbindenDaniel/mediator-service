@@ -17,6 +17,7 @@
   - Persistence side effects on `agentic_runs`, `agentic_run_review_history`, and selected `item_refs` fields.
   - Frontend review entry points and backend action mapping.
   - Logging/error handling paths used for auditability.
+  - Item creation quality review: physical-condition questions at item creation time, with results persisted to `quality_assessments` and `ai-prio` forwarded to the agentic trigger.
 - Out of scope:
   - New policy decisions (for unclear behavior, capture open questions instead of redefining behavior).
   - Historical/legacy compatibility beyond what current handlers already accept.
@@ -65,6 +66,48 @@
    - Restart endpoint re-queues run and can clear/carry review metadata depending on provided payload.
    - Item detail restart flow may retrigger `/api/agentic/run`; if trigger fails, UI auto-cancels the run to avoid zombie queued state.
 
+
+## Item Creation Quality Review
+
+A distinct review type that runs as the first wizard step when creating a new item. Unlike the AI run review (which evaluates agentic output quality), this review assesses the physical condition of the incoming item.
+
+### Questions (Phase 1 — physical condition)
+
+| # | Question (German) | Answer | Maps to field |
+|---|---|---|---|
+| 1 | Ist der Artikel vollständig? | yes/no | `is_complete` |
+| 2 | Gibt es sichtbare Schäden? | yes/no | `has_defects` |
+| 3 | Ist der Artikel funktionsfähig? | yes/no | `is_functional` |
+| 4 | Anmerkungen | free text | `notes` |
+
+### Quality tag derivation
+
+| Condition | Tag | Value |
+|---|---|---|
+| `is_functional = false` | Ersatzteil | 1 |
+| `has_defects = true` AND `is_complete = false` | Upcycling | 2 |
+| `has_defects = true` OR `is_complete = false` | Ok | 3 |
+| All positive | Gut | 4 |
+
+### `ai-prio` (transient, never persisted)
+Derived from the quality value and forwarded as `priority` in the `POST /api/agentic/run` trigger payload:
+- value 1–2 → `'high'`
+- value 3 → `'normal'`
+- value 4–5 → `'low'`
+
+### Persistence
+- `quality_assessments` table (see `backend/db.ts` for DDL).
+- API: `POST /api/items/:uuid/quality-review` (`backend/actions/quality-review.ts`).
+- The legacy `items.Quality INTEGER` column is dual-written to preserve backward compat.
+- Review can be skipped; item is then created with `QualityId = NULL` and no `priority` on the agentic trigger.
+
+### Data contracts
+- `models/quality.ts`: `QualityAssessment`, `QualityTag`, `AiPriority`, `deriveQualityTagFromCondition()`, `deriveAiPriorityFromAssessment()`
+- `frontend/src/components/QualityReviewStep.tsx`: wizard step UI
+- `frontend/src/components/ItemCreate.tsx`: step sequencing and API call
+
+### Extensibility
+The `QualityReviewStep` component accepts a `questionSet` prop for per-category question sets (not implemented in Phase 1; framework is in place).
 
 ## Restart metadata preservation/replacement policy
 <!-- TODO(agentic-doc-sync): Keep this truth table aligned with restart action/service/result-handler lifecycle updates. -->

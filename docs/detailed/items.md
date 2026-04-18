@@ -51,6 +51,7 @@
   - `models/item-detail.ts`
   - `models/agentic-statuses.ts`
   - `models/print-label.ts`
+  - `models/quality.ts` (`QualityAssessment` entity, `QualityTag`, `AiPriority`, derivation functions)
 - Backend contract touchpoints:
   - `backend/importer.ts` (CSV ingestion + alias/header normalization into item fields).
   - `backend/actions/save-item.ts` (GET detail response + PUT edit behavior across instance/reference boundaries).
@@ -64,6 +65,8 @@
   - `frontend/src/utils/logger.ts`
 
 ### Contract-check list (use before item-domain changes)
+- [ ] If `QualityAssessment` fields change, update `backend/actions/quality-review.ts`, `quality_assessments` DDL in `backend/db.ts`, and `models/quality.ts` together.
+- [ ] When hydrating `QualityAssessment` in detail responses, keep `item.Quality` (integer) in sync via dual-write to avoid divergence with grouping/badge consumers.
 - [ ] Identity fields stay explicit: do not treat `Artikel_Nummer` and `ItemUUID` as interchangeable in handlers or UI payloads.
 - [ ] `Item`, `ItemRef`, and `ItemInstance` edits remain synchronized with `ItemDetailResponse` shape.
 - [ ] If status values change, update `models/agentic-statuses.ts`, backend filtering/normalization, and frontend status label/filter usage together.
@@ -83,6 +86,9 @@
 - `UpdatedAt`: Last update timestamp used for sorting and change tracking.
 - `AgenticStatus`: Current agentic run lifecycle state driving list filters and review states.
 - `AgenticReviewState`: Review decision/status metadata paired with agentic outputs.
+- `Quality`: Legacy integer (1–5) denoting item condition. Kept as denormalized cache for backward compat; new assessments also write `QualityId`.
+- `QualityId`: FK to `quality_assessments.id`; populated after a quality review step at item creation. Null for pre-existing items.
+- `QualityAssessment`: Optional full assessment object (tag, condition answers, audit fields) attached when detail endpoint hydrates it.
 - `Grafikname`: Primary media reference name/path used as the preferred display image.
 - `ImageNames`: Serialized additional media references associated with the item reference.
 - `Verkaufspreis`: Sell price field used in edit/review/export contracts.
@@ -94,6 +100,7 @@
 | Flow | Endpoint/action | File | Notes |
 |---|---|---|---|
 | Create item/import one file | `POST /api/import/item` (`import-item`) | `backend/actions/import-item.ts` | Handles uploaded CSV/image style ingestion for new item creation pathways. |
+| Create quality assessment | `POST /api/items/:uuid/quality-review` (`quality-review`) | `backend/actions/quality-review.ts` | Called immediately after item creation to persist physical-condition review answers; dual-writes `QualityId` + legacy `Quality` integer. |
 | Increment/add instance | `POST /api/items/:id/add` (`add-item`) | `backend/actions/add-item.ts` | Branches by `Einheit`: bulk stock increment vs new instance mint/persist; emits events + sync queue jobs. |
 | Read detail | `GET /api/items/:id` (`save-item` GET branch) | `backend/actions/save-item.ts` | Returns `ItemDetailResponse` payload (`item`, `reference`, `instances`, `media`, events, agentic info). |
 | Edit item | `PUT /api/items/:id` (`save-item` PUT branch) | `backend/actions/save-item.ts` | Applies instance-safe edits + reference update logic + media mutation paths. |
@@ -114,7 +121,7 @@
   - `ItemListPage` + `ItemList` for grouped list/search/filter/sort states.
   - `ItemDetail` for instance/reference merged view, agentic review context, and related actions.
   - `ItemEdit` + shared form sections (`ItemForm`, `forms/itemFormShared.tsx`) for editing.
-  - `ItemCreate` for creation/import-assisted creation flows.
+  - `ItemCreate` for creation/import-assisted creation flows, including the `qualityReview` step (physical condition questions presented after `basicInfo` that produce a `QualityAssessment` and a transient `ai-prio` passed to the agentic trigger).
   - `ItemMediaGallery` for media render, modal preview, add/remove actions and failure fallback states.
 - Notable UI states worth preserving:
   - Grouped vs raw instance perspective in list (`groupedItems` consumption).

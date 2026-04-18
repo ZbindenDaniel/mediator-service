@@ -25,10 +25,12 @@ import { requestPrintLabel } from '../utils/printLabelRequest';
 import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 import { logger } from '../utils/logger';
 import { normalizeQuality } from '../../../models/quality';
+import QualityReviewStep from './QualityReviewStep';
+import type { QualityReviewResult } from './QualityReviewStep';
 
 // TODO(agentic-trigger-skip-ui): Suppress alerts for already-queued agentic runs.
 
-type CreationStep = 'basicInfo' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
+type CreationStep = 'basicInfo' | 'qualityReview' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
 export interface AgenticHealthProxyOptions {
   fetchImpl?: typeof fetch;
@@ -610,6 +612,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
   const [creating, setCreating] = useState(false);
   const [ocrPhoto, setOcrPhoto] = useState<string | null>(null);
   const [ocrCaptureOpen, setOcrCaptureOpen] = useState(false);
+  const [qualityReviewResult, setQualityReviewResult] = useState<QualityReviewResult | null>(null);
   const dialog = useDialog();
   const queryPrefilledBoxRef = useRef<string | null>(null);
 
@@ -1173,6 +1176,30 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         console.info('Skipping client-side agentic trigger because backend already dispatched.', { context });
       }
 
+      if (qualityReviewResult) {
+        const itemUUIDs = responseItems.length > 0
+          ? responseItems.map((i) => (typeof i?.ItemUUID === 'string' ? i.ItemUUID.trim() : '')).filter(Boolean)
+          : createdItem?.ItemUUID ? [createdItem.ItemUUID] : [];
+        if (itemUUIDs.length > 0) {
+          try {
+            const reviewedBy = actor;
+            await Promise.allSettled(
+              itemUUIDs.map((uuid) =>
+                fetch(`/api/items/${encodeURIComponent(uuid)}/quality-review`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...qualityReviewResult.assessment, reviewed_by: reviewedBy })
+                }).then((r) => {
+                  if (!r.ok) console.warn('[quality-review] API call returned non-ok status', { uuid, status: r.status });
+                })
+              )
+            );
+          } catch (qrErr) {
+            console.warn('[quality-review] Failed to persist quality assessment; creation continues', qrErr);
+          }
+        }
+      }
+
       if (responseItems.length > 1 || (createdCount ?? 0) > 1) {
         const itemIds = responseItems
           .map((item) => (typeof item?.ItemUUID === 'string' ? item.ItemUUID.trim() : ''))
@@ -1212,7 +1239,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         const agenticPayload: AgenticRunTriggerPayload = {
           artikelNummer,
           artikelbeschreibung: searchText,
-          ...(ocrPhoto ? { imageData: ocrPhoto } : {})
+          ...(ocrPhoto ? { imageData: ocrPhoto } : {}),
+          ...(qualityReviewResult?.aiPriority ? { priority: qualityReviewResult.aiPriority } : {})
         };
 
         try {
@@ -1458,13 +1486,23 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
         Artikelbeschreibung: trimmedDescription,
         Artikel_Nummer: trimmedNumber
       };
-      console.log('Advancing to match selection with basic info', normalized);
+      console.log('Advancing to quality review with basic info', normalized);
       setBasicInfo(normalized);
       setManualDraft(normalized);
-      setCreationStep('matchSelection');
+      setCreationStep('qualityReview');
     } catch (err) {
       console.error('Failed to prepare basic info for next step', err);
     }
+  };
+
+  const handleQualityReviewComplete = (result: QualityReviewResult) => {
+    setQualityReviewResult(result);
+    setCreationStep('matchSelection');
+  };
+
+  const handleQualityReviewSkip = () => {
+    setQualityReviewResult(null);
+    setCreationStep('matchSelection');
   };
 
   const handleMatchSelection = async (item: SimilarItem) => {
@@ -1699,6 +1737,19 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
           onSubmit={handleBasicInfoNext}
           layout={layout}
           headerContent={<>{basicInfoHeader}{ocrSection}</>}
+        />
+      </>
+    );
+  }
+
+  if (creationStep === 'qualityReview') {
+    return (
+      <>
+        {blockingOverlay}
+        <QualityReviewStep
+          onComplete={handleQualityReviewComplete}
+          onSkip={handleQualityReviewSkip}
+          layout={layout}
         />
       </>
     );

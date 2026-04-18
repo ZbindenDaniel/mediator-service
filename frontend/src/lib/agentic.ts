@@ -87,6 +87,8 @@ export interface AgenticRunTriggerPayload {
   } | null;
   /** Base64 data URL of a device nameplate/label photo for OCR-assisted search enrichment. */
   imageData?: string | null;
+  /** Derived from quality review answers; not persisted. Controls agentic run queue priority. */
+  priority?: 'high' | 'normal' | 'low';
 }
 
 const DEFAULT_AGENTIC_RUN_ENDPOINT = '/api/agentic/run';
