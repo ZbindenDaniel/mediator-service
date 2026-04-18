@@ -11,6 +11,10 @@ For deep implementation instructions, use [`docs/AGENT.md`](docs/AGENT.md).
 - `docs/`: architecture, planning, operations, and domain-specific implementation notes.
 - `OVERVIEW.md`: active task tracker and near-term priorities.
 
+## Documentation is mandatory
+
+Every completed task must update [`OVERVIEW.md`](OVERVIEW.md) and [`todo.md`](todo.md) before the response ends. See [`CLAUDE.md`](CLAUDE.md) for the required format and completion checklist.
+
 ## Read these first
 1. [`OVERVIEW.md`](OVERVIEW.md) – current focus and next queued work.
 2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) – system boundaries and responsibilities.
