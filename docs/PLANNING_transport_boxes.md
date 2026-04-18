@@ -1,6 +1,6 @@
 # Transport Boxes (T-) — Planning Document
 
-_Status: Draft · Date: 2026-04-18_
+_Status: Draft · Date: 2026-04-18 · Updated: 2026-04-18_
 
 ---
 
@@ -33,19 +33,20 @@ Transports do **not** move items at creation time. Items remain at their current
 
 ```sql
 CREATE TABLE transports (
-  TransportID   TEXT PRIMARY KEY,   -- T-DDMMYY-####
-  SourceId      TEXT,               -- shelf or box ID (nullable if items specified directly)
-  TargetId      TEXT NOT NULL,      -- shelf or location ID
-  State         TEXT NOT NULL DEFAULT 'pending',  -- pending | done | cancelled
-  Reference     TEXT,               -- order no., commission ref, free text
-  Note          TEXT,
-  ItemCount     INTEGER,            -- denormalized summary
-  TotalWeightKg REAL,               -- denormalized summary
-  CreatedAt     TEXT NOT NULL,
-  CreatedBy     TEXT,
-  CompletedAt   TEXT,
-  CompletedBy   TEXT,
-  UpdatedAt     TEXT NOT NULL
+  TransportID     TEXT PRIMARY KEY,   -- T-DDMMYY-####
+  SourceId        TEXT,               -- shelf or box ID (nullable if items specified directly)
+  TargetId        TEXT NOT NULL,      -- planned destination shelf ID
+  ActualTargetId  TEXT,               -- actual destination if overridden at completion
+  State           TEXT NOT NULL DEFAULT 'pending',  -- pending | done | cancelled
+  Reference       TEXT,               -- order no., commission ref, free text
+  Note            TEXT,
+  ItemCount       INTEGER,            -- denormalized summary
+  TotalWeightKg   REAL,               -- denormalized summary
+  CreatedAt       TEXT NOT NULL,
+  CreatedBy       TEXT,
+  CompletedAt     TEXT,
+  CompletedBy     TEXT,
+  UpdatedAt       TEXT NOT NULL
 );
 
 CREATE TABLE transport_items (
@@ -79,11 +80,12 @@ Add nullable columns `TargetLocationId`, `TransportState`, `TransportReference` 
 export type TransportState = 'pending' | 'done' | 'cancelled';
 
 export interface Transport {
-  TransportID: string;          // T-DDMMYY-####
-  SourceId?: string | null;     // shelf or box being transported
-  TargetId: string;             // destination shelf or location
+  TransportID: string;            // T-DDMMYY-####
+  SourceId?: string | null;       // shelf or box being transported
+  TargetId: string;               // planned destination shelf ID
+  ActualTargetId?: string | null; // actual destination when overridden at completion
   State: TransportState;
-  Reference?: string | null;    // order/commission reference
+  Reference?: string | null;      // order/commission reference
   Note?: string | null;
   ItemCount?: number | null;
   TotalWeightKg?: number | null;
@@ -141,9 +143,10 @@ Same collision-retry logic as `create-box.ts` (up to 25 attempts, 4-digit index 
 
 **Completion flow (warehouse employee):**
 1. Open **Transporte** page (new nav item), filter by `pending`.
-2. Select transport → see source, target, item count summary.
-3. Tap **"Abschliessen"** → prompted to confirm/scan target location.
-4. On confirm: backend relocates all items in source box/shelf to target, marks transport `done`.
+2. Select transport → see source, planned target, item count summary.
+3. Tap **"Abschliessen"** → completion dialog (see §5.4) with planned target pre-filled.
+4. Employee scans or selects target shelf (can differ from planned — see §5.4).
+5. Backend relocates all items in source box/shelf to confirmed target, marks transport `done`.
 
 ### UC2 — Warehouse → Store (commissioning / inbound)
 
@@ -157,8 +160,8 @@ Same collision-retry logic as `create-box.ts` (up to 25 attempts, 4-digit index 
 **Completion flow (warehouse employee):**
 1. Transport list → filter or search by reference.
 2. Select transport → see which items/boxes are included.
-3. Scan target location → backend moves items, marks done.
-4. Reference is preserved on the completed transport for audit.
+3. Completion dialog (§5.4) → scan or confirm target shelf.
+4. Backend moves items, marks done; reference preserved for audit.
 
 ### UC3 — Warehouse → Warehouse (inter-site)
 
@@ -170,7 +173,40 @@ Same collision-retry logic as `create-box.ts` (up to 25 attempts, 4-digit index 
 3. Specify target warehouse location and note (reason for transfer).
 4. Transport created with explicit `transport_items` entries (no single SourceId).
 
-**Completion flow:** same as UC1/UC2.
+**Completion flow:** same as UC1/UC2 — completion dialog, optional override.
+
+### UC4 — Shelf Full / Location Override at Completion
+
+**Context:** An employee arrives at the planned target shelf but it is full or otherwise unsuitable. They find a free shelf nearby and place items there instead.
+
+**Flow:**
+1. Employee opens transport detail, taps **"Abschliessen"**.
+2. Completion dialog shows planned target: _"Regal B379-1-0003 (12 Boxen, 47 Artikel)"_.
+3. Employee scans a **different** shelf (e.g. `S-B379-1-0005`).
+4. Dialog detects mismatch between scanned and planned target. Shows confirmation:
+   > **Zielort geändert**
+   > Geplant: Regal B379-1-0003
+   > Neu gescannt: Regal B379-1-0005 (3 Boxen, 11 Artikel)
+   > Trotzdem abschliessen?
+5. Employee confirms → backend completes transport with `ActualTargetId = S-B379-1-0005`, `TargetId` unchanged (planned target preserved for audit).
+6. Completed transport record shows both planned and actual target.
+
+**Notes:**
+- The confirmation step is required even if the override is intentional — prevents accidental wrong-shelf scans.
+- If the employee scans the **same** shelf as planned, no extra confirmation is shown (normal completion path).
+- `ActualTargetId` is null when the actual matches the planned target (no override needed).
+
+### §5.4 — Completion Dialog (shared flow)
+
+The "Abschliessen" dialog is the same for all use cases:
+
+1. **Target shelf picker** — shows all known shelves as a searchable list. Each shelf entry displays:
+   - Shelf label (e.g. "Hubertus – Etage 1 – Regal 0002")
+   - Current box count and item count (from aggregated `list-boxes` query)
+   - Planned target is pre-selected / highlighted
+2. **QR scan shortcut** — employee can scan a shelf QR to auto-select it instead of scrolling.
+3. **If scanned/selected shelf ≠ planned target** → override confirmation (§UC4 step 4).
+4. **Confirm** → sends `complete-transport` with `confirmedTargetId`.
 
 ---
 
@@ -193,12 +229,27 @@ Same collision-retry logic as `create-box.ts` (up to 25 attempts, 4-digit index 
 | `GET` | `/api/transports/:id` | `transport-detail` | Single transport + referenced items |
 | `POST` | `/api/transports/:id/complete` | `complete-transport` | Relocate items/boxes, mark done |
 | `POST` | `/api/transports/:id/cancel` | `cancel-transport` | Mark cancelled |
+| `GET` | `/api/boxes?type=shelf&counts=1` | `list-boxes` (extended) | All shelves with box+item count aggregates for target picker |
 
 `complete-transport` payload:
 ```json
-{ "actor": "string", "confirmedTargetId": "string" }
+{
+  "actor": "string",
+  "confirmedTargetId": "string"
+}
 ```
-`confirmedTargetId` must match (or be accepted as valid substitute for) the transport's `TargetId`. Mismatch → 400 with structured error. This prevents accidental delivery to the wrong location.
+
+- `confirmedTargetId` is the shelf ID the employee actually chose (scanned or selected).
+- If `confirmedTargetId` equals `TargetId`: normal completion, `ActualTargetId` stays null.
+- If they differ: override is accepted and `ActualTargetId = confirmedTargetId` is persisted. The mismatch is logged with structured context (`plannedTargetId`, `actualTargetId`, `actor`). No 400 error — the frontend already required explicit confirmation before sending.
+
+**Shelf list with counts** (`GET /api/boxes?type=shelf&counts=1`):
+
+Extend the existing `list-boxes` action to support an optional `counts=1` parameter that adds per-shelf aggregate columns:
+- `BoxCount` — number of boxes with `LocationId = shelf.BoxID`
+- `ItemCount` — total items across those boxes (already partially available via existing aggregate logic)
+
+This reuses the existing query and projection; the `counts` flag gates the JOIN to avoid overhead when not needed.
 
 ---
 
@@ -225,8 +276,21 @@ Same collision-retry logic as `create-box.ts` (up to 25 attempts, 4-digit index 
 
 - Header: TransportID, state badge, source → target summary, reference, note.
 - Item/box list: shows what will be (or was) moved.
-- Actions: **"Abschliessen"** (pending only) → confirms target via scan or dropdown; **"Abbrechen"** (pending only).
-- Completed transports: read-only with timestamp and actor.
+- Actions: **"Abschliessen"** (pending only) → opens completion dialog (§5.4); **"Abbrechen"** (pending only).
+- Completed transports: read-only with timestamp and actor. If `ActualTargetId` differs from `TargetId`, show both:
+  > Ziel: ~~Regal B379-1-0003~~ → **Regal B379-1-0005** (geändert bei Abschluss)
+
+### 8.5 Target shelf picker (in completion dialog and transport creation)
+
+Used in both the creation form (choosing planned target) and the completion dialog (confirming/overriding actual target).
+
+- Searchable list of all shelves fetched from `GET /api/boxes?type=shelf&counts=1`.
+- Each shelf row shows:
+  - Shelf label (resolved via `shelfLabel.ts` format: `{location_label} – {floor} – {index}`)
+  - Box count + item count in a compact badge (e.g. `4 Boxen · 23 Artikel`)
+  - Visual indicator if shelf appears full (box count exceeds a configurable threshold — TBD)
+- QR scan button alongside the list: scanning a shelf QR auto-selects it.
+- Pre-selects planned `TargetId` in the completion dialog.
 
 ### 8.4 "Transport ausstehend" indicator
 
@@ -239,13 +303,14 @@ Same collision-retry logic as `create-box.ts` (up to 25 attempts, 4-digit index 
 
 ### Phase 1 — Core (unblocked)
 
-1. `models/transport.ts` — TypeScript interfaces.
+1. `models/transport.ts` — TypeScript interfaces (including `ActualTargetId`).
 2. DB schema: `transports` + `transport_items` tables with migrations in `backend/db.ts`.
 3. `backend/actions/create-transport.ts`, `list-transports.ts`, `transport-detail.ts`.
-4. `backend/actions/complete-transport.ts` — reuses existing `move-item` / `move-box` logic.
+4. `backend/actions/complete-transport.ts` — reuses `move-item` / `move-box` logic; accepts `confirmedTargetId`; records `ActualTargetId` when override occurs; logs mismatch.
 5. `backend/actions/cancel-transport.ts`.
-6. Frontend: `TransportListPage.tsx`, `TransportDetail.tsx`.
-7. Navigation: add Transporte nav item.
+6. Extend `list-boxes` with `counts=1` parameter for shelf picker aggregates.
+7. Frontend: `TransportListPage.tsx`, `TransportDetail.tsx`, `TransportCompleteDialog.tsx` (shelf picker + override confirmation).
+8. Navigation: add Transporte nav item.
 
 ### Phase 2 — Creation entry points
 
@@ -300,6 +365,14 @@ Is it valid to have two pending transports referencing the same item?
 
 ItemCount and TotalWeightKg on the transport: compute on creation from snapshot (Phase 1), or aggregate live from transport_items join?
 - **Recommendation:** Snapshot at creation (denormalized), updated if items change. Consistent with how `Box.ItemCount` works.
+
+### Q8: "Shelf full" threshold in target picker
+
+The target picker should visually signal when a shelf appears full. What constitutes "full"?
+- Fixed box count threshold per location (configurable in `shelf-locations.ts`)?
+- Dynamic: flag shelves with ≥ N boxes where N is a global config value?
+- No automatic indicator — rely on employee judgment?
+- **Recommendation:** Global configurable threshold (`MAX_BOXES_PER_SHELF`, default e.g. 20) surfaced as a warning indicator (not a hard block). Defer per-shelf capacity config to a later phase.
 
 ### Q7: ERP/shop API authentication and schema
 
