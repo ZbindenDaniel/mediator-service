@@ -17,6 +17,10 @@ import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { generateShopwareCorrelationId } from '../db';
 import { attachTranscriptReference } from '../agentic';
 import { loadSubcategoryReviewAutomationSignals } from '../agentic/review-automation-signals';
+import { ALT_DOC_DIRS } from '../config';
+import { resolveAltDocDirPath, buildExternalDocUrl } from '../lib/alt-doc-resolver';
+import { listFilesInAltDocDirectory } from '../lib/media-request';
+import type { ExternalDocSummary } from '../../models/external-doc';
 import { listRecentAgenticRunReviewHistoryBySubcategory } from '../db';
 
 const MEDIA_PREFIX = '/media/';
@@ -949,6 +953,31 @@ const action = defineHttpAction({
           });
         }
 
+        let externalDocs: ExternalDocSummary[] | null = null;
+        if (ALT_DOC_DIRS.length > 0) {
+          const resolveCtx = {
+            itemUUID: itemId,
+            ean: typeof item.EAN === 'string' ? item.EAN : null,
+            serialNumber: typeof item.SerialNumber === 'string' ? item.SerialNumber : null,
+            macAddress: typeof item.MacAddress === 'string' ? item.MacAddress : null
+          };
+          externalDocs = ALT_DOC_DIRS.map((dirConfig) => {
+            const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);
+            if (!resolved) {
+              return { name: dirConfig.name, docType: dirConfig.docType ?? null, identifierType: dirConfig.identifierType, available: false, reason: 'identifier_not_set', fileCount: 0, files: [] };
+            }
+            const fileNames = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
+            return {
+              name: dirConfig.name,
+              docType: dirConfig.docType ?? null,
+              identifierType: dirConfig.identifierType,
+              available: true,
+              fileCount: fileNames.length,
+              files: fileNames.map((fileName) => ({ fileName, url: buildExternalDocUrl(dirConfig.name, itemId, fileName) }))
+            };
+          });
+        }
+
         let responsePayload: {
           item: Item;
           reference: ItemRef | null;
@@ -963,6 +992,7 @@ const action = defineHttpAction({
           compatibleAccessoryRefs: unknown[];
           compatibleParentRefs: unknown[];
           attachments: unknown[];
+          externalDocs: ExternalDocSummary[] | null;
         };
         try {
           const responseItem =
@@ -982,7 +1012,8 @@ const action = defineHttpAction({
             connectedToDevices,
             compatibleAccessoryRefs,
             compatibleParentRefs,
-            attachments
+            attachments,
+            externalDocs
           };
         } catch (error) {
           console.error('[save-item] Failed to construct item detail response payload', {
@@ -997,7 +1028,8 @@ const action = defineHttpAction({
           hasReference: Boolean(reference),
           hasAgentic: Boolean(agentic),
           hasReviewAutomation: Boolean(agenticReviewAutomation),
-          instanceCount: instances.length
+          instanceCount: instances.length,
+          externalDocDirs: externalDocs?.length ?? 0
         });
         return sendJson(res, 200, responsePayload);
       } catch (err) {
@@ -1162,6 +1194,8 @@ const action = defineHttpAction({
         'Datum_erfasst',
         'Auf_Lager',
         'ShopwareVariantId',
+        'SerialNumber',
+        'MacAddress',
         'ItemUUID'
       ];
       const ignoredPayloadFields = ignoredInstanceFields.filter((field) =>

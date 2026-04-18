@@ -428,10 +428,10 @@ const UPSERT_ITEM_REFERENCE_SQL = `
 
 const UPSERT_ITEM_INSTANCE_SQL = `
   INSERT INTO items (
-    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager, Quality, ShopwareVariantId
+    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager, Quality, ShopwareVariantId, SerialNumber, MacAddress
   )
   VALUES (
-    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager, @Quality, @ShopwareVariantId
+    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager, @Quality, @ShopwareVariantId, @SerialNumber, @MacAddress
   )
   ON CONFLICT(ItemUUID) DO UPDATE SET
     Artikel_Nummer=excluded.Artikel_Nummer,
@@ -442,7 +442,9 @@ const UPSERT_ITEM_INSTANCE_SQL = `
     Datum_erfasst=excluded.Datum_erfasst,
     Auf_Lager=excluded.Auf_Lager,
     Quality=excluded.Quality,
-    ShopwareVariantId=excluded.ShopwareVariantId
+    ShopwareVariantId=excluded.ShopwareVariantId,
+    SerialNumber=excluded.SerialNumber,
+    MacAddress=excluded.MacAddress
 `;
 
 type ItemInstanceRow = {
@@ -455,6 +457,8 @@ type ItemInstanceRow = {
   Auf_Lager: number | null;
   Quality: number | null;
   ShopwareVariantId: string | null;
+  SerialNumber: string | null;
+  MacAddress: string | null;
 };
 
 type ItemRefRow = {
@@ -636,7 +640,9 @@ function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
     Datum_erfasst: toIsoString(instance.Datum_erfasst),
     Auf_Lager: asNullableInteger(instance.Auf_Lager),
     Quality: resolvedQuality,
-    ShopwareVariantId: asNullableTrimmedString((instance as ItemInstance & { ShopwareVariantId?: string | null }).ShopwareVariantId)
+    ShopwareVariantId: asNullableTrimmedString((instance as ItemInstance & { ShopwareVariantId?: string | null }).ShopwareVariantId),
+    SerialNumber: asNullableTrimmedString(instance.SerialNumber),
+    MacAddress: asNullableTrimmedString(instance.MacAddress)
   };
 }
 
@@ -958,6 +964,37 @@ function ensureItemEanColumn(database: Database.Database = db): void {
 }
 
 ensureItemEanColumn(db);
+
+function ensureItemInstanceIdentifierColumns(database: Database.Database = db): void {
+  let columns: Array<{ name: string }> = [];
+  try {
+    columns = database.prepare(`PRAGMA table_info(items)`).all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('Failed to inspect items schema for identifier columns', err);
+    throw err;
+  }
+  const columnNames = columns.map((c) => c.name);
+  if (!columnNames.includes('SerialNumber')) {
+    try {
+      database.prepare('ALTER TABLE items ADD COLUMN SerialNumber TEXT').run();
+      console.info('[db] Added SerialNumber column to items');
+    } catch (err) {
+      console.error('Failed to add SerialNumber column to items', err);
+      throw err;
+    }
+  }
+  if (!columnNames.includes('MacAddress')) {
+    try {
+      database.prepare('ALTER TABLE items ADD COLUMN MacAddress TEXT').run();
+      console.info('[db] Added MacAddress column to items');
+    } catch (err) {
+      console.error('Failed to add MacAddress column to items', err);
+      throw err;
+    }
+  }
+}
+
+ensureItemInstanceIdentifierColumns(db);
 ensureAgenticRunSchema(db);
 
 let upsertItemReferenceStatement: Database.Statement;
@@ -1106,6 +1143,8 @@ SELECT
   i.Auf_Lager AS Auf_Lager,
   CAST(COALESCE(r.Quality, i.Quality) AS INTEGER) AS Quality,
   i.ShopwareVariantId AS ShopwareVariantId,
+  i.SerialNumber AS SerialNumber,
+  i.MacAddress AS MacAddress,
   -- TODO(agentic-search-term): Keep Suchbegriff in item selects for detail hydration.
   r.Suchbegriff AS Suchbegriff,
   r.Grafikname AS Grafikname,

@@ -20,3 +20,4 @@ export * from './quality';
 export * from './print-label';
 export * from './item-relation';
 export * from './item-attachment';
+export * from './external-doc';

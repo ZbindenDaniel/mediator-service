@@ -607,3 +607,89 @@ export function logShopwareConfigIssues(
 
   return issues;
 }
+
+export interface AltDocDirectoryConfig {
+  /** Unique name used in URLs and log messages (alphanumeric, hyphens, underscores only) */
+  name: string;
+  /** Absolute filesystem path to the mounted WebDAV root for this directory */
+  mountPath: string;
+  /**
+   * Which item field provides the subdirectory key.
+   * Use 'ean' for product-level docs (shared across all instances of a product).
+   * Use 'serialNumber' or 'macAddress' for per-unit docs.
+   */
+  identifierType: 'ean' | 'serialNumber' | 'macAddress';
+  /** Optional transformation applied to the identifier value before use as a path segment */
+  normalize?: 'uppercase' | 'lowercase' | 'strip-colons' | null;
+  /** Human-readable document category label (e.g. "Löschprotokoll", "Prüfprotokoll") */
+  docType?: string | null;
+}
+
+const ALT_DOC_DIR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const ALT_DOC_IDENTIFIER_TYPES = new Set<string>(['ean', 'serialNumber', 'macAddress']);
+const ALT_DOC_NORMALIZE_VALUES = new Set<string>(['uppercase', 'lowercase', 'strip-colons']);
+
+function parseAltDocDirsConfig(raw: string | undefined): AltDocDirectoryConfig[] {
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return [];
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    console.warn('[config] ALT_DOC_DIRS is not valid JSON — ignored. Expected a JSON array of directory configs.');
+    return [];
+  }
+
+  if (!Array.isArray(parsed)) {
+    console.warn('[config] ALT_DOC_DIRS must be a JSON array — ignored.');
+    return [];
+  }
+
+  const results: AltDocDirectoryConfig[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const entry = parsed[i] as Record<string, unknown>;
+    if (!entry || typeof entry !== 'object') {
+      console.warn(`[config] ALT_DOC_DIRS entry at index ${i} is not an object — skipped.`);
+      continue;
+    }
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    if (!name || !ALT_DOC_DIR_NAME_PATTERN.test(name)) {
+      console.warn(`[config] ALT_DOC_DIRS entry at index ${i} has invalid or missing "name" (alphanumeric, hyphens, underscores only) — skipped.`);
+      continue;
+    }
+    const mountPath = typeof entry.mountPath === 'string' ? entry.mountPath.trim() : '';
+    if (!mountPath || !path.isAbsolute(mountPath) || /^[a-z]+:\/\//i.test(mountPath)) {
+      console.warn(`[config] ALT_DOC_DIRS entry "${name}" has invalid "mountPath" (must be an absolute filesystem path, not a URL) — skipped.`);
+      continue;
+    }
+    const identifierType = typeof entry.identifierType === 'string' ? entry.identifierType.trim() : '';
+    if (!ALT_DOC_IDENTIFIER_TYPES.has(identifierType)) {
+      console.warn(`[config] ALT_DOC_DIRS entry "${name}" has invalid "identifierType" "${identifierType}" (must be one of: ean, serialNumber, macAddress) — skipped.`);
+      continue;
+    }
+    const normalizeRaw = typeof entry.normalize === 'string' ? entry.normalize.trim() : null;
+    const normalize = normalizeRaw && ALT_DOC_NORMALIZE_VALUES.has(normalizeRaw)
+      ? (normalizeRaw as AltDocDirectoryConfig['normalize'])
+      : null;
+    if (normalizeRaw && !normalize) {
+      console.warn(`[config] ALT_DOC_DIRS entry "${name}" has unrecognized "normalize" value "${normalizeRaw}" — treating as null.`);
+    }
+    const docType = typeof entry.docType === 'string' ? entry.docType.trim() || null : null;
+    results.push({ name, mountPath, identifierType: identifierType as AltDocDirectoryConfig['identifierType'], normalize, docType });
+  }
+
+  return results;
+}
+
+export const ALT_DOC_DIRS: readonly AltDocDirectoryConfig[] = Object.freeze(
+  parseAltDocDirsConfig(process.env.ALT_DOC_DIRS)
+);
+
+if (ALT_DOC_DIRS.length > 0) {
+  console.info('[config] Alternative document directory configuration loaded.', {
+    count: ALT_DOC_DIRS.length,
+    dirs: ALT_DOC_DIRS.map((d) => ({ name: d.name, identifierType: d.identifierType, mountPath: d.mountPath }))
+  });
+}

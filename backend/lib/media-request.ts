@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { resolvePathWithinRoot } from './path-guard';
 
 export function resolveSafeMediaRelativePath(rawPath: string): string | null {
   if (!rawPath) {
@@ -48,4 +49,32 @@ export function resolveExistingMediaPaths(
 
     return [{ root: resolvedRoot, filePath: candidatePath }];
   });
+}
+
+const ALT_DOC_FILE_LIMIT = 200;
+
+export function listFilesInAltDocDirectory(root: string, identifierValue: string): string[] {
+  const dirPath = resolvePathWithinRoot(root, identifierValue, { operation: 'list-alt-doc-dir' });
+  if (!dirPath) return [];
+
+  try {
+    if (!fs.existsSync(dirPath)) return [];
+    const entries = fs.readdirSync(dirPath);
+    const files: string[] = [];
+    for (const entry of entries) {
+      if (files.length >= ALT_DOC_FILE_LIMIT) break;
+      try {
+        const entryPath = path.join(dirPath, entry);
+        if (fs.statSync(entryPath).isFile()) {
+          files.push(entry);
+        }
+      } catch {
+        // skip unreadable entries
+      }
+    }
+    return files;
+  } catch (error) {
+    console.warn('[media-request] Failed to list alt doc directory', { root, identifierValue, error });
+    return [];
+  }
 }
