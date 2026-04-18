@@ -7,6 +7,12 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+64. ✅ Refine transport boxes planning: target shelf picker with box/item counts, location override at completion (`ActualTargetId`), UC4 (shelf full → scan new location → confirmation dialog), and `list-boxes?counts=1` API extension.
+   - **Why:** Completion flow needs explicit override support (transporter may find a better shelf) with a mandatory confirmation step to prevent wrong-shelf accidents. Shelf picker must show capacity context to aid that decision.
+   - **Deferred:** Per-shelf capacity threshold (Q8) — global config constant recommended for Phase 1.
+63. ✅ Research and produce transport boxes (T-) planning document at `docs/PLANNING_transport_boxes.md`.
+   - **Why:** User requested a planning doc covering use cases, data model, flows, UI placement, and open questions before any implementation. New separate `transports` table recommended over extending `boxes` — transport semantics (dual location, state machine, reference) do not map onto the Box interface without polluting existing print/relocation flows.
+   - **Deferred:** No implementation started. Todo item #18 ("Transport/Temporary box alias") is superseded by this broader plan and should be replaced when Phase 1 work begins.
 62. ✅ Create `CLAUDE.md` as the mandatory enforcement point for agent documentation; tighten `docs/AGENT.md` to define "done" as requiring OVERVIEW.md/todo.md updates; add a "Documentation is mandatory" callout to `AGENTS.md`.
    - **Why:** Agents were completing implementation work without updating documentation — framing it as guidance rather than a completion requirement meant it was routinely skipped. CLAUDE.md is loaded automatically by Claude Code, making it the most reliable enforcement location.
    - **Deferred:** No changes to OVERVIEW.md or todo.md format themselves — only the requirement to use them was strengthened.
