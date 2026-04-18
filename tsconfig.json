@@ -13,6 +13,8 @@
     "outDir": "dist",
     "rootDir": ".",
     "baseUrl": ".",
+    "ignoreDeprecations": "5.0",
+    "types": ["node"],
     "paths": {
       "@agentic/*": ["backend/agentic/*"]
     }
@@ -24,5 +26,11 @@
     "types/**/*",
     "test/**/*",
     "frontend/**/*"
+  ],
+  "exclude": [
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts"
   ]
 }

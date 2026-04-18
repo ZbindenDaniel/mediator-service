@@ -6,6 +6,7 @@ import type { AgenticRun } from './agentic-run';
 import type { AgenticRunStatus } from './agentic-statuses';
 import type { Box } from './box';
 import type { EventLog } from './event-log';
+import type { ExternalDocSummary } from './external-doc';
 import type { Item, ItemRef } from './item';
 import type { QualityValue } from './quality';
 
@@ -57,4 +58,5 @@ export interface ItemDetailResponse {
   agenticReviewAutomation: ItemDetailReviewAutomationSignal | null;
   media: string[];
   instances: ItemInstanceSummary[];
+  externalDocs?: ExternalDocSummary[] | null;
 }

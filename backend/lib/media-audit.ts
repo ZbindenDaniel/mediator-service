@@ -1,10 +1,12 @@
-export type MediaAuditAction = 'write' | 'delete' | 'prune' | 'mirror-copy' | 'mirror-skip';
-export type MediaAuditScope = 'item' | 'box' | 'erp-sync' | 'import';
+export type MediaAuditAction = 'write' | 'delete' | 'prune' | 'mirror-copy' | 'mirror-skip' | 'fetch';
+export type MediaAuditScope = 'item' | 'box' | 'erp-sync' | 'import' | 'external-docs';
 export type MediaAuditOutcome = 'start' | 'success' | 'blocked' | 'error' | 'skipped';
 
 export interface MediaAuditIdentifier {
   artikelNummer: string | null;
   itemUUID: string | null;
+  altIdentifierType?: string | null;
+  altIdentifierValue?: string | null;
 }
 
 export interface MediaAuditEvent {

@@ -61,6 +61,8 @@ export interface ItemInstance {
   // For Einheit=Stk, each persisted instance uses Auf_Lager=1 and quantity displays should use grouped counts.
   Auf_Lager?: number;
   ShopwareVariantId?: string | null;
+  SerialNumber?: string | null;
+  MacAddress?: string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade (nullable when unknown).
   // TODO(item-create): Keep creation payload expectations for Quality/Auf_Lager aligned across frontend and import flows.
   Quality?: QualityValue;

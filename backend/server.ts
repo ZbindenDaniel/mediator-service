@@ -28,7 +28,8 @@ import {
   SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
   getShopwareConfig,
   logShopwareConfigIssues,
-  IMPORTER_FORCE_ZERO_STOCK
+  IMPORTER_FORCE_ZERO_STOCK,
+  ALT_DOC_DIRS
 } from './config';
 import type { ShopwareConfig } from './config';
 import { ingestAgenticRunsCsv, ingestCsvFile, type IngestCsvFileOptions } from './importer';
@@ -98,7 +99,9 @@ import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
-import { resolveExistingMediaPaths, resolveSafeMediaRelativePath } from './lib/media-request';
+import { resolveExistingMediaPaths, resolveSafeMediaRelativePath, listFilesInAltDocDirectory } from './lib/media-request';
+import { resolveAltDocDirPath } from './lib/alt-doc-resolver';
+import { emitMediaAudit } from './lib/media-audit';
 
 const actions = loadActions();
 
@@ -691,6 +694,89 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           filePath: selected.filePath,
           error: err
         });
+        res.writeHead(404); return res.end('Not found');
+      }
+    }
+
+    if (url.pathname.startsWith('/external-docs/') && req.method === 'GET') {
+      // URL shape: /external-docs/:dirName/:itemUUID/:fileName
+      const segments = url.pathname.slice('/external-docs/'.length).split('/');
+      if (segments.length < 3) {
+        res.writeHead(400); return res.end('Bad request');
+      }
+      const [rawDirName, rawItemUUID, ...fileSegments] = segments;
+      const dirName = decodeURIComponent(rawDirName);
+      const itemUUID = decodeURIComponent(rawItemUUID);
+      const rawFileName = fileSegments.map(decodeURIComponent).join('/');
+
+      const dirConfig = ALT_DOC_DIRS.find((d) => d.name === dirName);
+      if (!dirConfig) {
+        console.warn('[external-docs] Unknown directory name in request', { dirName });
+        res.writeHead(404); return res.end('Not found');
+      }
+
+      const safeFileName = resolveSafeMediaRelativePath(rawFileName);
+      if (!safeFileName || safeFileName.includes('/')) {
+        console.warn('[external-docs] Rejected unsafe file name', { rawFileName });
+        res.writeHead(400); return res.end('Bad request');
+      }
+
+      const ext = path.extname(safeFileName).toLowerCase();
+      const allowedExts = new Set(['.pdf', '.txt', '.csv', '.xml', '.json']);
+      if (!allowedExts.has(ext)) {
+        console.warn('[external-docs] Rejected file with disallowed extension', { safeFileName, ext });
+        res.writeHead(404); return res.end('Not found');
+      }
+
+      const itemRow = db.prepare(
+        'SELECT i.ItemUUID, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = ?'
+      ).get(itemUUID) as { ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null } | undefined;
+
+      if (!itemRow) {
+        res.writeHead(404); return res.end('Not found');
+      }
+
+      const resolveCtx = {
+        itemUUID: itemRow.ItemUUID,
+        ean: itemRow.EAN ?? null,
+        serialNumber: itemRow.SerialNumber ?? null,
+        macAddress: itemRow.MacAddress ?? null
+      };
+
+      const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);
+      if (!resolved) {
+        console.warn('[external-docs] Could not resolve identifier for item', { itemUUID, dirName });
+        res.writeHead(404); return res.end('Not found');
+      }
+
+      const files = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
+      if (!files.includes(safeFileName)) {
+        console.warn('[external-docs] Requested file not in directory listing', { safeFileName, dirName, itemUUID });
+        res.writeHead(404); return res.end('Not found');
+      }
+
+      const filePath = path.join(resolved.dirPath, safeFileName);
+      try {
+        const data = fs.readFileSync(filePath);
+        const ct = ext === '.pdf' ? 'application/pdf'
+          : ext === '.txt' ? 'text/plain; charset=utf-8'
+          : ext === '.csv' ? 'text/csv; charset=utf-8'
+          : ext === '.xml' ? 'application/xml'
+          : ext === '.json' ? 'application/json'
+          : 'application/octet-stream';
+        emitMediaAudit({
+          action: 'fetch',
+          scope: 'external-docs',
+          identifier: { itemUUID, artikelNummer: null, altIdentifierType: dirConfig.identifierType, altIdentifierValue: resolved.identifierValue },
+          path: filePath,
+          root: dirConfig.mountPath,
+          outcome: 'success',
+          reason: null
+        });
+        res.writeHead(200, { 'Content-Type': ct });
+        return res.end(data);
+      } catch (err) {
+        console.error('[external-docs] Failed to serve file', { filePath, dirName, itemUUID, error: err });
         res.writeHead(404); return res.end('Not found');
       }
     }
