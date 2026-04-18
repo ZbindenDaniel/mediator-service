@@ -53,7 +53,7 @@
 
 17. **Add neighboring box navigation (prev/next).** Mirror existing item navigation patterns using existing sort order. **Goal:** reduce repeated return-to-list navigation during review flows.
 
-18. **Add Transport/Temporary box alias for item relocation.** A special box type with a `TargetLocation` field to temporarily hold items during multi-step relocation workflows until the contract is resolved. **Goal:** streamline complex relocation scenarios with clear temporary state and automatic resolution.
+18. **Implement transport boxes (T-).** Planning document at `docs/PLANNING_transport_boxes.md`. Phase 1: DB schema (`transports` + `transport_items` tables), models, CRUD + complete/cancel actions, TransportListPage + TransportDetail. Phase 2: creation entry points in BoxDetail/ShelfDetail/BulkActionBar + "Transport ausstehend" badges. Phase 3: ERP/shop API + reference search + audit export.
 
 19. **Add instance specification fields (RAM, SSD, OS).** Structured hardware spec fields to replace inconsistent manual entries in Langtext. **Goal:** enable structured spec queries and reporting while maintaining compatibility with existing workflows.
 
