@@ -73,6 +73,7 @@ A transporter in the warehouse needs to locate and collect specific stubbed good
 | `NumberLooseBoxes` | INTEGER NOT NULL DEFAULT 0 | Approximate count of unlabelled/uncatalogued boxes |
 | `CreatedAt` | TEXT NOT NULL | ISO 8601 |
 | `CreatedBy` | TEXT NOT NULL | Username |
+| `PhotoPath` | TEXT \| null | Optional path to a photo of the shelf/goods (stored via existing `MEDIA_STORAGE_MODE` infrastructure) |
 | `IsActive` | INTEGER NOT NULL DEFAULT 1 | `1` = open stub, `0` = resolved (inactive) |
 | `ResolvedAt` | TEXT \| null | ISO 8601 timestamp when stub was resolved at transport time |
 | `ResolvedBy` | TEXT \| null | Username of resolver |
@@ -108,6 +109,7 @@ Stub form:
   - Description: free text (required)
   - Loose items count: number input (optional, default 0)
   - Loose boxes count: number input (optional, default 0)
+  - Photo: optional camera capture (stored via MEDIA_STORAGE_MODE)
   - Notes: optional
         │
         ▼
@@ -132,13 +134,20 @@ GET /api/stubs?isActive=true
 Worker identifies high-priority stubs → initiates transport (out of scope)
 ```
 
-### Flow C: Resolve Stub (out of scope — outline only)
+### Flow C: Resolve Stub (auto-resolved by transport completion)
+
+Stubs on a source shelf are auto-resolved when a transport completes. No manual stub-resolve action is needed in v1.
 
 ```
-At transport time, transporter confirms goods collected
+complete-transport action (POST /api/transports/:id/complete)
         │
         ▼
-POST /api/stubs/:id/resolve  →  IsActive = 0, ResolvedAt = now, ResolvedBy = actor
+After relocating items, resolve all active box_stubs for source shelf:
+  UPDATE box_stubs SET IsActive = 0, ResolvedAt = now, ResolvedBy = actor
+  WHERE ShelfId = <sourceShelfId> AND IsActive = 1
+        │
+        ▼
+POST /api/stubs/:id/resolve  →  also available for manual resolution if needed
 ```
 
 ---
@@ -195,10 +204,12 @@ A dedicated view (accessible from main nav or BoxList filter):
 ```sql
 CREATE TABLE IF NOT EXISTS box_stubs (
   Id TEXT PRIMARY KEY,
+  -- ShelfId must be a shelf-format ID (S-*); enforced at application layer
   ShelfId TEXT NOT NULL REFERENCES boxes(BoxID),
   Description TEXT NOT NULL,
   NumberLooseItems INTEGER NOT NULL DEFAULT 0,
   NumberLooseBoxes INTEGER NOT NULL DEFAULT 0,
+  PhotoPath TEXT,
   CreatedAt TEXT NOT NULL,
   CreatedBy TEXT NOT NULL,
   IsActive INTEGER NOT NULL DEFAULT 1,
@@ -212,19 +223,34 @@ CREATE INDEX IF NOT EXISTS idx_box_stubs_active ON box_stubs(IsActive) WHERE IsA
 
 ---
 
-## Open Questions
+## Resolved Decisions
 
-1. **Shelf-only constraint** — should stubs be restricted to shelves (`S-*` format), or could a regular box also have a stub (e.g. an unlabelled box found inside a catalogued shelf)? If boxes can also have stubs, the `ShelfId` naming becomes awkward.
+All open questions are now decided.
 
-2. **Multiple stubs per shelf** — the model allows it (one per cluster). Is there a case where a single stub per shelf is sufficient and simpler? Or is the per-cluster granularity important for transport prioritisation?
+1. **Shelf-only constraint** — **✅ Shelves only (`S-*` format).** Stubs are never attached to regular boxes. The `ShelfId` column is validated at the application layer to ensure it starts with `S-`.
 
-3. **Photo attachment** — should stubs support an optional photo of the shelf/goods? This would help transporters locate and identify items. Ties into the existing `MEDIA_STORAGE_MODE` infrastructure.
+2. **Multiple stubs per shelf** — **✅ Allowed.** Per-cluster granularity is important for transport prioritisation; workers may add one stub per distinct cluster of goods on a shelf.
 
-4. **Stub resolution flow detail** — when a stub is resolved at transport time, should the system verify that the goods actually arrived (link to a transport record), or is a simple operator confirmation sufficient?
+3. **Photo attachment** — **✅ Yes — optional photo** using existing `MEDIA_STORAGE_MODE`. The `PhotoPath` column stores the path. The creation form includes a camera-capture input.
 
-5. **Stub visibility** — should stubs be visible during an inventory session for the same shelf (e.g. a note in `InventoryCheckView` that this shelf has open stubs)? This would inform the inventory worker but requires a join between the two features.
+4. **Stub resolution flow detail** — **✅ Auto-resolve on `complete-transport`.** When a transport completes, the backend auto-resolves all active stubs for the source shelf. No separate operator confirmation step is needed in v1.
 
-6. **Prioritisation signal** — beyond free-text description, is any structured prioritisation field useful? E.g. a `Priority` dropdown (low / medium / high) that the initial worker can set, making it easier to sort in the management view.
+5. **Stub visibility during inventory** — **✅ No cross-feature display.** Stub information is not shown inside `InventoryCheckView`. Features remain independent at the system level.
+
+6. **Prioritisation signal** — **✅ No priority field in v1.** Free-text description only. A structured `Priority` field may be added later if sorting needs arise.
+
+---
+
+## Nav Page: Stub Management (Warehouse Walk View)
+
+Accessible from the main nav (a dedicated entry with a "discovery" icon, e.g. compass or binoculars).
+
+**Layout:**
+- Rows are active stubs, one per row.
+- Rows are visually grouped by shelf using a distinct background color per shelf (one color per shelf, consistent across a session).
+- Each row shows: shelf label, stub description excerpt, loose-item count, loose-box count, created-by, creation date.
+- Optional photo thumbnail if `PhotoPath` is set.
+- Filter: active only (default) / all. Search: keyword in description, shelf ID.
 
 ---
 
@@ -232,5 +258,5 @@ CREATE INDEX IF NOT EXISTS idx_box_stubs_active ON box_stubs(IsActive) WHERE IsA
 
 | Document | Relationship |
 |----------|-------------|
-| [PLANNING_INVENTORY.md](./PLANNING_INVENTORY.md) | Independent; both may happen during the same warehouse visit but are separate system flows. An open stub on a shelf does not block or affect inventory sessions on the same shelf. |
-| Transport Planning *(future doc)* | The transport request process reads from `box_stubs` to build transport manifests and resolves stubs on completion. |
+| [PLANNING_INVENTORY.md](./PLANNING_INVENTORY.md) | Independent; both may happen during the same warehouse visit but are separate system flows. Open stubs are not displayed inside `InventoryCheckView`; an open stub does not block or affect an inventory session. |
+| [PLANNING_transport_boxes.md](./PLANNING_transport_boxes.md) | `complete-transport` auto-resolves all active stubs for the source shelf as part of the completion transaction. Stubs do not need to be manually resolved; the transport completion is the resolution trigger. |

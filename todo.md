@@ -53,7 +53,11 @@
 
 17. **Add neighboring box navigation (prev/next).** Mirror existing item navigation patterns using existing sort order. **Goal:** reduce repeated return-to-list navigation during review flows.
 
-18. **Implement transport boxes (T-).** Planning document at `docs/PLANNING_transport_boxes.md`. Phase 1: DB schema (`transports` + `transport_items` tables), models, CRUD + complete/cancel actions, TransportListPage + TransportDetail. Phase 2: creation entry points in BoxDetail/ShelfDetail/BulkActionBar + "Transport ausstehend" badges. Phase 3: ERP/shop API + reference search + audit export.
+18. **Implement transport boxes (T-).** Planning document at `docs/PLANNING_transport_boxes.md`. Phase 1: DB schema (`transports` + `transport_items` tables), models, CRUD + complete/cancel actions, TransportListPage + TransportDetail. Phase 2: creation entry points in BoxDetail/ShelfDetail/BulkActionBar + "Transport ausstehend" badges. Phase 3: ERP/shop API + reference search + audit export. Note: `complete-transport` must also auto-resolve active `box_stubs` for the source shelf.
+
+19a. **Implement stub boxes.** Planning document at `docs/PLANNING_STUB_BOXES.md`. Phase 1: `box_stubs` DB table + migration (incl. `PhotoPath` column), create/list/patch API actions, ShelfDetail `HasActiveStubs` badge + stub list section. Phase 2: dedicated Stub Management nav page (grouped by shelf with color distinction, photo thumbnail). Stub auto-resolve is handled by transport completion (item #18), not a separate action.
+
+19b. **Implement inventory feature (passive cycle).** Planning document at `docs/PLANNING_INVENTORY.md`. Phase 1: `LastInventoryDate` on boxes, `MissingAt` on items, `inventory_sessions` table, `INVENTORY_CYCLE_DAYS` config, `inventoryPending` filter on box list. Phase 2: `/api/inventory/start|scan|complete|cancel`, `InventoryCheckView` with checklist + scan zone + Menge count inputs + acoustic feedback. Phase 3: passive trigger hook in `qr-scan` + interstitial prompt. Phase 4: missing items view, `InventoryFound` flow, session export. Active Inventory Day (UC-1) is deferred — not part of current scope.
 
 19. **Add instance specification fields (RAM, SSD, OS).** Structured hardware spec fields to replace inconsistent manual entries in Langtext. **Goal:** enable structured spec queries and reporting while maintaining compatibility with existing workflows.
 
