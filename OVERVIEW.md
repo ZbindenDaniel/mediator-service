@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+62. ✅ Create `CLAUDE.md` as the mandatory enforcement point for agent documentation; tighten `docs/AGENT.md` to define "done" as requiring OVERVIEW.md/todo.md updates; add a "Documentation is mandatory" callout to `AGENTS.md`.
+   - **Why:** Agents were completing implementation work without updating documentation — framing it as guidance rather than a completion requirement meant it was routinely skipped. CLAUDE.md is loaded automatically by Claude Code, making it the most reliable enforcement location.
+   - **Deferred:** No changes to OVERVIEW.md or todo.md format themselves — only the requirement to use them was strengthened.
 61. ✅ Clarify media storage and cleanup policy docs so `shopbilder` remains the Artikelnummer source-of-truth, `shopbilder-import` stays the flat sync mirror, and runtime cleanup defaults to minimal/manual-script operations with explicit logging expectations.
 60. ✅ Documentation cleanup: split quick-start vs detailed agent guidance by making `AGENTS.md` a concise repository overview, moving detailed execution guardrails to `docs/AGENT.md`, and adding `docs/CODING_GUIDELINES.md` for extended coding standards linked from both entry points.
 59. ✅ Add focused frontend tests for `ItemBasicInfoForm` submission behavior covering optional dimension/weight parsing, blank-value nullability, and invalid numeric warning paths without broad integration rewrites.
