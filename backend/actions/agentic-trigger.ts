@@ -28,6 +28,7 @@ export interface AgenticRunTriggerPayload {
     reviewedBy?: string | null;
   } | null;
   imageData?: string | null;
+  priority?: 'high' | 'normal' | 'low';
   [key: string]: unknown;
 }
 

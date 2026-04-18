@@ -5,7 +5,7 @@
 // TODO(quality-metadata): Align Quality field naming with ERP schema once upstream attributes are finalised.
 // TODO(reference-only-edit): Revalidate reference-only edit payload expectations against item_refs when schemas shift.
 import type { AgenticRunStatus } from './agentic-statuses';
-import type { QualityValue } from './quality';
+import type { QualityAssessment, QualityValue } from './quality';
 export enum ItemEinheit {
   Stk = 'Stk',
   Menge = 'Menge'
@@ -64,6 +64,7 @@ export interface ItemInstance {
   // Importers normalize Langtext "Qualität" labels into this numeric grade (nullable when unknown).
   // TODO(item-create): Keep creation payload expectations for Quality/Auf_Lager aligned across frontend and import flows.
   Quality?: QualityValue;
+  QualityAssessment?: QualityAssessment | null;
 }
 
 // TODO(langtext-contract): Remove legacy string fallback from ItemRef.Langtext once all callers consume structured payloads.

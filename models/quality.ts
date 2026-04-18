@@ -1,4 +1,47 @@
 // TODO(quality-scale): Revisit quality labels and thresholds when merchandising finalizes the rubric.
+
+export type QualityTag = 'Ersatzteil' | 'Upcycling' | 'Ok' | 'Gut' | 'Neuwertig';
+export type AiPriority = 'high' | 'normal' | 'low';
+
+export interface QualityAssessment {
+  id: number;
+  tag: QualityTag;
+  value: number;
+  is_complete: boolean | null;
+  has_defects: boolean | null;
+  is_functional: boolean | null;
+  notes: string | null;
+  reviewed_at: string;
+  reviewed_by: string;
+}
+
+export type QualityAssessmentInsert = Omit<QualityAssessment, 'id'>;
+
+export interface PhysicalConditionAnswers {
+  is_complete: boolean | null;
+  has_defects: boolean | null;
+  is_functional: boolean | null;
+}
+
+export function deriveQualityTagFromCondition(answers: PhysicalConditionAnswers): { tag: QualityTag; value: number } {
+  if (answers.is_functional === false) {
+    return { tag: 'Ersatzteil', value: 1 };
+  }
+  if (answers.has_defects === true && answers.is_complete === false) {
+    return { tag: 'Upcycling', value: 2 };
+  }
+  if (answers.has_defects === true || answers.is_complete === false) {
+    return { tag: 'Ok', value: 3 };
+  }
+  return { tag: 'Gut', value: 4 };
+}
+
+export function deriveAiPriorityFromAssessment(value: number): AiPriority {
+  if (value <= 2) return 'high';
+  if (value === 3) return 'normal';
+  return 'low';
+}
+
 export const QUALITY_MIN = 1 as const;
 export const QUALITY_MAX = 5 as const;
 export const QUALITY_DEFAULT = 3 as const;

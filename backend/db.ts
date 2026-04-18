@@ -36,6 +36,7 @@ import {
   resolveEventLogLevel
 } from '../models';
 import { normalizeQuality } from '../models/quality';
+import type { QualityAssessment, QualityAssessmentInsert } from '../models/quality';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
 import { resolveStandortLabel } from './standort-label';
 import { parseSequentialItemUUID } from './lib/itemIds';
@@ -384,6 +385,20 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
 CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
+`;
+
+const CREATE_QUALITY_ASSESSMENTS_SQL = `
+CREATE TABLE IF NOT EXISTS quality_assessments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tag TEXT NOT NULL CHECK(tag IN ('Ersatzteil','Upcycling','Ok','Gut','Neuwertig')),
+  value INTEGER NOT NULL CHECK(value BETWEEN 1 AND 5),
+  is_complete INTEGER,
+  has_defects INTEGER,
+  is_functional INTEGER,
+  notes TEXT,
+  reviewed_at TEXT NOT NULL,
+  reviewed_by TEXT NOT NULL
+);
 `;
 
 const UPSERT_ITEM_REFERENCE_SQL = `
@@ -937,6 +952,33 @@ function ensureItemQualityColumns(database: Database.Database = db): void {
 }
 
 ensureItemQualityColumns(db);
+
+function ensureQualityAssessmentSchema(database: Database.Database = db): void {
+  try {
+    database.exec(CREATE_QUALITY_ASSESSMENTS_SQL);
+  } catch (err) {
+    console.error('[db] Failed to create quality_assessments table', err);
+    throw err;
+  }
+  let itemColumns: Array<{ name: string }>;
+  try {
+    itemColumns = database.prepare('PRAGMA table_info(items)').all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('[db] Failed to inspect items table for QualityId column', err);
+    throw err;
+  }
+  if (!itemColumns.some((col) => col.name === 'QualityId')) {
+    try {
+      database.prepare('ALTER TABLE items ADD COLUMN QualityId INTEGER REFERENCES quality_assessments(id)').run();
+      console.info('[db] Added QualityId column to items');
+    } catch (err) {
+      console.error('[db] Failed to add QualityId column to items', err);
+      throw err;
+    }
+  }
+}
+
+ensureQualityAssessmentSchema(db);
 
 function ensureItemEanColumn(database: Database.Database = db): void {
   let refColumns: Array<{ name: string }> = [];
@@ -3294,6 +3336,60 @@ export const listItemsForExport = {
     return statement.all(bindings);
   }
 };
+
+let insertQualityAssessmentStatement: Database.Statement;
+let getQualityAssessmentStatement: Database.Statement;
+let updateItemQualityStatement: Database.Statement;
+try {
+  insertQualityAssessmentStatement = db.prepare(`
+    INSERT INTO quality_assessments (tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by)
+    VALUES (@tag, @value, @is_complete, @has_defects, @is_functional, @notes, @reviewed_at, @reviewed_by)
+  `);
+  getQualityAssessmentStatement = db.prepare(`
+    SELECT id, tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by
+    FROM quality_assessments WHERE id = ?
+  `);
+  updateItemQualityStatement = db.prepare(`
+    UPDATE items SET QualityId = @qualityId, Quality = @value WHERE ItemUUID = @itemUUID
+  `);
+} catch (err) {
+  console.error('[db] Failed to prepare quality assessment statements', err);
+  throw err;
+}
+
+export function insertQualityAssessment(assessment: QualityAssessmentInsert): number {
+  const result = insertQualityAssessmentStatement.run({
+    tag: assessment.tag,
+    value: assessment.value,
+    is_complete: assessment.is_complete === null ? null : assessment.is_complete ? 1 : 0,
+    has_defects: assessment.has_defects === null ? null : assessment.has_defects ? 1 : 0,
+    is_functional: assessment.is_functional === null ? null : assessment.is_functional ? 1 : 0,
+    notes: assessment.notes,
+    reviewed_at: assessment.reviewed_at,
+    reviewed_by: assessment.reviewed_by
+  });
+  return Number(result.lastInsertRowid);
+}
+
+export function getQualityAssessment(id: number): QualityAssessment | null {
+  const row = getQualityAssessmentStatement.get(id) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    id: row.id as number,
+    tag: row.tag as QualityAssessment['tag'],
+    value: row.value as number,
+    is_complete: row.is_complete === null ? null : Boolean(row.is_complete),
+    has_defects: row.has_defects === null ? null : Boolean(row.has_defects),
+    is_functional: row.is_functional === null ? null : Boolean(row.is_functional),
+    notes: (row.notes as string | null) ?? null,
+    reviewed_at: row.reviewed_at as string,
+    reviewed_by: row.reviewed_by as string
+  };
+}
+
+export function updateItemQualityAssessment(itemUUID: string, qualityId: number, value: number): void {
+  updateItemQualityStatement.run({ qualityId, value, itemUUID });
+}
 
 export type {
   AgenticRun,
