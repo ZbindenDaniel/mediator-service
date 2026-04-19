@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+713. ✅ Create `PanelContext` (Step 2 of UI shell redesign): `frontend/src/context/PanelContext.tsx` with flat selection state (`entityType`, `entityId`, `activeTab`, `multiSelection`), `setEntity`/`setTab`/`setMultiSelection`/`clearSelection` helpers, URL sync via `useSearchParams` (serialize on state change, deserialize on mount for deep-link support); `PanelProvider` wrapped around `AppRoutes` in `App.tsx` inside `Router`.
+   - **Why:** Flat shape avoids nesting that would complicate URL serialization; `isMounted` ref skips the initial URL write since state is derived from the URL at mount, preventing a no-op `setSearchParams` call. `PanelProvider` sits inside `Router` so it can call `useSearchParams` directly.
+   - **Deferred:** No panels wired to this context yet — that is Steps 3+. Mobile layout and multi-selection entity-type enforcement are out of scope for this step.
 712. ✅ Add two-column right-split CSS shell layout (Step 1 of UI shell redesign): `.app-shell` flex row in `Layout.tsx`, `.panel-main` (62%), `.app-shell__right` sticky column (38%) split into `.panel-detail` (62% height) and `.panel-action` (38% height) in `styles.scss`; right column hidden below 900px; all existing content rendered in `.panel-main` unaffected.
    - **Why:** Establishes the structural CSS regions needed by future steps that will wire state/context into the right panels; keeping panels empty now avoids any behavioral change for existing routes.
    - **Deferred:** State/context wiring, content routing into `.panel-detail` / `.panel-action` — explicitly out of scope for Step 1.

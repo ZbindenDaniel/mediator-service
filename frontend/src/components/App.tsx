@@ -1,8 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
-// TODO: Assess additional global providers alongside the dialog provider when new cross-cutting concerns emerge.
 import Layout from './Layout';
 import { DialogProvider } from './dialog';
+import { PanelProvider } from '../context/PanelContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
@@ -61,9 +61,11 @@ export default function App() {
   return (
     <Router>
       <DialogProvider>
-        <Layout>
-          <AppRoutes />
-        </Layout>
+        <PanelProvider>
+          <Layout>
+            <AppRoutes />
+          </Layout>
+        </PanelProvider>
       </DialogProvider>
     </Router>
   );
