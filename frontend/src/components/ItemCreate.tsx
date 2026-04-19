@@ -598,10 +598,12 @@ export function hasAutoPrintTargetMismatch(
 interface ItemCreateProps {
   layout?: 'page' | 'embedded';
   basicInfoHeader?: React.ReactNode;
+  onSaved?: (itemId: string) => void;
+  onCancel?: () => void;
 }
 
 // TODO(overview-inline-create): Confirm item creation flow remains accessible when embedded.
-export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCreateProps) {
+export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, onCancel }: ItemCreateProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({}));
@@ -1451,7 +1453,11 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
           itemId: createdItem.ItemUUID,
           createdCount: createdCount ?? responseItems.length
         });
-        navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}`);
+        if (onSaved) {
+          onSaved(createdItem.ItemUUID);
+        } else {
+          navigate(`/items/${encodeURIComponent(createdItem.ItemUUID)}`);
+        }
       }
     } catch (err) {
       console.error('Failed to create item', err);
@@ -1729,6 +1735,11 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
     return (
       <>
         {blockingOverlay}
+        {onCancel ? (
+          <div className="panel-create__cancel-row">
+            <button type="button" className="btn" onClick={onCancel}>Abbrechen</button>
+          </div>
+        ) : null}
         <ItemBasicInfoForm
           initialValues={basicInfo}
           onSubmit={handleBasicInfoNext}

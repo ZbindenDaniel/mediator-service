@@ -14,12 +14,14 @@ import {
 } from '../lib/itemListFiltersStorage';
 import { GoArchive, GoFilter, GoHome, GoListUnordered, GoPlus, GoPulse } from 'react-icons/go';
 import { logError } from '../utils/logger';
+import { usePanelContext } from '../context/PanelContext';
 
 // TODO(filter-indicator): Surface stored filter state changes in the header and allow quick reset.
 // TODO(filter-indicator-accessibility): Validate whether deep-link filter color needs a text label for screen-reader parity.
 export default function Header() {
   const dialog = useDialog();
   const navigate = useNavigate();
+  const { setCreateMode } = usePanelContext();
   const [user, setUserState] = useState(() => getUser().trim());
   const [filterSummaries, setFilterSummaries] = useState<string[]>([]);
   const [hasStoredFilters, setHasStoredFilters] = useState(false);
@@ -150,13 +152,15 @@ export default function Header() {
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
         <nav className="header-nav" aria-label="Hauptnavigation">
           {/* TODO(navigation): Re-evaluate header icon spacing if more nav items are added. */}
-          <Link
-            to="/items/new"
+          <button
+            type="button"
+            className="header-nav__icon-btn"
             aria-label="Artikel erfassen"
             title="Artikel erfassen"
+            onClick={() => { setCreateMode('item'); navigate('/items'); }}
           >
             <GoPlus aria-hidden="true" />
-          </Link>
+          </button>
           <Link
             to="/items"
             aria-label="Artikelliste"

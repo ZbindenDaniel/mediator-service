@@ -21,6 +21,7 @@ export interface PanelState {
 
 export interface PanelContextValue extends PanelState {
   setEntity: (type: EntityType, id: string) => void;
+  setCreateMode: (type: EntityType) => void;
   setTab: (tab: string | null) => void;
   setMultiSelection: (ids: string[]) => void;
   clearSelection: () => void;
@@ -73,6 +74,10 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
     setState({ entityType: type, entityId: id, activeTab: null, multiSelection: null });
   }, []);
 
+  const setCreateMode = useCallback((type: EntityType) => {
+    setState({ entityType: type, entityId: null, activeTab: 'create', multiSelection: null });
+  }, []);
+
   const setTab = useCallback((tab: string | null) => {
     setState((prev) => ({ ...prev, activeTab: tab }));
   }, []);
@@ -90,8 +95,8 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   }, []);
 
   const value = useMemo<PanelContextValue>(
-    () => ({ ...state, setEntity, setTab, setMultiSelection, clearSelection }),
-    [state, setEntity, setTab, setMultiSelection, clearSelection]
+    () => ({ ...state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection }),
+    [state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection]
   );
 
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
