@@ -19,7 +19,7 @@
 
 3. **Ensure waiting agentic runs restart on application restart.** All runs in a waiting state should automatically resume when the app restarts. Waiting runs should wait (max. parallel runs has to be respected)
 
-4. **Fix AUTO_PRINT_ITEM_LABEL for multiple instances.** When multiple instances are created, multiple different labels should be printed; currently this does not work correctly.
+4. ✅ **Fix AUTO_PRINT_ITEM_LABEL for multiple instances.** Success dialog now renders one PrintLabelButton per Stk instance using all `responseItems` UUIDs.
 
 <!-- Not clarified:
  5. **Refine QR relocation flow.** Relocation still has edge-case issues in scan handoff/navigation. Moving an item to a box should behave consistently from both the box and item perspectives. Multi-scan and scan-until will be added in future iterations. **Goal:** stabilize intent and return-flow boundaries with targeted fixes, strong validation, and meaningful try/catch + logging at transition points. 

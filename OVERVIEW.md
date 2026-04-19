@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+70. ✅ Fix multi-instance label printing: success dialog now renders one `PrintLabelButton` per created Stk instance instead of only the first; removed shadowed dead-code `const dialogMessage`; added 3-instance regression test.
+   - **Why:** When 3 Stk items were created, the backend correctly returned all 3 UUIDs in `responseItems`, but the success dialog only used `createdItem.ItemUUID` (the first UUID). The auto-print loop (gated on `AUTO_PRINT_ITEM_LABEL=true`) was correct, but the manual-print fallback was not. The fix loops `responseItems` to build `allPrintItemIds` and renders a button for each. The dead outer `const dialogMessage` (lines 1350–1362) was immediately shadowed by `let dialogMessage` inside the `try` block and never used; removed to eliminate confusion.
+   - **Deferred:** Nothing deferred. `AUTO_PRINT_ITEM_LABEL` env-var path was already correct and unchanged.
 69. ✅ Fix four `export-items` serialization bugs: `Auf_Lager` header had underscore instead of space; published gate used `||` (published OR approved) instead of `&&` (both required); ERP Langtext format was `html` but tests require `markdown`; Langtext quality enrichment was commented out.
    - **Why:** The `||` gate was wrong — it would export items as published if they had agentic approval even when `Veröffentlicht_Status` was false, and vice versa. The test spec requires both flags. The ERP `markdown` format aligns with the `TODO` comment ("ERP markdown Langtext output") that predated the HTML change. Quality enrichment re-enabled as tests explicitly assert `Qualität`/quality label presence in serialized output.
    - **Deferred:** Nothing deferred.

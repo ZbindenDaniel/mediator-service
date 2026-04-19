@@ -48,6 +48,24 @@ describe('ItemCreate auto-print helpers', () => {
     expect(parsed.backendDispatched).toBe(true);
   });
 
+  it('parses 3-instance Stk response and exposes all UUIDs for dialog buttons', () => {
+    const parsed = parseCreateItemResponse({
+      item: { ItemUUID: 'stk-1', Artikel_Nummer: 'A-200' },
+      items: [{ ItemUUID: 'stk-1' }, { ItemUUID: 'stk-2' }, { ItemUUID: 'stk-3' }],
+      createdCount: 3,
+      agenticTriggerDispatched: false
+    });
+
+    expect(parsed.responseItems).toHaveLength(3);
+    expect(parsed.createdCount).toBe(3);
+
+    const allPrintItemIds = parsed.responseItems
+      .map((i) => (typeof i?.ItemUUID === 'string' ? i.ItemUUID.trim() : ''))
+      .filter(Boolean);
+
+    expect(allPrintItemIds).toEqual(['stk-1', 'stk-2', 'stk-3']);
+  });
+
   it('reports mismatch warning path for instance printing', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
