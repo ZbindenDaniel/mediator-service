@@ -95,6 +95,46 @@ body {
     height: 100vh;
 }
 
+/* === App shell: two-column right-split layout === */
+.app-shell {
+    display: flex;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+.panel-main {
+    flex: 0 0 62%;
+    min-width: 0;
+}
+
+.app-shell__right {
+    flex: 0 0 38%;
+    min-width: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-detail {
+    flex: 62 0 0;
+}
+
+.panel-action {
+    flex: 38 0 0;
+}
+
+@media (max-width: 900px) {
+    .panel-main {
+        flex: 1 1 100%;
+    }
+
+    .app-shell__right {
+        display: none;
+    }
+}
+
 textarea {
     resize: vertical;
     min-height: 80px;

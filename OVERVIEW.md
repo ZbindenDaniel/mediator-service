@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+71. ✅ Add two-column right-split CSS shell layout (Step 1 of UI shell redesign): `.app-shell` flex row in `Layout.tsx`, `.panel-main` (62%), `.app-shell__right` sticky column (38%) split into `.panel-detail` (62% height) and `.panel-action` (38% height) in `styles.scss`; right column hidden below 900px; all existing content rendered in `.panel-main` unaffected.
+   - **Why:** Establishes the structural CSS regions needed by future steps that will wire state/context into the right panels; keeping panels empty now avoids any behavioral change for existing routes.
+   - **Deferred:** State/context wiring, content routing into `.panel-detail` / `.panel-action` — explicitly out of scope for Step 1.
 70. ✅ Fix multi-instance label printing: success dialog now renders one `PrintLabelButton` per created Stk instance instead of only the first; removed shadowed dead-code `const dialogMessage`; added 3-instance regression test.
    - **Why:** When 3 Stk items were created, the backend correctly returned all 3 UUIDs in `responseItems`, but the success dialog only used `createdItem.ItemUUID` (the first UUID). The auto-print loop (gated on `AUTO_PRINT_ITEM_LABEL=true`) was correct, but the manual-print fallback was not. The fix loops `responseItems` to build `allPrintItemIds` and renders a button for each. The dead outer `const dialogMessage` (lines 1350–1362) was immediately shadowed by `let dialogMessage` inside the `try` block and never used; removed to eliminate confusion.
    - **Deferred:** Nothing deferred. `AUTO_PRINT_ITEM_LABEL` env-var path was already correct and unchanged.
