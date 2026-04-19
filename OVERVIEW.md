@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+69. ✅ Create `docs/PLANNING_UI_ARCHITECTURE.md`: full view inventory with contents, flows, and cross-view navigation map, including planned transport/stub/inventory surfaces.
+   - **Why:** The card layout and wide spacing no longer fit the growing information density. This document is the base for a UX redesign pass — it captures current state and upcoming additions before layout decisions are made.
+   - **Deferred:** Layout/component redesign itself; that follows from UX decisions the user will derive from this document.
 68. ✅ Fix three test harness bugs that caused `npm test` to crash: suppress spurious `.node` resolution warnings from the `bindings` library, pass `callerModule` to `storeMockEntry` in `requireActual`'s finally block, and pre-register `@jest/globals` as a harness-backed mock.
    - **Why:** The `.node` warnings were noise from the native module probe loop (not real errors). The `requireActual` finally-block bug caused mock re-registration to resolve relative paths from the wrong directory, emitting spurious warnings and potentially losing the mock key. The `@jest/globals` mock prevents a fatal crash when test utilities import `jest` from that package (e.g. for TypeScript types) outside a real Jest environment.
    - **Deferred:** Source-map support in the TypeScript transpiler was considered for better stack traces but not added — it would require `source-map-support` as a dev dependency and is a separate concern.
