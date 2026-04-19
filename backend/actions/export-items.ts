@@ -5,7 +5,8 @@ import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
-import { ItemEinheit, normalizeItemEinheit } from '../../models';
+import { ItemEinheit, normalizeItemEinheit, describeQuality } from '../../models';
+import type { LangtextPayload } from '../../models';
 import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
 import type { LangtextExportFormat } from '../lib/langtext';
 import { parseLangtext, serializeLangtextForExport } from '../lib/langtext';
@@ -48,7 +49,7 @@ const columnDescriptors = [
   { key: 'height_mm', header: 'Höhe(mm)', field: 'Höhe_mm' },
   { key: 'weight_kg', header: 'Gewicht(kg)', field: 'Gewicht_kg' },
   { key: 'sellprice', header: 'Verkaufspreis', field: 'Verkaufspreis' },
-  { key: 'onhand', header: 'Auf_Lager', field: 'Auf_Lager' },
+  { key: 'onhand', header: 'Auf Lager', field: 'Auf_Lager' },
   { key: 'published_status', header: 'Veröffentlicht_Status', field: 'Veröffentlicht_Status' },
   { key: 'shoparticle', header: 'Shopartikel', field: 'Shopartikel' },
   { key: 'unit', header: 'Einheit', field: 'Einheit' },
@@ -766,7 +767,7 @@ function resolveLangtextExportFormat(
 ): LangtextExportFormat {
   try {
     if (exportMode === 'erp') {
-      return 'html';
+      return 'markdown';
     }
     return 'json';
   } catch (error) {
@@ -872,7 +873,8 @@ function resolveExportValue(
       }
 
       const isApproved = agenticReviewState !== null ? agenticReviewState === 'approved' : agenticStatus === 'approved';
-      const gatedPublished = normalizedPublished || isApproved;
+      // Gate requires both stored published flag and agentic approval — OR would publish unapproved items.
+      const gatedPublished = normalizedPublished && isApproved;
 
       if (normalizedPublished && !gatedPublished) {
         console.info('[export-items] Agentic review gate suppressed published status during export.', {
@@ -1005,26 +1007,24 @@ function resolveExportValue(
       itemUUID
     } as const;
 
-    // TODO(export-items): Re-enable Langtext quality enrichment once downstream consumers want it again.
     const langtextValueForExport = (() => {
       try {
         const parsedLangtext = parseLangtext(value, helperContext);
         if (parsedLangtext && typeof parsedLangtext !== 'string') {
-          // NOTE: Quality export disabled for now. Keep this block commented so it can be reactivated when needed.
-          // try {
-          //   const { label } = describeQuality((rawRow as Record<string, unknown>).Quality);
-          //   const enriched: LangtextPayload = { ...parsedLangtext, Qualität: label };
-          //   return enriched;
-          // } catch (qualityError) {
-          //   console.warn(
-          //     '[export-items] Unable to resolve quality for Langtext enrichment; exporting original payload.',
-          //     {
-          //       artikelNummer,
-          //       itemUUID,
-          //       error: qualityError
-          //     }
-          //   );
-          // }
+          try {
+            const { label } = describeQuality((rawRow as Record<string, unknown>).Quality);
+            const enriched: LangtextPayload = { ...parsedLangtext, Qualität: label };
+            return enriched;
+          } catch (qualityError) {
+            console.warn(
+              '[export-items] Unable to resolve quality for Langtext enrichment; exporting original payload.',
+              {
+                artikelNummer,
+                itemUUID,
+                error: qualityError
+              }
+            );
+          }
         }
       } catch (parsingError) {
         console.error('[export-items] Failed to parse Langtext for quality enrichment during export.', {

@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+69. ✅ Fix four `export-items` serialization bugs: `Auf_Lager` header had underscore instead of space; published gate used `||` (published OR approved) instead of `&&` (both required); ERP Langtext format was `html` but tests require `markdown`; Langtext quality enrichment was commented out.
+   - **Why:** The `||` gate was wrong — it would export items as published if they had agentic approval even when `Veröffentlicht_Status` was false, and vice versa. The test spec requires both flags. The ERP `markdown` format aligns with the `TODO` comment ("ERP markdown Langtext output") that predated the HTML change. Quality enrichment re-enabled as tests explicitly assert `Qualität`/quality label presence in serialized output.
+   - **Deferred:** Nothing deferred.
 68. ✅ Fix three test harness bugs that caused `npm test` to crash: suppress spurious `.node` resolution warnings from the `bindings` library, pass `callerModule` to `storeMockEntry` in `requireActual`'s finally block, and pre-register `@jest/globals` as a harness-backed mock.
    - **Why:** The `.node` warnings were noise from the native module probe loop (not real errors). The `requireActual` finally-block bug caused mock re-registration to resolve relative paths from the wrong directory, emitting spurious warnings and potentially losing the mock key. The `@jest/globals` mock prevents a fatal crash when test utilities import `jest` from that package (e.g. for TypeScript types) outside a real Jest environment.
    - **Deferred:** Source-map support in the TypeScript transpiler was considered for better stack traces but not added — it would require `source-map-support` as a dev dependency and is a separate concern.
