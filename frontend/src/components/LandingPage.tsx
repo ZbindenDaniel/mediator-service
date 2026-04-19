@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import CreateItemCard from './CreateItemCard';
 import SearchCard from './SearchCard';
 import StatsCard from './StatsCard';
 import RecentBoxesCard from './RecentBoxesCard';
@@ -117,10 +116,6 @@ export default function LandingPage() {
     <div className="container overview">
       <h1>Übersicht</h1>
       <div className="grid landing-grid">
-        {/* TODO(overview-layout): Reconfirm stats placement after Erfassen card order update. */}
-        <div className="desktop-only">
-          <CreateItemCard />
-        </div>
         <SearchCard />
         <StatsCard
           counts={overview?.counts}

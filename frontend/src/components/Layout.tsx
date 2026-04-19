@@ -1,14 +1,20 @@
 import React, { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import { usePanelContext } from '../context/PanelContext';
 import { ItemActionsProvider } from '../context/ItemActionsContext';
 import ItemDetail from './ItemDetail';
 import BoxDetail from './BoxDetail';
+import ItemCreate from './ItemCreate';
 import DetailTabBar from './DetailTabBar';
 import ActionPanel from './panels/ActionPanel';
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { entityType, entityId } = usePanelContext();
+  const { entityType, entityId, activeTab, setEntity, clearSelection } = usePanelContext();
+  const navigate = useNavigate();
+
+  // Create mode: entityType=item, entityId=null, activeTab=create
+  const isCreateMode = entityType === 'item' && entityId === null && activeTab === 'create';
 
   return (
     <div className="layout">
@@ -17,29 +23,43 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="app-shell">
           <div className="panel-main">{children}</div>
           <div className="app-shell__right">
-            {/* ItemActionsProvider wraps both panels so ItemDetail (writer) and ActionPanel (reader) share the same context */}
-            <ItemActionsProvider>
-              <div className="panel-detail">
-                {entityType === 'item' && entityId ? (
-                  <>
-                    <DetailTabBar />
-                    <div className="panel-detail__body">
-                      <ItemDetail itemId={entityId} />
-                    </div>
-                  </>
-                ) : entityType === 'box' && entityId ? (
-                  <>
-                    <DetailTabBar />
-                    <div className="panel-detail__body">
-                      <BoxDetail boxId={entityId} />
-                    </div>
-                  </>
-                ) : null}
+            {isCreateMode ? (
+              // Merge detail + action slots into a single tall creation panel
+              <div className="panel-create">
+                <ItemCreate
+                  layout="embedded"
+                  onSaved={(newItemId) => {
+                    setEntity('item', newItemId);
+                    navigate('/items');
+                  }}
+                  onCancel={clearSelection}
+                />
               </div>
-              <div className="panel-action">
-                <ActionPanel />
-              </div>
-            </ItemActionsProvider>
+            ) : (
+              /* ItemActionsProvider wraps both panels so ItemDetail (writer) and ActionPanel (reader) share the same context */
+              <ItemActionsProvider>
+                <div className="panel-detail">
+                  {entityType === 'item' && entityId ? (
+                    <>
+                      <DetailTabBar />
+                      <div className="panel-detail__body">
+                        <ItemDetail itemId={entityId} />
+                      </div>
+                    </>
+                  ) : entityType === 'box' && entityId ? (
+                    <>
+                      <DetailTabBar />
+                      <div className="panel-detail__body">
+                        <BoxDetail boxId={entityId} />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+                <div className="panel-action">
+                  <ActionPanel />
+                </div>
+              </ItemActionsProvider>
+            )}
           </div>
         </div>
       </main>

@@ -2483,6 +2483,57 @@ export default function ItemDetail({ itemId }: Props) {
     void load({ showSpinner: true });
   }, [load]);
 
+  // Derived agentic state — computed before early returns so the hooks below can reference them
+  const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
+  const normalizedAgenticReview = agentic ? (agentic.ReviewState || '').trim().toLowerCase() : null;
+  const agenticNeedsReview = Boolean(
+    normalizedAgenticStatus === AGENTIC_RUN_STATUS_REVIEW || normalizedAgenticReview === 'pending'
+  );
+  const agenticCanRestart = normalizedAgenticStatus
+    ? AGENTIC_RUN_RESTARTABLE_STATUSES.has(normalizedAgenticStatus)
+    : false;
+  const agenticHasRun = Boolean(agentic);
+  const agenticCanStart = !agenticHasRun || normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
+  const agenticCanCancel = normalizedAgenticStatus
+    ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
+    : false;
+  const agenticCanClose = Boolean(
+    item &&
+    (!normalizedAgenticStatus || normalizedAgenticStatus !== AGENTIC_RUN_STATUS_RUNNING)
+  );
+  const agenticCanDelete = Boolean(
+    agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
+  );
+  const agenticStartLabel = agenticHasRun ? 'Starten' : 'Start KI-Lauf';
+
+  // Register / update action slot whenever relevant state changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!setItemActions) return;
+    if (!item) {
+      setItemActions(null);
+      return;
+    }
+    setItemActions({
+      itemId,
+      agenticNeedsReview,
+      agenticCanStart,
+      agenticCanRestart,
+      agenticCanCancel,
+      agenticActionPending,
+      startLabel: agenticStartLabel,
+      // Stable wrappers: always delegate to the latest handler captured in the ref above.
+      onStart: () => void agenticHandlersRef.current.onStart?.(),
+      onReview: () => void agenticHandlersRef.current.onReview?.(),
+      onCancel: () => void agenticHandlersRef.current.onCancel?.(),
+    });
+  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear the action slot when ItemDetail unmounts.
+  useEffect(() => {
+    return () => setItemActions?.(null);
+  }, [setItemActions]);
+
   if (isLoading) {
     return <LoadingPage message="Artikel wird geladen…" />;
   }
@@ -2505,29 +2556,6 @@ export default function ItemDetail({ itemId }: Props) {
       </div>
     );
   }
-
-  const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
-  const normalizedAgenticReview = agentic ? (agentic.ReviewState || '').trim().toLowerCase() : null;
-  const agenticNeedsReview = Boolean(
-    normalizedAgenticStatus === AGENTIC_RUN_STATUS_REVIEW || normalizedAgenticReview === 'pending'
-  );
-  const agenticCanRestart = normalizedAgenticStatus
-    ? AGENTIC_RUN_RESTARTABLE_STATUSES.has(normalizedAgenticStatus)
-    : false;
-  const agenticHasRun = Boolean(agentic);
-  const agenticCanStart = !agenticHasRun || normalizedAgenticStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
-  const agenticCanCancel = normalizedAgenticStatus
-    ? AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedAgenticStatus)
-    : false;
-  // TODO(agentic-close-not-started): Confirm manual close remains available for not-started runs after import/export sync.
-  // TODO(agentic-close-running): Reconfirm close affordance rules once running-state copy is finalized.
-  const agenticCanClose = Boolean(
-    item &&
-    (!normalizedAgenticStatus || normalizedAgenticStatus !== AGENTIC_RUN_STATUS_RUNNING)
-  );
-  const agenticCanDelete = Boolean(
-    agenticHasRun && normalizedAgenticStatus !== AGENTIC_RUN_STATUS_NOT_STARTED
-  );
 
   // TODO(agentic-review-flow-order): Reconfirm whether optional note should remain a final prompt once reviewer feedback is collected.
   // TODO(agentic-review-step-telemetry): Revisit per-question logging payload fields if analytics schema expands.
@@ -3494,7 +3522,6 @@ export default function ItemDetail({ itemId }: Props) {
   }
 
   const agenticStartHandler = !agenticHasRun ? handleAgenticStart : handleAgenticRestart;
-  const agenticStartLabel = agenticHasRun ? 'Starten' : 'Start KI-Lauf';
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
 
@@ -3599,34 +3626,6 @@ export default function ItemDetail({ itemId }: Props) {
     onReview: () => void handleAgenticReview(),
     onCancel: agenticCanCancel ? () => void handleAgenticCancel() : undefined,
   };
-
-  // Register / update action slot whenever relevant state changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!setItemActions) return;
-    if (!item) {
-      setItemActions(null);
-      return;
-    }
-    setItemActions({
-      itemId,
-      agenticNeedsReview,
-      agenticCanStart,
-      agenticCanRestart,
-      agenticCanCancel,
-      agenticActionPending,
-      startLabel: agenticStartLabel,
-      // Stable wrappers: always delegate to the latest handler captured in the ref above.
-      onStart: () => void agenticHandlersRef.current.onStart?.(),
-      onReview: () => void agenticHandlersRef.current.onReview?.(),
-      onCancel: () => void agenticHandlersRef.current.onCancel?.(),
-    });
-  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Clear the action slot when ItemDetail unmounts.
-  useEffect(() => {
-    return () => setItemActions?.(null);
-  }, [setItemActions]);
 
   return (
     <div className="container item">

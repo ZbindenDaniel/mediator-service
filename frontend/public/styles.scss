@@ -135,6 +135,18 @@ body {
     overflow-y: auto;
 }
 
+.panel-create {
+    flex: 1 1 0;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.panel-create__cancel-row {
+    padding: 8px 12px 0;
+    display: flex;
+    justify-content: flex-end;
+}
+
 /* === Detail panel tab bar === */
 .detail-tab-bar {
     display: flex;
@@ -289,6 +301,7 @@ textarea {
     #header-back-button,
     #header-home-button,
     .header-nav a,
+    .header-nav__icon-btn,
     .header-filter-indicator {
         width: 30px;
         height: 30px;
@@ -296,7 +309,8 @@ textarea {
 
     #header-back-button,
     #header-home-button,
-    .header-nav a {
+    .header-nav a,
+    .header-nav__icon-btn {
         font-size: 20px;
     }
 
@@ -307,7 +321,8 @@ textarea {
 }
 
 // TODO(navigation): Revisit header icon sizing if additional controls are added.
-.header-nav a {
+.header-nav a,
+.header-nav__icon-btn {
     color: var(--fg);
     font-size: 22px;
     font-weight: bolder;
@@ -320,10 +335,14 @@ textarea {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    padding: 0;
 }
 
 .header-nav a:hover,
 .header-nav a:focus-visible,
+.header-nav__icon-btn:hover,
+.header-nav__icon-btn:focus-visible,
 #header-home-button:hover,
 #header-home-button:focus-visible {
     background: #0000000d;
