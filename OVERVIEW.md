@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+712. ✅ Add two-column right-split CSS shell layout (Step 1 of UI shell redesign): `.app-shell` flex row in `Layout.tsx`, `.panel-main` (62%), `.app-shell__right` sticky column (38%) split into `.panel-detail` (62% height) and `.panel-action` (38% height) in `styles.scss`; right column hidden below 900px; all existing content rendered in `.panel-main` unaffected.
+   - **Why:** Establishes the structural CSS regions needed by future steps that will wire state/context into the right panels; keeping panels empty now avoids any behavioral change for existing routes.
+   - **Deferred:** State/context wiring, content routing into `.panel-detail` / `.panel-action` — explicitly out of scope for Step 1.
 71. ✅ Create `docs/PLANNING_UI_ARCHITECTURE.md`: full view inventory with contents, flows, and cross-view navigation map, including planned transport/stub/inventory surfaces.
    - **Why:** The card layout and wide spacing no longer fit the growing information density. This document is the base for a UX redesign pass — it captures current state and upcoming additions before layout decisions are made.
    - **Deferred:** Layout/component redesign itself; that follows from UX decisions the user will derive from this document.
