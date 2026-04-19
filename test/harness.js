@@ -77,7 +77,9 @@ Module._resolveFilename = function resolveWithAliases(request, parent, isMain, o
     try {
       return originalResolveFilename.call(Module, request, parent, isMain, { ...options, paths: searchPaths });
     } catch (fallbackError) {
-      console.warn(`[harness] Unable to resolve module ${request}`, fallbackError);
+      if (!request.endsWith('.node')) {
+        console.warn(`[harness] Unable to resolve module ${request}`, fallbackError);
+      }
       throw fallbackError;
     }
   }
@@ -97,7 +99,9 @@ function resolveRequest(request, parentModule = module) {
     const baseDir = parentModule?.filename ? path.dirname(parentModule.filename) : process.cwd();
     return require.resolve(request, { paths: [baseDir, process.cwd()] });
   } catch (error) {
-    console.warn(`[harness] Unable to resolve module ${request} for mocking`, error);
+    if (!request.endsWith('.node')) {
+      console.warn(`[harness] Unable to resolve module ${request} for mocking`, error);
+    }
     return request;
   }
 }
@@ -696,7 +700,7 @@ const jestApi = {
       throw error;
     } finally {
       if (mockEntry) {
-        storeMockEntry(request, mockEntry);
+        storeMockEntry(request, mockEntry, callerModule);
       }
       if (cached) {
         require.cache[resolved] = cached;
@@ -831,6 +835,25 @@ async function runSuite(suite, depth = 0, results = { passed: 0, failed: 0, deta
 
   return results;
 }
+
+// Intercept @jest/globals so test files that import { jest } from '@jest/globals'
+// get the harness implementation instead of crashing outside a real Jest environment.
+const jestGlobalsExports = {
+  jest: jestApi,
+  expect,
+  describe,
+  test,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach
+};
+mockRegistry.set('@jest/globals', { factory: () => jestGlobalsExports, instance: null });
+try {
+  const resolvedJestGlobals = require.resolve('@jest/globals');
+  mockRegistry.set(resolvedJestGlobals, { factory: () => jestGlobalsExports, instance: null });
+} catch (_) { /* @jest/globals not installed; raw-string key above is sufficient */ }
 
 module.exports = {
   describe,
