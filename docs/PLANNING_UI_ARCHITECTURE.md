@@ -72,30 +72,35 @@ _Each view section covers: what is on it · which flows it participates in · in
 
 ### 1. LandingPage `/`
 
-**Contents**
+This is the operational dashboard. Cards are an appropriate building block here but the layout should be more dashboard-like — e.g. a multi-column grid with panels of varying weight rather than a vertical card stack.
+
+**Contents (current → to redesign)**
 - System stats (item count, box count, unplaced items, printer health)
-- CreateItemCard — embedded item creation wizard
-- SearchCard — search items/boxes by text or QR scan
-- RecentBoxesCard — list of recently touched boxes
-- RecentEventsCard — live activity feed (last N events)
-- ImportCard — CSV/ZIP import trigger
-- StatsCard — agentic run pie chart + service health
+- ~~CreateItemCard~~ — **remove**: item creation moves to the nav (header + button)
+- ~~SearchCard~~ — **relocate**: search belongs in the header or a persistent global search bar; needs a decision on behavior in views where a local search already exists (item list, box list)
+- RecentBoxesCard — recent boxes panel; keep
+- RecentEventsCard — activity feed panel; keep
+- ~~ImportCard~~ — **move to admin page**
+- StatsCard — agentic pie chart + service health; keep
+
+**Open questions for redesign**
+- Where does global search live? Header bar (always visible) or a search shortcut in the nav? If in the header, how does it coexist with the local search on ItemListPage/BoxListPage?
+- Dashboard layout: two-column (stats left, activity right)? Priority panels vs equal-weight cards?
 
 **Flows**
-- Entry point for quick item intake (CreateItemCard launches ItemCreate wizard inline)
-- Search/scan shortcut that resolves directly to ItemDetail or BoxDetail
-- Import entry point (triggers CSV import dialog)
 - Dashboard monitoring (stats, events, printer status)
+- Quick navigation hub to most recent/relevant items and boxes
 
 **Navigation out**
-- → ItemDetail (search result or recent event tap)
+- → ItemDetail (recent event or search result tap)
 - → BoxDetail (recent box tap)
-- → /items/new (full-page create)
 - → /activities (see all events)
 
 ---
 
 ### 2. ItemListPage `/items`
+
+The list itself works well. The main pain points are mobile usability and the action bar behavior.
 
 **Contents**
 - Filter bar: text search, subcategory, box, stock, agentic status, shop/publication, placement, image, quality threshold
@@ -103,6 +108,10 @@ _Each view section covers: what is on it · which flows it participates in · in
 - Item list (grouped display with checkboxes for bulk select)
 - BulkItemActionBar (visible when items are selected): agentic start/restart, export CSV, transport creation (planned)
 - Filter state indicator in header (synced to localStorage)
+
+**Layout issues to address**
+- **Mobile**: filter bar and action bar consume too much vertical space; filter controls are badly structured on small screens. Consider a collapsible filter drawer / filter icon that opens a panel, freeing the list area on mobile.
+- **BulkItemActionBar**: currently pushes list content down when it appears, causing layout shift. Should be **sticky/overlapping** (fixed position, overlays list bottom) so it does not reflow the page.
 
 **Flows**
 - Primary browse + triage surface for all items
@@ -122,27 +131,29 @@ _Each view section covers: what is on it · which flows it participates in · in
 **Contents**
 Multi-step wizard:
 1. BasicInfoForm — description, category, subcategory, quality, location/box, dimensions, weight
-2. QualityReviewStep — quality confirmation
+2. QualityReviewStep — quality confirmation _(work in progress; flow is stable, visual design is not final)_
 3. ItemMatchSelection — similar items picker (deduplicate)
 4. AgenticPhotos — camera capture
 5. ManualEdit — final review before save
 
-Also embeddable inline on LandingPage (CreateItemCard).
+The embedded LandingPage variant (CreateItemCard) is **removed** — creation is now nav-initiated only.
 
 **Flows**
 - Primary intake path for new physical items
-- Can be triggered from LandingPage (embedded) or directly via nav
+- Triggered from nav (+ button) or directly via /items/new
 - Auto-print label on completion if configured
 
 **Navigation out**
 - → ItemDetail (after successful save)
-- → / (cancel from embedded mode)
+- → /items (cancel)
 
 ---
 
 ### 4. ItemDetail `/items/:id`
 
-**Contents**
+This view will undergo the largest changes. It is already dense and the current stacked layout does not carry it well. The contents need to be regrouped before any visual changes can succeed.
+
+**Contents (current)**
 - Item header: Artikel-Nummer, description, quality badge, shop badge, zubehoer badge
 - Location: current box/shelf with LocationTag (tappable → BoxDetail)
 - Media gallery (photos)
@@ -152,11 +163,27 @@ Also embeddable inline on LandingPage (CreateItemCard).
 - Event log
 - Edit / delete actions
 
+**Regrouping proposal**
+The view conflates two conceptually different concerns that may deserve separation or at least visual grouping:
+
+- **ItemRef data** (reference article information — Langtext, specs, shop metadata, agentic enrichment): shared across all instances of this article. This is the "what is this thing" layer.
+- **ItemInstance data** (physical instance — location, condition, stock count, relocation, transport, event log): specific to this one physical object. This is the "where is this object and what happened to it" layer.
+
+Options to consider:
+1. **Tab layout** — "Artikel" tab (ref data, agentic, media) / "Exemplar" tab (instance data, location, events)
+2. **Two-column layout** — ref data left column, instance data right column (desktop only)
+3. **Section headers with visual weight** — keep single scroll but with clear section separators
+
+**Actions grouping**
+Currently actions (edit, relocate, agentic trigger, delete) are scattered near their related data. Consider an **action bar or action panel** that groups all mutations in one place, separate from the display content.
+
+**Pending transport** (planned): badge in instance section linking to TransportDetail.
+
 **Flows**
 - Central detail surface; reached from list, search, QR scan, agentic review queue
 - Agentic review flow: trigger → running → needs_review → approve/reject → approved/rejected
 - Relocation flow: pick target box → confirm move
-- Pending transport badge (planned: if item has a pending transport, badge links to TransportDetail)
+- Pending transport badge (planned)
 
 **Navigation out**
 - → BoxDetail (LocationTag tap)
