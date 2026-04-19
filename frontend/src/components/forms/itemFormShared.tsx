@@ -1680,3 +1680,11 @@ export function createPhotoChangeHandler(
     }
   };
 }
+function getNextPhotoInputMode(current: PhotoInputMode): PhotoInputMode {
+  return current === 'camera' ? 'file' : 'camera';
+}
+
+function resolvePhotoCaptureAttribute(mode: PhotoInputMode): boolean | 'environment' | 'user' {
+  return mode === 'camera' ? 'user' : false;
+}
+

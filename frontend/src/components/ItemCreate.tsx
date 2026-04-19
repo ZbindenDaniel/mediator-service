@@ -1346,21 +1346,6 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
           ? `Artikel wurde erfasst und dem Behälter ${createdItem.BoxID} zugeordnet.`
           : 'Artikel wurde erfasst und ist noch keinem Behälter zugeordnet. Bitte platzieren!';
 
-      // TODO(agent): Confirm modal print logging remains consistent after dialog copy updates.
-      const dialogMessage = !AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && createdItem?.ItemUUID ? (
-        <>
-          <p>{successMessage}</p>
-          <PrintLabelButton
-            itemId={createdItem.ItemUUID}
-            onPrintStart={({ itemId }) => {
-              logger.info?.('Item create modal print requested', { itemId });
-            }}
-          />
-        </>
-      ) : (
-        successMessage
-      );
-
       let shouldNavigateToCreatedItem = Boolean(createdItem?.ItemUUID);
       try {
         // TODO(agent): Revisit success dialog layout after richer metadata and label actions land.
@@ -1398,18 +1383,30 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader }: ItemCre
             console.warn('Missing ItemUUID for created item success dialog', { itemId: itemIdRaw });
           }
 
+          const allPrintItemIds: string[] =
+            responseItems.length > 0
+              ? responseItems
+                  .map((i) => (typeof i?.ItemUUID === 'string' ? i.ItemUUID.trim() : ''))
+                  .filter(Boolean)
+              : itemId
+              ? [itemId]
+              : [];
+
           dialogMessage = (
             <div className="stack">
               <div>{successMessage}</div>
               <div>Artikelnummer: {artikelNummer || 'Unbekannt'}</div>
               <div>
-                {itemId ? (
-                  <PrintLabelButton
-                    itemId={itemId}
-                    onPrintStart={({ itemId: modalItemId }) => {
-                      logger.info?.('Item create modal print requested', { itemId: modalItemId });
-                    }}
-                  />
+                {allPrintItemIds.length > 0 ? (
+                  allPrintItemIds.map((printId) => (
+                    <PrintLabelButton
+                      key={printId}
+                      itemId={printId}
+                      onPrintStart={({ itemId: modalItemId }) => {
+                        logger.info?.('Item create modal print requested', { itemId: modalItemId });
+                      }}
+                    />
+                  ))
                 ) : (
                   <span>Label drucken nicht verfügbar.</span>
                 )}
