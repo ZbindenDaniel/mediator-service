@@ -82,6 +82,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import { useSetItemActions } from '../context/ItemActionsContext';
+import { usePanelContext } from '../context/PanelContext';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
@@ -1362,6 +1363,13 @@ export default function ItemDetail({ itemId }: Props) {
     onCancel?: () => void | Promise<void>;
   }>({});
   const setItemActions = useSetItemActions();
+  const { setEntity, setMainView } = usePanelContext();
+
+  // Navigate to BoxList and activate the box in the detail panel.
+  const handleBoxNavigation = useCallback((boxId: string) => {
+    setEntity('box', boxId);
+    setMainView('boxes');
+  }, [setEntity, setMainView]);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
@@ -1716,7 +1724,15 @@ export default function ItemDetail({ itemId }: Props) {
       ['Artikelnummer', item.Artikel_Nummer ?? null],
       [
         'Behälter',
-        item.BoxID ? <Link to={`/boxes/${encodeURIComponent(String(item.BoxID))}`}>{item.BoxID}</Link> : null
+        item.BoxID ? (
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => { handleBoxNavigation(String(item.BoxID)); }}
+          >
+            {item.BoxID}
+          </button>
+        ) : null
       ],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
       ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)],
@@ -1870,9 +1886,15 @@ export default function ItemDetail({ itemId }: Props) {
         return {
           id: instance.ItemUUID,
           qualityValue,
-          boxId: rawBoxId
-            ? <Link to={`/boxes/${encodeURIComponent(rawBoxId)}`}>{rawBoxId}</Link>
-            : null,
+          boxId: rawBoxId ? (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => { handleBoxNavigation(rawBoxId); }}
+            >
+              {rawBoxId}
+            </button>
+          ) : null,
           location: instance.Location ?? null,
           updatedAt: instance.UpdatedAt ? formatDateTime(instance.UpdatedAt) : null,
           createdAt: instance.Datum_erfasst ? formatDateTime(instance.Datum_erfasst) : null

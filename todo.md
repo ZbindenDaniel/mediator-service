@@ -15,6 +15,8 @@
 
 1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
 
+1b. **Restore mobile bulk-action controls.** `BulkItemActionBar` was moved from `ItemListPage` to the shell action panel (Steps 8–9). The action panel is hidden below 900px, so bulk actions (KI, relocate, export) are not accessible on mobile. Add a fallback for small screens.
+
 2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started
 
 3. **Ensure waiting agentic runs restart on application restart.** All runs in a waiting state should automatically resume when the app restarts. Waiting runs should wait (max. parallel runs has to be respected)
@@ -75,7 +77,7 @@
 
 25. **Improve event log.** Make event log more useful and easier to navigate.
 
-26. **Inconsistent locationTag display.** Audit and fix locationTag rendering across views so it is displayed consistently.
+26. **Inconsistent locationTag display.** Audit and fix locationTag rendering across views so it is displayed consistently. Note: box links in ItemDetail now navigate via the panel shell (Steps 8–9) rather than hard-navigating; other views may still use plain `<Link>` to `/boxes/:id`.
 
 27. **Improve pie chart.** The current chart is visually poor; redesign for clarity.
 
