@@ -269,6 +269,7 @@ This reuses the existing query and projection; the `counts` flag gates the JOIN 
 |---|---|---|
 | Box detail | "Transport erstellen" button (near "Verschieben") | Whole box contents |
 | Shelf detail | "Transport erstellen" button | Whole shelf contents |
+| Stub detail | "Transport erstellen" button — pre-fills `SourceId = stub.ShelfId` | Whole shelf contents (stub's shelf treated as source, identical to shelf detail flow) |
 | Item list (bulk) | Bulk action bar → "Transport erstellen" | Selected items |
 | Box list (bulk) | Bulk action bar → "Transport erstellen" | Selected boxes |
 | API | `POST /api/transports` | Programmatic (ERP/shop) |
@@ -280,6 +281,10 @@ This reuses the existing query and projection; the `counts` flag gates the JOIN 
 - Actions: **"Abschliessen"** (pending only) → opens completion dialog (§5.4); **"Abbrechen"** (pending only).
 - Completed transports: read-only with timestamp and actor. If `ActualTargetId` differs from `TargetId`, show both:
   > Ziel: ~~Regal B379-1-0003~~ → **Regal B379-1-0005** (geändert bei Abschluss)
+
+### 8.6 Pending transport on item instance view
+
+The item instance view (to be remodelled) surfaces any pending transport that references the item. The user can see the transport ID and status, and tap through to the transport detail to complete it from there. This is the primary completion path for transports where the physical move was done but completion was forgotten — no item-scanning step is required or planned for transport completion.
 
 ### 8.5 Target shelf picker (in completion dialog and transport creation)
 

@@ -131,7 +131,14 @@ GET /api/stubs?isActive=true
   - Searchable by: description keyword, ShelfId
         │
         ▼
-Worker identifies high-priority stubs → initiates transport (out of scope)
+Worker identifies high-priority stub → opens stub detail
+        │
+        ▼
+Taps [Transport erstellen] → transport creation form pre-filled with SourceId = stub.ShelfId
+  (treated identically to "Transport erstellen" from a shelf detail — no special stub-transport logic)
+        │
+        ▼
+Transport completes → stub auto-resolves (complete-transport side-effect)
 ```
 
 ### Flow C: Resolve Stub (auto-resolved by transport completion)
@@ -160,7 +167,7 @@ POST /api/stubs/:id/resolve  →  also available for manual resolution if needed
 | `GET` | `/api/stubs` | List stubs; filterable by `isActive`, `shelfId`; searchable by `q` (description keyword) |
 | `GET` | `/api/stubs/:id` | Get single stub detail |
 | `PATCH` | `/api/stubs/:id` | Update description, counts, or notes on an open stub |
-| `POST` | `/api/stubs/:id/resolve` | Mark stub resolved (out of scope — define when transport planning is designed) |
+| `POST` | `/api/stubs/:id/resolve` | Mark stub resolved manually (auto-resolve is the normal path via transport completion) |
 
 ---
 
@@ -180,7 +187,8 @@ A dedicated view (accessible from main nav or BoxList filter):
 - Columns: shelf, description, loose items, loose boxes, created by, created at
 - Filter: active only (default) / all
 - Search: keyword in description, shelf ID
-- Row action: edit, view shelf, resolve *(resolve out of scope)*
+- Row action: edit, view shelf
+- Stub detail: **[Transport erstellen]** button — pre-fills transport creation with `SourceId = stub.ShelfId`; identical to creating a transport from a shelf detail
 
 ### BoxList / BoxListPage (Shelves)
 
@@ -195,7 +203,7 @@ A dedicated view (accessible from main nav or BoxList filter):
 |-------|-----------|-------------|
 | `StubCreated` | Box (shelf) | New stub added for a shelf |
 | `StubUpdated` | Box (shelf) | Stub description or counts changed |
-| `StubResolved` | Box (shelf) | Stub resolved at transport time *(out of scope)* |
+| `StubResolved` | Box (shelf) | Stub resolved — either auto-resolved by transport completion or manually |
 
 ---
 
