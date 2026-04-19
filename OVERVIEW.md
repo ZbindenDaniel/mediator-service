@@ -7,6 +7,12 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+66. ✅ UX story walkthrough: finalize stub→transport flow and transport completion model.
+   - **Why:** Story trace revealed that "mark stub for transport" was out of scope but clearly needed. Resolved by treating stub detail as a standard transport creation entry point (pre-fill `SourceId = stub.ShelfId`) — no special logic, no new API. Transport completion via item-scanning rejected as too brittle; item instance view will surface pending transports for completion instead.
+   - **Deferred:** Split-destination transports (one target per transport is acceptable in v1); instance view remodel is a separate task.
+65. ✅ Resolve all open questions across the three planning docs (transport, stub boxes, inventory) and update docs so implementation can begin.
+   - **Why:** All Q&A decisions are now locked in the planning docs rather than conversation notes — prevents implementation drift and gives implementors a single authoritative source. Active Inventory Day (UC-1) was explicitly deferred; the passive cycle (UC-2) and `InventoryCheckView` are the implementation focus. Stub auto-resolve was tied to `complete-transport` instead of a separate manual action to reduce operator steps.
+   - **Deferred:** UC-1 Active Inventory Day (admin global flag + shelf-level task list); ERP API auth/schema for transport (needs ERP team alignment); per-shelf capacity thresholds for transport target picker.
 64. ✅ Refine transport boxes planning: target shelf picker with box/item counts, location override at completion (`ActualTargetId`), UC4 (shelf full → scan new location → confirmation dialog), and `list-boxes?counts=1` API extension.
    - **Why:** Completion flow needs explicit override support (transporter may find a better shelf) with a mandatory confirmation step to prevent wrong-shelf accidents. Shelf picker must show capacity context to aid that decision.
    - **Deferred:** Per-shelf capacity threshold (Q8) — global config constant recommended for Phase 1.

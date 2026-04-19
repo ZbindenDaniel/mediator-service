@@ -61,7 +61,7 @@ Add one field to the `items` table:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `MissingAt` | `TEXT \| null` | ISO 8601 timestamp when item was last confirmed missing during inventory. `null` = not flagged. Cleared when item is subsequently scanned/found. |
+| `MissingAt` | `TEXT \| null` | ISO 8601 timestamp when item was last confirmed missing during inventory. `null` = not flagged. Cleared when item is subsequently scanned/found (`InventoryFound` event). While set, the item is excluded from active stock counts (`Auf_Lager` treated as 0 for this instance). |
 
 ### New Table: `inventory_sessions`
 
@@ -165,12 +165,16 @@ Item's BoxID = Box B (or null)
         │
         ▼
 Show mismatch alert:
-  "This item is recorded in [Box B / no box]. What do you want to do?"
+  "This item is recorded in [Box B label / no box]. What do you want to do?"
+  Context shown: recorded box label (if any) — operator uses this as a hint only,
+  since the recorded location may itself be wrong.
   Options:
     [Move here]        → update item.BoxID = Box A, log Moved event
     [Ignore / skip]    → item is neither confirmed nor missing in this session
     [Mark as misplaced] → log event, leave assignment unchanged for now
 ```
+
+The operator chooses freely; the system does not pre-select or force the recorded box as the "correct" destination.
 
 ### Flow D: Missing Items After Inventory
 
@@ -195,6 +199,7 @@ When a missing item is subsequently found and scanned:
 | `POST` | `/api/inventory/complete` | Finalize session: persist outcomes, update `LastInventoryDate`, flag missing items |
 | `POST` | `/api/inventory/cancel` | Abandon session without updating `LastInventoryDate` |
 | `GET` | `/api/inventory/missing` | List items currently flagged as missing (`MissingAt IS NOT NULL`) |
+| `GET` | `/api/inventory/sessions/:id/export` | Session summary export: date, box, confirmed/missing/misplaced counts, actor (Phase 4) |
 | `GET` | `/api/boxes?filter=inventoryPending` | Existing endpoint extended with `inventoryPending` filter and `lastInventoryDate` sort |
 
 ---
@@ -220,8 +225,9 @@ The core inventory UI, displayed as a full page:
 - **Item checklist** — all items in box, each row showing:
   - Thumbnail, Artikel_Nummer, description
   - Status icon: unchecked / confirmed (green check) / missing (red X)
+  - For `Einheit = 'Menge'` items: a numeric count input instead of a checkbox (operator enters actual count; compared to `Auf_Lager` to derive confirmed/missing outcome)
 - **Scan zone** — persistent camera/input; does not navigate away on a successful match
-- **Acoustic feedback** — success tone on confirmed scan, distinct alert tone on mismatch
+- **Acoustic feedback** — success tone on confirmed scan, distinct alert tone on mismatch. The session [Start] button unlocks the browser audio context as a side effect.
 - **Bulk action** — "Mark remaining as missing" button
 - **Complete / Cancel** buttons; Complete shows summary before confirming: X confirmed, X missing
 
@@ -286,27 +292,29 @@ CREATE INDEX IF NOT EXISTS idx_items_missing ON items(MissingAt) WHERE MissingAt
 
 ---
 
-## Open Questions
+## Resolved Decisions
 
-1. **Partial completion** — if an employee starts a box and is interrupted, should the session persist for resumption? Sessions with `CompletedAt = null` could represent resumable state, but adds complexity. Alternative: cancel-and-restart is always acceptable.
+All open questions are now decided.
 
-2. **Menge items (bulk/non-serialized)** — items with `Einheit = 'Menge'` have no per-piece QR codes. Options: (a) manual count entry in checklist, (b) treat the ItemInstance QR as a single scannable unit, (c) skip Menge items in inventory check entirely.
+1. **Partial completion** — **✅ Cancel and restart.** No session resumption in v1. Sessions with `CompletedAt = null` are abandoned sessions; the operator starts fresh. Keeps session state simple.
 
-3. **Correction process for misplaced items** — should the system suggest the "correct" box based on the DB record, or let the operator freely choose? If the recorded location is also wrong, the suggestion would be misleading.
+2. **Menge items (bulk/non-serialized)** — **✅ Manual count entry.** Items with `Einheit = 'Menge'` show a numeric input in the checklist. The entered count is compared to `Auf_Lager` to determine confirmed/missing outcome. No per-piece QR scan needed.
 
-4. **Missing item exclusion from stock** — should `MissingAt` exclude the item from active stock counts? Should items missing for >N days trigger a notification or export?
+3. **Correction process for misplaced items** — **✅ Operator chooses freely.** Flow C shows the recorded box as context (the operator may use it as a hint) but does not pre-select it as the destination. The recorded location may itself be wrong.
 
-5. **Inventory scope** — should shelves (`S-*` BoxID format) participate in inventory the same way as boxes, or is the item-level check less meaningful for shelves?
+4. **Missing item exclusion from stock** — **✅ Exclude from `Auf_Lager` while `MissingAt` is set.** The item is treated as having `Auf_Lager = 0` for aggregation purposes. Cleared on `InventoryFound`. No automatic notification for long-missing items in v1.
 
-6. **Acoustic signals** — browser audio requires a prior user interaction to unlock the audio context. A persistent "Start session" button at the top of `InventoryCheckView` that unlocks audio as a side effect would solve this cleanly.
+5. **Inventory scope** — **✅ Shelves (`S-*`) participate.** `LastInventoryDate` applies to shelf records the same as boxes. Loose items attached to a shelf (`BoxID = S-*`) are checked during a shelf inventory session.
 
-7. **`InventoryCycleDays = 0`** — exact semantics: disable passive triggering entirely, or treat every box as always pending?
+6. **Acoustic signals** — **✅ Start button unlocks audio context.** The [Start Inventory] button in `InventoryCheckView` serves as the required prior user interaction to unlock browser audio, enabling success/mismatch tones during the session.
 
-8. **Undo after completion** — once a session completes and items are marked missing, can the operator reopen it, or must they scan the item again to clear `MissingAt`?
+7. **`InventoryCycleDays = 0`** — **✅ All boxes always pending.** Setting `INVENTORY_CYCLE_DAYS=0` makes every box `InventoryPending = true` at all times, triggering the inventory prompt on every scan.
 
-9. **Reporting** — is a session summary needed? Could be a simple export: date, box, confirmed/missing/misplaced counts, actor.
+8. **Undo after completion** — **✅ No undo.** Once a session completes and items are marked missing (`MissingAt` set), the operator must re-scan the item to clear the flag (`InventoryFound` event). No session reopen in v1.
 
-10. **Multi-user concurrency** — a guard on `POST /api/inventory/start` should reject if an open session already exists for that BoxID.
+9. **Reporting** — **✅ Session summary export included in Phase 4.** `GET /api/inventory/sessions/:id/export` returns date, box, confirmed/missing/misplaced counts, and actor.
+
+10. **Multi-user concurrency** — **✅ Guard at start.** `POST /api/inventory/start` rejects with an error if an open session (`CompletedAt IS NULL`) already exists for the requested `BoxID`.
 
 ---
 
@@ -331,4 +339,11 @@ CREATE INDEX IF NOT EXISTS idx_items_missing ON items(MissingAt) WHERE MissingAt
 ### Phase 4 — Missing Items & Reporting
 - Missing items view / filter in `ItemList`
 - `InventoryFound` flow (scan to clear `MissingAt`)
-- Optional: session summary export
+- Session summary export (`GET /api/inventory/sessions/:id/export`)
+- Menge item count-input handling in `InventoryCheckView`
+
+---
+
+## Deferred: Active Inventory Day (UC-1)
+
+UC-1 (admin-triggered inventory day with a global flag, a shelf-level task list in the nav, and per-shelf sessions) is **explicitly out of scope for this planning pass**. The current implementation focus is the passive cycle (UC-2) and the core `InventoryCheckView` component. UC-1 will be planned in a separate document when the passive cycle is stable.

@@ -242,6 +242,7 @@ The "Abschliessen" dialog is the same for all use cases:
 - `confirmedTargetId` is the shelf ID the employee actually chose (scanned or selected).
 - If `confirmedTargetId` equals `TargetId`: normal completion, `ActualTargetId` stays null.
 - If they differ: override is accepted and `ActualTargetId = confirmedTargetId` is persisted. The mismatch is logged with structured context (`plannedTargetId`, `actualTargetId`, `actor`). No 400 error — the frontend already required explicit confirmation before sending.
+- **Stub auto-resolve:** after relocating items, `complete-transport` resolves all active `box_stubs` records for the source shelf (`SourceId` or the shelf containing the source box) by setting `IsActive = 0`, `ResolvedAt = now`, `ResolvedBy = actor`. See `docs/PLANNING_STUB_BOXES.md` for stub schema.
 
 **Shelf list with counts** (`GET /api/boxes?type=shelf&counts=1`):
 
@@ -257,7 +258,7 @@ This reuses the existing query and projection; the `counts` flag gates the JOIN 
 
 ### 8.1 New page: `/transports`
 
-- Nav item: **"Transporte"** (between Boxen and Scan, or after Aktivitäten).
+- Nav item: **"Transporte"** — placed before "Aktivitäten" in the main nav.
 - Shows transport list, filterable by state (default: `pending`), location, reference.
 - Each row: TransportID, source label, target label, item count, state badge, created date.
 - Tap row → transport detail with item/box list and complete/cancel actions.
@@ -268,6 +269,7 @@ This reuses the existing query and projection; the `counts` flag gates the JOIN 
 |---|---|---|
 | Box detail | "Transport erstellen" button (near "Verschieben") | Whole box contents |
 | Shelf detail | "Transport erstellen" button | Whole shelf contents |
+| Stub detail | "Transport erstellen" button — pre-fills `SourceId = stub.ShelfId` | Whole shelf contents (stub's shelf treated as source, identical to shelf detail flow) |
 | Item list (bulk) | Bulk action bar → "Transport erstellen" | Selected items |
 | Box list (bulk) | Bulk action bar → "Transport erstellen" | Selected boxes |
 | API | `POST /api/transports` | Programmatic (ERP/shop) |
@@ -280,6 +282,10 @@ This reuses the existing query and projection; the `counts` flag gates the JOIN 
 - Completed transports: read-only with timestamp and actor. If `ActualTargetId` differs from `TargetId`, show both:
   > Ziel: ~~Regal B379-1-0003~~ → **Regal B379-1-0005** (geändert bei Abschluss)
 
+### 8.6 Pending transport on item instance view
+
+The item instance view (to be remodelled) surfaces any pending transport that references the item. The user can see the transport ID and status, and tap through to the transport detail to complete it from there. This is the primary completion path for transports where the physical move was done but completion was forgotten — no item-scanning step is required or planned for transport completion.
+
 ### 8.5 Target shelf picker (in completion dialog and transport creation)
 
 Used in both the creation form (choosing planned target) and the completion dialog (confirming/overriding actual target).
@@ -288,7 +294,6 @@ Used in both the creation form (choosing planned target) and the completion dial
 - Each shelf row shows:
   - Shelf label (resolved via `shelfLabel.ts` format: `{location_label} – {floor} – {index}`)
   - Box count + item count in a compact badge (e.g. `4 Boxen · 23 Artikel`)
-  - Visual indicator if shelf appears full (box count exceeds a configurable threshold — TBD)
 - QR scan button alongside the list: scanning a shelf QR auto-selects it.
 - Pre-selects planned `TargetId` in the completion dialog.
 
@@ -326,57 +331,41 @@ Used in both the creation form (choosing planned target) and the completion dial
 
 ---
 
-## 10. Open Questions
+## 10. Resolved Decisions
+
+All open questions are now decided.
 
 ### Q1: Whole-source vs. selective items (SourceId vs. transport_items)
 
-When a transport is created from a shelf, does it mean "move everything currently on this shelf" or "move items that were on this shelf at creation time"?
-
-- **Option A (dynamic):** `SourceId` without snapshot — completion queries current shelf contents. Simpler, but items added after transport creation are included unintentionally.
-- **Option B (snapshot):** At creation, enumerate items in source and write them to `transport_items`. Explicit and auditable.
-- **Recommendation:** Option B. Snapshot at creation. Prevents surprise inclusions and gives the employee a clear list of what to move.
+**✅ Decided: snapshot at creation (Option B).** At creation, enumerate items in source and write them to `transport_items`. Prevents surprise inclusions and gives the employee an explicit, auditable list of what to move.
 
 ### Q2: Does completing a transport auto-create a target box?
 
-If the target is a shelf, items need a box at the destination. Options:
-- Auto-create a new box at target shelf on completion (mirrors existing `RelocateItemCard` behavior).
-- Require the employee to specify an existing target box.
-- **Recommendation:** Auto-create if no target box is specified (consistent with existing relocation flow).
+**✅ Decided: auto-create** if no target box is specified — consistent with existing `RelocateItemCard` behavior.
 
 ### Q3: Should items change Location during transit?
 
-Could set item `Location = 'in-transit'` or `BoxID = TransportID` to show movement status.
-- Risk: pollutes location data; scan flows may break.
-- **Recommendation:** Keep items at source location until completion. Use transport badge as UI signal only.
+**✅ Decided: no.** Items remain at their source location until the transport is completed. The transport badge is the only UI signal during transit. Setting `BoxID = TransportID` would pollute location data and break scan flows.
 
 ### Q4: Re-open / edit after creation
 
-Can a pending transport have items added or removed after creation?
-- Needed if commissioning orders change before pickup.
-- **Recommendation:** Defer to Phase 2. V1 transports are immutable after creation; cancel and recreate to change scope.
+**✅ Decided: defer to Phase 2.** V1 transports are immutable after creation; cancel and recreate to change scope.
 
 ### Q5: Multiple transports referencing the same item
 
-Is it valid to have two pending transports referencing the same item?
-- Could cause conflicting moves.
-- **Recommendation:** Warn (not block) at creation if item already has a pending transport. Block at completion if item has moved since transport was created (compare current location vs. expected source).
+**✅ Decided:** warn (not block) at creation if the item already has a pending transport. Block at completion if the item has moved since the transport was created (compare current location vs. expected source).
 
 ### Q6: Transport weight/item count
 
-ItemCount and TotalWeightKg on the transport: compute on creation from snapshot (Phase 1), or aggregate live from transport_items join?
-- **Recommendation:** Snapshot at creation (denormalized), updated if items change. Consistent with how `Box.ItemCount` works.
-
-### Q8: "Shelf full" threshold in target picker
-
-The target picker should visually signal when a shelf appears full. What constitutes "full"?
-- Fixed box count threshold per location (configurable in `shelf-locations.ts`)?
-- Dynamic: flag shelves with ≥ N boxes where N is a global config value?
-- No automatic indicator — rely on employee judgment?
-- **Recommendation:** Global configurable threshold (`MAX_BOXES_PER_SHELF`, default e.g. 20) surfaced as a warning indicator (not a hard block). Defer per-shelf capacity config to a later phase.
+**✅ Decided: snapshot at creation** (denormalized). Consistent with how `Box.ItemCount` works.
 
 ### Q7: ERP/shop API authentication and schema
 
-Details undefined. The `POST /api/transports` endpoint should accept the same actor-based auth pattern as other API actions. The exact request contract (field names, reference format) needs alignment with ERP team.
+**Deferred — needs ERP team alignment.** The `POST /api/transports` endpoint uses the same actor-based auth pattern as other API actions. Exact request contract (field names, reference format) is not yet defined.
+
+### Q8: "Shelf full" indicator in target picker
+
+**✅ Decided: no indicator in v1.** Skip entirely; rely on employee judgment. A configurable threshold may be added later but adds no value without per-shelf capacity data.
 
 ---
 
