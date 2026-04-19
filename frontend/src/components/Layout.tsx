@@ -3,6 +3,7 @@ import Header from './Header';
 import { usePanelContext } from '../context/PanelContext';
 import { ItemActionsProvider } from '../context/ItemActionsContext';
 import ItemDetail from './ItemDetail';
+import BoxDetail from './BoxDetail';
 import DetailTabBar from './DetailTabBar';
 import ActionPanel from './panels/ActionPanel';
 
@@ -24,6 +25,13 @@ export default function Layout({ children }: { children: ReactNode }) {
                     <DetailTabBar />
                     <div className="panel-detail__body">
                       <ItemDetail itemId={entityId} />
+                    </div>
+                  </>
+                ) : entityType === 'box' && entityId ? (
+                  <>
+                    <DetailTabBar />
+                    <div className="panel-detail__body">
+                      <BoxDetail boxId={entityId} />
                     </div>
                   </>
                 ) : null}

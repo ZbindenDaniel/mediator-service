@@ -24,6 +24,7 @@ interface Props {
   onSortChange: (value: BoxSortKey) => void;
   onTypeFilterChange: (value: BoxTypeFilter) => void;
   onLocationFilterChange: (value: string) => void;
+  onSelect?: (id: string) => void;
 }
 
 const SORT_LABELS: Record<BoxSortKey, string> = {
@@ -60,12 +61,16 @@ function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest(interactiveSelector));
 }
 
-export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locationFilter, onSearchChange, onSortChange, onTypeFilterChange, onLocationFilterChange }: Props) {
+export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locationFilter, onSearchChange, onSortChange, onTypeFilterChange, onLocationFilterChange, onSelect }: Props) {
   logger.info?.('[BoxList] rendering boxes', { count: boxes.length });
 
   const navigate = useNavigate();
   const navigateToBoxDetail = useCallback((boxId: string, source: 'click' | 'keyboard') => {
     try {
+      if (onSelect) {
+        onSelect(boxId);
+        return;
+      }
       logger.info?.('Navigating to box detail from box list row', { boxId, source });
       navigate(`/boxes/${encodeURIComponent(boxId)}`);
     } catch (navigationError) {
@@ -74,7 +79,7 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
         source,
       });
     }
-  }, [navigate]);
+  }, [navigate, onSelect]);
 
   const safeBoxes = useMemo(() => boxes ?? [], [boxes]);
 
