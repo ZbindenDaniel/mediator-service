@@ -81,6 +81,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-positive-criteria): Keep review-positive gating aligned with checklist blocking criteria and explicit wrong-information signals only.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
+import { useSetItemActions } from '../context/ItemActionsContext';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
 import LoadingPage from './LoadingPage';
@@ -1354,6 +1355,13 @@ export default function ItemDetail({ itemId }: Props) {
     itemId: null,
     active: false
   });
+  // Holds latest agentic action callbacks; updated each render so the stable context wrappers always call current handlers.
+  const agenticHandlersRef = useRef<{
+    onStart?: () => void | Promise<void>;
+    onReview?: () => void | Promise<void>;
+    onCancel?: () => void | Promise<void>;
+  }>({});
+  const setItemActions = useSetItemActions();
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
@@ -3584,6 +3592,41 @@ export default function ItemDetail({ itemId }: Props) {
   const isOutOfStock = !!item
     && !isBulkItem
     && (typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0) <= 0;
+
+  // Keep ref current every render so stable context wrappers below always invoke the latest handler.
+  agenticHandlersRef.current = {
+    onStart: agenticCanStart ? () => void agenticStartHandler() : undefined,
+    onReview: () => void handleAgenticReview(),
+    onCancel: agenticCanCancel ? () => void handleAgenticCancel() : undefined,
+  };
+
+  // Register / update action slot whenever relevant state changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!setItemActions) return;
+    if (!item) {
+      setItemActions(null);
+      return;
+    }
+    setItemActions({
+      itemId,
+      agenticNeedsReview,
+      agenticCanStart,
+      agenticCanRestart,
+      agenticCanCancel,
+      agenticActionPending,
+      startLabel: agenticStartLabel,
+      // Stable wrappers: always delegate to the latest handler captured in the ref above.
+      onStart: () => void agenticHandlersRef.current.onStart?.(),
+      onReview: () => void agenticHandlersRef.current.onReview?.(),
+      onCancel: () => void agenticHandlersRef.current.onCancel?.(),
+    });
+  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear the action slot when ItemDetail unmounts.
+  useEffect(() => {
+    return () => setItemActions?.(null);
+  }, [setItemActions]);
 
   return (
     <div className="container item">
