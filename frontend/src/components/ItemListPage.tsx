@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoContainer, GoSearch } from 'react-icons/go';
 import { useSearchParams } from 'react-router-dom';
+import { usePanelContext } from '../context/PanelContext';
 import type { AgenticRunStatus, Item } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
@@ -373,6 +374,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 
 export default function ItemListPage() {
   const [searchParams] = useSearchParams();
+  const { setEntity } = usePanelContext();
   const [items, setItems] = useState<Item[]>([]);
   const [placementFilter, setPlacementFilter] = useState<ItemListFilters['placementFilter']>(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
   const [isLoading, setIsLoading] = useState(true);
@@ -809,6 +811,10 @@ export default function ItemListPage() {
     setSelectedIds(new Set());
   }, []);
 
+  const handleItemSelect = useCallback((id: string) => {
+    setEntity('item', id);
+  }, [setEntity]);
+
   const selectedItems = useMemo(() => {
     const selectedLookup = new Set(selectedIds);
     return items.filter((item) => selectedLookup.has(item.ItemUUID));
@@ -1078,6 +1084,7 @@ export default function ItemListPage() {
       <ItemList
         allVisibleSelected={allVisibleSelected}
         items={filtered}
+        onSelect={handleItemSelect}
         onToggleAll={handleToggleAll}
         onToggleItem={handleToggleItem}
         selectedItemIds={selectedIds}

@@ -29,6 +29,7 @@ interface Props {
   onToggleAll: (nextValue: boolean) => void;
   allVisibleSelected: boolean;
   someVisibleSelected: boolean;
+  onSelect?: (id: string) => void;
 }
 
 type ItemLocationSource = Pick<Item, 'ItemUUID' | 'BoxID' | 'Location' | 'ShelfLabel'>;
@@ -74,15 +75,20 @@ export default function ItemList({
   onToggleItem,
   onToggleAll,
   allVisibleSelected,
-  someVisibleSelected
+  someVisibleSelected,
+  onSelect
 }: Props) {
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const navigateToItemDetail = useCallback((itemId: string, identifierType: 'itemUUID' | 'artikelNummer', source: 'click' | 'keyboard') => {
     try {
-      console.info('Navigating to item detail from item list row', { itemId, identifierType, source });
-      navigate(`/items/${encodeURIComponent(itemId)}`);
+      if (onSelect) {
+        onSelect(itemId);
+      } else {
+        console.info('Navigating to item detail from item list row', { itemId, identifierType, source });
+        navigate(`/items/${encodeURIComponent(itemId)}`);
+      }
     } catch (navigationError) {
       console.error('Failed to navigate to item detail from item list row', {
         itemId,
@@ -91,7 +97,7 @@ export default function ItemList({
         navigationError
       });
     }
-  }, [navigate]);
+  }, [navigate, onSelect]);
   const headerLabel = useMemo(() => {
     if (allVisibleSelected) {
       return 'Alle sichtbaren Artikel abwählen';

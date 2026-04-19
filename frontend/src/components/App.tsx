@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
 import Layout from './Layout';
 import { DialogProvider } from './dialog';
-import { PanelProvider } from '../context/PanelContext';
+import { PanelProvider, usePanelContext } from '../context/PanelContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
@@ -25,6 +25,13 @@ function BoxRoute() {
 
 function ItemRoute() {
   const { itemId } = useParams();
+  const { setEntity } = usePanelContext();
+  // populate the panel so panel-detail shows ItemDetail for direct /items/:id deep links
+  useEffect(() => {
+    if (itemId) {
+      setEntity('item', itemId);
+    }
+  }, [itemId, setEntity]);
   return itemId ? <ItemDetail itemId={itemId} /> : <div>Missing item</div>;
 }
 
