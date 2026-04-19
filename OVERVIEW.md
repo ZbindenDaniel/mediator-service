@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+68. ✅ Fix three test harness bugs that caused `npm test` to crash: suppress spurious `.node` resolution warnings from the `bindings` library, pass `callerModule` to `storeMockEntry` in `requireActual`'s finally block, and pre-register `@jest/globals` as a harness-backed mock.
+   - **Why:** The `.node` warnings were noise from the native module probe loop (not real errors). The `requireActual` finally-block bug caused mock re-registration to resolve relative paths from the wrong directory, emitting spurious warnings and potentially losing the mock key. The `@jest/globals` mock prevents a fatal crash when test utilities import `jest` from that package (e.g. for TypeScript types) outside a real Jest environment.
+   - **Deferred:** Source-map support in the TypeScript transpiler was considered for better stack traces but not added — it would require `source-map-support` as a dev dependency and is a separate concern.
 67. ✅ Documentation audit: fix broken `docs/PLANS.md` links, sync `docs/BUGS.md` to v2.3, update stale version references, and clean up architecture placeholder.
    - **Why:** Three files (README.md, AGENTS.md, docs/OVERVIEW.md) linked `docs/PLANS.md` which never existed — planning content had been split into four separate PLANNING_*.md files. BUGS.md was stuck on "v2.2" and listed only 1 of 6 active bugs. docs/OVERVIEW.md still read "v2.2 current; v2.3 planning intake". docs/ARCHITECTURE.md had a `Design:owner@mediator` copy-paste placeholder.
    - **Deferred:** Eight detailed doc candidates listed in `docs/detailed/_candidates.md` (Shopware sync, CSV pipeline, search layer, label/PDF, agentic prompts, observability, bulk ops, config modes) remain unwritten — pre-existing known gaps, tracked in _candidates.md for incremental follow-up.
