@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+67. ✅ Documentation audit: fix broken `docs/PLANS.md` links, sync `docs/BUGS.md` to v2.3, update stale version references, and clean up architecture placeholder.
+   - **Why:** Three files (README.md, AGENTS.md, docs/OVERVIEW.md) linked `docs/PLANS.md` which never existed — planning content had been split into four separate PLANNING_*.md files. BUGS.md was stuck on "v2.2" and listed only 1 of 6 active bugs. docs/OVERVIEW.md still read "v2.2 current; v2.3 planning intake". docs/ARCHITECTURE.md had a `Design:owner@mediator` copy-paste placeholder.
+   - **Deferred:** Eight detailed doc candidates listed in `docs/detailed/_candidates.md` (Shopware sync, CSV pipeline, search layer, label/PDF, agentic prompts, observability, bulk ops, config modes) remain unwritten — pre-existing known gaps, tracked in _candidates.md for incremental follow-up.
 66. ✅ UX story walkthrough: finalize stub→transport flow and transport completion model.
    - **Why:** Story trace revealed that "mark stub for transport" was out of scope but clearly needed. Resolved by treating stub detail as a standard transport creation entry point (pre-fill `SourceId = stub.ShelfId`) — no special logic, no new API. Transport completion via item-scanning rejected as too brittle; item instance view will surface pending transports for completion instead.
    - **Deferred:** Split-destination transports (one target per transport is acceptable in v1); instance view remodel is a separate task.

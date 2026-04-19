@@ -29,6 +29,8 @@
 
 7. **Transform transcript persistence from HTML to JSON.** Store transcripts in a new location. UI restructuring of the transcript viewer (collapsible, step-separated) follows after persistence is changed. **Goal:** improve debuggability and enable structured transcript rendering.
 
+8. **Fix shelf location display in box item list.** Items shown in a box detail list should display the shelf as location when the item or its containing box is on a shelf. Current placement context is incomplete for operators during box workflows.
+
 ---
 
 ## Priority 2 — Feature Improvements

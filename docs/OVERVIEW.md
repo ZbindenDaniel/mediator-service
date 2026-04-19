@@ -27,7 +27,7 @@ The mediator service coordinates warehouse inventory workflows by pairing a Type
 
 ## Progress Updates
 
-- Current and historical implementation change logs are maintained in versioned sections in `docs/RECENT_HIGHLIGHTS.md` (v2.2 current; v2.3 planning intake in docs/PLANNING_V_2_3.md).
+- Current and historical implementation change logs are maintained in versioned sections in `docs/RECENT_HIGHLIGHTS.md` (v2.3 active).
 - This overview keeps only high-level project status so release documentation remains concise and auditable.
 
 ## Documentation Map
