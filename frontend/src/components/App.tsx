@@ -20,6 +20,13 @@ import ShelfCreateForm from './ShelfCreateForm';
 
 function BoxRoute() {
   const { boxId } = useParams();
+  const { setEntity } = usePanelContext();
+  // populate the panel so panel-detail shows BoxDetail for direct /boxes/:id deep links
+  useEffect(() => {
+    if (boxId) {
+      setEntity('box', boxId);
+    }
+  }, [boxId, setEntity]);
   return boxId ? <BoxDetail boxId={boxId} /> : <div>Behälter fehlt</div>;
 }
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePanelContext } from '../../context/PanelContext';
 import { useItemActions, type ItemActions } from '../../context/ItemActionsContext';
 import PrintLabelButton from '../PrintLabelButton';
@@ -13,6 +14,10 @@ export default function ActionPanel() {
 
   if (entityType === 'item') {
     return <ItemActionPanel tab={tab} entityId={entityId} actions={actions} />;
+  }
+
+  if (entityType === 'box') {
+    return <BoxActionPanel tab={activeTab ?? 'info'} entityId={entityId} />;
   }
 
   return null;
@@ -77,6 +82,35 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
     }
 
     // images, attachments, accessories, events: actions wired in a later step
+    default:
+      return null;
+  }
+}
+
+interface BoxActionPanelProps {
+  tab: string;
+  entityId: string;
+}
+
+function BoxActionPanel({ tab, entityId }: BoxActionPanelProps) {
+  const navigate = useNavigate();
+
+  switch (tab) {
+    case 'info':
+      return (
+        <div className="action-panel__content">
+          <PrintLabelButton boxId={entityId} />
+          <button
+            type="button"
+            className="btn"
+            onClick={() => navigate(`/boxes/${encodeURIComponent(entityId)}/edit`)}
+          >
+            Bearbeiten
+          </button>
+        </div>
+      );
+
+    // items, images, events, stubs: actions require BoxDetail internal state — wired in a later step
     default:
       return null;
   }
