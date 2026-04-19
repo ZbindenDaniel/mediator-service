@@ -2,11 +2,26 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePanelContext } from '../../context/PanelContext';
 import { useItemActions, type ItemActions } from '../../context/ItemActionsContext';
+import { useBulkSelection } from '../../context/BulkSelectionContext';
+import BulkItemActionBar from '../BulkItemActionBar';
 import PrintLabelButton from '../PrintLabelButton';
 
 export default function ActionPanel() {
-  const { entityType, activeTab, entityId } = usePanelContext();
+  const { entityType, activeTab, entityId, multiSelection } = usePanelContext();
   const actions = useItemActions();
+  const bulk = useBulkSelection();
+
+  // Multi-item selection takes priority: render bulk action bar in the action panel.
+  if (multiSelection?.length && bulk) {
+    return (
+      <BulkItemActionBar
+        selectedIds={multiSelection}
+        selectedItems={bulk.selectedItems}
+        onClearSelection={bulk.onClearSelection}
+        onActionComplete={bulk.onActionComplete}
+      />
+    );
+  }
 
   if (!entityType || !entityId) return null;
 

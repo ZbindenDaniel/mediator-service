@@ -147,6 +147,20 @@ body {
     justify-content: flex-end;
 }
 
+/* Button styled as an inline link for cross-entity navigation inside detail panels */
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--link, #0366d6);
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+}
+.link-btn:hover {
+    opacity: 0.8;
+}
+
 /* === Detail panel tab bar === */
 .detail-tab-bar {
     display: flex;
@@ -187,6 +201,34 @@ body {
     flex-direction: column;
     gap: 8px;
     padding: 12px;
+}
+
+/* === Multi-item summary (detail panel when multiple rows are checked) === */
+.multi-item-summary {
+    padding: 12px;
+}
+
+.multi-item-summary__heading {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 8px;
+}
+
+.multi-item-summary__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.multi-item-summary__item {
+    font-size: 0.8rem;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--border, #e1e4e8);
 }
 
 @media (max-width: 900px) {

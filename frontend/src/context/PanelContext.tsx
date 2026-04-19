@@ -8,7 +8,27 @@ import React, {
   useRef,
   useState
 } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
+
+export type MainView = 'items' | 'boxes' | 'transports' | 'stubs' | 'activities' | 'dashboard';
+
+const MAIN_VIEW_PATHS: Record<MainView, string> = {
+  items: '/items',
+  boxes: '/boxes',
+  transports: '/transports',
+  stubs: '/stubs',
+  activities: '/activities',
+  dashboard: '/'
+};
+
+function pathToMainView(pathname: string): MainView {
+  if (pathname.startsWith('/boxes')) return 'boxes';
+  if (pathname.startsWith('/items')) return 'items';
+  if (pathname.startsWith('/transports')) return 'transports';
+  if (pathname.startsWith('/stubs')) return 'stubs';
+  if (pathname.startsWith('/activities')) return 'activities';
+  return 'dashboard';
+}
 
 export type EntityType = 'item' | 'box' | 'transport' | 'stub';
 
@@ -25,6 +45,8 @@ export interface PanelContextValue extends PanelState {
   setTab: (tab: string | null) => void;
   setMultiSelection: (ids: string[]) => void;
   clearSelection: () => void;
+  mainView: MainView;
+  setMainView: (view: MainView) => void;
 }
 
 const VALID_ENTITY_TYPES: EntityType[] = ['item', 'box', 'transport', 'stub'];
@@ -58,9 +80,17 @@ function stateToParams(state: PanelState): Record<string, string> {
 
 export function PanelProvider({ children }: PropsWithChildren<{}>) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [state, setState] = useState<PanelState>(() => paramsToState(searchParams));
   // skip the initial URL write — state was already derived from the URL on mount
   const isMounted = useRef(false);
+
+  const mainView = useMemo(() => pathToMainView(location.pathname), [location.pathname]);
+
+  const setMainView = useCallback((view: MainView) => {
+    navigate(MAIN_VIEW_PATHS[view]);
+  }, [navigate]);
 
   useEffect(() => {
     if (!isMounted.current) {
@@ -95,8 +125,8 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   }, []);
 
   const value = useMemo<PanelContextValue>(
-    () => ({ ...state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection }),
-    [state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection]
+    () => ({ ...state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, mainView, setMainView }),
+    [state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, mainView, setMainView]
   );
 
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
