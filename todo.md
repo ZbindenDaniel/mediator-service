@@ -37,6 +37,12 @@
 
 ## Priority 2 — Feature Improvements
 
+19. **Wire `item × attachments` action panel slot.** `AttachmentsCard` already has an inline "Datei anhängen" button. To add an action panel button, expose `fileRef.current?.click()` via a `uploadTriggerRef` prop threaded through `ItemAttachmentsTab` → `ItemActionsContext`. Low priority since inline button already covers the use case.
+
+20. **Wire `item × accessories` action panel slot.** `ZubehoerCard` has inline `RefSearchInput` fields (always visible) — no single "add" trigger to expose. Revisit if a dedicated "add" modal is added to ZubehoerCard.
+
+21. **Box images tab empty for shelves.** Shelf boxes (`S-*`) are not `isBoxRelocatable`, so the images tab renders nothing. Revisit when shelf photo support is defined.
+
 8. **Ensure shelf weight and item count are calculated correctly.** Current totals are incomplete or inaccurate. Aggregation should cover both nested boxes and loose items. **Goal:** align aggregation logic across backend/frontend models while reusing existing summary helpers.
 
 9. **Agentic run substatus tracking.** Show substatus within a run (search → categorization → extraction) so the user can see where a run currently is.

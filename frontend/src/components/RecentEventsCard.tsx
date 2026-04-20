@@ -30,7 +30,7 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
     if (event.EntityType === 'Box') {
       if (event.EntityId) {
         return {
-          path: `/boxes/${encodeURIComponent(event.EntityId)}`,
+          path: `/boxes?entity=box&id=${encodeURIComponent(event.EntityId)}`,
           ariaSuffix: `Behälter ${event.EntityId}`,
         };
       }
@@ -52,7 +52,7 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
             eventId: event.Id,
           });
           return {
-            path: `/items/${encodeURIComponent(artikelNummer)}`,
+            path: `/items?entity=item&id=${encodeURIComponent(artikelNummer)}`,
             ariaSuffix: `Artikel ${artikelNummer}`,
           };
         }
@@ -65,7 +65,7 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
             eventId: event.Id,
           });
           return {
-            path: `/items/${encodeURIComponent(itemUUID)}`,
+            path: `/items?entity=item&id=${encodeURIComponent(itemUUID)}`,
             ariaSuffix: `Artikel ${itemUUID}`,
           };
         }

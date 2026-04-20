@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePanelContext } from '../../context/PanelContext';
 import { useItemActions, type ItemActions } from '../../context/ItemActionsContext';
+import { useBoxActions, type BoxActions } from '../../context/BoxActionsContext';
 import { useBulkSelection } from '../../context/BulkSelectionContext';
 import BulkItemActionBar from '../BulkItemActionBar';
 import PrintLabelButton from '../PrintLabelButton';
@@ -9,6 +10,7 @@ import PrintLabelButton from '../PrintLabelButton';
 export default function ActionPanel() {
   const { entityType, activeTab, entityId, multiSelection } = usePanelContext();
   const actions = useItemActions();
+  const boxActions = useBoxActions();
   const bulk = useBulkSelection();
 
   // Multi-item selection takes priority: render bulk action bar in the action panel.
@@ -32,7 +34,7 @@ export default function ActionPanel() {
   }
 
   if (entityType === 'box') {
-    return <BoxActionPanel tab={activeTab ?? 'info'} entityId={entityId} />;
+    return <BoxActionPanel tab={activeTab ?? 'info'} entityId={entityId} boxActions={boxActions} />;
   }
 
   return null;
@@ -96,7 +98,22 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
       );
     }
 
-    // images, attachments, accessories, events: actions wired in a later step
+    case 'images': {
+      if (!actions?.onUploadImage) return null;
+      return (
+        <div className="action-panel__content">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => actions.onUploadImage?.()}
+          >
+            Bild hochladen
+          </button>
+        </div>
+      );
+    }
+
+    // attachments, accessories, events: inline controls in tab already cover these
     default:
       return null;
   }
@@ -105,9 +122,10 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
 interface BoxActionPanelProps {
   tab: string;
   entityId: string;
+  boxActions: BoxActions | null;
 }
 
-function BoxActionPanel({ tab, entityId }: BoxActionPanelProps) {
+function BoxActionPanel({ tab, entityId, boxActions }: BoxActionPanelProps) {
   const navigate = useNavigate();
 
   switch (tab) {
@@ -125,7 +143,37 @@ function BoxActionPanel({ tab, entityId }: BoxActionPanelProps) {
         </div>
       );
 
-    // items, images, events, stubs: actions require BoxDetail internal state — wired in a later step
+    case 'items': {
+      if (!boxActions?.onAddItem) return null;
+      return (
+        <div className="action-panel__content">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => boxActions.onAddItem?.()}
+          >
+            Artikel hinzufügen
+          </button>
+        </div>
+      );
+    }
+
+    case 'images': {
+      if (!boxActions?.onUploadImage) return null;
+      return (
+        <div className="action-panel__content">
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => boxActions.onUploadImage?.()}
+          >
+            Foto hochladen
+          </button>
+        </div>
+      );
+    }
+
+    // events, stubs: no actions needed
     default:
       return null;
   }

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { usePanelContext } from '../context/PanelContext';
+import { useSetBoxActions } from '../context/BoxActionsContext';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
@@ -112,6 +114,8 @@ export default function BoxDetail({ boxId }: Props) {
   const location = useLocation();
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
+  const boxPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const setBoxActions = useSetBoxActions();
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
   const normalizedLocationId = useMemo(() => {
     if (typeof box?.LocationId !== 'string') {
@@ -688,6 +692,26 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID]);
 
+  const { activeTab } = usePanelContext();
+
+  // Register / update box action slot when relevant state changes.
+  useEffect(() => {
+    if (!setBoxActions || !box) {
+      setBoxActions?.(null);
+      return;
+    }
+    setBoxActions({
+      boxId: box.BoxID,
+      onAddItem: () => setShowAdd(true),
+      onUploadImage: isBoxRelocatable ? () => boxPhotoInputRef.current?.click() : undefined,
+    });
+  }, [setBoxActions, box, isBoxRelocatable]);
+
+  // Clear action slot on unmount.
+  useEffect(() => {
+    return () => setBoxActions?.(null);
+  }, [setBoxActions]);
+
   if (isLoading) {
     return <LoadingPage message="Behälter wird geladen…" />;
   }
@@ -716,6 +740,7 @@ export default function BoxDetail({ boxId }: Props) {
       <div className="grid landing-grid">
         {box ? (
           <>
+            {(activeTab === null || activeTab === 'info') && (
             <div className="box-detail-summary-grid grid-span-2">
               <div className="box-detail-summary-column">
                 <div className="card">
@@ -903,7 +928,52 @@ export default function BoxDetail({ boxId }: Props) {
                 ) : null}
               </div>
             </div>
+            )}
 
+            {(activeTab === null || activeTab === 'images') && isBoxRelocatable && (
+            <div className="card grid-span-2">
+              <h3>Fotos</h3>
+              <div className="note-photo-controls">
+                {photoPreview ? (
+                  <>
+                    <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
+                      <img
+                        src={photoPreview}
+                        alt="Aktuelles Box-Foto"
+                        style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
+                        onClick={openPhotoModal}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openPhotoModal();
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-haspopup="dialog"
+                        aria-label="Box-Foto vergrößern"
+                        onError={handlePhotoImageError}
+                      />
+                    </figure>
+                    <div className='row'>
+                      <button type="button" className="btn danger" onClick={handlePhotoRemove}>Foto entfernen</button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="muted">Kein Foto gespeichert.</p>
+                )}
+                <input
+                  ref={boxPhotoInputRef}
+                  type="file"
+                  id="box-photo-upload"
+                  accept="image/*"
+                  onChange={handlePhotoFileChange}
+                />
+              </div>
+            </div>
+            )}
+
+            {(activeTab === null || activeTab === 'items') && (
             <div className="card grid-span-2">
               <div className='row' style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>Artikel</h3>
@@ -1039,7 +1109,9 @@ export default function BoxDetail({ boxId }: Props) {
                 )}
               </div>
             </div>
+            )}
 
+            {(activeTab === null || activeTab === 'events') && (
             <div className="card grid-span-2">
               <h3>Aktivitäten</h3>
               <ul className="events">
@@ -1051,6 +1123,7 @@ export default function BoxDetail({ boxId }: Props) {
                 ))}
               </ul>
             </div>
+            )}
           </>
         ) : (
           <p>Loading...</p>

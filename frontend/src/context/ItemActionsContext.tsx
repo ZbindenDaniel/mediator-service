@@ -17,6 +17,7 @@ export interface ItemActions {
   onStart?: () => void | Promise<void>;
   onReview?: () => void | Promise<void>;
   onCancel?: () => void | Promise<void>;
+  onUploadImage?: () => void;
 }
 
 // Split into two contexts so ItemDetail (writer) doesn't re-render when actions state changes.

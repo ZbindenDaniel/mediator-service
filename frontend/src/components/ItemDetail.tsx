@@ -90,6 +90,12 @@ import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
 import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
+import ItemReferenceTab, { type SpecFieldModalState } from './item-tabs/ItemReferenceTab';
+import ItemInstanceTab from './item-tabs/ItemInstanceTab';
+import ItemImagesTab from './item-tabs/ItemImagesTab';
+import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
+import ItemAccessoriesTab from './item-tabs/ItemAccessoriesTab';
+import ItemEventsTab from './item-tabs/ItemEventsTab';
 import {
   buildNormalizedReviewSpecFields,
   mergeSpecFieldSelection,
@@ -1361,9 +1367,10 @@ export default function ItemDetail({ itemId }: Props) {
     onStart?: () => void | Promise<void>;
     onReview?: () => void | Promise<void>;
     onCancel?: () => void | Promise<void>;
+    onUploadImage?: () => void;
   }>({});
   const setItemActions = useSetItemActions();
-  const { setEntity, setMainView } = usePanelContext();
+  const { setEntity, setMainView, activeTab } = usePanelContext();
 
   // Navigate to BoxList and activate the box in the detail panel.
   const handleBoxNavigation = useCallback((boxId: string) => {
@@ -2548,6 +2555,7 @@ export default function ItemDetail({ itemId }: Props) {
       onStart: () => void agenticHandlersRef.current.onStart?.(),
       onReview: () => void agenticHandlersRef.current.onReview?.(),
       onCancel: () => void agenticHandlersRef.current.onCancel?.(),
+      onUploadImage: () => void agenticHandlersRef.current.onUploadImage?.(),
     });
   }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3642,12 +3650,214 @@ export default function ItemDetail({ itemId }: Props) {
     && !isBulkItem
     && (typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0) <= 0;
 
+  async function handleRemoveItem() {
+    if (!item) return;
+    const actor = await ensureUser();
+    if (!actor) {
+      try { await dialogService.alert({ title: 'Aktion nicht möglich', message: 'Bitte zuerst oben den Benutzer setzen.' }); }
+      catch (error) { console.error('Failed to display remove alert', error); }
+      return;
+    }
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor })
+      });
+      if (res.ok) {
+        const j = await res.json();
+        logger.info?.('Item entnommen', { itemId: item.ItemUUID, quantity: j.quantity, boxId: j.boxId });
+        await load({ showSpinner: false });
+      } else {
+        console.error('Failed to remove item', res.status);
+      }
+    } catch (err) {
+      console.error('Entnahme fehlgeschlagen', err);
+    }
+  }
+
+  async function handleRelationChanged() {
+    if (!item) return;
+    setConnectedAccessories([]);
+    setConnectedToDevices([]);
+    setCompatibleAccessoryRefs([]);
+    setCompatibleParentRefs([]);
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}`);
+      if (res.ok) {
+        const d: any = await res.json();
+        setConnectedAccessories(Array.isArray(d.connectedAccessories) ? d.connectedAccessories : []);
+        setConnectedToDevices(Array.isArray(d.connectedToDevices) ? d.connectedToDevices : []);
+        setCompatibleAccessoryRefs(Array.isArray(d.compatibleAccessoryRefs) ? d.compatibleAccessoryRefs : []);
+        setCompatibleParentRefs(Array.isArray(d.compatibleParentRefs) ? d.compatibleParentRefs : []);
+      }
+    } catch { /* noop */ }
+  }
+
   // Keep ref current every render so stable context wrappers below always invoke the latest handler.
   agenticHandlersRef.current = {
     onStart: agenticCanStart ? () => void agenticStartHandler() : undefined,
     onReview: () => void handleAgenticReview(),
     onCancel: agenticCanCancel ? () => void handleAgenticCancel() : undefined,
+    onUploadImage: () => handleMediaAdd(),
   };
+
+  // Tab-based rendering: when a tab is active, delegate to the appropriate per-tab component.
+  // When activeTab is null (legacy full-page route), fall through to the original single-scroll view below.
+  if (item && activeTab) {
+    const agenticCardProps = {
+      status: agenticStatus,
+      rows: agenticRows,
+      actionPending: agenticActionPending,
+      reviewIntent: agenticReviewIntent,
+      error: agenticError,
+      needsReview: agenticNeedsReview,
+      searchTerm: agenticSearchTerm,
+      searchTermError: agenticSearchError,
+      onSearchTermChange: handleAgenticSearchTermChange,
+      canCancel: agenticCanCancel,
+      canClose: agenticCanClose,
+      canStart: agenticCanStart,
+      canRestart: agenticCanRestart,
+      canDelete: agenticCanDelete,
+      startLabel: agenticStartLabel,
+      isInProgress: agenticIsInProgress,
+      onStart: agenticCanStart ? agenticStartHandler : undefined,
+      onRestart: handleAgenticRestart,
+      onReview: handleAgenticReview,
+      onCancel: handleAgenticCancel,
+      onClose: agenticCanClose ? handleAgenticClose : undefined,
+      onDelete: agenticCanDelete ? handleAgenticDelete : undefined,
+    };
+
+    const specModalData: SpecFieldModalState | null = specFieldReviewModalState
+      ? {
+          title: specFieldReviewModalState.title,
+          description: specFieldReviewModalState.description,
+          fieldOptions: specFieldReviewModalState.fieldOptions,
+          includeAdditionalInput: specFieldReviewModalState.includeAdditionalInput,
+          additionalInputPlaceholder: specFieldReviewModalState.additionalInputPlaceholder,
+          secondaryTitle: specFieldReviewModalState.secondaryTitle,
+          secondaryDescription: specFieldReviewModalState.secondaryDescription,
+          secondaryFieldOptions: specFieldReviewModalState.secondaryFieldOptions,
+          includeSecondaryAdditionalInput: specFieldReviewModalState.includeSecondaryAdditionalInput,
+          secondaryAdditionalInputPlaceholder: specFieldReviewModalState.secondaryAdditionalInputPlaceholder,
+        }
+      : null;
+
+    const handleSpecFieldModalClose = () => {
+      try { specFieldReviewModalState?.resolve(null); }
+      catch (error) { logError('ItemDetail: Failed to resolve cancelled spec modal', error, { itemId }); }
+      finally { setSpecFieldReviewModalState(null); }
+    };
+
+    const handleSpecFieldModalConfirm = (result: AgenticSpecFieldReviewResult) => {
+      try { specFieldReviewModalState?.resolve(result); }
+      catch (error) { logError('ItemDetail: Failed to resolve confirmed spec modal', error, { itemId }); }
+      finally { setSpecFieldReviewModalState(null); }
+    };
+
+    let tabContent: React.ReactNode;
+    switch (activeTab) {
+      case 'reference':
+      case 'review':
+        tabContent = (
+          <ItemReferenceTab
+            item={item}
+            referenceDetailRows={referenceDetailRows}
+            neighborIds={neighborIds}
+            neighborsLoading={neighborsLoading}
+            connectedToDevices={connectedToDevices}
+            compatibleParentRefs={compatibleParentRefs}
+            agenticCardProps={agenticCardProps}
+            specFieldModalState={specModalData}
+            onSpecFieldModalClose={handleSpecFieldModalClose}
+            onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
+            onNeighborNav={handleNeighborNavigation}
+            onEdit={handleEdit}
+          />
+        );
+        break;
+      case 'instance':
+        tabContent = (
+          <ItemInstanceTab
+            item={item}
+            instanceDetailRows={instanceDetailRows}
+            instanceRows={instanceRows}
+            isBulkItem={isBulkItem}
+            isOutOfStock={isOutOfStock}
+            skippedInstanceCount={skippedInstanceCount}
+            relocateCardRef={relocateCardRef}
+            onAddItem={handleAddItem}
+            onRemoveItem={handleRemoveItem}
+            onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
+            onRelocated={() => void load({ showSpinner: false })}
+          />
+        );
+        break;
+      case 'images':
+        tabContent = (
+          <ItemImagesTab
+            item={item}
+            mediaAssets={mediaAssets}
+            mediaFileInputRef={mediaFileInputRef}
+            onAdd={handleMediaAdd}
+            onRemove={handleMediaRemove}
+            onFileChange={handleMediaFileChange}
+          />
+        );
+        break;
+      case 'attachments':
+        tabContent = (
+          <ItemAttachmentsTab
+            itemUUID={item.ItemUUID}
+            attachments={attachments}
+            onChanged={setAttachments}
+          />
+        );
+        break;
+      case 'accessories':
+        tabContent = (
+          <ItemAccessoriesTab
+            item={item}
+            connectedAccessories={connectedAccessories}
+            connectedToDevices={connectedToDevices}
+            compatibleAccessoryRefs={compatibleAccessoryRefs}
+            compatibleParentRefs={compatibleParentRefs}
+            onRelationChanged={() => void handleRelationChanged()}
+          />
+        );
+        break;
+      case 'events':
+        tabContent = <ItemEventsTab events={events} />;
+        break;
+      default:
+        tabContent = (
+          <ItemReferenceTab
+            item={item}
+            referenceDetailRows={referenceDetailRows}
+            neighborIds={neighborIds}
+            neighborsLoading={neighborsLoading}
+            connectedToDevices={connectedToDevices}
+            compatibleParentRefs={compatibleParentRefs}
+            agenticCardProps={agenticCardProps}
+            specFieldModalState={specModalData}
+            onSpecFieldModalClose={handleSpecFieldModalClose}
+            onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
+            onNeighborNav={handleNeighborNavigation}
+            onEdit={handleEdit}
+          />
+        );
+    }
+
+    return (
+      <div className="container item">
+        <div className="grid landing-grid">
+          {tabContent}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container item">

@@ -47,7 +47,7 @@ export default function RecentBoxesCard({ boxes }: Props) {
         {sortedBoxes.length ? (
           sortedBoxes.map(b => (
             <React.Fragment key={b.BoxID}>
-              <Link className="linkcard" to={`/boxes/${encodeURIComponent(b.BoxID)}`}>
+              <Link className="linkcard" to={`/boxes?entity=box&id=${encodeURIComponent(b.BoxID)}`}>
                 <div className="card">
                   <div className="mono">{b.BoxID}</div>
                   <div><b>Standort: <LocationTag locationKey={b.LocationId} labelOverride={b.Label} /></b></div>

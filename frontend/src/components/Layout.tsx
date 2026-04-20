@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Header from './Header';
 import { usePanelContext } from '../context/PanelContext';
 import { ItemActionsProvider } from '../context/ItemActionsContext';
+import { BoxActionsProvider } from '../context/BoxActionsContext';
 import { BulkSelectionProvider, useBulkSelection } from '../context/BulkSelectionContext';
 import ItemDetail from './ItemDetail';
 import BoxDetail from './BoxDetail';
@@ -57,6 +58,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               ) : (
                 /* ItemActionsProvider wraps both panels so ItemDetail (writer) and ActionPanel (reader) share the same context */
                 <ItemActionsProvider>
+                <BoxActionsProvider>
                   <div className="panel-detail">
                     {hasMultiSelection ? (
                       <MultiItemDetailPanel />
@@ -79,6 +81,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                   <div className="panel-action">
                     <ActionPanel />
                   </div>
+                </BoxActionsProvider>
                 </ItemActionsProvider>
               )}
             </div>
