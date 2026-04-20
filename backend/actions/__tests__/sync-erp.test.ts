@@ -185,7 +185,7 @@ describe('sync-erp payload normalization', () => {
       itemId: 'I-3',
       artikelNummer: 'ART-3',
       entry: `/media/${mediaFolder}/missing.jpg`,
-      reason: 'missing-or-inaccessible-file'
+      reason: 'missing-in-source-roots'
     }));
     expect(logger.warn).toHaveBeenCalledWith('[sync-erp] media_entry_invalid_skipped', {
       itemId: 'I-4',
@@ -195,6 +195,79 @@ describe('sync-erp payload normalization', () => {
     });
 
     fs.rmSync(path.join(MEDIA_DIR, mediaFolder), { recursive: true, force: true });
+  });
+
+
+  it('prefers staged source roots when both staged and ERP fetch files exist', () => {
+    const scope = `__test-sync-erp-${Date.now()}-precedence`;
+    const stagingRoot = path.join(MEDIA_DIR, scope, 'staging');
+    const fetchRoot = path.join(MEDIA_DIR, scope, 'fetch');
+    const relativePath = '000123/A.jpg';
+    const stagedFile = path.join(stagingRoot, relativePath);
+    const fetchFile = path.join(fetchRoot, relativePath);
+
+    fs.mkdirSync(path.dirname(stagedFile), { recursive: true });
+    fs.mkdirSync(path.dirname(fetchFile), { recursive: true });
+    fs.writeFileSync(stagedFile, 'staged');
+    fs.writeFileSync(fetchFile, 'fetch');
+
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const resolved = resolveExplicitMediaMirrorSources(
+      [{ ItemUUID: 'I-5', Artikel_Nummer: '123', ImageNames: 'A.jpg' }],
+      logger,
+      {
+        sourceRoots: [
+          { root: stagingRoot, origin: 'staging' },
+          { root: fetchRoot, origin: 'erp-fetch-root' }
+        ]
+      }
+    );
+
+    expect(resolved).toEqual([stagedFile]);
+    expect(logger.info).toHaveBeenCalledWith('[sync-erp] media_entry_source_selected', {
+      itemId: 'I-5',
+      artikelNummer: '123',
+      entry: 'A.jpg',
+      resolvedPath: stagedFile,
+      sourceOrigin: 'staging'
+    });
+
+    fs.rmSync(path.join(MEDIA_DIR, scope), { recursive: true, force: true });
+  });
+
+  it('falls back to ERP fetch root and tags source origin when staging file is absent', () => {
+    const scope = `__test-sync-erp-${Date.now()}-fallback`;
+    const stagingRoot = path.join(MEDIA_DIR, scope, 'staging');
+    const fetchRoot = path.join(MEDIA_DIR, scope, 'fetch');
+    const relativePath = '000124/B.jpg';
+    const fetchFile = path.join(fetchRoot, relativePath);
+
+    fs.mkdirSync(stagingRoot, { recursive: true });
+    fs.mkdirSync(path.dirname(fetchFile), { recursive: true });
+    fs.writeFileSync(fetchFile, 'fetch');
+
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const resolved = resolveExplicitMediaMirrorSources(
+      [{ ItemUUID: 'I-6', Artikel_Nummer: '124', ImageNames: 'B.jpg' }],
+      logger,
+      {
+        sourceRoots: [
+          { root: stagingRoot, origin: 'staging' },
+          { root: fetchRoot, origin: 'erp-fetch-root' }
+        ]
+      }
+    );
+
+    expect(resolved).toEqual([fetchFile]);
+    expect(logger.info).toHaveBeenCalledWith('[sync-erp] media_entry_source_selected', {
+      itemId: 'I-6',
+      artikelNummer: '124',
+      entry: 'B.jpg',
+      resolvedPath: fetchFile,
+      sourceOrigin: 'erp-fetch-root'
+    });
+
+    fs.rmSync(path.join(MEDIA_DIR, scope), { recursive: true, force: true });
   });
 
   it('fails fast with 422 when no Artikelnummer values can be resolved', async () => {
