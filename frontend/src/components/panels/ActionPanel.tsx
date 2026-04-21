@@ -48,7 +48,8 @@ interface ItemActionPanelProps {
 
 function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
   switch (tab) {
-    case 'reference': {
+    case 'reference':
+    case 'ki': {
       if (!actions?.agenticCanStart && !actions?.agenticCanRestart) return null;
       return (
         <div className="action-panel__content">

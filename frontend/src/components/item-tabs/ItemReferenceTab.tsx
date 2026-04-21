@@ -1,26 +1,8 @@
 import React from 'react';
-import { AgenticStatusCard, type AgenticStatusCardProps } from '../AgenticStatusCard';
-import AgenticSpecFieldReviewModal, {
-  type AgenticSpecFieldOption,
-  type AgenticSpecFieldReviewResult
-} from '../AgenticSpecFieldReviewModal';
 import ShopBadge from '../ShopBadge';
 import ZubehoerBadge from '../ZubehoerBadge';
 import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
 import type { Item } from '../../../../models';
-
-export interface SpecFieldModalState {
-  title: string;
-  description: string;
-  fieldOptions: AgenticSpecFieldOption[];
-  includeAdditionalInput: boolean;
-  additionalInputPlaceholder?: string;
-  secondaryTitle?: string;
-  secondaryDescription?: string;
-  secondaryFieldOptions?: AgenticSpecFieldOption[];
-  includeSecondaryAdditionalInput?: boolean;
-  secondaryAdditionalInputPlaceholder?: string;
-}
 
 interface Props {
   item: Item;
@@ -29,11 +11,8 @@ interface Props {
   neighborsLoading: boolean;
   connectedToDevices: any[];
   compatibleParentRefs: any[];
-  agenticCardProps: AgenticStatusCardProps;
-  specFieldModalState: SpecFieldModalState | null;
-  onSpecFieldModalClose: () => void;
-  onSpecFieldModalConfirm: (result: AgenticSpecFieldReviewResult) => void;
   onNeighborNav: (direction: 'previous' | 'next') => void;
+  // kept for future use (e.g. edit button in tab header)
   onEdit: () => void;
 }
 
@@ -44,15 +23,11 @@ export default function ItemReferenceTab({
   neighborsLoading,
   connectedToDevices,
   compatibleParentRefs,
-  agenticCardProps,
-  specFieldModalState,
-  onSpecFieldModalClose,
-  onSpecFieldModalConfirm,
   onNeighborNav
 }: Props) {
   return (
     <>
-      <div className="card grid-span-row-2">
+      <div className="card">
         <div className='top-row'>
           <button
             type="button"
@@ -118,25 +93,6 @@ export default function ItemReferenceTab({
           <p className="muted">Keine Referenzdaten vorhanden.</p>
         )}
       </div>
-
-      <AgenticStatusCard {...agenticCardProps} />
-
-      {specFieldModalState ? (
-        <AgenticSpecFieldReviewModal
-          title={specFieldModalState.title}
-          description={specFieldModalState.description}
-          fieldOptions={specFieldModalState.fieldOptions}
-          includeAdditionalInput={specFieldModalState.includeAdditionalInput}
-          additionalInputPlaceholder={specFieldModalState.additionalInputPlaceholder}
-          secondaryTitle={specFieldModalState.secondaryTitle}
-          secondaryDescription={specFieldModalState.secondaryDescription}
-          secondaryFieldOptions={specFieldModalState.secondaryFieldOptions}
-          includeSecondaryAdditionalInput={specFieldModalState.includeSecondaryAdditionalInput}
-          secondaryAdditionalInputPlaceholder={specFieldModalState.secondaryAdditionalInputPlaceholder}
-          onCancel={onSpecFieldModalClose}
-          onConfirm={onSpecFieldModalConfirm}
-        />
-      ) : null}
     </>
   );
 }

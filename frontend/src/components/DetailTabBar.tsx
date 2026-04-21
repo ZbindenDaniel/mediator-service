@@ -9,6 +9,7 @@ interface TabDef {
 
 const ITEM_BASE_TABS: TabDef[] = [
   { id: 'reference', label: 'Referenz' },
+  { id: 'ki', label: 'KI' },
   { id: 'instance', label: 'Exemplar' },
   { id: 'images', label: 'Bilder' },
   { id: 'attachments', label: 'Anhänge' },

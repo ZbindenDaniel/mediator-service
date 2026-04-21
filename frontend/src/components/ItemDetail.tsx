@@ -90,7 +90,8 @@ import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
 import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
-import ItemReferenceTab, { type SpecFieldModalState } from './item-tabs/ItemReferenceTab';
+import ItemReferenceTab from './item-tabs/ItemReferenceTab';
+import ItemKiTab, { type SpecFieldModalState } from './item-tabs/ItemKiTab';
 import ItemInstanceTab from './item-tabs/ItemInstanceTab';
 import ItemImagesTab from './item-tabs/ItemImagesTab';
 import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
@@ -3760,7 +3761,6 @@ export default function ItemDetail({ itemId }: Props) {
     let tabContent: React.ReactNode;
     switch (activeTab) {
       case 'reference':
-      case 'review':
         tabContent = (
           <ItemReferenceTab
             item={item}
@@ -3769,12 +3769,19 @@ export default function ItemDetail({ itemId }: Props) {
             neighborsLoading={neighborsLoading}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
+            onNeighborNav={handleNeighborNavigation}
+            onEdit={handleEdit}
+          />
+        );
+        break;
+      case 'ki':
+      case 'review':
+        tabContent = (
+          <ItemKiTab
             agenticCardProps={agenticCardProps}
             specFieldModalState={specModalData}
             onSpecFieldModalClose={handleSpecFieldModalClose}
             onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
-            onNeighborNav={handleNeighborNavigation}
-            onEdit={handleEdit}
           />
         );
         break;
@@ -3840,23 +3847,13 @@ export default function ItemDetail({ itemId }: Props) {
             neighborsLoading={neighborsLoading}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
-            agenticCardProps={agenticCardProps}
-            specFieldModalState={specModalData}
-            onSpecFieldModalClose={handleSpecFieldModalClose}
-            onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
             onNeighborNav={handleNeighborNavigation}
             onEdit={handleEdit}
           />
         );
     }
 
-    return (
-      <div className="container item">
-        <div className="grid landing-grid">
-          {tabContent}
-        </div>
-      </div>
-    );
+    return <div className="panel-tab-body">{tabContent}</div>;
   }
 
   return (

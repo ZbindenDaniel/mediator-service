@@ -49,6 +49,7 @@ export interface AgenticStatusCardProps {
   onCancel: () => void | Promise<void>;
   onClose?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
+  initiallyExpanded?: boolean;
 }
 
 export function AgenticStatusCard({
@@ -73,9 +74,11 @@ export function AgenticStatusCard({
   onReview,
   onCancel,
   onClose,
-  onDelete
+  onDelete,
+  initiallyExpanded = false
 }: AgenticStatusCardProps) {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  // initiallyExpanded=true used in the KI tab where the card is the primary content
+  const [isCollapsed, setIsCollapsed] = useState(!initiallyExpanded);
   const contentId = useMemo(() => `agentic-status-panel-${Math.random().toString(36).slice(2)}`, []);
   const startHandler = onStart ?? onRestart;
   const startText = typeof startLabel === 'string' && startLabel.trim() ? startLabel : 'Starten';

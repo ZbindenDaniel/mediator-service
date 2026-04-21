@@ -147,6 +147,27 @@ body {
     justify-content: flex-end;
 }
 
+/* Single-column flex layout for tab content inside the detail panel */
+.panel-tab-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+}
+
+/* Neutralise full-page grid spans inside the panel tab body */
+.panel-tab-body .grid-span-row-2 {
+    grid-row: unset;
+}
+.panel-tab-body .grid-span-2 {
+    grid-column: unset;
+}
+
+/* BoxDetail summary grid: force single column inside the panel */
+.panel-detail__body .box-detail-summary-grid {
+    grid-template-columns: 1fr;
+}
+
 /* Button styled as an inline link for cross-entity navigation inside detail panels */
 .link-btn {
     background: none;
