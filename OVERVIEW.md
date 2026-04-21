@@ -7,9 +7,7 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
-71. ✅ Add optional API key authentication to all `/api/*` routes and create `docs/SEARCH_API.md`.
-   - **Why:** All API routes were unauthenticated. Added `API_KEY` env var; when set, requests must supply it via `Authorization: Bearer` or `X-API-Key` header. When unset, auth is disabled so existing deployments are unaffected.
-   - **Deferred:** Per-route auth granularity (e.g. read-only vs write keys) — a single shared key is sufficient for now.
+71. ✅ Create `docs/SEARCH_API.md` documenting the search endpoint with parameters, scopes, response shape, and curl examples.
 70. ✅ Fix multi-instance label printing: success dialog now renders one `PrintLabelButton` per created Stk instance instead of only the first; removed shadowed dead-code `const dialogMessage`; added 3-instance regression test.
    - **Why:** When 3 Stk items were created, the backend correctly returned all 3 UUIDs in `responseItems`, but the success dialog only used `createdItem.ItemUUID` (the first UUID). The auto-print loop (gated on `AUTO_PRINT_ITEM_LABEL=true`) was correct, but the manual-print fallback was not. The fix loops `responseItems` to build `allPrintItemIds` and renders a button for each. The dead outer `const dialogMessage` (lines 1350–1362) was immediately shadowed by `let dialogMessage` inside the `try` block and never used; removed to eliminate confusion.
    - **Deferred:** Nothing deferred. `AUTO_PRINT_ITEM_LABEL` env-var path was already correct and unchanged.

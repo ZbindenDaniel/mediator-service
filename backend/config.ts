@@ -57,7 +57,6 @@ if (!envLoaded) {
 // TODO(agent): Capture ERP sync configuration in a typed schema once integration stabilizes.
 
 export const HTTP_PORT = parseInt(process.env.HTTP_PORT || '8080', 10);
-export const API_KEY = (process.env.API_KEY || '').trim();
 // TODO(database-migration): Remove DB_PATH fallback once all services rely on DATABASE_URL.
 const DEFAULT_DB_PATH = path.join(__dirname, 'data/mediator.sqlite');
 const rawDatabaseUrl = (process.env.DATABASE_URL || '').trim();

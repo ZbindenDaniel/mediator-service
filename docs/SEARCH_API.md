@@ -2,23 +2,7 @@
 
 **Endpoint:** `GET /api/search`
 
-Returns items, item references, or boxes matching a free-text query.
-
----
-
-## Authentication
-
-If `API_KEY` is set in the server environment, every `/api/*` request must include it.  
-Two header formats are accepted:
-
-```
-Authorization: Bearer <key>
-```
-```
-X-API-Key: <key>
-```
-
-If `API_KEY` is not configured the endpoint is open (suitable for development or fully internal deployments).
+Returns items, item references, or boxes matching a free-text query. No authentication required.
 
 ---
 
@@ -55,7 +39,7 @@ If `API_KEY` is not configured the endpoint is open (suitable for development or
 }
 ```
 
-On error:
+Error:
 
 ```json
 { "error": "query term is required" }
@@ -65,10 +49,8 @@ On error:
 
 ## curl Examples
 
-### No authentication (API_KEY not set)
-
 ```bash
-# Basic search — returns matching items and boxes
+# Basic search — items and boxes
 curl "http://localhost:8080/api/search?term=Lenovo"
 
 # Pretty-print
@@ -87,36 +69,6 @@ curl "http://localhost:8080/api/search?term=B-151025&scope=boxes"
 curl "http://localhost:8080/api/search?term=widget&deepSearch=false"
 ```
 
-### With authentication (API_KEY set)
-
-```bash
-# Using Authorization: Bearer
-curl -H "Authorization: Bearer your-api-key" \
-  "http://localhost:8080/api/search?term=Lenovo"
-
-# Using X-API-Key
-curl -H "X-API-Key: your-api-key" \
-  "http://localhost:8080/api/search?term=Lenovo&scope=items&limit=10"
-
-# Store the key in a variable to avoid repeating it
-API_KEY="your-api-key"
-curl -H "Authorization: Bearer $API_KEY" \
-  "http://localhost:8080/api/search?term=Brother&scope=refs" | jq .
-```
-
----
-
-## Configuration
-
-Add to your `.env` file:
-
-```env
-# Required if you want to protect the API
-API_KEY=your-secret-key-here
-```
-
-Omit or leave blank to run without authentication.
-
 ---
 
 ## Error Codes
@@ -124,7 +76,6 @@ Omit or leave blank to run without authentication.
 | Status | Meaning |
 |--------|---------|
 | 200 | Success |
-| 400 | Missing or empty `term` parameter |
-| 401 | `API_KEY` is configured and the supplied key is missing or wrong |
+| 400 | Missing or empty `term` |
 | 404 | Route not found |
 | 500 | Internal server error |
