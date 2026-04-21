@@ -29,7 +29,8 @@ import {
   getShopwareConfig,
   logShopwareConfigIssues,
   IMPORTER_FORCE_ZERO_STOCK,
-  ALT_DOC_DIRS
+  ALT_DOC_DIRS,
+  API_KEY
 } from './config';
 import type { ShopwareConfig } from './config';
 import { ingestAgenticRunsCsv, ingestCsvFile, type IngestCsvFileOptions } from './importer';
@@ -817,6 +818,16 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
 
     // Remaining request handling delegated to actions
+    if (API_KEY && url.pathname.startsWith('/api/')) {
+      const authHeader = req.headers['authorization'] || '';
+      const keyHeader = req.headers['x-api-key'] || '';
+      const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      if (bearer !== API_KEY && keyHeader !== API_KEY) {
+        sendJson(res, 401, { error: 'Unauthorized' });
+        return;
+      }
+    }
+
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));
     if (action) {
       try {
