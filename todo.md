@@ -37,6 +37,8 @@
 
 ## Priority 2 — Feature Improvements
 
+22. **Per-tab lazy loading for ItemDetail.** `GET /api/items/:id` returns all item data (media, attachments, accessories, events) in one payload. Splitting to per-tab fetches would require either a partial-fields API or lazy tab-mount fetches using separate endpoints (e.g. `/api/item/:uuid/attachments` already exists). The list-refetch bug (PanelContext replacing all search params) is now fixed; re-evaluate whether per-tab loading is still needed after confirming no double-fetch remains.
+
 19. **Wire `item × attachments` action panel slot.** `AttachmentsCard` already has an inline "Datei anhängen" button. To add an action panel button, expose `fileRef.current?.click()` via a `uploadTriggerRef` prop threaded through `ItemAttachmentsTab` → `ItemActionsContext`. Low priority since inline button already covers the use case.
 
 20. **Wire `item × accessories` action panel slot.** `ZubehoerCard` has inline `RefSearchInput` fields (always visible) — no single "add" trigger to expose. Revisit if a dedicated "add" modal is added to ZubehoerCard.

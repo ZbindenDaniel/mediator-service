@@ -97,7 +97,19 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
       isMounted.current = true;
       return;
     }
-    setSearchParams(stateToParams(state), { replace: true });
+    // Merge panel params into existing search params instead of replacing all params.
+    // Replacing would clobber list-page filter params like ?box= causing spurious refetches.
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('entity');
+      next.delete('id');
+      next.delete('tab');
+      next.delete('multi');
+      for (const [k, v] of Object.entries(stateToParams(state))) {
+        next.set(k, v);
+      }
+      return next;
+    }, { replace: true });
   }, [state, setSearchParams]);
 
   const setEntity = useCallback((type: EntityType, id: string) => {
