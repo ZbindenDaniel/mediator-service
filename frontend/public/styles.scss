@@ -115,11 +115,12 @@ body {
     height: calc(100vh - 74px);
     display: flex;
     flex-direction: column;
-    border-left: 1px solid var(--line);
+    border-left: 5px solid var(--head);
+
 }
 
 .panel-detail {
-    flex: 62 0 0;
+    flex: 82 0 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -132,8 +133,9 @@ body {
 }
 
 .panel-action {
-    flex: 38 0 0;
+    flex: 18 0 0;
     overflow-y: auto;
+    border-top: 5px solid var(--head);
 }
 
 .panel-create {
@@ -157,7 +159,7 @@ body {
 }
 
 /* Cards inside the tab body manage their own spacing via gap, not margin-bottom */
-.panel-tab-body > .card {
+.panel-tab-body>.card {
     margin-bottom: 0;
 }
 
@@ -209,6 +211,7 @@ body {
     font: inherit;
     text-decoration: underline;
 }
+
 .link-btn:hover {
     opacity: 0.8;
 }
@@ -237,12 +240,12 @@ body {
 
     &:hover {
         color: var(--fg);
-        background: var(--hover-bg, rgba(0, 0, 0, 0.04));
+        background: var(--head, rgba(0, 0, 0, 0.04));
     }
 
     &.is-active {
         color: var(--fg);
-        border-bottom-color: var(--accent, #0066cc);
+        border-bottom-color: var(--head, rgba(0, 0, 0, 0.04));
         font-weight: 600;
     }
 }
@@ -657,7 +660,6 @@ div {
 
 .details th {
     text-align: left;
-    padding-right: 0.5rem;
 }
 
 /* TODO(agent): Revisit table sizing rules once layout tokens are standardized across cards. */
@@ -1713,7 +1715,8 @@ button:focus {
     align-items: center;
     gap: 6px;
     width: 29%;
-    min-width: 220px;;
+    min-width: 220px;
+    ;
     padding: var(--pad) 14px;
     border-radius: var(--radius);
     border: 1px solid var(--line);
