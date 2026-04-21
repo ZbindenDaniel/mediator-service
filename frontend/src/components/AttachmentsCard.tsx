@@ -49,7 +49,7 @@ export default function AttachmentsCard({ itemUUID, attachments, onChanged }: At
   }
 
   return (
-    <div className="card grid-span-2">
+    <div className="card">
       <h3>Anhänge ({attachments.length})</h3>
       {attachments.length > 0 && (
         <table className="details">

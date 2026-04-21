@@ -111,8 +111,8 @@ body {
     flex: 0 0 38%;
     min-width: 0;
     position: sticky;
-    top: 0;
-    height: 100vh;
+    top: 74px;
+    height: calc(100vh - 74px);
     display: flex;
     flex-direction: column;
 }
@@ -151,21 +151,23 @@ body {
 .panel-tab-body {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 16px;
+    gap: 12px;
+    padding: 12px;
 }
 
-/* Neutralise full-page grid spans inside the panel tab body */
-.panel-tab-body .grid-span-row-2 {
-    grid-row: unset;
-}
-.panel-tab-body .grid-span-2 {
-    grid-column: unset;
+/* Cards inside the tab body manage their own spacing via gap, not margin-bottom */
+.panel-tab-body > .card {
+    margin-bottom: 0;
 }
 
 /* BoxDetail summary grid: force single column inside the panel */
 .panel-detail__body .box-detail-summary-grid {
     grid-template-columns: 1fr;
+}
+
+/* BoxDetail cards inside the tab body */
+.panel-detail__body .card {
+    margin-bottom: 0;
 }
 
 /* Button styled as an inline link for cross-entity navigation inside detail panels */

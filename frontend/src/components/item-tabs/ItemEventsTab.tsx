@@ -12,7 +12,7 @@ export default function ItemEventsTab({ events }: Props) {
   const displayedEvents = events.slice(0, 5);
 
   return (
-    <div className="card grid-span-2">
+    <div className="card">
       <h3>Aktivitäten</h3>
       <ul className="events">
         {displayedEvents.map((ev) => (

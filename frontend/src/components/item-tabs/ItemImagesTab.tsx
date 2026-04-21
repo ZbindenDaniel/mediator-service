@@ -20,7 +20,7 @@ export default function ItemImagesTab({
   onFileChange
 }: Props) {
   return (
-    <div className="card grid-span-row-2">
+    <div className="card">
       <h3>Fotos</h3>
       <section className="item-media-section">
         <input
