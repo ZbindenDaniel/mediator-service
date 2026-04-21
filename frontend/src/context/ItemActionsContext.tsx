@@ -14,10 +14,15 @@ export interface ItemActions {
   agenticCanCancel: boolean;
   agenticActionPending: boolean;
   startLabel: string;
+  neighborIds: { previousId: string | null; nextId: string | null };
+  neighborsLoading: boolean;
   onStart?: () => void | Promise<void>;
   onReview?: () => void | Promise<void>;
   onCancel?: () => void | Promise<void>;
   onUploadImage?: () => void;
+  onNeighborNav?: (direction: 'previous' | 'next') => void;
+  onEdit?: () => void;
+  onStartRelocate?: () => void;
 }
 
 // Split into two contexts so ItemDetail (writer) doesn't re-render when actions state changes.

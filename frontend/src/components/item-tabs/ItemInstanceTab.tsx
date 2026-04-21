@@ -21,6 +21,7 @@ interface Props {
   isBulkItem: boolean;
   isOutOfStock: boolean;
   skippedInstanceCount: number;
+  showRelocate: boolean;
   relocateCardRef: React.RefObject<HTMLDivElement>;
   onAddItem: () => Promise<void>;
   onRemoveItem: () => Promise<void>;
@@ -35,6 +36,7 @@ export default function ItemInstanceTab({
   isBulkItem,
   isOutOfStock,
   skippedInstanceCount,
+  showRelocate,
   relocateCardRef,
   onAddItem,
   onRemoveItem,
@@ -123,15 +125,17 @@ export default function ItemInstanceTab({
         </div>
       </div>
 
-      <div ref={relocateCardRef}>
-        <RelocateItemCard
-          itemId={item.ItemUUID}
-          onRelocated={() => {
-            onRelocated();
-            relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }}
-        />
-      </div>
+      {showRelocate && (
+        <div ref={relocateCardRef}>
+          <RelocateItemCard
+            itemId={item.ItemUUID}
+            onRelocated={() => {
+              onRelocated();
+              relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+          />
+        </div>
+      )}
 
       <div className="card grid-span-2">
         <h3>Vorrat</h3>

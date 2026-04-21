@@ -33,7 +33,7 @@ export default function ItemKiTab({
 }: Props) {
   return (
     <>
-      <AgenticStatusCard {...agenticCardProps} initiallyExpanded />
+      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
       {specFieldModalState ? (
         <AgenticSpecFieldReviewModal
           title={specFieldModalState.title}

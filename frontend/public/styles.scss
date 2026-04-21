@@ -115,6 +115,7 @@ body {
     height: calc(100vh - 74px);
     display: flex;
     flex-direction: column;
+    border-left: 1px solid var(--line);
 }
 
 .panel-detail {
@@ -168,6 +169,34 @@ body {
 /* BoxDetail cards inside the tab body */
 .panel-detail__body .card {
     margin-bottom: 0;
+}
+
+/* On large screens, cards inside the right-column panels have no visual chrome —
+   the panel borders + padding provide the container. Flat content reads better
+   in the ~400px detail/action slots than boxed cards. */
+@media (min-width: 900px) {
+    .app-shell__right .card {
+        background: none;
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
+        margin-bottom: 0;
+    }
+}
+
+/* Action panel nav row: two buttons side by side */
+.action-panel__nav-row {
+    display: flex;
+    gap: 8px;
+}
+
+/* Badges row in reference tab */
+.item-reference-tab__badges {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
 }
 
 /* Button styled as an inline link for cross-entity navigation inside detail panels */

@@ -50,6 +50,10 @@ export interface AgenticStatusCardProps {
   onClose?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
   initiallyExpanded?: boolean;
+  /** Remove the collapse toggle; card is always expanded. Use in the KI tab where it is the primary content. */
+  noCollapse?: boolean;
+  /** Suppress inline Start/Cancel/Review buttons — they are shown in the action panel instead. */
+  hideInlineActions?: boolean;
 }
 
 export function AgenticStatusCard({
@@ -75,10 +79,11 @@ export function AgenticStatusCard({
   onCancel,
   onClose,
   onDelete,
-  initiallyExpanded = false
+  initiallyExpanded = false,
+  noCollapse = false,
+  hideInlineActions = false
 }: AgenticStatusCardProps) {
-  // initiallyExpanded=true used in the KI tab where the card is the primary content
-  const [isCollapsed, setIsCollapsed] = useState(!initiallyExpanded);
+  const [isCollapsed, setIsCollapsed] = useState(!initiallyExpanded && !noCollapse);
   const contentId = useMemo(() => `agentic-status-panel-${Math.random().toString(36).slice(2)}`, []);
   const startHandler = onStart ?? onRestart;
   const startText = typeof startLabel === 'string' && startLabel.trim() ? startLabel : 'Starten';
@@ -91,22 +96,31 @@ export function AgenticStatusCard({
     });
   }, []);
 
+  const effectiveCollapsed = noCollapse ? false : isCollapsed;
+
   return (
-    <div className={`card agentic-status-card${isCollapsed ? ' agentic-status-card--collapsed' : ''}`}>
+    <div className={`card agentic-status-card${effectiveCollapsed ? ' agentic-status-card--collapsed' : ''}`}>
       <h3 className="agentic-status-card__heading">
-        <button
-          type="button"
-          className="agentic-status-card__toggle"
-          onClick={handleToggle}
-          aria-expanded={!isCollapsed}
-          aria-controls={contentId}
-        >
-          <span className="agentic-status-card__title">Ki Status</span>
-          <span className={`agentic-status-card__summary ${status.className}`}>{status.label}</span>
-          <span className="agentic-status-card__chevron" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
-        </button>
+        {noCollapse ? (
+          <>
+            <span className="agentic-status-card__title">Ki Status</span>
+            <span className={`agentic-status-card__summary ${status.className}`}>{status.label}</span>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="agentic-status-card__toggle"
+            onClick={handleToggle}
+            aria-expanded={!effectiveCollapsed}
+            aria-controls={contentId}
+          >
+            <span className="agentic-status-card__title">Ki Status</span>
+            <span className={`agentic-status-card__summary ${status.className}`}>{status.label}</span>
+            <span className="agentic-status-card__chevron" aria-hidden="true">{effectiveCollapsed ? '▸' : '▾'}</span>
+          </button>
+        )}
       </h3>
-      {!isCollapsed ? (
+      {!effectiveCollapsed ? (
         <div className="agentic-status-card__content" id={contentId}>
           <div className="row status-row">
             {isInProgress ? <span className="status-spinner" aria-hidden="true" /> : null}
@@ -129,7 +143,7 @@ export function AgenticStatusCard({
               </tbody>
             </table>
           ) : null}
-          {!needsReview && (canStart || canRestart) ? (
+          {!hideInlineActions && !needsReview && (canStart || canRestart) ? (
             <div className="row">
               <label className="agentic-status-card__search" htmlFor={`${contentId}-search`}>
                 Suchbegriff
@@ -149,17 +163,12 @@ export function AgenticStatusCard({
           {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
           {reviewIntent ? <p className="muted">Review-Checkliste wird gesendet…</p> : null}
           {error ? <p className="muted" style={{ color: '#a30000' }}>{error}</p> : null}
-          {canCancel ? (
+          {!hideInlineActions && canCancel ? (
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>Abbrechen</button>
             </div>
           ) : null}
-          {false && canClose && onClose ? (
-            <div className='row'>
-              <button type="button" className="btn" disabled={actionPending} onClick={onClose}>Ki Suche abschliessen</button>
-            </div>
-          ) : null}
-          {!needsReview && (canStart || canRestart) ? (
+          {!hideInlineActions && !needsReview && (canStart || canRestart) ? (
             <div className='row'>
               {canStart && startHandler ? (
                 <button type="button" className="btn" disabled={actionPending} onClick={startHandler}>{startText}</button>
@@ -169,14 +178,9 @@ export function AgenticStatusCard({
               ) : null}
             </div>
           ) : null}
-          {needsReview ? (
+          {!hideInlineActions && needsReview ? (
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onReview}>Review</button>
-            </div>
-          ) : null}
-          {false && canDelete && onDelete ? (
-            <div className='row'>
-              <button type="button" className="btn danger" disabled={actionPending} onClick={onDelete}>Lauf löschen</button>
             </div>
           ) : null}
         </div>

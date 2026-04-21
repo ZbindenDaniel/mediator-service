@@ -1357,18 +1357,22 @@ export default function ItemDetail({ itemId }: Props) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
+  const [showRelocate, setShowRelocate] = useState(false);
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
   const relocateCardRef = useRef<HTMLDivElement | null>(null);
   const agenticOverrideLogRef = useRef<{ itemId: string | null; active: boolean }>({
     itemId: null,
     active: false
   });
-  // Holds latest agentic action callbacks; updated each render so the stable context wrappers always call current handlers.
+  // Holds latest action callbacks; updated each render so the stable context wrappers always call current handlers.
   const agenticHandlersRef = useRef<{
     onStart?: () => void | Promise<void>;
     onReview?: () => void | Promise<void>;
     onCancel?: () => void | Promise<void>;
     onUploadImage?: () => void;
+    onNeighborNav?: (direction: 'previous' | 'next') => void;
+    onEdit?: () => void;
+    onStartRelocate?: () => void;
   }>({});
   const setItemActions = useSetItemActions();
   const { setEntity, setMainView, activeTab } = usePanelContext();
@@ -1630,10 +1634,15 @@ export default function ItemDetail({ itemId }: Props) {
         console.error('ItemDetail: Failed to log neighbor navigation', logError);
       }
 
-      const search = window.location.search || '';
-      navigate(`/items/${encodeURIComponent(targetId)}${search}`);
+      // In shell mode (activeTab set), stay in the shell; in full-page mode navigate normally.
+      if (activeTab !== null) {
+        setEntity('item', targetId);
+      } else {
+        const search = window.location.search || '';
+        navigate(`/items/${encodeURIComponent(targetId)}${search}`);
+      }
     },
-    [itemId, navigate, neighborIds.nextId, neighborIds.previousId, neighborSource]
+    [activeTab, itemId, navigate, neighborIds.nextId, neighborIds.previousId, neighborSource, setEntity]
   );
 
   useEffect(() => {
@@ -2118,6 +2127,7 @@ export default function ItemDetail({ itemId }: Props) {
       setIsLoading(true);
     }
     setLoadError(null);
+    setShowRelocate(false);
     console.info('Loading item details', { itemId, showSpinner });
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
@@ -2552,13 +2562,18 @@ export default function ItemDetail({ itemId }: Props) {
       agenticCanCancel,
       agenticActionPending,
       startLabel: agenticStartLabel,
+      neighborIds,
+      neighborsLoading,
       // Stable wrappers: always delegate to the latest handler captured in the ref above.
       onStart: () => void agenticHandlersRef.current.onStart?.(),
       onReview: () => void agenticHandlersRef.current.onReview?.(),
       onCancel: () => void agenticHandlersRef.current.onCancel?.(),
       onUploadImage: () => void agenticHandlersRef.current.onUploadImage?.(),
+      onNeighborNav: (dir) => agenticHandlersRef.current.onNeighborNav?.(dir),
+      onEdit: () => agenticHandlersRef.current.onEdit?.(),
+      onStartRelocate: () => agenticHandlersRef.current.onStartRelocate?.(),
     });
-  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel, neighborIds, neighborsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear the action slot when ItemDetail unmounts.
   useEffect(() => {
@@ -3701,6 +3716,9 @@ export default function ItemDetail({ itemId }: Props) {
     onReview: () => void handleAgenticReview(),
     onCancel: agenticCanCancel ? () => void handleAgenticCancel() : undefined,
     onUploadImage: () => handleMediaAdd(),
+    onNeighborNav: (dir) => handleNeighborNavigation(dir),
+    onEdit: () => void handleEdit(),
+    onStartRelocate: () => setShowRelocate(true),
   };
 
   // Tab-based rendering: when a tab is active, delegate to the appropriate per-tab component.
@@ -3765,12 +3783,8 @@ export default function ItemDetail({ itemId }: Props) {
           <ItemReferenceTab
             item={item}
             referenceDetailRows={referenceDetailRows}
-            neighborIds={neighborIds}
-            neighborsLoading={neighborsLoading}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
-            onNeighborNav={handleNeighborNavigation}
-            onEdit={handleEdit}
           />
         );
         break;
@@ -3794,11 +3808,12 @@ export default function ItemDetail({ itemId }: Props) {
             isBulkItem={isBulkItem}
             isOutOfStock={isOutOfStock}
             skippedInstanceCount={skippedInstanceCount}
+            showRelocate={showRelocate}
             relocateCardRef={relocateCardRef}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
             onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
-            onRelocated={() => void load({ showSpinner: false })}
+            onRelocated={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
           />
         );
         break;
@@ -3843,12 +3858,8 @@ export default function ItemDetail({ itemId }: Props) {
           <ItemReferenceTab
             item={item}
             referenceDetailRows={referenceDetailRows}
-            neighborIds={neighborIds}
-            neighborsLoading={neighborsLoading}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
-            onNeighborNav={handleNeighborNavigation}
-            onEdit={handleEdit}
           />
         );
     }

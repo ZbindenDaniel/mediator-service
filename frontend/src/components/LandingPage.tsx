@@ -1,150 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import SearchCard from './SearchCard';
-import StatsCard from './StatsCard';
 import RecentBoxesCard from './RecentBoxesCard';
-import RecentEventsCard, { RecentEventsList } from './RecentEventsCard';
-import ImportCard from './ImportCard';
+import RecentEventsCard from './RecentEventsCard';
 import LoadingPage from './LoadingPage';
-import type { AgenticRunStatus, Box, EventLog } from '../../../models';
+import type { Box, EventLog } from '../../../models';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 
-interface OverviewCounts {
-  boxes: number;
-  items: number;
-  itemsNoBox: number;
-}
-
-interface OverviewAgenticStats {
-  stateCounts?: Partial<Record<AgenticRunStatus, number>>;
-  enrichedItems?: number;
-}
-
-interface OverviewData {
-  counts: OverviewCounts;
-  recentBoxes: Box[];
-  recentEvents: EventLog[];
-  agentic?: OverviewAgenticStats;
-}
-
-interface PrinterStatusResponse {
-  ok?: boolean;
-  reason?: string;
-}
-
 export default function LandingPage() {
-  const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [printerOk, setPrinterOk] = useState<boolean | null>(null);
-  const [printerReason, setPrinterReason] = useState<string | null>(null);
-  const [health, setHealth] = useState('prüfe…');
+  const [recentBoxes, setRecentBoxes] = useState<Box[]>([]);
   const [previewEvents, setPreviewEvents] = useState<EventLog[]>([]);
-  const [isOverviewLoading, setIsOverviewLoading] = useState(true);
-  const [isHealthLoading, setIsHealthLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch('/api/overview');
         const d = await r.json();
-        setOverview(d);
+        setRecentBoxes(Array.isArray(d?.recentBoxes) ? d.recentBoxes : []);
         if (Array.isArray(d?.recentEvents)) {
-          const filtered = filterVisibleEvents(d.recentEvents);
-          const limited = filtered.slice(0, 3);
-          if (filtered.length > 3) {
-            console.info('Truncating overview events to preview limit', { total: filtered.length });
-          }
-          setPreviewEvents(limited);
-        } else {
-          setPreviewEvents([]);
+          setPreviewEvents(filterVisibleEvents(d.recentEvents).slice(0, 3));
         }
-        console.log('Loaded overview');
       } catch (err) {
         console.error('Failed to load overview', err);
-        setPreviewEvents([]);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch('/api/printer/status');
-        const j = (await r.json()) as PrinterStatusResponse;
-        const resolvedOk = r.ok && j.ok === true;
-        setPrinterOk(resolvedOk);
-        setPrinterReason(resolvedOk ? null : j?.reason ?? null);
-        if (!resolvedOk) {
-          console.warn('Printer status unhealthy', { reason: j?.reason });
-        } else {
-          console.log('Checked printer status');
-        }
-      } catch (err) {
-        console.error('Printer status fetch failed', err);
-        setPrinterOk(false);
-        setPrinterReason(null);
       } finally {
-        setIsOverviewLoading(false);
+        setIsLoading(false);
       }
     })();
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch('/api/health');
-        const j = await r.json();
-        setHealth(r.ok && j.ok ? 'ok' : (j.reason || 'nicht erreichbar'));
-        console.log('Checked service health');
-      } catch (err) {
-        console.error('Health check failed', err);
-        setHealth('nicht erreichbar');
-      } finally {
-        setIsHealthLoading(false);
-      }
-    })();
-  }, []);
-
-  if (isOverviewLoading || isHealthLoading) {
-    return (
-      <LoadingPage message="Übersicht wird geladen…">
-        {/* <p className="muted">Aktuelle Kennzahlen und Dienststatus folgen in Kürze.</p> */}
-      </LoadingPage>
-    );
+  if (isLoading) {
+    return <LoadingPage message="Übersicht wird geladen…" />;
   }
 
   return (
     <div className="container overview">
-      <h1>Übersicht</h1>
-      <div className="grid landing-grid">
-        <SearchCard />
-        <StatsCard
-          counts={overview?.counts}
-          printerOk={printerOk}
-          printerReason={printerReason}
-          health={health}
-          agentic={overview?.agentic}
-          className="stats-card desktop-only"
-        />
-
-        {/* <div className="card mobile-only" id="chat-card">
-          <Link className="linkcard" to="/chat">
-            <div>
-              <h2>Chat</h2>
-              <p className="muted">Mit dem Agenten sprechen und vorgeschlagene SQLite-Queries ansehen</p>
-            </div>
-          </Link>
-        </div> */}
-
-        <RecentBoxesCard boxes={overview?.recentBoxes || []} />
-
-        <div className="grid-span-2">
-          <RecentEventsCard events={previewEvents}></RecentEventsCard>
-        </div>
-
-        <div className='desktop-only'>
-          <ImportCard />
-        </div>
-      </div>
+      <RecentBoxesCard boxes={recentBoxes} />
+      <RecentEventsCard events={previewEvents} />
     </div>
   );
 }
