@@ -107,8 +107,6 @@ interface ItemActionPanelProps {
 }
 
 function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
-  const navigate = useNavigate();
-
   switch (tab) {
     case 'reference': {
       return (
@@ -123,7 +121,7 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
           <button
             type="button"
             className="btn"
-            onClick={() => navigate(`/items/${encodeURIComponent(entityId)}/edit`)}
+            onClick={() => actions?.onShopStatus?.()}
           >
             Shopstatus
           </button>

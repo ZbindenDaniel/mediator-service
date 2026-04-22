@@ -141,7 +141,7 @@ function KiActionForm({ selectedItems, onChange }: KiActionFormProps) {
   );
 }
 
-interface ShopStatusValues {
+export interface ShopStatusValues {
   shopartikel: number | null;
   veröffentlicht: string | null;
   verkaufspreis: number | null;
@@ -151,7 +151,7 @@ interface ShopStatusFormProps {
   onChange: (values: ShopStatusValues) => void;
 }
 
-function ShopStatusForm({ onChange }: ShopStatusFormProps) {
+export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
   const [shopartikel, setShopartikel] = useState<number | null>(null);
   const [veröffentlicht, setVeröffentlicht] = useState<string | null>(null);
   const [verkaufspreis, setVerkaufspreis] = useState<number | null>(null);

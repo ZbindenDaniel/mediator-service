@@ -7,6 +7,11 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+727. ✅ Shopstatus modal for single items + tab persistence across list navigation:
+   - **Shopstatus**: `ShopStatusForm` and `ShopStatusValues` exported from `BulkItemActionBar`; `handleShopStatus` added to `ItemDetail` using the same dialog+`/api/items/bulk/update-ref` pattern as bulk; `onShopStatus` threaded through `agenticHandlersRef` and `ItemActionsContext`; ActionPanel reference-case Shopstatus button now calls `actions?.onShopStatus?.()` instead of navigating to the edit page.
+   - **Tab persistence (X-Y navigation)**: `PanelContext.setEntity` now preserves `activeTab` when switching to a new entity of the same type; only resets to `DEFAULT_TAB` when changing entity type. This enables navigating through all items on (e.g.) the `attachments` tab without the tab resetting on each click.
+   - **Why:** Reusing the existing bulk modal avoids duplicating form UI and avoids a separate PATCH endpoint; single-item is just `itemIds: [id]`. Preserving tab on same-type navigation uses `setState(prev => ...)` — a one-line change with no architectural impact.
+   - **Deferred:** nothing deferred.
 726. ✅ Root route, routing independence, action panel wiring, and in-panel navigation fixes:
    - **Root route**: `/` now renders `ItemListPage` directly (no more LandingPage as default); `MainView` type drops `'dashboard'` — `/` and `/items` both map to `'items'`.
    - **`setEntity` auto-tab**: calling `setEntity('item', id)` now sets `activeTab = 'reference'` automatically (boxes get `'info'`); clicking a list row immediately opens the shell tab view rather than the legacy full-page fallback.

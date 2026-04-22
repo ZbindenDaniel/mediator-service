@@ -81,6 +81,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-positive-criteria): Keep review-positive gating aligned with checklist blocking criteria and explicit wrong-information signals only.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
+import { ShopStatusForm, type ShopStatusValues } from './BulkItemActionBar';
 import { useSetItemActions } from '../context/ItemActionsContext';
 import { usePanelContext } from '../context/PanelContext';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
@@ -1375,6 +1376,7 @@ export default function ItemDetail({ itemId }: Props) {
     onNeighborNav?: (direction: 'previous' | 'next') => void;
     onEdit?: () => void;
     onStartRelocate?: () => void;
+    onShopStatus?: () => void;
   }>({});
   const setItemActions = useSetItemActions();
   const { setEntity, setMainView, activeTab } = usePanelContext();
@@ -2583,6 +2585,7 @@ export default function ItemDetail({ itemId }: Props) {
       onNeighborNav: (dir) => agenticHandlersRef.current.onNeighborNav?.(dir),
       onEdit: () => agenticHandlersRef.current.onEdit?.(),
       onStartRelocate: () => agenticHandlersRef.current.onStartRelocate?.(),
+      onShopStatus: () => agenticHandlersRef.current.onShopStatus?.(),
     });
   }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticCanClose, agenticCanDelete, agenticActionPending, agenticStartLabel, neighborIds, neighborsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -3605,6 +3608,41 @@ export default function ItemDetail({ itemId }: Props) {
     navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
   }
 
+  async function handleShopStatus() {
+    if (!item) return;
+    let shopValues: ShopStatusValues = { shopartikel: null, veröffentlicht: null, verkaufspreis: null };
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Shopstatus setzen',
+        message: (
+          <ShopStatusForm onChange={(values) => { shopValues = values; }} />
+        ),
+        confirmLabel: 'Setzen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (err) {
+      console.error('Failed to display shop status dialog', err);
+      return;
+    }
+    if (!confirmed) return;
+    try {
+      await fetch('/api/items/bulk/update-ref', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIds: [item.ItemUUID],
+          shopartikel: shopValues.shopartikel,
+          veröffentlicht: shopValues.veröffentlicht,
+          verkaufspreis: shopValues.verkaufspreis,
+        })
+      });
+      await load({ showSpinner: false });
+    } catch (err) {
+      console.error('Failed to update shop status', err);
+    }
+  }
+
   // TODO(agent): Revisit bulk add action copy once inline stock adjustments are validated by UX.
   async function handleAddItem() {
     if (!item) {
@@ -3732,6 +3770,7 @@ export default function ItemDetail({ itemId }: Props) {
     onNeighborNav: (dir) => handleNeighborNavigation(dir),
     onEdit: () => void handleEdit(),
     onStartRelocate: () => setShowRelocate(true),
+    onShopStatus: () => void handleShopStatus(),
   };
 
   // Tab-based rendering: when a tab is active, delegate to the appropriate per-tab component.

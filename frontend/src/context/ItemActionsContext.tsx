@@ -27,6 +27,7 @@ export interface ItemActions {
   onNeighborNav?: (direction: 'previous' | 'next') => void;
   onEdit?: () => void;
   onStartRelocate?: () => void;
+  onShopStatus?: () => void;
 }
 
 // Split into two contexts so ItemDetail (writer) doesn't re-render when actions state changes.

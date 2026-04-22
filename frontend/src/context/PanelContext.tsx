@@ -124,9 +124,14 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
     }, { replace: true });
   }, [state, setSearchParams]);
 
-  // Auto-activate the entity's default tab so clicking a list row opens the shell view directly.
+  // Preserve activeTab when navigating within the same entity type (X-Y navigation).
   const setEntity = useCallback((type: EntityType, id: string) => {
-    setState({ entityType: type, entityId: id, activeTab: DEFAULT_TAB[type] ?? 'reference', multiSelection: null });
+    setState(prev => ({
+      entityType: type,
+      entityId: id,
+      activeTab: prev.entityType === type ? prev.activeTab : (DEFAULT_TAB[type] ?? 'reference'),
+      multiSelection: null
+    }));
   }, []);
 
   const setCreateMode = useCallback((type: EntityType) => {
