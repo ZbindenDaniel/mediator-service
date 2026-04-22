@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import type { Item } from '../../../models';
 import LocationTag from './LocationTag';
+import { usePanelContext } from '../context/PanelContext';
 import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
 import ZubehoerBadge from './ZubehoerBadge';
@@ -81,6 +82,7 @@ export default function ItemList({
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
+  const { entityId, setEntity, setMainView } = usePanelContext();
   const navigateToItemDetail = useCallback((itemId: string, identifierType: 'itemUUID' | 'artikelNummer', source: 'click' | 'keyboard') => {
     try {
       if (onSelect) {
@@ -187,9 +189,7 @@ export default function ItemList({
               });
             }
 
-            const boxLinkTarget = boxId ? `/boxes/${encodeURIComponent(boxId)}` : null;
-            const shelfLinkTarget = shelfId ? `/boxes/${encodeURIComponent(shelfId)}` : null;
-            const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => selectedItemIds.has(itemId));
+const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => selectedItemIds.has(itemId));
             const isPartiallySelected = groupItemIds.some((itemId) => selectedItemIds.has(itemId)) && !isSelected;
             const representativeLabel = representative?.Artikelbeschreibung?.trim() || group.summary.Artikel_Nummer || 'Artikelgruppe';
             const checkboxLabel = `Artikelgruppe ${representativeLabel} auswählen`;
@@ -257,8 +257,9 @@ export default function ItemList({
               <tr
                 key={group.key}
                 data-item-uuid={group.summary.representativeItemId ?? ''}
-                className={['item-list-row', isOutOfStock ? 'item-row--out-of-stock' : ''].filter(Boolean).join(' ')}
+                className={['item-list-row', isOutOfStock ? 'item-row--out-of-stock' : '', group.summary.representativeItemId === entityId ? 'item-list-row--selected' : ''].filter(Boolean).join(' ')}
                 role="button"
+                aria-selected={group.summary.representativeItemId === entityId}
                 tabIndex={0}
                 aria-label={rowLabel}
                 onClick={(event) => {
@@ -306,19 +307,27 @@ export default function ItemList({
                 <td className="col-number">{group.summary.Artikel_Nummer?.trim() || representative?.Artikel_Nummer?.trim() || '—'}</td>
                 <td className="col-desc">{representative?.Artikelbeschreibung ?? '—'}</td>
                 <td className="col-box">
-                  {boxId && boxLinkTarget ? (
-                    <Link to={boxLinkTarget}>
+                  {boxId ? (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={(e) => { e.stopPropagation(); setEntity('box', boxId); setMainView('boxes'); }}
+                    >
                       {boxId}
-                    </Link>
+                    </button>
                   ) : (
                     <span>—</span>
                   )}
                 </td>
                 <td className="col-location">
-                  {shelfId && shelfLinkTarget ? (
-                    <Link to={shelfLinkTarget}>
+                  {shelfId ? (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={(e) => { e.stopPropagation(); setEntity('box', shelfId); setMainView('boxes'); }}
+                    >
                       <LocationTag item={locationItem} itemId={representativeItemId} />
-                    </Link>
+                    </button>
                   ) : (
                     <LocationTag item={locationItem} itemId={representativeItemId} />
                   )}
