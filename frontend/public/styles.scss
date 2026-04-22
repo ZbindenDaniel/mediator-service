@@ -1343,6 +1343,27 @@ button:hover {
     filter: brightness(.95)
 }
 
+/* BEM modifier variants used in ActionPanel */
+.btn--primary {
+    background: var(--acc);
+    color: #fff;
+    border-color: var(--acc);
+}
+
+.btn--primary:hover {
+    filter: brightness(.95);
+}
+
+.btn--danger {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.btn--danger:hover {
+    filter: brightness(.9);
+}
+
 input:focus,
 textarea:focus,
 select:focus,

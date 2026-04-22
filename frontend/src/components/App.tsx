@@ -55,7 +55,7 @@ function BoxEditRoute() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route path="/" element={<ItemListPage />} />
       <Route path="/boxes" element={<BoxListPage />} />
       <Route path="/boxes/:boxId" element={<BoxRoute />} />
       <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />

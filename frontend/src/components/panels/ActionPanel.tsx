@@ -11,7 +11,7 @@ import StatsCard from '../StatsCard';
 import type { AgenticRunStatus } from '../../../../models';
 
 export default function ActionPanel() {
-  const { entityType, activeTab, entityId, multiSelection, mainView } = usePanelContext();
+  const { entityType, activeTab, entityId, multiSelection } = usePanelContext();
   const actions = useItemActions();
   const boxActions = useBoxActions();
   const bulk = useBulkSelection();
@@ -29,8 +29,7 @@ export default function ActionPanel() {
   }
 
   if (!entityType || !entityId) {
-    if (mainView === 'dashboard') return <DashboardPanel />;
-    return null;
+    return <NoSelectionPanel />;
   }
 
   const tab = activeTab ?? 'reference';
@@ -46,7 +45,7 @@ export default function ActionPanel() {
   return null;
 }
 
-// ── Dashboard panel ──────────────────────────────────────────────────────────
+// ── No-selection panel: search + stats ──────────────────────────────────────
 
 interface DashboardData {
   counts?: { boxes: number; items: number; itemsNoBox: number };
@@ -56,7 +55,7 @@ interface DashboardData {
   health: string;
 }
 
-function DashboardPanel() {
+function NoSelectionPanel() {
   const [data, setData] = useState<DashboardData>({ printerOk: null, printerReason: null, health: 'prüfe…' });
 
   useEffect(() => {
@@ -114,6 +113,30 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
     case 'reference': {
       return (
         <div className="action-panel__content">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => actions?.onEdit?.()}
+          >
+            Bearbeiten
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => navigate(`/items/${encodeURIComponent(entityId)}/edit`)}
+          >
+            Shopstatus
+          </button>
+          {(actions?.agenticCanStart || actions?.agenticCanRestart) && (
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={Boolean(actions?.agenticActionPending)}
+              onClick={() => void actions?.onStart?.()}
+            >
+              KI-Sync
+            </button>
+          )}
           <div className="action-panel__nav-row">
             <button
               type="button"
@@ -134,38 +157,60 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
               Nächster →
             </button>
           </div>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => actions?.onEdit?.()}
-          >
-            Bearbeiten
-          </button>
         </div>
       );
     }
 
     case 'ki': {
-      const hasAgenticAction = actions?.agenticCanStart || actions?.agenticCanRestart;
+      const pending = Boolean(actions?.agenticActionPending);
       return (
         <div className="action-panel__content">
-          {hasAgenticAction ? (
+          {(actions?.agenticCanStart || actions?.agenticCanRestart) && (
             <button
               type="button"
               className="btn btn--primary"
-              disabled={Boolean(actions?.agenticActionPending)}
+              disabled={pending}
               onClick={() => void actions?.onStart?.()}
             >
-              {actions?.startLabel ?? 'KI-Lauf'}
+              {actions?.startLabel ?? 'Starten'}
             </button>
-          ) : null}
+          )}
+          {actions?.agenticCanCancel && (
+            <button
+              type="button"
+              className="btn"
+              disabled={pending}
+              onClick={() => void actions?.onCancel?.()}
+            >
+              Abbrechen
+            </button>
+          )}
+          {actions?.agenticCanClose && (
+            <button
+              type="button"
+              className="btn"
+              disabled={pending}
+              onClick={() => void actions?.onClose?.()}
+            >
+              Abschliessen
+            </button>
+          )}
+          {actions?.agenticCanDelete && (
+            <button
+              type="button"
+              className="btn btn--danger"
+              disabled={pending}
+              onClick={() => void actions?.onDelete?.()}
+            >
+              Löschen
+            </button>
+          )}
           <div className="action-panel__nav-row">
             <button
               type="button"
               className="btn"
               disabled={!actions?.neighborIds?.previousId || actions?.neighborsLoading}
               onClick={() => actions?.onNeighborNav?.('previous')}
-              aria-label="Vorheriger Artikel"
             >
               ←
             </button>
@@ -174,7 +219,6 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
               className="btn"
               disabled={!actions?.neighborIds?.nextId || actions?.neighborsLoading}
               onClick={() => actions?.onNeighborNav?.('next')}
-              aria-label="Nächster Artikel"
             >
               →
             </button>
@@ -200,12 +244,13 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
 
     case 'review': {
       if (!actions?.agenticNeedsReview) return null;
+      const pending = Boolean(actions?.agenticActionPending);
       return (
         <div className="action-panel__content">
           <button
             type="button"
             className="btn btn--primary"
-            disabled={Boolean(actions?.agenticActionPending)}
+            disabled={pending}
             onClick={() => void actions?.onReview?.()}
           >
             Review durchführen
@@ -214,7 +259,7 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
             <button
               type="button"
               className="btn"
-              disabled={Boolean(actions?.agenticActionPending)}
+              disabled={pending}
               onClick={() => void actions?.onCancel?.()}
             >
               Lauf abbrechen
@@ -224,22 +269,7 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
       );
     }
 
-    case 'images': {
-      if (!actions?.onUploadImage) return null;
-      return (
-        <div className="action-panel__content">
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => actions.onUploadImage?.()}
-          >
-            Bild hochladen
-          </button>
-        </div>
-      );
-    }
-
-    // attachments, accessories, events: inline controls already cover these
+    // images, attachments, accessories, events: no action panel needed
     default:
       return null;
   }
@@ -301,7 +331,6 @@ function BoxActionPanel({ tab, entityId, boxActions }: BoxActionPanelProps) {
       );
     }
 
-    // events, stubs: no actions needed
     default:
       return null;
   }

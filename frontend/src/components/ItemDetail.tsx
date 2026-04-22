@@ -1369,6 +1369,8 @@ export default function ItemDetail({ itemId }: Props) {
     onStart?: () => void | Promise<void>;
     onReview?: () => void | Promise<void>;
     onCancel?: () => void | Promise<void>;
+    onClose?: () => void | Promise<void>;
+    onDelete?: () => void | Promise<void>;
     onUploadImage?: () => void;
     onNeighborNav?: (direction: 'previous' | 'next') => void;
     onEdit?: () => void;
@@ -2479,7 +2481,12 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
       try {
-        navigate(`/items/${encodeURIComponent(targetItemId)}`);
+        // In shell mode use setEntity so the right panel updates without a full-page nav.
+        if (activeTab !== null) {
+          setEntity('item', targetItemId);
+        } else {
+          navigate(`/items/${encodeURIComponent(targetItemId)}`);
+        }
       } catch (error) {
         logError('ItemDetail: Failed to navigate to instance detail', error, {
           itemId,
@@ -2560,6 +2567,8 @@ export default function ItemDetail({ itemId }: Props) {
       agenticCanStart,
       agenticCanRestart,
       agenticCanCancel,
+      agenticCanClose,
+      agenticCanDelete,
       agenticActionPending,
       startLabel: agenticStartLabel,
       neighborIds,
@@ -2568,12 +2577,14 @@ export default function ItemDetail({ itemId }: Props) {
       onStart: () => void agenticHandlersRef.current.onStart?.(),
       onReview: () => void agenticHandlersRef.current.onReview?.(),
       onCancel: () => void agenticHandlersRef.current.onCancel?.(),
+      onClose: () => void agenticHandlersRef.current.onClose?.(),
+      onDelete: () => void agenticHandlersRef.current.onDelete?.(),
       onUploadImage: () => void agenticHandlersRef.current.onUploadImage?.(),
       onNeighborNav: (dir) => agenticHandlersRef.current.onNeighborNav?.(dir),
       onEdit: () => agenticHandlersRef.current.onEdit?.(),
       onStartRelocate: () => agenticHandlersRef.current.onStartRelocate?.(),
     });
-  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel, neighborIds, neighborsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticCanClose, agenticCanDelete, agenticActionPending, agenticStartLabel, neighborIds, neighborsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear the action slot when ItemDetail unmounts.
   useEffect(() => {
@@ -3715,6 +3726,8 @@ export default function ItemDetail({ itemId }: Props) {
     onStart: agenticCanStart ? () => void agenticStartHandler() : undefined,
     onReview: () => void handleAgenticReview(),
     onCancel: agenticCanCancel ? () => void handleAgenticCancel() : undefined,
+    onClose: agenticCanClose ? () => void handleAgenticClose() : undefined,
+    onDelete: agenticCanDelete ? () => void handleAgenticDelete() : undefined,
     onUploadImage: () => handleMediaAdd(),
     onNeighborNav: (dir) => handleNeighborNavigation(dir),
     onEdit: () => void handleEdit(),

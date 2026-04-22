@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 
-export type MainView = 'items' | 'boxes' | 'transports' | 'stubs' | 'activities' | 'dashboard';
+export type MainView = 'items' | 'boxes' | 'transports' | 'stubs' | 'activities';
 
 const MAIN_VIEW_PATHS: Record<MainView, string> = {
   items: '/items',
@@ -18,19 +18,25 @@ const MAIN_VIEW_PATHS: Record<MainView, string> = {
   transports: '/transports',
   stubs: '/stubs',
   activities: '/activities',
-  dashboard: '/'
 };
 
 function pathToMainView(pathname: string): MainView {
   if (pathname.startsWith('/boxes')) return 'boxes';
-  if (pathname.startsWith('/items')) return 'items';
   if (pathname.startsWith('/transports')) return 'transports';
   if (pathname.startsWith('/stubs')) return 'stubs';
   if (pathname.startsWith('/activities')) return 'activities';
-  return 'dashboard';
+  return 'items'; // / and /items both map to items
 }
 
 export type EntityType = 'item' | 'box' | 'transport' | 'stub';
+
+// Default tab to activate when selecting an entity — avoids the legacy full-page fallback.
+const DEFAULT_TAB: Record<EntityType, string> = {
+  item: 'reference',
+  box: 'info',
+  transport: 'info',
+  stub: 'info',
+};
 
 export interface PanelState {
   entityType: EntityType | null;
@@ -85,11 +91,17 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   const [state, setState] = useState<PanelState>(() => paramsToState(searchParams));
   // skip the initial URL write — state was already derived from the URL on mount
   const isMounted = useRef(false);
+  // Keep a ref of state for setMainView so it doesn't need state in its dep array.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const mainView = useMemo(() => pathToMainView(location.pathname), [location.pathname]);
 
+  // Preserve panel search params when switching main views so the right column stays stable.
   const setMainView = useCallback((view: MainView) => {
-    navigate(MAIN_VIEW_PATHS[view]);
+    const panelParams = stateToParams(stateRef.current);
+    const qs = new URLSearchParams(panelParams).toString();
+    navigate(qs ? `${MAIN_VIEW_PATHS[view]}?${qs}` : MAIN_VIEW_PATHS[view]);
   }, [navigate]);
 
   useEffect(() => {
@@ -112,8 +124,9 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
     }, { replace: true });
   }, [state, setSearchParams]);
 
+  // Auto-activate the entity's default tab so clicking a list row opens the shell view directly.
   const setEntity = useCallback((type: EntityType, id: string) => {
-    setState({ entityType: type, entityId: id, activeTab: null, multiSelection: null });
+    setState({ entityType: type, entityId: id, activeTab: DEFAULT_TAB[type] ?? 'reference', multiSelection: null });
   }, []);
 
   const setCreateMode = useCallback((type: EntityType) => {

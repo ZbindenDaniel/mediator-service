@@ -7,6 +7,17 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+726. ✅ Root route, routing independence, action panel wiring, and in-panel navigation fixes:
+   - **Root route**: `/` now renders `ItemListPage` directly (no more LandingPage as default); `MainView` type drops `'dashboard'` — `/` and `/items` both map to `'items'`.
+   - **`setEntity` auto-tab**: calling `setEntity('item', id)` now sets `activeTab = 'reference'` automatically (boxes get `'info'`); clicking a list row immediately opens the shell tab view rather than the legacy full-page fallback.
+   - **Routing independence**: `setMainView` now preserves panel search params (`entity`, `id`, `tab`) when switching main views, so the right column stays stable when navigating the left panel. Uses a `stateRef` to avoid re-creating `setMainView` on every state change.
+   - **Instance navigation**: `handleInstanceNavigation` uses `setEntity` when in shell mode (`activeTab !== null`), keeping navigation within the panel instead of doing a full `/items/:id` route push.
+   - **KI action panel**: all four KI actions now wired — Starten, Abbrechen, Abschliessen, Löschen (conditional on `agenticCanStart/Cancel/Close/Delete`); `agenticCanClose` and `agenticCanDelete` added to `ItemActionsContext` and registered in `ItemDetail.setItemActions`.
+   - **Reference action panel**: Bearbeiten + Shopstatus (navigates to edit page) + KI-Sync (agentic start, conditional) + Vorheriger/Nächster nav.
+   - **Images/Attachments tabs**: no action panel (return null) — inline controls in the tab body are sufficient.
+   - **`btn--primary` / `btn--danger`**: CSS BEM modifiers added to styles.scss (were used in ActionPanel but undefined).
+   - **Why:** `stateRef` pattern in `setMainView` avoids adding `state` to the `useCallback` dep array (which would recreate the callback on every keystroke); the ref is updated every render so it always reads current state. Auto-tab on `setEntity` removes the legacy full-page fallback for list-row clicks without changing the `PanelState` shape.
+   - **Deferred:** Shopstatus action navigates to the full edit page rather than a dedicated quick-toggle; a PATCH endpoint for just `Shopartikel`/`Veröffentlicht_Status` would allow an inline toggle without a page transition.
 725. ✅ Shell UX pass: landing page stripped, tabs cleaned, action panel wired:
    - **LandingPage** stripped to RecentBoxesCard + RecentEventsCard only; SearchCard and StatsCard moved to a self-fetching `DashboardPanel` that renders in the action column when `mainView === 'dashboard'` and no entity is selected; ImportCard removed (deferred to admin).
    - **ItemReferenceTab** now shows only the reference data table + ShopBadge/ZubehoerBadge; nav buttons and item UUID title removed; ← → "Vorheriger/Nächster" + "Bearbeiten" buttons added to action panel `reference` case; neighbor nav in shell mode now calls `setEntity` instead of `navigate` to stay within the panel.

@@ -12,6 +12,8 @@ export interface ItemActions {
   agenticCanStart: boolean;
   agenticCanRestart: boolean;
   agenticCanCancel: boolean;
+  agenticCanClose: boolean;
+  agenticCanDelete: boolean;
   agenticActionPending: boolean;
   startLabel: string;
   neighborIds: { previousId: string | null; nextId: string | null };
@@ -19,6 +21,8 @@ export interface ItemActions {
   onStart?: () => void | Promise<void>;
   onReview?: () => void | Promise<void>;
   onCancel?: () => void | Promise<void>;
+  onClose?: () => void | Promise<void>;
+  onDelete?: () => void | Promise<void>;
   onUploadImage?: () => void;
   onNeighborNav?: (direction: 'previous' | 'next') => void;
   onEdit?: () => void;
