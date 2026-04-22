@@ -8,7 +8,6 @@ import BulkItemActionBar from '../BulkItemActionBar';
 import PrintLabelButton from '../PrintLabelButton';
 import SearchCard from '../SearchCard';
 import StatsCard from '../StatsCard';
-import type { AgenticRunStatus } from '../../../../models';
 
 export default function ActionPanel() {
   const { entityType, activeTab, entityId, multiSelection } = usePanelContext();
@@ -49,7 +48,6 @@ export default function ActionPanel() {
 
 interface DashboardData {
   counts?: { boxes: number; items: number; itemsNoBox: number };
-  agentic?: { stateCounts?: Partial<Record<AgenticRunStatus, number>>; enrichedItems?: number };
   printerOk: boolean | null;
   printerReason: string | null;
   health: string;
@@ -74,7 +72,6 @@ function NoSelectionPanel() {
         const printerOk = printerRes.ok && printer?.ok === true;
         setData({
           counts: overview?.counts,
-          agentic: overview?.agentic,
           printerOk,
           printerReason: printerOk ? null : (printer?.reason ?? null),
           health: healthRes.ok && health?.ok ? 'ok' : (health?.reason || 'nicht erreichbar'),
@@ -92,7 +89,6 @@ function NoSelectionPanel() {
         printerOk={data.printerOk}
         printerReason={data.printerReason}
         health={data.health}
-        agentic={data.agentic}
       />
     </div>
   );
@@ -159,10 +155,22 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
       );
     }
 
+    // 'review' was a separate tab; review actions are now in the ki case.
+    case 'review':
     case 'ki': {
       const pending = Boolean(actions?.agenticActionPending);
       return (
         <div className="action-panel__content">
+          {actions?.agenticNeedsReview && (
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={pending}
+              onClick={() => void actions?.onReview?.()}
+            >
+              Review durchführen
+            </button>
+          )}
           {(actions?.agenticCanStart || actions?.agenticCanRestart) && (
             <button
               type="button"
@@ -236,33 +244,6 @@ function ItemActionPanel({ tab, entityId, actions }: ItemActionPanelProps) {
           >
             Umlagern
           </button>
-        </div>
-      );
-    }
-
-    case 'review': {
-      if (!actions?.agenticNeedsReview) return null;
-      const pending = Boolean(actions?.agenticActionPending);
-      return (
-        <div className="action-panel__content">
-          <button
-            type="button"
-            className="btn btn--primary"
-            disabled={pending}
-            onClick={() => void actions?.onReview?.()}
-          >
-            Review durchführen
-          </button>
-          {actions?.agenticCanCancel && (
-            <button
-              type="button"
-              className="btn"
-              disabled={pending}
-              onClick={() => void actions?.onCancel?.()}
-            >
-              Lauf abbrechen
-            </button>
-          )}
         </div>
       );
     }

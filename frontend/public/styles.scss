@@ -250,6 +250,17 @@ body {
     }
 }
 
+.tab-badge {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-warning, #f59e0b);
+    margin-left: 4px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
 /* === Action panel content === */
 .action-panel__content {
     display: flex;

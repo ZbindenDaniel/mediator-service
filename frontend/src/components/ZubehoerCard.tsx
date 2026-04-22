@@ -1,7 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import RefSearchInput, { type RefSuggestion } from './RefSearchInput';
 import ZubehoerBadge from './ZubehoerBadge';
+import { usePanelContext } from '../context/PanelContext';
 
 interface ZubehoerCardProps {
   itemUUID: string;
@@ -22,6 +22,7 @@ export default function ZubehoerCard({
   compatibleParentRefs,
   onRelationChanged
 }: ZubehoerCardProps) {
+  const { setEntity } = usePanelContext();
   const [linkInput, setLinkInput] = React.useState('');
   const [linkPending, setLinkPending] = React.useState(false);
   const [linkError, setLinkError] = React.useState<string | null>(null);
@@ -140,9 +141,9 @@ export default function ZubehoerCard({
                 <tr key={acc.ItemUUID}>
                   <td><ZubehoerBadge mode="connected" compact /></td>
                   <td>
-                    <Link to={`/items/${encodeURIComponent(acc.ItemUUID)}`}>
+                    <button type="button" className="link-btn" onClick={() => setEntity('item', acc.ItemUUID)}>
                       {acc.Artikelbeschreibung || acc.Kurzbeschreibung || acc.Artikel_Nummer || acc.ItemUUID}
-                    </Link>
+                    </button>
                     {' '}<span className="muted">#{acc.ItemUUID}</span>
                   </td>
                   <td className="muted">{acc.RelationType}</td>
@@ -164,9 +165,9 @@ export default function ZubehoerCard({
               {connectedToDevices.map((dev: any) => (
                 <tr key={dev.ItemUUID}>
                   <td>
-                    <Link to={`/items/${encodeURIComponent(dev.ItemUUID)}`}>
+                    <button type="button" className="link-btn" onClick={() => setEntity('item', dev.ItemUUID)}>
                       {dev.Artikelbeschreibung || dev.Kurzbeschreibung || dev.Artikel_Nummer || dev.ItemUUID}
-                    </Link>
+                    </button>
                     {' '}<span className="muted">#{dev.ItemUUID}</span>
                   </td>
                   <td className="muted">{dev.RelationType}</td>
@@ -187,9 +188,9 @@ export default function ZubehoerCard({
                   <tr key={ref.Artikel_Nummer}>
                     <td><ZubehoerBadge mode="available" compact /></td>
                     <td>
-                      <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
+                      <button type="button" className="link-btn" onClick={() => setEntity('item', ref.Artikel_Nummer)}>
                         {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
-                      </Link>
+                      </button>
                     </td>
                     <td className="muted">{ref.availableCount ?? 0} auf Lager</td>
                     {artikelNummer && (
@@ -220,9 +221,9 @@ export default function ZubehoerCard({
                 {localParentRefs.map((ref: any) => (
                   <tr key={ref.Artikel_Nummer}>
                     <td>
-                      <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
+                      <button type="button" className="link-btn" onClick={() => setEntity('item', ref.Artikel_Nummer)}>
                         {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
-                      </Link>
+                      </button>
                     </td>
                     <td className="muted">{ref.RelationType}</td>
                     {artikelNummer && (

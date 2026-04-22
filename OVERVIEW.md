@@ -7,6 +7,14 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+729. ✅ Activities open detail panel; review tab merged into KI; accessories navigate right; AI stats removed from dashboard:
+   - **Activities**: `RecentEventsList` replaced all `<Link>` navigation with row-click handlers calling `setEntity('item'|'box', id)` (no `setMainView`), so clicking an event opens the item/box in the right detail panel while keeping the left panel on the activities list.
+   - **Review tab removed**: `DetailTabBar` no longer conditionally inserts a "Review" tab. Review state is indicated by an amber dot badge on the KI tab. Old URLs with `tab=review` still render the KI content (DetailTabBar maps 'review' → 'ki' for the active-tab highlight).
+   - **Review merged into KI action panel**: The action panel's `ki` case now also shows "Review durchführen" when `agenticNeedsReview` is true; the old separate `review` case is removed. `case 'review'` falls through to `case 'ki'` for backwards compat.
+   - **Accessories links**: `ZubehoerCard` replaced all four `<Link to="/items/...">` elements with `<button className="link-btn">` calling `setEntity('item', id)`, opening items in the right detail panel.
+   - **AI stats removed from dashboard**: `NoSelectionPanel` no longer passes `agentic` to `StatsCard`; aggregate AI run counts will belong to a future KI overview screen.
+   - **Why:** `setEntity` without `setMainView` keeps the left panel stable; this matches the navigation principle that lists only change through nav links. Badge on KI tab keeps review discoverability without a separate tab. `link-btn` buttons preserve the panel paradigm for all cross-entity links.
+   - **Deferred:** A dedicated KI/AI main view (global run overview) is needed to surface the aggregate agentic stats removed from the dashboard. Tracked in todo.md.
 728. ✅ Box fetch deduplication, selected item highlight, panel navigation for box/shelf links:
    - **Box fetch storm fixed**: `LocationTag.fetchBoxById` now uses a module-level in-flight deduplication map — concurrent callers for the same box ID share one promise instead of each firing a separate `GET /api/boxes/:id`. This eliminates the 50+ duplicate box fetches observed when switching items (many list rows share the same shelf box).
    - **Current item highlighted**: `ItemList` reads `entityId` from `usePanelContext()` and adds `item-list-row--selected` CSS class + `aria-selected` attribute to the matching row. Blue left-border + tinted background makes the selected item visible at a glance.

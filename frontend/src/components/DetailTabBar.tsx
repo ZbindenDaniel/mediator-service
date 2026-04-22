@@ -17,11 +17,6 @@ const ITEM_BASE_TABS: TabDef[] = [
   { id: 'events', label: 'Aktivitäten' },
 ];
 
-const REVIEW_TAB: TabDef = { id: 'review', label: 'Review' };
-
-// review tab inserted after 'instance' (index 1) only when agentic review is pending
-const REVIEW_INSERT_INDEX = 2;
-
 const BOX_BASE_TABS: TabDef[] = [
   { id: 'info', label: 'Info' },
   { id: 'images', label: 'Bilder' },
@@ -66,19 +61,13 @@ export default function DetailTabBar() {
 
   if (entityType !== 'item') return null;
 
-  const effective = activeTab ?? 'reference';
-
-  const tabs = actions?.agenticNeedsReview
-    ? [
-        ...ITEM_BASE_TABS.slice(0, REVIEW_INSERT_INDEX),
-        REVIEW_TAB,
-        ...ITEM_BASE_TABS.slice(REVIEW_INSERT_INDEX),
-      ]
-    : ITEM_BASE_TABS;
+  // 'review' was a separate tab; now it's merged into 'ki' so old URLs still work visually.
+  const effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'reference';
+  const needsReview = Boolean(actions?.agenticNeedsReview);
 
   return (
     <nav className="detail-tab-bar" aria-label="Artikel-Tabs">
-      {tabs.map((tab) => (
+      {ITEM_BASE_TABS.map((tab) => (
         <button
           key={tab.id}
           type="button"
@@ -87,6 +76,7 @@ export default function DetailTabBar() {
           aria-current={effective === tab.id ? 'page' : undefined}
         >
           {tab.label}
+          {tab.id === 'ki' && needsReview && <span className="tab-badge" aria-label="Review ausstehend" />}
         </button>
       ))}
     </nav>
