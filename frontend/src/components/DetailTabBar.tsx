@@ -1,10 +1,14 @@
 import React from 'react';
 import { usePanelContext } from '../context/PanelContext';
-import { useItemActions } from '../context/ItemActionsContext';
 
 interface TabDef {
   id: string;
   label: string;
+}
+
+interface Props {
+  /** Dot indicator on the KI tab when an agentic review is pending. */
+  agenticNeedsReview?: boolean;
 }
 
 const ITEM_BASE_TABS: TabDef[] = [
@@ -24,7 +28,6 @@ const BOX_BASE_TABS: TabDef[] = [
   { id: 'events', label: 'Aktivitäten' },
 ];
 
-// stubs tab appended only for shelves (BoxID starts with S-)
 const STUBS_TAB: TabDef = { id: 'stubs', label: 'Stubs' };
 
 function isShelfId(boxId: string): boolean {
@@ -35,9 +38,8 @@ function isShelfId(boxId: string): boolean {
   }
 }
 
-export default function DetailTabBar() {
+export default function DetailTabBar({ agenticNeedsReview = false }: Props) {
   const { entityType, entityId, activeTab, setTab } = usePanelContext();
-  const actions = useItemActions();
 
   if (entityType === 'box' && entityId) {
     const effective = activeTab ?? 'info';
@@ -61,9 +63,8 @@ export default function DetailTabBar() {
 
   if (entityType !== 'item') return null;
 
-  // 'review' was a separate tab; now it's merged into 'ki' so old URLs still work visually.
+  // 'review' was a separate tab; it's merged into 'ki' so old URLs still work visually.
   const effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'reference';
-  const needsReview = Boolean(actions?.agenticNeedsReview);
 
   return (
     <nav className="detail-tab-bar" aria-label="Artikel-Tabs">
@@ -76,7 +77,7 @@ export default function DetailTabBar() {
           aria-current={effective === tab.id ? 'page' : undefined}
         >
           {tab.label}
-          {tab.id === 'ki' && needsReview && <span className="tab-badge" aria-label="Review ausstehend" />}
+          {tab.id === 'ki' && agenticNeedsReview && <span className="tab-badge" aria-label="Review ausstehend" />}
         </button>
       ))}
     </nav>
