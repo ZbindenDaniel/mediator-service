@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+736. ✅ Fix scroll, remap keys: up/down items, left/right tabs
+   - **Why:** panel-tab-body lacked `flex:1 + overflow-y:auto` so content pushed past the panel boundary and the page scrolled. panel-detail flex reset from 82 to 1 after action panel removal. Key rebind: ArrowUp/Down for item neighbour nav, ArrowLeft/Right for tab nav (handled centrally in DetailTabBar).
+   - **Deferred:** nothing deferred.
 735. ✅ Close Gap 3: fix shell navigation, delete dead landing page
    - **Why:** BoxDetail's item-row click was doing a full-page `navigate('/items/:id')`, breaking the shell layout. Replaced with `setEntity + setMainView`. LandingPage had no route since step 726; SearchCard and RecentBoxesCard were its only consumers and are now deleted (326 lines gone).
    - **Deferred:** BoxList has a `navigate` fallback when no `onSelect` is provided, but BoxListPage always passes `onSelect` so this path is never reached.
