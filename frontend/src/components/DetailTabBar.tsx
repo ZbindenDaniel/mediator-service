@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { usePanelContext } from '../context/PanelContext';
 
 interface TabDef {
@@ -40,6 +40,39 @@ function isShelfId(boxId: string): boolean {
 
 export default function DetailTabBar({ agenticNeedsReview = false }: Props) {
   const { entityType, entityId, activeTab, setTab } = usePanelContext();
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) return;
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+      let tabs: TabDef[];
+      let effective: string;
+      if (entityType === 'box' && entityId) {
+        tabs = isShelfId(entityId) ? [...BOX_BASE_TABS, STUBS_TAB] : BOX_BASE_TABS;
+        effective = activeTab ?? 'info';
+      } else if (entityType === 'item') {
+        tabs = ITEM_BASE_TABS;
+        effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'reference';
+      } else {
+        return;
+      }
+
+      const idx = tabs.findIndex((t) => t.id === effective);
+      if (event.key === 'ArrowLeft' && idx > 0) {
+        event.preventDefault();
+        setTab(tabs[idx - 1].id);
+      } else if (event.key === 'ArrowRight' && idx < tabs.length - 1) {
+        event.preventDefault();
+        setTab(tabs[idx + 1].id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [entityType, entityId, activeTab, setTab]);
 
   if (entityType === 'box' && entityId) {
     const effective = activeTab ?? 'info';

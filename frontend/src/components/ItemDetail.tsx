@@ -1226,10 +1226,10 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
 
-      if (event.key === 'ArrowLeft' && neighborIds.previousId) {
+      if (event.key === 'ArrowUp' && neighborIds.previousId) {
         event.preventDefault();
         handleNeighborNavigation('previous');
-      } else if (event.key === 'ArrowRight' && neighborIds.nextId) {
+      } else if (event.key === 'ArrowDown' && neighborIds.nextId) {
         event.preventDefault();
         handleNeighborNavigation('next');
       }

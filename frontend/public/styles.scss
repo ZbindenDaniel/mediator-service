@@ -120,22 +120,17 @@ body {
 }
 
 .panel-detail {
-    flex: 82 0 0;
+    flex: 1 1 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0;
 }
 
 .panel-detail__body {
     flex: 1 1 0;
     overflow-y: auto;
     min-height: 0;
-}
-
-.panel-action {
-    flex: 18 0 0;
-    overflow-y: auto;
-    border-top: 5px solid var(--head);
 }
 
 .panel-create {
@@ -152,6 +147,9 @@ body {
 
 /* Single-column flex layout for tab content inside the detail panel */
 .panel-tab-body {
+    flex: 1 1 0;
+    overflow-y: auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -164,13 +162,8 @@ body {
 }
 
 /* BoxDetail summary grid: force single column inside the panel */
-.panel-detail__body .box-detail-summary-grid {
+.panel-tab-body .box-detail-summary-grid {
     grid-template-columns: 1fr;
-}
-
-/* BoxDetail cards inside the tab body */
-.panel-detail__body .card {
-    margin-bottom: 0;
 }
 
 /* On large screens, cards inside the right-column panels have no visual chrome —
