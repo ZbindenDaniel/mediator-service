@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePanelContext } from '../context/PanelContext';
-import { useSetBoxActions } from '../context/BoxActionsContext';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
@@ -115,7 +114,6 @@ export default function BoxDetail({ boxId }: Props) {
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
   const boxPhotoInputRef = useRef<HTMLInputElement | null>(null);
-  const setBoxActions = useSetBoxActions();
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
   const normalizedLocationId = useMemo(() => {
     if (typeof box?.LocationId !== 'string') {
@@ -694,23 +692,6 @@ export default function BoxDetail({ boxId }: Props) {
 
   const { activeTab } = usePanelContext();
 
-  // Register / update box action slot when relevant state changes.
-  useEffect(() => {
-    if (!setBoxActions || !box) {
-      setBoxActions?.(null);
-      return;
-    }
-    setBoxActions({
-      boxId: box.BoxID,
-      onAddItem: () => setShowAdd(true),
-      onUploadImage: isBoxRelocatable ? () => boxPhotoInputRef.current?.click() : undefined,
-    });
-  }, [setBoxActions, box, isBoxRelocatable]);
-
-  // Clear action slot on unmount.
-  useEffect(() => {
-    return () => setBoxActions?.(null);
-  }, [setBoxActions]);
 
   if (isLoading) {
     return <LoadingPage message="Behälter wird geladen…" />;

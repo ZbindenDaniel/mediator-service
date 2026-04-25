@@ -80,7 +80,6 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import { ShopStatusForm, type ShopStatusValues } from './BulkItemActionBar';
-import { useSetItemActions } from '../context/ItemActionsContext';
 import { usePanelContext } from '../context/PanelContext';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
@@ -948,20 +947,6 @@ export default function ItemDetail({ itemId }: Props) {
     itemId: null,
     active: false
   });
-  // Holds latest action callbacks; updated each render so the stable context wrappers always call current handlers.
-  const agenticHandlersRef = useRef<{
-    onStart?: () => void | Promise<void>;
-    onReview?: () => void | Promise<void>;
-    onCancel?: () => void | Promise<void>;
-    onClose?: () => void | Promise<void>;
-    onDelete?: () => void | Promise<void>;
-    onUploadImage?: () => void;
-    onNeighborNav?: (direction: 'previous' | 'next') => void;
-    onEdit?: () => void;
-    onStartRelocate?: () => void;
-    onShopStatus?: () => void;
-  }>({});
-  const setItemActions = useSetItemActions();
   const { setEntity, setMainView, activeTab } = usePanelContext();
 
   // Navigate to BoxList and activate the box in the detail panel.
@@ -2133,44 +2118,6 @@ export default function ItemDetail({ itemId }: Props) {
   );
   const agenticStartLabel = agenticHasRun ? 'Starten' : 'Start KI-Lauf';
 
-  // Register / update action slot whenever relevant state changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!setItemActions) return;
-    if (!item) {
-      setItemActions(null);
-      return;
-    }
-    setItemActions({
-      itemId,
-      agenticNeedsReview,
-      agenticCanStart,
-      agenticCanRestart,
-      agenticCanCancel,
-      agenticCanClose,
-      agenticCanDelete,
-      agenticActionPending,
-      startLabel: agenticStartLabel,
-      neighborIds,
-      neighborsLoading,
-      // Stable wrappers: always delegate to the latest handler captured in the ref above.
-      onStart: () => void agenticHandlersRef.current.onStart?.(),
-      onReview: () => void agenticHandlersRef.current.onReview?.(),
-      onCancel: () => void agenticHandlersRef.current.onCancel?.(),
-      onClose: () => void agenticHandlersRef.current.onClose?.(),
-      onDelete: () => void agenticHandlersRef.current.onDelete?.(),
-      onUploadImage: () => void agenticHandlersRef.current.onUploadImage?.(),
-      onNeighborNav: (dir) => agenticHandlersRef.current.onNeighborNav?.(dir),
-      onEdit: () => agenticHandlersRef.current.onEdit?.(),
-      onStartRelocate: () => agenticHandlersRef.current.onStartRelocate?.(),
-      onShopStatus: () => agenticHandlersRef.current.onShopStatus?.(),
-    });
-  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticCanClose, agenticCanDelete, agenticActionPending, agenticStartLabel, neighborIds, neighborsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Clear the action slot when ItemDetail unmounts.
-  useEffect(() => {
-    return () => setItemActions?.(null);
-  }, [setItemActions]);
 
   if (isLoading) {
     return <LoadingPage message="Artikel wird geladen…" />;
@@ -3331,19 +3278,6 @@ export default function ItemDetail({ itemId }: Props) {
     } catch { /* noop */ }
   }
 
-  // Keep ref current every render so stable context wrappers below always invoke the latest handler.
-  agenticHandlersRef.current = {
-    onStart: agenticCanStart ? () => void agenticStartHandler() : undefined,
-    onReview: () => void handleAgenticReview(),
-    onCancel: agenticCanCancel ? () => void handleAgenticCancel() : undefined,
-    onClose: agenticCanClose ? () => void handleAgenticClose() : undefined,
-    onDelete: agenticCanDelete ? () => void handleAgenticDelete() : undefined,
-    onUploadImage: () => handleMediaAdd(),
-    onNeighborNav: (dir) => handleNeighborNavigation(dir),
-    onEdit: () => void handleEdit(),
-    onStartRelocate: () => setShowRelocate(true),
-    onShopStatus: () => void handleShopStatus(),
-  };
 
   // Always render in tab mode; default to 'reference' if no tab is set in the URL.
   if (item) {
