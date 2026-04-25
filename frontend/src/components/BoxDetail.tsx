@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePanelContext } from '../context/PanelContext';
+import DetailTabBar from './DetailTabBar';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
@@ -691,7 +692,7 @@ export default function BoxDetail({ boxId }: Props) {
   }, [box?.BoxID]);
 
   const { activeTab } = usePanelContext();
-
+  const effectiveTab = activeTab ?? 'info';
 
   if (isLoading) {
     return <LoadingPage message="Behälter wird geladen…" />;
@@ -717,11 +718,14 @@ export default function BoxDetail({ boxId }: Props) {
   }
 
   return (
-    <div className="container box box-detail-container">
+    <>
+      <DetailTabBar />
+      <div className="panel-tab-body">
+      <div className="container box box-detail-container">
       <div className="grid landing-grid">
         {box ? (
           <>
-            {(activeTab === null || activeTab === 'info') && (
+            {effectiveTab === 'info' && (
             <div className="box-detail-summary-grid grid-span-2">
               <div className="box-detail-summary-column">
                 <div className="card">
@@ -911,7 +915,7 @@ export default function BoxDetail({ boxId }: Props) {
             </div>
             )}
 
-            {(activeTab === null || activeTab === 'images') && isBoxRelocatable && (
+            {effectiveTab === 'images' && isBoxRelocatable && (
             <div className="card grid-span-2">
               <h3>Fotos</h3>
               <div className="note-photo-controls">
@@ -954,7 +958,7 @@ export default function BoxDetail({ boxId }: Props) {
             </div>
             )}
 
-            {(activeTab === null || activeTab === 'items') && (
+            {effectiveTab === 'items' && (
             <div className="card grid-span-2">
               <div className='row' style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>Artikel</h3>
@@ -1074,25 +1078,11 @@ export default function BoxDetail({ boxId }: Props) {
                     hinzufügen
                   </button>
                 </div>
-                {showAdd && (
-                  <AddItemToBoxDialog
-                    boxId={boxId}
-                    onAdded={() => {
-                      setQrReturnPayload(null);
-                      void load({ showSpinner: false });
-                    }}
-                    onClose={() => {
-                      setShowAdd(false);
-                      setQrReturnPayload(null);
-                    }}
-                    qrReturnPayload={qrReturnPayload}
-                  />
-                )}
               </div>
             </div>
             )}
 
-            {(activeTab === null || activeTab === 'events') && (
+            {effectiveTab === 'events' && (
             <div className="card grid-span-2">
               <h3>Aktivitäten</h3>
               <ul className="events">
@@ -1110,49 +1100,63 @@ export default function BoxDetail({ boxId }: Props) {
           <p>Loading...</p>
         )}
       </div>
-      {
-        isPhotoModalOpen && photoPreview ? (
+      </div>
+      </div>
+      {showAdd && (
+        <AddItemToBoxDialog
+          boxId={boxId}
+          onAdded={() => {
+            setQrReturnPayload(null);
+            void load({ showSpinner: false });
+          }}
+          onClose={() => {
+            setShowAdd(false);
+            setQrReturnPayload(null);
+          }}
+          qrReturnPayload={qrReturnPayload}
+        />
+      )}
+      {isPhotoModalOpen && photoPreview ? (
+        <div
+          className="dialog-overlay item-media-gallery__overlay"
+          role="presentation"
+          onClick={closePhotoModal}
+        >
           <div
-            className="dialog-overlay item-media-gallery__overlay"
-            role="presentation"
-            onClick={closePhotoModal}
+            className="dialog-content item-media-gallery__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={photoDialogTitleId}
+            tabIndex={-1}
+            ref={photoModalRef}
+            onClick={(event) => event.stopPropagation()}
           >
-            <div
-              className="dialog-content item-media-gallery__dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={photoDialogTitleId}
-              tabIndex={-1}
-              ref={photoModalRef}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="item-media-gallery__dialog-header">
-                <h2 id={photoDialogTitleId} className="dialog-title">
-                  Box-Foto
-                </h2>
-                <button
-                  type="button"
-                  className="item-media-gallery__dialog-close"
-                  onClick={closePhotoModal}
-                >
-                  Schließen
-                </button>
-              </header>
-              <div className="item-media-gallery__dialog-body">
-                <img
-                  className="item-media-gallery__dialog-image"
-                  src={photoPreview}
-                  alt={`Foto für Behälter ${box?.BoxID ?? boxId}`}
-                  onError={handlePhotoImageError}
-                />
-                <figcaption className="item-media-gallery__dialog-caption">
-                  Foto für Behälter {box?.BoxID ?? boxId}
-                </figcaption>
-              </div>
+            <header className="item-media-gallery__dialog-header">
+              <h2 id={photoDialogTitleId} className="dialog-title">
+                Box-Foto
+              </h2>
+              <button
+                type="button"
+                className="item-media-gallery__dialog-close"
+                onClick={closePhotoModal}
+              >
+                Schließen
+              </button>
+            </header>
+            <div className="item-media-gallery__dialog-body">
+              <img
+                className="item-media-gallery__dialog-image"
+                src={photoPreview}
+                alt={`Foto für Behälter ${box?.BoxID ?? boxId}`}
+                onError={handlePhotoImageError}
+              />
+              <figcaption className="item-media-gallery__dialog-caption">
+                Foto für Behälter {box?.BoxID ?? boxId}
+              </figcaption>
             </div>
           </div>
-        ) : null
-      }
-    </div >
+        </div>
+      ) : null}
+    </>
   );
 }

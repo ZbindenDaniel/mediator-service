@@ -6,7 +6,6 @@ import { BulkSelectionProvider, useBulkSelection } from '../context/BulkSelectio
 import ItemDetail from './ItemDetail';
 import BoxDetail from './BoxDetail';
 import ItemCreate from './ItemCreate';
-import DetailTabBar from './DetailTabBar';
 import MultiItemSummary from './MultiItemSummary';
 
 function MultiItemDetailPanel() {
@@ -55,15 +54,9 @@ export default function Layout({ children }: { children: ReactNode }) {
                   {hasMultiSelection ? (
                     <MultiItemDetailPanel />
                   ) : entityType === 'item' && entityId ? (
-                    // DetailTabBar is rendered inside ItemDetail so it can pass agenticNeedsReview directly
                     <ItemDetail itemId={entityId} />
                   ) : entityType === 'box' && entityId ? (
-                    <>
-                      <DetailTabBar />
-                      <div className="panel-detail__body">
-                        <BoxDetail boxId={entityId} />
-                      </div>
-                    </>
+                    <BoxDetail boxId={entityId} />
                   ) : null}
                 </div>
               )}
