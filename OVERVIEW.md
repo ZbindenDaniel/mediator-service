@@ -7,6 +7,15 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+732. ✅ ItemDetail: strip dead inline ZubehoerCard/AttachmentsCard, displayedEvents, resolveActorName, eventLabel import
+   - **Why:** These existed only to support the legacy full-scroll view removed in step 731. Dead code removed in small commit batches to keep each diff reviewable.
+   - **Deferred:** Remaining dead state (neighbor fetch, setItemActions, galleryAssets for tab-only view) — ActionPanel context must be removed first before those can go.
+731. ✅ ItemDetail: remove legacy full-scroll view; always render in tab mode
+   - **Why:** User confirmed tabs-only on all screen sizes; the fallthrough path that rendered a legacy single-scroll layout when activeTab was null is now replaced by `activeTab ?? 'reference'`. Reduces ItemDetail by ~430 lines and eliminates a divergent rendering path.
+   - **Deferred:** Inline ZubehoerCard/AttachmentsCard (removed in step 732), and dead imports from the legacy path.
+730. ✅ DetailTabBar: remove ItemActionsContext dependency; badge driven by prop
+   - **Why:** First step toward deleting ItemActionsContext. Badge (`agenticNeedsReview`) is now an optional prop defaulting to false; no context read at the tab bar level. Badge will be reconnected once ItemDetail passes the value directly.
+   - **Deferred:** Actually wiring the prop from ItemDetail — pending next batch.
 729. ✅ Activities open detail panel; review tab merged into KI; accessories navigate right; AI stats removed from dashboard:
    - **Activities**: `RecentEventsList` replaced all `<Link>` navigation with row-click handlers calling `setEntity('item'|'box', id)` (no `setMainView`), so clicking an event opens the item/box in the right detail panel while keeping the left panel on the activities list.
    - **Review tab removed**: `DetailTabBar` no longer conditionally inserts a "Review" tab. Review state is indicated by an amber dot badge on the KI tab. Old URLs with `tab=review` still render the KI content (DetailTabBar maps 'review' → 'ki' for the active-tab highlight).
