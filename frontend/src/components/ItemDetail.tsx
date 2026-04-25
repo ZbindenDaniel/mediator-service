@@ -39,7 +39,6 @@ import {
 import { describeQuality } from '../../../models/quality';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
-import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
@@ -633,9 +632,6 @@ export function AgenticStatusCard({
   );
 }
 
-function resolveActorName(actor?: string | null): string {
-  return actor && actor.trim() ? actor : 'System';
-}
 
 export interface AgenticRestartRequestInput {
   actor: string;
@@ -1284,16 +1280,11 @@ export default function ItemDetail({ itemId }: Props) {
     [unterCategoryLookup]
   );
 
-  // TODO: Replace client-side slicing once the activities page provides pagination.
-  const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
-
   // TODO: Revisit optional category rendering once backend schema clarifies optional Haupt-/Unterkategorien fields.
   const detailRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
       return [];
     }
-
-    const creator = resolveActorName(events.length ? events[events.length - 1].Actor : null);
 
     const createdDisplay = item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null;
     let updatedDisplay: React.ReactNode = null;
