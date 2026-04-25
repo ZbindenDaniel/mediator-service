@@ -41,11 +41,11 @@
 
 ## Priority 2 — Feature Improvements
 
-22. **Continue ItemDetail slim-down.** Next batches: (a) move `DetailTabBar` rendering inside `ItemDetail` so it can pass `agenticNeedsReview` directly; (b) remove `setItemActions`/`agenticHandlersRef` once `ActionPanel` is removed; (c) delete `ItemActionsContext`, `BoxActionsContext`, `ActionPanel`; (d) apply same tab-gating to `BoxDetail`.
+22. **Apply tab-gating to BoxDetail.** ItemDetail's per-tab rendering pattern should be mirrored in BoxDetail so each box tab shows only its content slice (info / images / items / events).
 
-19. **Wire `item × attachments` action panel slot.** `AttachmentsCard` already has an inline "Datei anhängen" button. To add an action panel button, expose `fileRef.current?.click()` via a `uploadTriggerRef` prop threaded through `ItemAttachmentsTab` → `ItemActionsContext`. Low priority since inline button already covers the use case. Will be superseded when ActionPanel is removed.
+19. ~~**Wire `item × attachments` action panel slot.**~~ Superseded — ActionPanel deleted; inline button in AttachmentsCard already covers the use case.
 
-20. **Wire `item × accessories` action panel slot.** `ZubehoerCard` has inline `RefSearchInput` fields (always visible) — no single "add" trigger to expose. Will be superseded when ActionPanel is removed.
+20. ~~**Wire `item × accessories` action panel slot.**~~ Superseded — ActionPanel deleted; inline RefSearchInput fields cover the use case.
 
 21. **Box images tab empty for shelves.** Shelf boxes (`S-*`) are not `isBoxRelocatable`, so the images tab renders nothing. Revisit when shelf photo support is defined.
 

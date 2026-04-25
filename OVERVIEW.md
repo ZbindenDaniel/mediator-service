@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+733. ✅ Delete ActionPanel, ItemActionsContext, BoxActionsContext
+   - **Why:** Actions now live in their respective tabs; the dispatch layer that bridged ItemDetail/BoxDetail state into a separate ActionPanel panel is no longer needed. Removes 526 lines and two context files with no behavior change.
+   - **Deferred:** nothing deferred.
 732. ✅ ItemDetail: strip dead inline ZubehoerCard/AttachmentsCard, displayedEvents, resolveActorName, eventLabel import
    - **Why:** These existed only to support the legacy full-scroll view removed in step 731. Dead code removed in small commit batches to keep each diff reviewable.
    - **Deferred:** Remaining dead state (neighbor fetch, setItemActions, galleryAssets for tab-only view) — ActionPanel context must be removed first before those can go.
