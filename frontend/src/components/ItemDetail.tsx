@@ -89,6 +89,7 @@ import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
 import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
+import DetailTabBar from './DetailTabBar';
 import ItemReferenceTab from './item-tabs/ItemReferenceTab';
 import ItemKiTab, { type SpecFieldModalState } from './item-tabs/ItemKiTab';
 import ItemInstanceTab from './item-tabs/ItemInstanceTab';
@@ -3486,7 +3487,12 @@ export default function ItemDetail({ itemId }: Props) {
         );
     }
 
-    return <div className="panel-tab-body">{tabContent}</div>;
+    return (
+      <>
+        <DetailTabBar agenticNeedsReview={agenticNeedsReview} />
+        <div className="panel-tab-body">{tabContent}</div>
+      </>
+    );
   }
 
 

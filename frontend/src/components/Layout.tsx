@@ -63,12 +63,8 @@ export default function Layout({ children }: { children: ReactNode }) {
                     {hasMultiSelection ? (
                       <MultiItemDetailPanel />
                     ) : entityType === 'item' && entityId ? (
-                      <>
-                        <DetailTabBar />
-                        <div className="panel-detail__body">
-                          <ItemDetail itemId={entityId} />
-                        </div>
-                      </>
+                      // DetailTabBar is rendered inside ItemDetail so it can pass agenticNeedsReview directly
+                      <ItemDetail itemId={entityId} />
                     ) : entityType === 'box' && entityId ? (
                       <>
                         <DetailTabBar />
