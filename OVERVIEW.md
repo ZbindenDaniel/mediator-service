@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+735. ✅ Close Gap 3: fix shell navigation, delete dead landing page
+   - **Why:** BoxDetail's item-row click was doing a full-page `navigate('/items/:id')`, breaking the shell layout. Replaced with `setEntity + setMainView`. LandingPage had no route since step 726; SearchCard and RecentBoxesCard were its only consumers and are now deleted (326 lines gone).
+   - **Deferred:** BoxList has a `navigate` fallback when no `onSelect` is provided, but BoxListPage always passes `onSelect` so this path is never reached.
 734. ✅ BoxDetail: move DetailTabBar inside, strict tab gating
    - **Why:** Mirrors ItemDetail's tab pattern. `effectiveTab = activeTab ?? 'info'` replaces the `activeTab === null || activeTab === 'xxx'` guards. AddItemToBoxDialog moved outside the grid so QR-return triggers work regardless of active tab. Layout.tsx simplified to render BoxDetail directly.
    - **Deferred:** nothing deferred.
