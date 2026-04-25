@@ -13,6 +13,10 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0. **Eliminate duplicate `/api/items` fetch on item selection.** When switching items via the list, ItemDetail's neighbor-resolution `useEffect` (`[itemId, neighborContext]`) fetches `/api/items` independently from the list fetch in `ItemListPage`. Fix: `handleItemSelect` in `ItemListPage` should encode `prev=<prevId>&next=<nextId>` as URL params when calling `setEntity` so ItemDetail reads them from `searchParams` and skips its own fetch (the `prev`/`next` params are already supported by ItemDetail's `neighborContext` memoization).
+
+0b. **Filter state resets intermittently when switching items.** `ItemListPage` re-runs its filter-init `useEffect` on every `searchParams` change, including PanelContext's `entity/id/tab` updates. React bails out when state values are unchanged (primitives), but `setFiltersReady(true)` always runs. Under certain timing conditions (e.g. fast item switching), this may reset in-flight filter changes. Investigation needed — add guard to bail out early if `entity`/`id`/`tab` are the only changed params.
+
 1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
 
 1b. **Restore mobile bulk-action controls.** `BulkItemActionBar` was moved from `ItemListPage` to the shell action panel (Steps 8–9). The action panel is hidden below 900px, so bulk actions (KI, relocate, export) are not accessible on mobile. Add a fallback for small screens.
@@ -36,6 +40,14 @@
 ---
 
 ## Priority 2 — Feature Improvements
+
+22. ✅ **Apply tab-gating to BoxDetail.** Done — each box tab now shows only its content slice; DetailTabBar renders inside BoxDetail.
+
+19. ~~**Wire `item × attachments` action panel slot.**~~ Superseded — ActionPanel deleted; inline button in AttachmentsCard already covers the use case.
+
+20. ~~**Wire `item × accessories` action panel slot.**~~ Superseded — ActionPanel deleted; inline RefSearchInput fields cover the use case.
+
+21. **Box images tab empty for shelves.** Shelf boxes (`S-*`) are not `isBoxRelocatable`, so the images tab renders nothing. Revisit when shelf photo support is defined.
 
 8. **Ensure shelf weight and item count are calculated correctly.** Current totals are incomplete or inaccurate. Aggregation should cover both nested boxes and loose items. **Goal:** align aggregation logic across backend/frontend models while reusing existing summary helpers.
 

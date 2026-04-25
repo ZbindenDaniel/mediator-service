@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { usePanelContext } from '../context/PanelContext';
+import DetailTabBar from './DetailTabBar';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
@@ -112,6 +114,7 @@ export default function BoxDetail({ boxId }: Props) {
   const location = useLocation();
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
+  const boxPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
   const normalizedLocationId = useMemo(() => {
     if (typeof box?.LocationId !== 'string') {
@@ -133,11 +136,12 @@ export default function BoxDetail({ boxId }: Props) {
 
     try {
       logger.info('Navigating to item detail from box detail row', { boxId, itemId, source });
-      navigate(`/items/${encodeURIComponent(itemId)}`);
+      setEntity('item', itemId);
+      setMainView('items');
     } catch (error) {
       logError('Failed to navigate to item detail from box detail row', error, { boxId, itemId, source });
     }
-  }, [boxId, navigate]);
+  }, [boxId, setEntity, setMainView]);
 
   const handleNavigateToItems = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -688,6 +692,9 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID]);
 
+  const { activeTab, setEntity, setMainView } = usePanelContext();
+  const effectiveTab = activeTab ?? 'info';
+
   if (isLoading) {
     return <LoadingPage message="Behälter wird geladen…" />;
   }
@@ -712,10 +719,14 @@ export default function BoxDetail({ boxId }: Props) {
   }
 
   return (
-    <div className="container box box-detail-container">
+    <>
+      <DetailTabBar />
+      <div className="panel-tab-body">
+      <div className="container box box-detail-container">
       <div className="grid landing-grid">
         {box ? (
           <>
+            {effectiveTab === 'info' && (
             <div className="box-detail-summary-grid grid-span-2">
               <div className="box-detail-summary-column">
                 <div className="card">
@@ -903,7 +914,52 @@ export default function BoxDetail({ boxId }: Props) {
                 ) : null}
               </div>
             </div>
+            )}
 
+            {effectiveTab === 'images' && isBoxRelocatable && (
+            <div className="card grid-span-2">
+              <h3>Fotos</h3>
+              <div className="note-photo-controls">
+                {photoPreview ? (
+                  <>
+                    <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
+                      <img
+                        src={photoPreview}
+                        alt="Aktuelles Box-Foto"
+                        style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
+                        onClick={openPhotoModal}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            openPhotoModal();
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-haspopup="dialog"
+                        aria-label="Box-Foto vergrößern"
+                        onError={handlePhotoImageError}
+                      />
+                    </figure>
+                    <div className='row'>
+                      <button type="button" className="btn danger" onClick={handlePhotoRemove}>Foto entfernen</button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="muted">Kein Foto gespeichert.</p>
+                )}
+                <input
+                  ref={boxPhotoInputRef}
+                  type="file"
+                  id="box-photo-upload"
+                  accept="image/*"
+                  onChange={handlePhotoFileChange}
+                />
+              </div>
+            </div>
+            )}
+
+            {effectiveTab === 'items' && (
             <div className="card grid-span-2">
               <div className='row' style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>Artikel</h3>
@@ -1023,23 +1079,11 @@ export default function BoxDetail({ boxId }: Props) {
                     hinzufügen
                   </button>
                 </div>
-                {showAdd && (
-                  <AddItemToBoxDialog
-                    boxId={boxId}
-                    onAdded={() => {
-                      setQrReturnPayload(null);
-                      void load({ showSpinner: false });
-                    }}
-                    onClose={() => {
-                      setShowAdd(false);
-                      setQrReturnPayload(null);
-                    }}
-                    qrReturnPayload={qrReturnPayload}
-                  />
-                )}
               </div>
             </div>
+            )}
 
+            {effectiveTab === 'events' && (
             <div className="card grid-span-2">
               <h3>Aktivitäten</h3>
               <ul className="events">
@@ -1051,54 +1095,69 @@ export default function BoxDetail({ boxId }: Props) {
                 ))}
               </ul>
             </div>
+            )}
           </>
         ) : (
           <p>Loading...</p>
         )}
       </div>
-      {
-        isPhotoModalOpen && photoPreview ? (
+      </div>
+      </div>
+      {showAdd && (
+        <AddItemToBoxDialog
+          boxId={boxId}
+          onAdded={() => {
+            setQrReturnPayload(null);
+            void load({ showSpinner: false });
+          }}
+          onClose={() => {
+            setShowAdd(false);
+            setQrReturnPayload(null);
+          }}
+          qrReturnPayload={qrReturnPayload}
+        />
+      )}
+      {isPhotoModalOpen && photoPreview ? (
+        <div
+          className="dialog-overlay item-media-gallery__overlay"
+          role="presentation"
+          onClick={closePhotoModal}
+        >
           <div
-            className="dialog-overlay item-media-gallery__overlay"
-            role="presentation"
-            onClick={closePhotoModal}
+            className="dialog-content item-media-gallery__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={photoDialogTitleId}
+            tabIndex={-1}
+            ref={photoModalRef}
+            onClick={(event) => event.stopPropagation()}
           >
-            <div
-              className="dialog-content item-media-gallery__dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={photoDialogTitleId}
-              tabIndex={-1}
-              ref={photoModalRef}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <header className="item-media-gallery__dialog-header">
-                <h2 id={photoDialogTitleId} className="dialog-title">
-                  Box-Foto
-                </h2>
-                <button
-                  type="button"
-                  className="item-media-gallery__dialog-close"
-                  onClick={closePhotoModal}
-                >
-                  Schließen
-                </button>
-              </header>
-              <div className="item-media-gallery__dialog-body">
-                <img
-                  className="item-media-gallery__dialog-image"
-                  src={photoPreview}
-                  alt={`Foto für Behälter ${box?.BoxID ?? boxId}`}
-                  onError={handlePhotoImageError}
-                />
-                <figcaption className="item-media-gallery__dialog-caption">
-                  Foto für Behälter {box?.BoxID ?? boxId}
-                </figcaption>
-              </div>
+            <header className="item-media-gallery__dialog-header">
+              <h2 id={photoDialogTitleId} className="dialog-title">
+                Box-Foto
+              </h2>
+              <button
+                type="button"
+                className="item-media-gallery__dialog-close"
+                onClick={closePhotoModal}
+              >
+                Schließen
+              </button>
+            </header>
+            <div className="item-media-gallery__dialog-body">
+              <img
+                className="item-media-gallery__dialog-image"
+                src={photoPreview}
+                alt={`Foto für Behälter ${box?.BoxID ?? boxId}`}
+                onError={handlePhotoImageError}
+              />
+              <figcaption className="item-media-gallery__dialog-caption">
+                Foto für Behälter {box?.BoxID ?? boxId}
+              </figcaption>
             </div>
           </div>
-        ) : null
-      }
-    </div >
+        </div>
+      ) : null}
+    </>
   );
 }

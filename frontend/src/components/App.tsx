@@ -6,7 +6,6 @@ import { PanelProvider, usePanelContext } from '../context/PanelContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
-import LandingPage from './LandingPage';
 import QrScannerPage from './QrScannerPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
@@ -55,7 +54,7 @@ function BoxEditRoute() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route path="/" element={<ItemListPage />} />
       <Route path="/boxes" element={<BoxListPage />} />
       <Route path="/boxes/:boxId" element={<BoxRoute />} />
       <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />

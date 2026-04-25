@@ -111,28 +111,26 @@ body {
     flex: 0 0 38%;
     min-width: 0;
     position: sticky;
-    top: 0;
-    height: 100vh;
+    top: 74px;
+    height: calc(100vh - 74px);
     display: flex;
     flex-direction: column;
+    border-left: 5px solid var(--head);
+
 }
 
 .panel-detail {
-    flex: 62 0 0;
+    flex: 1 1 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0;
 }
 
 .panel-detail__body {
     flex: 1 1 0;
     overflow-y: auto;
     min-height: 0;
-}
-
-.panel-action {
-    flex: 38 0 0;
-    overflow-y: auto;
 }
 
 .panel-create {
@@ -147,6 +145,55 @@ body {
     justify-content: flex-end;
 }
 
+/* Single-column flex layout for tab content inside the detail panel */
+.panel-tab-body {
+    flex: 1 1 0;
+    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+}
+
+/* Cards inside the tab body manage their own spacing via gap, not margin-bottom */
+.panel-tab-body>.card {
+    margin-bottom: 0;
+}
+
+/* BoxDetail summary grid: force single column inside the panel */
+.panel-tab-body .box-detail-summary-grid {
+    grid-template-columns: 1fr;
+}
+
+/* On large screens, cards inside the right-column panels have no visual chrome —
+   the panel borders + padding provide the container. Flat content reads better
+   in the ~400px detail/action slots than boxed cards. */
+@media (min-width: 900px) {
+    .app-shell__right .card {
+        background: none;
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
+        margin-bottom: 0;
+    }
+}
+
+/* Action panel nav row: two buttons side by side */
+.action-panel__nav-row {
+    display: flex;
+    gap: 8px;
+}
+
+/* Badges row in reference tab */
+.item-reference-tab__badges {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
 /* Button styled as an inline link for cross-entity navigation inside detail panels */
 .link-btn {
     background: none;
@@ -157,6 +204,7 @@ body {
     font: inherit;
     text-decoration: underline;
 }
+
 .link-btn:hover {
     opacity: 0.8;
 }
@@ -185,14 +233,25 @@ body {
 
     &:hover {
         color: var(--fg);
-        background: var(--hover-bg, rgba(0, 0, 0, 0.04));
+        background: var(--head, rgba(0, 0, 0, 0.04));
     }
 
     &.is-active {
         color: var(--fg);
-        border-bottom-color: var(--accent, #0066cc);
+        border-bottom-color: var(--head, rgba(0, 0, 0, 0.04));
         font-weight: 600;
     }
+}
+
+.tab-badge {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-warning, #f59e0b);
+    margin-left: 4px;
+    vertical-align: middle;
+    flex-shrink: 0;
 }
 
 /* === Action panel content === */
@@ -605,7 +664,6 @@ div {
 
 .details th {
     text-align: left;
-    padding-right: 0.5rem;
 }
 
 /* TODO(agent): Revisit table sizing rules once layout tokens are standardized across cards. */
@@ -1289,6 +1347,27 @@ button:hover {
     filter: brightness(.95)
 }
 
+/* BEM modifier variants used in ActionPanel */
+.btn--primary {
+    background: var(--acc);
+    color: #fff;
+    border-color: var(--acc);
+}
+
+.btn--primary:hover {
+    filter: brightness(.95);
+}
+
+.btn--danger {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.btn--danger:hover {
+    filter: brightness(.9);
+}
+
 input:focus,
 textarea:focus,
 select:focus,
@@ -1661,7 +1740,8 @@ button:focus {
     align-items: center;
     gap: 6px;
     width: 29%;
-    min-width: 220px;;
+    min-width: 220px;
+    ;
     padding: var(--pad) 14px;
     border-radius: var(--radius);
     border: 1px solid var(--line);
@@ -1968,6 +2048,11 @@ button:focus {
 .item-row--out-of-stock {
     opacity: 0.6;
     border-left: 3px solid var(--muted, #94a3b8);
+}
+
+.item-list-row--selected {
+    background: var(--accent-muted, rgba(59, 130, 246, 0.08));
+    border-left: 3px solid var(--head, #3b82f6);
 }
 
 /* Box list */
@@ -2619,8 +2704,10 @@ button:focus {
 }
 
 .quality-badge--compact {
-    padding: 2px 6px;
-    font-size: 10px;
+    padding: 1px 4px;
+    font-size: 9px;
+    height: auto;
+    min-width: unset;
 }
 
 .shop-badge {
@@ -2640,8 +2727,11 @@ button:focus {
 }
 
 .shop-badge--compact {
-    padding: 2px 6px;
-    font-size: 10px;
+    padding: 1px 4px;
+    font-size: 9px;
+    height: auto;
+    min-width: unset;
+    border-width: 1px;
 }
 
 .quality-slider__labels {

@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import type { EventLog } from '../../../models';
 import { formatDate } from '../lib/format';
 import { eventLabel } from '../../../models/event-labels';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
+import { usePanelContext } from '../context/PanelContext';
 
 // TODO(agent): Surface active topic filters in the UI to avoid confusing operators.
 // TODO(agent): Follow up on filtering the activities feed by query once backend support lands.
@@ -30,7 +31,7 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
     if (event.EntityType === 'Box') {
       if (event.EntityId) {
         return {
-          path: `/boxes/${encodeURIComponent(event.EntityId)}`,
+          path: `/boxes?entity=box&id=${encodeURIComponent(event.EntityId)}`,
           ariaSuffix: `Behälter ${event.EntityId}`,
         };
       }
@@ -52,7 +53,7 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
             eventId: event.Id,
           });
           return {
-            path: `/items/${encodeURIComponent(artikelNummer)}`,
+            path: `/items?entity=item&id=${encodeURIComponent(artikelNummer)}`,
             ariaSuffix: `Artikel ${artikelNummer}`,
           };
         }
@@ -65,7 +66,7 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
             eventId: event.Id,
           });
           return {
-            path: `/items/${encodeURIComponent(itemUUID)}`,
+            path: `/items?entity=item&id=${encodeURIComponent(itemUUID)}`,
             ariaSuffix: `Artikel ${itemUUID}`,
           };
         }
@@ -100,6 +101,21 @@ interface Props {
 
 export function RecentEventsList({ events }: Props) {
   const allowedEvents = filterVisibleEvents(events);
+  const { setEntity } = usePanelContext();
+
+  const handleEventClick = (e: EventLog) => {
+    const { ariaSuffix } = resolveEventLink(e);
+    void ariaSuffix; // still used for aria-label below
+    if (e.EntityType === 'Box' && e.EntityId) {
+      setEntity('box', e.EntityId);
+    } else if (e.EntityType === 'Item') {
+      const id = (typeof e.Artikel_Nummer === 'string' && e.Artikel_Nummer.trim())
+        || (typeof e.EntityId === 'string' && e.EntityId.trim())
+        || null;
+      if (id) setEntity('item', id);
+    }
+  };
+
   return (
     <div id="eventsOut" className="list">
       {allowedEvents.length ? (
@@ -117,7 +133,7 @@ export function RecentEventsList({ events }: Props) {
             </thead>
             <tbody>
               {allowedEvents.map((e) => {
-                const { path, ariaSuffix } = resolveEventLink(e);
+                const { ariaSuffix } = resolveEventLink(e);
                 const formattedDate = formatDate(e.CreatedAt);
                 const label = eventLabel(e.Event);
                 const actorText = e.Actor ?? '[?]';
@@ -128,37 +144,21 @@ export function RecentEventsList({ events }: Props) {
                 const artikelbezeichnung = e.Artikelbeschreibung ?? '—';
 
                 return (
-                  <tr key={e.Id}>
-                    <td>
-                      <Link className="linkcard" to={path} tabIndex={0} aria-label={ariaLabel}>
-                        <span className={`pill ${e.EntityType}`}>{typeLabel}</span>
-                      </Link>
-                    </td>
-                    <td>
-                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
-                        {entityId}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
-                        {artikelbezeichnung}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
-                        {actorText}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
-                        {label}
-                      </Link>
-                    </td>
-                    <td>
-                      <Link className="linkcard" to={path} tabIndex={-1} aria-hidden="true">
-                        {formattedDate}
-                      </Link>
-                    </td>
+                  <tr
+                    key={e.Id}
+                    className="item-list-row"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={ariaLabel}
+                    onClick={() => handleEventClick(e)}
+                    onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') handleEventClick(e); }}
+                  >
+                    <td><span className={`pill ${e.EntityType}`}>{typeLabel}</span></td>
+                    <td>{entityId}</td>
+                    <td>{artikelbezeichnung}</td>
+                    <td>{actorText}</td>
+                    <td>{label}</td>
+                    <td>{formattedDate}</td>
                   </tr>
                 );
               })}

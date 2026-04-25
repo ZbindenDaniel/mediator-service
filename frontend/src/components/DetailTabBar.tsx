@@ -1,25 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { usePanelContext } from '../context/PanelContext';
-import { useItemActions } from '../context/ItemActionsContext';
 
 interface TabDef {
   id: string;
   label: string;
 }
 
+interface Props {
+  /** Dot indicator on the KI tab when an agentic review is pending. */
+  agenticNeedsReview?: boolean;
+}
+
 const ITEM_BASE_TABS: TabDef[] = [
   { id: 'reference', label: 'Referenz' },
-  { id: 'instance', label: 'Exemplar' },
+  { id: 'ki', label: 'KI' },
+  { id: 'instance', label: 'Vorrat' },
   { id: 'images', label: 'Bilder' },
   { id: 'attachments', label: 'Anhänge' },
   { id: 'accessories', label: 'Zubehör' },
   { id: 'events', label: 'Aktivitäten' },
 ];
-
-const REVIEW_TAB: TabDef = { id: 'review', label: 'Review' };
-
-// review tab inserted after 'instance' (index 1) only when agentic review is pending
-const REVIEW_INSERT_INDEX = 2;
 
 const BOX_BASE_TABS: TabDef[] = [
   { id: 'info', label: 'Info' },
@@ -28,7 +28,6 @@ const BOX_BASE_TABS: TabDef[] = [
   { id: 'events', label: 'Aktivitäten' },
 ];
 
-// stubs tab appended only for shelves (BoxID starts with S-)
 const STUBS_TAB: TabDef = { id: 'stubs', label: 'Stubs' };
 
 function isShelfId(boxId: string): boolean {
@@ -39,9 +38,41 @@ function isShelfId(boxId: string): boolean {
   }
 }
 
-export default function DetailTabBar() {
+export default function DetailTabBar({ agenticNeedsReview = false }: Props) {
   const { entityType, entityId, activeTab, setTab } = usePanelContext();
-  const actions = useItemActions();
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) return;
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+
+      let tabs: TabDef[];
+      let effective: string;
+      if (entityType === 'box' && entityId) {
+        tabs = isShelfId(entityId) ? [...BOX_BASE_TABS, STUBS_TAB] : BOX_BASE_TABS;
+        effective = activeTab ?? 'info';
+      } else if (entityType === 'item') {
+        tabs = ITEM_BASE_TABS;
+        effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'reference';
+      } else {
+        return;
+      }
+
+      const idx = tabs.findIndex((t) => t.id === effective);
+      if (event.key === 'ArrowLeft' && idx > 0) {
+        event.preventDefault();
+        setTab(tabs[idx - 1].id);
+      } else if (event.key === 'ArrowRight' && idx < tabs.length - 1) {
+        event.preventDefault();
+        setTab(tabs[idx + 1].id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [entityType, entityId, activeTab, setTab]);
 
   if (entityType === 'box' && entityId) {
     const effective = activeTab ?? 'info';
@@ -65,19 +96,12 @@ export default function DetailTabBar() {
 
   if (entityType !== 'item') return null;
 
-  const effective = activeTab ?? 'reference';
-
-  const tabs = actions?.agenticNeedsReview
-    ? [
-        ...ITEM_BASE_TABS.slice(0, REVIEW_INSERT_INDEX),
-        REVIEW_TAB,
-        ...ITEM_BASE_TABS.slice(REVIEW_INSERT_INDEX),
-      ]
-    : ITEM_BASE_TABS;
+  // 'review' was a separate tab; it's merged into 'ki' so old URLs still work visually.
+  const effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'reference';
 
   return (
     <nav className="detail-tab-bar" aria-label="Artikel-Tabs">
-      {tabs.map((tab) => (
+      {ITEM_BASE_TABS.map((tab) => (
         <button
           key={tab.id}
           type="button"
@@ -86,6 +110,7 @@ export default function DetailTabBar() {
           aria-current={effective === tab.id ? 'page' : undefined}
         >
           {tab.label}
+          {tab.id === 'ki' && agenticNeedsReview && <span className="tab-badge" aria-label="Review ausstehend" />}
         </button>
       ))}
     </nav>
