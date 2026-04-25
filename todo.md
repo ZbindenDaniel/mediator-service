@@ -41,7 +41,7 @@
 
 ## Priority 2 — Feature Improvements
 
-22. **Apply tab-gating to BoxDetail.** ItemDetail's per-tab rendering pattern should be mirrored in BoxDetail so each box tab shows only its content slice (info / images / items / events).
+22. ✅ **Apply tab-gating to BoxDetail.** Done — each box tab now shows only its content slice; DetailTabBar renders inside BoxDetail.
 
 19. ~~**Wire `item × attachments` action panel slot.**~~ Superseded — ActionPanel deleted; inline button in AttachmentsCard already covers the use case.
 

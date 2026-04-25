@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+734. ✅ BoxDetail: move DetailTabBar inside, strict tab gating
+   - **Why:** Mirrors ItemDetail's tab pattern. `effectiveTab = activeTab ?? 'info'` replaces the `activeTab === null || activeTab === 'xxx'` guards. AddItemToBoxDialog moved outside the grid so QR-return triggers work regardless of active tab. Layout.tsx simplified to render BoxDetail directly.
+   - **Deferred:** nothing deferred.
 733. ✅ Delete ActionPanel, ItemActionsContext, BoxActionsContext
    - **Why:** Actions now live in their respective tabs; the dispatch layer that bridged ItemDetail/BoxDetail state into a separate ActionPanel panel is no longer needed. Removes 526 lines and two context files with no behavior change.
    - **Deferred:** nothing deferred.
