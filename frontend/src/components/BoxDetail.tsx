@@ -136,11 +136,12 @@ export default function BoxDetail({ boxId }: Props) {
 
     try {
       logger.info('Navigating to item detail from box detail row', { boxId, itemId, source });
-      navigate(`/items/${encodeURIComponent(itemId)}`);
+      setEntity('item', itemId);
+      setMainView('items');
     } catch (error) {
       logError('Failed to navigate to item detail from box detail row', error, { boxId, itemId, source });
     }
-  }, [boxId, navigate]);
+  }, [boxId, setEntity, setMainView]);
 
   const handleNavigateToItems = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -691,7 +692,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID]);
 
-  const { activeTab } = usePanelContext();
+  const { activeTab, setEntity, setMainView } = usePanelContext();
   const effectiveTab = activeTab ?? 'info';
 
   if (isLoading) {

@@ -6,7 +6,6 @@ import { PanelProvider, usePanelContext } from '../context/PanelContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
-import LandingPage from './LandingPage';
 import QrScannerPage from './QrScannerPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
