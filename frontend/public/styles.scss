@@ -186,6 +186,19 @@ body {
     gap: 8px;
 }
 
+/* Row of action buttons at the top of a tab panel */
+.tab-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding-bottom: 4px;
+}
+
+/* Back button shown only on mobile when detail panel is active */
+.mobile-back-btn {
+    display: none;
+}
+
 /* Badges row in reference tab */
 .item-reference-tab__badges {
     display: flex;
@@ -297,6 +310,33 @@ body {
 
     .app-shell__right {
         display: none;
+    }
+
+    /* When an entity is selected, swap: hide list, show detail full-screen */
+    .app-shell--has-entity .panel-main {
+        display: none;
+    }
+
+    .app-shell--has-entity .app-shell__right {
+        display: flex;
+        flex: 1 1 100%;
+        position: static;
+        height: auto;
+        min-height: calc(100vh - 74px);
+        border-left: none;
+    }
+
+    .mobile-back-btn {
+        display: block;
+        width: 100%;
+        padding: 10px 16px;
+        text-align: left;
+        background: var(--bg, #f6f8fa);
+        border: none;
+        border-bottom: 1px solid var(--border, #e1e4e8);
+        font-size: 0.9rem;
+        cursor: pointer;
+        flex-shrink: 0;
     }
 }
 

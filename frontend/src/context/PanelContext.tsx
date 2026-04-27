@@ -32,7 +32,7 @@ export type EntityType = 'item' | 'box' | 'transport' | 'stub';
 
 // Default tab to activate when selecting an entity — avoids the legacy full-page fallback.
 const DEFAULT_TAB: Record<EntityType, string> = {
-  item: 'reference',
+  item: 'instance',
   box: 'info',
   transport: 'info',
   stub: 'info',

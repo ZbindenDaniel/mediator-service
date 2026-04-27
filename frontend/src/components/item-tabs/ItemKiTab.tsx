@@ -23,17 +23,41 @@ interface Props {
   specFieldModalState: SpecFieldModalState | null;
   onSpecFieldModalClose: () => void;
   onSpecFieldModalConfirm: (result: AgenticSpecFieldReviewResult) => void;
+  canClose: boolean;
+  onClose?: () => void | Promise<void>;
+  canDelete: boolean;
+  onDelete?: () => void | Promise<void>;
+  actionPending: boolean;
 }
 
 export default function ItemKiTab({
   agenticCardProps,
   specFieldModalState,
   onSpecFieldModalClose,
-  onSpecFieldModalConfirm
+  onSpecFieldModalConfirm,
+  canClose,
+  onClose,
+  canDelete,
+  onDelete,
+  actionPending
 }: Props) {
   return (
     <>
-      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
+      {(canClose || canDelete) && (
+        <div className="tab-actions">
+          {canClose && onClose && (
+            <button type="button" className="btn" disabled={actionPending} onClick={() => void onClose()}>
+              Abschliessen
+            </button>
+          )}
+          {canDelete && onDelete && (
+            <button type="button" className="btn btn--danger" disabled={actionPending} onClick={() => void onDelete()}>
+              Löschen
+            </button>
+          )}
+        </div>
+      )}
+      <AgenticStatusCard {...agenticCardProps} noCollapse />
       {specFieldModalState ? (
         <AgenticSpecFieldReviewModal
           title={specFieldModalState.title}

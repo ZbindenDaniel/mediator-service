@@ -12,9 +12,9 @@ interface Props {
 }
 
 const ITEM_BASE_TABS: TabDef[] = [
+  { id: 'instance', label: 'Vorrat' },
   { id: 'reference', label: 'Referenz' },
   { id: 'ki', label: 'KI' },
-  { id: 'instance', label: 'Vorrat' },
   { id: 'images', label: 'Bilder' },
   { id: 'attachments', label: 'Anhänge' },
   { id: 'accessories', label: 'Zubehör' },
@@ -55,7 +55,7 @@ export default function DetailTabBar({ agenticNeedsReview = false }: Props) {
         effective = activeTab ?? 'info';
       } else if (entityType === 'item') {
         tabs = ITEM_BASE_TABS;
-        effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'reference';
+        effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'instance';
       } else {
         return;
       }

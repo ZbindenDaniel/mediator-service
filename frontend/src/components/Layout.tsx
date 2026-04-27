@@ -29,15 +29,21 @@ export default function Layout({ children }: { children: ReactNode }) {
   // Create mode: entityType=item, entityId=null, activeTab=create
   const isCreateMode = entityType === 'item' && entityId === null && activeTab === 'create';
   const hasMultiSelection = Boolean(multiSelection?.length);
+  const hasEntity = Boolean((entityType === 'item' || entityType === 'box') && entityId) || isCreateMode || hasMultiSelection;
 
   return (
     <div className="layout">
       <Header />
       <main>
         <BulkSelectionProvider>
-          <div className="app-shell">
+          <div className={`app-shell${hasEntity ? ' app-shell--has-entity' : ''}`}>
             <div className="panel-main">{children}</div>
             <div className="app-shell__right">
+              {hasEntity && (
+                <button type="button" className="mobile-back-btn" onClick={clearSelection}>
+                  ← Zurück
+                </button>
+              )}
               {isCreateMode ? (
                 <div className="panel-create">
                   <ItemCreate

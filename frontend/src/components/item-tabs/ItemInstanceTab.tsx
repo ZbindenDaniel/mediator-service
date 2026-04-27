@@ -1,6 +1,7 @@
 import React from 'react';
 import RelocateItemCard from '../RelocateItemCard';
 import QualityBadge from '../QualityBadge';
+import PrintLabelButton from '../PrintLabelButton';
 import { dialogService } from '../dialog';
 import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
 import type { Item } from '../../../../models';
@@ -25,6 +26,7 @@ interface Props {
   relocateCardRef: React.RefObject<HTMLDivElement>;
   onAddItem: () => Promise<void>;
   onRemoveItem: () => Promise<void>;
+  onRelocate: () => void;
   onInstanceNavigation: (itemId: string) => void;
   onRelocated: () => void;
 }
@@ -40,89 +42,90 @@ export default function ItemInstanceTab({
   relocateCardRef,
   onAddItem,
   onRemoveItem,
+  onRelocate,
   onInstanceNavigation,
   onRelocated
 }: Props) {
+  async function handleEntnehmen() {
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: isBulkItem ? 'Menge reduzieren?' : 'Entnehmen?',
+        message: isBulkItem ? 'Menge um 1 reduzieren?' : 'Artikel entnehmen?',
+        confirmLabel: isBulkItem ? 'Reduzieren' : 'Entnehmen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm Entnehmen', error);
+      return;
+    }
+    if (!confirmed) return;
+    await onRemoveItem();
+  }
+
   return (
     <>
+      <div className="tab-actions">
+        <PrintLabelButton itemId={item.ItemUUID} />
+        {!isOutOfStock && (
+          <button type="button" className="btn" onClick={onRelocate}>Umlagern</button>
+        )}
+        {!isOutOfStock && (
+          <button type="button" className="btn" onClick={() => void handleEntnehmen()}>
+            {isBulkItem ? 'Menge reduzieren' : 'Entnehmen'}
+          </button>
+        )}
+        {isOutOfStock && (
+          <button type="button" className="btn" onClick={() => void onAddItem()}>Hinzufügen</button>
+        )}
+        {isBulkItem && !isOutOfStock && (
+          <button
+            type="button"
+            className="btn"
+            onClick={async () => {
+              let confirmed = false;
+              try {
+                confirmed = await dialogService.confirm({
+                  title: 'Menge erhöhen?',
+                  message: 'Menge um 1 erhöhen?',
+                  confirmLabel: 'Hinzufügen',
+                  cancelLabel: 'Abbrechen'
+                });
+              } catch (error) {
+                console.error('Failed to confirm bulk add', error);
+                return;
+              }
+              if (!confirmed) return;
+              await onAddItem();
+            }}
+          >
+            Hinzufügen
+          </button>
+        )}
+      </div>
+
       <div className="card">
         <h3>dieser Artikel</h3>
-        <div className="row">
-          {instanceDetailRows.length > 0 ? (
-            <table className="details">
-              <tbody>
-                {instanceDetailRows.map(([k, v], idx) => {
-                  const cell = normalizeDetailValue(v);
-                  return (
-                    <tr key={`${k}-${idx}`} className="responsive-row">
-                      <th className="responsive-th">{k}</th>
-                      <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                        {cell.content}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <p className="muted">Keine Instanzdaten vorhanden.</p>
-          )}
-          {isOutOfStock ? (
-            <>
-              <p className="muted">Instanz nicht mehr eingelagert.</p>
-              <button type="button" className="btn" onClick={() => void onAddItem()}>
-                Hinzufügen
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="btn"
-              onClick={async () => {
-                let confirmed = false;
-                try {
-                  confirmed = await dialogService.confirm({
-                    title: isBulkItem ? 'Menge reduzieren?' : 'Artikel auslagern?',
-                    message: isBulkItem ? 'Menge hinzufügen?' : 'Artikel auslagern?',
-                    confirmLabel: isBulkItem ? 'Reduzieren' : 'Auslagern',
-                    cancelLabel: 'Abbrechen'
-                  });
-                } catch (error) {
-                  console.error('Failed to confirm item removal', error);
-                  return;
-                }
-                if (!confirmed) return;
-                await onRemoveItem();
-              }}
-            >
-              {isBulkItem ? 'Menge reduzieren' : 'Auslagern'}
-            </button>
-          )}
-          {isBulkItem && !isOutOfStock ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={async () => {
-                let confirmed = false;
-                try {
-                  confirmed = await dialogService.confirm({
-                    title: 'Menge erhöhen?',
-                    message: 'Menge hinzufügen?',
-                    confirmLabel: 'Hinzufügen',
-                    cancelLabel: 'Abbrechen'
-                  });
-                } catch (error) {
-                  console.error('Failed to confirm bulk add', error);
-                  return;
-                }
-                if (!confirmed) return;
-                await onAddItem();
-              }}
-            >
-              Hinzufügen
-            </button>
-          ) : null}
-        </div>
+        {instanceDetailRows.length > 0 ? (
+          <table className="details">
+            <tbody>
+              {instanceDetailRows.map(([k, v], idx) => {
+                const cell = normalizeDetailValue(v);
+                return (
+                  <tr key={`${k}-${idx}`} className="responsive-row">
+                    <th className="responsive-th">{k}</th>
+                    <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                      {cell.content}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <p className="muted">Keine Instanzdaten vorhanden.</p>
+        )}
+        {isOutOfStock && <p className="muted">Instanz nicht mehr eingelagert.</p>}
       </div>
 
       {showRelocate && (

@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+737. ✅ Restore action buttons in tabs; reorder tabs (instance first); fix mobile detail view
+   - **Why:** ActionPanel deletion (step 733) removed all action buttons with no replacement. Buttons are now embedded directly in each tab: Vorrat tab gets PrintLabel + Umlagern + Entnehmen; Referenz tab gets Bearbeiten + Shopartikel; KI tab gets Abschliessen + Löschen via a `tab-actions` row above the card, and start/cancel/review restored by removing `hideInlineActions` from AgenticStatusCard. Tab order changed to instance-first (Vorrat, Referenz, KI, …) and default tab updated across PanelContext, DetailTabBar, and ItemDetail. Mobile: `app-shell--has-entity` CSS class swaps the layout on ≤900px — hides the list, shows the detail panel full-width with a "← Zurück" button to clear the selection and return to the list.
+   - **Deferred:** "Create transport" button in instance tab — transport feature not yet implemented (todo #18). KI tab's "Abschliessen/Löschen" only appear when `canClose`/`canDelete` are true; if both are false the action row is hidden entirely (intentional — no ghost buttons).
 736. ✅ Fix scroll, remap keys: up/down items, left/right tabs
    - **Why:** panel-tab-body lacked `flex:1 + overflow-y:auto` so content pushed past the panel boundary and the page scrolled. panel-detail flex reset from 82 to 1 after action panel removal. Key rebind: ArrowUp/Down for item neighbour nav, ArrowLeft/Right for tab nav (handled centrally in DetailTabBar).
    - **Deferred:** nothing deferred.

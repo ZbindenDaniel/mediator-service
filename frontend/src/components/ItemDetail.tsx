@@ -3334,7 +3334,7 @@ export default function ItemDetail({ itemId }: Props) {
     };
 
     let tabContent: React.ReactNode;
-    switch (activeTab ?? 'reference') {
+    switch (activeTab ?? 'instance') {
       case 'reference':
         tabContent = (
           <ItemReferenceTab
@@ -3342,6 +3342,8 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
+            onEdit={() => void handleEdit()}
+            onShopStatus={() => void handleShopStatus()}
           />
         );
         break;
@@ -3353,6 +3355,11 @@ export default function ItemDetail({ itemId }: Props) {
             specFieldModalState={specModalData}
             onSpecFieldModalClose={handleSpecFieldModalClose}
             onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
+            canClose={agenticCanClose}
+            onClose={agenticCanClose ? handleAgenticClose : undefined}
+            canDelete={agenticCanDelete}
+            onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
+            actionPending={agenticActionPending}
           />
         );
         break;
@@ -3369,6 +3376,7 @@ export default function ItemDetail({ itemId }: Props) {
             relocateCardRef={relocateCardRef}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
+            onRelocate={() => setShowRelocate(true)}
             onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
             onRelocated={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
           />
@@ -3417,6 +3425,8 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
+            onEdit={() => void handleEdit()}
+            onShopStatus={() => void handleShopStatus()}
           />
         );
     }
