@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PrintLabelButton from './PrintLabelButton';
 import RelocateItemCard from './RelocateItemCard';
-import RefSearchInput, { RefSuggestion } from './RefSearchInput';
 // TODO(agent): Validate instance navigation UX once instance detail reload behavior is reviewed.
 // TODO(agent): Align default relocation hints with backend-provided data to avoid drift from canonical locations.
 // TODO(agent): Confirm instance inventory ordering requirements once detail UI feedback arrives.
@@ -40,7 +39,6 @@ import {
 import { describeQuality } from '../../../models/quality';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
-import { eventLabel } from '../../../models/event-labels';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
@@ -81,7 +79,7 @@ import { filterAndSortItems } from './ItemListPage';
 // TODO(agentic-review-positive-criteria): Keep review-positive gating aligned with checklist blocking criteria and explicit wrong-information signals only.
 // TODO(markdown-langtext): Extract markdown rendering into a shared component when additional fields use Markdown content.
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
-import { useSetItemActions } from '../context/ItemActionsContext';
+import { ShopStatusForm, type ShopStatusValues } from './BulkItemActionBar';
 import { usePanelContext } from '../context/PanelContext';
 import ItemMediaGallery, { normalizeGalleryAssets, type GalleryAsset } from './ItemMediaGallery';
 import { dialogService, useDialog } from './dialog';
@@ -90,6 +88,14 @@ import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
 import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
+import DetailTabBar from './DetailTabBar';
+import ItemReferenceTab from './item-tabs/ItemReferenceTab';
+import ItemKiTab, { type SpecFieldModalState } from './item-tabs/ItemKiTab';
+import ItemInstanceTab from './item-tabs/ItemInstanceTab';
+import ItemImagesTab from './item-tabs/ItemImagesTab';
+import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
+import ItemAccessoriesTab from './item-tabs/ItemAccessoriesTab';
+import ItemEventsTab from './item-tabs/ItemEventsTab';
 import {
   buildNormalizedReviewSpecFields,
   mergeSpecFieldSelection,
@@ -626,9 +632,6 @@ export function AgenticStatusCard({
   );
 }
 
-function resolveActorName(actor?: string | null): string {
-  return actor && actor.trim() ? actor : 'System';
-}
 
 export interface AgenticRestartRequestInput {
   actor: string;
@@ -893,419 +896,6 @@ export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
   return AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedStatus);
 }
 
-// ── ZubehoerCard ─────────────────────────────────────────────────────────────
-
-interface ZubehoerCardProps {
-  itemUUID: string;
-  artikelNummer?: string | null;
-  connectedAccessories: any[];
-  connectedToDevices: any[];
-  compatibleAccessoryRefs: any[];
-  compatibleParentRefs: any[];
-  onRelationChanged: () => void;
-}
-
-function ZubehoerCard({
-  itemUUID,
-  artikelNummer,
-  connectedAccessories,
-  connectedToDevices,
-  compatibleAccessoryRefs,
-  compatibleParentRefs,
-  onRelationChanged
-}: ZubehoerCardProps) {
-  const [linkInput, setLinkInput] = React.useState('');
-  const [linkPending, setLinkPending] = React.useState(false);
-  const [linkError, setLinkError] = React.useState<string | null>(null);
-
-  // Local state for ref-level relations (optimistic updates)
-  const [localCompatRefs, setLocalCompatRefs] = React.useState<any[]>(compatibleAccessoryRefs);
-  const [localParentRefs, setLocalParentRefs] = React.useState<any[]>(compatibleParentRefs);
-  const [refPending, setRefPending] = React.useState(false);
-  const [refError, setRefError] = React.useState<string | null>(null);
-
-  React.useEffect(() => { setLocalCompatRefs(compatibleAccessoryRefs); }, [compatibleAccessoryRefs]);
-  React.useEffect(() => { setLocalParentRefs(compatibleParentRefs); }, [compatibleParentRefs]);
-
-  async function handleAddCompatRef(ref: RefSuggestion) {
-    if (!artikelNummer) return;
-    setRefPending(true);
-    setRefError(null);
-    try {
-      const res = await fetch(`/api/ref/${encodeURIComponent(artikelNummer)}/relations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ childArtikelNummer: ref.Artikel_Nummer })
-      });
-      if (res.ok) {
-        setLocalCompatRefs((prev) => [...prev, { ...ref, availableCount: 0 }]);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setRefError((err as any).error || 'Fehler beim Hinzufügen');
-      }
-    } catch {
-      setRefError('Netzwerkfehler');
-    } finally {
-      setRefPending(false);
-    }
-  }
-
-  async function handleRemoveCompatRef(childArtikelNummer: string) {
-    if (!artikelNummer) return;
-    try {
-      await fetch(`/api/ref/${encodeURIComponent(artikelNummer)}/relations/${encodeURIComponent(childArtikelNummer)}`, {
-        method: 'DELETE'
-      });
-      setLocalCompatRefs((prev) => prev.filter((r) => r.Artikel_Nummer !== childArtikelNummer));
-    } catch { /* noop */ }
-  }
-
-  async function handleAddParentRef(ref: RefSuggestion) {
-    if (!artikelNummer) return;
-    setRefPending(true);
-    setRefError(null);
-    try {
-      const res = await fetch(`/api/ref/${encodeURIComponent(ref.Artikel_Nummer)}/relations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ childArtikelNummer: artikelNummer })
-      });
-      if (res.ok) {
-        setLocalParentRefs((prev) => [...prev, { ...ref }]);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setRefError((err as any).error || 'Fehler beim Hinzufügen');
-      }
-    } catch {
-      setRefError('Netzwerkfehler');
-    } finally {
-      setRefPending(false);
-    }
-  }
-
-  async function handleRemoveParentRef(parentArtikelNummer: string) {
-    if (!artikelNummer) return;
-    try {
-      await fetch(`/api/ref/${encodeURIComponent(parentArtikelNummer)}/relations/${encodeURIComponent(artikelNummer)}`, {
-        method: 'DELETE'
-      });
-      setLocalParentRefs((prev) => prev.filter((r) => r.Artikel_Nummer !== parentArtikelNummer));
-    } catch { /* noop */ }
-  }
-
-  async function handleLink(e: React.FormEvent) {
-    e.preventDefault();
-    const uuid = linkInput.trim();
-    if (!uuid) return;
-    setLinkPending(true);
-    setLinkError(null);
-    try {
-      const res = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/relations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ childItemUUID: uuid })
-      });
-      if (res.ok) {
-        setLinkInput('');
-        onRelationChanged();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setLinkError((err as any).error || 'Fehler beim Verknüpfen');
-      }
-    } catch {
-      setLinkError('Netzwerkfehler');
-    } finally {
-      setLinkPending(false);
-    }
-  }
-
-  async function handleUnlink(childItemUUID: string) {
-    try {
-      await fetch(`/api/item/${encodeURIComponent(itemUUID)}/relations/${encodeURIComponent(childItemUUID)}`, {
-        method: 'DELETE'
-      });
-      onRelationChanged();
-    } catch { /* noop */ }
-  }
-
-  const hasAny = connectedAccessories.length > 0 || connectedToDevices.length > 0
-    || compatibleAccessoryRefs.length > 0 || compatibleParentRefs.length > 0;
-
-  if (!hasAny && connectedAccessories.length === 0 && connectedToDevices.length === 0
-    && compatibleAccessoryRefs.length === 0 && compatibleParentRefs.length === 0) {
-    // Still show card so staff can link accessories
-  }
-
-  return (
-    <div className="card grid-span-2">
-      {connectedAccessories.length > 0 && (
-        <>
-          <h3>Verbundenes Zubehör ({connectedAccessories.length})</h3>
-          <table className="details">
-            <tbody>
-              {connectedAccessories.map((acc: any) => (
-                <tr key={acc.ItemUUID}>
-                  <td>
-                    <ZubehoerBadge mode="connected" compact />
-                  </td>
-                  <td>
-                    <Link to={`/items/${encodeURIComponent(acc.ItemUUID)}`}>
-                      {acc.Artikelbeschreibung || acc.Kurzbeschreibung || acc.Artikel_Nummer || acc.ItemUUID}
-                    </Link>
-                    {' '}<span className="muted">#{acc.ItemUUID}</span>
-                  </td>
-                  <td className="muted">{acc.RelationType}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => handleUnlink(acc.ItemUUID)}
-                    >
-                      Lösen
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-      {connectedToDevices.length > 0 && (
-        <>
-          <h3>Verbunden mit</h3>
-          <table className="details">
-            <tbody>
-              {connectedToDevices.map((dev: any) => (
-                <tr key={dev.ItemUUID}>
-                  <td>
-                    <Link to={`/items/${encodeURIComponent(dev.ItemUUID)}`}>
-                      {dev.Artikelbeschreibung || dev.Kurzbeschreibung || dev.Artikel_Nummer || dev.ItemUUID}
-                    </Link>
-                    {' '}<span className="muted">#{dev.ItemUUID}</span>
-                  </td>
-                  <td className="muted">{dev.RelationType}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-
-      {(artikelNummer || localCompatRefs.length > 0) && (
-        <>
-          <h3>Passendes Zubehör (Artikeltypen)</h3>
-          {localCompatRefs.length > 0 && (
-            <table className="details">
-              <tbody>
-                {localCompatRefs.map((ref: any) => (
-                  <tr key={ref.Artikel_Nummer}>
-                    <td>
-                      <ZubehoerBadge mode="available" compact />
-                    </td>
-                    <td>
-                      <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
-                        {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
-                      </Link>
-                    </td>
-                    <td className="muted">{ref.availableCount ?? 0} auf Lager</td>
-                    {artikelNummer && (
-                      <td>
-                        <button
-                          type="button"
-                          className="sml-btn btn"
-                          onClick={() => handleRemoveCompatRef(ref.Artikel_Nummer)}
-                          title="Kompatibilität entfernen"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {artikelNummer && (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '8px' }}>
-              <RefSearchInput
-                placeholder="Artikeltyp als Zubehör hinzufügen…"
-                disabled={refPending}
-                onSelected={handleAddCompatRef}
-              />
-              {refError && <span className="muted" style={{ color: 'var(--color-error, #d73a49)', alignSelf: 'center' }}>{refError}</span>}
-            </div>
-          )}
-        </>
-      )}
-
-      {(artikelNummer || localParentRefs.length > 0) && (
-        <>
-          <h3>Gehört zu (Artikeltyp)</h3>
-          {localParentRefs.length > 0 && (
-            <table className="details">
-              <tbody>
-                {localParentRefs.map((ref: any) => (
-                  <tr key={ref.Artikel_Nummer}>
-                    <td>
-                      <Link to={`/items?q=${encodeURIComponent(ref.Artikel_Nummer)}`}>
-                        {ref.Artikelbeschreibung || ref.Kurzbeschreibung || ref.Artikel_Nummer}
-                      </Link>
-                    </td>
-                    <td className="muted">{ref.RelationType}</td>
-                    {artikelNummer && (
-                      <td>
-                        <button
-                          type="button"
-                          className="sml-btn btn"
-                          onClick={() => handleRemoveParentRef(ref.Artikel_Nummer)}
-                          title="Zugehörigkeit entfernen"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {artikelNummer && (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '8px' }}>
-              <RefSearchInput
-                placeholder="Gerät hinzufügen, zu dem dieses Zubehör gehört…"
-                disabled={refPending}
-                onSelected={handleAddParentRef}
-              />
-            </div>
-          )}
-        </>
-      )}
-
-      <h3>
-        {connectedAccessories.length > 0
-          ? `Weiteres Zubehör verknüpfen`
-          : `Zubehör verknüpfen`}
-      </h3>
-      <form onSubmit={handleLink} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          placeholder="ItemUUID des Zubehörs"
-          value={linkInput}
-          onChange={(e) => setLinkInput(e.target.value)}
-          style={{ flex: 1, minWidth: '200px' }}
-          disabled={linkPending}
-        />
-        <button type="submit" className="btn" disabled={linkPending || !linkInput.trim()}>
-          {linkPending ? '…' : 'Verbinden'}
-        </button>
-      </form>
-      {linkError && <p className="muted" style={{ color: 'var(--color-error, #d73a49)', marginTop: '4px' }}>{linkError}</p>}
-    </div>
-  );
-}
-
-// ── AttachmentsCard ───────────────────────────────────────────────────────────
-
-interface AttachmentsCardProps {
-  itemUUID: string;
-  attachments: any[];
-  onChanged: (next: any[]) => void;
-}
-
-function AttachmentsCard({ itemUUID, attachments, onChanged }: AttachmentsCardProps) {
-  const [uploading, setUploading] = React.useState(false);
-  const fileRef = React.useRef<HTMLInputElement>(null);
-
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const res = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': file.type || 'application/octet-stream',
-          'X-Filename': file.name
-        },
-        body: file
-      });
-      if (res.ok) {
-        const listRes = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`);
-        if (listRes.ok) {
-          const data = await listRes.json();
-          onChanged(Array.isArray(data.attachments) ? data.attachments : []);
-        }
-      }
-    } catch { /* noop */ } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  }
-
-  async function handleDelete(id: number) {
-    await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments/${id}`, { method: 'DELETE' });
-    onChanged(attachments.filter((a: any) => a.Id !== id));
-  }
-
-  function formatBytes(bytes: number | null): string {
-    if (!bytes) return '';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  return (
-    <div className="card grid-span-2">
-      <h3>Anhänge ({attachments.length})</h3>
-      {attachments.length > 0 && (
-        <table className="details">
-          <tbody>
-            {attachments.map((att: any) => (
-              <tr key={att.Id}>
-                <td>
-                  <a
-                    href={`/media/${att.FilePath}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {att.Label || att.FileName}
-                  </a>
-                </td>
-                <td className="muted">{att.MimeType || ''}</td>
-                <td className="muted">{formatBytes(att.FileSize)}</td>
-                <td className="muted">{att.CreatedAt ? att.CreatedAt.slice(0, 10) : ''}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="sml-btn btn"
-                    onClick={() => handleDelete(att.Id)}
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <div style={{ marginTop: '8px' }}>
-        <input
-          ref={fileRef}
-          type="file"
-          onChange={handleUpload}
-          disabled={uploading}
-          style={{ display: 'none' }}
-          id={`attachment-upload-${itemUUID}`}
-        />
-        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
-          {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -1350,20 +940,14 @@ export default function ItemDetail({ itemId }: Props) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
+  const [showRelocate, setShowRelocate] = useState(false);
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
   const relocateCardRef = useRef<HTMLDivElement | null>(null);
   const agenticOverrideLogRef = useRef<{ itemId: string | null; active: boolean }>({
     itemId: null,
     active: false
   });
-  // Holds latest agentic action callbacks; updated each render so the stable context wrappers always call current handlers.
-  const agenticHandlersRef = useRef<{
-    onStart?: () => void | Promise<void>;
-    onReview?: () => void | Promise<void>;
-    onCancel?: () => void | Promise<void>;
-  }>({});
-  const setItemActions = useSetItemActions();
-  const { setEntity, setMainView } = usePanelContext();
+  const { setEntity, setMainView, activeTab } = usePanelContext();
 
   // Navigate to BoxList and activate the box in the detail panel.
   const handleBoxNavigation = useCallback((boxId: string) => {
@@ -1622,10 +1206,15 @@ export default function ItemDetail({ itemId }: Props) {
         console.error('ItemDetail: Failed to log neighbor navigation', logError);
       }
 
-      const search = window.location.search || '';
-      navigate(`/items/${encodeURIComponent(targetId)}${search}`);
+      // In shell mode (activeTab set), stay in the shell; in full-page mode navigate normally.
+      if (activeTab !== null) {
+        setEntity('item', targetId);
+      } else {
+        const search = window.location.search || '';
+        navigate(`/items/${encodeURIComponent(targetId)}${search}`);
+      }
     },
-    [itemId, navigate, neighborIds.nextId, neighborIds.previousId, neighborSource]
+    [activeTab, itemId, navigate, neighborIds.nextId, neighborIds.previousId, neighborSource, setEntity]
   );
 
   useEffect(() => {
@@ -1637,10 +1226,10 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
 
-      if (event.key === 'ArrowLeft' && neighborIds.previousId) {
+      if (event.key === 'ArrowUp' && neighborIds.previousId) {
         event.preventDefault();
         handleNeighborNavigation('previous');
-      } else if (event.key === 'ArrowRight' && neighborIds.nextId) {
+      } else if (event.key === 'ArrowDown' && neighborIds.nextId) {
         event.preventDefault();
         handleNeighborNavigation('next');
       }
@@ -1677,16 +1266,11 @@ export default function ItemDetail({ itemId }: Props) {
     [unterCategoryLookup]
   );
 
-  // TODO: Replace client-side slicing once the activities page provides pagination.
-  const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
-
   // TODO: Revisit optional category rendering once backend schema clarifies optional Haupt-/Unterkategorien fields.
   const detailRows = useMemo<[string, React.ReactNode][]>(() => {
     if (!item) {
       return [];
     }
-
-    const creator = resolveActorName(events.length ? events[events.length - 1].Actor : null);
 
     const createdDisplay = item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null;
     let updatedDisplay: React.ReactNode = null;
@@ -2110,6 +1694,7 @@ export default function ItemDetail({ itemId }: Props) {
       setIsLoading(true);
     }
     setLoadError(null);
+    setShowRelocate(false);
     console.info('Loading item details', { itemId, showSpinner });
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(itemId)}`);
@@ -2461,7 +2046,12 @@ export default function ItemDetail({ itemId }: Props) {
         return;
       }
       try {
-        navigate(`/items/${encodeURIComponent(targetItemId)}`);
+        // In shell mode use setEntity so the right panel updates without a full-page nav.
+        if (activeTab !== null) {
+          setEntity('item', targetItemId);
+        } else {
+          navigate(`/items/${encodeURIComponent(targetItemId)}`);
+        }
       } catch (error) {
         logError('ItemDetail: Failed to navigate to instance detail', error, {
           itemId,
@@ -2528,52 +2118,19 @@ export default function ItemDetail({ itemId }: Props) {
   );
   const agenticStartLabel = agenticHasRun ? 'Starten' : 'Start KI-Lauf';
 
-  // Register / update action slot whenever relevant state changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!setItemActions) return;
-    if (!item) {
-      setItemActions(null);
-      return;
-    }
-    setItemActions({
-      itemId,
-      agenticNeedsReview,
-      agenticCanStart,
-      agenticCanRestart,
-      agenticCanCancel,
-      agenticActionPending,
-      startLabel: agenticStartLabel,
-      // Stable wrappers: always delegate to the latest handler captured in the ref above.
-      onStart: () => void agenticHandlersRef.current.onStart?.(),
-      onReview: () => void agenticHandlersRef.current.onReview?.(),
-      onCancel: () => void agenticHandlersRef.current.onCancel?.(),
-    });
-  }, [setItemActions, item, itemId, agenticNeedsReview, agenticCanStart, agenticCanRestart, agenticCanCancel, agenticActionPending, agenticStartLabel]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Clear the action slot when ItemDetail unmounts.
-  useEffect(() => {
-    return () => setItemActions?.(null);
-  }, [setItemActions]);
 
   if (isLoading) {
     return <LoadingPage message="Artikel wird geladen…" />;
   }
 
   if (loadError && !item) {
-    // TODO: Replace basic retry UI with shared error boundary once available.
     return (
-      <div className="container item">
-        <div className="grid landing-grid">
-          <div className="card">
-            <h2>Fehler beim Laden</h2>
-            <p className="muted">{loadError}</p>
-            <div className='row'>
-              <button type="button" className="btn" onClick={() => void load({ showSpinner: true })}>
-                Erneut versuchen
-              </button>
-            </div>
-          </div>
+      <div className="panel-tab-body">
+        <div className="card">
+          <p className="muted">{loadError}</p>
+          <button type="button" className="btn" onClick={() => void load({ showSpinner: true })}>
+            Erneut versuchen
+          </button>
         </div>
       </div>
     );
@@ -3570,6 +3127,41 @@ export default function ItemDetail({ itemId }: Props) {
     navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
   }
 
+  async function handleShopStatus() {
+    if (!item) return;
+    let shopValues: ShopStatusValues = { shopartikel: null, veröffentlicht: null, verkaufspreis: null };
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Shopstatus setzen',
+        message: (
+          <ShopStatusForm onChange={(values) => { shopValues = values; }} />
+        ),
+        confirmLabel: 'Setzen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (err) {
+      console.error('Failed to display shop status dialog', err);
+      return;
+    }
+    if (!confirmed) return;
+    try {
+      await fetch('/api/items/bulk/update-ref', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemIds: [item.ItemUUID],
+          shopartikel: shopValues.shopartikel,
+          veröffentlicht: shopValues.veröffentlicht,
+          verkaufspreis: shopValues.verkaufspreis,
+        })
+      });
+      await load({ showSpinner: false });
+    } catch (err) {
+      console.error('Failed to update shop status', err);
+    }
+  }
+
   // TODO(agent): Revisit bulk add action copy once inline stock adjustments are validated by UX.
   async function handleAddItem() {
     if (!item) {
@@ -3642,422 +3234,201 @@ export default function ItemDetail({ itemId }: Props) {
     && !isBulkItem
     && (typeof item.Auf_Lager === 'number' ? item.Auf_Lager : 0) <= 0;
 
-  // Keep ref current every render so stable context wrappers below always invoke the latest handler.
-  agenticHandlersRef.current = {
-    onStart: agenticCanStart ? () => void agenticStartHandler() : undefined,
-    onReview: () => void handleAgenticReview(),
-    onCancel: agenticCanCancel ? () => void handleAgenticCancel() : undefined,
-  };
+  async function handleRemoveItem() {
+    if (!item) return;
+    const actor = await ensureUser();
+    if (!actor) {
+      try { await dialogService.alert({ title: 'Aktion nicht möglich', message: 'Bitte zuerst oben den Benutzer setzen.' }); }
+      catch (error) { console.error('Failed to display remove alert', error); }
+      return;
+    }
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor })
+      });
+      if (res.ok) {
+        const j = await res.json();
+        logger.info?.('Item entnommen', { itemId: item.ItemUUID, quantity: j.quantity, boxId: j.boxId });
+        await load({ showSpinner: false });
+      } else {
+        console.error('Failed to remove item', res.status);
+      }
+    } catch (err) {
+      console.error('Entnahme fehlgeschlagen', err);
+    }
+  }
 
-  return (
-    <div className="container item">
-      <div className="grid landing-grid">
-        {item ? (
-          <>
-            <div className="card grid-span-row-2">
-              <div className='top-row'>
-                <button
-                  type="button"
-                  className="sml-btn btn"
-                  disabled={!neighborIds.previousId || neighborsLoading}
-                  onClick={() => handleNeighborNavigation('previous')}
-                  aria-label="Vorheriger Artikel"
-                >
-                  ←
-                </button>
-                <button
-                  type="button"
-                  className="sml-btn btn"
-                  disabled={!neighborIds.nextId || neighborsLoading}
-                  onClick={() => handleNeighborNavigation('next')}
-                  aria-label="Nächster Artikel"
-                >
-                  →
-                </button>
-              </div>
-
-              <h2 className="item-detail__title">
-                Artikel <span className="muted">({item.ItemUUID})</span>
-                <span style={{ marginLeft: '8px' }}>
-                  <ShopBadge
-                    compact
-                    labelPrefix="Shop/Veröffentlichung"
-                    shopartikel={item.Shopartikel ?? null}
-                    publishedStatus={item.Veröffentlicht_Status ?? null}
-                  />
-                </span>
-                <span style={{ marginLeft: '4px' }}>
-                  <ZubehoerBadge
-                    compact
-                    mode={
-                      connectedToDevices.length > 0
-                        ? 'connected'
-                        : compatibleParentRefs.length > 0
-                          ? 'available'
-                          : null
-                    }
-                  />
-                </span>
-              </h2>
-              <h3>Referenz</h3>
-              {referenceDetailRows.length > 0 ? (
-                <table className="details">
-                  <tbody>
-                    {referenceDetailRows.map(([k, v], idx) => {
-                      const cell = normalizeDetailValue(v);
-                      return (
-                        <tr key={`${k}-${idx}`} className="responsive-row">
-                          <th className="responsive-th">{k}</th>
-                          <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                            {cell.content}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="muted">Keine Referenzdaten vorhanden.</p>
-              )}
-              <div className="row">
-                <button type="button" className="btn" onClick={handleEdit}>Bearbeiten</button>
-              </div>
-            </div>
-
-            <div className="card grid-span-row-2">
-              <h3>Fotos</h3>
-              <section className="item-media-section">
-                <input
-                  ref={mediaFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="item-media-gallery__input"
-                  onChange={handleMediaFileChange}
-                  aria-hidden="true"
-                  tabIndex={-1}
-                  style={{ display: 'none' }}
-                />
-                <ItemMediaGallery
-                  itemId={item.ItemUUID}
-                  grafikname={item.Grafikname}
-                  mediaAssets={mediaAssets}
-                  className="item-media-gallery--stacked"
-                  onAdd={handleMediaAdd}
-                  onRemove={handleMediaRemove}
-                />
-              </section>
-            </div>
-
-            <div className="card">
-              <h3>dieser Artikel</h3>
-              <div className="row">
-                {instanceDetailRows.length > 0 ? (
-                  <table className="details">
-                    <tbody>
-                      {instanceDetailRows.map(([k, v], idx) => {
-                        const cell = normalizeDetailValue(v);
-                        return (
-                          <tr key={`${k}-${idx}`} className="responsive-row">
-                            <th className="responsive-th">{k}</th>
-                            <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                              {cell.content}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="muted">Keine Instanzdaten vorhanden.</p>
-                )}
-                {/* TODO(stock-visibility): Validate out-of-stock messaging for non-bulk withdrawals. */}
-                {/* TODO(agent): Confirm whether removal should optimistically update local state or always rely on reload. */}
-                {/* TODO(confirm-withdrawal): Verify cancel behavior never triggers removal in the instance view. */}
-                {isOutOfStock ? (
-                  <>
-                    <p className="muted">Instanz nicht mehr eingelagert.</p>
-                    <button type="button" className="btn" onClick={handleAddItem}>
-                      Hinzufügen
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" className="btn" onClick={async () => {
-                    let confirmed = false;
-                    const actor = await ensureUser();
-                    if (!actor) {
-                      try {
-                        await dialogService.alert({
-                          title: 'Aktion nicht möglich',
-                          message: 'Bitte zuerst oben den Benutzer setzen.'
-                        });
-                      } catch (error) {
-                        console.error('Failed to display agentic cancel user alert', error);
-                      }
-                      return;
-                    }
-                    try {
-                      confirmed = await dialogService.confirm({
-                        title: 'Artikel entnehmen',
-                        message: 'Entnehmen?',
-                        confirmLabel: 'Entnehmen',
-                        cancelLabel: 'Abbrechen'
-                      });
-                    } catch (error) {
-                      console.error('Failed to confirm inline item removal', error);
-                      return;
-                    }
-                    if (!confirmed) {
-                      logger.info?.('ItemDetail: Item removal cancelled', { itemId: item.ItemUUID });
-                      return;
-                    }
-                    try {
-                      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ actor })
-                      });
-                      if (res.ok) {
-                        const j = await res.json();
-                        logger.info?.('Item entnommen', {
-                          itemId: item.ItemUUID,
-                          quantity: j.quantity,
-                          boxId: j.boxId
-                        });
-                        try {
-                          await load({ showSpinner: false });
-                        } catch (reloadError) {
-                          logError('ItemDetail: Failed to reload after item removal', reloadError, {
-                            itemId: item.ItemUUID
-                          });
-                        }
-                      } else {
-                        console.error('Failed to remove item', res.status);
-                      }
-                    } catch (err) {
-                      console.error('Entnahme fehlgeschlagen', err);
-                    }
-                  }}
-                  >
-                    Entnehmen
-                  </button>
-                )}
-                {resolvedQuantityEinheit === ItemEinheit.Menge ? (
-                  <button type="button" className="btn" onClick={async () => {
-                    let confirmed = false;
-                    try {
-                      confirmed = await dialogService.confirm({
-                        title: 'Menge hinzufügen',
-                        message: 'Menge hinzufügen?',
-                        confirmLabel: 'Hinzufügen',
-                        cancelLabel: 'Abbrechen'
-                      });
-                    } catch (error) {
-                      console.error('Failed to confirm bulk add', error);
-                      return;
-                    }
-                    if (!confirmed) {
-                      return;
-                    }
-                    await handleAddItem();
-                  }}>
-                    Hinzufügen
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div ref={relocateCardRef}>
-              <RelocateItemCard
-                itemId={item.ItemUUID}
-                onRelocated={() => {
-                  load({ showSpinner: false });
-                  relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-              />
-            </div>
-
-            <div className="card grid-span-2">
-              <h3>Vorrat</h3>
-              {instanceRows.length > 0 ? (
-                <>
-                  {/* TODO(mobile-stock-table): Keep Vorrat overflow guard aligned with mobile layout expectations. */}
-                  <div className="item-detail__stock-table">
-                    <table className="details">
-                      <thead>
-                        <tr>
-                          <th>UUID</th>
-                          <th>Qualität</th>
-                          <th>Behälter</th>
-                          <th>Standort</th>
-                          <th>Aktualisiert</th>
-                          <th>Erfasst</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {/* TODO(agent): Confirm current-instance row highlight styling with design review. */}
-                        {instanceRows.map((row) => {
-                          const isQualityPlaceholder = row.qualityValue === null;
-                          const isCurrentInstance = row.id === item.ItemUUID;
-                          const uuidCell = normalizeDetailValue(row.id);
-                          const boxCell = normalizeDetailValue(row.boxId);
-                          const locationCell = normalizeDetailValue(row.location);
-                          const updatedCell = normalizeDetailValue(row.updatedAt);
-                          const createdCell = normalizeDetailValue(row.createdAt);
-                          const navigationLabel = `Instanz ${row.id} öffnen`;
-                          const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              void handleInstanceNavigation(row.id);
-                            }
-                          };
-                          return (
-                            <tr
-                              key={row.id}
-                              className={isCurrentInstance ? 'is-current-instance' : undefined}
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => void handleInstanceNavigation(row.id)}
-                              onKeyDown={handleRowKeyDown}
-                              aria-label={navigationLabel}
-                            >
-                              <td className={uuidCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {uuidCell.content}
-                              </td>
-                              <td className={isQualityPlaceholder ? 'is-placeholder' : undefined}>
-                                <QualityBadge compact value={row.qualityValue} labelPrefix="Qualität" />
-                              </td>
-                              <td className={boxCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {boxCell.content}
-                              </td>
-                              <td className={locationCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {locationCell.content}
-                              </td>
-                              <td className={updatedCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {updatedCell.content}
-                              </td>
-                              <td className={createdCell.isPlaceholder ? 'is-placeholder' : undefined}>
-                                {createdCell.content}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <p className="muted">Keine Instanzen vorhanden.</p>
-              )}
-            </div>
-
-            <AgenticStatusCard
-              status={agenticStatus}
-              rows={agenticRows}
-              actionPending={agenticActionPending}
-              reviewIntent={agenticReviewIntent}
-              error={agenticError}
-              needsReview={agenticNeedsReview}
-              searchTerm={agenticSearchTerm}
-              searchTermError={agenticSearchError}
-              onSearchTermChange={handleAgenticSearchTermChange}
-              canCancel={agenticCanCancel}
-              canClose={agenticCanClose}
-              canStart={agenticCanStart}
-              canRestart={agenticCanRestart}
-              canDelete={agenticCanDelete}
-              startLabel={agenticStartLabel}
-              isInProgress={agenticIsInProgress}
-              onStart={agenticCanStart ? agenticStartHandler : undefined}
-              onRestart={handleAgenticRestart}
-              onReview={handleAgenticReview}
-              onCancel={handleAgenticCancel}
-              onClose={agenticCanClose ? handleAgenticClose : undefined}
-              onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
-            />
+  async function handleRelationChanged() {
+    if (!item) return;
+    setConnectedAccessories([]);
+    setConnectedToDevices([]);
+    setCompatibleAccessoryRefs([]);
+    setCompatibleParentRefs([]);
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}`);
+      if (res.ok) {
+        const d: any = await res.json();
+        setConnectedAccessories(Array.isArray(d.connectedAccessories) ? d.connectedAccessories : []);
+        setConnectedToDevices(Array.isArray(d.connectedToDevices) ? d.connectedToDevices : []);
+        setCompatibleAccessoryRefs(Array.isArray(d.compatibleAccessoryRefs) ? d.compatibleAccessoryRefs : []);
+        setCompatibleParentRefs(Array.isArray(d.compatibleParentRefs) ? d.compatibleParentRefs : []);
+      }
+    } catch { /* noop */ }
+  }
 
 
-            {specFieldReviewModalState ? (
-              <AgenticSpecFieldReviewModal
-                title={specFieldReviewModalState.title}
-                description={specFieldReviewModalState.description}
-                fieldOptions={specFieldReviewModalState.fieldOptions}
-                includeAdditionalInput={specFieldReviewModalState.includeAdditionalInput}
-                additionalInputPlaceholder={specFieldReviewModalState.additionalInputPlaceholder}
-                secondaryTitle={specFieldReviewModalState.secondaryTitle}
-                secondaryDescription={specFieldReviewModalState.secondaryDescription}
-                secondaryFieldOptions={specFieldReviewModalState.secondaryFieldOptions}
-                includeSecondaryAdditionalInput={specFieldReviewModalState.includeSecondaryAdditionalInput}
-                secondaryAdditionalInputPlaceholder={specFieldReviewModalState.secondaryAdditionalInputPlaceholder}
-                onCancel={() => {
-                  try {
-                    specFieldReviewModalState.resolve(null);
-                  } catch (error) {
-                    logError('ItemDetail: Failed to resolve cancelled spec field review modal', error, { itemId });
-                  } finally {
-                    setSpecFieldReviewModalState(null);
-                  }
-                }}
-                onConfirm={(result) => {
-                  try {
-                    specFieldReviewModalState.resolve(result);
-                  } catch (error) {
-                    logError('ItemDetail: Failed to resolve confirmed spec field review modal', error, { itemId });
-                  } finally {
-                    setSpecFieldReviewModalState(null);
-                  }
-                }}
-              />
-            ) : null}
+  // Always render in tab mode; default to 'reference' if no tab is set in the URL.
+  if (item) {
+    const agenticCardProps = {
+      status: agenticStatus,
+      rows: agenticRows,
+      actionPending: agenticActionPending,
+      reviewIntent: agenticReviewIntent,
+      error: agenticError,
+      needsReview: agenticNeedsReview,
+      searchTerm: agenticSearchTerm,
+      searchTermError: agenticSearchError,
+      onSearchTermChange: handleAgenticSearchTermChange,
+      canCancel: agenticCanCancel,
+      canClose: agenticCanClose,
+      canStart: agenticCanStart,
+      canRestart: agenticCanRestart,
+      canDelete: agenticCanDelete,
+      startLabel: agenticStartLabel,
+      isInProgress: agenticIsInProgress,
+      onStart: agenticCanStart ? agenticStartHandler : undefined,
+      onRestart: handleAgenticRestart,
+      onReview: handleAgenticReview,
+      onCancel: handleAgenticCancel,
+      onClose: agenticCanClose ? handleAgenticClose : undefined,
+      onDelete: agenticCanDelete ? handleAgenticDelete : undefined,
+    };
 
-            <PrintLabelButton itemId={item.ItemUUID} />
+    const specModalData: SpecFieldModalState | null = specFieldReviewModalState
+      ? {
+          title: specFieldReviewModalState.title,
+          description: specFieldReviewModalState.description,
+          fieldOptions: specFieldReviewModalState.fieldOptions,
+          includeAdditionalInput: specFieldReviewModalState.includeAdditionalInput,
+          additionalInputPlaceholder: specFieldReviewModalState.additionalInputPlaceholder,
+          secondaryTitle: specFieldReviewModalState.secondaryTitle,
+          secondaryDescription: specFieldReviewModalState.secondaryDescription,
+          secondaryFieldOptions: specFieldReviewModalState.secondaryFieldOptions,
+          includeSecondaryAdditionalInput: specFieldReviewModalState.includeSecondaryAdditionalInput,
+          secondaryAdditionalInputPlaceholder: specFieldReviewModalState.secondaryAdditionalInputPlaceholder,
+        }
+      : null;
 
-            <ZubehoerCard
-              itemUUID={item.ItemUUID}
-              artikelNummer={item.Artikel_Nummer ?? null}
-              connectedAccessories={connectedAccessories}
-              connectedToDevices={connectedToDevices}
-              compatibleAccessoryRefs={compatibleAccessoryRefs}
-              compatibleParentRefs={compatibleParentRefs}
-              onRelationChanged={() => {
-                // Re-fetch to refresh relation data
-                setConnectedAccessories([]);
-                setConnectedToDevices([]);
-                setCompatibleAccessoryRefs([]);
-                setCompatibleParentRefs([]);
-                fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}`)
-                  .then((r) => r.json())
-                  .then((d: any) => {
-                    setConnectedAccessories(Array.isArray(d.connectedAccessories) ? d.connectedAccessories : []);
-                    setConnectedToDevices(Array.isArray(d.connectedToDevices) ? d.connectedToDevices : []);
-                    setCompatibleAccessoryRefs(Array.isArray(d.compatibleAccessoryRefs) ? d.compatibleAccessoryRefs : []);
-                    setCompatibleParentRefs(Array.isArray(d.compatibleParentRefs) ? d.compatibleParentRefs : []);
-                  })
-                  .catch(() => {});
-              }}
-            />
+    const handleSpecFieldModalClose = () => {
+      try { specFieldReviewModalState?.resolve(null); }
+      catch (error) { logError('ItemDetail: Failed to resolve cancelled spec modal', error, { itemId }); }
+      finally { setSpecFieldReviewModalState(null); }
+    };
 
-            <AttachmentsCard
-              itemUUID={item.ItemUUID}
-              attachments={attachments}
-              onChanged={(next) => setAttachments(next)}
-            />
+    const handleSpecFieldModalConfirm = (result: AgenticSpecFieldReviewResult) => {
+      try { specFieldReviewModalState?.resolve(result); }
+      catch (error) { logError('ItemDetail: Failed to resolve confirmed spec modal', error, { itemId }); }
+      finally { setSpecFieldReviewModalState(null); }
+    };
 
-            <div className="card grid-span-2">
-              <h3>Aktivitäten</h3>
-              <ul className="events">
-                {displayedEvents.map((ev) => (
-                  <li key={ev.Id}>
-                    <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
-                    {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </>
-        ) : (
-          <p className="muted">Artikel steht nicht zur Verfügung.</p>
-        )}
-      </div>
-    </div>
-  );
+    let tabContent: React.ReactNode;
+    switch (activeTab ?? 'reference') {
+      case 'reference':
+        tabContent = (
+          <ItemReferenceTab
+            item={item}
+            referenceDetailRows={referenceDetailRows}
+            connectedToDevices={connectedToDevices}
+            compatibleParentRefs={compatibleParentRefs}
+          />
+        );
+        break;
+      case 'ki':
+      case 'review':
+        tabContent = (
+          <ItemKiTab
+            agenticCardProps={agenticCardProps}
+            specFieldModalState={specModalData}
+            onSpecFieldModalClose={handleSpecFieldModalClose}
+            onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
+          />
+        );
+        break;
+      case 'instance':
+        tabContent = (
+          <ItemInstanceTab
+            item={item}
+            instanceDetailRows={instanceDetailRows}
+            instanceRows={instanceRows}
+            isBulkItem={isBulkItem}
+            isOutOfStock={isOutOfStock}
+            skippedInstanceCount={skippedInstanceCount}
+            showRelocate={showRelocate}
+            relocateCardRef={relocateCardRef}
+            onAddItem={handleAddItem}
+            onRemoveItem={handleRemoveItem}
+            onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
+            onRelocated={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
+          />
+        );
+        break;
+      case 'images':
+        tabContent = (
+          <ItemImagesTab
+            item={item}
+            mediaAssets={mediaAssets}
+            mediaFileInputRef={mediaFileInputRef}
+            onAdd={handleMediaAdd}
+            onRemove={handleMediaRemove}
+            onFileChange={handleMediaFileChange}
+          />
+        );
+        break;
+      case 'attachments':
+        tabContent = (
+          <ItemAttachmentsTab
+            itemUUID={item.ItemUUID}
+            attachments={attachments}
+            onChanged={setAttachments}
+          />
+        );
+        break;
+      case 'accessories':
+        tabContent = (
+          <ItemAccessoriesTab
+            item={item}
+            connectedAccessories={connectedAccessories}
+            connectedToDevices={connectedToDevices}
+            compatibleAccessoryRefs={compatibleAccessoryRefs}
+            compatibleParentRefs={compatibleParentRefs}
+            onRelationChanged={() => void handleRelationChanged()}
+          />
+        );
+        break;
+      case 'events':
+        tabContent = <ItemEventsTab events={events} />;
+        break;
+      default:
+        tabContent = (
+          <ItemReferenceTab
+            item={item}
+            referenceDetailRows={referenceDetailRows}
+            connectedToDevices={connectedToDevices}
+            compatibleParentRefs={compatibleParentRefs}
+          />
+        );
+    }
+
+    return (
+      <>
+        <DetailTabBar agenticNeedsReview={agenticNeedsReview} />
+        <div className="panel-tab-body">{tabContent}</div>
+      </>
+    );
+  }
+
+
+  return null;
 }

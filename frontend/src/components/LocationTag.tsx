@@ -129,18 +129,24 @@ async function fetchItemById(itemId: string, signal?: AbortSignal): Promise<Item
   return data.item;
 }
 
-async function fetchBoxById(boxId: string, itemId: string | null, signal?: AbortSignal): Promise<Box | null> {
-  const data = await fetchJson<{ box?: Box }>(
-    `/api/boxes/${encodeURIComponent(boxId)}`,
-    'box',
-    itemId,
-    signal
-  );
-  if (!data?.box) {
-    logger.warn('LocationTag failed to load box payload', { itemId, boxId });
-    return null;
+// Deduplicates concurrent box fetches: many list rows share the same box/shelf ID.
+const boxFetchInFlight = new Map<string, Promise<Box | null>>();
+
+async function fetchBoxById(boxId: string, itemId: string | null): Promise<Box | null> {
+  if (boxFetchInFlight.has(boxId)) {
+    return boxFetchInFlight.get(boxId)!;
   }
-  return data.box;
+  const promise = fetchJson<{ box?: Box }>(
+    `/api/boxes/${encodeURIComponent(boxId)}`, 'box', itemId
+  ).then(data => {
+    if (!data?.box) {
+      logger.warn('LocationTag failed to load box payload', { itemId, boxId });
+      return null;
+    }
+    return data.box;
+  }).finally(() => boxFetchInFlight.delete(boxId));
+  boxFetchInFlight.set(boxId, promise);
+  return promise;
 }
 
 async function resolveLocationForItem(
@@ -176,7 +182,7 @@ async function resolveLocationForItem(
     };
   }
 
-  const box = await fetchBoxById(normalizedBoxId, resolvedItemId, signal);
+  const box = await fetchBoxById(normalizedBoxId, resolvedItemId);
   if (!box) {
     logger.warn('LocationTag failed to resolve box for item', { itemId: resolvedItemId, boxId: normalizedBoxId });
     return {
@@ -198,7 +204,7 @@ async function resolveLocationForItem(
     };
   }
 
-  const shelfBox = await fetchBoxById(shelfId, resolvedItemId, signal);
+  const shelfBox = await fetchBoxById(shelfId, resolvedItemId);
   const shelfLabel = normalizeTagValue(
     shelfBox?.Label ?? shelfBox?.ShelfLabel,
     'shelf label',
