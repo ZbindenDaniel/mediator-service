@@ -686,6 +686,7 @@ div {
 .details .item-detail__langtext {
     display: block;
     white-space: normal;
+    max-width: 90%;
 }
 
 .details .item-detail__langtext p {
@@ -2595,14 +2596,14 @@ button:focus {
 }
 
 .details .responsive-row {
-    display: table-row;
+    display: inline-grid;
 }
 
 .details .responsive-th,
 .details .responsive-td {
     font-size: 1rem;
     word-break: break-word;
-    min-width: 220px;
+    min-width: 180px;
 }
 
 .details .responsive-td.is-placeholder {

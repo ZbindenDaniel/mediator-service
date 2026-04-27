@@ -115,6 +115,7 @@ export default function BoxDetail({ boxId }: Props) {
   const photoModalRef = useRef<HTMLDivElement | null>(null);
   const photoDialogTitleId = useId();
   const boxPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const { activeTab, setEntity, setMainView } = usePanelContext();
   const groupedItems = useMemo(() => groupItemsForDisplay(items, { logContext: 'box-detail-grouping' }), [items]);
   const normalizedLocationId = useMemo(() => {
     if (typeof box?.LocationId !== 'string') {
@@ -692,7 +693,6 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID]);
 
-  const { activeTab, setEntity, setMainView } = usePanelContext();
   const effectiveTab = activeTab ?? 'info';
 
   if (isLoading) {
