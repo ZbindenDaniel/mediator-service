@@ -106,6 +106,7 @@ export default function BoxDetail({ boxId }: Props) {
   const [photoRemoved, setPhotoRemoved] = useState(false);
   const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
+  const [showRelocate, setShowRelocate] = useState(false);
   const [qrReturnPayload, setQrReturnPayload] = useState<{ id: string; rawPayload?: string; intent?: 'add-item' | 'relocate-box' | 'shelf-add-box' } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -722,282 +723,179 @@ export default function BoxDetail({ boxId }: Props) {
     <>
       <DetailTabBar />
       <div className="panel-tab-body">
-      <div className="container box box-detail-container">
-      <div className="grid landing-grid">
+
+        {/* Action button group — always visible */}
+        {box && (
+          <div className="tab-actions">
+            <PrintLabelButton boxId={box.BoxID} inline />
+            {isBoxRelocatable && (
+              <button type="button" className="btn" onClick={() => setShowRelocate((prev) => !prev)}>
+                Umlagern
+              </button>
+            )}
+            <button type="button" className="btn btn--danger" onClick={handleDeleteBox}>Löschen</button>
+          </div>
+        )}
+
+        {showRelocate && box && isBoxRelocatable && (
+          <RelocateBoxCard
+            boxId={box.BoxID}
+            onMoved={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
+          />
+        )}
+
         {box ? (
           <>
             {effectiveTab === 'info' && (
-            <div className="box-detail-summary-grid grid-span-2">
-              <div className="box-detail-summary-column">
-                <div className="card">
-                  <h2 className='mono'>{box.BoxID}</h2>
-                  <table className="details">
-                    <tbody>
-                      <tr>
-                        <th>Standort</th>
-                        <td>
-                          {shouldLinkLocation ? (
-                            <Link
-                              to={`/boxes/${encodeURIComponent(normalizedLocationId)}`}
-                              aria-label="Zum Regal"
-                            >
-                              <LocationTag locationKey={box.LocationId} labelOverride={box.Label} />
-                            </Link>
-                          ) : (
+              <div className="card">
+                <h2 className="mono">{box.BoxID}</h2>
+                <table className="details">
+                  <tbody>
+                    <tr>
+                      <th>Standort</th>
+                      <td>
+                        {shouldLinkLocation ? (
+                          <Link to={`/boxes/${encodeURIComponent(normalizedLocationId)}`} aria-label="Zum Regal">
                             <LocationTag locationKey={box.LocationId} labelOverride={box.Label} />
-                          )}
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Platziert am</th>
-                        <td>{box.PlacedAt ? formatDateTime(box.PlacedAt) : ''}</td>
-                      </tr>
-                      <tr>
-                        <th>Platziert von</th>
-                        <td>{box.PlacedBy ?? 'Niemandem!'}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div className='row'>
-                    <button type="button" className="btn danger" onClick={handleDeleteBox}>Löschen</button>
-                  </div>
-                </div>
-
-                <PrintLabelButton boxId={box.BoxID} />
-
-                {isBoxRelocatable ? (
-                  <RelocateBoxCard
-                    boxId={box.BoxID}
-                    onMoved={() => { void load({ showSpinner: false }); }}
-                  />
-                ) : null}
+                          </Link>
+                        ) : (
+                          <LocationTag locationKey={box.LocationId} labelOverride={box.Label} />
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Platziert am</th>
+                      <td>{box.PlacedAt ? formatDateTime(box.PlacedAt) : ''}</td>
+                    </tr>
+                    <tr>
+                      <th>Platziert von</th>
+                      <td>{box.PlacedBy ?? 'Niemandem!'}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
+            )}
 
-              <div className="box-detail-summary-column">
-                {isBoxRelocatable ? (
+            {effectiveTab === 'notizen' && (
+              <>
+                {isBoxRelocatable && (
                   <div className="card">
                     <h3>Notizen</h3>
-                    <form onSubmit={async (e) => {
-                      e.preventDefault();
-                      await saveBoxNoteAndPhoto({ source: 'note-form' });
-                    }}>
-                      <div className=''>
-                        <div className='row'>
-                          <label htmlFor="box-note-photo">Foto</label>
-                          <div className="note-photo-controls">
-                            {photoPreview ? (
-                              <div className="note-photo-preview">
-                                {/* TODO(agent): Extract box note photo preview into shared media component when expanding uploader features. */}
-                                <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
-                                  <img
-                                    src={photoPreview}
-                                    alt="Aktuelles Box-Foto"
-                                    style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
-                                    onClick={openPhotoModal}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'Enter' || event.key === ' ') {
-                                        event.preventDefault();
-                                        openPhotoModal();
-                                      }
-                                    }}
-                                    role="button"
-                                    tabIndex={0}
-                                    aria-haspopup="dialog"
-                                    aria-label="Box-Foto vergrößern"
-                                    onError={handlePhotoImageError}
-                                  />
-                                </figure>
-                                <div className='row'>
-                                  <button type="button" className="btn danger" onClick={handlePhotoRemove}>
-                                    Foto entfernen
-                                  </button>
-                                </div>
+                    <form onSubmit={async (e) => { e.preventDefault(); await saveBoxNoteAndPhoto({ source: 'note-form' }); }}>
+                      <div className="row">
+                        <label htmlFor="box-note-photo">Foto</label>
+                        <div className="note-photo-controls">
+                          {photoPreview ? (
+                            <div className="note-photo-preview">
+                              <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
+                                <img
+                                  src={photoPreview}
+                                  alt="Aktuelles Box-Foto"
+                                  style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
+                                  onClick={openPhotoModal}
+                                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPhotoModal(); } }}
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-haspopup="dialog"
+                                  aria-label="Box-Foto vergrößern"
+                                  onError={handlePhotoImageError}
+                                />
+                              </figure>
+                              <div className="row">
+                                <button type="button" className="btn btn--danger" onClick={handlePhotoRemove}>Foto entfernen</button>
                               </div>
-                            ) : (
-                              <p className="muted">Kein Foto gespeichert.</p>
-                            )}
-                            {photoRemoved ? (
-                              <p className="muted">Foto wird nach dem Speichern entfernt.</p>
-                            ) : null}
-                            {/* TODO(agent): Disable the photo upload control while autosave is in progress to prevent overlapping requests. */}
-                            <input
-                              type="file"
-                              id="box-note-photo"
-                              name="box-note-photo"
-                              accept="image/*"
-                              onChange={handlePhotoFileChange}
-                            />
-                          </div>
-                        </div>
-
-                        <div className='row'>
-                          <textarea
-                            value={note}
-                            onChange={e => {
-                              setNote(e.target.value);
-                              if (noteFeedback && noteFeedback.type !== 'info') {
-                                setNoteFeedback(null);
-                              }
-                            }}
-                            rows={Math.max(3, note.split('\n').length)} />
-                        </div>
-
-                        <div className='row'>
-                          <button type="submit" disabled={isSavingNote}>Speichern</button>
-                        </div>
-
-                        <div className='row'>
-                          {noteFeedback && (
-                            <span
-                              className="muted"
-                              role={noteFeedback.type === 'error' ? 'alert' : 'status'}
-                              style={noteFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}
-                            >
-                              {noteFeedback.message}
-                            </span>
+                            </div>
+                          ) : (
+                            <p className="muted">Kein Foto gespeichert.</p>
                           )}
+                          {photoRemoved ? <p className="muted">Foto wird nach dem Speichern entfernt.</p> : null}
+                          <input type="file" id="box-note-photo" name="box-note-photo" accept="image/*" onChange={handlePhotoFileChange} />
                         </div>
                       </div>
+                      <div className="row">
+                        <textarea value={note} onChange={(e) => { setNote(e.target.value); if (noteFeedback && noteFeedback.type !== 'info') setNoteFeedback(null); }} rows={Math.max(3, note.split('\n').length)} />
+                      </div>
+                      <div className="row">
+                        <button type="submit" disabled={isSavingNote}>Speichern</button>
+                      </div>
+                      {noteFeedback && (
+                        <div className="row">
+                          <span className="muted" role={noteFeedback.type === 'error' ? 'alert' : 'status'} style={noteFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                            {noteFeedback.message}
+                          </span>
+                        </div>
+                      )}
                     </form>
                   </div>
-                ) : null}
-
-                {isShelf ? (
+                )}
+                {isShelf && (
                   <div className="card">
                     <h3>Regal-Details</h3>
-                    <form onSubmit={async (event) => {
-                      event.preventDefault();
-                      await saveShelfDetails();
-                    }}>
+                    <form onSubmit={async (event) => { event.preventDefault(); await saveShelfDetails(); }}>
                       <div className="row">
                         <label htmlFor="shelf-label">Label</label>
-                        <input
-                          id="shelf-label"
-                          type="text"
-                          value={label}
-                          onChange={(event) => setLabel(event.target.value)}
-                          placeholder="Regalname"
-                          disabled={isSavingShelfDetails}
-                        />
+                        <input id="shelf-label" type="text" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Regalname" disabled={isSavingShelfDetails} />
                       </div>
                       <div className="row">
                         <label htmlFor="shelf-notes">Notizen</label>
-                        <textarea
-                          id="shelf-notes"
-                          value={note}
-                          onChange={(event) => {
-                            setNote(event.target.value);
-                            if (shelfFeedback && shelfFeedback.type !== 'info') {
-                              setShelfFeedback(null);
-                            }
-                          }}
-                          rows={Math.max(3, note.split('\n').length)}
-                          disabled={isSavingShelfDetails}
-                        />
+                        <textarea id="shelf-notes" value={note} onChange={(event) => { setNote(event.target.value); if (shelfFeedback && shelfFeedback.type !== 'info') setShelfFeedback(null); }} rows={Math.max(3, note.split('\n').length)} disabled={isSavingShelfDetails} />
                       </div>
                       <div className="row">
                         <button type="submit" disabled={isSavingShelfDetails}>Speichern</button>
                       </div>
-                      <div className="row">
-                        {shelfFeedback ? (
-                          <span
-                            className="muted"
-                            role={shelfFeedback.type === 'error' ? 'alert' : 'status'}
-                            style={shelfFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}
-                          >
+                      {shelfFeedback && (
+                        <div className="row">
+                          <span className="muted" role={shelfFeedback.type === 'error' ? 'alert' : 'status'} style={shelfFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
                             {shelfFeedback.message}
                           </span>
-                        ) : null}
-                      </div>
+                        </div>
+                      )}
                     </form>
                   </div>
-                ) : null}
-              </div>
-            </div>
-            )}
-
-            {effectiveTab === 'images' && isBoxRelocatable && (
-            <div className="card grid-span-2">
-              <h3>Fotos</h3>
-              <div className="note-photo-controls">
-                {photoPreview ? (
-                  <>
-                    <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
-                      <img
-                        src={photoPreview}
-                        alt="Aktuelles Box-Foto"
-                        style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
-                        onClick={openPhotoModal}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            openPhotoModal();
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        aria-haspopup="dialog"
-                        aria-label="Box-Foto vergrößern"
-                        onError={handlePhotoImageError}
-                      />
-                    </figure>
-                    <div className='row'>
-                      <button type="button" className="btn danger" onClick={handlePhotoRemove}>Foto entfernen</button>
-                    </div>
-                  </>
-                ) : (
-                  <p className="muted">Kein Foto gespeichert.</p>
                 )}
-                <input
-                  ref={boxPhotoInputRef}
-                  type="file"
-                  id="box-photo-upload"
-                  accept="image/*"
-                  onChange={handlePhotoFileChange}
-                />
-              </div>
-            </div>
+                {!isBoxRelocatable && !isShelf && (
+                  <p className="muted">Keine Notizen für diesen Behältertyp.</p>
+                )}
+              </>
             )}
 
             {effectiveTab === 'items' && (
-            <div className="card grid-span-2">
-              <div className='row' style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="card">
+              <div className="row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>Artikel</h3>
                 <Link to={itemsListRoute} onClick={handleNavigateToItems} style={{ color: 'rgb(221, 60, 114)', fontWeight: 600 }}>Detail-Liste</Link>
               </div>
-              <div className=''>
-                <div className='row'>
-                  <div className="item-list-wrapper">
-                    <table className="item-list">
-                      <thead>
-                        <tr className="item-list-header">
-                          <th className="col-number">A-Nr</th>
-                          <th className="col-desc">Artikel</th>
-                          <th className="col-stock optional-column">Anzahl</th>
-                          <th className="col-quality optional-column">Qualität</th>
-                          <th className="col-subcategory optional-column">Unterkategorie A</th>
-                          <th className="optional-column">Behälter</th>
-                          <th className="col-actions">Aktionen</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {groupedItems.length ? (
-                          groupedItems.map((group) => {
-                            const representative = group.representative;
-                            const representativeId = group.summary.representativeItemId;
-                            const subcategoryValue = group.summary.Category
-                              ?? (typeof representative?.Unterkategorien_A === 'number'
-                                ? String(representative.Unterkategorien_A)
-                                : (typeof representative?.Unterkategorien_A === 'string'
-                                  ? representative.Unterkategorien_A
-                                  : null));
-                            const qualityValue = typeof group.summary.Quality === 'number'
-                              ? group.summary.Quality
-                              : (typeof representative?.Quality === 'number' ? representative.Quality : null);
-                            const removalMessage = representativeId ? removalStatus[representativeId] : null;
-                            const itemNumber = group.summary.Artikel_Nummer || representative?.Artikel_Nummer;
-                            const itemNumberLabel = itemNumber ?? 'Artikel';
-                            const rowLabel = representativeId ? `Artikel ${itemNumberLabel} öffnen` : undefined;
+              <div className="item-list-wrapper">
+                <table className="item-list">
+                  <thead>
+                    <tr className="item-list-header">
+                      <th className="col-number">A-Nr</th>
+                      <th className="col-desc">Artikel</th>
+                      <th className="col-stock optional-column">Anzahl</th>
+                      <th className="col-quality optional-column">Qualität</th>
+                      <th className="col-subcategory optional-column">Unterkategorie A</th>
+                      <th className="optional-column">Behälter</th>
+                      <th className="col-actions">Aktionen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedItems.length ? (
+                      groupedItems.map((group) => {
+                        const representative = group.representative;
+                        const representativeId = group.summary.representativeItemId;
+                        const subcategoryValue = group.summary.Category
+                          ?? (typeof representative?.Unterkategorien_A === 'number'
+                            ? String(representative.Unterkategorien_A)
+                            : (typeof representative?.Unterkategorien_A === 'string'
+                              ? representative.Unterkategorien_A
+                              : null));
+                        const qualityValue = typeof group.summary.Quality === 'number'
+                          ? group.summary.Quality
+                          : (typeof representative?.Quality === 'number' ? representative.Quality : null);
+                        const removalMessage = representativeId ? removalStatus[representativeId] : null;
+                        const itemNumber = group.summary.Artikel_Nummer || representative?.Artikel_Nummer;
+                        const itemNumberLabel = itemNumber ?? 'Artikel';
+                        const rowLabel = representativeId ? `Artikel ${itemNumberLabel} öffnen` : undefined;
 
                             return (
                               <tr
@@ -1060,31 +958,15 @@ export default function BoxDetail({ boxId }: Props) {
                       </tbody>
                     </table>
                   </div>
-                </div>
-
-                <div className='row'>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}
-                  >
-                    neu
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setShowAdd(true)}
-                    style={{ marginLeft: '6px' }}
-                  >
-                    hinzufügen
-                  </button>
-                </div>
+              <div className="row">
+                <button type="button" className="btn" onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}>neu</button>
+                <button type="button" className="btn" onClick={() => setShowAdd(true)}>hinzufügen</button>
               </div>
             </div>
             )}
 
             {effectiveTab === 'events' && (
-            <div className="card grid-span-2">
+            <div className="card">
               <h3>Aktivitäten</h3>
               <ul className="events">
                 {displayedEvents.map((ev) => (
@@ -1098,10 +980,8 @@ export default function BoxDetail({ boxId }: Props) {
             )}
           </>
         ) : (
-          <p>Loading...</p>
+          <p className="muted">Laden…</p>
         )}
-      </div>
-      </div>
       </div>
       {showAdd && (
         <AddItemToBoxDialog

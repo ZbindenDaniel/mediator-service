@@ -66,7 +66,7 @@ export default function ItemInstanceTab({
   return (
     <>
       <div className="tab-actions">
-        <PrintLabelButton itemId={item.ItemUUID} />
+        <PrintLabelButton itemId={item.ItemUUID} inline />
         {!isOutOfStock && (
           <button type="button" className="btn" onClick={onRelocate}>Umlagern</button>
         )}

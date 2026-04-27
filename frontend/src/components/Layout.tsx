@@ -7,6 +7,7 @@ import ItemDetail from './ItemDetail';
 import BoxDetail from './BoxDetail';
 import ItemCreate from './ItemCreate';
 import MultiItemSummary from './MultiItemSummary';
+import BulkItemActionBar from './BulkItemActionBar';
 
 function MultiItemDetailPanel() {
   const { multiSelection } = usePanelContext();
@@ -18,6 +19,14 @@ function MultiItemDetailPanel() {
         selectedIds={multiSelection}
         selectedItems={bulk?.selectedItems ?? []}
       />
+      {bulk && (
+        <BulkItemActionBar
+          selectedIds={multiSelection}
+          selectedItems={bulk.selectedItems}
+          onClearSelection={bulk.onClearSelection}
+          onActionComplete={bulk.onActionComplete}
+        />
+      )}
     </div>
   );
 }

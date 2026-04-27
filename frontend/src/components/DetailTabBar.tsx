@@ -23,7 +23,7 @@ const ITEM_BASE_TABS: TabDef[] = [
 
 const BOX_BASE_TABS: TabDef[] = [
   { id: 'info', label: 'Info' },
-  { id: 'images', label: 'Bilder' },
+  { id: 'notizen', label: 'Notizen' },
   { id: 'items', label: 'Artikel' },
   { id: 'events', label: 'Aktivitäten' },
 ];

@@ -19,7 +19,7 @@
 
 1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
 
-1b. **Restore mobile bulk-action controls.** `BulkItemActionBar` was moved from `ItemListPage` to the shell action panel (Steps 8–9) and is no longer rendered. Bulk actions (KI, relocate, export) are not accessible on mobile or desktop. Add a fallback (e.g. in the multi-selection detail panel that appears when `hasMultiSelection` is true).
+1b. ✅ **Restore bulk-action controls.** `BulkItemActionBar` restored inside `MultiItemDetailPanel` in Layout; reads `selectedIds` from PanelContext and `selectedItems/onClearSelection/onActionComplete` from `BulkSelectionContext`.
 
 2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started
 
