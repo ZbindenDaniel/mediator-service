@@ -128,6 +128,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID, box?.LocationId]);
   const shouldLinkLocation = Boolean(normalizedLocationId);
+  const { activeTab, setEntity, setMainView } = usePanelContext();
   const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
     if (!itemId) {
       logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
@@ -692,7 +693,6 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID]);
 
-  const { activeTab, setEntity, setMainView } = usePanelContext();
   const effectiveTab = activeTab ?? 'info';
 
   if (isLoading) {
