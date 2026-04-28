@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import Layout from './Layout';
 import { DialogProvider } from './dialog';
 import { PanelProvider, usePanelContext } from '../context/PanelContext';
@@ -54,7 +54,7 @@ function BoxEditRoute() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<ItemListPage />} />
+      <Route path="/" element={<Navigate to="/items?entity=item&tab=create" replace />} />
       <Route path="/boxes" element={<BoxListPage />} />
       <Route path="/boxes/:boxId" element={<BoxRoute />} />
       <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />

@@ -885,7 +885,6 @@ export default function BoxDetail({ boxId }: Props) {
                       <th className="col-stock optional-column">Anzahl</th>
                       <th className="col-quality optional-column">Qualität</th>
                       <th className="col-subcategory optional-column">Unterkategorie A</th>
-                      <th className="optional-column">Behälter</th>
                       <th className="col-actions">Aktionen</th>
                     </tr>
                   </thead>
@@ -935,7 +934,6 @@ export default function BoxDetail({ boxId }: Props) {
                                   <QualityBadge compact value={qualityValue} />
                                 </td>
                                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
-                                <td className="optional-column">{resolveContainerLabel(group)}</td>
                                 <td className="col-actions">
                                   {representativeId ? (
                                     <>

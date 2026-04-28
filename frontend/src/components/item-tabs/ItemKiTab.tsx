@@ -44,6 +44,7 @@ export default function ItemKiTab({
 }: Props) {
   return (
     <>
+      <AgenticStatusCard {...agenticCardProps} noCollapse />
       {(canClose || canDelete) && (
         <div className="tab-actions">
           {canClose && onClose && (
@@ -58,7 +59,6 @@ export default function ItemKiTab({
           )}
         </div>
       )}
-      <AgenticStatusCard {...agenticCardProps} noCollapse />
       {specFieldModalState ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title={specFieldModalState.title}

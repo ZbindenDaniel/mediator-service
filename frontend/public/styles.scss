@@ -202,9 +202,21 @@ body {
     background: var(--bg-button, #f6f7f9); /* prevent transparent bleed-through */
 }
 
+.tab-actions .btn:first-child,
+.tab-actions button:not(.btn):first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+}
+
 .tab-actions .btn:last-child,
 .tab-actions button:not(.btn):last-child {
     margin-right: 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+/* single button: fully rounded */
+.tab-actions .btn:only-child,
+.tab-actions button:not(.btn):only-child {
+    border-radius: var(--radius);
 }
 
 .tab-actions .btn:focus,

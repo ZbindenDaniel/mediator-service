@@ -133,7 +133,7 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
   const labelDialog = isLabelDialogOpen ? (
         <div className="dialog-overlay" role="presentation" onClick={() => handleLabelDialogClose('overlay')}>
           <div
-            className="dialog-content card"
+            className="dialog-content"
             role="dialog"
             aria-modal="true"
             aria-labelledby="label-choice-title"
