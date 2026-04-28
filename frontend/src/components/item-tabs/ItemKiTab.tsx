@@ -42,11 +42,37 @@ export default function ItemKiTab({
   onDelete,
   actionPending
 }: Props) {
+  const { canStart, canRestart, canCancel, needsReview, reviewIntent, startLabel, onStart, onRestart, onCancel, onReview } = agenticCardProps;
+  const startHandler = onStart ?? onRestart;
+  const startText = typeof startLabel === 'string' && startLabel.trim() ? startLabel : 'Starten';
+
+  const hasActions = canStart || canRestart || canCancel || needsReview || canClose || canDelete;
+
   return (
     <>
-      <AgenticStatusCard {...agenticCardProps} noCollapse />
-      {(canClose || canDelete) && (
+      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
+      {hasActions && (
         <div className="tab-actions">
+          {!needsReview && canStart && startHandler && (
+            <button type="button" className="btn" disabled={actionPending} onClick={() => void startHandler()}>
+              {startText}
+            </button>
+          )}
+          {!needsReview && canRestart && (
+            <button type="button" className="btn" disabled={actionPending} onClick={() => void onRestart()}>
+              Wiederholen
+            </button>
+          )}
+          {needsReview && !reviewIntent && (
+            <button type="button" className="btn" disabled={actionPending} onClick={() => void onReview()}>
+              Review
+            </button>
+          )}
+          {canCancel && (
+            <button type="button" className="btn" disabled={actionPending} onClick={() => void onCancel()}>
+              Abbrechen
+            </button>
+          )}
           {canClose && onClose && (
             <button type="button" className="btn" disabled={actionPending} onClick={() => void onClose()}>
               Abschliessen
