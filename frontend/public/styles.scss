@@ -103,12 +103,12 @@ body {
 }
 
 .panel-main {
-    flex: 0 0 62%;
+    flex: 0 0 66%;
     min-width: 0;
 }
 
 .app-shell__right {
-    flex: 0 0 38%;
+    flex: 0 0 34%;
     min-width: 0;
     position: sticky;
     top: 74px;
@@ -449,7 +449,7 @@ textarea {
 
     li {
         margin-left: 12px;
-        font-size: 10px;
+        font-size: 14px;
     }
 
 }
