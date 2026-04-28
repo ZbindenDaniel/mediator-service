@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+741. ✅ Group B UX fixes: box Artikel tab button group, info tab summary
+   - **Why:** "Neu"/"Hinzufügen" buttons were in a plain `.row` div below the table — moved to a `.tab-actions` group at the top of the Artikel tab (button group, rounded ends, consistent with other tabs). "Detail-Liste" link joined the group as a styled `.btn`. Old bottom row removed. Info tab now shows Artikel count (types + Stk if > 1) and total weight (summed from `items[].Gewicht_kg`; row hidden if all items lack weight data).
+   - **Deferred:** Weight calculation multiplies each item's `Gewicht_kg` by 1 (not quantity) — bulk items with quantity > 1 could be off. Clarify with warehouse once bulk weight semantics are confirmed.
 740. ✅ Group A UX fixes: print modal, AI tab order, box Behälter column, button radius, landing page
    - **Why:** Print dialog was transparent inside app-shell__right because `dialog-content card` picked up the panel's `.app-shell__right .card { background: none }` rule — removed `card` from the class. AI tab had close/delete buttons above the status card; swapped order (card first, actions below). Behälter column removed from BoxDetail item list (redundant — we're already inside that box). Button group first/last children now get matching border-radius (left-rounded / right-rounded / fully-rounded if single). Root `/` now redirects to `/items?entity=item&tab=create` so the landing view is always the item list with the new-item form open in the right panel.
    - **Deferred:** nothing deferred.

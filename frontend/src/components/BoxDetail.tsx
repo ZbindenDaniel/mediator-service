@@ -775,12 +775,25 @@ export default function BoxDetail({ boxId }: Props) {
                       </td>
                     </tr>
                     <tr>
+                      <th>Artikel</th>
+                      <td>{groupedItems.length} {groupedItems.length === 1 ? 'Typ' : 'Typen'}{items.length !== groupedItems.length ? `, ${items.length} Stk` : ''}</td>
+                    </tr>
+                    {(() => {
+                      const totalWeight = items.reduce((sum, i) => sum + (typeof i.Gewicht_kg === 'number' ? i.Gewicht_kg : 0), 0);
+                      return totalWeight > 0 ? (
+                        <tr>
+                          <th>Gewicht</th>
+                          <td>{totalWeight % 1 === 0 ? totalWeight : totalWeight.toFixed(2)} kg</td>
+                        </tr>
+                      ) : null;
+                    })()}
+                    <tr>
                       <th>Platziert am</th>
-                      <td>{box.PlacedAt ? formatDateTime(box.PlacedAt) : ''}</td>
+                      <td>{box.PlacedAt ? formatDateTime(box.PlacedAt) : '—'}</td>
                     </tr>
                     <tr>
                       <th>Platziert von</th>
-                      <td>{box.PlacedBy ?? 'Niemandem!'}</td>
+                      <td>{box.PlacedBy ?? '—'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -872,9 +885,15 @@ export default function BoxDetail({ boxId }: Props) {
 
             {effectiveTab === 'items' && (
             <div className="card">
-              <div className="row" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>Artikel</h3>
-                <Link to={itemsListRoute} onClick={handleNavigateToItems} style={{ color: 'rgb(221, 60, 114)', fontWeight: 600 }}>Detail-Liste</Link>
+              <div className="tab-actions">
+                <button type="button" className="btn" onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}>Neu</button>
+                <button type="button" className="btn" onClick={() => setShowAdd(true)}>Hinzufügen</button>
+                <Link
+                  to={itemsListRoute}
+                  onClick={handleNavigateToItems}
+                  className="btn"
+                  style={{ textDecoration: 'none' }}
+                >Detail-Liste</Link>
               </div>
               <div className="item-list-wrapper">
                 <table className="item-list">
@@ -967,10 +986,6 @@ export default function BoxDetail({ boxId }: Props) {
                       </tbody>
                     </table>
                   </div>
-              <div className="row">
-                <button type="button" className="btn" onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}>neu</button>
-                <button type="button" className="btn" onClick={() => setShowAdd(true)}>hinzufügen</button>
-              </div>
             </div>
             )}
 
