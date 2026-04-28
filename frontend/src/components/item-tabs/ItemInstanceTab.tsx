@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import RelocateItemCard from '../RelocateItemCard';
 import QualityBadge from '../QualityBadge';
 import PrintLabelButton from '../PrintLabelButton';
@@ -128,16 +129,22 @@ export default function ItemInstanceTab({
         {isOutOfStock && <p className="muted">Instanz nicht mehr eingelagert.</p>}
       </div>
 
-      {showRelocate && (
-        <div ref={relocateCardRef}>
-          <RelocateItemCard
-            itemId={item.ItemUUID}
-            onRelocated={() => {
-              onRelocated();
-              relocateCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          />
-        </div>
+      {showRelocate && ReactDOM.createPortal(
+        <div className="dialog-overlay" role="presentation" onClick={onRelocated}>
+          <div
+            className="dialog-content"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Artikel umlagern"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <RelocateItemCard
+              itemId={item.ItemUUID}
+              onRelocated={onRelocated}
+            />
+          </div>
+        </div>,
+        document.body
       )}
 
       <div className="card grid-span-2">

@@ -49,6 +49,10 @@ const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 function parseItemListFiltersFromUrl(searchParams: URLSearchParams): Partial<ItemListFilters> {
   const parsed: Partial<ItemListFilters> = {};
   try {
+    const qValue = searchParams.get('q');
+    if (qValue !== null && qValue.trim()) {
+      parsed.searchTerm = qValue.trim();
+    }
     const boxValues = searchParams.getAll('box');
     const boxAliasValues = searchParams.getAll('boxFilter');
     if (boxValues.length > 1 || boxAliasValues.length > 1) {
@@ -75,7 +79,7 @@ function parseItemListFiltersFromUrl(searchParams: URLSearchParams): Partial<Ite
 
 function hasItemListUrlFilterParams(searchParams: URLSearchParams): boolean {
   try {
-    return searchParams.has('box') || searchParams.has('boxFilter');
+    return searchParams.has('box') || searchParams.has('boxFilter') || searchParams.has('q');
   } catch (error) {
     logError('Failed to detect item list URL filter params', error);
     return false;

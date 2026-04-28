@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
+import ReactDOM from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePanelContext } from '../context/PanelContext';
 import DetailTabBar from './DetailTabBar';
@@ -129,7 +130,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID, box?.LocationId]);
   const shouldLinkLocation = Boolean(normalizedLocationId);
-  const { activeTab, setEntity, setMainView } = usePanelContext();
+  const { activeTab, setEntity } = usePanelContext();
   const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
     if (!itemId) {
       logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
@@ -139,11 +140,10 @@ export default function BoxDetail({ boxId }: Props) {
     try {
       logger.info('Navigating to item detail from box detail row', { boxId, itemId, source });
       setEntity('item', itemId);
-      setMainView('items');
     } catch (error) {
       logError('Failed to navigate to item detail from box detail row', error, { boxId, itemId, source });
     }
-  }, [boxId, setEntity, setMainView]);
+  }, [boxId, setEntity]);
 
   const handleNavigateToItems = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -737,11 +737,22 @@ export default function BoxDetail({ boxId }: Props) {
           </div>
         )}
 
-        {showRelocate && box && isBoxRelocatable && (
-          <RelocateBoxCard
-            boxId={box.BoxID}
-            onMoved={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
-          />
+        {showRelocate && box && isBoxRelocatable && ReactDOM.createPortal(
+          <div className="dialog-overlay" role="presentation" onClick={() => setShowRelocate(false)}>
+            <div
+              className="dialog-content"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Behälter umlagern"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <RelocateBoxCard
+                boxId={box.BoxID}
+                onMoved={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
+              />
+            </div>
+          </div>,
+          document.body
         )}
 
         {box ? (

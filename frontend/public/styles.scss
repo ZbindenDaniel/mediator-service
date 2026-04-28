@@ -199,6 +199,7 @@ body {
     margin-right: -1px; /* collapse shared border between adjacent buttons */
     position: relative;
     z-index: 0;
+    background: var(--bg-button, #f6f7f9); /* prevent transparent bleed-through */
 }
 
 .tab-actions .btn:last-child,
@@ -242,11 +243,15 @@ body {
 /* === Detail panel tab bar === */
 .detail-tab-bar {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     gap: 2px;
     padding: 6px 8px 0;
     border-bottom: 1px solid var(--line);
     flex-shrink: 0;
+    /* hide scrollbar visually but keep it functional on touch */
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
 }
 
 .detail-tab-bar__tab {
@@ -254,12 +259,15 @@ body {
     border: none;
     padding: 6px 10px;
     font: inherit;
-    font-size: 0.82rem;
+    font-size: 1rem;
     color: var(--muted, #888);
     cursor: pointer;
     border-radius: var(--radius) var(--radius) 0 0;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 3px;
 
     &:hover {
         color: var(--fg);
@@ -442,6 +450,59 @@ textarea {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.header-search {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-left: 4px;
+}
+
+.header-search__input {
+    height: 30px;
+    width: 120px;
+    padding: 0 8px;
+    font: inherit;
+    font-size: 0.82rem;
+    border: 1px solid var(--line);
+    border-right: none;
+    border-radius: var(--radius) 0 0 var(--radius);
+    background: var(--bg, #fff);
+    color: var(--fg);
+    outline: none;
+    transition: width 0.2s;
+
+    &:focus {
+        width: 180px;
+        border-color: var(--link, #0366d6);
+    }
+}
+
+.header-search__btn {
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--bg-button, #f6f7f9);
+    color: var(--fg);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.9rem;
+
+    &:hover {
+        background: var(--head);
+    }
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
 }
 
 // TODO(mobile-header): Confirm small-screen header title hiding matches UX expectations.

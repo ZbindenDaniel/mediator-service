@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import { AgenticStatusCard, type AgenticStatusCardProps } from '../AgenticStatusCard';
 import AgenticSpecFieldReviewModal, {
   type AgenticSpecFieldOption,
@@ -58,7 +59,7 @@ export default function ItemKiTab({
         </div>
       )}
       <AgenticStatusCard {...agenticCardProps} noCollapse />
-      {specFieldModalState ? (
+      {specFieldModalState ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title={specFieldModalState.title}
           description={specFieldModalState.description}
@@ -72,7 +73,8 @@ export default function ItemKiTab({
           secondaryAdditionalInputPlaceholder={specFieldModalState.secondaryAdditionalInputPlaceholder}
           onCancel={onSpecFieldModalClose}
           onConfirm={onSpecFieldModalConfirm}
-        />
+        />,
+        document.body
       ) : null}
     </>
   );

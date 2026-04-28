@@ -12,7 +12,7 @@ import {
   ItemListFilterChangeDetail,
   loadItemListFilters
 } from '../lib/itemListFiltersStorage';
-import { GoArchive, GoFilter, GoHome, GoListUnordered, GoPlus, GoPulse } from 'react-icons/go';
+import { GoArchive, GoFilter, GoHome, GoListUnordered, GoPlus, GoPulse, GoSearch } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 
@@ -22,6 +22,7 @@ export default function Header() {
   const dialog = useDialog();
   const navigate = useNavigate();
   const { setCreateMode } = usePanelContext();
+  const [searchQuery, setSearchQuery] = useState('');
   const [user, setUserState] = useState(() => getUser().trim());
   const [filterSummaries, setFilterSummaries] = useState<string[]>([]);
   const [hasStoredFilters, setHasStoredFilters] = useState(false);
@@ -108,6 +109,18 @@ export default function Header() {
     }
   }, [dialog, user]);
 
+  const handleSearchSubmit = useCallback((event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const q = searchQuery.trim();
+    if (!q) return;
+    try {
+      navigate(`/items?q=${encodeURIComponent(q)}`);
+      setSearchQuery('');
+    } catch (err) {
+      logError('Failed to navigate to search results from header', err);
+    }
+  }, [navigate, searchQuery]);
+
   // TODO(header-home-link): Validate home navigation tracking once error telemetry is wired.
   const handleHomeClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -182,6 +195,21 @@ export default function Header() {
           >
             <GoPulse aria-hidden="true" />
           </Link>
+          <form className="header-search" onSubmit={handleSearchSubmit} role="search">
+            <label htmlFor="header-search-input" className="visually-hidden">Artikel suchen</label>
+            <input
+              id="header-search-input"
+              type="search"
+              className="header-search__input"
+              placeholder="Suchen…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Artikel suchen"
+            />
+            <button type="submit" className="header-search__btn" aria-label="Suche starten" title="Suche starten">
+              <GoSearch aria-hidden="true" />
+            </button>
+          </form>
         </nav>
       </div>
       <div className="right">
