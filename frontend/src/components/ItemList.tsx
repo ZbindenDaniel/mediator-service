@@ -82,7 +82,7 @@ export default function ItemList({
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
-  const { entityId, setEntity, setMainView } = usePanelContext();
+  const { entityId, setEntity } = usePanelContext();
   const navigateToItemDetail = useCallback((itemId: string, identifierType: 'itemUUID' | 'artikelNummer', source: 'click' | 'keyboard') => {
     try {
       if (onSelect) {
@@ -311,7 +311,7 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                     <button
                       type="button"
                       className="link-btn"
-                      onClick={(e) => { e.stopPropagation(); setEntity('box', boxId); setMainView('boxes'); }}
+                      onClick={(e) => { e.stopPropagation(); setEntity('box', boxId); }}
                     >
                       {boxId}
                     </button>
@@ -324,7 +324,7 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                     <button
                       type="button"
                       className="link-btn"
-                      onClick={(e) => { e.stopPropagation(); setEntity('box', shelfId); setMainView('boxes'); }}
+                      onClick={(e) => { e.stopPropagation(); setEntity('box', shelfId); }}
                     >
                       <LocationTag item={locationItem} itemId={representativeItemId} />
                     </button>

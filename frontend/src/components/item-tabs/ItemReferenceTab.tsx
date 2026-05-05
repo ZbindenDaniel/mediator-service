@@ -9,16 +9,25 @@ interface Props {
   referenceDetailRows: [string, React.ReactNode][];
   connectedToDevices: any[];
   compatibleParentRefs: any[];
+  onEdit: () => void;
+  onShopStatus: () => void;
 }
 
 export default function ItemReferenceTab({
   item,
   referenceDetailRows,
   connectedToDevices,
-  compatibleParentRefs
+  compatibleParentRefs,
+  onEdit,
+  onShopStatus
 }: Props) {
   return (
-    <div className="card">
+    <>
+      <div className="tab-actions">
+        <button type="button" className="btn" onClick={onEdit}>Bearbeiten</button>
+        <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>
+      </div>
+      <div className="card">
       <div className="item-reference-tab__badges">
         <ShopBadge
           compact
@@ -58,5 +67,6 @@ export default function ItemReferenceTab({
         <p className="muted">Keine Referenzdaten vorhanden.</p>
       )}
     </div>
+    </>
   );
 }

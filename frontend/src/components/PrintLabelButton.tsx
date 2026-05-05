@@ -8,9 +8,11 @@ interface Props {
   boxId?: string;
   itemId?: string;
   onPrintStart?: (context: { boxId?: string; itemId?: string }) => void;
+  /** When true, renders only the trigger button with no card wrapper. */
+  inline?: boolean;
 }
 
-export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props) {
+export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline = false }: Props) {
   const [status, setStatus] = useState('');
   const [preview, setPreview] = useState('');
   const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
@@ -128,6 +130,36 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
     }
   }
 
+  const labelDialog = isLabelDialogOpen ? (
+        <div className="dialog-overlay" role="presentation" onClick={() => handleLabelDialogClose('overlay')}>
+          <div
+            className="dialog-content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="label-choice-title"
+            ref={labelDialogRef}
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 id="label-choice-title" className="dialog-title">Label drucken</h4>
+            <p className="dialog-message">Bitte wähle den Labeltyp.</p>
+            <div className="dialog-buttons">
+              <button type="button" className="btn" onClick={() => handleLabelSelection('item')}>Gross</button>
+              <button type="button" className="btn" onClick={() => handleLabelSelection('smallitem')}>Klein</button>
+            </div>
+          </div>
+        </div>
+  ) : null;
+
+  if (inline) {
+    return (
+      <>
+        <button type="button" className="btn" onClick={handleClick}>Label drucken</button>
+        {labelDialog}
+      </>
+    );
+  }
+
   return (
     <div className="card">
       <div className="card-header">
@@ -145,30 +177,7 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart }: Props)
           )}
         </div>
       )}
-      {isLabelDialogOpen && (
-        <div className="dialog-overlay" role="presentation" onClick={() => handleLabelDialogClose('overlay')}>
-          <div
-            className="dialog-content card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="label-choice-title"
-            ref={labelDialogRef}
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h4 id="label-choice-title" className="dialog-title">Label drucken</h4>
-            <p className="dialog-message">Bitte wähle den Labeltyp.</p>
-            <div className="dialog-buttons">
-              <button type="button" className="btn" onClick={() => handleLabelSelection('item')}>
-                Gross
-              </button>
-              <button type="button" className="btn" onClick={() => handleLabelSelection('smallitem')}>
-                Klein
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {labelDialog}
     </div>
   );
 }

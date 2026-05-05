@@ -122,6 +122,22 @@ export function AgenticStatusCard({
       </h3>
       {!effectiveCollapsed ? (
         <div className="agentic-status-card__content" id={contentId}>
+           {!hideInlineActions && !needsReview && (canStart || canRestart) ? (
+            <div className='row'>
+              {canStart && startHandler ? (
+                <button type="button" className="btn" disabled={actionPending} onClick={startHandler}>{startText}</button>
+              ) : null}
+              {canRestart ? (
+                <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>Wiederholen</button>
+              ) : null}
+            </div>
+          ) : null}
+          {!hideInlineActions && needsReview ? (
+            <div className='row'>
+              <button type="button" className="btn" disabled={actionPending} onClick={onReview}>Review</button>
+            </div>
+          ) : null}
+          
           <div className="row status-row">
             {isInProgress ? <span className="status-spinner" aria-hidden="true" /> : null}
           </div>
@@ -166,21 +182,6 @@ export function AgenticStatusCard({
           {!hideInlineActions && canCancel ? (
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>Abbrechen</button>
-            </div>
-          ) : null}
-          {!hideInlineActions && !needsReview && (canStart || canRestart) ? (
-            <div className='row'>
-              {canStart && startHandler ? (
-                <button type="button" className="btn" disabled={actionPending} onClick={startHandler}>{startText}</button>
-              ) : null}
-              {canRestart ? (
-                <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>Wiederholen</button>
-              ) : null}
-            </div>
-          ) : null}
-          {!hideInlineActions && needsReview ? (
-            <div className='row'>
-              <button type="button" className="btn" disabled={actionPending} onClick={onReview}>Review</button>
             </div>
           ) : null}
         </div>

@@ -1733,20 +1733,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     );
 
     return (
-      <>
-        {blockingOverlay}
-        {onCancel ? (
-          <div className="panel-create__cancel-row">
-            <button type="button" className="btn" onClick={onCancel}>Abbrechen</button>
-          </div>
-        ) : null}
         <ItemBasicInfoForm
           initialValues={basicInfo}
           onSubmit={handleBasicInfoNext}
           layout={layout}
           headerContent={<>{basicInfoHeader}{ocrSection}</>}
         />
-      </>
     );
   }
 

@@ -2283,22 +2283,30 @@ export default function ItemDetail({ itemId }: Props) {
       stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
       title: string,
       message: React.ReactNode
-    ): Promise<boolean | null> => {
+    ): Promise<true | null> => {
       try {
         const confirmed = await dialogService.confirm({
           title,
           message,
           confirmLabel: 'Ja',
-          cancelLabel: 'Nein',
+          cancelLabel: 'Abbrechen',
           contentClassName: 'review-dialog'
         });
+        if (!confirmed) {
+          logger.warn?.('ItemDetail: Agentic review checklist step aborted via cancel', {
+            itemId,
+            stepKey,
+            completed: false
+          });
+          return null;
+        }
         logger.info?.('ItemDetail: Agentic review checklist step completed', {
           itemId,
           stepKey,
           completed: true,
-          answer: confirmed
+          answer: true
         });
-        return confirmed;
+        return true;
       } catch (error) {
         logError('ItemDetail: Failed to capture structured review flag', error, {
           itemId,
@@ -2438,7 +2446,7 @@ export default function ItemDetail({ itemId }: Props) {
           title: 'Schritt 6 · Shop',
           message: 'Artikel in den Shop stellen?',
           confirmLabel: 'Ja',
-          cancelLabel: 'Nein'
+          cancelLabel: 'Abbrechen'
         });
         logger.info?.('ItemDetail: Agentic review checklist step completed', {
           itemId,
@@ -3334,7 +3342,7 @@ export default function ItemDetail({ itemId }: Props) {
     };
 
     let tabContent: React.ReactNode;
-    switch (activeTab ?? 'reference') {
+    switch (activeTab ?? 'instance') {
       case 'reference':
         tabContent = (
           <ItemReferenceTab
@@ -3342,6 +3350,8 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
+            onEdit={() => void handleEdit()}
+            onShopStatus={() => void handleShopStatus()}
           />
         );
         break;
@@ -3353,6 +3363,11 @@ export default function ItemDetail({ itemId }: Props) {
             specFieldModalState={specModalData}
             onSpecFieldModalClose={handleSpecFieldModalClose}
             onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
+            canClose={agenticCanClose}
+            onClose={agenticCanClose ? handleAgenticClose : undefined}
+            canDelete={agenticCanDelete}
+            onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
+            actionPending={agenticActionPending}
           />
         );
         break;
@@ -3369,6 +3384,7 @@ export default function ItemDetail({ itemId }: Props) {
             relocateCardRef={relocateCardRef}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
+            onRelocate={() => setShowRelocate(true)}
             onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
             onRelocated={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
           />
@@ -3417,6 +3433,8 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
+            onEdit={() => void handleEdit()}
+            onShopStatus={() => void handleShopStatus()}
           />
         );
     }

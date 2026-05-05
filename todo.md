@@ -13,13 +13,18 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0c. **Verify tab icons render correctly once build runs.** react-icons/go icons GoInfo, GoPencil, GoFileMedia, GoPaperclip, GoTools are newly imported in DetailTabBar — confirm they exist in v5.5.0 (Octicons v19) when bundling.
+
+0d. **Move filter-clear button into ItemListPage list header (top-right).** Currently lives in Header.tsx. User requested it at list level (not global header) — requires passing filter-reset state down or using an event.
+
+
 0. **Eliminate duplicate `/api/items` fetch on item selection.** When switching items via the list, ItemDetail's neighbor-resolution `useEffect` (`[itemId, neighborContext]`) fetches `/api/items` independently from the list fetch in `ItemListPage`. Fix: `handleItemSelect` in `ItemListPage` should encode `prev=<prevId>&next=<nextId>` as URL params when calling `setEntity` so ItemDetail reads them from `searchParams` and skips its own fetch (the `prev`/`next` params are already supported by ItemDetail's `neighborContext` memoization).
 
 0b. **Filter state resets intermittently when switching items.** `ItemListPage` re-runs its filter-init `useEffect` on every `searchParams` change, including PanelContext's `entity/id/tab` updates. React bails out when state values are unchanged (primitives), but `setFiltersReady(true)` always runs. Under certain timing conditions (e.g. fast item switching), this may reset in-flight filter changes. Investigation needed — add guard to bail out early if `entity`/`id`/`tab` are the only changed params.
 
 1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
 
-1b. **Restore mobile bulk-action controls.** `BulkItemActionBar` was moved from `ItemListPage` to the shell action panel (Steps 8–9). The action panel is hidden below 900px, so bulk actions (KI, relocate, export) are not accessible on mobile. Add a fallback for small screens.
+1b. ✅ **Restore bulk-action controls.** `BulkItemActionBar` restored inside `MultiItemDetailPanel` in Layout; reads `selectedIds` from PanelContext and `selectedItems/onClearSelection/onActionComplete` from `BulkSelectionContext`.
 
 2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started
 
