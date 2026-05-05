@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+742. ✅ Header search: ported SearchCard logic into Header.tsx with inline dropdown
+   - **Why:** The nav search bar was navigating to `/items?q=...` but the search endpoint `/api/search` was not being called. Ported direct-ID navigation (I-*, B-*, S-* prefixes) and API text search from the old SearchCard into Header; results open in the right panel via `setEntity()` without a full-page nav. Dropdown uses click-outside (pointerdown) and Escape-key listeners. CSS added for dropdown/result/pill/desc classes.
+   - **Deferred:** Browser history back/forward does not update the panel state (Issue 7 — PanelContext writes URL but doesn't hydrate from URL on popstate). Item-edit post-save renders in the left panel (Issue 10 — handleEdit navigates to full route).
 741. ✅ Group B UX fixes: box Artikel tab button group, info tab summary
    - **Why:** "Neu"/"Hinzufügen" buttons were in a plain `.row` div below the table — moved to a `.tab-actions` group at the top of the Artikel tab (button group, rounded ends, consistent with other tabs). "Detail-Liste" link joined the group as a styled `.btn`. Old bottom row removed. Info tab now shows Artikel count (types + Stk if > 1) and total weight (summed from `items[].Gewicht_kg`; row hidden if all items lack weight data).
    - **Deferred:** Weight calculation multiplies each item's `Gewicht_kg` by 1 (not quantity) — bulk items with quantity > 1 could be off. Clarify with warehouse once bulk weight semantics are confirmed.
