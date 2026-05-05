@@ -48,11 +48,11 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className={`app-shell${hasEntity ? ' app-shell--has-entity' : ''}`}>
             <div className="panel-main">{children}</div>
             <div className="app-shell__right">
-              {hasEntity && (
+              {/* {hasEntity && (
                 <button type="button" className="mobile-back-btn" onClick={clearSelection}>
                   ← Zurück
                 </button>
-              )}
+              )} */}
               {isCreateMode ? (
                 <div className="panel-create">
                   <ItemCreate
