@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoContainer, GoSearch } from 'react-icons/go';
 import { useSearchParams } from 'react-router-dom';
+import { usePanelContext } from '../context/PanelContext';
+import { useSetBulkSelection } from '../context/BulkSelectionContext';
 import type { AgenticRunStatus, Item } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_NOT_STARTED,
@@ -25,7 +27,6 @@ import {
 } from '../lib/itemListFiltersStorage';
 import { groupItemsForDisplay, GroupedItemDisplay } from '../lib/itemGrouping';
 import { logError, logger } from '../utils/logger';
-import BulkItemActionBar from './BulkItemActionBar';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
 
@@ -48,6 +49,10 @@ const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 function parseItemListFiltersFromUrl(searchParams: URLSearchParams): Partial<ItemListFilters> {
   const parsed: Partial<ItemListFilters> = {};
   try {
+    const qValue = searchParams.get('q');
+    if (qValue !== null && qValue.trim()) {
+      parsed.searchTerm = qValue.trim();
+    }
     const boxValues = searchParams.getAll('box');
     const boxAliasValues = searchParams.getAll('boxFilter');
     if (boxValues.length > 1 || boxAliasValues.length > 1) {
@@ -74,7 +79,7 @@ function parseItemListFiltersFromUrl(searchParams: URLSearchParams): Partial<Ite
 
 function hasItemListUrlFilterParams(searchParams: URLSearchParams): boolean {
   try {
-    return searchParams.has('box') || searchParams.has('boxFilter');
+    return searchParams.has('box') || searchParams.has('boxFilter') || searchParams.has('q');
   } catch (error) {
     logError('Failed to detect item list URL filter params', error);
     return false;
@@ -373,6 +378,8 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 
 export default function ItemListPage() {
   const [searchParams] = useSearchParams();
+  const { setEntity, setMultiSelection, clearSelection } = usePanelContext();
+  const setBulkSelection = useSetBulkSelection();
   const [items, setItems] = useState<Item[]>([]);
   const [placementFilter, setPlacementFilter] = useState<ItemListFilters['placementFilter']>(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
   const [isLoading, setIsLoading] = useState(true);
@@ -807,12 +814,42 @@ export default function ItemListPage() {
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds(new Set());
-  }, []);
+    clearSelection();
+  }, [clearSelection]);
+
+  const handleItemSelect = useCallback((id: string) => {
+    setEntity('item', id);
+  }, [setEntity]);
 
   const selectedItems = useMemo(() => {
     const selectedLookup = new Set(selectedIds);
     return items.filter((item) => selectedLookup.has(item.ItemUUID));
   }, [items, selectedIds]);
+
+  // Sync checkbox selection into PanelContext (multiSelection) and BulkSelectionContext.
+  // Cleanup on unmount clears multiSelection so switching routes doesn't leave stale state.
+  useEffect(() => {
+    const ids = Array.from(selectedIds);
+    if (ids.length > 0) {
+      setMultiSelection(ids);
+      setBulkSelection?.({
+        selectedItems,
+        onClearSelection: handleClearSelection,
+        onActionComplete: () => loadItems({ silent: true })
+      });
+    } else {
+      clearSelection();
+      setBulkSelection?.(null);
+    }
+  }, [selectedIds, selectedItems, setMultiSelection, clearSelection, setBulkSelection, handleClearSelection, loadItems]);
+
+  // Clear selection state when this page unmounts so ActionPanel doesn't show stale bulk actions.
+  useEffect(() => {
+    return () => {
+      clearSelection();
+      setBulkSelection?.(null);
+    };
+  }, [clearSelection, setBulkSelection]);
 
   const handleAgenticStatusFilterChange = useCallback((value: string) => {
     const nextValue = value as AgenticRunStatus | 'any';
@@ -1067,17 +1104,11 @@ export default function ItemListPage() {
       {isRefreshing ? (
         <p className="muted" data-testid="item-list-refresh-status">Aktualisiere Liste…</p>
       ) : null}
-      {selectedIds.size ? (
-        <BulkItemActionBar
-          onActionComplete={() => loadItems({ silent: true })}
-          onClearSelection={handleClearSelection}
-          selectedItems={selectedItems}
-          selectedIds={Array.from(selectedIds)}
-        />
-      ) : null}
+      {/* BulkItemActionBar moved to ActionPanel (right panel) when multi-selection is active */}
       <ItemList
         allVisibleSelected={allVisibleSelected}
         items={filtered}
+        onSelect={handleItemSelect}
         onToggleAll={handleToggleAll}
         onToggleItem={handleToggleItem}
         selectedItemIds={selectedIds}

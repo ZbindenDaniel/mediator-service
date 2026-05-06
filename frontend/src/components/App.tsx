@@ -1,12 +1,11 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
-// TODO: Assess additional global providers alongside the dialog provider when new cross-cutting concerns emerge.
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import Layout from './Layout';
 import { DialogProvider } from './dialog';
+import { PanelProvider, usePanelContext } from '../context/PanelContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
-import LandingPage from './LandingPage';
 import QrScannerPage from './QrScannerPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
@@ -20,11 +19,25 @@ import ShelfCreateForm from './ShelfCreateForm';
 
 function BoxRoute() {
   const { boxId } = useParams();
+  const { setEntity } = usePanelContext();
+  // populate the panel so panel-detail shows BoxDetail for direct /boxes/:id deep links
+  useEffect(() => {
+    if (boxId) {
+      setEntity('box', boxId);
+    }
+  }, [boxId, setEntity]);
   return boxId ? <BoxDetail boxId={boxId} /> : <div>Behälter fehlt</div>;
 }
 
 function ItemRoute() {
   const { itemId } = useParams();
+  const { setEntity } = usePanelContext();
+  // populate the panel so panel-detail shows ItemDetail for direct /items/:id deep links
+  useEffect(() => {
+    if (itemId) {
+      setEntity('item', itemId);
+    }
+  }, [itemId, setEntity]);
   return itemId ? <ItemDetail itemId={itemId} /> : <div>Missing item</div>;
 }
 
@@ -41,7 +54,7 @@ function BoxEditRoute() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route path="/" element={<Navigate to="/items?entity=item&tab=create" replace />} />
       <Route path="/boxes" element={<BoxListPage />} />
       <Route path="/boxes/:boxId" element={<BoxRoute />} />
       <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />
@@ -61,9 +74,11 @@ export default function App() {
   return (
     <Router>
       <DialogProvider>
-        <Layout>
-          <AppRoutes />
-        </Layout>
+        <PanelProvider>
+          <Layout>
+            <AppRoutes />
+          </Layout>
+        </PanelProvider>
       </DialogProvider>
     </Router>
   );

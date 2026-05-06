@@ -95,6 +95,301 @@ body {
     height: 100vh;
 }
 
+/* === App shell: two-column right-split layout === */
+.app-shell {
+    display: flex;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+.panel-main {
+    flex: 0 0 66%;
+    min-width: 0;
+}
+
+.app-shell__right {
+    flex: 0 0 34%;
+    min-width: 0;
+    position: sticky;
+    top: 74px;
+    height: calc(100vh - 74px);
+    display: flex;
+    flex-direction: column;
+    border-left: 5px solid var(--head);
+
+}
+
+.panel-detail {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.panel-detail__body {
+    flex: 1 1 0;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.panel-create {
+    flex: 1 1 0;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 0 20px;
+}
+
+.panel-create__cancel-row {
+    padding: 8px 12px 0;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Single-column flex layout for tab content inside the detail panel */
+.panel-tab-body {
+    flex: 1 1 0;
+    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+}
+
+/* Cards inside the tab body manage their own spacing via gap, not margin-bottom */
+.panel-tab-body>.card {
+    margin-bottom: 0;
+}
+
+/* BoxDetail summary grid: force single column inside the panel */
+.panel-tab-body .box-detail-summary-grid {
+    grid-template-columns: 1fr;
+}
+
+/* On large screens, cards inside the right-column panels have no visual chrome —
+   the panel borders + padding provide the container. Flat content reads better
+   in the ~400px detail/action slots than boxed cards. */
+@media (min-width: 900px) {
+    .app-shell__right .card {
+        background: none;
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
+        margin-bottom: 0;
+    }
+}
+
+/* Action panel nav row: two buttons side by side */
+.action-panel__nav-row {
+    display: flex;
+    gap: 8px;
+}
+
+/* Button group: all tab actions in a connected row, square corners */
+.tab-actions {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+
+.tab-actions .btn,
+.tab-actions button:not(.btn) {
+    border-radius: 0;
+    margin-right: -1px;
+    /* collapse shared border between adjacent buttons */
+    position: relative;
+    z-index: 0;
+    background: var(--bg-button, #f6f7f9);
+    /* prevent transparent bleed-through */
+}
+
+.tab-actions .btn:first-child,
+.tab-actions button:not(.btn):first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.tab-actions .btn:last-child,
+.tab-actions button:not(.btn):last-child {
+    margin-right: 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+/* single button: fully rounded */
+.tab-actions .btn:only-child,
+.tab-actions button:not(.btn):only-child {
+    border-radius: var(--radius);
+}
+
+.tab-actions .btn:focus,
+.tab-actions button:not(.btn):focus {
+    z-index: 1;
+    /* lift focused button so its ring is not clipped */
+}
+
+/* Back button shown only on mobile when detail panel is active */
+// .mobile-back-btn {
+//     display: none;
+// }
+
+/* Badges row in reference tab */
+.item-reference-tab__badges {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+/* Button styled as an inline link for cross-entity navigation inside detail panels */
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--link, #0366d6);
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+}
+
+.link-btn:hover {
+    opacity: 0.8;
+}
+
+/* === Detail panel tab bar === */
+.detail-tab-bar {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 2px;
+    padding: 11px 8px 0;
+    border-bottom: 1px solid #bce0a3;
+    flex-shrink: 0;
+    /* hide scrollbar visually but keep it functional on touch */
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.detail-tab-bar__tab {
+    background: none;
+    border: none;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 1.4rem;
+    color: var(--muted, #888);
+    cursor: pointer;
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+
+    &:hover {
+        color: var(--fg);
+        background: var(--head, rgba(0, 0, 0, 0.04));
+    }
+
+    &.is-active {
+        color: var(--fg);
+        border-bottom-color: var(--head, rgba(0, 0, 0, 0.04));
+        font-weight: 600;
+    }
+}
+
+.tab-badge {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-warning, #f59e0b);
+    margin-left: 4px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+/* === Action panel content === */
+.action-panel__content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+}
+
+/* === Multi-item summary (detail panel when multiple rows are checked) === */
+.multi-item-summary {
+    padding: 12px;
+}
+
+.multi-item-summary__heading {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 8px;
+}
+
+.multi-item-summary__list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.multi-item-summary__item {
+    font-size: 0.8rem;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--border, #e1e4e8);
+}
+
+@media (max-width: 900px) {
+
+    .panel-main {
+        flex: 1 1 100%;
+    }
+
+    .panel-detail {
+        padding-top: 10vh;
+    }
+
+    .app-shell__right {
+        display: none;
+    }
+
+    /* When an entity is selected, swap: hide list, show detail full-screen */
+    .app-shell--has-entity .panel-main {
+        display: none;
+    }
+
+    .app-shell--has-entity .app-shell__right {
+        display: flex;
+        flex: 1 1 100%;
+        position: static;
+        height: auto;
+        min-height: calc(100vh - 74px);
+        border-left: none;
+    }
+
+    // .mobile-back-btn {
+    //     display: block;
+    //     width: 100%;
+    //     padding: 10px 16px;
+    //     text-align: left;
+    //     background: var(--bg, #f6f8fa);
+    //     border: none;
+    //     border-bottom: 1px solid var(--border, #e1e4e8);
+    //     font-size: 0.9rem;
+    //     cursor: pointer;
+    //     flex-shrink: 0;
+    // }
+}
+
 textarea {
     resize: vertical;
     min-height: 80px;
@@ -167,7 +462,7 @@ textarea {
 
     li {
         margin-left: 12px;
-        font-size: 10px;
+        font-size: 14px;
     }
 
 }
@@ -180,6 +475,130 @@ textarea {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.header-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-left: 4px;
+}
+
+.header-search__input {
+    height: 30px;
+    width: 120px;
+    padding: 0 8px;
+    font: inherit;
+    font-size: 0.82rem;
+    border: 1px solid var(--line);
+    border-right: none;
+    border-radius: var(--radius) 0 0 var(--radius);
+    background: var(--bg, #fff);
+    color: var(--fg);
+    outline: none;
+    transition: width 0.2s;
+
+    &:focus {
+        width: 180px;
+        border-color: var(--link, #0366d6);
+    }
+}
+
+.header-search__btn {
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: var(--bg-button, #f6f7f9);
+    color: var(--fg);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.9rem;
+
+    &:hover {
+        background: var(--head);
+    }
+}
+
+.header-search__dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 260px;
+    max-width: 380px;
+    background: var(--bg, #fff);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    z-index: 200;
+    overflow: hidden;
+}
+
+.header-search__dropdown-status {
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    color: var(--fg-muted, #666);
+}
+
+.header-search__result {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 12px;
+    background: none;
+    border: none;
+    border-top: 1px solid var(--line);
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.82rem;
+    text-align: left;
+    cursor: pointer;
+
+    &:first-child {
+        border-top: none;
+    }
+
+    &:hover,
+    &:focus-visible {
+        background: var(--head, #f6f7f9);
+        outline: none;
+    }
+}
+
+.header-search__result-pill {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 0.78rem;
+    background: var(--bg-button, #f6f7f9);
+
+    &.mono {
+        font-family: monospace;
+    }
+}
+
+.header-search__result-desc {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    &.muted {
+        color: var(--fg-muted, #666);
+    }
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
 }
 
 // TODO(mobile-header): Confirm small-screen header title hiding matches UX expectations.
@@ -197,6 +616,7 @@ textarea {
     #header-back-button,
     #header-home-button,
     .header-nav a,
+    .header-nav__icon-btn,
     .header-filter-indicator {
         width: 30px;
         height: 30px;
@@ -204,7 +624,8 @@ textarea {
 
     #header-back-button,
     #header-home-button,
-    .header-nav a {
+    .header-nav a,
+    .header-nav__icon-btn {
         font-size: 20px;
     }
 
@@ -215,7 +636,8 @@ textarea {
 }
 
 // TODO(navigation): Revisit header icon sizing if additional controls are added.
-.header-nav a {
+.header-nav a,
+.header-nav__icon-btn {
     color: var(--fg);
     font-size: 22px;
     font-weight: bolder;
@@ -228,10 +650,14 @@ textarea {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    padding: 0;
 }
 
 .header-nav a:hover,
 .header-nav a:focus-visible,
+.header-nav__icon-btn:hover,
+.header-nav__icon-btn:focus-visible,
 #header-home-button:hover,
 #header-home-button:focus-visible {
     background: #0000000d;
@@ -452,7 +878,6 @@ div {
 
 .details th {
     text-align: left;
-    padding-right: 0.5rem;
 }
 
 /* TODO(agent): Revisit table sizing rules once layout tokens are standardized across cards. */
@@ -1136,6 +1561,27 @@ button:hover {
     filter: brightness(.95)
 }
 
+/* BEM modifier variants used in ActionPanel */
+.btn--primary {
+    background: var(--acc);
+    color: #fff;
+    border-color: var(--acc);
+}
+
+.btn--primary:hover {
+    filter: brightness(.95);
+}
+
+.btn--danger {
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
+}
+
+.btn--danger:hover {
+    filter: brightness(.9);
+}
+
 input:focus,
 textarea:focus,
 select:focus,
@@ -1508,7 +1954,8 @@ button:focus {
     align-items: center;
     gap: 6px;
     width: 29%;
-    min-width: 220px;;
+    min-width: 220px;
+    ;
     padding: var(--pad) 14px;
     border-radius: var(--radius);
     border: 1px solid var(--line);
@@ -1815,6 +2262,11 @@ button:focus {
 .item-row--out-of-stock {
     opacity: 0.6;
     border-left: 3px solid var(--muted, #94a3b8);
+}
+
+.item-list-row--selected {
+    background: var(--accent-muted, rgba(59, 130, 246, 0.08));
+    border-left: 3px solid var(--head, #3b82f6);
 }
 
 /* Box list */
@@ -2357,7 +2809,7 @@ button:focus {
 }
 
 .details .responsive-row {
-    display: table-row;
+    display: inline-grid;
 }
 
 .details .responsive-th,
@@ -2466,8 +2918,10 @@ button:focus {
 }
 
 .quality-badge--compact {
-    padding: 2px 6px;
-    font-size: 10px;
+    padding: 1px 4px;
+    font-size: 9px;
+    height: auto;
+    min-width: unset;
 }
 
 .shop-badge {
@@ -2487,8 +2941,11 @@ button:focus {
 }
 
 .shop-badge--compact {
-    padding: 2px 6px;
-    font-size: 10px;
+    padding: 1px 4px;
+    font-size: 9px;
+    height: auto;
+    min-width: unset;
+    border-width: 1px;
 }
 
 .quality-slider__labels {

@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Box } from '../../../models';
 import BoxList, { BoxSortKey } from './BoxList';
 import { prepareBoxesForDisplay, type BoxTypeFilter } from './boxListUtils';
 import { logError, logger } from '../utils/logger';
+import { usePanelContext } from '../context/PanelContext';
 
 export default function BoxListPage() {
+  const { setEntity } = usePanelContext();
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -101,6 +103,14 @@ export default function BoxListPage() {
     }
   };
 
+  const handleBoxSelect = useCallback((id: string) => {
+    try {
+      setEntity('box', id);
+    } catch (err) {
+      logError('Failed to set box entity in panel context', err, { id });
+    }
+  }, [setEntity]);
+
   return (
     <div className="list-container box">
       <h2>Alle Behälter</h2>
@@ -117,6 +127,7 @@ export default function BoxListPage() {
           onSortChange={handleSortChange}
           onTypeFilterChange={handleTypeFilterChange}
           onLocationFilterChange={handleLocationFilterChange}
+          onSelect={handleBoxSelect}
         />
       ) : (
         <div className="muted">Noch keine Behälter vorhanden.</div>
