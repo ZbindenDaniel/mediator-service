@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { GoFilter } from 'react-icons/go';
 import type { Box } from '../../../models';
 import BoxList, { BoxSortKey } from './BoxList';
 import { prepareBoxesForDisplay, type BoxTypeFilter } from './boxListUtils';
@@ -111,9 +112,32 @@ export default function BoxListPage() {
     }
   }, [setEntity]);
 
+  const hasActiveFilters = searchText !== '' || sortKey !== 'updatedAt' || typeFilter !== 'all' || locationFilter !== 'all';
+
+  const handleResetFilters = useCallback(() => {
+    setSearchText('');
+    setSortKey('updatedAt');
+    setTypeFilter('all');
+    setLocationFilter('all');
+  }, []);
+
   return (
     <div className="list-container box">
-      <h2>Alle Behälter</h2>
+      <div className="list-header">
+        <h2>Alle Behälter</h2>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            className="filter-reset-btn"
+            onClick={handleResetFilters}
+            title="Filter zurücksetzen"
+            aria-label="Behälter-Filter zurücksetzen"
+          >
+            <GoFilter aria-hidden="true" />
+            <span>Filter zurücksetzen</span>
+          </button>
+        )}
+      </div>
       {error ? (
         <div className="muted">{error}</div>
       ) : boxes.length ? (

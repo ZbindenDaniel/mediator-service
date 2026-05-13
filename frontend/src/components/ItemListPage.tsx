@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GoContainer, GoSearch } from 'react-icons/go';
+import { GoContainer, GoFilter, GoSearch } from 'react-icons/go';
 import { useSearchParams } from 'react-router-dom';
 import { usePanelContext } from '../context/PanelContext';
 import { useSetBulkSelection } from '../context/BulkSelectionContext';
@@ -378,7 +378,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 
 export default function ItemListPage() {
   const [searchParams] = useSearchParams();
-  const { setEntity, setMultiSelection, clearSelection } = usePanelContext();
+  const { setEntity, setMultiSelection, clearSelection, clearMultiSelection } = usePanelContext();
   const setBulkSelection = useSetBulkSelection();
   const [items, setItems] = useState<Item[]>([]);
   const [placementFilter, setPlacementFilter] = useState<ItemListFilters['placementFilter']>(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
@@ -407,6 +407,12 @@ export default function ItemListPage() {
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
   const [isDeepLinkFilterSession, setIsDeepLinkFilterSession] = useState(false);
+
+  // Only watch filter-relevant URL params (box, q) — not panel params (entity/id/tab).
+  // Panel params change on every tab/entity switch; including searchParams directly caused
+  // loadItems to fire on each navigation, which was the main list-reload regression.
+  const boxParam = searchParams.get('box');
+  const qParam = searchParams.get('q');
 
   useEffect(() => {
     try {
@@ -454,7 +460,8 @@ export default function ItemListPage() {
     } finally {
       setFiltersReady(true);
     }
-  }, [searchParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boxParam, qParam]);
 
   useEffect(() => {
     const handleFilterReset = () => {
@@ -827,7 +834,8 @@ export default function ItemListPage() {
   }, [items, selectedIds]);
 
   // Sync checkbox selection into PanelContext (multiSelection) and BulkSelectionContext.
-  // Cleanup on unmount clears multiSelection so switching routes doesn't leave stale state.
+  // Uses clearMultiSelection (not clearSelection) so that deselecting all checkboxes — including
+  // as a side-effect of filter/sort changes — never empties the single-entity detail panel.
   useEffect(() => {
     const ids = Array.from(selectedIds);
     if (ids.length > 0) {
@@ -838,18 +846,18 @@ export default function ItemListPage() {
         onActionComplete: () => loadItems({ silent: true })
       });
     } else {
-      clearSelection();
+      clearMultiSelection();
       setBulkSelection?.(null);
     }
-  }, [selectedIds, selectedItems, setMultiSelection, clearSelection, setBulkSelection, handleClearSelection, loadItems]);
+  }, [selectedIds, selectedItems, setMultiSelection, clearMultiSelection, setBulkSelection, handleClearSelection, loadItems]);
 
-  // Clear selection state when this page unmounts so ActionPanel doesn't show stale bulk actions.
+  // Clear only multi-selection when this page unmounts so stale bulk state doesn't persist across routes.
   useEffect(() => {
     return () => {
-      clearSelection();
+      clearMultiSelection();
       setBulkSelection?.(null);
     };
-  }, [clearSelection, setBulkSelection]);
+  }, [clearMultiSelection, setBulkSelection]);
 
   const handleAgenticStatusFilterChange = useCallback((value: string) => {
     const nextValue = value as AgenticRunStatus | 'any';
@@ -860,6 +868,12 @@ export default function ItemListPage() {
     console.warn('Ignoring unknown agentic status filter value', value);
     setAgenticStatusFilter('any');
   }, []);
+
+  const handleClearFiltersClick = useCallback(() => {
+    window.dispatchEvent(new Event(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT));
+  }, []);
+
+  const hasActiveFilters = hasNonDefaultFilters(currentFilters, ITEM_LIST_DEFAULT_FILTERS);
 
   if (isLoading) {
     return (
@@ -872,7 +886,21 @@ export default function ItemListPage() {
   return (
     // <div className="container item">
     <div className="list-container item">
-      <h2>Alle Artikel</h2>
+      <div className="list-header">
+        <h2>Alle Artikel</h2>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            className="filter-reset-btn"
+            onClick={handleClearFiltersClick}
+            title="Aktive Filter zurücksetzen"
+            aria-label="Aktive Filter zurücksetzen"
+          >
+            <GoFilter aria-hidden="true" />
+            <span>Filter zurücksetzen</span>
+          </button>
+        )}
+      </div>
       {/* TODO(filter-panel-layout): Confirm filter panel sizing in CSS after grid wrapper update. */}
       <div className="filter-bar">
         <div className="filter-grid row">

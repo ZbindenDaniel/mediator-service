@@ -352,9 +352,15 @@ export default function ItemMediaGallery({
                     tabIndex={0}
                   />
                 ) : (
-                  <div className="item-media-gallery__fallback" role="status">
+                  // Broken image is still clickable so the modal opens and the delete button is reachable.
+                  <button
+                    type="button"
+                    className="item-media-gallery__fallback item-media-gallery__fallback--clickable"
+                    onClick={handleImageSelect(asset)}
+                    aria-label={`${asset.label}: Bild nicht verfügbar. Klicken zum Verwalten.`}
+                  >
                     <span>Bild konnte nicht geladen werden.</span>
-                  </div>
+                  </button>
                 )}
                 {/* <figcaption>{asset.label}</figcaption> */}
               </figure>
