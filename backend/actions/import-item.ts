@@ -775,6 +775,8 @@ const action = defineHttpAction({
       }
       const herstellerInput = (p.get('Hersteller') || '').trim();
       const eanRaw = (p.get('EAN') || '').trim();
+      const serialNumberInput = (p.get('SerialNumber') || '').trim() || null;
+      const macAddressInput = (p.get('MacAddress') || '').trim() || null;
       const verkaufspreisRaw = (p.get('Verkaufspreis') || '').replace(',', '.').trim();
       const gewichtRaw = (p.get('Gewicht_kg') || '').replace(',', '.').trim();
       const laengeRaw = (p.get('Länge_mm') || '').trim();
@@ -1256,6 +1258,8 @@ const action = defineHttpAction({
             : null,
         Hersteller: hersteller,
         EAN: ean,
+        SerialNumber: serialNumberInput,
+        MacAddress: macAddressInput,
         Länge_mm: laenge,
         Breite_mm: breite,
         Höhe_mm: hoehe,

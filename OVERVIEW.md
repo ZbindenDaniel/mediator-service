@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+743. ✅ Instance fields: surface SerialNumber/MacAddress in UI; route EAN to instance tab
+   - **Why:** SN and MAC existed in the DB and model but had no UI surface — not displayed in the instance tab, not editable in the create form. EAN (on ItemRef) also now routes to the instance tab so all identifiers are visible in one place. `import-item.ts` now reads and persists `SerialNumber`/`MacAddress` from the creation payload; `itemFormShared.tsx` renders the two inputs when not in reference mode; `ItemDetail.tsx` adds the rows to `detailRows` and includes the three keys in `instanceKeys`.
+   - **Deferred:** Editing SN/MAC on existing instances is not yet possible — the PUT `/api/items/:uuid` handler is reference-only. A dedicated instance-edit endpoint or update path via import-item would be needed for that.
 742. ✅ Header search: ported SearchCard logic into Header.tsx with inline dropdown
    - **Why:** The nav search bar was navigating to `/items?q=...` but the search endpoint `/api/search` was not being called. Ported direct-ID navigation (I-*, B-*, S-* prefixes) and API text search from the old SearchCard into Header; results open in the right panel via `setEntity()` without a full-page nav. Dropdown uses click-outside (pointerdown) and Escape-key listeners. CSS added for dropdown/result/pill/desc classes.
    - **Deferred:** Browser history back/forward does not update the panel state (Issue 7 — PanelContext writes URL but doesn't hydrate from URL on popstate). Item-edit post-save renders in the left panel (Issue 10 — handleEdit navigates to full route).
