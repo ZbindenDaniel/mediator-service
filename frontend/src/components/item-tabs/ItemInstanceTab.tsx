@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import RelocateItemCard from '../RelocateItemCard';
+import EditInstanceCard from '../EditInstanceCard';
 import QualityBadge from '../QualityBadge';
 import PrintLabelButton from '../PrintLabelButton';
 import { dialogService } from '../dialog';
@@ -25,11 +26,14 @@ interface Props {
   skippedInstanceCount: number;
   showRelocate: boolean;
   relocateCardRef: React.RefObject<HTMLDivElement>;
+  showEditInstance: boolean;
   onAddItem: () => Promise<void>;
   onRemoveItem: () => Promise<void>;
   onRelocate: () => void;
+  onEditInstance: () => void;
   onInstanceNavigation: (itemId: string) => void;
   onRelocated: () => void;
+  onInstanceSaved: () => void;
 }
 
 export default function ItemInstanceTab({
@@ -41,11 +45,14 @@ export default function ItemInstanceTab({
   skippedInstanceCount,
   showRelocate,
   relocateCardRef,
+  showEditInstance,
   onAddItem,
   onRemoveItem,
   onRelocate,
+  onEditInstance,
   onInstanceNavigation,
-  onRelocated
+  onRelocated,
+  onInstanceSaved
 }: Props) {
   async function handleEntnehmen() {
     let confirmed = false;
@@ -68,6 +75,7 @@ export default function ItemInstanceTab({
     <>
       <div className="tab-actions">
         <PrintLabelButton itemId={item.ItemUUID} inline />
+        <button type="button" className="btn" onClick={onEditInstance}>Bearbeiten</button>
         {!isOutOfStock && (
           <button type="button" className="btn" onClick={onRelocate}>Umlagern</button>
         )}
@@ -141,6 +149,29 @@ export default function ItemInstanceTab({
             <RelocateItemCard
               itemId={item.ItemUUID}
               onRelocated={onRelocated}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showEditInstance && ReactDOM.createPortal(
+        <div className="dialog-overlay" role="presentation" onClick={onInstanceSaved}>
+          <div
+            className="dialog-content"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Instanz bearbeiten"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <EditInstanceCard
+              itemId={item.ItemUUID}
+              einheit={item.Einheit}
+              currentSerialNumber={item.SerialNumber}
+              currentMacAddress={item.MacAddress}
+              currentQuality={item.Quality}
+              onSaved={onInstanceSaved}
+              onCancel={onInstanceSaved}
             />
           </div>
         </div>,
