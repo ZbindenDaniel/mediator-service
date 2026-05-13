@@ -25,7 +25,7 @@ function resolveDirectTarget(term: string): { type: 'item' | 'box'; id: string }
 export default function Header() {
   const dialog = useDialog();
   const navigate = useNavigate();
-  const { setCreateMode, setEntity } = usePanelContext();
+  const { setCreateMode, setEntity, setMobileShowDetail } = usePanelContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -177,13 +177,13 @@ export default function Header() {
           >
             <GoPlus aria-hidden="true" />
           </button>
-          <Link to="/items" aria-label="Artikelliste" title="Artikelliste">
+          <Link to="/items" aria-label="Artikelliste" title="Artikelliste" onClick={() => setMobileShowDetail(false)}>
             <GoListUnordered aria-hidden="true" />
           </Link>
-          <Link to="/boxes" aria-label="Behälterliste" title="Behälterliste">
+          <Link to="/boxes" aria-label="Behälterliste" title="Behälterliste" onClick={() => setMobileShowDetail(false)}>
             <GoArchive aria-hidden="true" />
           </Link>
-          <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten">
+          <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => setMobileShowDetail(false)}>
             <GoPulse aria-hidden="true" />
           </Link>
           <form

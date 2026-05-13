@@ -54,6 +54,8 @@ export interface PanelContextValue extends PanelState {
   clearMultiSelection: () => void;
   mainView: MainView;
   setMainView: (view: MainView, extraParams?: Record<string, string>) => void;
+  mobileShowDetail: boolean;
+  setMobileShowDetail: (show: boolean) => void;
 }
 
 const VALID_ENTITY_TYPES: EntityType[] = ['item', 'box', 'transport', 'stub'];
@@ -90,6 +92,7 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   const navigate = useNavigate();
   const location = useLocation();
   const [state, setState] = useState<PanelState>(() => paramsToState(searchParams));
+  const [mobileShowDetail, setMobileShowDetail] = useState(false);
   // skip the initial URL write — state was already derived from the URL on mount
   const isMounted = useRef(false);
   // Keep a ref of state for setMainView so it doesn't need state in its dep array.
@@ -135,10 +138,12 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
       activeTab: prev.entityType === type ? prev.activeTab : (DEFAULT_TAB[type] ?? 'reference'),
       multiSelection: null
     }));
+    setMobileShowDetail(true);
   }, []);
 
   const setCreateMode = useCallback((type: EntityType) => {
     setState({ entityType: type, entityId: null, activeTab: 'create', multiSelection: null });
+    setMobileShowDetail(true);
   }, []);
 
   const setTab = useCallback((tab: string | null) => {
@@ -151,10 +156,12 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
       entityId: null,
       multiSelection: ids.length > 0 ? ids : null
     }));
+    if (ids.length > 0) setMobileShowDetail(true);
   }, []);
 
   const clearSelection = useCallback(() => {
     setState({ entityType: null, entityId: null, activeTab: null, multiSelection: null });
+    setMobileShowDetail(false);
   }, []);
 
   // Clears only multi-selection without touching single-entity state.
@@ -164,8 +171,8 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   }, []);
 
   const value = useMemo<PanelContextValue>(
-    () => ({ ...state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView }),
-    [state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView]
+    () => ({ ...state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView, mobileShowDetail, setMobileShowDetail }),
+    [state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView, mobileShowDetail]
   );
 
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
