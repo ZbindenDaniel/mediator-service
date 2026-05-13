@@ -728,6 +728,22 @@ export default function BoxDetail({ boxId }: Props) {
         {box && (
           <div className="tab-actions">
             <PrintLabelButton boxId={box.BoxID} inline />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=items`)}
+            >
+              Einscannen
+            </button>
+            {isShelf && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=boxes`)}
+              >
+                Behälter einlagern
+              </button>
+            )}
             {isBoxRelocatable && (
               <button type="button" className="btn" onClick={() => setShowRelocate((prev) => !prev)}>
                 Umlagern
