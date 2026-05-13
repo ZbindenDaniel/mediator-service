@@ -101,7 +101,7 @@ export default function RelocateBoxCard({ boxId, onMoved }: Props) {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          setStatus('Behälter verschoben');
+          setStatus(`Behälter verschoben von`);
           onMoved?.();
         } else {
           setStatus('Fehler: ' + (data.error || res.status));

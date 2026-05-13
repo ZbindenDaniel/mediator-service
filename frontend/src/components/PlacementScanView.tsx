@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ensureUser } from '../lib/user';
-import { logError } from '../lib/logger';
+import { logError } from '../utils/logger';
 
 type PendingWarning = {
   entityId: string;

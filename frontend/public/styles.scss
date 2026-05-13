@@ -202,6 +202,8 @@ body {
     position: relative;
     z-index: 0;
     background: var(--bg-button, #f6f7f9);
+    padding: 12px 14px;
+    color: black;
     /* prevent transparent bleed-through */
 }
 
@@ -230,7 +232,9 @@ body {
 
 /* Back button shown only on mobile when detail panel is active */
 .mobile-back-btn {
-    display: none;
+    // this can be enabled then the desktop view is static, 
+    // when commented out we can close the detail view and have full screen list
+    // display: none;
 }
 
 /* Badges row in reference tab */
@@ -360,7 +364,7 @@ body {
     .app-shell__right {
         flex: 0 0 100%;
         min-width: 0;
-        transition: transform 0.25s ease;
+        transition: transform 0.25s ease, display 0.5s ease;
     }
 
     /* Default: list visible, detail off-screen to the right */
@@ -374,6 +378,7 @@ body {
         left: 0;
         width: 100%;
         height: auto;
+        padding-top: 70px;
         min-height: calc(100vh - 74px);
         border-left: none;
         transform: translateX(100%);
@@ -384,6 +389,7 @@ body {
     /* When detail is active: slide list out left, detail in from right */
     .app-shell--mobile-detail .panel-main {
         transform: translateX(-100%);
+        display: none;
     }
 
     .app-shell--mobile-detail .app-shell__right {
@@ -392,6 +398,15 @@ body {
         position: relative;
         display: flex;
         flex-direction: column;
+    }
+
+    .app-shell--mobile-list .panel-main {
+        transform: translateX(0%);
+    }
+
+    .app-shell--mobile-list .app-shell__right {
+        transform: translateX(-100%);
+        display: none;
     }
 
     .panel-detail {
@@ -509,7 +524,7 @@ textarea {
 
 .header-search__input {
     height: 30px;
-    width: 120px;
+    width: 70px;
     padding: 0 8px;
     font: inherit;
     font-size: 0.82rem;
@@ -522,7 +537,7 @@ textarea {
     transition: width 0.2s;
 
     &:focus {
-        width: 180px;
+        width: 100px;
         border-color: var(--link, #0366d6);
     }
 }
@@ -782,6 +797,7 @@ textarea {
     width: 100%;
     font: inherit;
     color: inherit;
+
     &:hover {
         background-color: #e8e8e8;
     }
@@ -886,6 +902,7 @@ div {
     cursor: pointer;
     font-size: 0.8rem;
     opacity: 0.75;
+
     &:hover {
         opacity: 1;
     }
@@ -3022,33 +3039,75 @@ button:focus {
 .quality-slider__labels span {
     text-align: center;
 }
+
 /* placement-scan-view */
 .placement-scan {
-  position: fixed; inset: 0; z-index: 100;
-  display: flex; flex-direction: column;
-  background: var(--bg, #fff); color: var(--fg);
-  overflow: hidden;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg, #fff);
+    color: var(--fg);
+    overflow: hidden;
 }
+
 .placement-scan__header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; border-bottom: 1px solid var(--border, #e0e0e0);
-  flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border, #e0e0e0);
+    flex-shrink: 0;
 }
-.placement-scan__header h2 { margin: 0; font-size: 1rem; }
+
+.placement-scan__header h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+
 .placement-scan__start {
-  flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
 }
-.placement-scan__start .btn { font-size: 1.1rem; padding: 14px 28px; }
+
+.placement-scan__start .btn {
+    font-size: 1.1rem;
+    padding: 14px 28px;
+}
+
 .placement-scan__warning {
-  margin: 8px 16px; padding: 12px; border-radius: var(--radius, 8px);
-  background: var(--warning-bg, #fff3cd); border: 1px solid var(--warning, #ffc107);
-  flex-shrink: 0;
+    margin: 8px 16px;
+    padding: 12px;
+    border-radius: var(--radius, 8px);
+    background: var(--warning-bg, #fff3cd);
+    border: 1px solid var(--warning, #ffc107);
+    flex-shrink: 0;
 }
-.placement-scan__warning p { margin: 0 0 8px; }
-.placement-scan__warning-actions { display: flex; gap: 8px; }
+
+.placement-scan__warning p {
+    margin: 0 0 8px;
+}
+
+.placement-scan__warning-actions {
+    display: flex;
+    gap: 8px;
+}
+
 .placement-scan__status {
-  margin: 8px 16px; padding: 12px; border-radius: var(--radius, 8px);
-  background: var(--surface2, #f5f5f5); flex-shrink: 0;
-  display: flex; flex-direction: column; gap: 8px;
+    margin: 8px 16px;
+    padding: 12px;
+    border-radius: var(--radius, 8px);
+    background: var(--surface2, #f5f5f5);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
-.placement-scan__status p { margin: 0; }
+
+.placement-scan__status p {
+    margin: 0;
+}

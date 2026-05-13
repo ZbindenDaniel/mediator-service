@@ -57,7 +57,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <Header />
       <main>
         <BulkSelectionProvider>
-          <div className={`app-shell${mobileShowDetail ? ' app-shell--mobile-detail' : ''}`}>
+          <div className={`app-shell${mobileShowDetail ? ' app-shell--mobile-detail' : 'app-shell--mobile-list'}`}>
             <div className="panel-main">{children}</div>
             <div className="app-shell__right">
               {mobileShowDetail && (
