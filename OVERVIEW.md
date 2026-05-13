@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+744. ✅ Placement actions: scan items into boxes and boxes onto shelves via QR callback loop
+   - **Why:** Operators needed a fast mobile flow to physically organise stock without a dedicated scanner device. Reused the existing `/scan` QrScannerPage callback pattern (returnTo + location.state.qrReturn) — no inline camera code, no new hooks. Each scan is one atomic round-trip; the URL carries the target, each `qrReturn` payload carries the scan result; all state is ephemeral React component state (no sessionStorage needed).
+   - **Deferred:** No persistent scan-history list per session — each mount handles one scan result. Operators who need an audit trail can check the event log. No new backend endpoints were added.
 743. ✅ Instance fields: surface SerialNumber/MacAddress in UI; route EAN to instance tab
    - **Why:** SN and MAC existed in the DB and model but had no UI surface — not displayed in the instance tab, not editable in the create form. EAN (on ItemRef) also now routes to the instance tab so all identifiers are visible in one place. `import-item.ts` now reads and persists `SerialNumber`/`MacAddress` from the creation payload; `itemFormShared.tsx` renders the two inputs when not in reference mode; `ItemDetail.tsx` adds the rows to `detailRows` and includes the three keys in `instanceKeys`.
    - **Deferred:** Editing SN/MAC on existing instances is not yet possible — the PUT `/api/items/:uuid` handler is reference-only. A dedicated instance-edit endpoint or update path via import-item would be needed for that.
