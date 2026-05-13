@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../models';
+import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../models';
 import { ItemFormData, ITEM_FORM_DEFAULT_EINHEIT, useItemFormState } from './forms/itemFormShared';
 
 interface ItemBasicInfoFormProps {
@@ -19,6 +19,9 @@ export function ItemBasicInfoForm({
   headerContent
 }: ItemBasicInfoFormProps) {
   const { form, update, mergeForm } = useItemFormState({ initialItem: initialValues });
+
+  const isMenge = (form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT) === ItemEinheit.Menge;
+  const hasIdentifier = !!(form.SerialNumber?.trim() || form.MacAddress?.trim());
 
   const updateOptionalNumber = (
     field: 'Länge_mm' | 'Breite_mm' | 'Höhe_mm' | 'Gewicht_kg',
@@ -55,6 +58,10 @@ export function ItemBasicInfoForm({
       if (!qualityProvided && payload.Quality == null) {
         delete (payload as Record<string, unknown>).Quality;
       }
+      // Enforce quantity=1 when a unique identifier is set
+      if (payload.SerialNumber?.trim() || payload.MacAddress?.trim()) {
+        payload.Auf_Lager = 1;
+      }
       console.log('Submitting basic item info step', payload);
       onSubmit(payload);
     } catch (err) {
@@ -77,13 +84,80 @@ export function ItemBasicInfoForm({
         </div>
 
         <div className="row">
+          <label>Seriennummer</label>
+          <input
+            value={form.SerialNumber || ''}
+            onChange={(event) => {
+              const raw = event.target.value.trim() || null;
+              update('SerialNumber', raw);
+              if (raw) update('Auf_Lager', 1);
+            }}
+            placeholder="Seriennummer"
+          />
+        </div>
+
+        <div className="row">
+          <label>MAC-Adresse</label>
+          <input
+            value={form.MacAddress || ''}
+            onChange={(event) => {
+              const raw = event.target.value.trim() || null;
+              update('MacAddress', raw);
+              if (raw) update('Auf_Lager', 1);
+            }}
+            placeholder="MAC-Adresse"
+          />
+        </div>
+
+        {/* TODO(agent): Confirm Einheit defaults and labels with the inventory team before the next release. */}
+        <div className="row">
+          <label>Einheit*</label>
+          <select
+            value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
+            onChange={(event) => {
+              try {
+                const candidate = event.target.value;
+                let resolved = ITEM_FORM_DEFAULT_EINHEIT;
+                if (isItemEinheit(candidate)) {
+                  resolved = candidate;
+                } else {
+                  const trimmed = candidate.trim();
+                  if (isItemEinheit(trimmed)) {
+                    resolved = trimmed;
+                  } else {
+                    console.warn('Invalid Einheit selection in basic info form, using default', { candidate });
+                  }
+                }
+                update('Einheit', resolved);
+                // Menge items have no per-unit identity — clear identifiers
+                if (resolved === ItemEinheit.Menge) {
+                  update('SerialNumber', null);
+                  update('MacAddress', null);
+                }
+              } catch (error) {
+                console.error('Failed to update Einheit in basic info form', error);
+                update('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
+              }
+            }}
+            required
+          >
+            {ITEM_EINHEIT_VALUES.map((value) => (
+              <option key={`einheit-${value}`} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="row">
           <label>Anzahl*</label>
           {/* TODO(agent): Align basic info quantity defaults with instance-vs-bulk handling guidance. */}
-          {/* TODO(agent): Add validation messaging once Einheit-specific copy is finalized. */}
           <input
             type="number"
             value={form.Auf_Lager ?? 1}
+            readOnly={hasIdentifier}
             onChange={(event) => {
+              if (hasIdentifier) return;
               try {
                 const parsed = Number.parseInt(event.target.value, 10);
                 if (Number.isNaN(parsed) || parsed <= 0) {
@@ -102,44 +176,12 @@ export function ItemBasicInfoForm({
             required
           />
           <div className="muted">
-            {form.Einheit === ITEM_FORM_DEFAULT_EINHEIT || form.Einheit === 'Stk'
-              ? 'Bei Einheit Stk werden einzelne Instanzen angelegt.'
-              : 'Bei Einheit Menge wird die Anzahl als Gesamtmenge gespeichert.'}
+            {hasIdentifier
+              ? 'Anzahl auf 1 fixiert (Seriennummer oder MAC-Adresse angegeben).'
+              : isMenge
+                ? 'Bei Einheit Menge wird die Anzahl als Gesamtmenge gespeichert.'
+                : 'Bei Einheit Stk werden einzelne Instanzen angelegt.'}
           </div>
-        </div>
-
-        {/* TODO(agent): Confirm Einheit defaults and labels with the inventory team before the next release. */}
-        <div className="row">
-          <label>Einheit*</label>
-          <select
-            value={form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT}
-            onChange={(event) => {
-              try {
-                const candidate = event.target.value;
-                if (isItemEinheit(candidate)) {
-                  update('Einheit', candidate);
-                  return;
-                }
-                const trimmed = candidate.trim();
-                if (isItemEinheit(trimmed)) {
-                  update('Einheit', trimmed);
-                  return;
-                }
-                console.warn('Invalid Einheit selection in basic info form, using default', { candidate });
-                update('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
-              } catch (error) {
-                console.error('Failed to update Einheit in basic info form', error);
-                update('Einheit', ITEM_FORM_DEFAULT_EINHEIT);
-              }
-            }}
-            required
-          >
-            {ITEM_EINHEIT_VALUES.map((value) => (
-              <option key={`einheit-${value}`} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* TODO(agent): Confirm optional dimension/weight helper copy once validation UX guidelines are finalized. */}
@@ -181,20 +223,16 @@ export function ItemBasicInfoForm({
         </div>
 
         <div className="row">
-          <label>Seriennummer</label>
+          <label>EAN</label>
           <input
-            value={form.SerialNumber || ''}
-            onChange={(event) => update('SerialNumber', event.target.value.trim() || null)}
-            placeholder="Seriennummer"
-          />
-        </div>
-
-        <div className="row">
-          <label>MAC-Adresse</label>
-          <input
-            value={form.MacAddress || ''}
-            onChange={(event) => update('MacAddress', event.target.value.trim() || null)}
-            placeholder="MAC-Adresse"
+            value={(form as Partial<ItemFormData & { EAN?: string | null }>).EAN || ''}
+            onChange={(event) => {
+              const raw = event.target.value.trim();
+              update('EAN' as keyof ItemFormData, raw || null);
+            }}
+            placeholder="EAN-8, UPC-A oder EAN-13"
+            pattern="[0-9]{8}|[0-9]{12}|[0-9]{13}"
+            title="EAN-8 (8 Stellen), UPC-A (12 Stellen) oder EAN-13 (13 Stellen)"
           />
         </div>
 

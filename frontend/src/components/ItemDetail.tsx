@@ -941,6 +941,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
   const [showRelocate, setShowRelocate] = useState(false);
+  const [showEditInstance, setShowEditInstance] = useState(false);
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
   const relocateCardRef = useRef<HTMLDivElement | null>(null);
   const agenticOverrideLogRef = useRef<{ itemId: string | null; active: boolean }>({
@@ -3387,11 +3388,14 @@ export default function ItemDetail({ itemId }: Props) {
             skippedInstanceCount={skippedInstanceCount}
             showRelocate={showRelocate}
             relocateCardRef={relocateCardRef}
+            showEditInstance={showEditInstance}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
             onRelocate={() => setShowRelocate(true)}
+            onEditInstance={() => setShowEditInstance(true)}
             onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
             onRelocated={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
+            onInstanceSaved={() => { setShowEditInstance(false); void load({ showSpinner: false }); }}
           />
         );
         break;
