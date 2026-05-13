@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+746. ✅ Creation form: SN/MAC → Einheit → Anzahl ordering + enforcement + EAN
+   - **Why:** SN/MAC now appear before Einheit so the causal order matches the rules — entering an identifier implicitly makes it a single unit before you've even touched Einheit. Switching to Menge clears the identifier fields. Anzahl is readOnly when an identifier is set (locked to 1) with a contextual hint; defensive clamp also applied on submit. EAN added to the basic info step as a free-entry field.
+   - **Deferred:** Nothing deferred.
 745. ✅ Edit-instance view: PATCH endpoint + EditInstanceCard modal for post-creation SN/MAC/Quality edits
    - **Why:** Instance fields (SerialNumber, MacAddress, Quality) were write-once after creation. Added `PATCH /api/items/:uuid/instance` which updates only those three fields with targeted SQL; `EditInstanceCard` mirrors the Umlagern modal pattern — "Bearbeiten" button in the instance tab opens a dialog portal with SN/MAC hidden for Menge items. Quality slider uses the existing 1–5 range from itemFormShared.
    - **Deferred:** Nothing deferred.
