@@ -181,6 +181,24 @@ export function ItemBasicInfoForm({
         </div>
 
         <div className="row">
+          <label>Seriennummer</label>
+          <input
+            value={form.SerialNumber || ''}
+            onChange={(event) => update('SerialNumber', event.target.value.trim() || null)}
+            placeholder="Seriennummer"
+          />
+        </div>
+
+        <div className="row">
+          <label>MAC-Adresse</label>
+          <input
+            value={form.MacAddress || ''}
+            onChange={(event) => update('MacAddress', event.target.value.trim() || null)}
+            placeholder="MAC-Adresse"
+          />
+        </div>
+
+        <div className="row">
           <button type="submit">{submitLabel}</button>
         </div>
       </form>

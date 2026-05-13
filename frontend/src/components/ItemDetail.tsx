@@ -1318,6 +1318,8 @@ export default function ItemDetail({ itemId }: Props) {
           </button>
         ) : null
       ],
+      ['Seriennummer', item.SerialNumber ?? null],
+      ['MAC-Adresse', item.MacAddress ?? null],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
       ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)],
       ['Qualität', qualityBadge],
@@ -1365,6 +1367,9 @@ export default function ItemDetail({ itemId }: Props) {
       // TODO(agent): Re-validate instance/reference row keys if additional fields move between cards.
       const instanceKeys = new Set([
         'ItemUUID',
+        'Seriennummer',
+        'MAC-Adresse',
+        'EAN',
         'Behälter',
         'Qualität',
         'Ki Status',

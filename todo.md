@@ -66,7 +66,7 @@
 
 13. **Filter and sort boxes/shelves.** Add filter options (boxes only / shelves only, location dropdown) and sorting to the box/shelf list.
 
-14. **Populate EAN number field in item references.** Enable EAN barcode capture and display in item forms; ensure EAN data flows through import/export pipelines. **Goal:** support standard product identification with minimal schema changes and clear validation rules.
+14. ✅ **Populate EAN / surface instance identifiers.** EAN display now routes to the instance tab (alongside SN/MAC). SerialNumber and MacAddress are captured in the create form and persisted via import-item. Remaining gap: editing SN/MAC on existing instances requires a separate instance-update path (not yet built).
 
 15. **Support text search fallback for relocate item/box (label search).** QR-only flows are brittle when labels/scans fail. Reuse existing search endpoints and add a low-overhead fallback without building a parallel relocation system.
 
