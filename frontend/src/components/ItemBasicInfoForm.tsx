@@ -77,6 +77,30 @@ export function ItemBasicInfoForm({
         </div>
 
         <div className="row">
+          <div>
+            <label>S/N</label>
+            <input
+              value={form.SerialNumber || ''}
+              onChange={(event) => update('SerialNumber', event.target.value)}
+            />
+          </div>
+          <div>
+            <label>EAN</label>
+            <input
+              value={form.EAN || ''}
+              onChange={(event) => update('EAN', event.target.value)}
+            />
+          </div>
+          <div>
+            <label>MAC</label>
+            <input
+              value={form.MacAddress || ''}
+              onChange={(event) => update('MacAddress', event.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="row">
           <label>Anzahl*</label>
           {/* TODO(agent): Align basic info quantity defaults with instance-vs-bulk handling guidance. */}
           {/* TODO(agent): Add validation messaging once Einheit-specific copy is finalized. */}
