@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+747. ✅ Tests for edit-item-instance backend endpoint and ItemBasicInfoForm
+   - **Why:** Added `edit-item-instance.test.ts` (13 cases) covering matches(), 404/400 validation, single-field and multi-field updates, whitespace trimming, Quality clamping, and SQL UpdatedAt inclusion. Added `ItemBasicInfoForm.test.tsx` (11 cases) covering dimensions, SN/MAC locking Anzahl to 1, submit-time clamp, Einheit→Menge clearing, EAN payload. Installed `jest-environment-jsdom` and `@testing-library/react` which were missing from devDependencies; both test suites now pass (24 total).
+   - **Deferred:** The `console.warn` path in `updateOptionalNumber` is not reachable via jsdom fireEvent because `<input type="number">` coerces invalid strings to '' before onChange fires — tested the empty-string clearing branch instead.
 746. ✅ Creation form: SN/MAC → Einheit → Anzahl ordering + enforcement + EAN
    - **Why:** SN/MAC now appear before Einheit so the causal order matches the rules — entering an identifier implicitly makes it a single unit before you've even touched Einheit. Switching to Menge clears the identifier fields. Anzahl is readOnly when an identifier is set (locked to 1) with a contextual hint; defensive clamp also applied on submit. EAN added to the basic info step as a free-entry field.
    - **Deferred:** Nothing deferred.
