@@ -754,6 +754,17 @@ textarea {
     text-align: center;
 }
 
+.item-media-gallery__fallback--clickable {
+    cursor: pointer;
+    border: none;
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    &:hover {
+        background-color: #e8e8e8;
+    }
+}
+
 .item-form__header {
     margin-bottom: 1rem;
 }
@@ -826,6 +837,35 @@ div {
 
     &.activities {
         border-color: $activity-color
+    }
+}
+
+.list-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.25rem;
+
+    h2 {
+        margin: 0;
+        flex: 1;
+    }
+}
+
+.filter-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid currentColor;
+    border-radius: var(--radius);
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.8rem;
+    opacity: 0.75;
+    &:hover {
+        opacity: 1;
     }
 }
 

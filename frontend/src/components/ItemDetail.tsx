@@ -947,13 +947,13 @@ export default function ItemDetail({ itemId }: Props) {
     itemId: null,
     active: false
   });
-  const { setEntity, setMainView, activeTab } = usePanelContext();
+  const { setEntity, activeTab } = usePanelContext();
 
-  // Navigate to BoxList and activate the box in the detail panel.
+  // Only set the entity — don't switch the main view. The detail panel shows the box
+  // without displacing whatever list is currently in the left column.
   const handleBoxNavigation = useCallback((boxId: string) => {
     setEntity('box', boxId);
-    setMainView('boxes');
-  }, [setEntity, setMainView]);
+  }, [setEntity]);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
