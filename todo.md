@@ -13,6 +13,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0e. ✅ **Fix mobile navigation to lists and Einscannen visibility.** `mobileShowDetail` state in PanelContext drives `app-shell--mobile-detail` CSS class; slide transition replaces display-toggle; back button added; full-screen bypass for scan/placement routes.
+
 0c. **Verify tab icons render correctly once build runs.** react-icons/go icons GoInfo, GoPencil, GoFileMedia, GoPaperclip, GoTools are newly imported in DetailTabBar — confirm they exist in v5.5.0 (Octicons v19) when bundling.
 
 0d. ✅ **Move filter-clear button into ItemListPage list header (top-right).** Done — filter-reset button added to both ItemListPage and BoxListPage; removed from Header.

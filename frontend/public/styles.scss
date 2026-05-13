@@ -229,9 +229,9 @@ body {
 }
 
 /* Back button shown only on mobile when detail panel is active */
-// .mobile-back-btn {
-//     display: none;
-// }
+.mobile-back-btn {
+    display: none;
+}
 
 /* Badges row in reference tab */
 .item-reference-tab__badges {
@@ -350,44 +350,66 @@ body {
 
 @media (max-width: 900px) {
 
-    .panel-main {
-        flex: 1 1 100%;
+    /* Clip off-screen panel during slide */
+    .app-shell {
+        overflow-x: hidden;
+        position: relative;
     }
 
-    .panel-detail {
-        padding-top: 10vh;
+    .panel-main,
+    .app-shell__right {
+        flex: 0 0 100%;
+        min-width: 0;
+        transition: transform 0.25s ease;
+    }
+
+    /* Default: list visible, detail off-screen to the right */
+    .panel-main {
+        transform: translateX(0);
     }
 
     .app-shell__right {
-        display: none;
-    }
-
-    /* When an entity is selected, swap: hide list, show detail full-screen */
-    .app-shell--has-entity .panel-main {
-        display: none;
-    }
-
-    .app-shell--has-entity .app-shell__right {
-        display: flex;
-        flex: 1 1 100%;
-        position: static;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
         height: auto;
         min-height: calc(100vh - 74px);
         border-left: none;
+        transform: translateX(100%);
+        /* keep it out of tab order when off-screen */
+        visibility: hidden;
     }
 
-    // .mobile-back-btn {
-    //     display: block;
-    //     width: 100%;
-    //     padding: 10px 16px;
-    //     text-align: left;
-    //     background: var(--bg, #f6f8fa);
-    //     border: none;
-    //     border-bottom: 1px solid var(--border, #e1e4e8);
-    //     font-size: 0.9rem;
-    //     cursor: pointer;
-    //     flex-shrink: 0;
-    // }
+    /* When detail is active: slide list out left, detail in from right */
+    .app-shell--mobile-detail .panel-main {
+        transform: translateX(-100%);
+    }
+
+    .app-shell--mobile-detail .app-shell__right {
+        transform: translateX(0);
+        visibility: visible;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .panel-detail {
+        padding-top: 0;
+    }
+
+    .mobile-back-btn {
+        display: block;
+        width: 100%;
+        padding: 10px 16px;
+        text-align: left;
+        background: var(--bg, #f6f8fa);
+        border: none;
+        border-bottom: 1px solid var(--border, #e1e4e8);
+        font-size: 0.9rem;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
 }
 
 textarea {
