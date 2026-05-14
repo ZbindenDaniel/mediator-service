@@ -323,7 +323,7 @@ export default function ItemDetail({ itemId }: Props) {
     itemId: null,
     active: false
   });
-  const { setEntity, activeTab } = usePanelContext();
+  const { setEntity, activeTab, setMobileShowDetail } = usePanelContext();
 
   // Only set the entity — don't switch the main view. The detail panel shows the box
   // without displacing whatever list is currently in the left column.
@@ -2513,6 +2513,7 @@ export default function ItemDetail({ itemId }: Props) {
       }
       return;
     }
+    setMobileShowDetail(false);
     navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
   }
 

@@ -50,7 +50,6 @@ export default function ItemKiTab({
 
   return (
     <>
-      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
       {hasActions && (
         <div className="tab-actions">
           {!needsReview && canStart && startHandler && (
@@ -85,6 +84,7 @@ export default function ItemKiTab({
           )}
         </div>
       )}
+      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
       {specFieldModalState ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title={specFieldModalState.title}

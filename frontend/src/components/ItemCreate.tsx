@@ -1677,8 +1677,14 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   };
 
   const manualLockedFields = useMemo<LockedFieldConfig>(
-    () => ({ ...MANUAL_CREATION_LOCKS }),
-    []
+    () => {
+      const hasIdentifier = !!(manualDraft.SerialNumber?.trim() || manualDraft.MacAddress?.trim());
+      return {
+        ...MANUAL_CREATION_LOCKS,
+        ...(hasIdentifier ? { Auf_Lager: 'readonly' as const } : {}),
+      };
+    },
+    [manualDraft.SerialNumber, manualDraft.MacAddress]
   );
 
   console.log('Rendering item create form', { creationStep, shouldUseAgenticForm });
