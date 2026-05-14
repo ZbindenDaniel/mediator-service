@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "subCategory": 201,
+  "questions": [
+    {
+      "id": "keyboard_layout",
+      "type": "select",
+      "question": "Tastatur-Layout?",
+      "values": ["CH", "DE", "US", "Anderes"],
+      "specField": "Tastatur-Layout",
+      "specValue": "%v"
+    },
+    {
+      "id": "ram_gb",
+      "type": "select",
+      "question": "Wie viel RAM ist verbaut?",
+      "values": ["2", "4", "8", "16", "32", "64"],
+      "specField": "RAM",
+      "specValue": "%v GB"
+    },
+    {
+      "id": "storage_gb",
+      "type": "select",
+      "question": "Speicher (SSD/HDD)?",
+      "values": ["128", "256", "512", "1000", "2000"],
+      "specField": "Speicher",
+      "specValue": "%v GB"
+    },
+    {
+      "id": "battery_condition",
+      "type": "select",
+      "question": "Akkuzustand?",
+      "values": ["Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt"],
+      "specField": "Akku",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Gut (>80%)": 5,
+        "Mittel (50–80%)": 4,
+        "Schwach (<50%)": 3,
+        "Defekt": 2
+      }
+    }
+  ]
+}

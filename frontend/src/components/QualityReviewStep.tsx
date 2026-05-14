@@ -1,78 +1,145 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import type { QualityQuestion } from '../../../models/quality-contract';
 import {
   deriveAiPriorityFromAssessment,
-  deriveQualityTagFromCondition,
   type AiPriority,
-  type PhysicalConditionAnswers,
-  type QualityAssessmentInsert
+  type QualityAssessmentInsert,
 } from '../../../models/quality';
+import {
+  loadContracts,
+  deriveQualityFromAnswers,
+  getAllQuestions,
+  allRequiredAnswered,
+} from '../lib/qualityContracts';
 import QualityBadge from './QualityBadge';
 
 export interface QualityReviewResult {
   assessment: Omit<QualityAssessmentInsert, 'reviewed_at' | 'reviewed_by'>;
   aiPriority: AiPriority;
+  contractAnswers: Record<string, string>;
+  subCategory?: number;
 }
-
-interface QuestionConfig {
-  key: keyof PhysicalConditionAnswers;
-  label: string;
-}
-
-const PHYSICAL_CONDITION_QUESTIONS: QuestionConfig[] = [
-  { key: 'is_complete', label: 'Ist der Artikel vollständig?' },
-  { key: 'has_defects', label: 'Gibt es sichtbare Schäden?' },
-  { key: 'is_functional', label: 'Ist der Artikel funktionsfähig?' }
-];
-
-const AI_PRIORITY_LABELS: Record<AiPriority, string> = {
-  high: 'Hoch',
-  normal: 'Normal',
-  low: 'Niedrig'
-};
 
 interface QualityReviewStepProps {
   onComplete: (result: QualityReviewResult) => void;
   onSkip: () => void;
-  questionSet?: QuestionConfig[];
+  subCategory?: number;
   layout?: 'page' | 'embedded';
+}
+
+const AI_PRIORITY_LABELS: Record<AiPriority, string> = {
+  high: 'Hoch',
+  normal: 'Normal',
+  low: 'Niedrig',
+};
+
+function BooleanToggle({
+  value,
+  onChange,
+}: {
+  value: string | undefined;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="quality-review-step__toggle-group">
+      <button
+        type="button"
+        className={`quality-review-step__toggle${value === 'true' ? ' quality-review-step__toggle--active' : ''}`}
+        onClick={() => onChange('true')}
+      >
+        Ja
+      </button>
+      <button
+        type="button"
+        className={`quality-review-step__toggle${value === 'false' ? ' quality-review-step__toggle--active' : ''}`}
+        onClick={() => onChange('false')}
+      >
+        Nein
+      </button>
+    </div>
+  );
+}
+
+function QuestionRow({
+  question,
+  value,
+  onChange,
+}: {
+  question: QualityQuestion;
+  value: string | undefined;
+  onChange: (v: string) => void;
+}) {
+  if (question.type === 'boolean') {
+    return (
+      <div className="row">
+        <label>
+          {question.question}
+          {question.required && ' *'}
+        </label>
+        <BooleanToggle value={value} onChange={onChange} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="row">
+      <label>
+        {question.question}
+        {question.required && ' *'}
+      </label>
+      <select value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+        <option value="">— bitte auswählen —</option>
+        {question.values.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 export default function QualityReviewStep({
   onComplete,
   onSkip,
-  questionSet = PHYSICAL_CONDITION_QUESTIONS
+  subCategory,
+  layout,
 }: QualityReviewStepProps) {
-  const [answers, setAnswers] = useState<PhysicalConditionAnswers>({
-    is_complete: null,
-    has_defects: null,
-    is_functional: null
-  });
+  const { general, subCat } = useMemo(() => loadContracts(subCategory), [subCategory]);
+  const questions = useMemo(() => getAllQuestions(general, subCat), [general, subCat]);
+
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
 
-  const setAnswer = (key: keyof PhysicalConditionAnswers, value: boolean) => {
-    setAnswers((prev) => ({ ...prev, [key]: value }));
-  };
+  const setAnswer = (id: string, value: string) =>
+    setAnswers((prev) => ({ ...prev, [id]: value }));
 
-  const derived = deriveQualityTagFromCondition(answers);
-  const aiPriority = deriveAiPriorityFromAssessment(derived.value);
-
-  const allAnswered = questionSet.every((q) => answers[q.key] !== null);
+  const contracts = subCat ? [general, subCat] : [general];
+  const qualityValue = deriveQualityFromAnswers(contracts, answers);
+  const aiPriority = deriveAiPriorityFromAssessment(qualityValue);
+  const canSubmit = allRequiredAnswered(questions, answers);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!allAnswered) return;
+    if (!canSubmit) return;
+
     onComplete({
       assessment: {
-        tag: derived.tag,
-        value: derived.value,
-        is_complete: answers.is_complete,
-        has_defects: answers.has_defects,
-        is_functional: answers.is_functional,
-        notes: notes.trim() || null
+        tag: 'Ok', // tag resolved server-side from contract; client preview uses qualityValue
+        value: qualityValue,
+        is_complete: null,
+        has_defects: null,
+        is_functional: null,
+        notes: notes.trim() || null,
       },
-      aiPriority
+      aiPriority,
+      contractAnswers: answers,
+      subCategory,
     });
   };
+
+  const generalQuestions = general.questions;
+  const subCatQuestions = subCat ? subCat.questions : [];
 
   return (
     <div className="item-create__step">
@@ -80,31 +147,34 @@ export default function QualityReviewStep({
         <h2>Qualitätsbewertung</h2>
         <p className="muted">Bitte den Zustand des Artikels bewerten.</p>
       </div>
+
       <form onSubmit={handleSubmit} className="item-form">
-        {questionSet.map((question) => {
-          const current = answers[question.key];
-          return (
-            <div key={question.key} className="row">
-              <label>{question.label}</label>
-              <div className="quality-review-step__toggle-group">
-                <button
-                  type="button"
-                  className={`quality-review-step__toggle${current === true ? ' quality-review-step__toggle--active' : ''}`}
-                  onClick={() => setAnswer(question.key, true)}
-                >
-                  Ja
-                </button>
-                <button
-                  type="button"
-                  className={`quality-review-step__toggle${current === false ? ' quality-review-step__toggle--active' : ''}`}
-                  onClick={() => setAnswer(question.key, false)}
-                >
-                  Nein
-                </button>
-              </div>
+        {generalQuestions.map((q) => (
+          <QuestionRow
+            key={q.id}
+            question={q}
+            value={answers[q.id]}
+            onChange={(v) => setAnswer(q.id, v)}
+          />
+        ))}
+
+        {subCatQuestions.length > 0 && (
+          <>
+            <div className="row">
+              <p className="muted" style={{ margin: 0 }}>
+                <strong>{subCat!.subCategory && `Kategorie ${subCat!.subCategory}`}</strong>
+              </p>
             </div>
-          );
-        })}
+            {subCatQuestions.map((q) => (
+              <QuestionRow
+                key={q.id}
+                question={q}
+                value={answers[q.id]}
+                onChange={(v) => setAnswer(q.id, v)}
+              />
+            ))}
+          </>
+        )}
 
         <div className="row">
           <label>Anmerkungen (optional)</label>
@@ -116,10 +186,10 @@ export default function QualityReviewStep({
           />
         </div>
 
-        {allAnswered && (
+        {canSubmit && (
           <div className="row quality-review-step__preview">
             <span className="muted">Vorschau:</span>
-            <QualityBadge value={derived.value} />
+            <QualityBadge value={qualityValue} />
             <span className="muted quality-review-step__priority">
               KI-Priorität: {AI_PRIORITY_LABELS[aiPriority]}
             </span>
@@ -130,7 +200,7 @@ export default function QualityReviewStep({
           <button type="button" className="btn btn--secondary" onClick={onSkip}>
             Überspringen
           </button>
-          <button type="submit" className="btn btn--primary" disabled={!allAnswered}>
+          <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
             Weiter →
           </button>
         </div>

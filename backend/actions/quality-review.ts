@@ -1,19 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { insertQualityAssessment, updateItemQualityAssessment } from '../db';
-import { deriveQualityTagFromCondition } from '../../models/quality';
+import { insertQualityAssessment, updateItemQualityAssessment, updateItemLangtextSpecs } from '../db';
+import {
+  loadGeneralContract,
+  loadSubCategoryContract,
+  buildQualityCheckResponse,
+} from '../lib/quality-contracts';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
-}
-
-function parseNullableBoolean(value: unknown): boolean | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === 'boolean') return value;
-  if (value === 1 || value === '1' || value === 'true') return true;
-  if (value === 0 || value === '0' || value === 'false') return false;
-  return null;
 }
 
 const action = defineHttpAction({
@@ -41,24 +37,35 @@ const action = defineHttpAction({
       const reviewed_by = typeof data.reviewed_by === 'string' ? data.reviewed_by.trim() : '';
       if (!reviewed_by) return sendJson(res, 400, { error: 'reviewed_by is required' });
 
-      const answers = {
-        is_complete: parseNullableBoolean(data.is_complete),
-        has_defects: parseNullableBoolean(data.has_defects),
-        is_functional: parseNullableBoolean(data.is_functional)
-      };
+      if (typeof data.answers !== 'object' || data.answers === null || Array.isArray(data.answers)) {
+        return sendJson(res, 400, { error: 'answers object is required' });
+      }
+      const answers = data.answers as Record<string, string>;
 
-      const { tag, value } = deriveQualityTagFromCondition(answers);
+      const subCategory = typeof data.subCategory === 'number' ? data.subCategory : undefined;
       const notes = typeof data.notes === 'string' && data.notes.trim() ? data.notes.trim() : null;
 
+      let generalContract;
+      try {
+        generalContract = loadGeneralContract();
+      } catch (err) {
+        console.error('[quality-review] Failed to load general contract', err);
+        return sendJson(res, 500, { error: 'Failed to load quality contract' });
+      }
+
+      const subCatContract = subCategory !== undefined ? loadSubCategoryContract(subCategory) : null;
+      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, answers);
+
       const assessment = {
-        tag,
-        value,
-        is_complete: answers.is_complete,
-        has_defects: answers.has_defects,
-        is_functional: answers.is_functional,
+        tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,
+        value: checkResponse.qualityValue,
+        is_complete: null as boolean | null,
+        has_defects: null as boolean | null,
+        is_functional: null as boolean | null,
         notes,
         reviewed_at: new Date().toISOString(),
-        reviewed_by
+        reviewed_by,
+        checkResponse,
       };
 
       let id: number;
@@ -70,14 +77,45 @@ const action = defineHttpAction({
       }
 
       try {
-        updateItemQualityAssessment(itemUUID, id, value);
+        updateItemQualityAssessment(itemUUID, id, checkResponse.qualityValue);
       } catch (err) {
         console.error('[quality-review] Failed to update item quality fields', { itemUUID, id, error: err });
         return sendJson(res, 500, { error: 'Failed to link quality assessment to item' });
       }
 
-      console.info('[quality-review] Quality assessment created', { itemUUID, id, tag, value, reviewed_by });
-      sendJson(res, 200, { id, ...assessment });
+      if (Object.keys(checkResponse.derivedSpecs).length > 0) {
+        try {
+          updateItemLangtextSpecs(itemUUID, checkResponse.derivedSpecs);
+        } catch (err) {
+          // Non-fatal: log but don't fail the whole request
+          console.warn('[quality-review] Failed to merge derived specs into Langtext', { itemUUID, error: err });
+        }
+      }
+
+      console.info('[quality-review] Quality assessment created', {
+        itemUUID,
+        id,
+        tag: checkResponse.qualityTag,
+        value: checkResponse.qualityValue,
+        subCategory,
+        reviewed_by,
+      });
+
+      sendJson(res, 200, {
+        id,
+        tag: checkResponse.qualityTag,
+        value: checkResponse.qualityValue,
+        notes,
+        reviewed_at: assessment.reviewed_at,
+        reviewed_by,
+        answers: checkResponse.answers,
+        derivedSpecs: checkResponse.derivedSpecs,
+        generalContractVersion: checkResponse.generalContractVersion,
+        ...(checkResponse.subCategoryContractVersion !== undefined
+          ? { subCategoryContractVersion: checkResponse.subCategoryContractVersion }
+          : {}),
+        ...(subCategory !== undefined ? { subCategory } : {}),
+      });
     } catch (err) {
       console.error('[quality-review] Unexpected error', err);
       sendJson(res, 500, { error: (err as Error).message });

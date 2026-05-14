@@ -1190,7 +1190,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
                 fetch(`/api/items/${encodeURIComponent(uuid)}/quality-review`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ...qualityReviewResult.assessment, reviewed_by: reviewedBy })
+                  body: JSON.stringify({
+                    answers: qualityReviewResult.contractAnswers,
+                    subCategory: qualityReviewResult.subCategory,
+                    notes: qualityReviewResult.assessment.notes,
+                    reviewed_by: reviewedBy,
+                  })
                 }).then((r) => {
                   if (!r.ok) console.warn('[quality-review] API call returned non-ok status', { uuid, status: r.status });
                 })
@@ -1755,6 +1760,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
         <QualityReviewStep
           onComplete={handleQualityReviewComplete}
           onSkip={handleQualityReviewSkip}
+          subCategory={typeof basicInfo.Unterkategorien_A === 'number' ? basicInfo.Unterkategorien_A : undefined}
           layout={layout}
         />
       </>

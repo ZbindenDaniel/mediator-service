@@ -82,7 +82,15 @@
 
 19b. **Implement inventory feature (passive cycle).** Planning document at `docs/PLANNING_INVENTORY.md`. Phase 1: `LastInventoryDate` on boxes, `MissingAt` on items, `inventory_sessions` table, `INVENTORY_CYCLE_DAYS` config, `inventoryPending` filter on box list. Phase 2: `/api/inventory/start|scan|complete|cancel`, `InventoryCheckView` with checklist + scan zone + Menge count inputs + acoustic feedback. Phase 3: passive trigger hook in `qr-scan` + interstitial prompt. Phase 4: missing items view, `InventoryFound` flow, session export. Active Inventory Day (UC-1) is deferred — not part of current scope.
 
-19. **Add instance specification fields (RAM, SSD, OS).** Structured hardware spec fields to replace inconsistent manual entries in Langtext. **Goal:** enable structured spec queries and reporting while maintaining compatibility with existing workflows.
+19. ✅ **Add instance specification fields (RAM, SSD, OS).** Now driven by quality contracts: `specField`/`specValue` in each question contributes to Langtext automatically after quality review. Subcategory contract 201 (Laptop) covers keyboard layout, RAM, storage, battery.
+
+40. **Quality contract: add remaining subcategory contracts.** Currently only 201 (Laptop) exists. Add contracts for the other high-volume subcategories (e.g., graphics cards, monitors, phones) as needed.
+
+41. **Quality re-check from ItemDetail.** Add a "Neu bewerten" button in the instance tab that opens `QualityReviewStep` with the item's existing `Unterkategorien_A` as `subCategory`. Contract version stored in `quality_assessments.contract_version` supports detecting stale assessments.
+
+42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (SQLite `json_extract`). Enables searching "16GB" to find matching Laptops.
+
+43. **Quality contracts: extend question types.** Currently `select` and `boolean` only. Add `text` (free-entry) and `range` (numeric slider) types to the contract schema and `QualityReviewStep` renderer.
 
 20. **Enhance partial imports functionality.** Large imports currently fail completely on a single item error. Add granular error reporting and selective retry. **Goal:** make bulk import workflows resilient with clear per-item failure reporting.
 
