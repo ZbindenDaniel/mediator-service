@@ -90,7 +90,9 @@ import {
   deleteItem,
   deleteBox,
   enqueueShopwareSyncJob,
-  insertAgenticRunReviewHistoryEntry
+  insertAgenticRunReviewHistoryEntry,
+  listStubs,
+  createStub
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
@@ -477,6 +479,8 @@ type ActionContext = {
   listItemReferencesWithFilters: typeof listItemReferencesWithFilters;
   listItemsForExport: typeof listItemsForExport;
   updateAgenticReview: typeof updateAgenticReview;
+  listStubs: typeof listStubs;
+  createStub: typeof createStub;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
@@ -887,6 +891,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           listItemsWithFilters,
           updateAgenticReview,
           insertAgenticRunReviewHistoryEntry,
+          listStubs,
+          createStub,
           INBOX_DIR,
           PUBLIC_DIR,
           PREVIEW_DIR,
