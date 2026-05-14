@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import { GoArchive, GoHome, GoListUnordered, GoPlus, GoPulse, GoSearch } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoSearch } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -143,28 +143,9 @@ export default function Header() {
     }
   }, [dialog, user]);
 
-  // TODO(header-home-link): Validate home navigation tracking once error telemetry is wired.
-  const handleHomeClick = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    try {
-      navigate('/');
-    } catch (err) {
-      logError('Failed to navigate to the home route from the header.', err);
-    }
-  }, [navigate]);
-
   return (
     <header className="header">
       <div className="left">
-        <Link
-          id="header-home-button"
-          to="/"
-          onClick={handleHomeClick}
-          aria-label="Startseite"
-          title="Startseite"
-        >
-          <GoHome aria-hidden="true" />
-        </Link>
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
         <nav className="header-nav" aria-label="Hauptnavigation">
           {/* TODO(navigation): Re-evaluate header icon spacing if more nav items are added. */}
