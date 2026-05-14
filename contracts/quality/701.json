@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "subCategory": 701,
+  "questions": [
+    {
+      "id": "vram_gb",
+      "type": "select",
+      "question": "Wie viel VRAM hat die Karte?",
+      "values": ["1", "2", "4", "6", "8", "12", "16", "24"],
+      "specField": "VRAM",
+      "specValue": "%v GB"
+    },
+    {
+      "id": "interface",
+      "type": "select",
+      "question": "Anschlusstyp?",
+      "values": ["PCIe x16", "PCIe x8", "AGP", "Anderes"],
+      "specField": "Anschluss",
+      "specValue": "%v"
+    },
+    {
+      "id": "display_outputs",
+      "type": "select",
+      "question": "Anzahl Displayausgänge?",
+      "values": ["1", "2", "3", "4", "6"],
+      "specField": "Displayausgänge",
+      "specValue": "%v"
+    },
+    {
+      "id": "fan_condition",
+      "type": "select",
+      "question": "Lüfterzustand?",
+      "values": ["Einwandfrei", "Laut", "Defekt", "Passivkühlung"],
+      "specField": "Lüfter",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Einwandfrei": 5,
+        "Laut": 3,
+        "Passivkühlung": 5,
+        "Defekt": 1
+      }
+    }
+  ]
+}

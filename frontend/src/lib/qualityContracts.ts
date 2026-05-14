@@ -3,11 +3,15 @@ import type { QualityContract, QualityQuestion } from '../../../models/quality-c
 // Statically bundled contracts — add new subcategory files here as they are created
 import generalContractJson from '../../../contracts/quality/general.json';
 import contract201Json from '../../../contracts/quality/201.json';
+import contract301Json from '../../../contracts/quality/301.json';
+import contract701Json from '../../../contracts/quality/701.json';
 
 const GENERAL_CONTRACT = generalContractJson as QualityContract;
 
 const SUBCATEGORY_CONTRACTS: Partial<Record<number, QualityContract>> = {
   201: contract201Json as QualityContract,
+  301: contract301Json as QualityContract,
+  701: contract701Json as QualityContract,
 };
 
 export function loadContracts(subCategory?: number): {
