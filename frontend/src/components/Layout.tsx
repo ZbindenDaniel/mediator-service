@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Header from './Header';
 import { usePanelContext } from '../context/PanelContext';
 import { BulkSelectionProvider, useBulkSelection } from '../context/BulkSelectionContext';
@@ -32,8 +32,20 @@ function MultiItemDetailPanel() {
 }
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection } = usePanelContext();
+  const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection, mobileShowDetail, setMobileShowDetail } = usePanelContext();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
+
+  // Full-screen routes bypass the two-column shell entirely
+  const isFullScreen = pathname.startsWith('/scan') || pathname.startsWith('/placement/');
+  if (isFullScreen) {
+    return (
+      <div className="layout">
+        <Header />
+        <main>{children}</main>
+      </div>
+    );
+  }
 
   // Create mode: entityType=item, entityId=null, activeTab=create
   const isCreateMode = entityType === 'item' && entityId === null && activeTab === 'create';
@@ -45,14 +57,14 @@ export default function Layout({ children }: { children: ReactNode }) {
       <Header />
       <main>
         <BulkSelectionProvider>
-          <div className={`app-shell${hasEntity ? ' app-shell--has-entity' : ''}`}>
+          <div className={`app-shell${mobileShowDetail ? ' app-shell--mobile-detail' : 'app-shell--mobile-list'}`}>
             <div className="panel-main">{children}</div>
             <div className="app-shell__right">
-              {/* {hasEntity && (
-                <button type="button" className="mobile-back-btn" onClick={clearSelection}>
-                  ← Zurück
+              {mobileShowDetail && (
+                <button type="button" className="mobile-back-btn" onClick={() => setMobileShowDetail(false)}>
+                  ← Liste
                 </button>
-              )} */}
+              )}
               {isCreateMode ? (
                 <div className="panel-create">
                   <ItemCreate

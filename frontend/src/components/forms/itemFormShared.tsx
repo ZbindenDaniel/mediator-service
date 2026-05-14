@@ -1167,6 +1167,34 @@ export function ItemDetailsFields({
         </div>
       )}
 
+      {!isReferenceMode && (
+        <div className="row">
+          <label>Seriennummer</label>
+          <input
+            value={(form as Partial<ItemFormData>).SerialNumber || ''}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              onUpdate('SerialNumber' as ItemFormFieldKey, raw || null);
+            }}
+            placeholder="Seriennummer"
+          />
+        </div>
+      )}
+
+      {!isReferenceMode && (
+        <div className="row">
+          <label>MAC-Adresse</label>
+          <input
+            value={(form as Partial<ItemFormData>).MacAddress || ''}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              onUpdate('MacAddress' as ItemFormFieldKey, raw || null);
+            }}
+            placeholder="MAC-Adresse"
+          />
+        </div>
+      )}
+
       <div className="row">
         <label>
           Kurzbeschreibung

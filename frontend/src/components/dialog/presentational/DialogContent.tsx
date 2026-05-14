@@ -12,7 +12,7 @@ export const DialogContent = forwardRef(function DialogContent(
 ) {
   const titleId = useId();
   const descriptionId = useId();
-  const combinedClassName = ['dialog-content', 'card', className]
+  const combinedClassName = ['dialog-content', className]
     .filter(Boolean)
     .join(' ');
 

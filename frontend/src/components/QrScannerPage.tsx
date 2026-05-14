@@ -24,7 +24,7 @@ type QrTarget = {
 };
 
 type QrCallback = 'NavigateToEntity';
-type QrScanIntent = 'add-item' | 'relocate-box' | 'shelf-add-box';
+type QrScanIntent = 'add-item' | 'relocate-box' | 'shelf-add-box' | 'placement-scan';
 
 export default function QrScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -100,7 +100,7 @@ export default function QrScannerPage() {
       if (!trimmed) {
         return null;
       }
-      if (trimmed === 'add-item' || trimmed === 'relocate-box' || trimmed === 'shelf-add-box') {
+      if (trimmed === 'add-item' || trimmed === 'relocate-box' || trimmed === 'shelf-add-box' || trimmed === 'placement-scan') {
         return trimmed as QrScanIntent;
       }
       logger.warn?.('Ignoring invalid QR intent value', { intent: trimmed });

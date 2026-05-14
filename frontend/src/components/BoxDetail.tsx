@@ -130,7 +130,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID, box?.LocationId]);
   const shouldLinkLocation = Boolean(normalizedLocationId);
-  const { activeTab, setEntity } = usePanelContext();
+  const { activeTab, setEntity, setMainView } = usePanelContext();
   const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
     if (!itemId) {
       logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
@@ -150,20 +150,20 @@ export default function BoxDetail({ boxId }: Props) {
     const resolvedBoxId = box?.BoxID || boxId;
     try {
       const encodedBoxId = encodeURIComponent(resolvedBoxId);
-      const targetRoute = `/items?box=${encodedBoxId}`;
       logger.info('Navigating from box detail to item list with box filter', {
         source: 'box-detail',
-        boxId: resolvedBoxId,
-        targetRoute
+        boxId: resolvedBoxId
       });
-      navigate(targetRoute);
+      // Use setMainView so panel state (entity/id/tab) is preserved in the URL.
+      // This keeps BoxDetail visible in the right panel after switching to items view.
+      setMainView('items', { box: encodedBoxId });
     } catch (error) {
       logError('Failed to navigate from box detail to item list with box filter', error, {
         source: 'box-detail',
         boxId: resolvedBoxId
       });
     }
-  }, [box?.BoxID, boxId, navigate]);
+  }, [box?.BoxID, boxId, setMainView]);
 
   const itemsListRoute = useMemo(() => {
     const resolvedBoxId = box?.BoxID || boxId;
@@ -728,6 +728,22 @@ export default function BoxDetail({ boxId }: Props) {
         {box && (
           <div className="tab-actions">
             <PrintLabelButton boxId={box.BoxID} inline />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=items`)}
+            >
+              Einscannen
+            </button>
+            {isShelf && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=boxes`)}
+              >
+                Behälter einlagern
+              </button>
+            )}
             {isBoxRelocatable && (
               <button type="button" className="btn" onClick={() => setShowRelocate((prev) => !prev)}>
                 Umlagern
@@ -892,8 +908,7 @@ export default function BoxDetail({ boxId }: Props) {
                   to={itemsListRoute}
                   onClick={handleNavigateToItems}
                   className="btn"
-                  style={{ textDecoration: 'none' }}
-                >Detail-Liste</Link>
+                >Artikelliste</Link>
               </div>
               <div className="item-list-wrapper">
                 <table className="item-list">

@@ -13,14 +13,16 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0e. ✅ **Fix mobile navigation to lists and Einscannen visibility.** `mobileShowDetail` state in PanelContext drives `app-shell--mobile-detail` CSS class; slide transition replaces display-toggle; back button added; full-screen bypass for scan/placement routes.
+
 0c. **Verify tab icons render correctly once build runs.** react-icons/go icons GoInfo, GoPencil, GoFileMedia, GoPaperclip, GoTools are newly imported in DetailTabBar — confirm they exist in v5.5.0 (Octicons v19) when bundling.
 
-0d. **Move filter-clear button into ItemListPage list header (top-right).** Currently lives in Header.tsx. User requested it at list level (not global header) — requires passing filter-reset state down or using an event.
+0d. ✅ **Move filter-clear button into ItemListPage list header (top-right).** Done — filter-reset button added to both ItemListPage and BoxListPage; removed from Header.
 
 
 0. **Eliminate duplicate `/api/items` fetch on item selection.** When switching items via the list, ItemDetail's neighbor-resolution `useEffect` (`[itemId, neighborContext]`) fetches `/api/items` independently from the list fetch in `ItemListPage`. Fix: `handleItemSelect` in `ItemListPage` should encode `prev=<prevId>&next=<nextId>` as URL params when calling `setEntity` so ItemDetail reads them from `searchParams` and skips its own fetch (the `prev`/`next` params are already supported by ItemDetail's `neighborContext` memoization).
 
-0b. **Filter state resets intermittently when switching items.** `ItemListPage` re-runs its filter-init `useEffect` on every `searchParams` change, including PanelContext's `entity/id/tab` updates. React bails out when state values are unchanged (primitives), but `setFiltersReady(true)` always runs. Under certain timing conditions (e.g. fast item switching), this may reset in-flight filter changes. Investigation needed — add guard to bail out early if `entity`/`id`/`tab` are the only changed params.
+0b. ✅ **Filter state resets intermittently when switching items.** Fixed — filter-init useEffect now deps on `[boxParam, qParam]` instead of full `[searchParams]`, so PanelContext entity/tab URL writes no longer retrigger it.
 
 1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
 
@@ -66,7 +68,7 @@
 
 13. **Filter and sort boxes/shelves.** Add filter options (boxes only / shelves only, location dropdown) and sorting to the box/shelf list.
 
-14. **Populate EAN number field in item references.** Enable EAN barcode capture and display in item forms; ensure EAN data flows through import/export pipelines. **Goal:** support standard product identification with minimal schema changes and clear validation rules.
+14. ✅ **Populate EAN / surface instance identifiers.** EAN display now routes to the instance tab (alongside SN/MAC). SerialNumber and MacAddress are captured in the create form and persisted via import-item. Remaining gap: editing SN/MAC on existing instances requires a separate instance-update path (not yet built).
 
 15. **Support text search fallback for relocate item/box (label search).** QR-only flows are brittle when labels/scans fail. Reuse existing search endpoints and add a low-overhead fallback without building a parallel relocation system.
 

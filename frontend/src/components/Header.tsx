@@ -2,17 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import {
-  clearItemListFilters,
-  getActiveFilterDescriptions,
-  getDefaultItemListFilters,
-  hasNonDefaultFilters,
-  ITEM_LIST_FILTERS_CHANGED_EVENT,
-  ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT,
-  ItemListFilterChangeDetail,
-  loadItemListFilters
-} from '../lib/itemListFiltersStorage';
-import { GoArchive, GoFilter, GoHome, GoListUnordered, GoPlus, GoPulse, GoSearch } from 'react-icons/go';
+import { GoArchive, GoHome, GoListUnordered, GoPlus, GoPulse, GoSearch } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -35,16 +25,13 @@ function resolveDirectTarget(term: string): { type: 'item' | 'box'; id: string }
 export default function Header() {
   const dialog = useDialog();
   const navigate = useNavigate();
-  const { setCreateMode, setEntity } = usePanelContext();
+  const { setCreateMode, setEntity, setMobileShowDetail } = usePanelContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const searchFormRef = useRef<HTMLFormElement | null>(null);
   const [user, setUserState] = useState(() => getUser().trim());
-  const [filterSummaries, setFilterSummaries] = useState<string[]>([]);
-  const [hasStoredFilters, setHasStoredFilters] = useState(false);
-  const [hasDeepLinkFilters, setHasDeepLinkFilters] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,32 +49,6 @@ export default function Header() {
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    const defaults = getDefaultItemListFilters();
-    const syncFromStorage = () => {
-      const stored = loadItemListFilters(defaults);
-      if (stored) {
-        setFilterSummaries(getActiveFilterDescriptions(stored, defaults));
-        setHasStoredFilters(hasNonDefaultFilters(stored, defaults));
-      } else {
-        setFilterSummaries([]);
-        setHasStoredFilters(false);
-      }
-      setHasDeepLinkFilters(false);
-    };
-    syncFromStorage();
-    const handleFilterChange = (event: Event) => {
-      const customEvent = event as CustomEvent<ItemListFilterChangeDetail>;
-      const activeFilters = customEvent.detail?.activeFilters ?? [];
-      const hasOverrides = customEvent.detail?.hasOverrides ?? false;
-      const isDeepLinkFilterSession = customEvent.detail?.isDeepLinkFilterSession ?? false;
-      setFilterSummaries(activeFilters);
-      setHasStoredFilters(hasOverrides);
-      setHasDeepLinkFilters(isDeepLinkFilterSession);
-    };
-    window.addEventListener(ITEM_LIST_FILTERS_CHANGED_EVENT, handleFilterChange as EventListener);
-    return () => window.removeEventListener(ITEM_LIST_FILTERS_CHANGED_EVENT, handleFilterChange as EventListener);
-  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -192,24 +153,6 @@ export default function Header() {
     }
   }, [navigate]);
 
-  const handleClearFiltersClick = useCallback(() => {
-    try {
-      clearItemListFilters();
-      window.dispatchEvent(new Event(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT));
-      setFilterSummaries([]);
-      setHasStoredFilters(false);
-      setHasDeepLinkFilters(false);
-    } catch (err) {
-      console.error('Failed to clear stored filters from header control', err);
-    }
-  }, []);
-
-  const filterTooltip = filterSummaries.length
-    ? `Aktive Filter:\n- ${filterSummaries.join('\n- ')}${hasDeepLinkFilters ? '\n(Hinweis: Deep-Link überschreibt lokale Speicherung)' : ''}`
-    : hasDeepLinkFilters
-      ? 'Deep-Link-Filter aktiv (lokale Speicherung übersprungen)'
-      : 'Gespeicherte Filter zurücksetzen';
-
   return (
     <header className="header">
       <div className="left">
@@ -234,13 +177,13 @@ export default function Header() {
           >
             <GoPlus aria-hidden="true" />
           </button>
-          <Link to="/items" aria-label="Artikelliste" title="Artikelliste">
+          <Link to="/items" aria-label="Artikelliste" title="Artikelliste" onClick={() => setMobileShowDetail(false)}>
             <GoListUnordered aria-hidden="true" />
           </Link>
-          <Link to="/boxes" aria-label="Behälterliste" title="Behälterliste">
+          <Link to="/boxes" aria-label="Behälterliste" title="Behälterliste" onClick={() => setMobileShowDetail(false)}>
             <GoArchive aria-hidden="true" />
           </Link>
-          <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten">
+          <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => setMobileShowDetail(false)}>
             <GoPulse aria-hidden="true" />
           </Link>
           <form
@@ -304,17 +247,6 @@ export default function Header() {
         </nav>
       </div>
       <div className="right">
-        {hasStoredFilters ? (
-          <button
-            aria-label="Gespeicherte Filter löschen"
-            className={`header-filter-indicator${hasDeepLinkFilters ? ' header-filter-indicator--deeplink' : ''}`}
-            onClick={handleClearFiltersClick}
-            title={filterTooltip}
-            type="button"
-          >
-            <GoFilter aria-hidden="true" />
-          </button>
-        ) : null}
         <div
           className="user"
           onDoubleClick={handleUserDoubleClick}

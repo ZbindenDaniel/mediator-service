@@ -316,19 +316,20 @@ export default function ItemDetail({ itemId }: Props) {
   const [searchParams] = useSearchParams();
   const dialog = useDialog();
   const [showRelocate, setShowRelocate] = useState(false);
+  const [showEditInstance, setShowEditInstance] = useState(false);
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
   const relocateCardRef = useRef<HTMLDivElement | null>(null);
   const agenticOverrideLogRef = useRef<{ itemId: string | null; active: boolean }>({
     itemId: null,
     active: false
   });
-  const { setEntity, setMainView, activeTab } = usePanelContext();
+  const { setEntity, activeTab } = usePanelContext();
 
-  // Navigate to BoxList and activate the box in the detail panel.
+  // Only set the entity — don't switch the main view. The detail panel shows the box
+  // without displacing whatever list is currently in the left column.
   const handleBoxNavigation = useCallback((boxId: string) => {
     setEntity('box', boxId);
-    setMainView('boxes');
-  }, [setEntity, setMainView]);
+  }, [setEntity]);
 
   const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
 
@@ -693,6 +694,8 @@ export default function ItemDetail({ itemId }: Props) {
           </button>
         ) : null
       ],
+      ['Seriennummer', item.SerialNumber ?? null],
+      ['MAC-Adresse', item.MacAddress ?? null],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
       ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)],
       ['Qualität', qualityBadge],
@@ -740,6 +743,9 @@ export default function ItemDetail({ itemId }: Props) {
       // TODO(agent): Re-validate instance/reference row keys if additional fields move between cards.
       const instanceKeys = new Set([
         'ItemUUID',
+        'Seriennummer',
+        'MAC-Adresse',
+        'EAN',
         'Behälter',
         'Qualität',
         'Ki Status',
@@ -2757,11 +2763,14 @@ export default function ItemDetail({ itemId }: Props) {
             skippedInstanceCount={skippedInstanceCount}
             showRelocate={showRelocate}
             relocateCardRef={relocateCardRef}
+            showEditInstance={showEditInstance}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
             onRelocate={() => setShowRelocate(true)}
+            onEditInstance={() => setShowEditInstance(true)}
             onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
             onRelocated={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
+            onInstanceSaved={() => { setShowEditInstance(false); void load({ showSpinner: false }); }}
           />
         );
         break;
