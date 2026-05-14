@@ -17,6 +17,7 @@ export * from './item-categories';
 export * from './default-shelf-locations';
 export * from './shelf-locations';
 export * from './quality';
+export * from './quality-contract';
 export * from './print-label';
 export * from './item-relation';
 export * from './item-attachment';

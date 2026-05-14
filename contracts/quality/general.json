@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "condition_optical",
+      "type": "select",
+      "question": "Optischer Zustand?",
+      "values": ["Wie neu", "Gut", "Gebrauchsspuren", "Beschädigt"],
+      "required": true,
+      "specField": "Zustand",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Wie neu": 5,
+        "Gut": 4,
+        "Gebrauchsspuren": 3,
+        "Beschädigt": 2
+      }
+    },
+    {
+      "id": "is_complete",
+      "type": "boolean",
+      "question": "Ist der Artikel vollständig?",
+      "required": true,
+      "qualityImpact": { "true": 5, "false": 3 }
+    },
+    {
+      "id": "is_functional",
+      "type": "boolean",
+      "question": "Ist der Artikel funktionsfähig?",
+      "required": true,
+      "qualityImpact": { "true": 5, "false": 1 }
+    }
+  ]
+}

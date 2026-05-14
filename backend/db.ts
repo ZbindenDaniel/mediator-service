@@ -37,6 +37,7 @@ import {
 } from '../models';
 import { normalizeQuality } from '../models/quality';
 import type { QualityAssessment, QualityAssessmentInsert } from '../models/quality';
+import type { QualityCheckResponse } from '../models/quality-contract';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
 import { resolveStandortLabel } from './standort-label';
 import { parseSequentialItemUUID } from './lib/itemIds';
@@ -985,6 +986,37 @@ function ensureQualityAssessmentSchema(database: Database.Database = db): void {
 }
 
 ensureQualityAssessmentSchema(db);
+
+function ensureQualityAssessmentContractColumns(database: Database.Database = db): void {
+  let columns: Array<{ name: string }>;
+  try {
+    columns = database.prepare('PRAGMA table_info(quality_assessments)').all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('[db] Failed to inspect quality_assessments schema', err);
+    throw err;
+  }
+  const additions: Array<{ name: string; sql: string }> = [];
+  if (!columns.some((c) => c.name === 'responses')) {
+    additions.push({ name: 'responses', sql: 'ALTER TABLE quality_assessments ADD COLUMN responses TEXT' });
+  }
+  if (!columns.some((c) => c.name === 'contract_version')) {
+    additions.push({ name: 'contract_version', sql: 'ALTER TABLE quality_assessments ADD COLUMN contract_version TEXT' });
+  }
+  if (!columns.some((c) => c.name === 'derived_specs')) {
+    additions.push({ name: 'derived_specs', sql: 'ALTER TABLE quality_assessments ADD COLUMN derived_specs TEXT' });
+  }
+  for (const { name, sql } of additions) {
+    try {
+      database.prepare(sql).run();
+      console.info(`[db] Added ${name} column to quality_assessments`);
+    } catch (err) {
+      console.error(`[db] Failed to add ${name} column to quality_assessments`, err);
+      throw err;
+    }
+  }
+}
+
+ensureQualityAssessmentContractColumns(db);
 
 function ensureItemEanColumn(database: Database.Database = db): void {
   let refColumns: Array<{ name: string }> = [];
@@ -3379,24 +3411,33 @@ export const listItemsForExport = {
 let insertQualityAssessmentStatement: Database.Statement;
 let getQualityAssessmentStatement: Database.Statement;
 let updateItemQualityStatement: Database.Statement;
+let updateItemLangtextStatement: Database.Statement;
 try {
   insertQualityAssessmentStatement = db.prepare(`
-    INSERT INTO quality_assessments (tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by)
-    VALUES (@tag, @value, @is_complete, @has_defects, @is_functional, @notes, @reviewed_at, @reviewed_by)
+    INSERT INTO quality_assessments (tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by, responses, contract_version, derived_specs)
+    VALUES (@tag, @value, @is_complete, @has_defects, @is_functional, @notes, @reviewed_at, @reviewed_by, @responses, @contract_version, @derived_specs)
   `);
   getQualityAssessmentStatement = db.prepare(`
-    SELECT id, tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by
+    SELECT id, tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by, responses, contract_version, derived_specs
     FROM quality_assessments WHERE id = ?
   `);
   updateItemQualityStatement = db.prepare(`
     UPDATE items SET QualityId = @qualityId, Quality = @value WHERE ItemUUID = @itemUUID
+  `);
+  updateItemLangtextStatement = db.prepare(`
+    UPDATE item_refs SET Langtext = @langtext WHERE Artikel_Nummer = (SELECT Artikel_Nummer FROM items WHERE ItemUUID = @itemUUID)
   `);
 } catch (err) {
   console.error('[db] Failed to prepare quality assessment statements', err);
   throw err;
 }
 
-export function insertQualityAssessment(assessment: QualityAssessmentInsert): number {
+export interface QualityAssessmentInsertWithContract extends QualityAssessmentInsert {
+  checkResponse?: QualityCheckResponse;
+}
+
+export function insertQualityAssessment(assessment: QualityAssessmentInsertWithContract): number {
+  const { checkResponse } = assessment;
   const result = insertQualityAssessmentStatement.run({
     tag: assessment.tag,
     value: assessment.value,
@@ -3405,7 +3446,12 @@ export function insertQualityAssessment(assessment: QualityAssessmentInsert): nu
     is_functional: assessment.is_functional === null ? null : assessment.is_functional ? 1 : 0,
     notes: assessment.notes,
     reviewed_at: assessment.reviewed_at,
-    reviewed_by: assessment.reviewed_by
+    reviewed_by: assessment.reviewed_by,
+    responses: checkResponse ? JSON.stringify(checkResponse.answers) : null,
+    contract_version: checkResponse
+      ? JSON.stringify({ general: checkResponse.generalContractVersion, ...(checkResponse.subCategoryContractVersion !== undefined ? { subCat: checkResponse.subCategoryContractVersion } : {}) })
+      : null,
+    derived_specs: checkResponse && Object.keys(checkResponse.derivedSpecs).length > 0 ? JSON.stringify(checkResponse.derivedSpecs) : null,
   });
   return Number(result.lastInsertRowid);
 }
@@ -3428,6 +3474,24 @@ export function getQualityAssessment(id: number): QualityAssessment | null {
 
 export function updateItemQualityAssessment(itemUUID: string, qualityId: number, value: number): void {
   updateItemQualityStatement.run({ qualityId, value, itemUUID });
+}
+
+/** Merges derived spec key-value pairs into the item's Langtext (as a JSON payload). */
+export function updateItemLangtextSpecs(itemUUID: string, derivedSpecs: Record<string, string>): void {
+  const row = db.prepare(
+    'SELECT Langtext FROM item_refs WHERE Artikel_Nummer = (SELECT Artikel_Nummer FROM items WHERE ItemUUID = ?)'
+  ).get(itemUUID) as { Langtext: string | null } | undefined;
+  if (!row) return;
+
+  const existing = parseLangtext(row.Langtext) ?? {};
+  const base: Record<string, string | string[]> = typeof existing === 'string' ? {} : { ...existing };
+  for (const [key, value] of Object.entries(derivedSpecs)) {
+    base[key] = value;
+  }
+  const serialized = stringifyLangtext(base);
+  if (serialized !== null) {
+    updateItemLangtextStatement.run({ langtext: serialized, itemUUID });
+  }
 }
 
 export type {
