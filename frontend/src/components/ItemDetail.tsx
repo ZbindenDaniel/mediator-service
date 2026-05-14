@@ -21,19 +21,12 @@ import type {
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
-  AGENTIC_RUN_STATUS_APPROVED,
-  AGENTIC_RUN_STATUS_CANCELLED,
-  AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_QUEUED,
-  AGENTIC_RUN_STATUS_REJECTED,
   AGENTIC_RUN_STATUS_REVIEW,
   AGENTIC_RUN_STATUS_RUNNING,
   AGENTIC_RUN_STATUSES,
-  AGENTIC_RUN_TERMINAL_STATUSES,
   ItemEinheit,
-  isItemEinheit,
-  normalizeItemEinheit,
   normalizeAgenticRunStatus
 } from '../../../models';
 import { describeQuality } from '../../../models/quality';
@@ -43,8 +36,10 @@ import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { buildItemCategoryLookups } from '../lib/categoryLookup';
 import {
   buildAgenticItemRefPath,
+  buildAgenticRestartRequestPayload,
   describeAgenticFailureReason,
   extractAgenticFailureReason,
+  performItemDetailAgenticCancel,
   persistAgenticRunClose,
   persistAgenticRunCancellation,
   persistAgenticRunDeletion,
@@ -105,107 +100,33 @@ import AgenticSpecFieldReviewModal, {
   type AgenticSpecFieldOption,
   type AgenticSpecFieldReviewResult
 } from './AgenticSpecFieldReviewModal';
+import {
+  agenticStatusDisplay,
+  isAgenticRunInProgress,
+  type AgenticBadgeVariant,
+  type AgenticStatusDisplay,
+  type AgenticStatusCardProps
+} from './AgenticStatusCard';
+import {
+  type NormalizedDetailValue,
+  DETAIL_PLACEHOLDER_TEXT,
+  buildPlaceholder,
+  normalizeDetailValue,
+  humanizeCategoryLabel,
+  renderLangtextInlineSegments,
+  buildLangtextMarkdown,
+  resolveDetailEinheit,
+  resolveQuantityEinheit,
+} from '../lib/itemDetailFormatting';
 
 interface Props {
   itemId: string;
 }
 
-export type AgenticBadgeVariant = 'info' | 'success' | 'error' | 'pending' | 'warning';
 
-export interface AgenticStatusDisplay {
-  label: string;
-  className: string;
-  description: string;
-  variant: AgenticBadgeVariant;
-  needsReviewBadge: boolean;
-  isTerminal: boolean;
-}
-
-const DEFAULT_DETAIL_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 
-// TODO(agent): Validate the reference vs. instance row grouping once product owners review the split detail cards.
-function resolveDetailEinheit(value: unknown): ItemEinheit {
-  try {
-    if (isItemEinheit(value)) {
-      return value;
-    }
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (isItemEinheit(trimmed)) {
-        return trimmed;
-      }
-      if (trimmed.length > 0) {
-        console.warn('ItemDetail: Invalid Einheit encountered, reverting to default.', {
-          provided: trimmed
-        });
-      }
-    } else if (value !== null && value !== undefined) {
-      console.warn('ItemDetail: Unexpected Einheit type encountered, reverting to default.', {
-        providedType: typeof value
-      });
-    }
-  } catch (error) {
-    console.error('ItemDetail: Failed to resolve Einheit value, using default.', error);
-  }
-  return DEFAULT_DETAIL_EINHEIT;
-}
 
-// TODO(agent): Confirm quantity row hiding behavior stays aligned with bulk item expectations.
-function resolveQuantityEinheit(value: unknown, itemId: string): ItemEinheit | null {
-  try {
-    const normalized = normalizeItemEinheit(value);
-    if (!normalized) {
-      logger.warn?.('ItemDetail: Einheit missing or invalid; hiding quantity row.', {
-        itemId,
-        provided: value
-      });
-      return null;
-    }
-    return normalized;
-  } catch (error) {
-    logError('ItemDetail: Failed to normalize Einheit for quantity row', error, {
-      itemId,
-      provided: value
-    });
-    return null;
-  }
-}
-
-export interface AgenticStatusCardProps {
-  status: AgenticStatusDisplay;
-  rows: [string, React.ReactNode][];
-  actionPending: boolean;
-  reviewIntent: 'review' | null;
-  error: string | null;
-  needsReview: boolean;
-  searchTerm?: string;
-  searchTermError?: string | null;
-  onSearchTermChange?: (value: string) => void;
-  canCancel: boolean;
-  canClose: boolean;
-  canStart: boolean;
-  canRestart: boolean;
-  canDelete: boolean;
-  isInProgress: boolean;
-  startLabel?: string;
-  onStart?: () => void | Promise<void>;
-  onRestart: () => void | Promise<void>;
-  onReview: () => void | Promise<void>;
-  onCancel: () => void | Promise<void>;
-  onClose?: () => void | Promise<void>;
-  onDelete?: () => void | Promise<void>;
-}
-
-interface NormalizedDetailValue {
-  content: React.ReactNode;
-  isPlaceholder: boolean;
-}
-
-const DETAIL_PLACEHOLDER_TEXT = '-';
-
-
-export const AGENTIC_REVIEW_PROMPT_SEQUENCE = ['checklist', 'note'] as const;
 
 const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
 const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 400;
@@ -236,7 +157,7 @@ function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): R
 }
 
 
-export function buildAgenticReviewSubmissionPayload(
+function buildAgenticReviewSubmissionPayload(
   actor: string,
   reviewInput: AgenticReviewInput
 ): Record<string, unknown> {
@@ -334,543 +255,6 @@ function buildReviewDialogSection(
   );
 }
 
-function buildPlaceholder(): NormalizedDetailValue {
-  return {
-    content: <span className="details-placeholder">{DETAIL_PLACEHOLDER_TEXT}</span>,
-    isPlaceholder: true
-  };
-}
-
-function normalizeDetailValue(value: React.ReactNode): NormalizedDetailValue {
-  if (value === null || value === undefined) {
-    return buildPlaceholder();
-  }
-
-  if (typeof value === 'boolean') {
-    return {
-      content: value ? 'Ja' : 'Nein',
-      isPlaceholder: false
-    };
-  }
-
-  if (typeof value === 'number') {
-    if (Number.isNaN(value)) {
-      return buildPlaceholder();
-    }
-    return { content: value, isPlaceholder: false };
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return buildPlaceholder();
-    }
-    return { content: trimmed, isPlaceholder: false };
-  }
-
-  if (Array.isArray(value)) {
-    return { content: value, isPlaceholder: false };
-  }
-
-  if (React.isValidElement(value)) {
-    return { content: value, isPlaceholder: false };
-  }
-
-  return { content: value, isPlaceholder: false };
-}
-
-function humanizeCategoryLabel(label: string): string {
-  try {
-    return label.replace(/_/g, ' ');
-  } catch (error) {
-    console.error('Failed to humanize category label', { label }, error);
-    return label;
-  }
-}
-
-function renderLangtextInlineSegments(
-  text: string,
-  counters: { bold: number },
-  keyBase: string
-): React.ReactNode {
-  const nodes: React.ReactNode[] = [];
-  const boldRegex = /\*\*(.+?)\*\*/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = boldRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-
-    counters.bold += 1;
-    nodes.push(
-      <strong key={`${keyBase}-bold-${counters.bold}`}>{match[1]}</strong>
-    );
-
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-
-  if (nodes.length === 0) {
-    return text;
-  }
-
-  return nodes;
-}
-
-function buildLangtextMarkdown(raw: string): React.ReactNode | null {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  let normalizedText = trimmed.replace(/\r\n/g, '\n');
-  if (normalizedText.trim().startsWith('- ') && normalizedText.includes(' - **')) {
-    normalizedText = normalizedText.replace(/\s+-\s+(?=\*\*)/g, '\n- ');
-  }
-
-  const lines = normalizedText.split('\n');
-  if (lines.length === 0) {
-    return trimmed;
-  }
-
-  const blocks: React.ReactNode[] = [];
-  const counters = { bold: 0 };
-  let pendingList: React.ReactNode[] = [];
-
-  const flushList = () => {
-    if (pendingList.length > 0) {
-      const listKey = `langtext-ul-${blocks.length}`;
-      blocks.push(<ul key={listKey}>{pendingList}</ul>);
-      pendingList = [];
-    }
-  };
-
-  lines.forEach((line, index) => {
-    const value = line.trim();
-    if (!value) {
-      flushList();
-      return;
-    }
-
-    if (value.startsWith('- ')) {
-      const itemContent = value.slice(2).trim();
-      const inline = renderLangtextInlineSegments(itemContent, counters, `li-${index}`);
-      pendingList.push(<li key={`langtext-li-${index}`}>{inline}</li>);
-      return;
-    }
-
-    flushList();
-    const inline = renderLangtextInlineSegments(value, counters, `p-${index}`);
-    blocks.push(
-      <p key={`langtext-p-${index}`}>{inline}</p>
-    );
-  });
-
-  flushList();
-
-  if (blocks.length === 0) {
-    return trimmed;
-  }
-
-  return <div className="item-detail__langtext">{blocks}</div>;
-}
-
-export function AgenticStatusCard({
-  status,
-  rows,
-  actionPending,
-  reviewIntent,
-  error,
-  needsReview,
-  searchTerm,
-  searchTermError,
-  onSearchTermChange,
-  canCancel,
-  canClose,
-  canStart,
-  canRestart,
-  canDelete,
-  isInProgress,
-  startLabel,
-  onStart,
-  onRestart,
-  onReview,
-  onCancel,
-  onClose,
-  onDelete
-}: AgenticStatusCardProps) {
-  const [isCollapsed, setIsCollapsed] = useState(true);
-  const contentId = useMemo(() => `agentic-status-panel-${Math.random().toString(36).slice(2)}`, []);
-  const startHandler = onStart ?? onRestart;
-  const startText = typeof startLabel === 'string' && startLabel.trim() ? startLabel : 'Starten';
-  const handleToggle = useCallback(() => {
-    setIsCollapsed((prev) => {
-      const next = !prev;
-      try {
-        console.info('Toggled agentic status card', { collapsed: next });
-      } catch (logError) {
-        console.error('Failed to log agentic status card toggle', logError);
-      }
-      return next;
-    });
-  }, []);
-
-  return (
-    <div className={`card agentic-status-card${isCollapsed ? ' agentic-status-card--collapsed' : ''}`}>
-      <h3 className="agentic-status-card__heading">
-        <button
-          type="button"
-          className="agentic-status-card__toggle"
-          onClick={handleToggle}
-          aria-expanded={!isCollapsed}
-          aria-controls={contentId}
-        >
-          <span className="agentic-status-card__title">Ki Status</span>
-          <span className={`agentic-status-card__summary ${status.className}`}>{status.label}</span>
-          <span className="agentic-status-card__chevron" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
-        </button>
-      </h3>
-      {!isCollapsed ? (
-        <div className="agentic-status-card__content" id={contentId}>
-          <div className="row status-row">
-            {isInProgress ? <span className="status-spinner" aria-hidden="true" /> : null}
-          </div>
-          <p className="muted">{status.description}</p>
-          {rows.length > 0 ? (
-            <table className="details">
-              <tbody>
-                {rows.map(([k, v], idx) => (
-                  (() => {
-                    const cell = normalizeDetailValue(v);
-                    return (
-                      <tr key={`${k}-${idx}`} className="responsive-row">
-                        <th className="responsive-th">{k}</th>
-                        <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                          {cell.content}
-                        </td>
-                      </tr>
-                    );
-                  })()
-                ))}
-              </tbody>
-            </table>
-          ) : null}
-          {!needsReview && (canStart || canRestart) ? (
-            <div className="row">
-              <label className="agentic-status-card__search" htmlFor={`${contentId}-search`}>
-                Suchbegriff
-                <input
-                  id={`${contentId}-search`}
-                  type="text"
-                  value={searchTerm ?? ''}
-                  onChange={(event) => onSearchTermChange?.(event.target.value)}
-                  disabled={actionPending}
-                />
-              </label>
-              {searchTermError ? (
-                <p className="muted" style={{ color: '#a30000' }}>{searchTermError}</p>
-              ) : null}
-            </div>
-          ) : null}
-          {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
-          {reviewIntent ? <p className="muted">Review-Checkliste wird gesendet…</p> : null}
-          {error ? (
-            <p className="muted" style={{ color: '#a30000' }}>{error}</p>
-          ) : null}
-          {canCancel ? (
-            <div className='row'>
-              <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>
-                Abbrechen
-              </button>
-            </div>
-          ) : null}
-          {false && canClose && onClose ? (
-            //  temporarely disabled until clear flow is defined. This action is probably better reserved for admins
-            <div className='row'>
-              <button type="button" className="btn" disabled={actionPending} onClick={onClose}>
-                Ki Suche abschliessen
-              </button>
-            </div>
-          ) : null}
-          {!needsReview && (canStart || canRestart) ? (
-            <div className='row'>
-              {canStart && startHandler ? (
-                <button type="button" className="btn" disabled={actionPending} onClick={startHandler}>
-                  {startText}
-                </button>
-              ) : null}
-              {canRestart ? (
-                <button type="button" className="btn" disabled={actionPending} onClick={onRestart}>
-                  Wiederholen
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          {needsReview ? (
-            <div className='row'>
-              <button type="button" className="btn" disabled={actionPending} onClick={onReview}>
-                Review
-              </button>
-            </div>
-          ) : null}
-          {false && canDelete && onDelete ? (
-            // disabled for now. Might be smarter to only expose this to admins
-            <div className='row'>
-              <button type="button" className="btn danger" disabled={actionPending} onClick={onDelete}>
-                Lauf löschen
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-
-export interface AgenticRestartRequestInput {
-  actor: string;
-  search: string | null;
-  reviewDecision?: string | null;
-  reviewNotes?: string | null;
-  reviewedBy?: string | null;
-}
-
-export function buildAgenticRestartRequestPayload({
-  actor,
-  search,
-  reviewDecision,
-  reviewNotes,
-  reviewedBy
-}: AgenticRestartRequestInput): Record<string, unknown> {
-  const trimmedActor = actor.trim();
-  const trimmedSearch = (search ?? '').trim();
-  const payload: Record<string, unknown> = {
-    actor: trimmedActor,
-    search: trimmedSearch
-  };
-
-  const decisionNormalized = reviewDecision && reviewDecision.trim() ? reviewDecision.trim().toLowerCase() : null;
-  const notesNormalized = reviewNotes && reviewNotes.trim() ? reviewNotes.trim() : null;
-  const reviewedByNormalized = reviewedBy && reviewedBy.trim() ? reviewedBy.trim() : null;
-
-  if (decisionNormalized || notesNormalized || reviewedByNormalized) {
-    payload.review = {
-      decision: decisionNormalized,
-      notes: notesNormalized,
-      reviewedBy: reviewedByNormalized
-    };
-  }
-
-  return payload;
-}
-
-export interface ItemDetailAgenticCancelRequest {
-  agentic: AgenticRun;
-  actor: string;
-  persistCancellation: typeof persistAgenticRunCancellation;
-  logger?: Pick<typeof console, 'warn' | 'error' | 'info'>;
-}
-
-export interface ItemDetailAgenticCancelResult {
-  updatedRun: AgenticRun | null;
-  error: string | null;
-}
-
-export async function performItemDetailAgenticCancel({
-  agentic,
-  actor,
-  persistCancellation,
-  logger = console
-}: ItemDetailAgenticCancelRequest): Promise<ItemDetailAgenticCancelResult> {
-  let updatedRun: AgenticRun | null = agentic;
-  let finalError: string | null = null;
-  const referenceId = agentic.Artikel_Nummer?.trim();
-
-  let persistence: Awaited<ReturnType<typeof persistCancellation>>;
-  try {
-    persistence = await persistCancellation({
-      artikelNummer: referenceId,
-      actor,
-      context: 'item detail cancel persistence'
-    });
-  } catch (error) {
-    logger.error?.('Agentic cancellation failed during persistence', {
-      artikelNummer: referenceId ?? null,
-      error
-    });
-    return { updatedRun: null, error: 'Ki-Abbruch konnte nicht gespeichert werden.' };
-  }
-
-  if (persistence.ok) {
-    if (persistence.agentic) {
-      updatedRun = persistence.agentic;
-    }
-    logger.info?.('Persisted agentic cancellation via mediator API', {
-      artikelNummer: referenceId ?? null,
-      status: persistence.status
-    });
-  } else if (persistence.status === 404) {
-    finalError = 'Kein laufender Ki-Durchlauf gefunden.';
-    logger.warn?.('Agentic cancellation skipped because run was not found', {
-      artikelNummer: referenceId ?? null
-    });
-  } else if (persistence.status === 0) {
-    finalError = 'Ki-Abbruch fehlgeschlagen.';
-    logger.error?.('Agentic cancellation failed due to network error', {
-      artikelNummer: referenceId ?? null
-    });
-  } else {
-    finalError = 'Ki-Abbruch konnte nicht gespeichert werden.';
-    logger.error?.('Agentic cancellation failed to persist via mediator API', {
-      artikelNummer: referenceId ?? null,
-      status: persistence.status
-    });
-  }
-
-  return { updatedRun, error: finalError };
-}
-
-// TODO(agentic-status-labels): Reuse shared agentic status labels in detail display.
-export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDisplay {
-  if (!run) {
-    return {
-      label: 'Keine Daten',
-      className: 'pill status status-info',
-      description: 'Es liegen keine KI Ergebnisse vor.',
-      variant: 'info',
-      needsReviewBadge: false,
-      isTerminal: false
-    };
-  }
-
-  const normalizedStatus = normalizeAgenticRunStatus(run.Status);
-  const normalizedReview = (run.ReviewState || '').trim().toLowerCase();
-  const defaultLabel = run.Status && run.Status.trim() ? run.Status.trim() : 'Unbekannt';
-
-  let base: Omit<AgenticStatusDisplay, 'className'> = {
-    label: defaultLabel,
-    description: `Status: ${defaultLabel}`,
-    variant: 'info',
-    needsReviewBadge: false,
-    isTerminal: AGENTIC_RUN_TERMINAL_STATUSES.has(normalizedStatus)
-  };
-
-  switch (normalizedStatus) {
-    case AGENTIC_RUN_STATUS_NOT_STARTED:
-      base = {
-        label: 'Nicht gestartet',
-        description: 'Der KI Durchlauf wurde noch nicht gestartet.',
-        variant: 'info',
-        needsReviewBadge: false,
-        isTerminal: true
-      };
-      break;
-    case AGENTIC_RUN_STATUS_FAILED:
-      base = {
-        label: 'Fehlgeschlagen',
-        description: 'Der KI Durchlauf ist fehlgeschlagen.',
-        variant: 'error',
-        needsReviewBadge: false,
-        isTerminal: true
-      };
-      break;
-    case AGENTIC_RUN_STATUS_RUNNING:
-      base = {
-        label: 'In Arbeit',
-        description: 'Der KI Durchlauf läuft derzeit.',
-        variant: 'info',
-        needsReviewBadge: false,
-        isTerminal: false
-      };
-      break;
-    case AGENTIC_RUN_STATUS_QUEUED:
-      base = {
-        label: 'Wartet',
-        description: 'Der KI Durchlauf wartet auf Ausführung.',
-        variant: 'pending',
-        needsReviewBadge: false,
-        isTerminal: false
-      };
-      break;
-    case AGENTIC_RUN_STATUS_CANCELLED:
-      base = {
-        label: 'Abgebrochen',
-        description: 'Der KI Durchlauf wurde abgebrochen.',
-        variant: 'info',
-        needsReviewBadge: false,
-        isTerminal: true
-      };
-      break;
-    case AGENTIC_RUN_STATUS_REVIEW:
-      base = {
-        label: 'Review ausstehend',
-        description: 'Das Ergebnis wartet auf Freigabe.',
-        variant: 'pending',
-        needsReviewBadge: true,
-        isTerminal: false
-      };
-      break;
-    case AGENTIC_RUN_STATUS_APPROVED:
-      base = {
-        label: 'Freigegeben',
-        description: 'Das Ergebnis wurde freigegeben.',
-        variant: 'success',
-        needsReviewBadge: false,
-        isTerminal: true
-      };
-      break;
-    case AGENTIC_RUN_STATUS_REJECTED:
-      base = {
-        label: 'Abgelehnt',
-        description: 'Das Ergebnis wurde abgelehnt.',
-        variant: 'error',
-        needsReviewBadge: false,
-        isTerminal: true
-      };
-      break;
-    default:
-      break;
-  }
-
-  let finalMeta = base;
-  if (normalizedReview === 'pending') {
-    finalMeta = {
-      label: 'Review ausstehend',
-      description: 'Das Ergebnis wartet auf Freigabe.',
-      variant: 'pending',
-      needsReviewBadge: true,
-      isTerminal: false
-    };
-  } else if (normalizedReview === 'approved') {
-    finalMeta = {
-      label: 'Freigegeben',
-      description: 'Das Ergebnis wurde freigegeben.',
-      variant: 'success',
-      needsReviewBadge: false,
-      isTerminal: true
-    };
-  } else if (normalizedReview === 'rejected') {
-    finalMeta = {
-      label: 'Abgelehnt',
-      description: 'Das Ergebnis wurde abgelehnt.',
-      variant: 'error',
-      needsReviewBadge: false,
-      isTerminal: true
-    };
-  }
-
-  return {
-    ...finalMeta,
-    className: `pill status status-${finalMeta.variant}`
-  };
-}
-
 // TODO(agentic-search-term): Verify Suchbegriff hydration ordering once persisted edits are enabled.
 function resolveAgenticSearchTerm(item: Item | null): string {
   try {
@@ -885,15 +269,6 @@ function resolveAgenticSearchTerm(item: Item | null): string {
   }
 
   return '';
-}
-
-export function isAgenticRunInProgress(run: AgenticRun | null): boolean {
-  if (!run) {
-    return false;
-  }
-
-  const normalizedStatus = normalizeAgenticRunStatus(run.Status);
-  return AGENTIC_RUN_ACTIVE_STATUSES.has(normalizedStatus);
 }
 
 export default function ItemDetail({ itemId }: Props) {
