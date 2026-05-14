@@ -15,6 +15,7 @@ import RecentActivitiesPage from './RecentActivitiesPage';
 import ChatPlaceholder from './ChatPlaceholder';
 import ShelfCreateForm from './ShelfCreateForm';
 import PlacementScanView from './PlacementScanView';
+import StubListPage from './StubListPage';
 
 // TODO(agent): Confirm admin-only shelf create route visibility expectations with product.
 
@@ -65,6 +66,7 @@ export function AppRoutes() {
       <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
       <Route path="/scan" element={<QrScannerPage />} />
       <Route path="/activities" element={<RecentActivitiesPage />} />
+      <Route path="/stubs" element={<StubListPage />} />
       <Route path="/chat" element={<ChatPlaceholder />} />
       <Route path="/placement/:targetId" element={<PlacementScanView />} />
       <Route path="/admin/shelves/new" element={<ShelfCreateForm />} />
