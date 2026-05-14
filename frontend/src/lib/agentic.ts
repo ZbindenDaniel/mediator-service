@@ -463,3 +463,106 @@ export function buildAgenticItemRefPath(artikelNummer: string, action?: string |
   const normalizedAction = typeof action === 'string' ? action.trim() : '';
   return normalizedAction ? `${basePath}/${normalizedAction}` : basePath;
 }
+
+export interface AgenticRestartRequestInput {
+  actor: string;
+  search: string | null;
+  reviewDecision?: string | null;
+  reviewNotes?: string | null;
+  reviewedBy?: string | null;
+}
+
+export function buildAgenticRestartRequestPayload({
+  actor,
+  search,
+  reviewDecision,
+  reviewNotes,
+  reviewedBy
+}: AgenticRestartRequestInput): Record<string, unknown> {
+  const trimmedActor = actor.trim();
+  const trimmedSearch = (search ?? '').trim();
+  const payload: Record<string, unknown> = {
+    actor: trimmedActor,
+    search: trimmedSearch
+  };
+
+  const decisionNormalized = reviewDecision && reviewDecision.trim() ? reviewDecision.trim().toLowerCase() : null;
+  const notesNormalized = reviewNotes && reviewNotes.trim() ? reviewNotes.trim() : null;
+  const reviewedByNormalized = reviewedBy && reviewedBy.trim() ? reviewedBy.trim() : null;
+
+  if (decisionNormalized || notesNormalized || reviewedByNormalized) {
+    payload.review = {
+      decision: decisionNormalized,
+      notes: notesNormalized,
+      reviewedBy: reviewedByNormalized
+    };
+  }
+
+  return payload;
+}
+
+export interface ItemDetailAgenticCancelRequest {
+  agentic: AgenticRun;
+  actor: string;
+  persistCancellation: typeof persistAgenticRunCancellation;
+  logger?: Pick<typeof console, 'warn' | 'error' | 'info'>;
+}
+
+export interface ItemDetailAgenticCancelResult {
+  updatedRun: AgenticRun | null;
+  error: string | null;
+}
+
+export async function performItemDetailAgenticCancel({
+  agentic,
+  actor,
+  persistCancellation,
+  logger = console
+}: ItemDetailAgenticCancelRequest): Promise<ItemDetailAgenticCancelResult> {
+  let updatedRun: AgenticRun | null = agentic;
+  let finalError: string | null = null;
+  const referenceId = agentic.Artikel_Nummer?.trim();
+
+  let persistence: Awaited<ReturnType<typeof persistCancellation>>;
+  try {
+    persistence = await persistCancellation({
+      artikelNummer: referenceId,
+      actor,
+      context: 'item detail cancel persistence'
+    });
+  } catch (error) {
+    logger.error?.('Agentic cancellation failed during persistence', {
+      artikelNummer: referenceId ?? null,
+      error
+    });
+    return { updatedRun: null, error: 'Ki-Abbruch konnte nicht gespeichert werden.' };
+  }
+
+  if (persistence.ok) {
+    if (persistence.agentic) {
+      updatedRun = persistence.agentic;
+    }
+    logger.info?.('Persisted agentic cancellation via mediator API', {
+      artikelNummer: referenceId ?? null,
+      status: persistence.status
+    });
+  } else if (persistence.status === 404) {
+    finalError = 'Kein laufender Ki-Durchlauf gefunden.';
+    logger.warn?.('Agentic cancellation skipped because run was not found', {
+      artikelNummer: referenceId ?? null
+    });
+  } else if (persistence.status === 0) {
+    finalError = 'Ki-Abbruch fehlgeschlagen.';
+    logger.error?.('Agentic cancellation failed due to network error', {
+      artikelNummer: referenceId ?? null
+    });
+  } else {
+    finalError = 'Ki-Abbruch konnte nicht gespeichert werden.';
+    logger.error?.('Agentic cancellation failed to persist via mediator API', {
+      artikelNummer: referenceId ?? null,
+      status: persistence.status
+    });
+  }
+
+  return { updatedRun, error: finalError };
+}
