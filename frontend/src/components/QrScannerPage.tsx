@@ -24,7 +24,39 @@ type QrTarget = {
 };
 
 type QrCallback = 'NavigateToEntity';
-type QrScanIntent = 'add-item' | 'relocate-box' | 'shelf-add-box' | 'placement-scan';
+type QrScanIntent = 'add-item' | 'relocate-box' | 'shelf-add-box' | 'placement-scan' | 'search';
+
+function triggerSuccessFeedback() {
+  try { navigator.vibrate?.([200]); } catch { /* vibration unsupported */ }
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch { /* AudioContext unsupported */ }
+}
+
+function triggerMismatchFeedback() {
+  try { navigator.vibrate?.([50]); } catch { /* vibration unsupported */ }
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 300;
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+  } catch { /* AudioContext unsupported */ }
+}
 
 export default function QrScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -38,6 +70,9 @@ export default function QrScannerPage() {
   const [rawContent, setRawContent] = useState('');
   const [showRawDetails, setShowRawDetails] = useState(false);
   const [logErrorMessage, setLogErrorMessage] = useState<string | null>(null);
+  const [mismatchToast, setMismatchToast] = useState(false);
+  // Blocks the detection interval for 1.5 s after a mismatch so the same wrong code isn't re-triggered while still in frame.
+  const skipDetectionRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
   const returnTo = (() => {
@@ -100,7 +135,7 @@ export default function QrScannerPage() {
       if (!trimmed) {
         return null;
       }
-      if (trimmed === 'add-item' || trimmed === 'relocate-box' || trimmed === 'shelf-add-box' || trimmed === 'placement-scan') {
+      if (trimmed === 'add-item' || trimmed === 'relocate-box' || trimmed === 'shelf-add-box' || trimmed === 'placement-scan' || trimmed === 'search') {
         return trimmed as QrScanIntent;
       }
       logger.warn?.('Ignoring invalid QR intent value', { intent: trimmed });
@@ -109,6 +144,24 @@ export default function QrScannerPage() {
       logError('Failed to parse QR intent value', error);
       return null;
     }
+  })();
+
+  const searchTarget = (() => {
+    try {
+      const stateVal = (location.state as { searchTarget?: unknown } | null)?.searchTarget;
+      const queryVal = new URLSearchParams(location.search).get('searchTarget');
+      const raw = typeof stateVal === 'string' ? stateVal : queryVal;
+      return raw?.trim() || null;
+    } catch { return null; }
+  })();
+
+  const searchLabel = (() => {
+    try {
+      const stateVal = (location.state as { searchLabel?: unknown } | null)?.searchLabel;
+      const queryVal = new URLSearchParams(location.search).get('searchLabel');
+      const raw = typeof stateVal === 'string' ? stateVal : queryVal;
+      return raw?.trim() || null;
+    } catch { return null; }
   })();
 
   // TODO(qr-scan-routing): Revisit S- routing if a dedicated shelf detail route is added.
@@ -188,6 +241,7 @@ export default function QrScannerPage() {
   }, [navigate]);
 
   const handleDecoded = useCallback(async (raw: string) => {
+    if (skipDetectionRef.current) return;
     setRawContent(raw);
     try {
       const data = JSON.parse(raw);
@@ -205,6 +259,35 @@ export default function QrScannerPage() {
           ? (data as { ItemUUID?: string })?.ItemUUID?.trim()
           : '';
       const minimalReturnPayload = { id, rawPayload: raw, itemUUID: itemUUID || undefined, intent: intent ?? undefined };
+
+      if (searchTarget) {
+        if (id === searchTarget) {
+          triggerSuccessFeedback();
+          setPayload(normalized);
+          setStatus('success');
+          stopCamera();
+          setMessage('Gefunden!');
+          logger.info?.('QR search match found', { id, searchTarget, returnTo });
+          await logScan(normalized);
+          if (returnTo) {
+            navigateToReturn(returnTo, minimalReturnPayload);
+          } else {
+            const nextTarget = resolveTarget(id);
+            setTarget(nextTarget);
+            navigateToTarget(nextTarget);
+          }
+        } else {
+          triggerMismatchFeedback();
+          setMismatchToast(true);
+          skipDetectionRef.current = true;
+          window.setTimeout(() => {
+            setMismatchToast(false);
+            skipDetectionRef.current = false;
+          }, 1500);
+        }
+        return;
+      }
+
       setPayload(normalized);
       setStatus('success');
       stopCamera();
@@ -238,7 +321,7 @@ export default function QrScannerPage() {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Unbekannter Fehler beim Lesen des QR-Codes.');
     }
-  }, [callback, intent, logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, stopCamera]);
+  }, [callback, intent, logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, searchTarget, stopCamera]);
 
   const startScanner = useCallback(async () => {
     stopCamera();
@@ -281,7 +364,7 @@ export default function QrScannerPage() {
         }
       }
 
-      setMessage('Halte den QR-Code vor die Kamera.');
+      setMessage(searchTarget ? `Scanne QR-Codes — suche: ${searchLabel ?? searchTarget}` : 'Halte den QR-Code vor die Kamera.');
 
       detectionTimerRef.current = window.setInterval(async () => {
         if (!detectorRef.current || !videoRef.current) {
@@ -309,7 +392,7 @@ export default function QrScannerPage() {
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Kamera konnte nicht gestartet werden.');
     }
-  }, [handleDecoded, stopCamera]);
+  }, [handleDecoded, searchLabel, searchTarget, stopCamera]);
 
   useEffect(() => {
     void startScanner();
@@ -339,10 +422,18 @@ export default function QrScannerPage() {
     <div className="container qr-scanner">
       <h1>QR-Scanner</h1>
       <div className="card">
+        {searchTarget && (
+          <p className="search-target-hint">
+            Suche: <strong>{searchLabel ?? searchTarget}</strong>
+          </p>
+        )}
         <div className="video-frame">
           <video ref={videoRef} className="qr-video" autoPlay playsInline muted />
         </div>
         <p className={`status ${status}`}>{message}</p>
+        {mismatchToast && (
+          <p className="status scanning search-mismatch">Nicht dieser — weiter scannen</p>
+        )}
         {logErrorMessage && <p className="error">{logErrorMessage}</p>}
         {payload ? (
           <div className="result">

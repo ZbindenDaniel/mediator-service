@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePanelContext } from '../context/PanelContext';
 import DetailTabBar from './DetailTabBar';
 import PrintLabelButton from './PrintLabelButton';
+import QrScanButton from './QrScanButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
 import type { Box, Item, EventLog, BoxDetailResponse } from '../../../models';
@@ -735,6 +736,11 @@ export default function BoxDetail({ boxId }: Props) {
             >
               Einscannen
             </button>
+            <QrScanButton
+              searchTarget={box.BoxID}
+              searchLabel={box.Label ?? box.BoxID}
+              label="Finden"
+            />
             {isShelf && (
               <button
                 type="button"

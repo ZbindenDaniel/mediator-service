@@ -4,6 +4,7 @@ import RelocateItemCard from '../RelocateItemCard';
 import EditInstanceCard from '../EditInstanceCard';
 import QualityBadge from '../QualityBadge';
 import PrintLabelButton from '../PrintLabelButton';
+import QrScanButton from '../QrScanButton';
 import { dialogService } from '../dialog';
 import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
 import type { Item } from '../../../../models';
@@ -76,6 +77,13 @@ export default function ItemInstanceTab({
       <div className="tab-actions">
         <PrintLabelButton itemId={item.ItemUUID} inline />
         <button type="button" className="btn" onClick={onEditInstance}>Bearbeiten</button>
+        {!isOutOfStock && (
+          <QrScanButton
+            searchTarget={item.ItemUUID}
+            searchLabel={item.Artikel_Nummer ?? item.ItemUUID}
+            label="Finden"
+          />
+        )}
         {!isOutOfStock && (
           <button type="button" className="btn" onClick={onRelocate}>Umlagern</button>
         )}
