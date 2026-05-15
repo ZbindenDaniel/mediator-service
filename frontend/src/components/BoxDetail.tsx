@@ -112,6 +112,16 @@ export default function BoxDetail({ boxId }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
+  type BoxStub = { Id: string; ShelfId: string; Description: string; NumberLooseItems: number; NumberLooseBoxes: number; CreatedAt: string; CreatedBy: string; Notes: string | null };
+  const [stubs, setStubs] = useState<BoxStub[]>([]);
+  const [stubsLoading, setStubsLoading] = useState(false);
+  const [stubsError, setStubsError] = useState<string | null>(null);
+  const [stubDescription, setStubDescription] = useState('');
+  const [stubLooseItems, setStubLooseItems] = useState(0);
+  const [stubLooseBoxes, setStubLooseBoxes] = useState(0);
+  const [stubNotes, setStubNotes] = useState('');
+  const [isAddingStub, setIsAddingStub] = useState(false);
+  const [addStubFeedback, setAddStubFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const photoModalRef = useRef<HTMLDivElement | null>(null);
@@ -425,9 +435,75 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }
 
+  const loadStubs = useCallback(async () => {
+    if (!box?.BoxID) return;
+    setStubsLoading(true);
+    setStubsError(null);
+    try {
+      const res = await fetch(`/api/stubs?shelfId=${encodeURIComponent(box.BoxID)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setStubs(data.stubs ?? []);
+      } else {
+        setStubsError('Stubs konnten nicht geladen werden.');
+      }
+    } catch {
+      setStubsError('Stubs konnten nicht geladen werden.');
+    } finally {
+      setStubsLoading(false);
+    }
+  }, [box?.BoxID]);
+
+  const handleAddStub = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!box?.BoxID || !stubDescription.trim()) return;
+    const actor = await ensureUser();
+    if (!actor) {
+      setAddStubFeedback({ type: 'error', message: 'Bitte zuerst Benutzer setzen.' });
+      return;
+    }
+    setIsAddingStub(true);
+    setAddStubFeedback(null);
+    try {
+      const res = await fetch('/api/stubs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shelfId: box.BoxID,
+          description: stubDescription.trim(),
+          numberLooseItems: stubLooseItems,
+          numberLooseBoxes: stubLooseBoxes,
+          notes: stubNotes.trim() || null,
+          createdBy: actor,
+        }),
+      });
+      if (res.ok) {
+        setStubDescription('');
+        setStubLooseItems(0);
+        setStubLooseBoxes(0);
+        setStubNotes('');
+        setAddStubFeedback({ type: 'success', message: 'Stub hinzugefügt.' });
+        await loadStubs();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setAddStubFeedback({ type: 'error', message: j.error ?? 'Hinzufügen fehlgeschlagen.' });
+      }
+    } catch {
+      setAddStubFeedback({ type: 'error', message: 'Hinzufügen fehlgeschlagen.' });
+    } finally {
+      setIsAddingStub(false);
+    }
+  }, [box?.BoxID, stubDescription, stubLooseItems, stubLooseBoxes, stubNotes, loadStubs]);
+
   useEffect(() => {
     void load({ showSpinner: true });
   }, [boxId]);
+
+  useEffect(() => {
+    if ((activeTab ?? 'info') === 'stubs') {
+      void loadStubs();
+    }
+  }, [activeTab, loadStubs]);
 
   useEffect(() => {
     if (!isPhotoModalOpen) {
@@ -1016,6 +1092,70 @@ export default function BoxDetail({ boxId }: Props) {
                 ))}
               </ul>
             </div>
+            )}
+
+            {effectiveTab === 'stubs' && isShelf && (
+              <div className="card">
+                <h3>Stubs</h3>
+                {stubsLoading && <p className="muted">Wird geladen…</p>}
+                {stubsError && <p className="muted" role="alert" style={{ color: '#b3261e' }}>{stubsError}</p>}
+                {!stubsLoading && stubs.length === 0 && !stubsError && (
+                  <p className="muted">Keine Stubs für dieses Regal.</p>
+                )}
+                {stubs.length > 0 && (
+                  <table className="item-list">
+                    <thead>
+                      <tr className="item-list-header">
+                        <th>Beschreibung</th>
+                        <th>Lose Artikel</th>
+                        <th>Lose Kartons</th>
+                        <th>Erstellt von</th>
+                        <th>Datum</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stubs.map((stub) => (
+                        <tr key={stub.Id}>
+                          <td>{stub.Description}</td>
+                          <td>{stub.NumberLooseItems}</td>
+                          <td>{stub.NumberLooseBoxes}</td>
+                          <td>{stub.CreatedBy}</td>
+                          <td>{formatDateTime(stub.CreatedAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <h4>Stub hinzufügen</h4>
+                <form onSubmit={(e) => { void handleAddStub(e); }}>
+                  <div className="row">
+                    <label htmlFor="stub-description">Beschreibung *</label>
+                    <input id="stub-description" type="text" value={stubDescription} onChange={(e) => setStubDescription(e.target.value)} required disabled={isAddingStub} placeholder="Kurze Beschreibung" />
+                  </div>
+                  <div className="row">
+                    <label htmlFor="stub-loose-items">Lose Artikel</label>
+                    <input id="stub-loose-items" type="number" min={0} value={stubLooseItems} onChange={(e) => setStubLooseItems(Math.max(0, parseInt(e.target.value, 10) || 0))} disabled={isAddingStub} />
+                  </div>
+                  <div className="row">
+                    <label htmlFor="stub-loose-boxes">Lose Kartons</label>
+                    <input id="stub-loose-boxes" type="number" min={0} value={stubLooseBoxes} onChange={(e) => setStubLooseBoxes(Math.max(0, parseInt(e.target.value, 10) || 0))} disabled={isAddingStub} />
+                  </div>
+                  <div className="row">
+                    <label htmlFor="stub-notes">Notizen</label>
+                    <textarea id="stub-notes" value={stubNotes} onChange={(e) => setStubNotes(e.target.value)} rows={2} disabled={isAddingStub} />
+                  </div>
+                  <div className="row">
+                    <button type="submit" className="btn" disabled={isAddingStub || !stubDescription.trim()}>Hinzufügen</button>
+                  </div>
+                  {addStubFeedback && (
+                    <div className="row">
+                      <span className="muted" role={addStubFeedback.type === 'error' ? 'alert' : 'status'} style={addStubFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                        {addStubFeedback.message}
+                      </span>
+                    </div>
+                  )}
+                </form>
+              </div>
             )}
           </>
         ) : (

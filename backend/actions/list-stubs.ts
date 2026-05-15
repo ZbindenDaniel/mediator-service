@@ -15,8 +15,10 @@ const action = defineHttpAction({
     try {
       const url = new URL(req.url ?? '/api/stubs', 'http://localhost');
       const activeOnly = url.searchParams.get('isActive') !== 'false';
+      const shelfId = url.searchParams.get('shelfId');
       const stubs = activeOnly ? ctx.listStubs.active() : ctx.listStubs.all();
-      sendJson(res, 200, { stubs });
+      const filtered = shelfId ? stubs.filter((s: any) => s.ShelfId === shelfId) : stubs;
+      sendJson(res, 200, { stubs: filtered });
     } catch (err) {
       console.error('list-stubs failed', err);
       sendJson(res, 500, { error: (err as Error).message });
