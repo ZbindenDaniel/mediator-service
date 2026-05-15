@@ -24,7 +24,7 @@
 
 0b. ✅ **Filter state resets intermittently when switching items.** Fixed — filter-init useEffect now deps on `[boxParam, qParam]` instead of full `[searchParams]`, so PanelContext entity/tab URL writes no longer retrigger it.
 
-1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
+1. **Fix eventLog display on item and box detail.** Empty state added (shows "Keine Aktivitäten." instead of blank). If events are still absent when they should exist, the data-fetch path needs investigation.
 
 1b. ✅ **Restore bulk-action controls.** `BulkItemActionBar` restored inside `MultiItemDetailPanel` in Layout; reads `selectedIds` from PanelContext and `selectedItems/onClearSelection/onActionComplete` from `BulkSelectionContext`.
 

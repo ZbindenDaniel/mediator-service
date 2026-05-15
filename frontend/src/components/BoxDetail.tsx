@@ -1089,14 +1089,18 @@ export default function BoxDetail({ boxId }: Props) {
             {effectiveTab === 'events' && (
             <div className="card">
               <h3>Aktivitäten</h3>
-              <ul className="events">
-                {displayedEvents.map((ev) => (
-                  <li key={ev.Id}>
-                    <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
-                    {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
-                  </li>
-                ))}
-              </ul>
+              {displayedEvents.length === 0 ? (
+                <p className="muted">Keine Aktivitäten.</p>
+              ) : (
+                <ul className="events">
+                  {displayedEvents.map((ev) => (
+                    <li key={ev.Id}>
+                      <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
+                      {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             )}
 
