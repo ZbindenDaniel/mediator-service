@@ -13,7 +13,9 @@ import qrIcon from '../assets/qrIcon.svg';
 interface QrScanButtonProps {
   returnTo?: string;
   callback?: string;
-  scanIntent?: 'add-item' | 'relocate-box' | 'shelf-add-box';
+  scanIntent?: 'add-item' | 'relocate-box' | 'shelf-add-box' | 'search';
+  searchTarget?: string;
+  searchLabel?: string;
   onBeforeNavigate?: () => void;
   className?: string;
   label?: string;
@@ -23,6 +25,8 @@ export default function QrScanButton({
   returnTo,
   callback,
   scanIntent,
+  searchTarget,
+  searchLabel,
   onBeforeNavigate,
   className,
   label = 'QR scannen'
@@ -30,6 +34,8 @@ export default function QrScanButton({
   const location = useLocation();
   const navigate = useNavigate();
   const resolvedReturnTo = returnTo ?? `${location.pathname}${location.search}`;
+
+  const resolvedIntent = searchTarget ? 'search' : scanIntent;
 
   const scanHref = useMemo(() => {
     const params = new URLSearchParams();
@@ -39,12 +45,18 @@ export default function QrScanButton({
     if (callback) {
       params.set('callback', callback);
     }
-    if (scanIntent) {
-      params.set('intent', scanIntent);
+    if (resolvedIntent) {
+      params.set('intent', resolvedIntent);
+    }
+    if (searchTarget) {
+      params.set('searchTarget', searchTarget);
+    }
+    if (searchLabel) {
+      params.set('searchLabel', searchLabel);
     }
     const query = params.toString();
     return query ? `/scan?${query}` : '/scan';
-  }, [callback, resolvedReturnTo, scanIntent]);
+  }, [callback, resolvedReturnTo, resolvedIntent, searchTarget, searchLabel]);
 
   const handleClick = useCallback(() => {
     try {
@@ -54,18 +66,20 @@ export default function QrScanButton({
     }
 
     try {
-      logger.info('QrScanButton: opening QR scanner', { returnTo: resolvedReturnTo, callback, scanIntent });
+      logger.info('QrScanButton: opening QR scanner', { returnTo: resolvedReturnTo, callback, intent: resolvedIntent, searchTarget });
       navigate(scanHref, {
         state: {
           returnTo: resolvedReturnTo,
           callback,
-          intent: scanIntent
+          intent: resolvedIntent,
+          searchTarget,
+          searchLabel
         }
       });
     } catch (error) {
       logError('Failed to open QR scanner', error, { returnTo: resolvedReturnTo, callback, scanIntent, scanHref });
     }
-  }, [callback, navigate, onBeforeNavigate, resolvedReturnTo, scanHref, scanIntent]);
+  }, [callback, navigate, onBeforeNavigate, resolvedReturnTo, scanHref, resolvedIntent, searchTarget, searchLabel]);
 
   return (
     <button
