@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+753. ✅ Box item list: add Standort column showing shelf location via LocationTag
+   - **Why:** Backend already returned `Location`/`ShelfLabel` on each item; no column displayed it. Operators had to leave the items tab and check the info tab to know which shelf a box (and its items) was on. Reused the `<LocationTag item={} itemId={}>` pattern from ItemList. Column marked `optional-column` so it collapses on narrow screens.
+   - **Deferred:** Nothing deferred.
 752. ✅ Pre-release cleanup: QR search-scan CSS + EventLog empty state
    - **Why:** `.search-target-hint` / `.search-mismatch` classes were applied in `QrScannerPage` but had no CSS rules (deferred in step 751); added amber color for mismatch and muted gray for the search target hint, matching the existing `.qr-scanner` status palette. `ItemEventsTab` and `BoxDetail` events render silently produced an empty area when the events array was empty; added "Keine Aktivitäten." empty-state text to make the blank-vs-no-data distinction visible.
    - **Deferred:** If the events array is empty due to a deeper data-fetch regression (rather than genuinely no events), that path still needs investigation — the empty state now makes it visible instead of invisible.

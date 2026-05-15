@@ -1001,6 +1001,7 @@ export default function BoxDetail({ boxId }: Props) {
                       <th className="col-stock optional-column">Anzahl</th>
                       <th className="col-quality optional-column">Qualität</th>
                       <th className="col-subcategory optional-column">Unterkategorie A</th>
+                      <th className="col-location optional-column">Standort</th>
                       <th className="col-actions">Aktionen</th>
                     </tr>
                   </thead>
@@ -1050,6 +1051,9 @@ export default function BoxDetail({ boxId }: Props) {
                                   <QualityBadge compact value={qualityValue} />
                                 </td>
                                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
+                                <td className="col-location optional-column">
+                                  {representative ? <LocationTag item={representative} itemId={representativeId ?? undefined} /> : '—'}
+                                </td>
                                 <td className="col-actions">
                                   {representativeId ? (
                                     <>
