@@ -109,6 +109,20 @@ CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_attempt
 
 CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_correlation
   ON shopware_sync_queue (CorrelationId);
+
+CREATE TABLE IF NOT EXISTS box_stubs (
+  Id TEXT PRIMARY KEY,
+  ShelfId TEXT NOT NULL REFERENCES boxes(BoxID),
+  Description TEXT NOT NULL,
+  NumberLooseItems INTEGER NOT NULL DEFAULT 0,
+  NumberLooseBoxes INTEGER NOT NULL DEFAULT 0,
+  CreatedAt TEXT NOT NULL,
+  CreatedBy TEXT NOT NULL,
+  IsActive INTEGER NOT NULL DEFAULT 1,
+  Notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_box_stubs_shelf ON box_stubs(ShelfId);
+CREATE INDEX IF NOT EXISTS idx_box_stubs_active ON box_stubs(IsActive) WHERE IsActive = 1;
 `);
 } catch (err) {
   console.error('Failed to create schema', err);
@@ -3492,6 +3506,55 @@ export function updateItemLangtextSpecs(itemUUID: string, derivedSpecs: Record<s
   if (serialized !== null) {
     updateItemLangtextStatement.run({ langtext: serialized, itemUUID });
   }
+}
+
+
+export type BoxStub = {
+  Id: string;
+  ShelfId: string;
+  Description: string;
+  NumberLooseItems: number;
+  NumberLooseBoxes: number;
+  CreatedAt: string;
+  CreatedBy: string;
+  IsActive: number;
+  Notes: string | null;
+};
+
+const listStubsStatement = db.prepare(
+  'SELECT * FROM box_stubs ORDER BY CreatedAt DESC'
+);
+
+export const listStubs = {
+  active: (): BoxStub[] => (listStubsStatement.all() as BoxStub[]).filter((r) => r.IsActive === 1),
+  all: (): BoxStub[] => listStubsStatement.all() as BoxStub[],
+};
+
+const insertStubStatement = db.prepare(`
+  INSERT INTO box_stubs (Id, ShelfId, Description, NumberLooseItems, NumberLooseBoxes, CreatedAt, CreatedBy, IsActive, Notes)
+  VALUES (@Id, @ShelfId, @Description, @NumberLooseItems, @NumberLooseBoxes, @CreatedAt, @CreatedBy, 1, @Notes)
+`);
+
+export function createStub(params: {
+  id: string;
+  shelfId: string;
+  description: string;
+  numberLooseItems: number;
+  numberLooseBoxes: number;
+  createdAt: string;
+  createdBy: string;
+  notes: string | null;
+}): void {
+  insertStubStatement.run({
+    Id: params.id,
+    ShelfId: params.shelfId,
+    Description: params.description,
+    NumberLooseItems: params.numberLooseItems,
+    NumberLooseBoxes: params.numberLooseBoxes,
+    CreatedAt: params.createdAt,
+    CreatedBy: params.createdBy,
+    Notes: params.notes ?? null,
+  });
 }
 
 export type {

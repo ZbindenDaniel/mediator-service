@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoSearch } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoSearch, GoTag } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -166,6 +166,9 @@ export default function Header() {
           </Link>
           <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => setMobileShowDetail(false)}>
             <GoPulse aria-hidden="true" />
+          </Link>
+          <Link to="/stubs" aria-label="Stubs" title="Stubs" onClick={() => setMobileShowDetail(false)}>
+            <GoTag aria-hidden="true" />
           </Link>
           <form
             className="header-search"
