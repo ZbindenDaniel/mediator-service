@@ -20,6 +20,7 @@
 - Out of scope:
   - Legacy shelf-category behaviors no longer used by current flows.
   - Future warehouse topology changes.
+  - **Box stubs** (`box_stubs` table, `GET/POST /api/boxes/stubs`): a sister feature for recording uncatalogued shelf content. Stubs are shelf-scoped, not box-scoped, and have a separate detailed doc at [`docs/detailed/stubs.md`](stubs.md).
 
 ## Core concepts
 - Terms:

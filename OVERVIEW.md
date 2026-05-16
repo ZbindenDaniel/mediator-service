@@ -7,6 +7,15 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+754. ✅ Documentation: sync qr_codes.md, ARCHITECTURE.md, items.md, boxes.md + new stubs.md with shipped features
+   - **Why:** QR search-scan mode (step 751), box stubs, and quality contracts shipped without doc updates. Added `search` intent to QrScanIntent enum and new "Search flow" user-flow description in qr_codes.md. Created docs/detailed/stubs.md (Phase 1 runbook). Added stub + quality-review action mentions to ARCHITECTURE.md. Expanded QualityAssessment field in items.md with the full derived-specs → Langtext flow. Cross-referenced stubs from boxes.md. Added domain runbook table to docs/detailed/README.md.
+   - **Deferred:** Traceability matrix not updated (stubs.md not yet mapped); todo 0c tab icon verification still needs a live build.
+753. ✅ Box item list: add Standort column showing shelf location via LocationTag
+   - **Why:** Backend already returned `Location`/`ShelfLabel` on each item; no column displayed it. Operators had to leave the items tab and check the info tab to know which shelf a box (and its items) was on. Reused the `<LocationTag item={} itemId={}>` pattern from ItemList. Column marked `optional-column` so it collapses on narrow screens.
+   - **Deferred:** Nothing deferred.
+752. ✅ Pre-release cleanup: QR search-scan CSS + EventLog empty state
+   - **Why:** `.search-target-hint` / `.search-mismatch` classes were applied in `QrScannerPage` but had no CSS rules (deferred in step 751); added amber color for mismatch and muted gray for the search target hint, matching the existing `.qr-scanner` status palette. `ItemEventsTab` and `BoxDetail` events render silently produced an empty area when the events array was empty; added "Keine Aktivitäten." empty-state text to make the blank-vs-no-data distinction visible.
+   - **Deferred:** If the events array is empty due to a deeper data-fetch regression (rather than genuinely no events), that path still needs investigation — the empty state now makes it visible instead of invisible.
 751. ✅ QR search-scan mode: continuous scan resolves on target match with audio+vibration feedback
    - **Why:** Operators needed a "find this item/box" flow — scan QR codes until the right one is found, with instant tactile+audio confirmation. Reused the existing `QrScannerPage` + `QrScanButton` infrastructure; added a `searchTarget` URL param and `'search'` intent. On mismatch the camera stays open and a 1.5 s cooldown prevents re-triggering the same code while it's still in frame. Web Audio API + `navigator.vibrate` are used for feedback; both degrade gracefully if unavailable. "Finden" button added to the item instance tab (hidden when out-of-stock) and to the box/shelf tab-actions.
    - **Why (approach):** All new logic is behind a `searchTarget` guard — zero change to existing scan flows. Module-level feedback helpers avoid repeated AudioContext allocations. The `skipDetectionRef` cooldown ref (not state) avoids re-renders during the scan loop.

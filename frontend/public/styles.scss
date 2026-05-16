@@ -1390,6 +1390,16 @@ div {
     color: #c5221f;
 }
 
+.qr-scanner .search-target-hint {
+    color: var(--text-muted, #888);
+    font-size: 0.85em;
+    margin-bottom: 4px;
+}
+
+.qr-scanner .status.search-mismatch {
+    color: #e8a000;
+}
+
 .qr-scanner details.raw {
     background: #f4f4f4;
     border-radius: var(--radius);

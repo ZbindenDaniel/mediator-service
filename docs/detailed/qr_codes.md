@@ -45,7 +45,7 @@
   - Optional return helper fields: `itemUUID`/`ItemUUID` normalized for return-navigation helpers.
   - Audit payload: `actor`, `payload`, `scannedAt`, `source`, and backend-enriched `userAgent`.
 - Enums:
-  - `QrScanIntent`: `add-item` | `relocate-box` | `shelf-add-box`.
+  - `QrScanIntent`: `add-item` | `relocate-box` | `shelf-add-box` | `search`.
   - `QrCallback`: currently `NavigateToEntity`.
   - Event key: `QrScanned`.
 - Sync requirements across layers:
@@ -89,9 +89,11 @@
 - User flows:
   - Direct flow: open scanner -> decode QR -> validate -> log scan -> navigate to entity route.
   - Return flow: open scanner from a source page via `QrScanButton` -> decode and log -> navigate back to `returnTo` with `location.state.qrReturn` payload.
+  - **Search flow** (`intent=search`): scanner stays open on a mismatch and keeps scanning until the target entity is found. On match, audio + vibration feedback fires and the result is returned to the caller via the normal `qrReturn` path. Activated by passing `searchTarget=<entityId>` and `searchLabel=<displayLabel>` as URL params. Entry points: "Finden" button on item instance tab (hidden when out-of-stock) and shelf/box tab-actions. A 1.5 s cooldown after each decode prevents the same code triggering again while still in frame. Web Audio API + `navigator.vibrate` provide feedback; both degrade gracefully when unavailable. CSS classes `.search-target-hint` (muted, 0.85em) and `.search-mismatch` (amber) reflect scan state visually.
 
 ## State machine / workflow
 1. **QR generation (backend print path)**
+   > Note: search flow has no QR generation step — it uses the standard scanner with an additional search target overlay.
    - Print action builds entity label payload and calls label HTML renderer.
    - Label renderer creates QR PNG data URI from minimal JSON (`id`, `type`, `materialNumber`) and injects it into label template payload.
 2. **Scan initialization (frontend `/scan`)**
@@ -153,6 +155,7 @@
 - Static checks:
   - Keep `QrScanned` present in `models/event-resources.json`.
   - Keep scanner intent/callback unions aligned between `QrScanButton` and `QrScannerPage`.
+  - `search` intent must be present in the `QrScanIntent` enum in `QrScannerPage.tsx`.
 - Runtime checks:
   - Generate a label (`/api/print/...`) and verify `qrPayload` in response.
   - Scan valid `I-`, `B-`, and `S-` QR payloads and confirm expected navigation.

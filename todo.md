@@ -24,7 +24,7 @@
 
 0b. ✅ **Filter state resets intermittently when switching items.** Fixed — filter-init useEffect now deps on `[boxParam, qParam]` instead of full `[searchParams]`, so PanelContext entity/tab URL writes no longer retrigger it.
 
-1. **Fix eventLog display on item and box detail.** Currently displays nothing. Likely a rendering or data-fetch regression.
+1. **Fix eventLog display on item and box detail.** Empty state added (shows "Keine Aktivitäten." instead of blank). If events are still absent when they should exist, the data-fetch path needs investigation.
 
 1b. ✅ **Restore bulk-action controls.** `BulkItemActionBar` restored inside `MultiItemDetailPanel` in Layout; reads `selectedIds` from PanelContext and `selectedItems/onClearSelection/onActionComplete` from `BulkSelectionContext`.
 
@@ -42,7 +42,7 @@
 
 7. **Transform transcript persistence from HTML to JSON.** Store transcripts in a new location. UI restructuring of the transcript viewer (collapsible, step-separated) follows after persistence is changed. **Goal:** improve debuggability and enable structured transcript rendering.
 
-8. **Fix shelf location display in box item list.** Items shown in a box detail list should display the shelf as location when the item or its containing box is on a shelf. Current placement context is incomplete for operators during box workflows.
+8. ✅ **Fix shelf location display in box item list.** Standort column added to BoxDetail item list using `LocationTag`; backend was already returning Location/ShelfLabel per item.
 
 ---
 
