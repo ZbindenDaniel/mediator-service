@@ -89,6 +89,7 @@
 - `Quality`: Legacy integer (1–5) denoting item condition. Kept as denormalized cache for backward compat; new assessments also write `QualityId`.
 - `QualityId`: FK to `quality_assessments.id`; populated after a quality review step at item creation. Null for pre-existing items.
 - `QualityAssessment`: Optional full assessment object (tag, condition answers, audit fields) attached when detail endpoint hydrates it.
+  - **Quality assessment flow**: at item creation, `QualityReviewStep` presents a versioned questionnaire driven by JSON contracts in `contracts/quality/<subcategoryId>.json` (falling back to `general.json`). Each `select`/`boolean` question can map to a `specField`/`specValue` that contributes to `Langtext` via `derived_specs`. After submission, `POST /api/items/:uuid/quality-review` writes the full response set to `quality_assessments` (columns: `responses`, `contract_version`, `derived_specs`) and dual-writes `Quality` (1–5 integer) + `QualityId`. Derived specs are then merged into `ItemRef.Langtext` automatically. A transient `ai-prio` value is also passed to the agentic trigger to bias extraction priority. See `docs/detailed/review-flow.md` § "Item Creation Quality Review" for the full flow.
 - `Grafikname`: Primary media reference name/path used as the preferred display image.
 - `ImageNames`: Serialized additional media references associated with the item reference.
 - `Verkaufspreis`: Sell price field used in edit/review/export contracts.

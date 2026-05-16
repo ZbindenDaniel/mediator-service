@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+754. ✅ Documentation: sync qr_codes.md, ARCHITECTURE.md, items.md, boxes.md + new stubs.md with shipped features
+   - **Why:** QR search-scan mode (step 751), box stubs, and quality contracts shipped without doc updates. Added `search` intent to QrScanIntent enum and new "Search flow" user-flow description in qr_codes.md. Created docs/detailed/stubs.md (Phase 1 runbook). Added stub + quality-review action mentions to ARCHITECTURE.md. Expanded QualityAssessment field in items.md with the full derived-specs → Langtext flow. Cross-referenced stubs from boxes.md. Added domain runbook table to docs/detailed/README.md.
+   - **Deferred:** Traceability matrix not updated (stubs.md not yet mapped); todo 0c tab icon verification still needs a live build.
 753. ✅ Box item list: add Standort column showing shelf location via LocationTag
    - **Why:** Backend already returned `Location`/`ShelfLabel` on each item; no column displayed it. Operators had to leave the items tab and check the info tab to know which shelf a box (and its items) was on. Reused the `<LocationTag item={} itemId={}>` pattern from ItemList. Column marked `optional-column` so it collapses on narrow screens.
    - **Deferred:** Nothing deferred.
