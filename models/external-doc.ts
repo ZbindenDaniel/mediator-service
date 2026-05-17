@@ -11,4 +11,6 @@ export interface ExternalDocSummary {
   reason?: string | null;
   fileCount: number;
   files: ExternalDocEntry[];
+  writable: boolean;
+  deletable: boolean;
 }
