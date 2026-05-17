@@ -120,4 +120,6 @@ Eine Erfolgsmeldung bestätigt die Übertragung. Bei Fehlern wenden Sie sich bit
 
 Bei Fragen zur Bedienung steht Ihnen diese Hilfeseite jederzeit zur Verfügung. Zur Überprüfung einer neuen Softwareversion verwenden Sie bitte die **Freigabe-Checkliste**.
 
-Bei technischen Problemen (Drucker, Synchronisation, Zugangsdaten) wenden Sie sich an Ihre zuständige Ansprechperson.
+Bei häufigen Problemen (Drucker, Bilder, WebDAV, versehentliche Fehler) finden Sie Schritt-für-Schritt-Anleitungen in der **Fehlerbehebung**.
+
+Bei technischen Problemen, die Sie selbst nicht lösen können, wenden Sie sich mit einem Screenshot und der Artikelnummer an Ihre Systemadministration.
