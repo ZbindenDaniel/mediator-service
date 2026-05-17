@@ -22,6 +22,9 @@ import { resolveAltDocDirPath, buildExternalDocUrl } from '../lib/alt-doc-resolv
 import { listFilesInAltDocDirectory } from '../lib/media-request';
 import type { ExternalDocSummary } from '../../models/external-doc';
 import { listRecentAgenticRunReviewHistoryBySubcategory } from '../db';
+import { getSpecContract } from '../contracts/registry';
+import { applySpecContract } from '../../models/spec-contract';
+import { parseLangtext } from '../lib/langtext';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -1317,6 +1320,27 @@ const action = defineHttpAction({
           responseGrafikname: normalisedGrafikname ?? null
         });
       }
+      // Apply spec contract when subcategory is known: add empty-string placeholders for missing fields.
+      // Runs both when subcategory is being changed and when it's inherited from the existing reference.
+      const effectiveSubcategory = referenceUpdates.Unterkategorien_A ?? referenceBase.Unterkategorien_A ?? null;
+      if (typeof effectiveSubcategory === 'number') {
+        const specContract = getSpecContract(effectiveSubcategory);
+        if (specContract) {
+          const rawLangtext = referenceUpdates.Langtext ?? referenceBase.Langtext ?? null;
+          const parsedLangtextForContract = parseLangtext(
+            typeof rawLangtext === 'string' ? rawLangtext : JSON.stringify(rawLangtext ?? {}),
+            { context: 'save-item:spec-contract' }
+          );
+          const langtextObj = parsedLangtextForContract && typeof parsedLangtextForContract === 'object' && !Array.isArray(parsedLangtextForContract)
+            ? (parsedLangtextForContract as Record<string, string | string[]>)
+            : {};
+          const enriched = applySpecContract(specContract, langtextObj);
+          if (enriched !== langtextObj) {
+            referenceUpdates.Langtext = enriched;
+          }
+        }
+      }
+
       const reference: ItemRef = {
         ...referenceBase,
         ...referenceUpdates,

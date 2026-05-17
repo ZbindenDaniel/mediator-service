@@ -1,27 +1,15 @@
 import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
+import { fetchQualityContract } from './contractsApi';
 
-// Statically bundled contracts — add new subcategory files here as they are created
-import generalContractJson from '../../../contracts/quality/general.json';
-import contract201Json from '../../../contracts/quality/201.json';
-import contract301Json from '../../../contracts/quality/301.json';
-import contract701Json from '../../../contracts/quality/701.json';
-
-const GENERAL_CONTRACT = generalContractJson as QualityContract;
-
-const SUBCATEGORY_CONTRACTS: Partial<Record<number, QualityContract>> = {
-  201: contract201Json as QualityContract,
-  301: contract301Json as QualityContract,
-  701: contract701Json as QualityContract,
-};
-
-export function loadContracts(subCategory?: number): {
-  general: QualityContract;
+export async function loadContractsAsync(subCategory?: number): Promise<{
+  general: QualityContract | null;
   subCat: QualityContract | null;
-} {
-  return {
-    general: GENERAL_CONTRACT,
-    subCat: subCategory !== undefined ? (SUBCATEGORY_CONTRACTS[subCategory] ?? null) : null,
-  };
+}> {
+  const [general, subCat] = await Promise.all([
+    fetchQualityContract('general'),
+    subCategory !== undefined ? fetchQualityContract(subCategory) : Promise.resolve(null)
+  ]);
+  return { general, subCat };
 }
 
 /** Derives quality value (1–5) from answers across all provided contracts. */
@@ -44,10 +32,11 @@ export function deriveQualityFromAnswers(
 
 /** Returns all questions from all contracts in order: general first, then subcategory. */
 export function getAllQuestions(
-  general: QualityContract,
+  general: QualityContract | null,
   subCat: QualityContract | null
 ): QualityQuestion[] {
-  return subCat ? [...general.questions, ...subCat.questions] : general.questions;
+  const base = general?.questions ?? [];
+  return subCat ? [...base, ...subCat.questions] : base;
 }
 
 /** Checks whether all required questions have been answered. */

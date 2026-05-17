@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import type { QualityQuestion } from '../../../models/quality-contract';
+import React, { useEffect, useState } from 'react';
+import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
 import {
   deriveAiPriorityFromAssessment,
   type AiPriority,
   type QualityAssessmentInsert,
 } from '../../../models/quality';
 import {
-  loadContracts,
+  loadContractsAsync,
   deriveQualityFromAnswers,
   getAllQuestions,
   allRequiredAnswered,
@@ -105,8 +105,26 @@ export default function QualityReviewStep({
   subCategory,
   layout,
 }: QualityReviewStepProps) {
-  const { general, subCat } = useMemo(() => loadContracts(subCategory), [subCategory]);
-  const questions = useMemo(() => getAllQuestions(general, subCat), [general, subCat]);
+  const [contracts, setContracts] = useState<{ general: QualityContract | null; subCat: QualityContract | null }>({
+    general: null,
+    subCat: null,
+  });
+  const [contractsLoading, setContractsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setContractsLoading(true);
+    loadContractsAsync(subCategory).then((loaded) => {
+      if (!cancelled) {
+        setContracts(loaded);
+        setContractsLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [subCategory]);
+
+  const { general, subCat } = contracts;
+  const questions = getAllQuestions(general, subCat);
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
@@ -114,8 +132,11 @@ export default function QualityReviewStep({
   const setAnswer = (id: string, value: string) =>
     setAnswers((prev) => ({ ...prev, [id]: value }));
 
-  const contracts = subCat ? [general, subCat] : [general];
-  const qualityValue = deriveQualityFromAnswers(contracts, answers);
+  const activeContracts = [
+    ...(general ? [general] : []),
+    ...(subCat ? [subCat] : [])
+  ];
+  const qualityValue = deriveQualityFromAnswers(activeContracts, answers);
   const aiPriority = deriveAiPriorityFromAssessment(qualityValue);
   const canSubmit = allRequiredAnswered(questions, answers);
 
@@ -138,8 +159,19 @@ export default function QualityReviewStep({
     });
   };
 
-  const generalQuestions = general.questions;
-  const subCatQuestions = subCat ? subCat.questions : [];
+  const generalQuestions = general?.questions ?? [];
+  const subCatQuestions = subCat?.questions ?? [];
+
+  if (contractsLoading) {
+    return (
+      <div className="item-create__step">
+        <div className="item-create__step-header">
+          <h2>Qualitätsbewertung</h2>
+          <p className="muted">Bewertungsformular wird geladen…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="item-create__step">

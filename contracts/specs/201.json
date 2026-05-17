@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "subCategory": 201,
+  "fields": [
+    { "key": "Hersteller",      "required": true,  "description": "Laptop manufacturer (e.g. Dell, HP, Lenovo)" },
+    { "key": "Modell",          "required": true,  "description": "Product model name/number" },
+    { "key": "Prozessor",       "required": true,  "description": "CPU model and speed" },
+    { "key": "RAM",             "required": true,  "description": "Memory in GB" },
+    { "key": "Speicher",        "required": true,  "description": "Storage size and type (e.g. 256 GB SSD)" },
+    { "key": "Display",         "required": false, "description": "Screen size and resolution" },
+    { "key": "Betriebssystem",  "required": false, "description": "Operating system installed" },
+    { "key": "Akku",            "required": false, "description": "Battery condition" },
+    { "key": "Tastatur-Layout", "required": false, "description": "Keyboard layout (CH/DE/US)" }
+  ]
+}

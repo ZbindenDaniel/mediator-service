@@ -18,6 +18,7 @@
     - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
     - Kurzbeschreibung: One concise paragraph; bullets only if they clarify.
     - Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays of strings.
+    - Empty string values ("") in Spezifikationen are contract placeholders — fill them when evidence is available; do not return them as empty strings.
     - Anti-pattern: Never return placeholder-only `Spezifikationen` (e.g., `{"Feature": "N/A"}`) when sources contain concrete technical specs.
     - Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.
     - Numeric fields: extract only when present; otherwise keep defaults.
