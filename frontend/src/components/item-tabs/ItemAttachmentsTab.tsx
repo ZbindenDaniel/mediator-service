@@ -1,12 +1,19 @@
 import React from 'react';
-import AttachmentsCard from '../AttachmentsCard';
+import AttachmentsCard, { AttachmentIdentifiers } from '../AttachmentsCard';
 
-interface Props {
+interface Props extends AttachmentIdentifiers {
   itemUUID: string;
   attachments: any[];
   onChanged: (next: any[]) => void;
 }
 
-export default function ItemAttachmentsTab({ itemUUID, attachments, onChanged }: Props) {
-  return <AttachmentsCard itemUUID={itemUUID} attachments={attachments} onChanged={onChanged} />;
+export default function ItemAttachmentsTab({ itemUUID, attachments, onChanged, ...ids }: Props) {
+  return (
+    <AttachmentsCard
+      itemUUID={itemUUID}
+      attachments={attachments}
+      onChanged={onChanged}
+      {...ids}
+    />
+  );
 }

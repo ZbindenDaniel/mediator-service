@@ -2793,6 +2793,10 @@ export default function ItemDetail({ itemId }: Props) {
             itemUUID={item.ItemUUID}
             attachments={attachments}
             onChanged={setAttachments}
+            artikelNummer={item.Artikel_Nummer ?? null}
+            serialNumber={item.SerialNumber ?? null}
+            macAddress={item.MacAddress ?? null}
+            ean={item.EAN ?? null}
           />
         );
         break;
