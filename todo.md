@@ -85,6 +85,9 @@
 19. ✅ **Add instance specification fields (RAM, SSD, OS).** Now driven by quality contracts: `specField`/`specValue` in each question contributes to Langtext automatically after quality review. Subcategory contract 201 (Laptop) covers keyboard layout, RAM, storage, battery.
 
 40. **Quality contract: add remaining subcategory contracts.** Currently only 201 (Laptop) exists. Add contracts for the other high-volume subcategories (e.g., graphics cards, monitors, phones) as needed.
+44. **Spec contracts: add remaining subcategory contracts.** Currently only 201 (Laptop) and 701 (Graphikkarte) have spec contracts in contracts/specs/. Add JSON files for other high-volume subcategories (301 Drucker, 401 Flachbildschirm, 601 Mainboard, etc.) — no code changes needed, restart picks them up.
+45. **Spec contracts: targeted enrich button in ItemKiTab.** When an item has missing required spec fields (visible as empty Langtext rows), add a "Gezielt anreichern" button in the KI tab that starts an agentic run pre-seeded with the missing field names as missingSpecFields. Requires fetching the spec contract client-side and computing the gap against the current Langtext.
+46. **Spec contracts: contract version stamping.** Add a specContractVersion nullable integer to agentic_runs to track which spec contract version was active when a run was completed. Enables detecting items that were enriched against an older contract version after the contract changes.
 
 41. **Quality re-check from ItemDetail.** Add a "Neu bewerten" button in the instance tab that opens `QualityReviewStep` with the item's existing `Unterkategorien_A` as `subCategory`. Contract version stored in `quality_assessments.contract_version` supports detecting stale assessments.
 
