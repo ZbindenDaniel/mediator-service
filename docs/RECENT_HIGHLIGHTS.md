@@ -1,5 +1,79 @@
 # Recent Highlights
 
+## Version 3.0
+
+### Spec Contracts & Quality Assessment
+
+- Introduced contract-driven specification validation: per-subcategory JSON contracts in `contracts/specs/` define required and desired Langtext fields, replacing the hardcoded 3-question quality system. Missing fields are injected as empty slots on item creation so gaps are visible in the existing spec display and the extraction agent has natural targets to fill.
+- Extended spec contracts to laptops, GPUs, printers, and graphics cards (subcategories 201, 701, and others), with the contract registry loading from disk at runtime so new contracts require no redeploy.
+- Migrated quality contracts from static bundle imports to the same API-served pattern as spec contracts for consistency and runtime reload support.
+
+### Box Stubs Management
+
+- Added a box stubs system for tracking incomplete or placeholder inventory items on shelves: new database table, REST endpoints, and a frontend management interface integrated with the shelf detail view.
+
+### QR Scan Workflows
+
+- Added a QR search-scan mode so scanning a code in search intent looks up the matching item or box and highlights it, with audio and vibration feedback on match/mismatch and a 1.5 s cooldown to prevent re-triggering.
+- Introduced a placement scan workflow for fast mobile-first item and box intake without manual navigation between scans.
+- Extended QR scan return-to handling to box relocation and add-item dialogs so scan results pre-select relocation targets and add-item payloads with validation logging.
+
+### UI Shell Redesign
+
+- Redesigned the detail panel as a two-column right-split CSS layout with a tabbed interface and a dedicated action slot, replacing the previous single-column card layout.
+- Improved the mobile detail view with a back button, overflow guards for wide tables, and mobile-first single-column defaults that step up at medium and large breakpoints.
+- Stabilised the detail panel so navigating between items no longer collapses or resets the active tab.
+
+### Enhanced Item Data
+
+- Surfaced SerialNumber and MacAddress fields in the item detail UI and CSV import flows.
+- Added instance field enforcement with an edit modal so instance-level metadata is kept separate from reference edits.
+- Routed EAN barcodes to the instance tab for cleaner data placement.
+
+### Media System Overhaul
+
+- Split media storage into separate roots for staging, ERP, and sync with centralised path guards to prevent cross-root writes.
+- Normalised media file handling to filename-only storage with absolute-path safety checks and startup logging for resolved roots.
+- Enhanced the ERP media mirror with phase attribution so timeout and error triage can identify which sync step failed.
+- Added WebDAV storage mode with absolute path validation, startup configuration feedback, and documented URL-vs-filesystem path requirements.
+- Removed media directory bundling from exports now that media lives in WebDAV, reducing archive size.
+
+### Agentic System Maturity
+
+- Injected review examples into extraction prompts to improve output quality and reduce hallucinated fields.
+- Added phase attribution to agentic timeouts and errors so operators can pinpoint which pipeline step stalled.
+- Migrated all agentic APIs to use Artikel_Nummer as the sole canonical run identifier, removing legacy ItemUUID paths throughout trigger, result ingestion, queue, and status routes.
+- Added script execution timeouts with streaming log output and a configurable queued-run dispatcher with retry intervals.
+- Aligned agentic close availability to allow closing in any non-running state while keeping running runs locked.
+
+### Data & Import/Export
+
+- Added a unified `/api/export/data` endpoint that can bundle items, boxes, agentic runs, and labelled events into a single archive or JSON payload with filterable query parameters.
+- Introduced two explicit export modes: backup exports retain instance-level ItemUUIDs; ERP exports group rows and intentionally blank ItemUUIDs for downstream reconciliation.
+- Added `events.csv` and `agentic_runs.csv` import/restore support with per-row validation and non-blocking error handling.
+- Extended CSV import alias coverage for ItemUUID and Auf_Lager headers and hardened boxes-only ingestion logging.
+
+### Infrastructure & Operations
+
+- Added an nginx reverse proxy service with TLS termination, Basic Auth, and rate limiting to protect all ingress traffic.
+- Introduced `PRINTER_SERVER` and `PRINT_RENDERER` environment variables for configuring CUPS host and headless PDF rendering; added Chromium to the Docker runtime image for PDF generation.
+- Added Docker Compose logging defaults with size and retention options for core services.
+- Made agentic search plan and per-request query limits configurable via environment variables.
+
+### Documentation
+
+- Published a complete environment variable reference in `docs/ENVIRONMENT.md` and expanded the `.env.example` template to match runtime usage.
+- Added German-language user docs served in-app at `/hilfe`: a release checklist and an onboarding guide, with prev/next navigation between docs.
+- Expanded domain runbooks in `docs/detailed/` covering QR codes, box stubs, items, boxes, printing, and agentic flows with cross-references.
+
+### Testing
+
+- Added baseline backend action tests covering import, save, list, search, and QR scan with match/handle coverage and response assertions.
+- Added UI workflow tests for agentic trigger handling and match-selection search error and cancel flows.
+- Extended the Jest-style test harness with async matchers, call-count checks, subset equality, and one-shot mock returns.
+
+---
+
 ## Version 2.3
 
 ## Versions before 2.2 (historical)

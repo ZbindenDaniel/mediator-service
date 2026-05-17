@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+758. ✅ Created v3.0 release notes in `docs/RECENT_HIGHLIGHTS.md` and bumped version from 2.2.0 to 3.0.0
+   - **Why:** 100 PRs merged since the last formal release; v3.0 marks the maturity of the agentic system (Artikel_Nummer migration, example injection, phase attribution), spec contracts, box stubs, QR scan workflows, media overhaul, and UI shell redesign.
+   - **Deferred:** Per-PR GitHub links in release notes — not in existing format convention. GitHub release/tag creation — deferred to a manual publish step.
 757. ✅ Onboarding redirect + help page nav: route new users to Erste-Schritte, add prev/next doc buttons
    - **Why:** First-time users (no username in localStorage) were shown a bare dialog prompt with no context. Replaced with a redirect to `/hilfe?doc=Erste-Schritte` so they land on the onboarding guide. Username is collected inline on the help page (highlighted setup form) rather than via a floating dialog. Removed `ensureUser()` from Header — redirect in Layout covers first-run, double-click edit covers subsequent changes. Prev/next buttons at the bottom of each doc let users step through all three guides in order without touching the sidebar. `?doc=` search param drives active doc selection so browser back/forward works correctly.
    - **Deferred:** Username is not re-prompted if user clears localStorage manually (they'll be redirected to onboarding again, which is fine). No progress indicator across docs.
