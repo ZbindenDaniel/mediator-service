@@ -3205,6 +3205,39 @@ button:focus {
     margin: 8px 0;
 }
 
+.hilfe-username-setup {
+    background: var(--card);
+    border: 2px solid $overview-color;
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 16px;
+
+    p { margin: 0 0 12px; }
+}
+
+.hilfe-username-setup__row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.hilfe-username-setup__input {
+    flex: 1;
+    max-width: 300px;
+}
+
+.hilfe-doc-nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    gap: 8px;
+}
+
+.hilfe-doc-nav__prev { flex: 1; }
+.hilfe-doc-nav__next { flex: 1; text-align: right; }
+
 @media (max-width: 600px) {
     .hilfe-layout {
         flex-direction: column;

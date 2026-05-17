@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { getUser, setUser } from '../lib/user';
 import { logError } from '../utils/logger';
 
 interface DocEntry {
@@ -39,7 +41,6 @@ function renderMarkdown(md: string): React.ReactNode[] {
     } else if (line.startsWith('- ')) {
       nodes.push(<li key={i}>{inlineMarkdown(line.slice(2))}</li>);
     } else if (line.startsWith('```')) {
-      // collect until closing ```
       const codeLines: string[] = [];
       i++;
       while (i < lines.length && !lines[i].startsWith('```')) {
@@ -59,7 +60,6 @@ function renderMarkdown(md: string): React.ReactNode[] {
 }
 
 function inlineMarkdown(text: string): React.ReactNode {
-  // handle **bold** and `code`
   const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -68,25 +68,74 @@ function inlineMarkdown(text: string): React.ReactNode {
     if (part.startsWith('`') && part.endsWith('`')) {
       return <code key={idx}>{part.slice(1, -1)}</code>;
     }
-    // render &nbsp; as non-breaking space
     return part.replace(/&nbsp;/g, ' ');
   });
 }
 
+function UsernameSetup({ onSaved }: { onSaved: (name: string) => void }) {
+  const [value, setValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSave = () => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setUser(trimmed);
+    onSaved(trimmed);
+  };
+
+  return (
+    <div className="hilfe-username-setup">
+      <p><strong>Willkommen!</strong> Bitte geben Sie Ihren Namen ein, damit Ihre Aktionen im System zugeordnet werden können.</p>
+      <div className="hilfe-username-setup__row">
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Ihr Name"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+          className="hilfe-username-setup__input"
+          aria-label="Benutzername"
+        />
+        <button type="button" className="btn btn--primary" onClick={handleSave} disabled={!value.trim()}>
+          Speichern
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function HilfePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [docs, setDocs] = useState<DocEntry[]>([]);
-  const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [username, setUsername] = useState(() => getUser().trim());
+
+  const docParam = searchParams.get('doc');
+  const activeDoc = docParam ?? null;
+
+  const setActiveDoc = (name: string) => {
+    setSearchParams({ doc: name }, { replace: false });
+  };
 
   useEffect(() => {
     fetch('/api/user-docs')
       .then((r) => r.json() as Promise<DocEntry[]>)
       .then((list) => {
         setDocs(list);
-        if (list.length > 0 && list[0]) setActiveDoc(list[0].name);
+        // if no doc param yet, default to first doc
+        if (!docParam && list.length > 0 && list[0]) {
+          setSearchParams({ doc: list[0].name }, { replace: true });
+        }
       })
       .catch((err) => logError('HilfePage: failed to load doc list', err));
+  // run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -102,11 +151,20 @@ export default function HilfePage() {
       });
   }, [activeDoc]);
 
+  const activeIndex = docs.findIndex((d) => d.name === activeDoc);
+  const prevDoc = activeIndex > 0 ? docs[activeIndex - 1] : null;
+  const nextDoc = activeIndex >= 0 && activeIndex < docs.length - 1 ? docs[activeIndex + 1] : null;
+
+  const showUsernameSetup = !username;
+
   return (
     <div className="list-container hilfe">
       <div className="page-header">
         <h1>Hilfe</h1>
       </div>
+      {showUsernameSetup && (
+        <UsernameSetup onSaved={(name) => setUsername(name)} />
+      )}
       <div className="hilfe-layout">
         <nav className="hilfe-sidebar" aria-label="Dokumente">
           {docs.map((doc) => (
@@ -122,7 +180,29 @@ export default function HilfePage() {
         </nav>
         <article className="hilfe-content card">
           {loading && <p>Wird geladen…</p>}
-          {!loading && content !== null && renderMarkdown(content)}
+          {!loading && content !== null && (
+            <>
+              {renderMarkdown(content)}
+              {(prevDoc || nextDoc) && (
+                <nav className="hilfe-doc-nav" aria-label="Dokument-Navigation">
+                  <div className="hilfe-doc-nav__prev">
+                    {prevDoc && (
+                      <button type="button" className="btn" onClick={() => setActiveDoc(prevDoc.name)}>
+                        ← {prevDoc.title}
+                      </button>
+                    )}
+                  </div>
+                  <div className="hilfe-doc-nav__next">
+                    {nextDoc && (
+                      <button type="button" className="btn" onClick={() => setActiveDoc(nextDoc.name)}>
+                        {nextDoc.title} →
+                      </button>
+                    )}
+                  </div>
+                </nav>
+              )}
+            </>
+          )}
           {!loading && content === null && docs.length === 0 && (
             <p>Keine Dokumente gefunden.</p>
           )}

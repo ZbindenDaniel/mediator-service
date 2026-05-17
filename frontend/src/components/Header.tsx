@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
+import { getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
 import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoQuestion, GoSearch, GoTag } from 'react-icons/go';
 import { logError } from '../utils/logger';
@@ -34,19 +34,7 @@ export default function Header() {
   const [user, setUserState] = useState(() => getUser().trim());
 
   useEffect(() => {
-    let cancelled = false;
-    const loadUser = async () => {
-      try {
-        const ensured = await ensureUser();
-        if (!cancelled) {
-          setUserState(ensured);
-        }
-      } catch (err) {
-        if (!cancelled) console.error('Failed to ensure user during header mount', err);
-      }
-    };
-    void loadUser();
-    return () => { cancelled = true; };
+    setUserState(getUser().trim());
   }, []);
 
 
