@@ -702,6 +702,48 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       }
     }
 
+    if (url.pathname === '/api/user-docs' && req.method === 'GET') {
+      const USER_DOCS_DIR = path.join(__dirname, '../../docs/user');
+      try {
+        const files = fs.readdirSync(USER_DOCS_DIR).filter((f) => f.endsWith('.md'));
+        const docs = files.map((fileName) => {
+          const name = fileName.replace(/\.md$/, '');
+          let title = name;
+          try {
+            const firstLine = fs.readFileSync(path.join(USER_DOCS_DIR, fileName), 'utf8').split('\n')[0] ?? '';
+            if (firstLine.startsWith('# ')) title = firstLine.slice(2).trim();
+          } catch { /* keep filename as title */ }
+          return { name, title };
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(docs));
+      } catch (err) {
+        console.error('[user-docs] Failed to list docs directory', { error: err });
+        res.writeHead(500); return res.end('Internal error');
+      }
+    }
+
+    if (url.pathname.startsWith('/api/user-docs/') && req.method === 'GET') {
+      const USER_DOCS_DIR = path.join(__dirname, '../../docs/user');
+      const rawName = url.pathname.slice('/api/user-docs/'.length);
+      const safeName = decodeURIComponent(rawName);
+      // reject traversal attempts
+      if (!safeName || safeName.includes('/') || safeName.includes('..') || safeName.includes('\0')) {
+        res.writeHead(400); return res.end('Bad request');
+      }
+      const filePath = path.join(USER_DOCS_DIR, `${safeName}.md`);
+      if (!filePath.startsWith(USER_DOCS_DIR + path.sep) && filePath !== USER_DOCS_DIR) {
+        res.writeHead(400); return res.end('Bad request');
+      }
+      try {
+        const data = fs.readFileSync(filePath, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' });
+        return res.end(data);
+      } catch {
+        res.writeHead(404); return res.end('Not found');
+      }
+    }
+
     if (url.pathname.startsWith('/external-docs/') && req.method === 'GET') {
       // URL shape: /external-docs/:dirName/:itemUUID/:fileName
       const segments = url.pathname.slice('/external-docs/'.length).split('/');
