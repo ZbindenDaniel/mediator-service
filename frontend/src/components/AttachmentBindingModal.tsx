@@ -5,6 +5,7 @@ export interface BindingOption {
   type: string;
   label: string;
   value: string;
+  endpoint: { kind: 'instance' } | { kind: 'external'; dirName: string };
 }
 
 interface Props {

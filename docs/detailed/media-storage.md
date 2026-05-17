@@ -160,7 +160,9 @@ ALT_DOC_DIRS=[
 | `mountPath` | Yes | Absolute filesystem path to the mounted WebDAV root |
 | `identifierType` | Yes | `ean`, `serialNumber`, or `macAddress` |
 | `normalize` | No | Optional transform before using value as folder name: `uppercase`, `lowercase`, `strip-colons` |
-| `docType` | No | Human-readable label returned in API responses (e.g. `Löschprotokoll`) |
+| `docType` | No | Human-readable label shown in the UI and API responses (e.g. `Löschprotokoll`) |
+| `writable` | No | `true` to allow uploading new files via the UI (default: `false`). The upload modal shows this dir as a binding option only when `writable: true` and the item has the required identifier. |
+| `deletable` | No | `true` to allow deleting individual files via the UI (default: `false`). Files are never deleted automatically — only explicit per-file UI actions are gated by this flag. |
 
 ### API surface
 
@@ -168,8 +170,8 @@ ALT_DOC_DIRS=[
 GET /api/items/:itemUUID/external-docs
 ```
 
-Returns an array of directory summaries. Each entry is either available (with file list and URLs) or
-unavailable with a reason:
+Returns an array of directory summaries. Each entry includes `writable` and `deletable` flags so the
+UI can show or hide the upload binding and delete button accordingly:
 
 ```json
 {
@@ -185,7 +187,9 @@ unavailable with a reason:
           "fileName": "wipe-report-2026-01-15.pdf",
           "url": "/external-docs/wipe-reports/I-123456-0001/wipe-report-2026-01-15.pdf"
         }
-      ]
+      ],
+      "writable": true,
+      "deletable": false
     },
     {
       "name": "test-results",
@@ -194,7 +198,9 @@ unavailable with a reason:
       "available": false,
       "reason": "identifier_not_set",
       "fileCount": 0,
-      "files": []
+      "files": [],
+      "writable": false,
+      "deletable": false
     }
   ]
 }
@@ -211,6 +217,21 @@ GET /external-docs/:dirName/:itemUUID/:fileName
 Serves a single file. Allowed extensions: `.pdf`, `.txt`, `.csv`, `.xml`, `.json`. All file access is
 logged via the media audit framework.
 
+```
+POST /api/items/:itemUUID/external-docs/:dirName
+```
+
+Uploads a file to the external mount. Requires `writable: true` on the dir config — returns `403`
+otherwise. Body: raw file bytes. Required header: `X-Filename`. The file is written to
+`<mountPath>/<identifierValue>/<safeName>`. Returns `{ ok: true, fileName, url }`.
+
+```
+DELETE /api/items/:itemUUID/external-docs/:dirName/:fileName
+```
+
+Deletes a single file from the external mount. Requires `deletable: true` — returns `403` otherwise.
+No files are ever deleted automatically on item deletion; only this explicit endpoint removes files.
+
 ### Security
 
 - Identifier values are validated against type-specific allowlist patterns before use as path segments:
@@ -218,14 +239,9 @@ logged via the media audit framework.
   - `serialNumber` — `[a-zA-Z0-9_-]+`
   - `macAddress` — `[0-9A-Fa-f:.-]+`
 - The resolved path is checked with `resolvePathWithinRoot` (`backend/lib/path-guard.ts`) to reject any
-  traversal attempt.
+  traversal attempt for both reads and writes.
 - Only the file extensions listed above can be served; all other extensions are blocked.
-
-### Implementation status
-
-The backend (resolver, config parsing, API routes, path guards) is complete. There is currently no UI
-component that calls `/api/items/:itemUUID/external-docs` or renders the returned file list on the item
-detail page — that is the primary remaining integration work.
+- Write and delete operations emit structured audit events via the media audit framework.
 
 ---
 
@@ -258,9 +274,8 @@ All media operations (uploads, deletes, mirrors, external-doc serves) emit struc
 
 | Gap | Notes |
 |---|---|
-| UI component for external docs | Backend API is ready; no React component calls it yet |
 | Artikel_Nummer-keyed item attachments | Attachments still use ItemUUID as the folder key |
-| Automatic cleanup on item delete | Orphaned folders must be removed manually |
+| Automatic cleanup on item delete | Orphaned folders must be removed manually (by design — no cascade delete) |
 | Filesystem readiness check for ERP mirror target | TODO in `backend/actions/sync-erp.ts` |
 | Queryable media manifest API | TODO in `backend/actions/export-items.ts` — would enable CSV derivation |
 

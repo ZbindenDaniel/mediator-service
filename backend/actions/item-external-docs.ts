@@ -53,7 +53,9 @@ const action = defineHttpAction({
           available: false,
           reason: 'identifier_not_set',
           fileCount: 0,
-          files: []
+          files: [],
+          writable: dirConfig.writable ?? false,
+          deletable: dirConfig.deletable ?? false
         };
       }
 
@@ -68,7 +70,9 @@ const action = defineHttpAction({
           available: false,
           reason: 'directory_unavailable',
           fileCount: 0,
-          files: []
+          files: [],
+          writable: dirConfig.writable ?? false,
+          deletable: dirConfig.deletable ?? false
         };
       }
 
@@ -81,7 +85,9 @@ const action = defineHttpAction({
         files: fileNames.map((fileName) => ({
           fileName,
           url: buildExternalDocUrl(dirConfig.name, itemUUID, fileName)
-        }))
+        })),
+        writable: dirConfig.writable ?? false,
+        deletable: dirConfig.deletable ?? false
       };
     });
 

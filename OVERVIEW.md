@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+761. ✅ Unified attachments tab: aggregates instance attachments + external docs (ALT_DOC_DIRS) in one view; upload modal routes files to the correct storage backend; external mount write/delete gated by per-dir `writable`/`deletable` flags (both default false)
+   - **Why:** The previous implementation stored all uploads to the same endpoint with a label tag. The user wanted actual routing: external-mount uploads land in the correct filesystem path. The `deletable` flag defaults to false so no files are deleted without explicit opt-in per directory.
+   - **Deferred:** Artikel_Nummer-keyed attachments (non-image product-level docs still go to item_attachments with a label); filesystem readiness check for ERP mirror target.
 760. ✅ Attachment upload binding modal: intercept file selection in AttachmentsCard, show identifier-choice modal when 2+ options are available, store chosen binding as X-Label on upload, and display the binding type in the attachment list
    - **Why:** Users upload to one unified attachments tab but files need to carry provenance — whether they belong to the specific instance (ItemUUID), the product reference (Artikelnummer), or a per-unit identifier (SN/MAC/EAN). The modal is only shown when the item actually has 2+ non-null identifiers so it never adds friction for sparse items.
    - **Deferred:** Routing uploads to separate backend storage per binding type (e.g. Artikel_Nummer folder vs. instances/ folder) — currently all writes still go to POST /api/item/:uuid/attachments regardless of binding; the label carries the intent. Backend routing is the next step once the UI pattern is validated. UI surface for external-docs (ALT_DOC_DIRS) on the same tab is also deferred.

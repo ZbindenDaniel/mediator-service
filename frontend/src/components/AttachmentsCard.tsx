@@ -1,5 +1,6 @@
 import React from 'react';
 import AttachmentBindingModal, { BindingOption } from './AttachmentBindingModal';
+import type { ExternalDocSummary } from '../../../models/external-doc';
 
 export interface AttachmentIdentifiers {
   artikelNummer?: string | null;
@@ -14,26 +15,11 @@ interface AttachmentsCardProps extends AttachmentIdentifiers {
   onChanged: (next: any[]) => void;
 }
 
-function buildBindingOptions(itemUUID: string, ids: AttachmentIdentifiers): BindingOption[] {
-  const options: BindingOption[] = [
-    { type: 'instance', label: 'Diese Instanz', value: itemUUID }
-  ];
-  if (ids.artikelNummer) {
-    options.push({ type: 'artikel', label: 'Artikel (Produktebene)', value: ids.artikelNummer });
-  }
-  if (ids.serialNumber) {
-    options.push({ type: 'serialNumber', label: 'Seriennummer', value: ids.serialNumber });
-  }
-  if (ids.macAddress) {
-    options.push({ type: 'macAddress', label: 'MAC-Adresse', value: ids.macAddress });
-  }
-  if (ids.ean) {
-    options.push({ type: 'ean', label: 'EAN', value: ids.ean });
-  }
-  return options;
-}
+type UnifiedRow =
+  | { kind: 'instance'; att: any }
+  | { kind: 'external'; dirName: string; docType: string | null; deletable: boolean; fileName: string; url: string };
 
-// Matches the label format written on upload: "type:value"
+// Matches labels written on upload: "type:value"
 const BINDING_RE = /^(instance|artikel|serialNumber|macAddress|ean):(.+)$/;
 
 function parseBindingLabel(label: string | null): { type: string; value: string } | null {
@@ -53,6 +39,54 @@ function bindingBadgeText(type: string): string {
   }
 }
 
+function identValueForType(type: string, ids: AttachmentIdentifiers): string | null {
+  switch (type) {
+    case 'serialNumber': return ids.serialNumber ?? null;
+    case 'macAddress': return ids.macAddress ?? null;
+    case 'ean': return ids.ean ?? null;
+    default: return null;
+  }
+}
+
+function buildBindingOptions(itemUUID: string, ids: AttachmentIdentifiers, externalDocs: ExternalDocSummary[]): BindingOption[] {
+  const options: BindingOption[] = [
+    { type: 'instance', label: 'Diese Instanz', value: itemUUID, endpoint: { kind: 'instance' } }
+  ];
+  if (ids.artikelNummer) {
+    options.push({ type: 'artikel', label: 'Artikel (Produktebene)', value: ids.artikelNummer, endpoint: { kind: 'instance' } });
+  }
+  for (const dir of externalDocs) {
+    if (!dir.available || !dir.writable) continue;
+    const identValue = identValueForType(dir.identifierType, ids);
+    if (!identValue) continue;
+    options.push({
+      type: `external:${dir.name}`,
+      label: dir.docType || dir.name,
+      value: identValue,
+      endpoint: { kind: 'external', dirName: dir.name }
+    });
+  }
+  return options;
+}
+
+function buildRows(attachments: any[], externalDocs: ExternalDocSummary[]): UnifiedRow[] {
+  const rows: UnifiedRow[] = attachments.map(att => ({ kind: 'instance', att }));
+  for (const dir of externalDocs) {
+    if (!dir.available) continue;
+    for (const file of dir.files) {
+      rows.push({
+        kind: 'external',
+        dirName: dir.name,
+        docType: dir.docType,
+        deletable: dir.deletable,
+        fileName: file.fileName,
+        url: file.url
+      });
+    }
+  }
+  return rows;
+}
+
 export default function AttachmentsCard({
   itemUUID,
   attachments,
@@ -65,27 +99,52 @@ export default function AttachmentsCard({
   const [uploading, setUploading] = React.useState(false);
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
   const [bindingOptions, setBindingOptions] = React.useState<BindingOption[]>([]);
+  const [externalDocs, setExternalDocs] = React.useState<ExternalDocSummary[]>([]);
   const fileRef = React.useRef<HTMLInputElement>(null);
 
-  async function doUpload(file: File, label?: string) {
+  React.useEffect(() => {
+    fetch(`/api/items/${encodeURIComponent(itemUUID)}/external-docs`)
+      .then(r => r.ok ? r.json() : { docs: [] })
+      .then(data => setExternalDocs(Array.isArray(data.docs) ? data.docs : []))
+      .catch(() => setExternalDocs([]));
+  }, [itemUUID]);
+
+  async function doUpload(file: File, binding: BindingOption) {
     setUploading(true);
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': file.type || 'application/octet-stream',
-        'X-Filename': file.name
-      };
-      if (label) headers['X-Label'] = label;
-
-      const res = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`, {
-        method: 'POST',
-        headers,
-        body: file
-      });
-      if (res.ok) {
-        const listRes = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`);
-        if (listRes.ok) {
-          const data = await listRes.json();
-          onChanged(Array.isArray(data.attachments) ? data.attachments : []);
+      if (binding.endpoint.kind === 'instance') {
+        const label = binding.type === 'instance' ? null : `${binding.type}:${binding.value}`;
+        const headers: Record<string, string> = {
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-Filename': file.name
+        };
+        if (label) headers['X-Label'] = label;
+        const res = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`, {
+          method: 'POST', headers, body: file
+        });
+        if (res.ok) {
+          const listRes = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`);
+          if (listRes.ok) {
+            const data = await listRes.json();
+            onChanged(Array.isArray(data.attachments) ? data.attachments : []);
+          }
+        }
+      } else {
+        const { dirName } = binding.endpoint;
+        const res = await fetch(`/api/items/${encodeURIComponent(itemUUID)}/external-docs/${encodeURIComponent(dirName)}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            'X-Filename': file.name
+          },
+          body: file
+        });
+        if (res.ok) {
+          const listRes = await fetch(`/api/items/${encodeURIComponent(itemUUID)}/external-docs`);
+          if (listRes.ok) {
+            const data = await listRes.json();
+            setExternalDocs(Array.isArray(data.docs) ? data.docs : []);
+          }
         }
       }
     } catch { /* noop */ } finally {
@@ -97,9 +156,10 @@ export default function AttachmentsCard({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const options = buildBindingOptions(itemUUID, { artikelNummer, serialNumber, macAddress, ean });
+    const ids = { artikelNummer, serialNumber, macAddress, ean };
+    const options = buildBindingOptions(itemUUID, ids, externalDocs);
     if (options.length < 2) {
-      doUpload(file);
+      doUpload(file, options[0]);
     } else {
       setPendingFile(file);
       setBindingOptions(options);
@@ -108,7 +168,7 @@ export default function AttachmentsCard({
 
   function handleBindingConfirm(binding: BindingOption) {
     if (!pendingFile) return;
-    doUpload(pendingFile, `${binding.type}:${binding.value}`);
+    doUpload(pendingFile, binding);
     setPendingFile(null);
     setBindingOptions([]);
   }
@@ -119,9 +179,23 @@ export default function AttachmentsCard({
     if (fileRef.current) fileRef.current.value = '';
   }
 
-  async function handleDelete(id: number) {
+  async function handleInstanceDelete(id: number) {
     await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments/${id}`, { method: 'DELETE' });
     onChanged(attachments.filter((a: any) => a.Id !== id));
+  }
+
+  async function handleExternalDelete(dirName: string, fileName: string) {
+    await fetch(
+      `/api/items/${encodeURIComponent(itemUUID)}/external-docs/${encodeURIComponent(dirName)}/${encodeURIComponent(fileName)}`,
+      { method: 'DELETE' }
+    );
+    setExternalDocs(prev => prev.map(dir =>
+      dir.name !== dirName ? dir : {
+        ...dir,
+        files: dir.files.filter(f => f.fileName !== fileName),
+        fileCount: dir.fileCount - 1
+      }
+    ));
   }
 
   function formatBytes(bytes: number | null): string {
@@ -130,6 +204,8 @@ export default function AttachmentsCard({
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
+
+  const rows = buildRows(attachments, externalDocs);
 
   return (
     <>
@@ -142,38 +218,62 @@ export default function AttachmentsCard({
         />
       )}
       <div className="card">
-        <h3>Anhänge ({attachments.length})</h3>
-        {attachments.length > 0 && (
+        <h3>Anhänge ({rows.length})</h3>
+        {rows.length > 0 && (
           <table className="details">
             <tbody>
-              {attachments.map((att: any) => {
-                const binding = parseBindingLabel(att.Label);
+              {rows.map((row, idx) => {
+                if (row.kind === 'instance') {
+                  const att = row.att;
+                  const binding = parseBindingLabel(att.Label);
+                  return (
+                    <tr key={`i-${att.Id}`}>
+                      <td>
+                        <a href={`/media/${att.FilePath}`} target="_blank" rel="noopener noreferrer">
+                          {att.FileName}
+                        </a>
+                      </td>
+                      <td className="muted" style={{ fontSize: '0.85em' }}>
+                        {binding ? bindingBadgeText(binding.type) : att.Label || null}
+                      </td>
+                      <td className="muted">{att.MimeType || ''}</td>
+                      <td className="muted">{formatBytes(att.FileSize)}</td>
+                      <td className="muted">{att.CreatedAt ? att.CreatedAt.slice(0, 10) : ''}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="sml-btn btn"
+                          onClick={() => handleInstanceDelete(att.Id)}
+                          title="Anhang löschen"
+                        >
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
                 return (
-                  <tr key={att.Id}>
+                  <tr key={`e-${idx}`}>
                     <td>
-                      <a href={`/media/${att.FilePath}`} target="_blank" rel="noopener noreferrer">
-                        {att.FileName}
+                      <a href={row.url} target="_blank" rel="noopener noreferrer">
+                        {row.fileName}
                       </a>
                     </td>
                     <td className="muted" style={{ fontSize: '0.85em' }}>
-                      {binding ? (
-                        bindingBadgeText(binding.type)
-                      ) : att.Label ? (
-                        att.Label
-                      ) : null}
+                      {row.docType || row.dirName}
                     </td>
-                    <td className="muted">{att.MimeType || ''}</td>
-                    <td className="muted">{formatBytes(att.FileSize)}</td>
-                    <td className="muted">{att.CreatedAt ? att.CreatedAt.slice(0, 10) : ''}</td>
+                    <td className="muted" colSpan={3} />
                     <td>
-                      <button
-                        type="button"
-                        className="sml-btn btn"
-                        onClick={() => handleDelete(att.Id)}
-                        title="Anhang löschen"
-                      >
-                        ✕
-                      </button>
+                      {row.deletable && (
+                        <button
+                          type="button"
+                          className="sml-btn btn"
+                          onClick={() => handleExternalDelete(row.dirName, row.fileName)}
+                          title="Datei löschen"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

@@ -53,7 +53,9 @@ Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The servi
 | `mountPath` | Yes | Absolute filesystem path to the mounted WebDAV root (must not be a URL). |
 | `identifierType` | Yes | `ean` (product-level), `serialNumber` (per-unit), or `macAddress` (per-unit). |
 | `normalize` | No | Optional transformation applied to the identifier before use as a path segment: `uppercase`, `lowercase`, or `strip-colons`. |
-| `docType` | No | Human-readable label shown in the API response (e.g. `Löschprotokoll`, `Prüfprotokoll`). |
+| `docType` | No | Human-readable label shown in the API response and upload modal (e.g. `Löschprotokoll`, `Prüfprotokoll`). |
+| `writable` | No | `true` to allow uploading new files via the UI (default: `false`). |
+| `deletable` | No | `true` to allow deleting individual files via the UI (default: `false`). Both flags are independent — a dir can be append-only (`writable: true, deletable: false`). |
 
 ### Identifier scope
 
@@ -72,8 +74,10 @@ ALT_DOC_DIRS=[
 
 ### API endpoints
 
-- `GET /api/items/:itemUUID/external-docs` — lists available files for all configured directories. Returns `available: false, reason: "identifier_not_set"` when the item is missing the required identifier.
+- `GET /api/items/:itemUUID/external-docs` — lists available files for all configured directories. Each entry includes `writable` and `deletable` flags reflecting the dir config. Returns `available: false, reason: "identifier_not_set"` when the item is missing the required identifier.
 - `GET /external-docs/:name/:itemUUID/:fileName` — serves a single file (allowed extensions: `.pdf`, `.txt`, `.csv`, `.xml`, `.json`).
+- `POST /api/items/:itemUUID/external-docs/:dirName` — uploads a file to an external mount. Requires `writable: true` on the dir config; returns `403` otherwise. Body: raw file bytes. Headers: `X-Filename` (required), `Content-Type`.
+- `DELETE /api/items/:itemUUID/external-docs/:dirName/:fileName` — deletes a single file from an external mount. Requires `deletable: true`; returns `403` otherwise. No files are deleted automatically on item deletion.
 
 ### Security
 

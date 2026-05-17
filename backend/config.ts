@@ -623,6 +623,10 @@ export interface AltDocDirectoryConfig {
   normalize?: 'uppercase' | 'lowercase' | 'strip-colons' | null;
   /** Human-readable document category label (e.g. "Löschprotokoll", "Prüfprotokoll") */
   docType?: string | null;
+  /** When true, the UI allows uploading new files into this directory (default: false). */
+  writable?: boolean;
+  /** When true, the UI allows deleting files from this directory (default: false). */
+  deletable?: boolean;
 }
 
 const ALT_DOC_DIR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -677,7 +681,9 @@ function parseAltDocDirsConfig(raw: string | undefined): AltDocDirectoryConfig[]
       console.warn(`[config] ALT_DOC_DIRS entry "${name}" has unrecognized "normalize" value "${normalizeRaw}" — treating as null.`);
     }
     const docType = typeof entry.docType === 'string' ? entry.docType.trim() || null : null;
-    results.push({ name, mountPath, identifierType: identifierType as AltDocDirectoryConfig['identifierType'], normalize, docType });
+    const writable = entry.writable === true;
+    const deletable = entry.deletable === true;
+    results.push({ name, mountPath, identifierType: identifierType as AltDocDirectoryConfig['identifierType'], normalize, docType, writable, deletable });
   }
 
   return results;
