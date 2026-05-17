@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+759. ✅ Added `docs/detailed/media-storage.md` runbook documenting all three storage concepts (item photos, instance attachments, identifier-keyed external docs)
+   - **Why:** No dedicated doc existed for the media system. The identifier-based alt-doc-dirs feature (EAN/serial/MAC) is fully implemented in the backend but undiscoverable without docs. Runbook covers architecture, API surface, config, security, what is and isn't yet implemented, and key source files.
+   - **Deferred:** UI component for external-docs (no React surface yet — noted as gap in the doc). Artikel_Nummer-keyed attachments (still ItemUUID today).
 758. ✅ Created v3.0 release notes in `docs/RECENT_HIGHLIGHTS.md` and bumped version from 2.2.0 to 3.0.0
    - **Why:** 100 PRs merged since the last formal release; v3.0 marks the maturity of the agentic system (Artikel_Nummer migration, example injection, phase attribution), spec contracts, box stubs, QR scan workflows, media overhaul, and UI shell redesign.
    - **Deferred:** Per-PR GitHub links in release notes — not in existing format convention. GitHub release/tag creation — deferred to a manual publish step.

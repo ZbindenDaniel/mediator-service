@@ -20,6 +20,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`items.md`](./items.md) | Item/instance lifecycle, fields, actions, quality assessment flow |
 | [`boxes.md`](./boxes.md) | Box/shelf hierarchy, relocation, printing, import touchpoints |
 | [`stubs.md`](./stubs.md) | Box stubs — uncatalogued shelf content triage tool |
+| [`media-storage.md`](./media-storage.md) | File storage: item photos, per-unit attachments, identifier-keyed external docs |
 | [`qr_codes.md`](./qr_codes.md) | QR generation, scan lifecycle, search-scan mode, audit logging |
 | [`printing.md`](./printing.md) | Label printing, preview/dispatch, template/route mapping |
 | [`import_export.md`](./import_export.md) | CSV/ZIP ingestion, export regimes, alias mapping |
