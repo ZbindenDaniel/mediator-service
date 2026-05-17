@@ -16,6 +16,7 @@ import ChatPlaceholder from './ChatPlaceholder';
 import ShelfCreateForm from './ShelfCreateForm';
 import PlacementScanView from './PlacementScanView';
 import StubListPage from './StubListPage';
+import HilfePage from './HilfePage';
 
 // TODO(agent): Confirm admin-only shelf create route visibility expectations with product.
 
@@ -70,6 +71,7 @@ export function AppRoutes() {
       <Route path="/chat" element={<ChatPlaceholder />} />
       <Route path="/placement/:targetId" element={<PlacementScanView />} />
       <Route path="/admin/shelves/new" element={<ShelfCreateForm />} />
+      <Route path="/hilfe" element={<HilfePage />} />
     </Routes>
   );
 }

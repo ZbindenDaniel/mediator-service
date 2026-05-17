@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Header from './Header';
 import { usePanelContext } from '../context/PanelContext';
@@ -8,6 +8,7 @@ import BoxDetail from './BoxDetail';
 import ItemCreate from './ItemCreate';
 import MultiItemSummary from './MultiItemSummary';
 import BulkItemActionBar from './BulkItemActionBar';
+import { getUser } from '../lib/user';
 
 function MultiItemDetailPanel() {
   const { multiSelection } = usePanelContext();
@@ -35,6 +36,14 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection, mobileShowDetail, setMobileShowDetail } = usePanelContext();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!getUser() && !pathname.startsWith('/hilfe')) {
+      navigate('/hilfe?doc=Erste-Schritte', { replace: true });
+    }
+  // only run on mount — pathname intentionally excluded to avoid redirect loops during navigation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Full-screen routes bypass the two-column shell entirely
   const isFullScreen = pathname.startsWith('/scan') || pathname.startsWith('/placement/');

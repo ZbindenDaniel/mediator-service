@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ensureUser, getUser, setUser as persistUser } from '../lib/user';
+import { getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoSearch, GoTag } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoQuestion, GoSearch, GoTag } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -34,19 +34,7 @@ export default function Header() {
   const [user, setUserState] = useState(() => getUser().trim());
 
   useEffect(() => {
-    let cancelled = false;
-    const loadUser = async () => {
-      try {
-        const ensured = await ensureUser();
-        if (!cancelled) {
-          setUserState(ensured);
-        }
-      } catch (err) {
-        if (!cancelled) console.error('Failed to ensure user during header mount', err);
-      }
-    };
-    void loadUser();
-    return () => { cancelled = true; };
+    setUserState(getUser().trim());
   }, []);
 
 
@@ -169,6 +157,9 @@ export default function Header() {
           </Link>
           <Link to="/stubs" aria-label="Stubs" title="Stubs" onClick={() => setMobileShowDetail(false)}>
             <GoTag aria-hidden="true" />
+          </Link>
+          <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => setMobileShowDetail(false)}>
+            <GoQuestion aria-hidden="true" />
           </Link>
           <form
             className="header-search"
