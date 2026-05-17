@@ -20,6 +20,8 @@ import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
+import { getSpecContract } from '../contracts/registry';
+import { checkSpecGap } from '../../../models/spec-contract';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
 
@@ -430,6 +432,22 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
+    // Derive required fields missing from the item's Langtext based on its spec contract.
+    // Merged into missingSpecFields so the existing applyReviewSpecGuidanceToPromptTarget pipeline handles them.
+    const contractMissingFields: string[] = [];
+    const subcategoryCode = typeof target.Unterkategorien_A === 'number' ? target.Unterkategorien_A : null;
+    if (subcategoryCode) {
+      const specContract = getSpecContract(subcategoryCode);
+      if (specContract) {
+        const langtextObj = target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)
+          ? (target.Langtext as Record<string, unknown>)
+          : {};
+        const gap = checkSpecGap(specContract, langtextObj);
+        contractMissingFields.push(...gap.missingRequired);
+        logger.debug?.({ msg: 'spec contract gap computed for extraction', itemId, subcategoryCode, missingRequired: gap.missingRequired, contractVersion: specContract.version });
+      }
+    }
+
     const extractionResult = await runExtractionAttempts({
       llm: deps.llm,
       logger,
@@ -449,7 +467,10 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       searchInvoker,
       target,
       reviewNotes: reviewerNotes,
-      missingSpecFields: Array.isArray(input.missingSpecFields) ? input.missingSpecFields : [],
+      missingSpecFields: [
+        ...(Array.isArray(input.missingSpecFields) ? input.missingSpecFields : []),
+        ...contractMissingFields
+      ],
       unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
       skipSearch,
       exampleItemBlock: input.exampleItemBlock ?? null,

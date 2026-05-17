@@ -21,6 +21,8 @@ import { parseLangtext } from '../lib/langtext';
 import { IMPORT_DATE_FIELD_PRIORITIES } from '../importer';
 import { resolveCategoryLabelToCode, resolveSubcategoryLabelToCodeWithParent } from '../lib/categoryLabelLookup';
 import { normalizeQuality, resolveQualityFromLabel } from '../../models/quality';
+import { getSpecContract } from '../contracts/registry';
+import { applySpecContract } from '../../models/spec-contract';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -1209,6 +1211,18 @@ const action = defineHttpAction({
         einheit,
         isUpdateRequest
       });
+
+      // Apply spec contract: add empty-string entries for any missing required/desired fields.
+      // Never overwrites existing values — only fills gaps so the agent knows what to look for.
+      if (unterkategorienA) {
+        const specContract = getSpecContract(unterkategorienA);
+        if (specContract) {
+          const langtextObj = langtext && typeof langtext === 'object' && !Array.isArray(langtext)
+            ? (langtext as Record<string, string | string[]>)
+            : {};
+          langtext = applySpecContract(specContract, langtextObj);
+        }
+      }
 
       let grafiknameToPersist = '';
       try {
