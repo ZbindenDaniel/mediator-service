@@ -93,10 +93,29 @@ function copyAgenticPrompts() {
   }
 }
 
+function copyContracts() {
+  const src = path.join(__dirname, '..', 'contracts');
+  const dest = path.join(__dirname, '..', 'dist', 'contracts');
+
+  if (!fs.existsSync(src)) {
+    console.log('[build] No contracts directory to copy.', { src });
+    return;
+  }
+
+  try {
+    copyDirectory(src, dest);
+    console.log('[build] Copied contracts.', { dest });
+  } catch (error) {
+    console.error('[build] Failed to copy contracts.', { src, dest, error });
+    throw error;
+  }
+}
+
 try {
   copyFrontendPublic();
   copyModelResources();
   copyAgenticPrompts();
+  copyContracts();
 } catch (error) {
   console.error('[build] Build script encountered an unrecoverable error.', error);
   process.exit(1);

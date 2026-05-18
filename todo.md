@@ -13,6 +13,10 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
+0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.
+0h. ✅ **Review flow only showed Ja/Abbrechen.** Extended dialog system with `confirmThreeWay`; `askFlag` now offers Ja/Nein/Abbrechen so reviewers can flag individual steps as wrong without aborting the review.
+0i. ✅ **Mobile QR scan navigation missing.** Added `QrScanButton` (mobile-only) to Header nav for direct label-scan → item/box navigation on mobile.
 0e. ✅ **Fix mobile navigation to lists and Einscannen visibility.** `mobileShowDetail` state in PanelContext drives `app-shell--mobile-detail` CSS class; slide transition replaces display-toggle; back button added; full-screen bypass for scan/placement routes.
 
 0c. **Verify tab icons render correctly once build runs.** react-icons/go icons GoInfo, GoPencil, GoFileMedia, GoPaperclip, GoTools are newly imported in DetailTabBar — confirm they exist in v5.5.0 (Octicons v19) when bundling.

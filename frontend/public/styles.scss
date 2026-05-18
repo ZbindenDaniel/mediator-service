@@ -1466,6 +1466,7 @@ button {
 
 input[type="checkbox"] {
     scale: 1.8;
+    margin: 8px;
 }
 
 
@@ -3035,6 +3036,10 @@ button:focus {
     height: auto;
     min-width: unset;
     border-width: 1px;
+}
+
+.shop-status-form__row{
+    padding: 8px 0;
 }
 
 .quality-slider__labels {

@@ -6,6 +6,7 @@ import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoQuestion, GoSearch, GoTa
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
+import QrScanButton from './QrScanButton';
 
 type SearchResult =
   | { type: 'item'; item: Item }
@@ -161,6 +162,7 @@ export default function Header() {
           <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => setMobileShowDetail(false)}>
             <GoQuestion aria-hidden="true" />
           </Link>
+          <QrScanButton label="QR-Code scannen" />
           <form
             className="header-search"
             onSubmit={handleSearchSubmit}

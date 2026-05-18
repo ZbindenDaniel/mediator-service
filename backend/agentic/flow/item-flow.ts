@@ -20,7 +20,7 @@ import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
-import { getSpecContract } from '../contracts/registry';
+import { getSpecContract } from '../..//contracts/registry';
 import { checkSpecGap } from '../../../models/spec-contract';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
