@@ -1440,14 +1440,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
         } else {
           shouldNavigateToCreatedItem = false;
           console.log('Resetting item creation form for additional entry after success dialog choice.');
+          // Re-seed BoxID from URL param so the next item stays associated with the same box.
+          const boxReset: Partial<ItemFormData> = preselectedBoxId ? { BoxID: preselectedBoxId } : {};
           setCreationStep('basicInfo');
-          setDraft(() => ({}));
-          setBasicInfo(() => ({}));
-          setManualDraft(() => ({}));
-          queryPrefilledBoxRef.current = null;
-          if (preselectedBoxId) {
-            console.log('Cleared applied box prefill to allow reapplication.', { boxId: preselectedBoxId });
-          }
+          setDraft(() => ({ ...boxReset }));
+          setBasicInfo(() => ({ ...boxReset }));
+          setManualDraft(() => ({ ...boxReset }));
         }
       } catch (error) {
         console.error('Failed to display item creation success dialog', error);

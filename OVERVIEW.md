@@ -7,6 +7,15 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+763. ✅ Six urgent fixes + mobile hamburger nav
+   - **Why (quality specs):** `updateItemLangtextSpecs` merged per-instance quality-derived specs into the shared `item_refs.Langtext`, overwriting specs from prior instances of the same article. Added `InstanceSpecs TEXT` column to `items`, new `updateItemInstanceSpecs()` function, and display in the instance tab with the same table format as the reference tab.
+   - **Why (QR scan):** Header `QrScanButton` lacked `callback="NavigateToEntity"`, so after scanning the user was returned to the previous page without navigating to the scanned entity.
+   - **Why (Bearbeiten/quality):** Replaced the quality range slider in `EditInstanceCard` with a "Neu bewerten" button that opens a full `QualityReviewModal` (portal wrapping `QualityReviewStep`) wired to `POST /api/items/:uuid/quality-review`.
+   - **Why (Weiter erfassen):** After "Weiter erfassen", the form was reset to `{}` but the `useEffect` re-applying `preselectedBoxId` never re-fired (dep array `[preselectedBoxId]` unchanged). Fixed by seeding `BoxID` directly into the reset state.
+   - **Why (stubs shelf link):** ShelfId was plain text; made it a `link-btn` navigating to `/boxes?entity=box&id=...`.
+   - **Why (stubs boxes count):** `NumberLooseBoxes` removed from frontend, backend action, and DB type — column kept in SQLite schema as DEFAULT 0 (SQLite does not support DROP COLUMN easily).
+   - **Why (hamburger nav):** Header had 7+ nav icons cramped on mobile. Added hamburger toggle button (mobile-only) with slide-in dropdown; desktop unaffected.
+   - **Deferred:** `GoThreeBars` icon availability at runtime — confirmed in react-icons v5.5 Octicons; if missing, swap for a text `≡` fallback. QR color fix scoped to `.header-nav__icon-btn.qr-scan-button` specificity override.
 762. ✅ Gamification stats: StatsCard restored to the right panel empty-state via self-fetching OverviewPanel; three fun derived stats added — KI-Trefferquote %, Angereichert %, Gesamt-Gewicht; "Artikel ohne Behälter" renamed to "Heimatlose Artikel"
    - **Why:** StatsCard existed but wasn't rendered anywhere. The new stats are computed from data already returned by /api/overview (KI-Trefferquote, Angereichert) plus one new SQL aggregate (sumInventoryWeightKg). All three rows hide gracefully when no data is available (no decided runs, no items, no weight data). OverviewPanel is a minimal self-fetching wrapper so Layout.tsx stays clean.
    - **Deferred:** Quality distribution breakdown (would need a new GROUP BY query and more display space). "Most stubborn item" (highest RetryCount) — cute idea but needs a more prominent UI slot.

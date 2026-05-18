@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { GoPlus, GoX } from 'react-icons/go';
 import { getUser } from '../lib/user';
 
@@ -7,16 +8,16 @@ type BoxStub = {
   ShelfId: string;
   Description: string;
   NumberLooseItems: number;
-  NumberLooseBoxes: number;
   CreatedAt: string;
   CreatedBy: string;
   IsActive: number;
   Notes: string | null;
 };
 
-const EMPTY_FORM = { shelfId: '', description: '', numberLooseItems: '', numberLooseBoxes: '', notes: '' };
+const EMPTY_FORM = { shelfId: '', description: '', numberLooseItems: '', notes: '' };
 
 export default function StubListPage() {
+  const navigate = useNavigate();
   const [stubs, setStubs] = useState<BoxStub[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -47,7 +48,6 @@ export default function StubListPage() {
           shelfId: form.shelfId.trim(),
           description: form.description.trim(),
           numberLooseItems: parseInt(form.numberLooseItems || '0', 10) || 0,
-          numberLooseBoxes: parseInt(form.numberLooseBoxes || '0', 10) || 0,
           notes: form.notes.trim() || null,
           createdBy: getUser(),
         }),
@@ -111,27 +111,15 @@ export default function StubListPage() {
                 required
               />
             </div>
-            <div className="form-row form-row--inline">
-              <div>
-                <label htmlFor="stub-loose-items">Lose Artikel</label>
-                <input
-                  id="stub-loose-items"
-                  type="number"
-                  min="0"
-                  value={form.numberLooseItems}
-                  onChange={(e) => setForm((f) => ({ ...f, numberLooseItems: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label htmlFor="stub-loose-boxes">Lose Kartons</label>
-                <input
-                  id="stub-loose-boxes"
-                  type="number"
-                  min="0"
-                  value={form.numberLooseBoxes}
-                  onChange={(e) => setForm((f) => ({ ...f, numberLooseBoxes: e.target.value }))}
-                />
-              </div>
+            <div className="form-row">
+              <label htmlFor="stub-loose-items">Lose Artikel</label>
+              <input
+                id="stub-loose-items"
+                type="number"
+                min="0"
+                value={form.numberLooseItems}
+                onChange={(e) => setForm((f) => ({ ...f, numberLooseItems: e.target.value }))}
+              />
             </div>
             <div className="form-row">
               <label htmlFor="stub-notes">Notizen</label>
@@ -166,7 +154,6 @@ export default function StubListPage() {
               <th>Regal</th>
               <th>Beschreibung</th>
               <th>Lose Artikel</th>
-              <th>Lose Kartons</th>
               <th>Erstellt von</th>
               <th>Datum</th>
             </tr>
@@ -174,10 +161,17 @@ export default function StubListPage() {
           <tbody>
             {stubs.map((stub) => (
               <tr key={stub.Id}>
-                <td><span className="mono">{stub.ShelfId}</span></td>
+                <td>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => navigate(`/boxes?entity=box&id=${encodeURIComponent(stub.ShelfId)}`)}
+                  >
+                    <span className="mono">{stub.ShelfId}</span>
+                  </button>
+                </td>
                 <td>{stub.Description}{stub.Notes ? <span className="muted"> — {stub.Notes}</span> : null}</td>
                 <td>{stub.NumberLooseItems || '—'}</td>
-                <td>{stub.NumberLooseBoxes || '—'}</td>
                 <td>{stub.CreatedBy}</td>
                 <td className="muted">{new Date(stub.CreatedAt).toLocaleDateString('de-CH')}</td>
               </tr>

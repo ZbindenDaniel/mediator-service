@@ -93,7 +93,7 @@
 45. **Spec contracts: targeted enrich button in ItemKiTab.** When an item has missing required spec fields (visible as empty Langtext rows), add a "Gezielt anreichern" button in the KI tab that starts an agentic run pre-seeded with the missing field names as missingSpecFields. Requires fetching the spec contract client-side and computing the gap against the current Langtext.
 46. **Spec contracts: contract version stamping.** Add a specContractVersion nullable integer to agentic_runs to track which spec contract version was active when a run was completed. Enables detecting items that were enriched against an older contract version after the contract changes.
 
-41. **Quality re-check from ItemDetail.** Add a "Neu bewerten" button in the instance tab that opens `QualityReviewStep` with the item's existing `Unterkategorien_A` as `subCategory`. Contract version stored in `quality_assessments.contract_version` supports detecting stale assessments.
+41. ✅ **Quality re-check from ItemDetail.** "Neu bewerten" button added to instance tab `tab-actions`; opens `QualityReviewModal` wrapping `QualityReviewStep`. Results stored in `items.InstanceSpecs` (per-instance) and `quality_assessments`.
 
 42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (SQLite `json_extract`). Enables searching "16GB" to find matching Laptops.
 

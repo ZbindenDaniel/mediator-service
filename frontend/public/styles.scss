@@ -512,6 +512,53 @@ textarea {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    position: relative;
+}
+
+// On mobile the nav items collapse behind the hamburger button
+.header-nav__items {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+@media (max-width: 719px) {
+    .header-nav__items {
+        // Hidden by default on mobile — slide in when open
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        background: var(--bg, #fff);
+        border: 1px solid var(--line, #ddd);
+        border-radius: 8px;
+        padding: 8px;
+        z-index: 200;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+        transition: max-height 0.22s ease, opacity 0.18s ease, padding 0.18s ease;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+
+    .header-nav__items--open {
+        max-height: 400px;
+        opacity: 1;
+        pointer-events: auto;
+        padding: 8px;
+    }
+}
+
+@media (min-width: 720px) {
+    .header-nav__hamburger {
+        display: none;
+    }
 }
 
 .header-search {
@@ -1767,6 +1814,15 @@ button:focus {
     justify-content: center;
     background: #fff;
     animation: none !important;
+}
+
+// When the QR button sits inside the header nav it inherits nav icon styling
+.header-nav__icon-btn.qr-scan-button {
+    background-color: var(--nav);
+    border: 1px solid var(--line);
+    color: var(--fg);
+    width: 36px;
+    height: 36px;
 }
 
 .qr-scan-button__icon {

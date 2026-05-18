@@ -30,7 +30,6 @@ const action = defineHttpAction({
       const description = (body.description ?? '').trim();
       const createdBy = (body.createdBy ?? 'unknown').trim();
       const numberLooseItems = Math.max(0, parseInt(body.numberLooseItems ?? '0', 10) || 0);
-      const numberLooseBoxes = Math.max(0, parseInt(body.numberLooseBoxes ?? '0', 10) || 0);
       const notes = (body.notes ?? '').trim() || null;
 
       if (!shelfId) return sendJson(res, 400, { error: 'shelfId is required' });
@@ -39,9 +38,9 @@ const action = defineHttpAction({
       const id = randomBytes(16).toString('hex');
       const createdAt = new Date().toISOString();
 
-      ctx.createStub({ id, shelfId, description, numberLooseItems, numberLooseBoxes, createdAt, createdBy, notes });
+      ctx.createStub({ id, shelfId, description, numberLooseItems, createdAt, createdBy, notes });
 
-      sendJson(res, 201, { id, shelfId, description, numberLooseItems, numberLooseBoxes, createdAt, createdBy, isActive: 1, notes });
+      sendJson(res, 201, { id, shelfId, description, numberLooseItems, createdAt, createdBy, isActive: 1, notes });
     } catch (err) {
       console.error('create-stub failed', err);
       sendJson(res, 500, { error: (err as Error).message });
