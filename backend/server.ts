@@ -73,6 +73,7 @@ import {
   countAgenticRunsByStatus,
   countEnrichedItemReferences,
   listItemsForCo2,
+  sumInventoryWeightKg,
   listRecentBoxes,
   getMaxShelfIndex,
   getMaxBoxId,
@@ -473,6 +474,7 @@ type ActionContext = {
   countAgenticRunsByStatus: typeof countAgenticRunsByStatus;
   countEnrichedItemReferences: typeof countEnrichedItemReferences;
   listItemsForCo2: typeof listItemsForCo2;
+  sumInventoryWeightKg: typeof sumInventoryWeightKg;
   listRecentBoxes: typeof listRecentBoxes;
   getMaxShelfIndex: typeof getMaxShelfIndex;
   getMaxBoxId: typeof getMaxBoxId;
@@ -925,6 +927,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           countAgenticRunsByStatus,
           countEnrichedItemReferences,
           listItemsForCo2,
+          sumInventoryWeightKg,
           listRecentBoxes,
           getMaxShelfIndex,
           getMaxBoxId,

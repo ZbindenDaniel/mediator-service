@@ -968,7 +968,7 @@ const action = defineHttpAction({
           externalDocs = ALT_DOC_DIRS.map((dirConfig) => {
             const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);
             if (!resolved) {
-              return { name: dirConfig.name, docType: dirConfig.docType ?? null, identifierType: dirConfig.identifierType, available: false, reason: 'identifier_not_set', fileCount: 0, files: [] };
+              return { name: dirConfig.name, docType: dirConfig.docType ?? null, identifierType: dirConfig.identifierType, available: false, reason: 'identifier_not_set', fileCount: 0, files: [], writable: false, deletable: false };
             }
             const fileNames = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
             return {
@@ -977,7 +977,9 @@ const action = defineHttpAction({
               identifierType: dirConfig.identifierType,
               available: true,
               fileCount: fileNames.length,
-              files: fileNames.map((fileName) => ({ fileName, url: buildExternalDocUrl(dirConfig.name, itemId, fileName) }))
+              files: fileNames.map((fileName) => ({ fileName, url: buildExternalDocUrl(dirConfig.name, itemId, fileName) })),
+              writable: false,
+              deletable: false
             };
           });
         }

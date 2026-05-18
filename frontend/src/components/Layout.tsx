@@ -10,6 +10,7 @@ import MultiItemSummary from './MultiItemSummary';
 import BulkItemActionBar from './BulkItemActionBar';
 import DashboardPanel from './DashboardPanel';
 import { getUser } from '../lib/user';
+import OverviewPanel from './OverviewPanel';
 
 function MultiItemDetailPanel() {
   const { multiSelection } = usePanelContext();
@@ -96,6 +97,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                     <BoxDetail boxId={entityId} />
                   ) : (
                     <DashboardPanel />
+                    <OverviewPanel />
                   )}
                 </div>
               )}

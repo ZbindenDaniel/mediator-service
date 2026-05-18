@@ -7,22 +7,26 @@ interface DialogButtonsProps {
   type: DialogType;
   confirmLabel?: string;
   cancelLabel?: string;
+  rejectLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  onReject?: () => void;
 }
 
 export function DialogButtons({
   type,
   confirmLabel,
   cancelLabel,
+  rejectLabel,
   onConfirm,
-  onCancel
+  onCancel,
+  onReject
 }: DialogButtonsProps) {
   const resolveConfirmLabel = () => {
     if (confirmLabel) {
       return confirmLabel;
     }
-    if (type === 'confirm' || type === 'prompt') {
+    if (type === 'confirm' || type === 'prompt' || type === 'threeWay') {
       return 'OK';
     }
     return 'Schließen';
@@ -35,11 +39,18 @@ export function DialogButtons({
     return 'Abbrechen';
   };
 
+  const resolveRejectLabel = () => rejectLabel ?? 'Nein';
+
   return (
     <div className="dialog-buttons">
-      {(type === 'confirm' || type === 'prompt') && (
+      {(type === 'confirm' || type === 'prompt' || type === 'threeWay') && (
         <button className="secondary" onClick={onCancel} type="button">
           {resolveCancelLabel()}
+        </button>
+      )}
+      {type === 'threeWay' && onReject && (
+        <button className="secondary" onClick={onReject} type="button">
+          {resolveRejectLabel()}
         </button>
       )}
       <button className="primary" onClick={onConfirm} type="button">

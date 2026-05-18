@@ -30,6 +30,7 @@ interface Props {
   health: string;
   agentic?: AgenticOverviewStats;
   totalCo2SavedKg?: number;
+  totalWeightKg?: number;
   className?: string;
 }
 
@@ -62,7 +63,12 @@ function safeNumber(value: unknown): number {
 }
 
 // TODO(agentic-overview-chart): Add optional layered segments (shopartikel / quality) when data contract is finalized.
-export default function StatsCard({ counts, printerOk, printerReason, health, agentic, totalCo2SavedKg, className }: Props) {
+function formatWeight(kg: number): string {
+  if (kg >= 1000) return `${(kg / 1000).toFixed(1).replace('.', ',')} t`;
+  return `${Math.round(kg)} kg`;
+}
+
+export default function StatsCard({ counts, printerOk, printerReason, health, agentic, totalWeightKg, totalCo2SavedKg, className }: Props) {
   const classes = ['card', className].filter(Boolean).join(' ');
 
   const pieSegments = useMemo<PieSegment[]>(() => {
@@ -95,6 +101,13 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
   const totalAgentic = pieSegments.reduce((sum, segment) => sum + segment.value, 0);
   const enrichedItems = safeNumber(agentic?.enrichedItems);
 
+  const approvedRuns = safeNumber(agentic?.stateCounts?.['approved' as AgenticRunStatus]);
+  const rejectedRuns = safeNumber(agentic?.stateCounts?.['rejected' as AgenticRunStatus]);
+  const failedRuns = safeNumber(agentic?.stateCounts?.['failed' as AgenticRunStatus]);
+  const decidedRuns = approvedRuns + rejectedRuns + failedRuns;
+  const hitRate = decidedRuns > 0 ? Math.round((approvedRuns / decidedRuns) * 100) : null;
+  const enrichmentRate = counts && counts.items > 0 ? Math.round((enrichedItems / counts.items) * 100) : null;
+
   return (
     <div className={classes}>
       <h2>Statistiken</h2>
@@ -108,6 +121,15 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               <div>Artikel ohne Behälter: <b>{counts.itemsNoBox}</b></div>
               {totalCo2SavedKg != null && totalCo2SavedKg > 0 && (
                 <div>CO₂ gespart gesamt: <b>~{Math.round(totalCo2SavedKg / 5) * 5} kg</b></div>
+              <div>Heimatlose Artikel: <b>{counts.itemsNoBox}</b></div>
+              {hitRate !== null && (
+                <div>KI-Trefferquote: <b>{hitRate}%</b></div>
+              )}
+              {enrichmentRate !== null && (
+                <div>Angereichert: <b>{enrichmentRate}%</b></div>
+              )}
+              {typeof totalWeightKg === 'number' && totalWeightKg > 0 && (
+                <div>Gesamt-Gewicht: <b>{formatWeight(totalWeightKg)}</b></div>
               )}
             </div>
           ) : (

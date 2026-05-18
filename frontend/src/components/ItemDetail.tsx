@@ -318,6 +318,7 @@ export default function ItemDetail({ itemId }: Props) {
   const dialog = useDialog();
   const [showRelocate, setShowRelocate] = useState(false);
   const [showEditInstance, setShowEditInstance] = useState(false);
+  const [showQualityReview, setShowQualityReview] = useState(false);
   const mediaFileInputRef = useRef<HTMLInputElement | null>(null);
   const relocateCardRef = useRef<HTMLDivElement | null>(null);
   const agenticOverrideLogRef = useRef<{ itemId: string | null; active: boolean }>({
@@ -563,6 +564,24 @@ export default function ItemDetail({ itemId }: Props) {
       return [['Spezifikationen', legacyText]];
     }
   }, [item?.Langtext]);
+
+  const instanceSpecRows = useMemo<[string, React.ReactNode][]>(() => {
+    if (!item?.InstanceSpecs) return [];
+    const parsed = parseLangtext(item.InstanceSpecs);
+    if (parsed.kind === 'json') {
+      return parsed.entries
+        .filter((e) => e.value.trim())
+        .map<[string, React.ReactNode]>((entry) => {
+          try {
+            const rendered = buildLangtextMarkdown(entry.value);
+            return [entry.key, rendered || entry.value];
+          } catch {
+            return [entry.key, entry.value];
+          }
+        });
+    }
+    return [];
+  }, [item?.InstanceSpecs]);
 
   const handleNeighborNavigation = useCallback(
     (direction: 'previous' | 'next') => {
@@ -1668,20 +1687,22 @@ export default function ItemDetail({ itemId }: Props) {
       </div>
     );
 
+    // returns true (Ja), false (Nein/does not match), or null (Abbrechen/abort review)
     const askFlag = async (
       stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
       title: string,
       message: React.ReactNode
-    ): Promise<true | null> => {
+    ): Promise<boolean | null> => {
       try {
-        const confirmed = await dialogService.confirm({
+        const result = await dialogService.confirmThreeWay({
           title,
           message,
           confirmLabel: 'Ja',
+          rejectLabel: 'Nein',
           cancelLabel: 'Abbrechen',
           contentClassName: 'review-dialog'
         });
-        if (!confirmed) {
+        if (result === null) {
           logger.warn?.('ItemDetail: Agentic review checklist step aborted via cancel', {
             itemId,
             stepKey,
@@ -1693,9 +1714,9 @@ export default function ItemDetail({ itemId }: Props) {
           itemId,
           stepKey,
           completed: true,
-          answer: true
+          answer: result
         });
-        return true;
+        return result;
       } catch (error) {
         logError('ItemDetail: Failed to capture structured review flag', error, {
           itemId,
@@ -2766,6 +2787,7 @@ export default function ItemDetail({ itemId }: Props) {
           <ItemInstanceTab
             item={item}
             instanceDetailRows={instanceDetailRows}
+            instanceSpecRows={instanceSpecRows}
             instanceRows={instanceRows}
             isBulkItem={isBulkItem}
             isOutOfStock={isOutOfStock}
@@ -2773,13 +2795,16 @@ export default function ItemDetail({ itemId }: Props) {
             showRelocate={showRelocate}
             relocateCardRef={relocateCardRef}
             showEditInstance={showEditInstance}
+            showQualityReview={showQualityReview}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
             onRelocate={() => setShowRelocate(true)}
             onEditInstance={() => setShowEditInstance(true)}
+            onQualityReview={() => setShowQualityReview(true)}
             onInstanceNavigation={(id) => void handleInstanceNavigation(id)}
             onRelocated={() => { setShowRelocate(false); void load({ showSpinner: false }); }}
             onInstanceSaved={() => { setShowEditInstance(false); void load({ showSpinner: false }); }}
+            onQualityReviewDone={() => { setShowQualityReview(false); void load({ showSpinner: false }); }}
           />
         );
         break;

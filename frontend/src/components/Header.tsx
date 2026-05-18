@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoQuestion, GoSearch, GoTag } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoQuestion, GoSearch, GoTag, GoThreeBars } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
+import QrScanButton from './QrScanButton';
 
 type SearchResult =
   | { type: 'item'; item: Item }
@@ -32,13 +33,36 @@ export default function Header() {
   const [isSearching, setIsSearching] = useState(false);
   const searchFormRef = useRef<HTMLFormElement | null>(null);
   const [user, setUserState] = useState(() => getUser().trim());
+  const [navOpen, setNavOpen] = useState(false);
+  const navRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setUserState(getUser().trim());
   }, []);
 
+  // Close hamburger nav on outside click
+  useEffect(() => {
+    if (!navOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setNavOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [navOpen]);
 
-  // Close dropdown on outside click
+  // Close hamburger nav on Escape
+  useEffect(() => {
+    if (!navOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [navOpen]);
+
+  // Close search dropdown on outside click
   useEffect(() => {
     if (!isSearchOpen) return;
     const handlePointerDown = (e: PointerEvent) => {
@@ -50,7 +74,7 @@ export default function Header() {
     return () => window.removeEventListener('pointerdown', handlePointerDown);
   }, [isSearchOpen]);
 
-  // Close dropdown on Escape
+  // Close search dropdown on Escape
   useEffect(() => {
     if (!isSearchOpen) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -135,32 +159,47 @@ export default function Header() {
     <header className="header">
       <div className="left">
         <h1><a id="homelink" href="/">rrrevamp_____</a></h1>
-        <nav className="header-nav" aria-label="Hauptnavigation">
-          {/* TODO(navigation): Re-evaluate header icon spacing if more nav items are added. */}
+        <nav className="header-nav" aria-label="Hauptnavigation" ref={navRef}>
+          {/* Hamburger toggle — visible only on mobile */}
           <button
             type="button"
-            className="header-nav__icon-btn"
-            aria-label="Artikel erfassen"
-            title="Artikel erfassen"
-            onClick={() => { setCreateMode('item'); navigate('/items'); }}
+            className="header-nav__icon-btn header-nav__hamburger mobile-only"
+            aria-label="Navigation öffnen"
+            aria-expanded={navOpen}
+            title="Navigation"
+            onClick={() => setNavOpen((v) => !v)}
           >
-            <GoPlus aria-hidden="true" />
+            <GoThreeBars aria-hidden="true" />
           </button>
-          <Link to="/items" aria-label="Artikelliste" title="Artikelliste" onClick={() => setMobileShowDetail(false)}>
-            <GoListUnordered aria-hidden="true" />
-          </Link>
-          <Link to="/boxes" aria-label="Behälterliste" title="Behälterliste" onClick={() => setMobileShowDetail(false)}>
-            <GoArchive aria-hidden="true" />
-          </Link>
-          <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => setMobileShowDetail(false)}>
-            <GoPulse aria-hidden="true" />
-          </Link>
-          <Link to="/stubs" aria-label="Stubs" title="Stubs" onClick={() => setMobileShowDetail(false)}>
-            <GoTag aria-hidden="true" />
-          </Link>
-          <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => setMobileShowDetail(false)}>
-            <GoQuestion aria-hidden="true" />
-          </Link>
+
+          {/* Nav items — always visible on desktop, toggled on mobile */}
+          <div className={`header-nav__items${navOpen ? ' header-nav__items--open' : ''}`}>
+            <button
+              type="button"
+              className="header-nav__icon-btn"
+              aria-label="Artikel erfassen"
+              title="Artikel erfassen"
+              onClick={() => { setNavOpen(false); setCreateMode('item'); navigate('/items'); }}
+            >
+              <GoPlus aria-hidden="true" />
+            </button>
+            <Link to="/items" aria-label="Artikelliste" title="Artikelliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+              <GoListUnordered aria-hidden="true" />
+            </Link>
+            <Link to="/boxes" aria-label="Behälterliste" title="Behälterliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+              <GoArchive aria-hidden="true" />
+            </Link>
+            <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+              <GoPulse aria-hidden="true" />
+            </Link>
+            <Link to="/stubs" aria-label="Stubs" title="Stubs" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+              <GoTag aria-hidden="true" />
+            </Link>
+            <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+              <GoQuestion aria-hidden="true" />
+            </Link>
+            <QrScanButton callback="NavigateToEntity" className="header-nav__icon-btn" label="QR-Code scannen" />
+          </div>
           <form
             className="header-search"
             onSubmit={handleSearchSubmit}

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import RelocateItemCard from '../RelocateItemCard';
 import EditInstanceCard from '../EditInstanceCard';
+import QualityReviewModal from '../QualityReviewModal';
 import QualityBadge from '../QualityBadge';
 import PrintLabelButton from '../PrintLabelButton';
 import QrScanButton from '../QrScanButton';
@@ -21,6 +22,7 @@ export interface InstanceRow {
 interface Props {
   item: Item;
   instanceDetailRows: [string, React.ReactNode][];
+  instanceSpecRows: [string, React.ReactNode][];
   instanceRows: InstanceRow[];
   isBulkItem: boolean;
   isOutOfStock: boolean;
@@ -28,18 +30,22 @@ interface Props {
   showRelocate: boolean;
   relocateCardRef: React.RefObject<HTMLDivElement>;
   showEditInstance: boolean;
+  showQualityReview: boolean;
   onAddItem: () => Promise<void>;
   onRemoveItem: () => Promise<void>;
   onRelocate: () => void;
   onEditInstance: () => void;
+  onQualityReview: () => void;
   onInstanceNavigation: (itemId: string) => void;
   onRelocated: () => void;
   onInstanceSaved: () => void;
+  onQualityReviewDone: () => void;
 }
 
 export default function ItemInstanceTab({
   item,
   instanceDetailRows,
+  instanceSpecRows,
   instanceRows,
   isBulkItem,
   isOutOfStock,
@@ -47,13 +53,16 @@ export default function ItemInstanceTab({
   showRelocate,
   relocateCardRef,
   showEditInstance,
+  showQualityReview,
   onAddItem,
   onRemoveItem,
   onRelocate,
   onEditInstance,
+  onQualityReview,
   onInstanceNavigation,
   onRelocated,
-  onInstanceSaved
+  onInstanceSaved,
+  onQualityReviewDone,
 }: Props) {
   async function handleEntnehmen() {
     let confirmed = false;
@@ -77,6 +86,7 @@ export default function ItemInstanceTab({
       <div className="tab-actions">
         <PrintLabelButton itemId={item.ItemUUID} inline />
         <button type="button" className="btn" onClick={onEditInstance}>Bearbeiten</button>
+        <button type="button" className="btn" onClick={onQualityReview}>Neu bewerten</button>
         {!isOutOfStock && (
           <QrScanButton
             searchTarget={item.ItemUUID}
@@ -142,6 +152,26 @@ export default function ItemInstanceTab({
         ) : (
           <p className="muted">Keine Instanzdaten vorhanden.</p>
         )}
+        {instanceSpecRows.length > 0 && (
+          <>
+            <h4 style={{ marginTop: '1rem', marginBottom: '0.25rem' }}>Spezifikationen</h4>
+            <table className="details">
+              <tbody>
+                {instanceSpecRows.map(([k, v], idx) => {
+                  const cell = normalizeDetailValue(v);
+                  return (
+                    <tr key={`spec-${k}-${idx}`} className="responsive-row">
+                      <th className="responsive-th">{k}</th>
+                      <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
+                        {cell.content}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
         {isOutOfStock && <p className="muted">Instanz nicht mehr eingelagert.</p>}
       </div>
 
@@ -177,13 +207,21 @@ export default function ItemInstanceTab({
               einheit={item.Einheit}
               currentSerialNumber={item.SerialNumber}
               currentMacAddress={item.MacAddress}
-              currentQuality={item.Quality}
               onSaved={onInstanceSaved}
               onCancel={onInstanceSaved}
             />
           </div>
         </div>,
         document.body
+      )}
+
+      {showQualityReview && (
+        <QualityReviewModal
+          itemId={item.ItemUUID}
+          subCategory={item.Unterkategorien_A}
+          onDone={onQualityReviewDone}
+          onCancel={onQualityReviewDone}
+        />
       )}
 
       <div className="card grid-span-2">

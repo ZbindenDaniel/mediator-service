@@ -14,6 +14,10 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
+0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.
+0h. ✅ **Review flow only showed Ja/Abbrechen.** Extended dialog system with `confirmThreeWay`; `askFlag` now offers Ja/Nein/Abbrechen so reviewers can flag individual steps as wrong without aborting the review.
+0i. ✅ **Mobile QR scan navigation missing.** Added `QrScanButton` (mobile-only) to Header nav for direct label-scan → item/box navigation on mobile.
 0e. ✅ **Fix mobile navigation to lists and Einscannen visibility.** `mobileShowDetail` state in PanelContext drives `app-shell--mobile-detail` CSS class; slide transition replaces display-toggle; back button added; full-screen bypass for scan/placement routes.
 
 0c. **Verify tab icons render correctly once build runs.** react-icons/go icons GoInfo, GoPencil, GoFileMedia, GoPaperclip, GoTools are newly imported in DetailTabBar — confirm they exist in v5.5.0 (Octicons v19) when bundling.
@@ -90,7 +94,7 @@
 45. **Spec contracts: targeted enrich button in ItemKiTab.** When an item has missing required spec fields (visible as empty Langtext rows), add a "Gezielt anreichern" button in the KI tab that starts an agentic run pre-seeded with the missing field names as missingSpecFields. Requires fetching the spec contract client-side and computing the gap against the current Langtext.
 46. **Spec contracts: contract version stamping.** Add a specContractVersion nullable integer to agentic_runs to track which spec contract version was active when a run was completed. Enables detecting items that were enriched against an older contract version after the contract changes.
 
-41. **Quality re-check from ItemDetail.** Add a "Neu bewerten" button in the instance tab that opens `QualityReviewStep` with the item's existing `Unterkategorien_A` as `subCategory`. Contract version stored in `quality_assessments.contract_version` supports detecting stale assessments.
+41. ✅ **Quality re-check from ItemDetail.** "Neu bewerten" button added to instance tab `tab-actions`; opens `QualityReviewModal` wrapping `QualityReviewStep`. Results stored in `items.InstanceSpecs` (per-instance) and `quality_assessments`.
 
 42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (SQLite `json_extract`). Enables searching "16GB" to find matching Laptops.
 

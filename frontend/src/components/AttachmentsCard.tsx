@@ -158,7 +158,10 @@ export default function AttachmentsCard({
     if (!file) return;
     const ids = { artikelNummer, serialNumber, macAddress, ean };
     const options = buildBindingOptions(itemUUID, ids, externalDocs);
-    if (options.length < 2) {
+    // only show the binding choice modal when there is at least one external dir to route to;
+    // without ALT_DOC_DIRS all options share the same endpoint so the choice adds no value
+    const hasExternalOption = options.some(o => o.endpoint.kind === 'external');
+    if (!hasExternalOption) {
       doUpload(file, options[0]);
     } else {
       setPendingFile(file);

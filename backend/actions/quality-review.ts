@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { insertQualityAssessment, updateItemQualityAssessment, updateItemLangtextSpecs } from '../db';
+import { insertQualityAssessment, updateItemQualityAssessment, updateItemInstanceSpecs } from '../db';
 import {
   loadGeneralContract,
   loadSubCategoryContract,
@@ -85,10 +85,10 @@ const action = defineHttpAction({
 
       if (Object.keys(checkResponse.derivedSpecs).length > 0) {
         try {
-          updateItemLangtextSpecs(itemUUID, checkResponse.derivedSpecs);
+          updateItemInstanceSpecs(itemUUID, checkResponse.derivedSpecs);
         } catch (err) {
-          // Non-fatal: log but don't fail the whole request
-          console.warn('[quality-review] Failed to merge derived specs into Langtext', { itemUUID, error: err });
+          // Non-fatal: store failure doesn't fail the whole review
+          console.warn('[quality-review] Failed to store derived specs into InstanceSpecs', { itemUUID, error: err });
         }
       }
 

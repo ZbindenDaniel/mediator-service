@@ -71,7 +71,14 @@ const action = defineHttpAction({
       } catch (err) {
         console.error('Failed to determine total event count for overview', err);
       }
-      sendJson(res, 200, { counts, recentBoxes, recentEvents, agentic: { stateCounts: agenticStateCounts, enrichedItems }, totalCo2SavedKg });
+      let totalWeightKg = 0;
+      try {
+        totalWeightKg = (ctx.sumInventoryWeightKg?.get?.() as { total?: number } | undefined)?.total ?? 0;
+      } catch (err) {
+        console.error('Failed to load inventory weight aggregate', err);
+      }
+
+      sendJson(res, 200, { counts, recentBoxes, recentEvents, agentic: { stateCounts: agenticStateCounts, enrichedItems }, totalWeightKg, totalCo2SavedKg });
     } catch (err) {
       console.error('Overview endpoint failed', err);
       sendJson(res, 500, { error: (err as Error).message });

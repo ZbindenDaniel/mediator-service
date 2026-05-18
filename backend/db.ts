@@ -523,22 +523,26 @@ function parseLangtextForRow<T extends Record<string, unknown>>(
   row: T,
   context: string
 ): T {
-  if (!row || typeof row !== 'object' || !Object.prototype.hasOwnProperty.call(row, 'Langtext')) {
-    return row;
-  }
-  const rawValue = (row as Record<string, unknown>).Langtext;
+  if (!row || typeof row !== 'object') return row;
   const artikelNummer = typeof row.Artikel_Nummer === 'string' ? row.Artikel_Nummer : null;
   const itemUUID = typeof row.ItemUUID === 'string' ? row.ItemUUID : null;
-  const parsed = parseLangtext(rawValue, {
-    logger: console,
-    context,
-    artikelNummer,
-    itemUUID
-  });
-  return {
-    ...row,
-    Langtext: parsed ?? (rawValue === undefined ? null : (rawValue as string | null))
-  } as T;
+  let result = { ...row } as Record<string, unknown>;
+
+  if (Object.prototype.hasOwnProperty.call(row, 'Langtext')) {
+    const rawValue = row.Langtext;
+    const parsed = parseLangtext(rawValue, { logger: console, context, artikelNummer, itemUUID });
+    result.Langtext = parsed ?? (rawValue === undefined ? null : (rawValue as string | null));
+  }
+
+  if (Object.prototype.hasOwnProperty.call(row, 'InstanceSpecs')) {
+    const rawSpecs = row.InstanceSpecs;
+    if (rawSpecs !== null && rawSpecs !== undefined) {
+      const parsed = parseLangtext(rawSpecs, { logger: console, context: `${context}:instanceSpecs`, artikelNummer, itemUUID });
+      result.InstanceSpecs = parsed ?? null;
+    }
+  }
+
+  return result as T;
 }
 
 function wrapLangtextAwareStatement<T extends Database.Statement>(
@@ -1032,6 +1036,27 @@ function ensureQualityAssessmentContractColumns(database: Database.Database = db
 
 ensureQualityAssessmentContractColumns(db);
 
+function ensureInstanceSpecsColumn(database: Database.Database = db): void {
+  let itemColumns: Array<{ name: string }>;
+  try {
+    itemColumns = database.prepare('PRAGMA table_info(items)').all() as Array<{ name: string }>;
+  } catch (err) {
+    console.error('[db] Failed to inspect items table for InstanceSpecs column', err);
+    throw err;
+  }
+  if (!itemColumns.some((col) => col.name === 'InstanceSpecs')) {
+    try {
+      database.prepare('ALTER TABLE items ADD COLUMN InstanceSpecs TEXT').run();
+      console.info('[db] Added InstanceSpecs column to items');
+    } catch (err) {
+      console.error('[db] Failed to add InstanceSpecs column to items', err);
+      throw err;
+    }
+  }
+}
+
+ensureInstanceSpecsColumn(db);
+
 function ensureItemEanColumn(database: Database.Database = db): void {
   let refColumns: Array<{ name: string }> = [];
   try {
@@ -1233,6 +1258,7 @@ SELECT
   i.ShopwareVariantId AS ShopwareVariantId,
   i.SerialNumber AS SerialNumber,
   i.MacAddress AS MacAddress,
+  i.InstanceSpecs AS InstanceSpecs,
   -- TODO(agentic-search-term): Keep Suchbegriff in item selects for detail hydration.
   r.Suchbegriff AS Suchbegriff,
   r.Grafikname AS Grafikname,
@@ -3140,6 +3166,11 @@ export const countEnrichedItemReferences = db.prepare(`
   FROM item_refs
   WHERE Langtext IS NOT NULL AND TRIM(Langtext) != ''
 `);
+export const sumInventoryWeightKg = db.prepare(`
+  SELECT COALESCE(SUM(COALESCE(i.Auf_Lager, 0) * COALESCE(r.Gewicht_kg, 0)), 0) AS total
+  FROM items i
+  LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
+`);
 export const listRecentBoxes = db.prepare(
   `SELECT BoxID, LocationId, Label, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
 );
@@ -3497,6 +3528,22 @@ export function updateItemQualityAssessment(itemUUID: string, qualityId: number,
   updateItemQualityStatement.run({ qualityId, value, itemUUID });
 }
 
+/** Stores per-instance quality-derived spec key-value pairs into items.InstanceSpecs (JSON payload). */
+export function updateItemInstanceSpecs(itemUUID: string, derivedSpecs: Record<string, string>): void {
+  const row = db.prepare('SELECT InstanceSpecs FROM items WHERE ItemUUID = ?').get(itemUUID) as { InstanceSpecs: string | null } | undefined;
+  if (!row) return;
+
+  const existing = parseLangtext(row.InstanceSpecs) ?? {};
+  const base: Record<string, string | string[]> = typeof existing === 'string' ? {} : { ...existing };
+  for (const [key, value] of Object.entries(derivedSpecs)) {
+    base[key] = value;
+  }
+  const serialized = stringifyLangtext(base);
+  if (serialized !== null) {
+    db.prepare('UPDATE items SET InstanceSpecs = ? WHERE ItemUUID = ?').run(serialized, itemUUID);
+  }
+}
+
 /** Merges derived spec key-value pairs into the item's Langtext (as a JSON payload). */
 export function updateItemLangtextSpecs(itemUUID: string, derivedSpecs: Record<string, string>): void {
   const row = db.prepare(
@@ -3521,7 +3568,6 @@ export type BoxStub = {
   ShelfId: string;
   Description: string;
   NumberLooseItems: number;
-  NumberLooseBoxes: number;
   CreatedAt: string;
   CreatedBy: string;
   IsActive: number;
@@ -3539,7 +3585,7 @@ export const listStubs = {
 
 const insertStubStatement = db.prepare(`
   INSERT INTO box_stubs (Id, ShelfId, Description, NumberLooseItems, NumberLooseBoxes, CreatedAt, CreatedBy, IsActive, Notes)
-  VALUES (@Id, @ShelfId, @Description, @NumberLooseItems, @NumberLooseBoxes, @CreatedAt, @CreatedBy, 1, @Notes)
+  VALUES (@Id, @ShelfId, @Description, @NumberLooseItems, 0, @CreatedAt, @CreatedBy, 1, @Notes)
 `);
 
 export function createStub(params: {
@@ -3547,7 +3593,6 @@ export function createStub(params: {
   shelfId: string;
   description: string;
   numberLooseItems: number;
-  numberLooseBoxes: number;
   createdAt: string;
   createdBy: string;
   notes: string | null;
@@ -3557,7 +3602,6 @@ export function createStub(params: {
     ShelfId: params.shelfId,
     Description: params.description,
     NumberLooseItems: params.numberLooseItems,
-    NumberLooseBoxes: params.numberLooseBoxes,
     CreatedAt: params.createdAt,
     CreatedBy: params.createdBy,
     Notes: params.notes ?? null,
