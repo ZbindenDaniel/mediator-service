@@ -63,6 +63,8 @@ export interface ItemInstance {
   ShopwareVariantId?: string | null;
   SerialNumber?: string | null;
   MacAddress?: string | null;
+  // Per-instance specs derived from quality review (stored separately from shared reference Langtext).
+  InstanceSpecs?: LangtextPayload | string | null;
   // Importers normalize Langtext "Qualität" labels into this numeric grade (nullable when unknown).
   // TODO(item-create): Keep creation payload expectations for Quality/Auf_Lager aligned across frontend and import flows.
   Quality?: QualityValue;
