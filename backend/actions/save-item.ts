@@ -25,6 +25,7 @@ import { listRecentAgenticRunReviewHistoryBySubcategory } from '../db';
 import { getSpecContract } from '../contracts/registry';
 import { applySpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
+import { calculateCo2Savings } from '../lib/co2Calculator';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -983,6 +984,12 @@ const action = defineHttpAction({
           });
         }
 
+        const co2Einsparung = calculateCo2Savings({
+          unterkategorien: sanitizedItem.Unterkategorien_A != null ? [sanitizedItem.Unterkategorien_A] : [],
+          datumErfasst: typeof sanitizedItem.Datum_erfasst === 'string' ? sanitizedItem.Datum_erfasst : null,
+          quality: typeof sanitizedItem.Quality === 'number' ? sanitizedItem.Quality : null
+        }, console);
+
         let responsePayload: {
           item: Item;
           reference: ItemRef | null;
@@ -998,6 +1005,7 @@ const action = defineHttpAction({
           compatibleParentRefs: unknown[];
           attachments: unknown[];
           externalDocs: ExternalDocSummary[] | null;
+          co2Einsparung: ItemDetailResponse['co2Einsparung'];
         };
         try {
           const responseItem =
@@ -1018,7 +1026,8 @@ const action = defineHttpAction({
             compatibleAccessoryRefs,
             compatibleParentRefs,
             attachments,
-            externalDocs
+            externalDocs,
+            co2Einsparung
           };
         } catch (error) {
           console.error('[save-item] Failed to construct item detail response payload', {

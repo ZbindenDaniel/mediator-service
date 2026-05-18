@@ -8,6 +8,7 @@ import BoxDetail from './BoxDetail';
 import ItemCreate from './ItemCreate';
 import MultiItemSummary from './MultiItemSummary';
 import BulkItemActionBar from './BulkItemActionBar';
+import DashboardPanel from './DashboardPanel';
 import { getUser } from '../lib/user';
 import OverviewPanel from './OverviewPanel';
 
@@ -95,6 +96,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                   ) : entityType === 'box' && entityId ? (
                     <BoxDetail boxId={entityId} />
                   ) : (
+                    <DashboardPanel />
                     <OverviewPanel />
                   )}
                 </div>

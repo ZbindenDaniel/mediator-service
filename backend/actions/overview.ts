@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { AGENTIC_RUN_STATUSES, AGENTIC_RUN_STATUS_NOT_STARTED, normalizeAgenticRunStatus, type AgenticRunStatus } from '../../models';
+import { calculateCo2Savings } from '../lib/co2Calculator';
 import { defineHttpAction } from './index';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -42,6 +43,23 @@ const action = defineHttpAction({
         console.error('Failed to load agentic overview aggregates', err);
       }
 
+      let totalCo2SavedKg = 0;
+      try {
+        const co2Rows = (ctx.listItemsForCo2?.all?.() ?? []) as Array<{ Unterkategorien_A?: unknown; Datum_erfasst?: unknown; Quality?: unknown }>;
+        for (const row of co2Rows) {
+          const result = calculateCo2Savings({
+            unterkategorien: row.Unterkategorien_A != null ? [row.Unterkategorien_A] : [],
+            datumErfasst: typeof row.Datum_erfasst === 'string' ? row.Datum_erfasst : null,
+            quality: typeof row.Quality === 'number' ? row.Quality : null
+          }, console);
+          if (result) {
+            totalCo2SavedKg += result.co2SavedKg;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to compute total CO2 savings for overview', err);
+      }
+
       try {
         const totalEvents = ctx.countEvents.get().c || 0;
         if (totalEvents > OVERVIEW_EVENT_LIMIT) {
@@ -60,7 +78,7 @@ const action = defineHttpAction({
         console.error('Failed to load inventory weight aggregate', err);
       }
 
-      sendJson(res, 200, { counts, recentBoxes, recentEvents, agentic: { stateCounts: agenticStateCounts, enrichedItems }, totalWeightKg });
+      sendJson(res, 200, { counts, recentBoxes, recentEvents, agentic: { stateCounts: agenticStateCounts, enrichedItems }, totalWeightKg, totalCo2SavedKg });
     } catch (err) {
       console.error('Overview endpoint failed', err);
       sendJson(res, 500, { error: (err as Error).message });

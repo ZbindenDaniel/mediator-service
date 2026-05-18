@@ -2,6 +2,7 @@
 // TODO(item-detail-reference): Align reference payload documentation with item_refs usage.
 // TODO(agent): Revalidate item detail response fields after UI card splits to avoid missing instance metadata.
 // TODO(agent): Verify ItemDetailResponse instances always return ItemUUID and timestamps in production payloads.
+import type { Co2CalculationResult } from './co2';
 import type { AgenticRun } from './agentic-run';
 import type { AgenticRunStatus } from './agentic-statuses';
 import type { Box } from './box';
@@ -59,4 +60,5 @@ export interface ItemDetailResponse {
   media: string[];
   instances: ItemInstanceSummary[];
   externalDocs?: ExternalDocSummary[] | null;
+  co2Einsparung?: Co2CalculationResult | null;
 }

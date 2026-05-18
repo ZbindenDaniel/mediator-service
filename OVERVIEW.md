@@ -7,6 +7,10 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+762. ✅ CO₂ impact calculation: ADEME 2022 formula per item + aggregated total in stats card
+   - **Why:** Second-hand IT's primary value proposition is environmental — manufacturing dominates lifecycle CO₂ (70–80%). Surfacing the estimated savings per device and as a warehouse total makes this visible to operators without requiring a DB migration. Phase 1 computes at runtime; a pre-computed `co2_einsparung_kg` DB column is the Phase 2 path once volume warrants it.
+   - **Deferred:** DB column for pre-computed values; per-model PCF overrides (Dell/HP/Cisco vendor data); Boavizta API for unknown server configs; ESG quarterly export; storefront display; manufacture-year field (currently inferred from intake date).
+
 763. ✅ Six urgent fixes + mobile hamburger nav
    - **Why (quality specs):** `updateItemLangtextSpecs` merged per-instance quality-derived specs into the shared `item_refs.Langtext`, overwriting specs from prior instances of the same article. Added `InstanceSpecs TEXT` column to `items`, new `updateItemInstanceSpecs()` function, and display in the instance tab with the same table format as the reference tab.
    - **Why (QR scan):** Header `QrScanButton` lacked `callback="NavigateToEntity"`, so after scanning the user was returned to the previous page without navigating to the scanned entity.

@@ -1,6 +1,7 @@
 # Todo
 
 ## Confirmed Decisions
+- **CO₂ savings calculation:** ADEME 2022 formula (E_new × R_reuse × L_factor − O_refurb); coefficients in `contracts/impact/co2.json`; computed at runtime (no DB column in Phase 1). Phase 2 path: add `co2_einsparung_kg REAL` to items table once volume warrants pre-computation.
 
 - **Batch run conflicts:** when an agentic run is already in progress, new start requests should be ignored (no parallel start via repeated triggers).
 - **Qty=0 item visibility:** items with zero quantity should remain accessible only through explicit navigation (e.g., direct/scan/detail path), not broad default lists. A clear distinction between removed and deleted items has yet to be made.
