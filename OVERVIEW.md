@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+762. ✅ Gamification stats: StatsCard restored to the right panel empty-state via self-fetching OverviewPanel; three fun derived stats added — KI-Trefferquote %, Angereichert %, Gesamt-Gewicht; "Artikel ohne Behälter" renamed to "Heimatlose Artikel"
+   - **Why:** StatsCard existed but wasn't rendered anywhere. The new stats are computed from data already returned by /api/overview (KI-Trefferquote, Angereichert) plus one new SQL aggregate (sumInventoryWeightKg). All three rows hide gracefully when no data is available (no decided runs, no items, no weight data). OverviewPanel is a minimal self-fetching wrapper so Layout.tsx stays clean.
+   - **Deferred:** Quality distribution breakdown (would need a new GROUP BY query and more display space). "Most stubborn item" (highest RetryCount) — cute idea but needs a more prominent UI slot.
 765. ✅ Four v3.0 release bugs fixed: quality contracts missing in dist, attachments binding modal shown needlessly, review Ja/Nein/Abbrechen restored, mobile QR scan button added to header
    - **Why (contracts):** `scripts/build.js` did not copy `contracts/` to `dist/contracts/`. At runtime `backend/contracts/registry.ts` resolves `CONTRACTS_DIR` relative to `__dirname` which points inside `dist/`; without the copy the general and subcategory quality contracts returned 404, leaving the quality step empty. Fix: added `copyContracts()` to the build script.
    - **Why (attachments):** The binding modal appeared whenever `artikelNummer` was set (≥2 options), even though both "instance" and "artikel" options share the same backend endpoint (routing deferred in step 760). Modal now only shows when at least one option has `endpoint.kind === 'external'`.

@@ -9,6 +9,7 @@ import ItemCreate from './ItemCreate';
 import MultiItemSummary from './MultiItemSummary';
 import BulkItemActionBar from './BulkItemActionBar';
 import { getUser } from '../lib/user';
+import OverviewPanel from './OverviewPanel';
 
 function MultiItemDetailPanel() {
   const { multiSelection } = usePanelContext();
@@ -93,7 +94,9 @@ export default function Layout({ children }: { children: ReactNode }) {
                     <ItemDetail itemId={entityId} />
                   ) : entityType === 'box' && entityId ? (
                     <BoxDetail boxId={entityId} />
-                  ) : null}
+                  ) : (
+                    <OverviewPanel />
+                  )}
                 </div>
               )}
             </div>
