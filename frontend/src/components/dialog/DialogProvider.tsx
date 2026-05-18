@@ -17,7 +17,7 @@ import {
   DialogOverlay
 } from './presentational';
 
-export type DialogType = 'alert' | 'confirm' | 'prompt';
+export type DialogType = 'alert' | 'confirm' | 'prompt' | 'threeWay';
 
 export interface BaseDialogOptions {
   title?: ReactNode;
@@ -30,6 +30,10 @@ export interface ConfirmDialogOptions extends BaseDialogOptions {
   cancelLabel?: string;
 }
 
+export interface ThreeWayDialogOptions extends ConfirmDialogOptions {
+  rejectLabel?: string;
+}
+
 export interface PromptDialogOptions extends ConfirmDialogOptions {
   defaultValue?: string;
   placeholder?: string;
@@ -38,6 +42,8 @@ export interface PromptDialogOptions extends ConfirmDialogOptions {
 export interface DialogContextValue {
   alert: (options: BaseDialogOptions) => Promise<void>;
   confirm: (options: ConfirmDialogOptions) => Promise<boolean>;
+  /** Three-way confirm: true = confirmed (Ja), false = rejected (Nein), null = aborted (Abbrechen) */
+  confirmThreeWay: (options: ThreeWayDialogOptions) => Promise<boolean | null>;
   prompt: (options: PromptDialogOptions) => Promise<string | null>;
 }
 
@@ -57,6 +63,14 @@ interface ConfirmRequest {
   reject: (reason?: unknown) => void;
 }
 
+interface ThreeWayRequest {
+  id: string;
+  type: 'threeWay';
+  options: ThreeWayDialogOptions;
+  resolve: (value: boolean | null) => void;
+  reject: (reason?: unknown) => void;
+}
+
 interface PromptRequest {
   id: string;
   type: 'prompt';
@@ -65,11 +79,12 @@ interface PromptRequest {
   reject: (reason?: unknown) => void;
 }
 
-type DialogRequest = AlertRequest | ConfirmRequest | PromptRequest;
+type DialogRequest = AlertRequest | ConfirmRequest | ThreeWayRequest | PromptRequest;
 
 type DialogResolvers = {
   alert: AlertRequest;
   confirm: ConfirmRequest;
+  threeWay: ThreeWayRequest;
   prompt: PromptRequest;
 };
 
@@ -149,6 +164,15 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
     });
   }, [enqueue]);
 
+  const confirmThreeWay = useCallback<DialogContextValue['confirmThreeWay']>((options) => {
+    return new Promise<boolean | null>((resolve, reject) => {
+      enqueue('threeWay', options, (result) => {
+        console.log('Dialog threeWay resolved', result);
+        resolve(result);
+      }, reject);
+    });
+  }, [enqueue]);
+
   const prompt = useCallback<DialogContextValue['prompt']>((options) => {
     return new Promise<string | null>((resolve, reject) => {
       enqueue('prompt', options, (result) => {
@@ -161,8 +185,9 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
   const contextValue = useMemo<DialogContextValue>(() => ({
     alert,
     confirm,
+    confirmThreeWay,
     prompt
-  }), [alert, confirm, prompt]);
+  }), [alert, confirm, confirmThreeWay, prompt]);
 
   if (!registeredRef.current) {
     try {
@@ -202,6 +227,8 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
         activeRequest.resolve();
       } else if (activeRequest.type === 'confirm') {
         activeRequest.resolve(Boolean(value));
+      } else if (activeRequest.type === 'threeWay') {
+        activeRequest.resolve(true);
       } else {
         activeRequest.resolve((value ?? promptValueRef.current) as string | null);
       }
@@ -217,6 +244,20 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
     }
   }, [activeRequest, removeActiveRequest]);
 
+  const handleReject = useCallback(() => {
+    if (!activeRequest || activeRequest.type !== 'threeWay') {
+      return;
+    }
+    try {
+      activeRequest.resolve(false);
+      console.log('Dialog threeWay rejected (Nein)');
+    } catch (error) {
+      console.error('Failed to reject threeWay dialog', error);
+    } finally {
+      removeActiveRequest();
+    }
+  }, [activeRequest, removeActiveRequest]);
+
   const handleCancel = useCallback(() => {
     if (!activeRequest) {
       return;
@@ -226,6 +267,8 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
         activeRequest.resolve(null);
       } else if (activeRequest.type === 'confirm') {
         activeRequest.resolve(false);
+      } else if (activeRequest.type === 'threeWay') {
+        activeRequest.resolve(null);
       } else {
         activeRequest.reject(new Error('Alert dialog cancelled'));
       }
@@ -352,6 +395,11 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
                   ? undefined
                   : activeRequest.options.cancelLabel
               }
+              rejectLabel={
+                activeRequest.type === 'threeWay'
+                  ? (activeRequest.options as ThreeWayDialogOptions).rejectLabel
+                  : undefined
+              }
               onConfirm={() =>
                 handleConfirm(
                   activeRequest.type === 'prompt'
@@ -360,6 +408,7 @@ export function DialogProvider({ children }: PropsWithChildren<{}>) {
                 )
               }
               onCancel={handleCancel}
+              onReject={activeRequest.type === 'threeWay' ? handleReject : undefined}
             />
           </DialogContent>
         </DialogOverlay>
