@@ -7,6 +7,10 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+762. ✅ CO₂ impact calculation: ADEME 2022 formula per item + aggregated total in stats card
+   - **Why:** Second-hand IT's primary value proposition is environmental — manufacturing dominates lifecycle CO₂ (70–80%). Surfacing the estimated savings per device and as a warehouse total makes this visible to operators without requiring a DB migration. Phase 1 computes at runtime; a pre-computed `co2_einsparung_kg` DB column is the Phase 2 path once volume warrants it.
+   - **Deferred:** DB column for pre-computed values; per-model PCF overrides (Dell/HP/Cisco vendor data); Boavizta API for unknown server configs; ESG quarterly export; storefront display; manufacture-year field (currently inferred from intake date).
+
 761. ✅ Unified attachments tab: aggregates instance attachments + external docs (ALT_DOC_DIRS) in one view; upload modal routes files to the correct storage backend; external mount write/delete gated by per-dir `writable`/`deletable` flags (both default false)
    - **Why:** The previous implementation stored all uploads to the same endpoint with a label tag. The user wanted actual routing: external-mount uploads land in the correct filesystem path. The `deletable` flag defaults to false so no files are deleted without explicit opt-in per directory.
    - **Deferred:** Artikel_Nummer-keyed attachments (non-image product-level docs still go to item_attachments with a label); filesystem readiness check for ERP mirror target.
