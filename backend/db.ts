@@ -3133,6 +3133,11 @@ export const countEnrichedItemReferences = db.prepare(`
   FROM item_refs
   WHERE Langtext IS NOT NULL AND TRIM(Langtext) != ''
 `);
+export const sumInventoryWeightKg = db.prepare(`
+  SELECT COALESCE(SUM(COALESCE(i.Auf_Lager, 0) * COALESCE(r.Gewicht_kg, 0)), 0) AS total
+  FROM items i
+  LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
+`);
 export const listRecentBoxes = db.prepare(
   `SELECT BoxID, LocationId, Label, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
 );

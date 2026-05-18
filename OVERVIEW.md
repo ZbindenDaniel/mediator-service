@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+762. ✅ Gamification stats: StatsCard restored to the right panel empty-state via self-fetching OverviewPanel; three fun derived stats added — KI-Trefferquote %, Angereichert %, Gesamt-Gewicht; "Artikel ohne Behälter" renamed to "Heimatlose Artikel"
+   - **Why:** StatsCard existed but wasn't rendered anywhere. The new stats are computed from data already returned by /api/overview (KI-Trefferquote, Angereichert) plus one new SQL aggregate (sumInventoryWeightKg). All three rows hide gracefully when no data is available (no decided runs, no items, no weight data). OverviewPanel is a minimal self-fetching wrapper so Layout.tsx stays clean.
+   - **Deferred:** Quality distribution breakdown (would need a new GROUP BY query and more display space). "Most stubborn item" (highest RetryCount) — cute idea but needs a more prominent UI slot.
 761. ✅ Unified attachments tab: aggregates instance attachments + external docs (ALT_DOC_DIRS) in one view; upload modal routes files to the correct storage backend; external mount write/delete gated by per-dir `writable`/`deletable` flags (both default false)
    - **Why:** The previous implementation stored all uploads to the same endpoint with a label tag. The user wanted actual routing: external-mount uploads land in the correct filesystem path. The `deletable` flag defaults to false so no files are deleted without explicit opt-in per directory.
    - **Deferred:** Artikel_Nummer-keyed attachments (non-image product-level docs still go to item_attachments with a label); filesystem readiness check for ERP mirror target.
