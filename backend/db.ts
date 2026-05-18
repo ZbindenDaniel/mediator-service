@@ -3123,6 +3123,13 @@ export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
 export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
 export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
 // TODO(agentic-overview): Extend overview aggregates with shop/quality splits once chart layering is prioritized.
+export const listItemsForCo2 = db.prepare(`
+  SELECT r.Unterkategorien_A, i.Datum_erfasst, i.Quality
+  FROM items i
+  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
+  WHERE r.Unterkategorien_A IS NOT NULL
+`);
+
 export const countAgenticRunsByStatus = db.prepare(`
   SELECT COALESCE(NULLIF(TRIM(Status), ''), 'notStarted') AS status, COUNT(*) as c
   FROM agentic_runs

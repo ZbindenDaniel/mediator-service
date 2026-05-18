@@ -29,6 +29,7 @@ interface Props {
   printerReason?: string | null;
   health: string;
   agentic?: AgenticOverviewStats;
+  totalCo2SavedKg?: number;
   className?: string;
 }
 
@@ -61,7 +62,7 @@ function safeNumber(value: unknown): number {
 }
 
 // TODO(agentic-overview-chart): Add optional layered segments (shopartikel / quality) when data contract is finalized.
-export default function StatsCard({ counts, printerOk, printerReason, health, agentic, className }: Props) {
+export default function StatsCard({ counts, printerOk, printerReason, health, agentic, totalCo2SavedKg, className }: Props) {
   const classes = ['card', className].filter(Boolean).join(' ');
 
   const pieSegments = useMemo<PieSegment[]>(() => {
@@ -105,6 +106,9 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               <div>Behälter gesamt <b>{counts.boxes}</b></div>
               <div>Artikel gesamt: <b>{counts.items}</b></div>
               <div>Artikel ohne Behälter: <b>{counts.itemsNoBox}</b></div>
+              {totalCo2SavedKg != null && totalCo2SavedKg > 0 && (
+                <div>CO₂ gespart gesamt: <b>~{Math.round(totalCo2SavedKg / 5) * 5} kg</b></div>
+              )}
             </div>
           ) : (
             <div className="muted">Übersicht konnte nicht geladen werden</div>

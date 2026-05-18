@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "methodology": "ADEME 2022 — CO2_saved = E_new × R_reuse × L_factor − O_refurb",
+  "r_reuse": 0.85,
+  "o_refurb_kg": {
+    "light": 5,
+    "medium": 10,
+    "heavy": 20
+  },
+  "quality_to_refurb_intensity": {
+    "5": "light",
+    "4": "light",
+    "3": "medium",
+    "2": "medium",
+    "1": "heavy"
+  },
+  "default_age_yr": 4,
+  "categories": [
+    { "unterkategorie": 201, "label": "Laptop",               "e_new_kg": 180, "typical_life_new_yr": 5, "total_achievable_life_yr": 8  },
+    { "unterkategorie": 203, "label": "Netbook",              "e_new_kg": 180, "typical_life_new_yr": 5, "total_achievable_life_yr": 8  },
+    { "unterkategorie": 204, "label": "Tablet PC",            "e_new_kg": 180, "typical_life_new_yr": 5, "total_achievable_life_yr": 7  },
+    { "unterkategorie": 101, "label": "Komplettsysteme",      "e_new_kg": 205, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 102, "label": "Standard-PC",          "e_new_kg": 205, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 104, "label": "Barebones/Mini-PC",    "e_new_kg": 205, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 105, "label": "MAC",                  "e_new_kg": 300, "typical_life_new_yr": 5, "total_achievable_life_yr": 8  },
+    { "unterkategorie": 106, "label": "Workstation",          "e_new_kg": 400, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 108, "label": "Thin-Client",          "e_new_kg": 205, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 103, "label": "Server",               "e_new_kg": 1200,"typical_life_new_yr": 4, "total_achievable_life_yr": 8  },
+    { "unterkategorie": 301, "label": "Drucker",              "e_new_kg": 150, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 302, "label": "Multifunktionsgerät",  "e_new_kg": 150, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 401, "label": "Flachbildschirm",      "e_new_kg": 66,  "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 701, "label": "Graphikkarte",         "e_new_kg": 165, "typical_life_new_yr": 5, "total_achievable_life_yr": 7  },
+    { "unterkategorie": 702, "label": "Netzwerkkarte",        "e_new_kg": 30,  "typical_life_new_yr": 5, "total_achievable_life_yr": 7  },
+    { "unterkategorie": 1203,"label": "Switch/Hub",           "e_new_kg": 380, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 },
+    { "unterkategorie": 1204,"label": "Router/DSL",           "e_new_kg": 400, "typical_life_new_yr": 5, "total_achievable_life_yr": 10 }
+  ]
+}
