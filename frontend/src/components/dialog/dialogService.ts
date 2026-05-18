@@ -3,7 +3,8 @@ import {
   BaseDialogOptions,
   ConfirmDialogOptions,
   DialogContextValue,
-  PromptDialogOptions
+  PromptDialogOptions,
+  ThreeWayDialogOptions
 } from './DialogProvider';
 
 interface DialogImplementation extends DialogContextValue {}
@@ -48,6 +49,15 @@ class DialogService {
       return this.getImplementation('confirm').confirm(options);
     } catch (error) {
       console.error('Dialog service confirm failed', error);
+      return Promise.reject(error);
+    }
+  }
+
+  confirmThreeWay(options: ThreeWayDialogOptions) {
+    try {
+      return this.getImplementation('confirmThreeWay').confirmThreeWay(options);
+    } catch (error) {
+      console.error('Dialog service confirmThreeWay failed', error);
       return Promise.reject(error);
     }
   }

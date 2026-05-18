@@ -2,6 +2,7 @@
 export type {
   BaseDialogOptions,
   ConfirmDialogOptions,
+  ThreeWayDialogOptions,
   PromptDialogOptions,
   DialogContextValue
 } from './DialogProvider';

@@ -1660,20 +1660,22 @@ export default function ItemDetail({ itemId }: Props) {
       </div>
     );
 
+    // returns true (Ja), false (Nein/does not match), or null (Abbrechen/abort review)
     const askFlag = async (
       stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
       title: string,
       message: React.ReactNode
-    ): Promise<true | null> => {
+    ): Promise<boolean | null> => {
       try {
-        const confirmed = await dialogService.confirm({
+        const result = await dialogService.confirmThreeWay({
           title,
           message,
           confirmLabel: 'Ja',
+          rejectLabel: 'Nein',
           cancelLabel: 'Abbrechen',
           contentClassName: 'review-dialog'
         });
-        if (!confirmed) {
+        if (result === null) {
           logger.warn?.('ItemDetail: Agentic review checklist step aborted via cancel', {
             itemId,
             stepKey,
@@ -1685,9 +1687,9 @@ export default function ItemDetail({ itemId }: Props) {
           itemId,
           stepKey,
           completed: true,
-          answer: true
+          answer: result
         });
-        return true;
+        return result;
       } catch (error) {
         logError('ItemDetail: Failed to capture structured review flag', error, {
           itemId,
