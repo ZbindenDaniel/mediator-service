@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import { GoArchive, GoListUnordered, GoPlus, GoPulse, GoQuestion, GoSearch, GoTag, GoThreeBars } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoLog, GoQuestion, GoSearch, GoGift, GoHash } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -169,7 +169,7 @@ export default function Header() {
             title="Navigation"
             onClick={() => setNavOpen((v) => !v)}
           >
-            <GoThreeBars aria-hidden="true" />
+            <GoHash aria-hidden="true" />
           </button>
 
           {/* Nav items — always visible on desktop, toggled on mobile */}
@@ -186,18 +186,18 @@ export default function Header() {
             <Link to="/items" aria-label="Artikelliste" title="Artikelliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoListUnordered aria-hidden="true" />
             </Link>
-            <Link to="/boxes" aria-label="Behälterliste" title="Behälterliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/boxes" aria-label="Behälter" title="Behälterliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoArchive aria-hidden="true" />
             </Link>
             <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-              <GoPulse aria-hidden="true" />
+              <GoLog aria-hidden="true" />
             </Link>
-            <Link to="/stubs" aria-label="Stubs" title="Stubs" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-              <GoTag aria-hidden="true" />
+            <Link to="/stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+              <GoGift aria-hidden="true" />
             </Link>
-            <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            {/* <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoQuestion aria-hidden="true" />
-            </Link>
+            </Link> */}
             <QrScanButton callback="NavigateToEntity" className="header-nav__icon-btn" label="QR-Code scannen" />
           </div>
           <form

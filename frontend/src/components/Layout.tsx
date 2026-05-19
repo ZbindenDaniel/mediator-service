@@ -96,8 +96,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                   ) : entityType === 'box' && entityId ? (
                     <BoxDetail boxId={entityId} />
                   ) : (
-                    <DashboardPanel />
-                    <OverviewPanel />
+                    <><DashboardPanel /><OverviewPanel /></>
                   )}
                 </div>
               )}

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { GoCpu, GoFileMedia, GoInfo, GoPaperclip, GoPencil, GoPackage, GoPulse, GoTag, GoTools } from 'react-icons/go';
+import { GoDependabot, GoFileMedia, GoInfo, GoPaperclip, GoPencil, GoCpu, GoLog, GoTag, GoPlug } from 'react-icons/go';
 import { usePanelContext } from '../context/PanelContext';
 
 interface TabDef {
@@ -14,20 +14,20 @@ interface Props {
 }
 
 const ITEM_BASE_TABS: TabDef[] = [
-  { id: 'instance', label: 'Vorrat', icon: <GoPackage aria-hidden="true" /> },
+  { id: 'instance', label: 'Vorrat', icon: <GoCpu aria-hidden="true" /> },
   { id: 'reference', label: 'Referenz', icon: <GoTag aria-hidden="true" /> },
-  { id: 'ki', label: 'KI', icon: <GoCpu aria-hidden="true" /> },
+  { id: 'ki', label: 'KI', icon: <GoDependabot aria-hidden="true" /> },
   { id: 'images', label: 'Bilder', icon: <GoFileMedia aria-hidden="true" /> },
   { id: 'attachments', label: 'Anhänge', icon: <GoPaperclip aria-hidden="true" /> },
-  { id: 'accessories', label: 'Zubehör', icon: <GoTools aria-hidden="true" /> },
-  { id: 'events', label: 'Aktivitäten', icon: <GoPulse aria-hidden="true" /> },
+  { id: 'accessories', label: 'Zubehör', icon: <GoPlug aria-hidden="true" /> },
+  { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" /> },
 ];
 
 const BOX_BASE_TABS: TabDef[] = [
   { id: 'info', label: 'Info', icon: <GoInfo aria-hidden="true" /> },
   { id: 'notizen', label: 'Notizen', icon: <GoPencil aria-hidden="true" /> },
-  { id: 'items', label: 'Artikel', icon: <GoPackage aria-hidden="true" /> },
-  { id: 'events', label: 'Aktivitäten', icon: <GoPulse aria-hidden="true" /> },
+  { id: 'items', label: 'Artikel', icon: <GoCpu aria-hidden="true" /> },
+  { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" /> },
 ];
 
 const STUBS_TAB: TabDef = { id: 'stubs', label: 'Stubs', icon: <GoTag aria-hidden="true" /> };

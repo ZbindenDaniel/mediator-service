@@ -1110,11 +1110,12 @@ export default function BoxDetail({ boxId }: Props) {
 
             {effectiveTab === 'stubs' && isShelf && (
               <div className="card">
-                <h3>Stubs</h3>
+                <h3>Gefundes</h3>
+                <h2>In den Lagern</h2>
                 {stubsLoading && <p className="muted">Wird geladen…</p>}
                 {stubsError && <p className="muted" role="alert" style={{ color: '#b3261e' }}>{stubsError}</p>}
                 {!stubsLoading && stubs.length === 0 && !stubsError && (
-                  <p className="muted">Keine Stubs für dieses Regal.</p>
+                  <p className="muted">nüüt für dieses Regal.</p>
                 )}
                 {stubs.length > 0 && (
                   <table className="item-list">

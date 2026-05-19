@@ -120,8 +120,9 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               <div>Artikel gesamt: <b>{counts.items}</b></div>
               <div>Artikel ohne Behälter: <b>{counts.itemsNoBox}</b></div>
               {totalCo2SavedKg != null && totalCo2SavedKg > 0 && (
-                <div>CO₂ gespart gesamt: <b>~{Math.round(totalCo2SavedKg / 5) * 5} kg</b></div>
-              <div>Heimatlose Artikel: <b>{counts.itemsNoBox}</b></div>
+                <><div>CO₂ gespart gesamt: <b>~{Math.round(totalCo2SavedKg / 5) * 5} kg</b></div>
+                <div>Heimatlose Artikel: <b>{counts.itemsNoBox}</b></div></>
+            )}
               {hitRate !== null && (
                 <div>KI-Trefferquote: <b>{hitRate}%</b></div>
               )}
