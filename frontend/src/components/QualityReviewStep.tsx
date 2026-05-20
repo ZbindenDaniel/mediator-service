@@ -138,7 +138,8 @@ export default function QualityReviewStep({
   ];
   const qualityValue = deriveQualityFromAnswers(activeContracts, answers);
   const aiPriority = deriveAiPriorityFromAssessment(qualityValue);
-  const canSubmit = allRequiredAnswered(questions, answers);
+  // All questions are optional — users may skip any they don't know (e.g. RAM on a laptop).
+  const canSubmit = true;
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();

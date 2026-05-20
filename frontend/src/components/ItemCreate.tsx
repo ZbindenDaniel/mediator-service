@@ -27,6 +27,7 @@ import { logger } from '../utils/logger';
 import { normalizeQuality } from '../../../models/quality';
 import QualityReviewStep from './QualityReviewStep';
 import type { QualityReviewResult } from './QualityReviewStep';
+import QualityBadge from './QualityBadge';
 
 // TODO(agentic-trigger-skip-ui): Suppress alerts for already-queued agentic runs.
 
@@ -615,6 +616,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   const [ocrPhoto, setOcrPhoto] = useState<string | null>(null);
   const [ocrCaptureOpen, setOcrCaptureOpen] = useState(false);
   const [qualityReviewResult, setQualityReviewResult] = useState<QualityReviewResult | null>(null);
+  const [qualitySkippedForMultiple, setQualitySkippedForMultiple] = useState(false);
   const dialog = useDialog();
   const queryPrefilledBoxRef = useRef<string | null>(null);
 
@@ -1403,6 +1405,18 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
             <div className="stack">
               <div>{successMessage}</div>
               <div>Artikelnummer: {artikelNummer || 'Unbekannt'}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {qualityReviewResult ? (
+                  <>
+                    <span>Qualität:</span>
+                    <QualityBadge value={qualityReviewResult.assessment.value} />
+                  </>
+                ) : qualitySkippedForMultiple ? (
+                  <span className="muted">Qualität bitte bei jedem Exemplar einzeln bewerten.</span>
+                ) : (
+                  <span className="muted">Qualität noch nicht bewertet.</span>
+                )}
+              </div>
               <div>
                 {allPrintItemIds.length > 0 ? (
                   allPrintItemIds.map((printId) => (
@@ -1442,6 +1456,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
           console.log('Resetting item creation form for additional entry after success dialog choice.');
           // Re-seed BoxID from URL param so the next item stays associated with the same box.
           const boxReset: Partial<ItemFormData> = preselectedBoxId ? { BoxID: preselectedBoxId } : {};
+          setQualitySkippedForMultiple(false);
           setCreationStep('basicInfo');
           setDraft(() => ({ ...boxReset }));
           setBasicInfo(() => ({ ...boxReset }));
@@ -1492,10 +1507,22 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
         Artikelbeschreibung: trimmedDescription,
         Artikel_Nummer: trimmedNumber
       };
-      console.log('Advancing to quality review with basic info', normalized);
-      setBasicInfo(normalized);
-      setManualDraft(normalized);
-      setCreationStep('qualityReview');
+      const isMultipleStk = normalized.Einheit === 'Stk' && (Number(normalized.Anzahl) || 1) > 1;
+      if (isMultipleStk) {
+        // Each Stk unit is a separate physical item with potentially different condition — skip shared review.
+        console.log('Skipping quality review for multiple Stk items', { anzahl: normalized.Anzahl });
+        setQualitySkippedForMultiple(true);
+        setQualityReviewResult(null);
+        setBasicInfo(normalized);
+        setManualDraft(normalized);
+        setCreationStep('matchSelection');
+      } else {
+        setQualitySkippedForMultiple(false);
+        console.log('Advancing to quality review with basic info', normalized);
+        setBasicInfo(normalized);
+        setManualDraft(normalized);
+        setCreationStep('qualityReview');
+      }
     } catch (err) {
       console.error('Failed to prepare basic info for next step', err);
     }

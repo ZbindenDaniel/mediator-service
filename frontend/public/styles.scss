@@ -3070,6 +3070,17 @@ button:focus {
     min-width: unset;
 }
 
+.quality-missing-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
 .shop-badge {
     display: inline-flex;
     justify-content: center;
