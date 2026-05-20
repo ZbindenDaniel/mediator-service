@@ -1,5 +1,13 @@
 export type QualityQuestionType = 'select' | 'boolean';
 
+/** Makes a question conditionally visible based on another question's answer. */
+export interface ShowIfCondition {
+  /** ID of another question whose answer controls visibility */
+  questionId: string;
+  /** Show this question only when that question's answer equals this value */
+  value: string;
+}
+
 export interface SelectQuestion {
   id: string;
   type: 'select';
@@ -12,6 +20,8 @@ export interface SelectQuestion {
   specValue?: string;
   /** Maps answer values to a quality impact score (1–5); final quality = min of all mapped answers */
   qualityImpact?: Record<string, number>;
+  /** Only show this question when the referenced question has the specified answer */
+  showIf?: ShowIfCondition;
 }
 
 export interface BooleanQuestion {
@@ -22,6 +32,8 @@ export interface BooleanQuestion {
   specField?: string;
   specValue?: string;
   qualityImpact?: Record<'true' | 'false', number>;
+  /** Only show this question when the referenced question has the specified answer */
+  showIf?: ShowIfCondition;
 }
 
 export type QualityQuestion = SelectQuestion | BooleanQuestion;

@@ -9,9 +9,10 @@ interface Props {
   subCategory?: number | null;
   onDone: () => void;
   onCancel: () => void;
+  initialAnswers?: Record<string, string>;
 }
 
-export default function QualityReviewModal({ itemId, subCategory, onDone, onCancel }: Props) {
+export default function QualityReviewModal({ itemId, subCategory, onDone, onCancel, initialAnswers }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +63,7 @@ export default function QualityReviewModal({ itemId, subCategory, onDone, onCanc
               onComplete={(result) => void handleComplete(result)}
               onSkip={onCancel}
               layout="embedded"
+              initialAnswers={initialAnswers}
             />
             {error && <p className="error" style={{ margin: '0.5rem 1rem' }}>{error}</p>}
           </>

@@ -1,12 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
   "questions": [
     {
       "id": "condition_optical",
       "type": "select",
       "question": "Optischer Zustand?",
       "values": ["Wie neu", "Gut", "Gebrauchsspuren", "Beschädigt"],
-      "required": true,
       "specField": "Zustand",
       "specValue": "%v",
       "qualityImpact": {
@@ -17,17 +16,23 @@
       }
     },
     {
-      "id": "is_complete",
-      "type": "boolean",
-      "question": "Ist der Artikel vollständig?",
-      "required": true,
-      "qualityImpact": { "true": 5, "false": 3 }
+      "id": "lieferumfang",
+      "type": "select",
+      "question": "Lieferumfang?",
+      "values": ["Vollständig", "Netzteil fehlt", "Kabel fehlt", "Teile fehlen"],
+      "specField": "Lieferumfang",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Vollständig": 5,
+        "Netzteil fehlt": 4,
+        "Kabel fehlt": 4,
+        "Teile fehlen": 3
+      }
     },
     {
       "id": "is_functional",
       "type": "boolean",
       "question": "Ist der Artikel funktionsfähig?",
-      "required": true,
       "qualityImpact": { "true": 5, "false": 1 }
     }
   ]

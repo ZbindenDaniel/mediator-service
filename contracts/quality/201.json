@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 201,
   "questions": [
     {
@@ -27,6 +27,14 @@
       "specValue": "%v GB"
     },
     {
+      "id": "drive_type",
+      "type": "select",
+      "question": "Speichertyp?",
+      "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
+      "specField": "Speichertyp",
+      "specValue": "%v"
+    },
+    {
       "id": "battery_condition",
       "type": "select",
       "question": "Akkuzustand?",
@@ -39,6 +47,21 @@
         "Schwach (<50%)": 3,
         "Defekt": 2
       }
+    },
+    {
+      "id": "has_os",
+      "type": "boolean",
+      "question": "Betriebssystem installiert?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    },
+    {
+      "id": "os_installed",
+      "type": "select",
+      "question": "Welches Betriebssystem?",
+      "values": ["Windows 11 Pro", "Windows 11 Home", "Windows 10 Pro", "Windows 10 Home", "macOS", "Linux", "Chrome OS"],
+      "specField": "Betriebssystem",
+      "specValue": "%v",
+      "showIf": { "questionId": "has_os", "value": "true" }
     }
   ]
 }

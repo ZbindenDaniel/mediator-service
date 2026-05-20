@@ -3528,6 +3528,24 @@ export function updateItemQualityAssessment(itemUUID: string, qualityId: number,
   updateItemQualityStatement.run({ qualityId, value, itemUUID });
 }
 
+/** Returns the saved responses and notes for an item's current quality assessment, or empty responses if none. */
+export function getItemQualityResponses(itemUUID: string): { responses: Record<string, string>; notes: string | null } {
+  const itemRow = db.prepare('SELECT QualityId FROM items WHERE ItemUUID = ?').get(itemUUID) as { QualityId: number | null } | undefined;
+  if (!itemRow || itemRow.QualityId == null) return { responses: {}, notes: null };
+  const qaRow = getQualityAssessmentStatement.get(itemRow.QualityId) as Record<string, unknown> | undefined;
+  if (!qaRow) return { responses: {}, notes: null };
+  let responses: Record<string, string> = {};
+  if (typeof qaRow.responses === 'string') {
+    try {
+      const parsed = JSON.parse(qaRow.responses) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        responses = parsed as Record<string, string>;
+      }
+    } catch { /* stored JSON is corrupt — return empty */ }
+  }
+  return { responses, notes: (qaRow.notes as string | null) ?? null };
+}
+
 /** Stores per-instance quality-derived spec key-value pairs into items.InstanceSpecs (JSON payload). */
 export function updateItemInstanceSpecs(itemUUID: string, derivedSpecs: Record<string, string>): void {
   const row = db.prepare('SELECT InstanceSpecs FROM items WHERE ItemUUID = ?').get(itemUUID) as { InstanceSpecs: string | null } | undefined;
