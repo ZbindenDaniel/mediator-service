@@ -8,6 +8,7 @@ frontend/public/bundle.js.map
 frontend/public/styles.css
 frontend/public/styles.css.map
 dist/
+build/
 
 logs/
 
