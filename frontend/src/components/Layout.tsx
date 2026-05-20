@@ -40,7 +40,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!getUser() && !pathname.startsWith('/hilfe')) {
+    if (!getUser() && !pathname.startsWith('/hilfe') && !pathname.startsWith('/admin')) {
       navigate('/hilfe?doc=Erste-Schritte', { replace: true });
     }
   // only run on mount — pathname intentionally excluded to avoid redirect loops during navigation

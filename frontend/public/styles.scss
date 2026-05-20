@@ -3311,3 +3311,78 @@ button:focus {
         width: 100%;
     }
 }
+
+/* Admin page */
+.admin-page {
+    padding: var(--pad);
+}
+
+.admin-page__title {
+    font-size: 1.3rem;
+    margin: 0 0 12px;
+}
+
+.admin-page__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 12px;
+    align-items: start;
+}
+
+.admin-export-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+
+    &:last-child { border-bottom: none; }
+}
+
+.admin-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+
+    &--ok { background: var(--positive); color: var(--fg); }
+    &--error { background: var(--negative); color: var(--fg); }
+}
+
+.admin-agentic-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-bottom: 10px;
+}
+
+.admin-agentic-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 60px;
+}
+
+.admin-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+@media (max-width: 600px) {
+    .admin-page__grid {
+        grid-template-columns: 1fr;
+    }
+}
