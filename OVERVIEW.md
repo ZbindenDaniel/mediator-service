@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+766. ✅ Admin page at /admin with 6 operational sections: import, export, shelf creation, print queue, KI queue, system status
+   - **Why:** Admin operations were scattered — shelf creation at a one-off URL, import buried in the items list, export only accessible via bulk-selection. Consolidating them into a single `/admin` page (gear icon in header nav) gives operators one place for all system-level tasks. Existing components (`ImportCard`, `ShelfCreateForm`) reused directly; export and agentic-restart needed only small new backend actions. The page renders in `panel-main` like `/hilfe`, keeping the panel shell intact.
+   - **Deferred:** Auth gating (no auth layer exists in the app). Periodic backup trigger (todo item 39 — Phase 1 could add a manual button here). Batch label reprint from print queue (button exists but reprint endpoint not yet wired per-job). `/admin/shelves/new` now redirects to `/admin`.
 766. ✅ Quality assessment UX: nullable questions, skip for multi-Stk, quality in success dialog, missing-quality prompt, list filter
    - **Why (nullable questions):** The required-gate on `QualityReviewStep` blocked submission unless all 3 general questions were answered. Operators often don't know every detail (e.g. RAM on a laptop); made all questions optional — quality defaults to 3 (Ok) when no quality-impacting answers are given.
    - **Why (multi-Stk skip):** Creating multiple Stk items with one shared quality review was wrong — each physical unit may be in different condition. The quality step is now bypassed when `Einheit=Stk && Anzahl>1`; a note in the success dialog and an amber banner on each item instance prompt per-item review. Menge items keep the quality step (one product, many units).
