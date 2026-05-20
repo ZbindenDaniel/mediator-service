@@ -130,7 +130,7 @@
 
 ## Priority 3 — Infrastructure & Platform
 
-33. **Admin mode / admin page for operational controls.** Consolidate admin operations (export, shelves, related tasks) into a single scoped surface with clear boundaries.
+33. ✅ **Admin mode / admin page for operational controls.** `/admin` page with import, export, shelf creation, print queue, KI queue, and system status. Gear icon in header nav. Old `/admin/shelves/new` redirects to `/admin`.
 
 34. **Add WebDAV folder for temporary media, transcripts, and service-related data.** Support the new transcript persistence location and other temporary media storage needs.
 

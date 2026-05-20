@@ -7,6 +7,10 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+766. ✅ Admin page at /admin with 6 operational sections: import, export, shelf creation, print queue, KI queue, system status
+   - **Why:** Admin operations were scattered — shelf creation at a one-off URL, import buried in the items list, export only accessible via bulk-selection. Consolidating them into a single `/admin` page (gear icon in header nav) gives operators one place for all system-level tasks. Existing components (`ImportCard`, `ShelfCreateForm`) reused directly; export and agentic-restart needed only small new backend actions. The page renders in `panel-main` like `/hilfe`, keeping the panel shell intact.
+   - **Deferred:** Auth gating (no auth layer exists in the app). Periodic backup trigger (todo item 39 — Phase 1 could add a manual button here). Batch label reprint from print queue (button exists but reprint endpoint not yet wired per-job). `/admin/shelves/new` now redirects to `/admin`.
+
 762. ✅ CO₂ impact calculation: ADEME 2022 formula per item + aggregated total in stats card
    - **Why:** Second-hand IT's primary value proposition is environmental — manufacturing dominates lifecycle CO₂ (70–80%). Surfacing the estimated savings per device and as a warehouse total makes this visible to operators without requiring a DB migration. Phase 1 computes at runtime; a pre-computed `co2_einsparung_kg` DB column is the Phase 2 path once volume warrants it.
    - **Deferred:** DB column for pre-computed values; per-model PCF overrides (Dell/HP/Cisco vendor data); Boavizta API for unknown server configs; ESG quarterly export; storefront display; manufacture-year field (currently inferred from intake date).
