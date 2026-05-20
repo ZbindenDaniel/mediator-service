@@ -38,16 +38,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # TODO(media-storage): Ensure media directory defaults remain aligned with compose and runtime overrides.
-ENV NODE_ENV=production \
-    HTTP_PORT=8080 \
-    MEDIA_DIR=/app/dist/backend/media \
-    WEB_DAV_DIR=/app/dist/backend/webDav \
-    AGENTIC_MODEL_PROVIDER=ollama \
-    AGENTIC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
-    AGENTIC_OLLAMA_MODEL=gpt-oss:20b \
-    AGENTIC_OPENAI_BASE_URL=https://api.openai.com/v1 \
-    AGENTIC_OPENAI_MODEL=gpt-4o-mini \
-    SEARCH_WEB_ALLOWED_ENGINES=google,duckduckgo,brave
+# ENV NODE_ENV=production \
+#     HTTP_PORT=8080 \
+#     MEDIA_DIR=/app/dist/backend/media \
+#     WEB_DAV_DIR=/app/dist/backend/webDav \
+#     AGENTIC_MODEL_PROVIDER=ollama \
+#     AGENTIC_OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+#     AGENTIC_OLLAMA_MODEL=gpt-oss:20b \
+#     AGENTIC_OPENAI_BASE_URL=https://api.openai.com/v1 \
+#     AGENTIC_OPENAI_MODEL=gpt-4o-mini \
+#     SEARCH_WEB_ALLOWED_ENGINES=google,duckduckgo,brave
 
 WORKDIR /app
 
@@ -69,8 +69,8 @@ RUN chmod +x /app/backend/scripts/erp-sync.sh
 # TODO(media-storage): Revisit directory creation if media paths move outside /app.
 RUN mkdir -p \
         dist/backend/data \
-        "${MEDIA_DIR}" \
-        "${WEB_DAV_DIR}" \
+        /app/dist/backend/media \
+        ${WEB_DAV_DIR:-dist/backend/webDav} \
         dist/frontend/public \
         /var/lib/mediator/inbox \
         /var/lib/mediator/archive \
