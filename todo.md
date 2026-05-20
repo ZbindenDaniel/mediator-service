@@ -96,6 +96,8 @@
 
 41. ✅ **Quality re-check from ItemDetail.** "Neu bewerten" button added to instance tab `tab-actions`; opens `QualityReviewModal` wrapping `QualityReviewStep`. Results stored in `items.InstanceSpecs` (per-instance) and `quality_assessments`.
 
+41b. ✅ **Quality assessment visibility & flow.** Quality questions are now all optional (submit without answering all). Multiple Stk creation skips quality (each item gets an amber missing-quality prompt). Success dialog shows quality badge or note. Item list has Alle/Mit Bewertung/Ohne Bewertung filter dropdown.
+
 42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (SQLite `json_extract`). Enables searching "16GB" to find matching Laptops.
 
 43. **Quality contracts: extend question types.** Currently `select` and `boolean` only. Add `text` (free-entry) and `range` (numeric slider) types to the contract schema and `QualityReviewStep` renderer.

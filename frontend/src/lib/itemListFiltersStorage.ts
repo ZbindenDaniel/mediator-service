@@ -33,6 +33,7 @@ export type ItemListFilters = {
   sortDirection: 'asc' | 'desc';
   entityFilter: 'all' | 'instances' | 'references';
   qualityThreshold: number;
+  qualityFilter: 'all' | 'rated' | 'missing';
 };
 
 export type ItemListFilterChangeDetail = {
@@ -70,7 +71,8 @@ const DEFAULT_FILTERS: ItemListFilters = {
   sortKey: 'artikelbeschreibung',
   sortDirection: 'asc',
   entityFilter: 'instances',
-  qualityThreshold: QUALITY_MIN
+  qualityThreshold: QUALITY_MIN,
+  qualityFilter: 'all'
 };
 
 export function getDefaultItemListFilters(): ItemListFilters {
@@ -93,6 +95,7 @@ export function hasNonDefaultFilters(
     || filters.sortDirection !== defaults.sortDirection
     || filters.entityFilter !== defaults.entityFilter
     || filters.qualityThreshold !== defaults.qualityThreshold
+    || filters.qualityFilter !== defaults.qualityFilter
   );
 }
 
@@ -128,6 +131,14 @@ export function getActiveFilterDescriptions(
   if (filters.qualityThreshold > defaults.qualityThreshold) {
     const label = QUALITY_LABELS[filters.qualityThreshold] ?? `mind. ${filters.qualityThreshold}`;
     active.push(`Qualität: ${label} oder besser`);
+  }
+  if (filters.qualityFilter !== defaults.qualityFilter) {
+    const qualityFilterLabels: Record<ItemListFilters['qualityFilter'], string> = {
+      all: 'Alle',
+      rated: 'Mit Bewertung',
+      missing: 'Ohne Bewertung',
+    };
+    active.push(`Qualität: ${qualityFilterLabels[filters.qualityFilter]}`);
   }
   if (filters.placementFilter !== defaults.placementFilter) {
     const placementLabels: Record<ItemListFilters['placementFilter'], string> = {
@@ -190,6 +201,9 @@ export function buildItemListQueryParams(filters: ItemListFilters): URLSearchPar
     if (filters.qualityThreshold > QUALITY_MIN) {
       query.set('qualityAtLeast', filters.qualityThreshold.toString());
     }
+    if (filters.qualityFilter !== 'all') {
+      query.set('qualityFilter', filters.qualityFilter);
+    }
   } catch (error) {
     logError('Failed to build item list query params', error, { filters });
   }
@@ -228,6 +242,12 @@ export function loadItemListFilters(
 
     if (typeof parsed.qualityThreshold === 'number') {
       merged.qualityThreshold = normalizeQuality(parsed.qualityThreshold, logger) ?? QUALITY_MIN;
+    }
+
+    if (parsed.qualityFilter === 'all' || parsed.qualityFilter === 'rated' || parsed.qualityFilter === 'missing') {
+      merged.qualityFilter = parsed.qualityFilter;
+    } else if ((parsed as Record<string, unknown>).qualityFilter !== undefined) {
+      logger.warn?.('Ignoring invalid stored quality filter', (parsed as Record<string, unknown>).qualityFilter);
     }
 
     if (parsed.agenticStatusFilter === 'any' || AGENTIC_RUN_STATUSES.includes(parsed.agenticStatusFilter as AgenticRunStatus)) {

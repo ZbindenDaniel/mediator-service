@@ -7,6 +7,14 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+766. ✅ Quality assessment UX: nullable questions, skip for multi-Stk, quality in success dialog, missing-quality prompt, list filter
+   - **Why (nullable questions):** The required-gate on `QualityReviewStep` blocked submission unless all 3 general questions were answered. Operators often don't know every detail (e.g. RAM on a laptop); made all questions optional — quality defaults to 3 (Ok) when no quality-impacting answers are given.
+   - **Why (multi-Stk skip):** Creating multiple Stk items with one shared quality review was wrong — each physical unit may be in different condition. The quality step is now bypassed when `Einheit=Stk && Anzahl>1`; a note in the success dialog and an amber banner on each item instance prompt per-item review. Menge items keep the quality step (one product, many units).
+   - **Why (success dialog):** Quality result was invisible after creation — the dialog showed article number and print button but nothing about quality. Added a quality badge (if assessed) or an explanatory note (if skipped).
+   - **Why (missing-quality prompt):** Items with null quality showed a grey "?" badge with no call to action. Added an amber `.quality-missing-hint` strip in the instance tab that links directly to the "Neu bewerten" flow.
+   - **Why (list filter):** The quality filter was commented out. Replaced the planned range slider with a 3-option dropdown (Alle / Mit Bewertung / Ohne Bewertung) wired to the existing `ItemListFilters` type with full localStorage persistence.
+   - **Deferred:** Quality threshold filtering (Ok+ / Gut+ / Neuwertig) not included — the user wanted Alle/Mit/Ohne only. Backend-side quality filter (currently all filtering is client-side). Prompt to re-rate items whose quality contract version is outdated.
+
 762. ✅ CO₂ impact calculation: ADEME 2022 formula per item + aggregated total in stats card
    - **Why:** Second-hand IT's primary value proposition is environmental — manufacturing dominates lifecycle CO₂ (70–80%). Surfacing the estimated savings per device and as a warehouse total makes this visible to operators without requiring a DB migration. Phase 1 computes at runtime; a pre-computed `co2_einsparung_kg` DB column is the Phase 2 path once volume warrants it.
    - **Deferred:** DB column for pre-computed values; per-model PCF overrides (Dell/HP/Cisco vendor data); Boavizta API for unknown server configs; ESG quarterly export; storefront display; manufacture-year field (currently inferred from intake date).

@@ -131,6 +131,15 @@ export default function ItemInstanceTab({
         )}
       </div>
 
+      {item.Quality === null && (
+        <div className="quality-missing-hint">
+          <span>Qualitätsbewertung fehlt</span>
+          <button type="button" className="btn btn--small" onClick={onQualityReview}>
+            Jetzt bewerten
+          </button>
+        </div>
+      )}
+
       <div className="card">
         <h3>dieser Artikel</h3>
         {instanceDetailRows.length > 0 ? (

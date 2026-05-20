@@ -128,6 +128,7 @@ export interface ItemListComputationOptions {
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   qualityThreshold: number;
+  qualityFilter: ItemListFilters['qualityFilter'];
 }
 
 function resolveBinaryFlag(value: unknown, context: { field: 'Shopartikel' | 'Veröffentlicht_Status'; itemId: string | null }): 0 | 1 | null {
@@ -220,7 +221,8 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     imageFilter,
     sortKey,
     sortDirection,
-    qualityThreshold
+    qualityThreshold,
+    qualityFilter
   } = options;
 
   const baseItems = placementFilter === 'unplaced'
@@ -265,7 +267,11 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       : true;
     const matchesShopPublication = matchesShopPublicationFilter(group, shopPublicationFilter);
     const groupQuality = group.summary.Quality ?? representative?.Quality;
-    const matchesQuality = resolveItemQuality(groupQuality) >= qualityThreshold;
+    const rawGroupQuality = typeof groupQuality === 'number' ? groupQuality : null;
+    const matchesQuality =
+      qualityFilter === 'all' ? true :
+      qualityFilter === 'missing' ? rawGroupQuality === null :
+      rawGroupQuality !== null; // 'rated': must have a value
     const matchesImageFilter = imageFilter === 'all'
       ? true
       : imageFilter === 'noImages'
@@ -403,6 +409,7 @@ export default function ItemListPage() {
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
   const [imageFilter, setImageFilter] = useState<ItemListFilters['imageFilter']>(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
   const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
+  const [qualityFilter, setQualityFilter] = useState<ItemListFilters['qualityFilter']>(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
   const [filtersReady, setFiltersReady] = useState(false);
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -439,6 +446,7 @@ export default function ItemListPage() {
       setEntityFilter(mergedFilters.entityFilter);
       setImageFilter(mergedFilters.imageFilter);
       setQualityThreshold(mergedFilters.qualityThreshold);
+      setQualityFilter(mergedFilters.qualityFilter);
       setIsDeepLinkFilterSession(hasUrlFilterParams);
 
       if (storedFilters) {
@@ -479,6 +487,7 @@ export default function ItemListPage() {
       setEntityFilter(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
       setImageFilter(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
       setQualityThreshold(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
+      setQualityFilter(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
       clearItemListFilters();
       setSelectedIds(new Set());
       console.info('Item list filters reset to defaults via header');
@@ -499,7 +508,8 @@ export default function ItemListPage() {
     entityFilter,
     sortKey,
     sortDirection,
-    qualityThreshold
+    qualityThreshold,
+    qualityFilter
   }), [
     searchTerm,
     subcategoryFilter,
@@ -511,7 +521,8 @@ export default function ItemListPage() {
     entityFilter,
     sortKey,
     sortDirection,
-    qualityThreshold
+    qualityThreshold,
+    qualityFilter
   ]);
 
   useEffect(() => {
@@ -743,7 +754,8 @@ export default function ItemListPage() {
         imageFilter,
         sortKey,
         sortDirection,
-        qualityThreshold
+        qualityThreshold,
+        qualityFilter
       }),
     [
       items,
@@ -757,7 +769,8 @@ export default function ItemListPage() {
       sortKey,
       stockFilter,
       shopPublicationFilter,
-      qualityThreshold
+      qualityThreshold,
+      qualityFilter
     ]
   );
 
@@ -1101,20 +1114,20 @@ export default function ItemListPage() {
                 </label>
               </div>
 
-              {/* <div className="filter-grid__item">
+              <div className="filter-grid__item">
                 <label className="filter-control">
-                  <span>Qualität ab {describeQuality(qualityThreshold).label}</span>
-                  <input
-                    type="range"
-                    min={QUALITY_MIN}
-                    max={5}
-                    step={1}
-                    value={qualityThreshold}
-                    onChange={(event) => setQualityThreshold(normalizeQuality(event.target.value, console) ?? QUALITY_MIN)}
-                    aria-valuetext={`${describeQuality(qualityThreshold).label} (${qualityThreshold})`}
-                  />
+                  <span>Qualität</span>
+                  <select
+                    aria-label="Qualitätsbewertung filtern"
+                    value={qualityFilter}
+                    onChange={(e) => setQualityFilter(e.target.value as ItemListFilters['qualityFilter'])}
+                  >
+                    <option value="all">Alle</option>
+                    <option value="rated">Mit Bewertung</option>
+                    <option value="missing">Ohne Bewertung</option>
+                  </select>
                 </label>
-              </div> */}
+              </div>
             </div>
           </div>
         </div>
