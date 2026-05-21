@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+769. ✅ Fix shopartikel/shop status modal not persisting Veröffentlicht_Status and Preis changes
+   - **Why:** Two bugs combined to silently discard every save. (1) `handleShopStatus` in `ItemDetail.tsx` omitted `actor` and `confirm: true` from the API request body — the backend validation gate at `bulk-update-ref-fields.ts` returned HTTP 400 before any DB write occurred. (2) The `updateItemRefShopFieldsStatement` SQL used bare `= @Field` for all three columns; when a field was left untouched (null = "do not change"), the UPDATE wrote NULL over the existing value. Fixed by adding `ensureUser()` + the missing fields to the single-item path, and switching the SQL to `COALESCE(@Field, Field)` so null inputs preserve existing data.
+   - **Deferred:** Nothing deferred.
 767. ✅ Fix image persistence bug: ocrPhoto from basicInfo step now propagated as picture1 in all three creation paths
    - **Why:** The OCR photo captured in the `basicInfo` step was stored in separate `ocrPhoto` state and only forwarded to the agentic trigger as `imageData` for AI recognition — it was never included in the item creation POST body. Fixed by injecting `ocrPhoto` as `picture1` in `handleAgenticPhotos`, `handleManualSubmit`, and `handleMatchSelection` in `ItemCreate.tsx`, skipping the injection when `picture1` is already explicitly set.
    - **Deferred:** Neither `ItemForm_agentic` (photos mode) nor `ItemForm` (manual form) render any photo upload UI — all photo handlers are dead code in those components. This pre-existing state is not changed; the fix only ensures the already-captured OCR photo is not silently dropped.
