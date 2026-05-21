@@ -2564,8 +2564,10 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
     if (!confirmed) return;
+    const actor = await ensureUser();
+    if (!actor) return;
     try {
-      await fetch('/api/items/bulk/update-ref', {
+      const response = await fetch('/api/items/bulk/update-ref', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2573,8 +2575,14 @@ export default function ItemDetail({ itemId }: Props) {
           shopartikel: shopValues.shopartikel,
           veröffentlicht: shopValues.veröffentlicht,
           verkaufspreis: shopValues.verkaufspreis,
+          actor,
+          confirm: true,
         })
       });
+      if (!response.ok) {
+        const msg = await response.text().catch(() => response.statusText);
+        console.error('Failed to update shop status', { status: response.status, msg });
+      }
       await load({ showSpinner: false });
     } catch (err) {
       console.error('Failed to update shop status', err);

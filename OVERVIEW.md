@@ -7,6 +7,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+769. ✅ Fix shopartikel/shop status modal not persisting Veröffentlicht_Status and Preis changes
+   - **Why:** Two bugs combined to silently discard every save. (1) `handleShopStatus` in `ItemDetail.tsx` omitted `actor` and `confirm: true` from the API request body — the backend validation gate at `bulk-update-ref-fields.ts` returned HTTP 400 before any DB write occurred. (2) The `updateItemRefShopFieldsStatement` SQL used bare `= @Field` for all three columns; when a field was left untouched (null = "do not change"), the UPDATE wrote NULL over the existing value. Fixed by adding `ensureUser()` + the missing fields to the single-item path, and switching the SQL to `COALESCE(@Field, Field)` so null inputs preserve existing data.
 769. ✅ Five UI shell bugs fixed: item-edit left-panel bleed, Lose Kartons removal, stubs shelf link, duplicate dashboard panel, OverviewPanel position
    - **Why (item edit panel):** After saving, `ItemEdit` called `navigate('/items/${itemId}')` which rendered `ItemRoute → ItemDetail` inside `panel-main` (left column). Fixed by calling `setEntity('item', itemId)` + `navigate('/items')` so `ItemDetail` renders in the right `panel-detail` via `Layout` and `ItemListPage` restores in the left panel.
    - **Why (Lose Kartons):** `NumberLooseBoxes` was removed from the backend and StubListPage in step 763 but was missed in `BoxDetail.tsx`. Removed `stubLooseBoxes` state, POST body field, useCallback dep, table column, and form field.
