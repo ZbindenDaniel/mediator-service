@@ -7,6 +7,10 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+767. ✅ Fix image persistence bug: ocrPhoto from basicInfo step now propagated as picture1 in all three creation paths
+   - **Why:** The OCR photo captured in the `basicInfo` step was stored in separate `ocrPhoto` state and only forwarded to the agentic trigger as `imageData` for AI recognition — it was never included in the item creation POST body. Fixed by injecting `ocrPhoto` as `picture1` in `handleAgenticPhotos`, `handleManualSubmit`, and `handleMatchSelection` in `ItemCreate.tsx`, skipping the injection when `picture1` is already explicitly set.
+   - **Deferred:** Neither `ItemForm_agentic` (photos mode) nor `ItemForm` (manual form) render any photo upload UI — all photo handlers are dead code in those components. This pre-existing state is not changed; the fix only ensures the already-captured OCR photo is not silently dropped.
+
 766. ✅ Admin page at /admin with 6 operational sections: import, export, shelf creation, print queue, KI queue, system status
    - **Why:** Admin operations were scattered — shelf creation at a one-off URL, import buried in the items list, export only accessible via bulk-selection. Consolidating them into a single `/admin` page (gear icon in header nav) gives operators one place for all system-level tasks. Existing components (`ImportCard`, `ShelfCreateForm`) reused directly; export and agentic-restart needed only small new backend actions. The page renders in `panel-main` like `/hilfe`, keeping the panel shell intact.
    - **Deferred:** Auth gating (no auth layer exists in the app). Periodic backup trigger (todo item 39 — Phase 1 could add a manual button here). Batch label reprint from print queue (button exists but reprint endpoint not yet wired per-job). `/admin/shelves/new` now redirects to `/admin`.
