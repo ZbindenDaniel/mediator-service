@@ -113,13 +113,12 @@ export default function BoxDetail({ boxId }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
-  type BoxStub = { Id: string; ShelfId: string; Description: string; NumberLooseItems: number; NumberLooseBoxes: number; CreatedAt: string; CreatedBy: string; Notes: string | null };
+  type BoxStub = { Id: string; ShelfId: string; Description: string; NumberLooseItems: number; CreatedAt: string; CreatedBy: string; Notes: string | null };
   const [stubs, setStubs] = useState<BoxStub[]>([]);
   const [stubsLoading, setStubsLoading] = useState(false);
   const [stubsError, setStubsError] = useState<string | null>(null);
   const [stubDescription, setStubDescription] = useState('');
   const [stubLooseItems, setStubLooseItems] = useState(0);
-  const [stubLooseBoxes, setStubLooseBoxes] = useState(0);
   const [stubNotes, setStubNotes] = useState('');
   const [isAddingStub, setIsAddingStub] = useState(false);
   const [addStubFeedback, setAddStubFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -473,7 +472,6 @@ export default function BoxDetail({ boxId }: Props) {
           shelfId: box.BoxID,
           description: stubDescription.trim(),
           numberLooseItems: stubLooseItems,
-          numberLooseBoxes: stubLooseBoxes,
           notes: stubNotes.trim() || null,
           createdBy: actor,
         }),
@@ -481,7 +479,6 @@ export default function BoxDetail({ boxId }: Props) {
       if (res.ok) {
         setStubDescription('');
         setStubLooseItems(0);
-        setStubLooseBoxes(0);
         setStubNotes('');
         setAddStubFeedback({ type: 'success', message: 'Stub hinzugefügt.' });
         await loadStubs();
@@ -494,7 +491,7 @@ export default function BoxDetail({ boxId }: Props) {
     } finally {
       setIsAddingStub(false);
     }
-  }, [box?.BoxID, stubDescription, stubLooseItems, stubLooseBoxes, stubNotes, loadStubs]);
+  }, [box?.BoxID, stubDescription, stubLooseItems, stubNotes, loadStubs]);
 
   useEffect(() => {
     void load({ showSpinner: true });
@@ -1123,7 +1120,6 @@ export default function BoxDetail({ boxId }: Props) {
                       <tr className="item-list-header">
                         <th>Beschreibung</th>
                         <th>Lose Artikel</th>
-                        <th>Lose Kartons</th>
                         <th>Erstellt von</th>
                         <th>Datum</th>
                       </tr>
@@ -1133,7 +1129,6 @@ export default function BoxDetail({ boxId }: Props) {
                         <tr key={stub.Id}>
                           <td>{stub.Description}</td>
                           <td>{stub.NumberLooseItems}</td>
-                          <td>{stub.NumberLooseBoxes}</td>
                           <td>{stub.CreatedBy}</td>
                           <td>{formatDateTime(stub.CreatedAt)}</td>
                         </tr>
@@ -1150,10 +1145,6 @@ export default function BoxDetail({ boxId }: Props) {
                   <div className="row">
                     <label htmlFor="stub-loose-items">Lose Artikel</label>
                     <input id="stub-loose-items" type="number" min={0} value={stubLooseItems} onChange={(e) => setStubLooseItems(Math.max(0, parseInt(e.target.value, 10) || 0))} disabled={isAddingStub} />
-                  </div>
-                  <div className="row">
-                    <label htmlFor="stub-loose-boxes">Lose Kartons</label>
-                    <input id="stub-loose-boxes" type="number" min={0} value={stubLooseBoxes} onChange={(e) => setStubLooseBoxes(Math.max(0, parseInt(e.target.value, 10) || 0))} disabled={isAddingStub} />
                   </div>
                   <div className="row">
                     <label htmlFor="stub-notes">Notizen</label>
