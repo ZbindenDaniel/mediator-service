@@ -70,20 +70,20 @@ export default function StubListPage() {
   return (
     <div className="list-container">
       <div className="list-header">
-        <h2>Stubs</h2>
+        <h2>Fundsachen</h2>
         <button
           type="button"
           className="btn btn--primary"
           onClick={() => { setShowForm(true); setFormError(null); }}
         >
-          <GoPlus aria-hidden="true" /> Stub hinzufügen
+          <GoPlus aria-hidden="true" /> was gefunden?
         </button>
       </div>
 
       {showForm && (
         <div className="card" style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <strong>Neuer Stub</strong>
+            <strong>Neuer Fund</strong>
             <button type="button" className="icon-btn" onClick={() => setShowForm(false)} aria-label="Schliessen">
               <GoX />
             </button>

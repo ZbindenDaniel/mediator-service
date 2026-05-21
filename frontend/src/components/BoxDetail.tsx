@@ -480,7 +480,7 @@ export default function BoxDetail({ boxId }: Props) {
         setStubDescription('');
         setStubLooseItems(0);
         setStubNotes('');
-        setAddStubFeedback({ type: 'success', message: 'Stub hinzugefügt.' });
+        setAddStubFeedback({ type: 'success', message: 'Gefundenes hinzugefügt.' });
         await loadStubs();
       } else {
         const j = await res.json().catch(() => ({}));
@@ -1136,7 +1136,7 @@ export default function BoxDetail({ boxId }: Props) {
                     </tbody>
                   </table>
                 )}
-                <h4>Stub hinzufügen</h4>
+                <h4>was gefunden?</h4>
                 <form onSubmit={(e) => { void handleAddStub(e); }}>
                   <div className="row">
                     <label htmlFor="stub-description">Beschreibung *</label>

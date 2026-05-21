@@ -1744,9 +1744,9 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
           Gerät fotografieren (optional) – Typenschild scannen für bessere KI-Suche
         </p>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button type="button" onClick={() => setOcrCaptureOpen(true)}>
+          {/* <button type="button" onClick={() => setOcrCaptureOpen(true)}>
             Foto aufnehmen
-          </button>
+          </button> */}
           <label style={{ cursor: 'pointer' }}>
             Datei wählen
             <input

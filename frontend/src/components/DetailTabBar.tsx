@@ -30,7 +30,7 @@ const BOX_BASE_TABS: TabDef[] = [
   { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" /> },
 ];
 
-const STUBS_TAB: TabDef = { id: 'stubs', label: 'Stubs', icon: <GoTag aria-hidden="true" /> };
+const STUBS_TAB: TabDef = { id: 'stubs', label: 'Fundsachen', icon: <GoTag aria-hidden="true" /> };
 
 function isShelfId(boxId: string): boolean {
   try {
