@@ -34,7 +34,7 @@ function MultiItemDetailPanel() {
 }
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection, mobileShowDetail, setMobileShowDetail } = usePanelContext();
+  const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection, mobileShowDetail, setMobileShowDetail, loadRevision } = usePanelContext();
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
@@ -91,11 +91,13 @@ export default function Layout({ children }: { children: ReactNode }) {
                   {hasMultiSelection ? (
                     <MultiItemDetailPanel />
                   ) : entityType === 'item' && entityId ? (
-                    <ItemDetail itemId={entityId} />
+                    <ItemDetail key={`${entityId}-${loadRevision}`} itemId={entityId} />
                   ) : entityType === 'box' && entityId ? (
                     <BoxDetail boxId={entityId} />
                   ) : (
-                    <OverviewPanel />
+                    <div className="panel-tab-body">
+                      <OverviewPanel />
+                    </div>
                   )}
                 </div>
               )}

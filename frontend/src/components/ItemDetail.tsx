@@ -1528,19 +1528,29 @@ export default function ItemDetail({ itemId }: Props) {
 
 
   if (isLoading) {
-    return <LoadingPage message="Artikel wird geladen…" />;
+    return (
+      <>
+        <DetailTabBar agenticNeedsReview={false} />
+        <div className="panel-tab-body">
+          <LoadingPage message="Artikel wird geladen…" />
+        </div>
+      </>
+    );
   }
 
   if (loadError && !item) {
     return (
-      <div className="panel-tab-body">
-        <div className="card">
-          <p className="muted">{loadError}</p>
-          <button type="button" className="btn" onClick={() => void load({ showSpinner: true })}>
-            Erneut versuchen
-          </button>
+      <>
+        <DetailTabBar agenticNeedsReview={false} />
+        <div className="panel-tab-body">
+          <div className="card">
+            <p className="muted">{loadError}</p>
+            <button type="button" className="btn" onClick={() => void load({ showSpinner: true })}>
+              Erneut versuchen
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
