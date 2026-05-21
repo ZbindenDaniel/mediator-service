@@ -148,7 +148,14 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   }, []);
 
   const setCreateMode = useCallback((type: EntityType) => {
-    setState({ entityType: type, entityId: null, activeTab: 'create', multiSelection: null });
+    setState((prev) => ({
+      ...prev,
+      entityType: type,
+      entityId: null,
+      activeTab: 'create',
+      multiSelection: null,
+      loadRevision: prev.loadRevision + 1,
+    }));
     setMobileShowDetail(true);
   }, []);
 
@@ -166,7 +173,13 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   }, []);
 
   const clearSelection = useCallback(() => {
-    setState({ entityType: null, entityId: null, activeTab: null, multiSelection: null });
+    setState((prev) => ({
+      ...prev,
+      entityType: null,
+      entityId: null,
+      activeTab: null,
+      multiSelection: null,
+    }));
     setMobileShowDetail(false);
   }, []);
 
