@@ -83,6 +83,32 @@ function QuestionRow({
     );
   }
 
+  if (question.type === 'text') {
+    const listId = question.suggestions?.length ? `datalist-${question.id}` : undefined;
+    return (
+      <div className="row">
+        <label>
+          {question.question}
+          {question.required && ' *'}
+        </label>
+        <input
+          type="text"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          list={listId}
+          placeholder="Eingeben oder aus Liste wählen…"
+        />
+        {listId && (
+          <datalist id={listId}>
+            {question.suggestions!.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="row">
       <label>

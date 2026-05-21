@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "subCategory": 201,
   "questions": [
     {
@@ -56,9 +56,20 @@
     },
     {
       "id": "os_installed",
-      "type": "select",
+      "type": "text",
       "question": "Welches Betriebssystem?",
-      "values": ["Windows 11 Pro", "Windows 11 Home", "Windows 10 Pro", "Windows 10 Home", "macOS", "Linux", "Chrome OS"],
+      "suggestions": [
+        "Ubuntu 24.04 LTS",
+        "Ubuntu 22.04 LTS",
+        "Debian 12 (Bookworm)",
+        "Linux Mint 22",
+        "Linux Mint 21.3",
+        "Fedora 41",
+        "openSUSE Leap 15.6",
+        "Manjaro",
+        "Zorin OS 17",
+        "Pop!_OS 22.04"
+      ],
       "specField": "Betriebssystem",
       "specValue": "%v",
       "showIf": { "questionId": "has_os", "value": "true" }

@@ -7,11 +7,14 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+768. ✅ OS question: add text question type with datalist suggestions; switch 201/102 os_installed to Linux-only free-text combobox
+   - **Why:** revamp-it installs exclusively Linux. A fixed select with Windows entries was wrong, and a plain select can't capture specific distro versions. Added `text` question type to the contract schema; renders as `<input list=datalist>` in QualityReviewStep — common Linux distros appear as suggestions but the operator can type anything.
+   - **Deferred:** Charger/accessories linking during assessment (see feasibility note below in todo.md).
 767. ✅ Quality contracts extended: editable review with pre-fill, conditional questions (showIf), expanded contracts for 201/401/102, lieferumfang select in general
    - **Why (editable review):** "Neu bewerten" previously reset all answers from scratch. If only the OS changed, operators had to re-answer every question. Added `GET /api/items/:uuid/quality-review` endpoint returning existing `responses`; `ItemInstanceTab` fetches these before opening the modal; `QualityReviewStep` accepts `initialAnswers` prop and pre-populates the form.
    - **Why (conditional questions):** OS type is only relevant when OS is installed; showing it unconditionally added noise. Added `showIf: { questionId, value }` to `QualityQuestion` schema; both `QualityReviewStep` (rendering) and the backend derivation functions (`deriveQualityFromAnswers`, `deriveSpecsFromAnswers`) skip hidden questions. Answers for newly-hidden questions are cleared when the gating question changes.
    - **Why (general.json v2):** `is_complete` boolean gave no detail about what was missing. Replaced with `lieferumfang` select ("Vollständig / Netzteil fehlt / Kabel fehlt / Teile fehlen") that also writes a spec field. New id avoids collision with old boolean answers stored in existing assessments.
-   - **Why (201.json v2):** Laptop contract was missing drive type (SSD/NVMe/HDD) and OS. Added `drive_type` select and `has_os` boolean gating a conditional `os_installed` select.
+   - **Why (201.json v2 → v3 / 102.json v1 → v2):** Laptop/desktop contract used a fixed select for OS. Replaced with new `text` type (datalist combobox) and removed Windows values.
    - **Why (new 401/102 contracts):** Monitors and desktop PCs had no quality contracts at all. 401 covers screen condition, resolution, panel type, connection, stand. 102 covers drive type, conditional OS, power cable.
    - **Deferred:** Export pipeline gap (InstanceSpecs not merged into shop Langtext) — tracked separately. Other subcategory contracts (103 Server, 204 Tablet, 1802 Smartphone) can be added as JSON files without code changes.
 766. ✅ Admin page at /admin with 6 operational sections: import, export, shelf creation, print queue, KI queue, system status

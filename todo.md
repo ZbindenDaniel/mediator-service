@@ -100,7 +100,9 @@
 
 42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (SQLite `json_extract`). Enables searching "16GB" to find matching Laptops.
 
-43. **Quality contracts: extend question types.** Currently `select` and `boolean` only. Add `text` (free-entry) and `range` (numeric slider) types to the contract schema and `QualityReviewStep` renderer.
+43. ✅ **Quality contracts: `text` question type (datalist combobox) implemented.** `select` / `boolean` / `text` now supported. `range` (numeric slider) still deferred.
+
+44. **Quality assessment: link accessories (charger etc.) during assessment.** Feasibility confirmed — `item_relations` table (RelationType='Zubehör') and full CRUD API already exist. Chargers are separate items (cat 804/805). The assessment step could show an "Zubehör hinzufügen?" picker that creates `item_relations` records on save. No new table needed; add an optional `linked_accessories TEXT` JSON column to `quality_assessments` or just rely on `item_relations`. Effort: medium (new UI step + wiring to existing API).
 
 20. **Enhance partial imports functionality.** Large imports currently fail completely on a single item error. Add granular error reporting and selective retry. **Goal:** make bulk import workflows resilient with clear per-item failure reporting.
 
