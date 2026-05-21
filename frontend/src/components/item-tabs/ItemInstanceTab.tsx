@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import RelocateItemCard from '../RelocateItemCard';
 import EditInstanceCard from '../EditInstanceCard';
@@ -64,6 +64,21 @@ export default function ItemInstanceTab({
   onInstanceSaved,
   onQualityReviewDone,
 }: Props) {
+  const [existingAnswers, setExistingAnswers] = useState<Record<string, string>>({});
+
+  async function handleOpenQualityReview() {
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/quality-review`);
+      if (res.ok) {
+        const data = await res.json() as { responses?: Record<string, string> };
+        setExistingAnswers(data.responses ?? {});
+      }
+    } catch {
+      setExistingAnswers({});
+    }
+    onQualityReview();
+  }
+
   async function handleEntnehmen() {
     let confirmed = false;
     try {
@@ -86,7 +101,7 @@ export default function ItemInstanceTab({
       <div className="tab-actions">
         <PrintLabelButton itemId={item.ItemUUID} inline />
         <button type="button" className="btn" onClick={onEditInstance}>Bearbeiten</button>
-        <button type="button" className="btn" onClick={onQualityReview}>Neu bewerten</button>
+        <button type="button" className="btn" onClick={() => void handleOpenQualityReview()}>Neu bewerten</button>
         {!isOutOfStock && (
           <QrScanButton
             searchTarget={item.ItemUUID}
@@ -134,7 +149,7 @@ export default function ItemInstanceTab({
       {item.Quality === null && (
         <div className="quality-missing-hint">
           <span>Qualitätsbewertung fehlt</span>
-          <button type="button" className="btn btn--small" onClick={onQualityReview}>
+          <button type="button" className="btn btn--small" onClick={() => void handleOpenQualityReview()}>
             Jetzt bewerten
           </button>
         </div>
@@ -230,6 +245,7 @@ export default function ItemInstanceTab({
           subCategory={item.Unterkategorien_A}
           onDone={onQualityReviewDone}
           onCancel={onQualityReviewDone}
+          initialAnswers={existingAnswers}
         />
       )}
 

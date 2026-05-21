@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "subCategory": 401,
+  "questions": [
+    {
+      "id": "screen_condition",
+      "type": "select",
+      "question": "Bildschirmzustand?",
+      "values": ["Keine Auffälligkeiten", "Geringe Kratzer", "Deutliche Mängel", "Pixelfehler vorhanden"],
+      "specField": "Bildschirmzustand",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Keine Auffälligkeiten": 5,
+        "Geringe Kratzer": 3,
+        "Deutliche Mängel": 2,
+        "Pixelfehler vorhanden": 1
+      }
+    },
+    {
+      "id": "resolution",
+      "type": "select",
+      "question": "Auflösung?",
+      "values": ["HD (1366×768)", "FHD (1920×1080)", "QHD (2560×1440)", "4K (3840×2160)", "Andere"],
+      "specField": "Auflösung",
+      "specValue": "%v"
+    },
+    {
+      "id": "panel_type",
+      "type": "select",
+      "question": "Panel-Typ?",
+      "values": ["IPS", "TN", "VA", "OLED", "Unbekannt"],
+      "specField": "Panel",
+      "specValue": "%v"
+    },
+    {
+      "id": "connection_type",
+      "type": "select",
+      "question": "Hauptanschluss?",
+      "values": ["HDMI", "DisplayPort", "VGA", "USB-C", "Mehrere"],
+      "specField": "Anschluss",
+      "specValue": "%v"
+    },
+    {
+      "id": "stand_included",
+      "type": "boolean",
+      "question": "Standfuss / VESA-Halter vorhanden?",
+      "specField": "Standfuss",
+      "specValue": "%v",
+      "qualityImpact": { "true": 5, "false": 4 }
+    }
+  ]
+}

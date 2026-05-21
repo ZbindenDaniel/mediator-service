@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "subCategory": 201,
   "questions": [
     {
@@ -27,6 +27,14 @@
       "specValue": "%v GB"
     },
     {
+      "id": "drive_type",
+      "type": "select",
+      "question": "Speichertyp?",
+      "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
+      "specField": "Speichertyp",
+      "specValue": "%v"
+    },
+    {
       "id": "battery_condition",
       "type": "select",
       "question": "Akkuzustand?",
@@ -39,6 +47,32 @@
         "Schwach (<50%)": 3,
         "Defekt": 2
       }
+    },
+    {
+      "id": "has_os",
+      "type": "boolean",
+      "question": "Betriebssystem installiert?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    },
+    {
+      "id": "os_installed",
+      "type": "text",
+      "question": "Welches Betriebssystem?",
+      "suggestions": [
+        "Ubuntu 24.04 LTS",
+        "Ubuntu 22.04 LTS",
+        "Debian 12 (Bookworm)",
+        "Linux Mint 22",
+        "Linux Mint 21.3",
+        "Fedora 41",
+        "openSUSE Leap 15.6",
+        "Manjaro",
+        "Zorin OS 17",
+        "Pop!_OS 22.04"
+      ],
+      "specField": "Betriebssystem",
+      "specValue": "%v",
+      "showIf": { "questionId": "has_os", "value": "true" }
     }
   ]
 }

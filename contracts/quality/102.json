@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "subCategory": 102,
+  "questions": [
+    {
+      "id": "drive_type",
+      "type": "select",
+      "question": "Speichertyp?",
+      "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD"],
+      "specField": "Speichertyp",
+      "specValue": "%v"
+    },
+    {
+      "id": "has_os",
+      "type": "boolean",
+      "question": "Betriebssystem installiert?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    },
+    {
+      "id": "os_installed",
+      "type": "text",
+      "question": "Welches Betriebssystem?",
+      "suggestions": [
+        "Ubuntu 24.04 LTS",
+        "Ubuntu 22.04 LTS",
+        "Debian 12 (Bookworm)",
+        "Linux Mint 22",
+        "Linux Mint 21.3",
+        "Fedora 41",
+        "openSUSE Leap 15.6",
+        "Manjaro",
+        "Zorin OS 17",
+        "Pop!_OS 22.04"
+      ],
+      "specField": "Betriebssystem",
+      "specValue": "%v",
+      "showIf": { "questionId": "has_os", "value": "true" }
+    },
+    {
+      "id": "power_cable_included",
+      "type": "boolean",
+      "question": "Netzkabel vorhanden?",
+      "specField": "Netzkabel",
+      "specValue": "%v",
+      "qualityImpact": { "true": 5, "false": 4 }
+    }
+  ]
+}

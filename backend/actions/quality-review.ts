@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { insertQualityAssessment, updateItemQualityAssessment, updateItemInstanceSpecs } from '../db';
+import { insertQualityAssessment, updateItemQualityAssessment, updateItemInstanceSpecs, getItemQualityResponses } from '../db';
 import {
   loadGeneralContract,
   loadSubCategoryContract,
@@ -17,7 +17,7 @@ const action = defineHttpAction({
   label: 'Quality Review',
   appliesTo: () => false,
   matches: (path, method) =>
-    /^\/api\/items\/[^/]+\/quality-review$/.test(path) && method === 'POST',
+    /^\/api\/items\/[^/]+\/quality-review$/.test(path) && (method === 'POST' || method === 'GET'),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/quality-review$/);
@@ -26,6 +26,11 @@ const action = defineHttpAction({
 
       const item = ctx.getItem.get(itemUUID);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
+
+      if (req.method === 'GET') {
+        const result = getItemQualityResponses(itemUUID);
+        return sendJson(res, 200, result);
+      }
 
       let raw = '';
       for await (const chunk of req) raw += chunk;
