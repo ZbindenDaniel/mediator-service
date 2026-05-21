@@ -1,6 +1,11 @@
 import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
 import { fetchQualityContract } from './contractsApi';
 
+export function isQuestionVisible(question: QualityQuestion, answers: Record<string, string>): boolean {
+  if (!question.showIf) return true;
+  return answers[question.showIf.questionId] === question.showIf.value;
+}
+
 export async function loadContractsAsync(subCategory?: number): Promise<{
   general: QualityContract | null;
   subCat: QualityContract | null;
@@ -20,6 +25,7 @@ export function deriveQualityFromAnswers(
   const scores: number[] = [];
   for (const contract of contracts) {
     for (const question of contract.questions) {
+      if (!isQuestionVisible(question, answers)) continue;
       if (!question.qualityImpact) continue;
       const answer = answers[question.id];
       if (answer === undefined) continue;

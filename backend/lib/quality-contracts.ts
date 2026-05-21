@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import type { QualityContract, QualityCheckResponse } from '../../models/quality-contract';
+import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
 
@@ -29,6 +29,11 @@ function clamp(value: number): number {
   return Math.max(QUALITY_MIN, Math.min(QUALITY_MAX, value));
 }
 
+function isQuestionVisible(question: QualityQuestion, answers: Record<string, string>): boolean {
+  if (!question.showIf) return true;
+  return answers[question.showIf.questionId] === question.showIf.value;
+}
+
 function tagForValue(value: number): QualityTag {
   const label = QUALITY_LABELS[value];
   if (!label) return QUALITY_LABELS[QUALITY_DEFAULT] as QualityTag;
@@ -44,6 +49,7 @@ export function deriveQualityFromAnswers(
 
   for (const contract of contracts) {
     for (const question of contract.questions) {
+      if (!isQuestionVisible(question, answers)) continue;
       if (!question.qualityImpact) continue;
       const answer = answers[question.id];
       if (answer === undefined) continue;
@@ -65,6 +71,7 @@ export function deriveSpecsFromAnswers(
 
   for (const contract of contracts) {
     for (const question of contract.questions) {
+      if (!isQuestionVisible(question, answers)) continue;
       if (!question.specField) continue;
       const answer = answers[question.id];
       if (answer === undefined) continue;

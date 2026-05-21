@@ -10,6 +10,7 @@ import {
   deriveQualityFromAnswers,
   getAllQuestions,
   allRequiredAnswered,
+  isQuestionVisible,
 } from '../lib/qualityContracts';
 import QualityBadge from './QualityBadge';
 
@@ -25,6 +26,7 @@ interface QualityReviewStepProps {
   onSkip: () => void;
   subCategory?: number;
   layout?: 'page' | 'embedded';
+  initialAnswers?: Record<string, string>;
 }
 
 const AI_PRIORITY_LABELS: Record<AiPriority, string> = {
@@ -81,6 +83,32 @@ function QuestionRow({
     );
   }
 
+  if (question.type === 'text') {
+    const listId = question.suggestions?.length ? `datalist-${question.id}` : undefined;
+    return (
+      <div className="row">
+        <label>
+          {question.question}
+          {question.required && ' *'}
+        </label>
+        <input
+          type="text"
+          value={value ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          list={listId}
+          placeholder="Eingeben oder aus Liste wählen…"
+        />
+        {listId && (
+          <datalist id={listId}>
+            {question.suggestions!.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="row">
       <label>
@@ -104,6 +132,7 @@ export default function QualityReviewStep({
   onSkip,
   subCategory,
   layout,
+  initialAnswers,
 }: QualityReviewStepProps) {
   const [contracts, setContracts] = useState<{ general: QualityContract | null; subCat: QualityContract | null }>({
     general: null,
@@ -126,11 +155,20 @@ export default function QualityReviewStep({
   const { general, subCat } = contracts;
   const questions = getAllQuestions(general, subCat);
 
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers ?? {});
   const [notes, setNotes] = useState('');
 
   const setAnswer = (id: string, value: string) =>
-    setAnswers((prev) => ({ ...prev, [id]: value }));
+    setAnswers((prev) => {
+      const next = { ...prev, [id]: value };
+      // Clear answers for questions that are now hidden due to this change
+      for (const q of questions) {
+        if (q.showIf?.questionId === id && next[q.id] !== undefined && !isQuestionVisible(q, next)) {
+          delete next[q.id];
+        }
+      }
+      return next;
+    });
 
   const activeContracts = [
     ...(general ? [general] : []),
@@ -182,14 +220,16 @@ export default function QualityReviewStep({
       </div>
 
       <form onSubmit={handleSubmit} className="item-form">
-        {generalQuestions.map((q) => (
-          <QuestionRow
-            key={q.id}
-            question={q}
-            value={answers[q.id]}
-            onChange={(v) => setAnswer(q.id, v)}
-          />
-        ))}
+        {generalQuestions.map((q) =>
+          isQuestionVisible(q, answers) ? (
+            <QuestionRow
+              key={q.id}
+              question={q}
+              value={answers[q.id]}
+              onChange={(v) => setAnswer(q.id, v)}
+            />
+          ) : null
+        )}
 
         {subCatQuestions.length > 0 && (
           <>
@@ -198,14 +238,16 @@ export default function QualityReviewStep({
                 <strong>{subCat!.subCategory && `Kategorie ${subCat!.subCategory}`}</strong>
               </p>
             </div>
-            {subCatQuestions.map((q) => (
-              <QuestionRow
-                key={q.id}
-                question={q}
-                value={answers[q.id]}
-                onChange={(v) => setAnswer(q.id, v)}
-              />
-            ))}
+            {subCatQuestions.map((q) =>
+              isQuestionVisible(q, answers) ? (
+                <QuestionRow
+                  key={q.id}
+                  question={q}
+                  value={answers[q.id]}
+                  onChange={(v) => setAnswer(q.id, v)}
+                />
+              ) : null
+            )}
           </>
         )}
 
