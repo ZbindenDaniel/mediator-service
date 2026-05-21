@@ -399,12 +399,15 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
 async function runPrinterConnectionAttempt(options: {
   queue: string;
   timeoutMs: number;
+  printerHost?: string;
 }): Promise<{ ok: boolean; reason?: string }> {
-  const { queue, timeoutMs } = options;
+  const { queue, timeoutMs, printerHost } = options;
+  const lpstatArgs = ['-p', queue];
+  if (printerHost) lpstatArgs.push('-h', printerHost);
 
   return await new Promise((resolve) => {
     try {
-      const child = spawn(LPSTAT_COMMAND, ['-p', queue], {
+      const child = spawn(LPSTAT_COMMAND, lpstatArgs, {
         stdio: ['ignore', 'pipe', 'pipe']
       });
       let stdout = '';
@@ -490,7 +493,7 @@ export async function testPrinterConnection(
     operation: 'testPrinterConnection',
     queue: normalizedQueue,
     printerHost,
-    attemptOnce: async () => await runPrinterConnectionAttempt({ queue: normalizedQueue, timeoutMs }),
+    attemptOnce: async () => await runPrinterConnectionAttempt({ queue: normalizedQueue, timeoutMs, printerHost }),
     isSuccess: (result) => result.ok,
     getReason: (result) => result.reason
   });

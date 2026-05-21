@@ -7,6 +7,14 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+768. ✅ Added `docs/detailed/printer-server-setup.md`: end-to-end Raspberry Pi CUPS print server setup guide
+   - **Why:** No prior runbook existed for the network printer path; operators setting up the Raspi had no reference for CUPS config, driver install, label media sizes, env vars, or troubleshooting steps.
+   - **Deferred:** nothing deferred.
+
+767. ✅ Network printer support: `lpstat` now passes `-h` to remote CUPS server when `PRINTER_SERVER` is set
+   - **Why:** `lp` already forwarded `-h printerHost` to the remote CUPS server, but `lpstat` (used for printer status checks) did not — status checks would silently probe the local socket even when a remote server was configured. The fix passes `printerHost` into `runPrinterConnectionAttempt` and adds `-h` to the `lpstat` args, making status checks consistent with print dispatch. Change is gated on `PRINTER_SERVER` being non-empty, so the current local-socket setup is unaffected.
+   - **Deferred:** `docker-compose.yml` socket mount cleanup (harmless to leave; user chose to keep it with a transition note in the plan).
+
 766. ✅ Admin page at /admin with 6 operational sections: import, export, shelf creation, print queue, KI queue, system status
    - **Why:** Admin operations were scattered — shelf creation at a one-off URL, import buried in the items list, export only accessible via bulk-selection. Consolidating them into a single `/admin` page (gear icon in header nav) gives operators one place for all system-level tasks. Existing components (`ImportCard`, `ShelfCreateForm`) reused directly; export and agentic-restart needed only small new backend actions. The page renders in `panel-main` like `/hilfe`, keeping the panel shell intact.
    - **Deferred:** Auth gating (no auth layer exists in the app). Periodic backup trigger (todo item 39 — Phase 1 could add a manual button here). Batch label reprint from print queue (button exists but reprint endpoint not yet wired per-job). `/admin/shelves/new` now redirects to `/admin`.
