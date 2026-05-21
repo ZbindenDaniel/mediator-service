@@ -1507,10 +1507,10 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
         Artikelbeschreibung: trimmedDescription,
         Artikel_Nummer: trimmedNumber
       };
-      const isMultipleStk = normalized.Einheit === 'Stk' && (Number(normalized.Anzahl) || 1) > 1;
+      const isMultipleStk = normalized.Einheit === 'Stk' && (Number(normalized.Auf_Lager) || 1) > 1;
       if (isMultipleStk) {
         // Each Stk unit is a separate physical item with potentially different condition — skip shared review.
-        console.log('Skipping quality review for multiple Stk items', { anzahl: normalized.Anzahl });
+        console.log('Skipping quality review for multiple Stk items', { anzahl: normalized.Auf_Lager });
         setQualitySkippedForMultiple(true);
         setQualityReviewResult(null);
         setBasicInfo(normalized);

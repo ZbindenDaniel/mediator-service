@@ -446,7 +446,8 @@ export default function ItemDetail({ itemId }: Props) {
           imageFilter: effectiveFilters.imageFilter,
           sortKey: effectiveFilters.sortKey,
           sortDirection: effectiveFilters.sortDirection,
-          qualityThreshold: effectiveFilters.qualityThreshold
+          qualityThreshold: effectiveFilters.qualityThreshold,
+          qualityFilter: 'all'
         });
 
         const currentIndex = filtered.findIndex((entry) => entry.summary.representativeItemId === itemId);
