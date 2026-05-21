@@ -7,6 +7,12 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+769. ✅ Five UI shell bugs fixed: item-edit left-panel bleed, Lose Kartons removal, stubs shelf link, duplicate dashboard panel, OverviewPanel position
+   - **Why (item edit panel):** After saving, `ItemEdit` called `navigate('/items/${itemId}')` which rendered `ItemRoute → ItemDetail` inside `panel-main` (left column). Fixed by calling `setEntity('item', itemId)` + `navigate('/items')` so `ItemDetail` renders in the right `panel-detail` via `Layout` and `ItemListPage` restores in the left panel.
+   - **Why (Lose Kartons):** `NumberLooseBoxes` was removed from the backend and StubListPage in step 763 but was missed in `BoxDetail.tsx`. Removed `stubLooseBoxes` state, POST body field, useCallback dep, table column, and form field.
+   - **Why (stubs shelf link):** `StubListPage` used `navigate('/boxes?entity=box&id=...')` which doesn't update `PanelContext` (it only hydrates from URL on mount). Replaced with `setEntity('box', shelfId) + setMainView('boxes')` to update panel state directly.
+   - **Why (duplicate dashboard):** `Layout` rendered both `DashboardPanel` and `OverviewPanel` in `panel-detail`. They are functionally identical; `OverviewPanel` is the current version (also fetches printer/health). Removed `DashboardPanel` — one `StatsCard` now shows in the empty-state right panel.
+   - **Deferred:** Nothing deferred.
 767. ✅ Fix image persistence bug: ocrPhoto from basicInfo step now propagated as picture1 in all three creation paths
    - **Why:** The OCR photo captured in the `basicInfo` step was stored in separate `ocrPhoto` state and only forwarded to the agentic trigger as `imageData` for AI recognition — it was never included in the item creation POST body. Fixed by injecting `ocrPhoto` as `picture1` in `handleAgenticPhotos`, `handleManualSubmit`, and `handleMatchSelection` in `ItemCreate.tsx`, skipping the injection when `picture1` is already explicitly set.
    - **Deferred:** Neither `ItemForm_agentic` (photos mode) nor `ItemForm` (manual form) render any photo upload UI — all photo handlers are dead code in those components. This pre-existing state is not changed; the fix only ensures the already-captured OCR photo is not silently dropped.
