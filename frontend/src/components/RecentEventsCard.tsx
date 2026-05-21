@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { EventLog } from '../../../models';
 import { formatDate } from '../lib/format';
 import { eventLabel } from '../../../models/event-labels';
+import { formatEventDescription } from '../utils/eventDescription';
 import { useNavigate } from 'react-router-dom';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { usePanelContext } from '../context/PanelContext';
@@ -139,6 +140,7 @@ export function RecentEventsList({ events }: Props) {
                 const actorText = e.Actor ?? '[?]';
                 const ariaActor = e.Actor ? `${e.Actor}: ` : 'Unbekannt: ';
                 const ariaLabel = `${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`;
+                const description = formatEventDescription(e);
                 const typeLabel = e.EntityType === 'Box' ? 'Behälter' : e.EntityType === 'Item' ? 'Artikel' : e.EntityType;
                 const entityId = e.EntityId ?? '—';
                 const artikelbezeichnung = e.Artikelbeschreibung ?? '—';
@@ -157,7 +159,7 @@ export function RecentEventsList({ events }: Props) {
                     <td>{entityId}</td>
                     <td>{artikelbezeichnung}</td>
                     <td>{actorText}</td>
-                    <td>{label}</td>
+                    <td>{description}</td>
                     <td>{formattedDate}</td>
                   </tr>
                 );
