@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { GoPlus, GoX } from 'react-icons/go';
 import { getUser } from '../lib/user';
+import { usePanelContext } from '../context/PanelContext';
 
 type BoxStub = {
   Id: string;
@@ -17,7 +17,7 @@ type BoxStub = {
 const EMPTY_FORM = { shelfId: '', description: '', numberLooseItems: '', notes: '' };
 
 export default function StubListPage() {
-  const navigate = useNavigate();
+  const { setEntity, setMainView } = usePanelContext();
   const [stubs, setStubs] = useState<BoxStub[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -165,7 +165,7 @@ export default function StubListPage() {
                   <button
                     type="button"
                     className="link-btn"
-                    onClick={() => navigate(`/boxes?entity=box&id=${encodeURIComponent(stub.ShelfId)}`)}
+                    onClick={() => { setEntity('box', stub.ShelfId); setMainView('boxes'); }}
                   >
                     <span className="mono">{stub.ShelfId}</span>
                   </button>

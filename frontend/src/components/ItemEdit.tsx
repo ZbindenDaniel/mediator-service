@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { usePanelContext } from '../context/PanelContext';
 import { AGENTIC_RUN_ACTIVE_STATUSES, normalizeAgenticRunStatus } from '../../../models';
 import type { ItemReferenceEdit } from '../../../models';
 // TODO(agentic-edit-lock): Add a read-only fallback view when edits are blocked by active agentic runs.
@@ -67,6 +68,7 @@ export default function ItemEdit({ itemId }: Props) {
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
   const dialog = useDialog();
+  const { setEntity } = usePanelContext();
 
   const initialPhotos = useMemo(() => {
     try {
@@ -118,7 +120,8 @@ export default function ItemEdit({ itemId }: Props) {
             } catch (error) {
               console.error('Failed to display agentic edit block alert', error);
             }
-            navigate(`/items/${encodeURIComponent(itemId)}`);
+            setEntity('item', itemId);
+            navigate('/items');
             return;
           }
           const referenceFields = extractReferenceFields(nextItem);
@@ -183,7 +186,8 @@ export default function ItemEdit({ itemId }: Props) {
             console.error('Failed to parse save item response', err);
             return null;
           });
-        navigate(`/items/${encodeURIComponent(itemId)}`);
+        setEntity('item', itemId);
+        navigate('/items');
       } else {
         console.error('Failed to save item', res.status);
         try {
