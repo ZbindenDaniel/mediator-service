@@ -2755,11 +2755,12 @@ export const zeroItemStock = db.prepare(
 );
 export const deleteItem = db.prepare(`DELETE FROM items WHERE ItemUUID = ?`);
 export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
+// COALESCE preserves existing column values when a null is passed (meaning "do not change")
 const updateItemRefShopFieldsStatement = db.prepare(`
   UPDATE item_refs
-     SET Verkaufspreis = @Verkaufspreis,
-         Shopartikel = @Shopartikel,
-         Veröffentlicht_Status = @Veröffentlicht_Status
+     SET Verkaufspreis = COALESCE(@Verkaufspreis, Verkaufspreis),
+         Shopartikel = COALESCE(@Shopartikel, Shopartikel),
+         Veröffentlicht_Status = COALESCE(@Veröffentlicht_Status, Veröffentlicht_Status)
    WHERE Artikel_Nummer = @Artikel_Nummer
 `);
 const insertEventStatement = db.prepare(`
