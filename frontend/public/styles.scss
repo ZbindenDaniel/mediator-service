@@ -1133,6 +1133,8 @@ div {
     flex-direction: column;
     gap: 16px;
     width: min(520px, 100%);
+    max-height: min(90vh, 680px);
+    overflow-y: auto;
     background: var(--dialog, #ffffff);
     color: var(--fg);
     border-radius: var(--radius);

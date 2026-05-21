@@ -7,6 +7,12 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+770. ✅ Three smaller UI fixes: quality modal scrollable, OverviewPanel wrapper, ItemDetail data refresh + tab bar persistence
+   - **Why (modal):** `.dialog-content` had no `max-height` or `overflow-y`, so quality assessment modals with many contract questions (e.g. subcategory 401) overflowed the viewport. Added `max-height: min(90vh, 680px); overflow-y: auto` to the class.
+   - **Why (OverviewPanel):** `<OverviewPanel>` was rendered directly in `panel-detail` (which has `overflow: hidden`) without a scrollable wrapper, unlike ItemDetail/BoxDetail which both use `panel-tab-body`. Wrapped in `panel-tab-body` for consistent padding and scrollability.
+   - **Why (data refresh):** After `ItemEdit` saved and called `setEntity('item', itemId) + navigate('/items')`, the `entityId` prop to `ItemDetail` was unchanged so its `load()` useEffect didn't re-run — stale data showed. Fixed by adding `loadRevision: number` to `PanelState`, incremented on every `setEntity` call, and using it as part of the `key` prop on `<ItemDetail>` in Layout so it always remounts with fresh data after selection.
+   - **Why (tab bar):** `ItemDetail`'s loading/error early returns rendered without `<DetailTabBar>`, causing the tab bar to disappear during load (most noticeable after remount from the refresh fix). Changed both early returns to include `<DetailTabBar agenticNeedsReview={false}>` above a `panel-tab-body` wrapper.
+   - **Deferred:** Nothing deferred.
 769. ✅ Fix shopartikel/shop status modal not persisting Veröffentlicht_Status and Preis changes
    - **Why:** Two bugs combined to silently discard every save. (1) `handleShopStatus` in `ItemDetail.tsx` omitted `actor` and `confirm: true` from the API request body — the backend validation gate at `bulk-update-ref-fields.ts` returned HTTP 400 before any DB write occurred. (2) The `updateItemRefShopFieldsStatement` SQL used bare `= @Field` for all three columns; when a field was left untouched (null = "do not change"), the UPDATE wrote NULL over the existing value. Fixed by adding `ensureUser()` + the missing fields to the single-item path, and switching the SQL to `COALESCE(@Field, Field)` so null inputs preserve existing data.
 769. ✅ Five UI shell bugs fixed: item-edit left-panel bleed, Lose Kartons removal, stubs shelf link, duplicate dashboard panel, OverviewPanel position

@@ -43,6 +43,7 @@ export interface PanelState {
   entityId: string | null;
   activeTab: string | null;
   multiSelection: string[] | null;
+  loadRevision: number;
 }
 
 export interface PanelContextValue extends PanelState {
@@ -56,6 +57,7 @@ export interface PanelContextValue extends PanelState {
   setMainView: (view: MainView, extraParams?: Record<string, string>) => void;
   mobileShowDetail: boolean;
   setMobileShowDetail: (show: boolean) => void;
+  loadRevision: number;
 }
 
 const VALID_ENTITY_TYPES: EntityType[] = ['item', 'box', 'transport', 'stub'];
@@ -74,7 +76,9 @@ function paramsToState(params: URLSearchParams): PanelState {
     // multiSelection and entityId are mutually exclusive per spec
     entityId: multiSelection?.length ? null : (params.get('id') ?? null),
     activeTab: params.get('tab') ?? null,
-    multiSelection: multiSelection?.length ? multiSelection : null
+    multiSelection: multiSelection?.length ? multiSelection : null,
+    // loadRevision is not URL-synced; it resets to 0 on page load (fresh mount always reloads)
+    loadRevision: 0,
   };
 }
 
@@ -131,12 +135,14 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   }, [state, setSearchParams]);
 
   // Preserve activeTab when navigating within the same entity type (X-Y navigation).
+  // Always increment loadRevision so ItemDetail remounts and fetches fresh data on every selection.
   const setEntity = useCallback((type: EntityType, id: string) => {
     setState(prev => ({
       entityType: type,
       entityId: id,
       activeTab: prev.entityType === type ? prev.activeTab : (DEFAULT_TAB[type] ?? 'reference'),
-      multiSelection: null
+      multiSelection: null,
+      loadRevision: prev.loadRevision + 1,
     }));
     setMobileShowDetail(true);
   }, []);
