@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+772. ✅ Multiselect: waiting (queued) runs can now be stopped alongside running runs
+   - **Why:** `stoppableCount` in `KiActionForm` and the stop handler in `handleBulkKi` both filtered only for `AGENTIC_RUN_STATUS_RUNNING`, silently excluding `AGENTIC_RUN_STATUS_QUEUED` items. The backend `cancelAgenticRun` already handles any status; the gate was purely frontend-side. Extended both filters to include `AGENTIC_RUN_STATUS_QUEUED`. Updated the UI count label to "laufende/wartende Artikel stoppen" and the empty-state message accordingly.
+   - **Deferred:** Nothing deferred.
 771. ✅ Enrich event log descriptions: show from/to for movements, box source for removals, reviewer for KI events
    - **Why:** The "Aktion" column in the activities table and the item events tab previously showed only a static label (e.g. "Verschoben") — the `Meta` JSON field already contained rich context (BoxIDs, reviewer names, quantities) but was never surfaced. Added `formatEventDescription()` in `frontend/src/utils/eventDescription.tsx` to parse `Meta` per event type and render human-readable sentences (e.g. "Umgelagert von B-… nach B-…", "Entnommen aus B-… (3 → 2)", "Ki-Ergebnis freigegeben von Alice").
    - **Deferred:** Box location label resolution for item moves (only BoxIDs shown, not shelf labels — those would require a separate lookup). `Added` event meta enrichment not done (meta structure not confirmed). Box moves could optionally show the previous location too (not in current `Meta`).

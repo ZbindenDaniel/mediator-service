@@ -102,6 +102,7 @@ function KiActionForm({ selectedItems, onChange }: KiActionFormProps) {
   ).length;
   const stoppableCount = selectedItems.filter((item) =>
     item.AgenticStatus === AGENTIC_RUN_STATUS_RUNNING
+    || item.AgenticStatus === AGENTIC_RUN_STATUS_QUEUED
   ).length;
 
   function select(a: KiAction) {
@@ -133,7 +134,7 @@ function KiActionForm({ selectedItems, onChange }: KiActionFormProps) {
           />
           <span className="ki-action-form__option-body">
             <span className="ki-action-form__label">Stoppen</span>
-            <span className="ki-action-form__count">{stoppableCount} laufende Artikel stoppen</span>
+            <span className="ki-action-form__count">{stoppableCount} laufende/wartende Artikel stoppen</span>
           </span>
         </label>
       ) : null}
@@ -574,7 +575,7 @@ export default function BulkItemActionBar({
     }
 
     if ((kiActionRef.current as KiAction) === 'stop') {
-      // Stop: cancel only currently running runs; others are silently ignored.
+      // Stop: cancel running and queued (waiting) runs.
       const actor = await ensureActorOrAlert({
         context: 'bulk agentic stop',
         resolveActor: effectiveResolveActor
@@ -586,10 +587,11 @@ export default function BulkItemActionBar({
 
       const runningItems = selectedItems.filter(
         (item) => item.AgenticStatus === AGENTIC_RUN_STATUS_RUNNING
+          || item.AgenticStatus === AGENTIC_RUN_STATUS_QUEUED
       );
 
       if (runningItems.length === 0) {
-        setFeedback({ type: 'info', message: 'Keine laufenden Artikel in der Auswahl.' });
+        setFeedback({ type: 'info', message: 'Keine laufenden oder wartenden Artikel in der Auswahl.' });
         return;
       }
 
