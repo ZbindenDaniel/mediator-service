@@ -23,6 +23,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`media-storage.md`](./media-storage.md) | File storage: item photos, per-unit attachments, identifier-keyed external docs |
 | [`qr_codes.md`](./qr_codes.md) | QR generation, scan lifecycle, search-scan mode, audit logging |
 | [`printing.md`](./printing.md) | Label printing, preview/dispatch, template/route mapping |
+| [`printer-server-setup.md`](./printer-server-setup.md) | Raspberry Pi CUPS print server: install, configure, connect to mediator |
 | [`import_export.md`](./import_export.md) | CSV/ZIP ingestion, export regimes, alias mapping |
 | [`agentic-basics.md`](./agentic-basics.md) | Agentic orchestration overview, lifecycle, guardrails |
 | [`item-flow.md`](./item-flow.md) | Agentic extraction/categorization/pricing stage contracts |
