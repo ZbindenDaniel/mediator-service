@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+771. ✅ Enrich event log descriptions: show from/to for movements, box source for removals, reviewer for KI events
+   - **Why:** The "Aktion" column in the activities table and the item events tab previously showed only a static label (e.g. "Verschoben") — the `Meta` JSON field already contained rich context (BoxIDs, reviewer names, quantities) but was never surfaced. Added `formatEventDescription()` in `frontend/src/utils/eventDescription.tsx` to parse `Meta` per event type and render human-readable sentences (e.g. "Umgelagert von B-… nach B-…", "Entnommen aus B-… (3 → 2)", "Ki-Ergebnis freigegeben von Alice").
+   - **Deferred:** Box location label resolution for item moves (only BoxIDs shown, not shelf labels — those would require a separate lookup). `Added` event meta enrichment not done (meta structure not confirmed). Box moves could optionally show the previous location too (not in current `Meta`).
 770. ✅ Three smaller UI fixes: quality modal scrollable, OverviewPanel wrapper, ItemDetail data refresh + tab bar persistence
    - **Why (modal):** `.dialog-content` had no `max-height` or `overflow-y`, so quality assessment modals with many contract questions (e.g. subcategory 401) overflowed the viewport. Added `max-height: min(90vh, 680px); overflow-y: auto` to the class.
    - **Why (OverviewPanel):** `<OverviewPanel>` was rendered directly in `panel-detail` (which has `overflow: hidden`) without a scrollable wrapper, unlike ItemDetail/BoxDetail which both use `panel-tab-body`. Wrapped in `panel-tab-body` for consistent padding and scrollability.
