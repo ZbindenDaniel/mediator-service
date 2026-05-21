@@ -1629,6 +1629,10 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
 
       console.info('Submitting duplicate selection via legacy item creation flow.');
 
+      // ocrPhoto taken in basicInfo step should persist as picture1 if not already provided
+      if (ocrPhoto && !clone.picture1) {
+        clone.picture1 = ocrPhoto;
+      }
       await submitNewItem(clone, 'match-selection');
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
@@ -1664,6 +1668,10 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
         basicInfo,
         manualData: data
       });
+      // ocrPhoto taken in basicInfo step should persist as picture1 if not already provided
+      if (ocrPhoto && !merged.picture1) {
+        merged.picture1 = ocrPhoto;
+      }
       console.log('Prepared manual submission payload', merged);
       await submitNewItem(merged, 'manual-edit');
     } catch (err) {
@@ -1687,6 +1695,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     try {
       const mergedData: Partial<ItemFormData> = {
         ...baseDraft,
+        // ocrPhoto taken in basicInfo step should persist as picture1 if not already provided
+        ...(ocrPhoto && !baseDraft.picture1 && !data.picture1 ? { picture1: ocrPhoto } : {}),
         ...data,
         agenticStatus: AGENTIC_RUN_STATUS_RUNNING,
         agenticSearch:

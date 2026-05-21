@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+767. ✅ Fix image persistence bug: ocrPhoto from basicInfo step now propagated as picture1 in all three creation paths
+   - **Why:** The OCR photo captured in the `basicInfo` step was stored in separate `ocrPhoto` state and only forwarded to the agentic trigger as `imageData` for AI recognition — it was never included in the item creation POST body. Fixed by injecting `ocrPhoto` as `picture1` in `handleAgenticPhotos`, `handleManualSubmit`, and `handleMatchSelection` in `ItemCreate.tsx`, skipping the injection when `picture1` is already explicitly set.
+   - **Deferred:** Neither `ItemForm_agentic` (photos mode) nor `ItemForm` (manual form) render any photo upload UI — all photo handlers are dead code in those components. This pre-existing state is not changed; the fix only ensures the already-captured OCR photo is not silently dropped.
 768. ✅ OS question: add text question type with datalist suggestions; switch 201/102 os_installed to Linux-only free-text combobox
    - **Why:** revamp-it installs exclusively Linux. A fixed select with Windows entries was wrong, and a plain select can't capture specific distro versions. Added `text` question type to the contract schema; renders as `<input list=datalist>` in QualityReviewStep — common Linux distros appear as suggestions but the operator can type anything.
    - **Deferred:** Charger/accessories linking during assessment (see feasibility note below in todo.md).
