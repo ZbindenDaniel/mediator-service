@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+773. ✅ Fix BoxDetail shelf LocationTag navigating into the main shell
+   - **Why:** The "Standort" row in BoxDetail used `<Link to="/boxes/:shelfId">` which triggered React Router to render BoxDetail inside `panel-main` (via BoxRoute), causing shelf tabs to appear in the main shell and BoxDetail to render twice (main + right panel). Replaced with a `<button>` that calls `setEntity('box', normalizedLocationId)` — the same pattern already used in ItemList for shelf/box column buttons.
+   - **Deferred:** Nothing deferred.
 772. ✅ Multiselect: waiting (queued) runs can now be stopped alongside running runs
    - **Why:** `stoppableCount` in `KiActionForm` and the stop handler in `handleBulkKi` both filtered only for `AGENTIC_RUN_STATUS_RUNNING`, silently excluding `AGENTIC_RUN_STATUS_QUEUED` items. The backend `cancelAgenticRun` already handles any status; the gate was purely frontend-side. Extended both filters to include `AGENTIC_RUN_STATUS_QUEUED`. Updated the UI count label to "laufende/wartende Artikel stoppen" and the empty-state message accordingly.
    - **Deferred:** Nothing deferred.
