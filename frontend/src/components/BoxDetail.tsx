@@ -861,9 +861,14 @@ export default function BoxDetail({ boxId }: Props) {
                       <th>Standort</th>
                       <td>
                         {shouldLinkLocation ? (
-                          <Link to={`/boxes/${encodeURIComponent(normalizedLocationId)}`} aria-label="Zum Regal">
+                          <button
+                            type="button"
+                            className="link-btn"
+                            onClick={() => setEntity('box', normalizedLocationId)}
+                            aria-label="Zum Regal"
+                          >
                             <LocationTag locationKey={box.LocationId} labelOverride={box.Label} />
-                          </Link>
+                          </button>
                         ) : (
                           <LocationTag locationKey={box.LocationId} labelOverride={box.Label} />
                         )}
