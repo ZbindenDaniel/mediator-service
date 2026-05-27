@@ -101,6 +101,8 @@
 
 42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (SQLite `json_extract`). Enables searching "16GB" to find matching Laptops.
 
+42b. ✅ **Search covers instance identifiers (SerialNumber, MacAddress, EAN).** Header search now finds items by serial number, MAC address, or EAN barcode. Both token-presence (LIKE) and exact-match (=) checks added to SQL; JS scoring updated. Reference (dedupe) search also includes EAN.
+
 43. ✅ **Quality contracts: `text` question type (datalist combobox) implemented.** `select` / `boolean` / `text` now supported. `range` (numeric slider) still deferred.
 
 44. **Quality assessment: link accessories (charger etc.) during assessment.** Feasibility confirmed — `item_relations` table (RelationType='Zubehör') and full CRUD API already exist. Chargers are separate items (cat 804/805). The assessment step could show an "Zubehör hinzufügen?" picker that creates `item_relations` records on save. No new table needed; add an optional `linked_accessories TEXT` JSON column to `quality_assessments` or just rely on `item_relations`. Effort: medium (new UI step + wiring to existing API).

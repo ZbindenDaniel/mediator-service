@@ -615,6 +615,10 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   const [creating, setCreating] = useState(false);
   const [ocrPhoto, setOcrPhoto] = useState<string | null>(null);
   const [ocrCaptureOpen, setOcrCaptureOpen] = useState(false);
+  const isCameraAvailable = useMemo(
+    () => typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia),
+    []
+  );
   const [qualityReviewResult, setQualityReviewResult] = useState<QualityReviewResult | null>(null);
   const [qualitySkippedForMultiple, setQualitySkippedForMultiple] = useState(false);
   const dialog = useDialog();
@@ -1744,9 +1748,11 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
           Gerät fotografieren (optional) – Typenschild scannen für bessere KI-Suche
         </p>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* <button type="button" onClick={() => setOcrCaptureOpen(true)}>
-            Foto aufnehmen
-          </button> */}
+          {isCameraAvailable && (
+            <button type="button" onClick={() => setOcrCaptureOpen(true)}>
+              Foto aufnehmen
+            </button>
+          )}
           <label style={{ cursor: 'pointer' }}>
             Datei wählen
             <input
