@@ -27,6 +27,7 @@ interface QualityReviewStepProps {
   subCategory?: number;
   layout?: 'page' | 'embedded';
   initialAnswers?: Record<string, string>;
+  disabled?: boolean;
 }
 
 const AI_PRIORITY_LABELS: Record<AiPriority, string> = {
@@ -133,6 +134,7 @@ export default function QualityReviewStep({
   subCategory,
   layout,
   initialAnswers,
+  disabled,
 }: QualityReviewStepProps) {
   const [contracts, setContracts] = useState<{ general: QualityContract | null; subCat: QualityContract | null }>({
     general: null,
@@ -272,10 +274,10 @@ export default function QualityReviewStep({
         )}
 
         <div className="item-create__step-actions">
-          <button type="button" className="btn btn--secondary" onClick={onSkip}>
+          <button type="button" className="btn btn--secondary" onClick={onSkip} disabled={disabled}>
             Überspringen
           </button>
-          <button type="submit" className="btn btn--primary" disabled={!canSubmit}>
+          <button type="submit" className="btn btn--primary" disabled={!canSubmit || disabled}>
             Weiter →
           </button>
         </div>
