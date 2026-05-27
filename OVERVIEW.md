@@ -7,6 +7,11 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+775. ✅ Search now covers SerialNumber, MacAddress, EAN; desktop camera capture restored in item creation
+   - **Why (search):** The `/api/search` SQL only matched reference-level text fields plus ItemUUID/Artikel_Nummer/BoxID. Operators scanning barcodes (EAN) or typing a serial/MAC found nothing. Added `i.SerialNumber`, `i.MacAddress`, and `r.EAN` to both the token-presence LIKE expressions and the exact-match equality checks in the item search path, and `r.EAN` to the reference (dedupe) search path. JS-side scoring updated accordingly.
+   - **Why (camera):** `PhotoCaptureModal` (webcam via `getUserMedia`) was built and wired in `ItemCreate.tsx` but the "Foto aufnehmen" trigger button was commented out. Added `isCameraAvailable` guard and restored the button — it renders only when the browser exposes camera access, so devices without cameras are unaffected.
+   - **Deferred:** Nothing deferred.
+774. ✅ Fix BoxDetail shelf LocationTag navigating into the main shell
 773. ✅ A4 marketing sheet (Produktblatt) for items — printable shelf card with name, specs, price, CO₂, image, QR
    - **Why:** Added a new `'marketingsheet'` PrintLabelType that routes through the existing print pipeline (HTML-to-PDF via Chromium). Template `item-a4.html` follows the `shelf-a4` pattern and is injected with a richer payload (Langtext specs, Verkaufspreis, calculated CO₂ savings, first attachment image URL). A third "A4 Produktblatt" button is added to the item label dialog in `PrintLabelButton`. A `PRINTER_QUEUE_MARKETING` env var allows routing to a dedicated A4 printer queue (falls back to `PRINTER_QUEUE`).
    - **Deferred:** CO₂ badge only shown when a value can be calculated (category + quality known). Image only shown when an attachment exists. No dedicated printer queue is configured by default — operators must set `PRINTER_QUEUE_MARKETING` to target an A4 printer.
