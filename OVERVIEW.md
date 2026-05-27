@@ -7,7 +7,11 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
-773. ✅ Fix BoxDetail shelf LocationTag navigating into the main shell
+775. ✅ Search now covers SerialNumber, MacAddress, EAN; desktop camera capture restored in item creation
+   - **Why (search):** The `/api/search` SQL only matched reference-level text fields plus ItemUUID/Artikel_Nummer/BoxID. Operators scanning barcodes (EAN) or typing a serial/MAC found nothing. Added `i.SerialNumber`, `i.MacAddress`, and `r.EAN` to both the token-presence LIKE expressions and the exact-match equality checks in the item search path, and `r.EAN` to the reference (dedupe) search path. JS-side scoring updated accordingly.
+   - **Why (camera):** `PhotoCaptureModal` (webcam via `getUserMedia`) was built and wired in `ItemCreate.tsx` but the "Foto aufnehmen" trigger button was commented out. Added `isCameraAvailable` guard and restored the button — it renders only when the browser exposes camera access, so devices without cameras are unaffected.
+   - **Deferred:** Nothing deferred.
+774. ✅ Fix BoxDetail shelf LocationTag navigating into the main shell
    - **Why:** The "Standort" row in BoxDetail used `<Link to="/boxes/:shelfId">` which triggered React Router to render BoxDetail inside `panel-main` (via BoxRoute), causing shelf tabs to appear in the main shell and BoxDetail to render twice (main + right panel). Replaced with a `<button>` that calls `setEntity('box', normalizedLocationId)` — the same pattern already used in ItemList for shelf/box column buttons.
    - **Deferred:** Nothing deferred.
 772. ✅ Multiselect: waiting (queued) runs can now be stopped alongside running runs

@@ -287,6 +287,9 @@ type ItemFieldScores = {
   scoreArtikelNummer: number;
   scoreItemUUID: number;
   scoreBoxID: number;
+  scoreSerialNumber: number;
+  scoreMacAddress: number;
+  scoreEAN: number;
   bestScore: number;
   bestField:
     | 'Suchbegriff'
@@ -296,7 +299,10 @@ type ItemFieldScores = {
     | 'Langtext'
     | 'ArtikelNummer'
     | 'ItemUUID'
-    | 'BoxID';
+    | 'BoxID'
+    | 'SerialNumber'
+    | 'MacAddress'
+    | 'EAN';
 };
 
 // TODO(search-typing): Revisit search score input types if new search fields are introduced.
@@ -311,6 +317,9 @@ interface SearchScoreItem {
   Langtext?: SearchScoreField;
   ItemUUID?: SearchScoreField;
   BoxID?: SearchScoreField;
+  SerialNumber?: SearchScoreField;
+  MacAddress?: SearchScoreField;
+  EAN?: SearchScoreField;
 }
 
 interface SearchScoreReference {
@@ -320,6 +329,7 @@ interface SearchScoreReference {
   Hersteller?: SearchScoreField;
   Kurzbeschreibung?: SearchScoreField;
   Langtext?: SearchScoreField;
+  EAN?: SearchScoreField;
 }
 
 type ReferenceFieldScores = {
@@ -329,8 +339,9 @@ type ReferenceFieldScores = {
   scoreKurzbeschreibung: number;
   scoreLangtext: number;
   scoreArtikelNummer: number;
+  scoreEAN: number;
   bestScore: number;
-  bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'Kurzbeschreibung' | 'Langtext' | 'ArtikelNummer';
+  bestField: 'Suchbegriff' | 'Hersteller' | 'Artikelbeschreibung' | 'Kurzbeschreibung' | 'Langtext' | 'ArtikelNummer' | 'EAN';
 };
 
 function scoreItem(
@@ -382,7 +393,10 @@ function scoreItem(
       { fieldName: 'Langtext', value: includeDeepFields ? item?.Langtext : null },
       { fieldName: 'ArtikelNummer', value: item?.Artikel_Nummer },
       { fieldName: 'ItemUUID', value: item?.ItemUUID },
-      { fieldName: 'BoxID', value: item?.BoxID }
+      { fieldName: 'BoxID', value: item?.BoxID },
+      { fieldName: 'SerialNumber', value: item?.SerialNumber },
+      { fieldName: 'MacAddress', value: item?.MacAddress },
+      { fieldName: 'EAN', value: item?.EAN }
     ]
   );
 
@@ -395,6 +409,9 @@ function scoreItem(
     scoreArtikelNummer: fieldScores.ArtikelNummer,
     scoreItemUUID: fieldScores.ItemUUID,
     scoreBoxID: fieldScores.BoxID,
+    scoreSerialNumber: fieldScores.SerialNumber,
+    scoreMacAddress: fieldScores.MacAddress,
+    scoreEAN: fieldScores.EAN,
     bestScore,
     bestField
   };
@@ -460,7 +477,8 @@ function scoreReference(
       { fieldName: 'Artikelbeschreibung', value: reference?.Artikelbeschreibung },
       { fieldName: 'Kurzbeschreibung', value: includeDeepFields ? reference?.Kurzbeschreibung : null },
       { fieldName: 'Langtext', value: includeDeepFields ? reference?.Langtext : null },
-      { fieldName: 'ArtikelNummer', value: reference?.Artikel_Nummer }
+      { fieldName: 'ArtikelNummer', value: reference?.Artikel_Nummer },
+      { fieldName: 'EAN', value: reference?.EAN }
     ]
   );
 
@@ -471,6 +489,7 @@ function scoreReference(
     scoreKurzbeschreibung: fieldScores.Kurzbeschreibung,
     scoreLangtext: fieldScores.Langtext,
     scoreArtikelNummer: fieldScores.ArtikelNummer,
+    scoreEAN: fieldScores.EAN,
     bestScore,
     bestField
   };
@@ -544,9 +563,9 @@ const action = defineHttpAction({
         let refSql = '';
         let refParams: Array<string | number> = [];
         try {
-          const like6 = (t: string) => {
+          const like7 = (t: string) => {
             const p = `%${t}%`;
-            return [p, p, p, p, p, p] as const;
+            return [p, p, p, p, p, p, p] as [string, string, string, string, string, string, string];
           };
 
           refTokenPresenceTerms = tokens
@@ -559,6 +578,7 @@ const action = defineHttpAction({
       OR lower(${suchbegriffFallbackExpr}) LIKE ?
       OR lower(COALESCE(r.Langtext, '')) LIKE ?
       OR lower(COALESCE(r.Hersteller, '')) LIKE ?
+      OR lower(COALESCE(r.EAN, '')) LIKE ?
     ) THEN 1 ELSE 0 END
   `
             )
@@ -570,6 +590,7 @@ const action = defineHttpAction({
       OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
       OR lower(${suchbegriffFallbackExpr}) = ?
       OR lower(COALESCE(r.Hersteller, '')) = ?
+      OR lower(COALESCE(r.EAN, '')) = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -615,9 +636,10 @@ const action = defineHttpAction({
   `;
 
           refParams = [
-            // token_hits params
-            ...tokens.flatMap(like6),
-            // exact_match params (equality)
+            // token_hits params (7 per token: Artikel_Nummer, Artikelbeschreibung, Kurzbeschreibung, Suchbegriff, Langtext, Hersteller, EAN)
+            ...tokens.flatMap(like7),
+            // exact_match params (equality: Artikel_Nummer, Artikelbeschreibung, Suchbegriff, Hersteller, EAN)
+            normalized,
             normalized,
             normalized,
             normalized,
@@ -627,8 +649,9 @@ const action = defineHttpAction({
             normalized,
             normalized,
             normalized,
+            normalized,
             // sql_score token_hits terms again (used in ELSE)
-            ...tokens.flatMap(like6),
+            ...tokens.flatMap(like7),
             // divisor = tokens.length
             tokens.length,
             // WHERE threshold
@@ -681,7 +704,8 @@ const action = defineHttpAction({
               reference.Artikel_Nummer,
               reference.Artikelbeschreibung,
               suchbegriffCheck,
-              reference.Hersteller
+              reference.Hersteller,
+              reference.EAN
             ])
           ) {
             console.warn('[search] Reference token hits without exact-match fields populated', {
@@ -746,9 +770,10 @@ const action = defineHttpAction({
         return;
       }
 
-      const likeItem = (t: string) => {
+      const likeItem = (t: string): string[] => {
         const p = `%${t}%`;
-        return deepSearch ? [p, p, p, p, p, p, p, p] as const : [p, p, p, p, p, p] as const;
+        // 6 base fields + 2 deep-only (Kurzbeschreibung, Langtext) + 3 identifier fields (SerialNumber, MacAddress, EAN)
+        return deepSearch ? [p, p, p, p, p, p, p, p, p, p, p] : [p, p, p, p, p, p, p, p, p];
       };
       const likeBox = (t: string) => {
         const p = `%${t}%`;
@@ -772,6 +797,9 @@ const action = defineHttpAction({
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?\n      OR lower(COALESCE(r.Langtext, '')) LIKE ?" : ''}
       OR lower(COALESCE(r.Hersteller, '')) LIKE ?
       OR lower(i.BoxID)            LIKE ?
+      OR lower(COALESCE(i.SerialNumber, '')) LIKE ?
+      OR lower(COALESCE(i.MacAddress, ''))   LIKE ?
+      OR lower(COALESCE(r.EAN, ''))          LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
 
@@ -785,6 +813,9 @@ const action = defineHttpAction({
       ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) = ?\n      OR lower(COALESCE(r.Langtext, '')) = ?" : ''}
       OR lower(COALESCE(r.Hersteller, '')) = ?
       OR lower(i.BoxID)            = ?
+      OR lower(COALESCE(i.SerialNumber, '')) = ?
+      OR lower(COALESCE(i.MacAddress, ''))   = ?
+      OR lower(COALESCE(r.EAN, ''))          = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -819,6 +850,9 @@ const action = defineHttpAction({
         r.Artikeltyp,
         r.Einheit,
         r.EntityType,
+        i.SerialNumber,
+        i.MacAddress,
+        r.EAN,
         (${itemTokenPresenceTerms}) AS token_hits,
         ${itemExactMatchExpr} AS exact_match,
         CASE
@@ -834,9 +868,10 @@ const action = defineHttpAction({
     LIMIT ?
   `;
 
+        // 6 base fields + 2 deep-only + 3 identifier fields (SerialNumber, MacAddress, EAN)
         itemExactParams = deepSearch
-          ? [normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized]
-          : [normalized, normalized, normalized, normalized, normalized, normalized];
+          ? [normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized]
+          : [normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized, normalized];
 
         itemParams = [
           // token_hits params
