@@ -7,6 +7,7 @@ import {
   PRINTER_QUEUE_ITEM,
   PRINTER_QUEUE_ITEM_SMALL,
   PRINTER_QUEUE_SHELF,
+  PRINTER_QUEUE_MARKETING,
   PRINTER_SERVER,
   LP_COMMAND,
   LPSTAT_COMMAND,
@@ -35,7 +36,7 @@ export interface PrintFileResult {
 
 // TODO(agent): Keep print retry behaviour minimal and shared across lp/lpstat operations.
 
-export type PrintLabelType = 'box' | 'item' | 'shelf' | 'smallitem';
+export type PrintLabelType = 'box' | 'item' | 'shelf' | 'smallitem' | 'marketingsheet';
 export type PrinterQueueSource = 'label' | 'default' | 'missing';
 
 export interface PrinterQueueResolution {
@@ -60,6 +61,9 @@ export function resolvePrinterQueue(
       break;
     case 'shelf':
       queue = PRINTER_QUEUE_SHELF;
+      break;
+    case 'marketingsheet':
+      queue = PRINTER_QUEUE_MARKETING;
       break;
     default:
       queue = '';

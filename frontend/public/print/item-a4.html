@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Produktblatt A4</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 12mm;
+    }
+
+    :root {
+      color-scheme: only light;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      background: #f3f4f6;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .sheet {
+      width: 186mm;
+      min-height: 267mm;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      border: 1.5px solid #d1d5db;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    .header {
+      background: #1f2937;
+      color: #fff;
+      padding: 6mm 8mm 5mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 4mm;
+    }
+
+    .header-title {
+      flex: 1;
+    }
+
+    .item-name {
+      font-size: 20pt;
+      font-weight: 700;
+      line-height: 1.2;
+      margin: 0;
+    }
+
+    .item-category {
+      font-size: 10pt;
+      font-weight: 400;
+      color: #9ca3af;
+      margin-top: 1.5mm;
+    }
+
+    .item-manufacturer {
+      font-size: 10pt;
+      font-weight: 600;
+      color: #d1d5db;
+      margin-top: 1mm;
+    }
+
+    /* ── Body ────────────────────────────────────────────────── */
+    .body {
+      display: grid;
+      grid-template-columns: 80mm 1fr;
+      gap: 0;
+      flex: 1;
+    }
+
+    /* ── Left column: image + QR ─────────────────────────────── */
+    .left-col {
+      display: flex;
+      flex-direction: column;
+      padding: 6mm;
+      gap: 4mm;
+      border-right: 1.5px solid #e5e7eb;
+    }
+
+    .item-image {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: contain;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 2mm;
+    }
+
+    .item-image-placeholder {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 2mm;
+      color: #9ca3af;
+      font-size: 9pt;
+    }
+
+    .qr-row {
+      display: flex;
+      align-items: center;
+      gap: 3mm;
+    }
+
+    .qr-img,
+    .qr-canvas {
+      width: 20mm;
+      height: 20mm;
+      image-rendering: pixelated;
+      flex-shrink: 0;
+    }
+
+    .qr-label {
+      font-size: 7.5pt;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+
+    .material-number {
+      font-size: 7.5pt;
+      color: #6b7280;
+      font-family: 'Courier New', monospace;
+    }
+
+    /* ── Right column: specs + price ─────────────────────────── */
+    .right-col {
+      display: flex;
+      flex-direction: column;
+      padding: 6mm;
+      gap: 4mm;
+    }
+
+    .section-title {
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      margin-bottom: 2mm;
+    }
+
+    .description {
+      font-size: 9.5pt;
+      color: #374151;
+      line-height: 1.5;
+    }
+
+    .specs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.5pt;
+    }
+
+    .specs-table tr:nth-child(odd) td {
+      background: #f9fafb;
+    }
+
+    .specs-table td {
+      padding: 1.2mm 2mm;
+      vertical-align: top;
+      color: #374151;
+    }
+
+    .specs-table td:first-child {
+      font-weight: 600;
+      color: #1f2937;
+      width: 40%;
+      white-space: nowrap;
+    }
+
+    /* ── Price block ─────────────────────────────────────────── */
+    .price-block {
+      margin-top: auto;
+      padding: 4mm;
+      background: #f0fdf4;
+      border: 1.5px solid #86efac;
+      border-radius: 2mm;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .price-amount {
+      font-size: 22pt;
+      font-weight: 700;
+      color: #166534;
+    }
+
+    .price-currency {
+      font-size: 11pt;
+      font-weight: 600;
+      color: #166534;
+      margin-right: 1mm;
+    }
+
+    .price-label {
+      font-size: 8pt;
+      color: #15803d;
+    }
+
+    /* ── CO₂ badge ───────────────────────────────────────────── */
+    .co2-badge {
+      display: flex;
+      align-items: center;
+      gap: 2mm;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 2mm;
+      padding: 2mm 3mm;
+      font-size: 8pt;
+      color: #166534;
+    }
+
+    .co2-value {
+      font-weight: 700;
+      font-size: 10pt;
+    }
+
+    .no-price {
+      font-size: 9pt;
+      color: #9ca3af;
+      font-style: italic;
+    }
+
+    .error {
+      margin: 16px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 11pt;
+    }
+
+    @media print {
+      body {
+        background: none;
+      }
+
+      .sheet {
+        border-color: #d1d5db;
+        page-break-inside: avoid;
+        box-shadow: none;
+      }
+
+      .error {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="sheet" id="sheet" hidden>
+    <div class="header">
+      <div class="header-title">
+        <div class="item-name" id="itemName">Artikelname</div>
+        <div class="item-category" id="itemCategory"></div>
+        <div class="item-manufacturer" id="itemManufacturer"></div>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="left-col">
+        <img class="item-image" id="itemImage" alt="Produktbild" hidden />
+        <div class="item-image-placeholder" id="itemImagePlaceholder">Kein Bild vorhanden</div>
+
+        <div id="co2Section" hidden>
+          <div class="co2-badge">
+            <span>🌱</span>
+            <span>Eingesparte CO₂: <span class="co2-value" id="co2Value"></span> kg</span>
+          </div>
+        </div>
+
+        <div class="qr-row">
+          <img class="qr-img" id="qrImage" alt="QR-Code" hidden />
+          <canvas class="qr-canvas" id="qrCanvas" hidden></canvas>
+          <div>
+            <div class="qr-label">Artikel scannen für<br>mehr Informationen</div>
+            <div class="material-number" id="materialNumber"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="right-col">
+        <div id="descriptionSection" hidden>
+          <div class="section-title">Beschreibung</div>
+          <div class="description" id="description"></div>
+        </div>
+
+        <div id="specsSection" hidden>
+          <div class="section-title">Spezifikationen</div>
+          <table class="specs-table" id="specsTable"></table>
+        </div>
+
+        <div id="priceSection">
+          <div class="price-block" id="priceBlock" hidden>
+            <div>
+              <div class="price-label">Verkaufspreis</div>
+              <div>
+                <span class="price-currency" id="priceCurrency">CHF</span>
+                <span class="price-amount" id="priceAmount"></span>
+              </div>
+            </div>
+          </div>
+          <div class="no-price" id="noPrice" hidden>Preis auf Anfrage</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="error" id="error" hidden></div>
+
+  <script>
+    (function init() {
+      const sheetEl = document.getElementById('sheet');
+      const itemNameEl = document.getElementById('itemName');
+      const itemCategoryEl = document.getElementById('itemCategory');
+      const itemManufacturerEl = document.getElementById('itemManufacturer');
+      const itemImageEl = document.getElementById('itemImage');
+      const itemImagePlaceholderEl = document.getElementById('itemImagePlaceholder');
+      const co2SectionEl = document.getElementById('co2Section');
+      const co2ValueEl = document.getElementById('co2Value');
+      const qrImageEl = document.getElementById('qrImage');
+      const qrCanvasEl = document.getElementById('qrCanvas');
+      const materialNumberEl = document.getElementById('materialNumber');
+      const descriptionSectionEl = document.getElementById('descriptionSection');
+      const descriptionEl = document.getElementById('description');
+      const specsSectionEl = document.getElementById('specsSection');
+      const specsTableEl = document.getElementById('specsTable');
+      const priceBlockEl = document.getElementById('priceBlock');
+      const priceAmountEl = document.getElementById('priceAmount');
+      const priceCurrencyEl = document.getElementById('priceCurrency');
+      const noPriceEl = document.getElementById('noPrice');
+      const errorEl = document.getElementById('error');
+
+      function drawMatrix(modules, margin) {
+        if (!qrCanvasEl || !Array.isArray(modules) || modules.length === 0) return false;
+        try {
+          const size = modules.length;
+          const pixelSize = 400;
+          const scale = Math.floor(pixelSize / size);
+          const offset = Math.floor((pixelSize - size * scale) / 2);
+          const ctx = qrCanvasEl.getContext('2d');
+          if (!ctx) return false;
+          qrCanvasEl.width = pixelSize;
+          qrCanvasEl.height = pixelSize;
+          ctx.clearRect(0, 0, pixelSize, pixelSize);
+          ctx.fillStyle = '#1f2937';
+          modules.forEach(function(row, y) {
+            row.forEach(function(cell, x) {
+              if (cell) ctx.fillRect(offset + x * scale, offset + y * scale, scale, scale);
+            });
+          });
+          qrCanvasEl.hidden = false;
+          return true;
+        } catch (err) {
+          console.error('Failed to draw QR matrix', err);
+          return false;
+        }
+      }
+
+      function showError(message) {
+        if (!errorEl) return;
+        errorEl.textContent = message;
+        errorEl.hidden = false;
+        if (sheetEl) sheetEl.hidden = true;
+      }
+
+      function renderSpecs(specs) {
+        if (!specs || typeof specs !== 'object' || Array.isArray(specs)) return;
+        var entries = Object.entries(specs).filter(function(e) {
+          return e[1] !== null && e[1] !== undefined && e[1] !== '';
+        });
+        if (entries.length === 0) return;
+        var rows = entries.map(function(entry) {
+          var key = entry[0];
+          var val = Array.isArray(entry[1]) ? entry[1].join(', ') : String(entry[1]);
+          return '<tr><td>' + escHtml(key) + '</td><td>' + escHtml(val) + '</td></tr>';
+        }).join('');
+        specsTableEl.innerHTML = rows;
+        specsSectionEl.hidden = false;
+      }
+
+      function escHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function render(payload) {
+        if (!payload || typeof payload !== 'object') {
+          showError('Kein gültiger Payload vorhanden.');
+          return;
+        }
+        try {
+          if (itemNameEl) itemNameEl.textContent = payload.labelText || payload.id || '';
+          if (itemCategoryEl && payload.category) itemCategoryEl.textContent = payload.category;
+          if (itemManufacturerEl && payload.manufacturer) itemManufacturerEl.textContent = payload.manufacturer;
+          if (materialNumberEl && payload.materialNumber) materialNumberEl.textContent = payload.materialNumber;
+
+          // Image
+          if (payload.imageUrl && itemImageEl) {
+            itemImageEl.src = payload.imageUrl;
+            itemImageEl.hidden = false;
+            if (itemImagePlaceholderEl) itemImagePlaceholderEl.hidden = true;
+          }
+
+          // CO₂
+          if (typeof payload.co2SavedKg === 'number' && payload.co2SavedKg > 0 && co2SectionEl && co2ValueEl) {
+            co2ValueEl.textContent = payload.co2SavedKg.toFixed(1);
+            co2SectionEl.hidden = false;
+          }
+
+          // QR code
+          var hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
+          if (qrImageEl) {
+            if (hasDataUri) {
+              qrImageEl.src = payload.qrDataUri;
+              qrImageEl.hidden = false;
+            } else {
+              qrImageEl.hidden = true;
+            }
+          }
+          if (!hasDataUri && Array.isArray(payload.qrModules)) {
+            drawMatrix(payload.qrModules, payload.qrMargin);
+          }
+
+          // Description
+          if (payload.description && descriptionSectionEl && descriptionEl) {
+            descriptionEl.textContent = payload.description;
+            descriptionSectionEl.hidden = false;
+          }
+
+          // Specs from Langtext
+          if (payload.specs) renderSpecs(payload.specs);
+
+          // Price
+          if (typeof payload.price === 'number') {
+            if (priceAmountEl) priceAmountEl.textContent = payload.price.toFixed(2);
+            if (priceCurrencyEl) priceCurrencyEl.textContent = payload.currency || 'CHF';
+            if (priceBlockEl) priceBlockEl.hidden = false;
+          } else {
+            if (noPriceEl) noPriceEl.hidden = false;
+          }
+
+          if (sheetEl) sheetEl.hidden = false;
+        } catch (err) {
+          console.error('Render error in item-a4 marketing sheet', err);
+          showError('Vorlage konnte nicht gerendert werden.');
+        }
+      }
+
+      function tryInlinePayload() {
+        var inlinePayload = window.__LABEL_PAYLOAD__;
+        if (!inlinePayload) return false;
+        try {
+          render(inlinePayload);
+          return true;
+        } catch (err) {
+          console.error('Failed to render inline payload', err);
+          showError('Eingebettete Druckdaten konnten nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function tryFromStorage(key) {
+        if (!key) return false;
+        try {
+          var raw = sessionStorage.getItem(key);
+          if (!raw) {
+            showError('Kein zwischengespeicherter Payload gefunden.');
+            return true;
+          }
+          var payload = JSON.parse(raw);
+          sessionStorage.removeItem(key);
+          render(payload);
+          return true;
+        } catch (err) {
+          console.error('Failed to load payload from storage', err);
+          showError('Payload konnte nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function handleMessage(event) {
+        if (event.origin && event.origin !== window.location.origin) {
+          console.warn('Ignoring message from unexpected origin', event.origin);
+          return;
+        }
+        try {
+          var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+          if (data && data.payload) render(data.payload);
+        } catch (err) {
+          console.error('Failed to parse postMessage payload', err);
+          showError('Übertragene Daten ungültig.');
+        }
+      }
+
+      window.addEventListener('message', handleMessage, { once: true });
+
+      var params = new URLSearchParams(window.location.search);
+      var key = params.get('key');
+      if (!tryInlinePayload() && !tryFromStorage(key)) {
+        console.warn('Warte auf Payload via postMessage…');
+      }
+    })();
+  </script>
+</body>
+
+</html>
