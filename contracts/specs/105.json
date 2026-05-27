@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "subCategory": 105,
+  "fields": [
+    { "key": "Modell",          "required": true,  "description": "Apple model name (e.g. MacBook Pro 14\", iMac 24\", Mac Mini)" },
+    { "key": "Prozessor",       "required": true,  "description": "CPU (e.g. Apple M2, Intel Core i7)" },
+    { "key": "RAM",             "required": true,  "description": "Memory in GB (unified memory for Apple Silicon)" },
+    { "key": "Speicher",        "required": true,  "description": "SSD storage size (e.g. 512 GB)" },
+    { "key": "Display",         "required": false, "description": "Screen size and resolution (MacBook/iMac only)" },
+    { "key": "Betriebssystem",  "required": false, "description": "macOS version installed" },
+    { "key": "Akku",            "required": false, "description": "Battery condition (MacBook only)" },
+    { "key": "Tastatur-Layout", "required": false, "description": "Keyboard layout (CH/DE/US)" }
+  ]
+}

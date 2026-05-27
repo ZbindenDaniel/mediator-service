@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "subCategory": 301,
+  "fields": [
+    { "key": "Modell",            "required": true,  "description": "Product model name/number" },
+    { "key": "Druckertyp",        "required": true,  "description": "Print technology (Laser, Tinte, Nadel, Thermisch)" },
+    { "key": "Farbe",             "required": false, "description": "Whether colour printing is supported" },
+    { "key": "Duplex",            "required": false, "description": "Whether automatic duplex printing is supported" },
+    { "key": "Anschluss",         "required": false, "description": "Interface (USB, LAN, WLAN, Mehrere)" },
+    { "key": "Verbrauchsmaterial", "required": false, "description": "Toner/ink status (Voll, Teilweise, Leer, Nicht enthalten)" }
+  ]
+}

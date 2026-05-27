@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "subCategory": 103,
+  "questions": [
+    {
+      "id": "form_factor",
+      "type": "select",
+      "question": "Formfaktor?",
+      "values": ["Rack 1U", "Rack 2U", "Rack 4U", "Tower", "Blade"],
+      "specField": "Formfaktor",
+      "specValue": "%v"
+    },
+    {
+      "id": "drive_type",
+      "type": "select",
+      "question": "Speichertyp?",
+      "values": ["SSD", "NVMe SSD", "HDD", "SAS HDD", "SSD + HDD", "Mehrere"],
+      "specField": "Speichertyp",
+      "specValue": "%v"
+    },
+    {
+      "id": "has_os",
+      "type": "boolean",
+      "question": "Betriebssystem installiert?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    },
+    {
+      "id": "os_installed",
+      "type": "text",
+      "question": "Welches Betriebssystem?",
+      "suggestions": [
+        "Ubuntu Server 24.04 LTS",
+        "Ubuntu Server 22.04 LTS",
+        "Debian 12 (Bookworm)",
+        "Rocky Linux 9",
+        "AlmaLinux 9",
+        "openSUSE Leap 15.6",
+        "Proxmox VE 8",
+        "VMware ESXi"
+      ],
+      "specField": "Betriebssystem",
+      "specValue": "%v",
+      "showIf": { "questionId": "has_os", "value": "true" }
+    },
+    {
+      "id": "power_cable_included",
+      "type": "boolean",
+      "question": "Netzkabel vorhanden?",
+      "specField": "Netzkabel",
+      "specValue": "%v",
+      "qualityImpact": { "true": 5, "false": 4 }
+    }
+  ]
+}

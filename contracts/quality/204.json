@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "subCategory": 204,
+  "questions": [
+    {
+      "id": "screen_condition",
+      "type": "select",
+      "question": "Bildschirmzustand?",
+      "values": ["Keine Auffälligkeiten", "Geringe Kratzer", "Deutliche Mängel", "Gesprungenes Glas"],
+      "specField": "Bildschirmzustand",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Keine Auffälligkeiten": 5,
+        "Geringe Kratzer": 3,
+        "Deutliche Mängel": 2,
+        "Gesprungenes Glas": 1
+      }
+    },
+    {
+      "id": "battery_condition",
+      "type": "select",
+      "question": "Akkuzustand?",
+      "values": ["Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt"],
+      "specField": "Akku",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Gut (>80%)": 5,
+        "Mittel (50–80%)": 4,
+        "Schwach (<50%)": 3,
+        "Defekt": 2
+      }
+    },
+    {
+      "id": "has_os",
+      "type": "boolean",
+      "question": "Betriebssystem installiert?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    },
+    {
+      "id": "os_installed",
+      "type": "text",
+      "question": "Welches Betriebssystem?",
+      "suggestions": [
+        "Android 14",
+        "Android 13",
+        "Android 12",
+        "iPadOS 18",
+        "iPadOS 17",
+        "Ubuntu Touch",
+        "ChromeOS"
+      ],
+      "specField": "Betriebssystem",
+      "specValue": "%v",
+      "showIf": { "questionId": "has_os", "value": "true" }
+    },
+    {
+      "id": "charging_cable_included",
+      "type": "boolean",
+      "question": "Ladekabel vorhanden?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    },
+    {
+      "id": "cellular",
+      "type": "boolean",
+      "question": "Mobilfunk-fähig (SIM)?",
+      "specField": "Mobilfunk",
+      "specValue": "%v"
+    }
+  ]
+}

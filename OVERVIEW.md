@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+774. ✅ Add missing quality and spec contracts for 5 + 6 subcategories
+   - **Why:** Quality contracts 103/105/302/204/1802 and spec contracts 102/103/105/204/301/401 were listed in todo items 40 and 44 as missing. Pure JSON files — no code change, backend registry auto-discovers them on restart. `Hersteller` intentionally omitted from all new spec contracts (it is a first-class `ItemRef` field, not a `Langtext` spec). OS suggestion lists duplicated per-file (no cross-file reference in current schema).
+   - **Deferred:** `1802` spec contract (model + OS captured by quality contract; low spec-tracking value). `101/104/106/108` quality contracts (identical pattern to 102; no meaningful difference). `302` spec contract (field set identical to 301). Remaining subcategories not in scope for this pass.
 773. ✅ A4 marketing sheet (Produktblatt) for items — printable shelf card with name, specs, price, CO₂, image, QR
    - **Why:** Added a new `'marketingsheet'` PrintLabelType that routes through the existing print pipeline (HTML-to-PDF via Chromium). Template `item-a4.html` follows the `shelf-a4` pattern and is injected with a richer payload (Langtext specs, Verkaufspreis, calculated CO₂ savings, first attachment image URL). A third "A4 Produktblatt" button is added to the item label dialog in `PrintLabelButton`. A `PRINTER_QUEUE_MARKETING` env var allows routing to a dedicated A4 printer queue (falls back to `PRINTER_QUEUE`).
    - **Deferred:** CO₂ badge only shown when a value can be calculated (category + quality known). Image only shown when an attachment exists. No dedicated printer queue is configured by default — operators must set `PRINTER_QUEUE_MARKETING` to target an A4 printer.
