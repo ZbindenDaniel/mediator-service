@@ -142,6 +142,7 @@ export const PRINTER_QUEUE_BOX = (process.env.PRINTER_QUEUE_BOX || '').trim();
 export const PRINTER_QUEUE_ITEM = (process.env.PRINTER_QUEUE_ITEM || '').trim();
 export const PRINTER_QUEUE_ITEM_SMALL = (process.env.PRINTER_QUEUE_ITEM_SMALL || '').trim();
 export const PRINTER_QUEUE_SHELF = (process.env.PRINTER_QUEUE_SHELF || '').trim();
+export const PRINTER_QUEUE_MARKETING = (process.env.PRINTER_QUEUE_MARKETING || '').trim();
 export const PRINTER_SERVER = (process.env.PRINTER_SERVER || '').trim();
 if (!PRINTER_QUEUE_BOX) {
   console.warn('[config] PRINTER_QUEUE_BOX not set; box labels will fall back to PRINTER_QUEUE.');
@@ -154,6 +155,9 @@ if (!PRINTER_QUEUE_ITEM_SMALL) {
 }
 if (!PRINTER_QUEUE_SHELF) {
   console.warn('[config] PRINTER_QUEUE_SHELF not set; shelf labels will fall back to PRINTER_QUEUE.');
+}
+if (!PRINTER_QUEUE_MARKETING) {
+  console.warn('[config] PRINTER_QUEUE_MARKETING not set; marketing sheets will fall back to PRINTER_QUEUE.');
 }
 export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';

@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+773. ✅ A4 marketing sheet (Produktblatt) for items — printable shelf card with name, specs, price, CO₂, image, QR
+   - **Why:** Added a new `'marketingsheet'` PrintLabelType that routes through the existing print pipeline (HTML-to-PDF via Chromium). Template `item-a4.html` follows the `shelf-a4` pattern and is injected with a richer payload (Langtext specs, Verkaufspreis, calculated CO₂ savings, first attachment image URL). A third "A4 Produktblatt" button is added to the item label dialog in `PrintLabelButton`. A `PRINTER_QUEUE_MARKETING` env var allows routing to a dedicated A4 printer queue (falls back to `PRINTER_QUEUE`).
+   - **Deferred:** CO₂ badge only shown when a value can be calculated (category + quality known). Image only shown when an attachment exists. No dedicated printer queue is configured by default — operators must set `PRINTER_QUEUE_MARKETING` to target an A4 printer.
 773. ✅ Fix BoxDetail shelf LocationTag navigating into the main shell
    - **Why:** The "Standort" row in BoxDetail used `<Link to="/boxes/:shelfId">` which triggered React Router to render BoxDetail inside `panel-main` (via BoxRoute), causing shelf tabs to appear in the main shell and BoxDetail to render twice (main + right panel). Replaced with a `<button>` that calls `setEntity('box', normalizedLocationId)` — the same pattern already used in ItemList for shelf/box column buttons.
    - **Deferred:** Nothing deferred.

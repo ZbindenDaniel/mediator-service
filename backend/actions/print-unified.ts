@@ -10,8 +10,9 @@ import {
   getSubcategoryLabelFromCode,
   itemCategories
 } from '../../models';
-import type { BoxLabelPayload, ItemLabelPayload, ShelfLabelPayload } from '../lib/labelHtml';
-import { htmlForSmallItem } from '../lib/labelHtml';
+import type { BoxLabelPayload, ItemLabelPayload, MarketingSheetPayload, ShelfLabelPayload } from '../lib/labelHtml';
+import { htmlForMarketingSheet, htmlForSmallItem } from '../lib/labelHtml';
+import { calculateCo2Savings } from '../lib/co2Calculator';
 import type { PrintFileResult, PrintLabelType } from '../print';
 import { resolvePrinterQueue } from '../print';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
@@ -20,7 +21,8 @@ const LABEL_TEMPLATES: Record<PrintLabelType, string> = {
   box: '62x100',
   item: '29x90',
   smallitem: '62x10',
-  shelf: 'shelf-a4'
+  shelf: 'shelf-a4',
+  marketingsheet: 'item-a4'
 };
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -41,7 +43,7 @@ async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
 
 // TODO(agent): Keep label type parsing aligned with frontend label selection prompts.
 function parseLabelType(raw: string): PrintLabelType | null {
-  if (raw === 'box' || raw === 'item' || raw === 'smallitem' || raw === 'shelf') {
+  if (raw === 'box' || raw === 'item' || raw === 'smallitem' || raw === 'shelf' || raw === 'marketingsheet') {
     return raw;
   }
   return null;
@@ -234,12 +236,47 @@ function buildShelfLabelPayload(box: Box): ShelfLabelPayload {
   };
 }
 
+function buildMarketingSheetPayload(item: Item, imageUrl: string | null): MarketingSheetPayload {
+  const categoryLabel = resolveCategoryLabel(item.Unterkategorien_A, {
+    labelType: 'marketingsheet',
+    itemId: item.ItemUUID
+  });
+
+  let specs: Record<string, string | string[]> | null = null;
+  const langtext = item.Langtext;
+  if (langtext && typeof langtext === 'object' && !Array.isArray(langtext)) {
+    specs = langtext as Record<string, string | string[]>;
+  }
+
+  const co2Result = calculateCo2Savings({
+    unterkategorien: [item.Unterkategorien_A],
+    datumErfasst: item.Datum_erfasst ?? null,
+    quality: typeof item.Quality === 'number' ? item.Quality : null
+  });
+
+  return {
+    type: 'marketingsheet',
+    id: item.ItemUUID,
+    labelText: item.Artikelbeschreibung?.trim() || item.ItemUUID,
+    materialNumber: item.Artikel_Nummer?.trim() || null,
+    description: item.Kurzbeschreibung?.trim() || null,
+    specs,
+    price: typeof item.Verkaufspreis === 'number' ? item.Verkaufspreis : null,
+    currency: 'CHF',
+    category: categoryLabel || null,
+    manufacturer: item.Hersteller?.trim() || null,
+    co2SavedKg: co2Result ? Math.round(co2Result.co2SavedKg * 10) / 10 : null,
+    imageUrl
+  };
+}
+
 function resolveInvalidIdMessage(labelType: PrintLabelType): string {
   switch (labelType) {
     case 'box':
       return 'invalid box id';
     case 'item':
     case 'smallitem':
+    case 'marketingsheet':
       return 'invalid item id';
     case 'shelf':
       return 'invalid shelf id';
@@ -254,6 +291,7 @@ function resolveNotFoundMessage(labelType: PrintLabelType): string {
       return 'box not found';
     case 'item':
     case 'smallitem':
+    case 'marketingsheet':
       return 'item not found';
     case 'shelf':
       return 'shelf not found';
@@ -336,15 +374,30 @@ export async function handleUnifiedPrintRequest(
 
     let previewUrl = '';
     let htmlPath = '';
-    let payload: BoxLabelPayload | ItemLabelPayload | ShelfLabelPayload;
+    let payload: BoxLabelPayload | ItemLabelPayload | ShelfLabelPayload | MarketingSheetPayload;
     let entityType: 'Box' | 'Item';
     let entityId: string;
 
     try {
-      if (labelType === 'item' || labelType === 'smallitem') {
+      if (labelType === 'item' || labelType === 'smallitem' || labelType === 'marketingsheet') {
         const item = ctx.getItem.get(id) as Item | undefined;
         if (!item) return sendJson(res, 404, { error: resolveNotFoundMessage(labelType) });
-        payload = buildItemLabelPayload(item);
+        if (labelType === 'marketingsheet') {
+          let imageUrl: string | null = null;
+          try {
+            const firstAttachment = ctx.db.prepare(
+              `SELECT FileName, FilePath FROM item_attachments WHERE ItemUUID = ? ORDER BY CreatedAt DESC LIMIT 1`
+            ).get(id) as { FileName: string; FilePath: string } | undefined;
+            if (firstAttachment?.FilePath) {
+              imageUrl = `/media/instances/${encodeURIComponent(id)}/${encodeURIComponent(firstAttachment.FileName)}`;
+            }
+          } catch (attachErr) {
+            console.warn('[print-unified] Failed to resolve item image for marketing sheet', { itemId: id, error: attachErr });
+          }
+          payload = buildMarketingSheetPayload(item, imageUrl);
+        } else {
+          payload = buildItemLabelPayload(item);
+        }
         entityType = 'Item';
         entityId = item.ItemUUID;
       } else {
@@ -399,6 +452,8 @@ export async function handleUnifiedPrintRequest(
         await ctx.htmlForItem({ itemData: labelPayload as ItemLabelPayload, outPath: htmlPath });
       } else if (labelType === 'smallitem') {
         await htmlForSmallItem({ itemData: labelPayload as ItemLabelPayload, outPath: htmlPath });
+      } else if (labelType === 'marketingsheet') {
+        await htmlForMarketingSheet({ sheetData: labelPayload as MarketingSheetPayload, outPath: htmlPath });
       } else {
         await ctx.htmlForShelf({ shelfData: labelPayload as ShelfLabelPayload, outPath: htmlPath });
       }
@@ -434,7 +489,9 @@ export async function handleUnifiedPrintRequest(
           ? `Small Item ${entityId}`
           : labelType === 'shelf'
             ? `Shelf ${entityId}`
-            : `Box ${entityId}`;
+            : labelType === 'marketingsheet'
+              ? `Marketing ${entityId}`
+              : `Box ${entityId}`;
       printResult = await ctx.printFile({
         filePath: htmlPath,
         jobName,
@@ -491,7 +548,7 @@ const action = defineHttpAction({
   key: 'print-unified',
   label: 'Print label (unified)',
   appliesTo: () => false,
-  matches: (p, m) => /^\/api\/print\/(box|item|smallitem|shelf)\/[^/]+$/.test(p) && m === 'POST',
+  matches: (p, m) => /^\/api\/print\/(box|item|smallitem|shelf|marketingsheet)\/[^/]+$/.test(p) && m === 'POST',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     await handleUnifiedPrintRequest(req, res, ctx);
   },

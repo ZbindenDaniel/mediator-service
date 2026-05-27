@@ -146,6 +146,7 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
             <div className="dialog-buttons">
               <button type="button" className="btn" onClick={() => handleLabelSelection('item')}>Gross</button>
               <button type="button" className="btn" onClick={() => handleLabelSelection('smallitem')}>Klein</button>
+              <button type="button" className="btn" onClick={() => handleLabelSelection('marketingsheet')}>A4 Produktblatt</button>
             </div>
           </div>
         </div>
