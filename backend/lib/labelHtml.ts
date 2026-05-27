@@ -9,6 +9,7 @@ const BOX_TEMPLATE: LabelTemplate = '62x100';
 const ITEM_TEMPLATE: LabelTemplate = '29x90';
 const ITEM_SMALL_TEMPLATE: LabelTemplate = '62x10';
 const SHELF_TEMPLATE: LabelTemplate = 'shelf-a4';
+const MARKETING_SHEET_TEMPLATE: LabelTemplate = 'item-a4';
 
 let QRCode: any;
 try {
@@ -148,4 +149,29 @@ export interface ShelfLabelOptions {
 
 export async function htmlForShelf({ shelfData, outPath, logger = console }: ShelfLabelOptions): Promise<string> {
   return renderLabel(SHELF_TEMPLATE, { ...shelfData, type: 'shelf' }, outPath, logger);
+}
+
+export interface MarketingSheetPayload {
+  type: 'marketingsheet';
+  id: string;
+  labelText: string;
+  materialNumber: string | null;
+  description: string | null;
+  specs: Record<string, string | string[]> | null;
+  price: number | null;
+  currency: string;
+  category: string | null;
+  manufacturer: string | null;
+  co2SavedKg: number | null;
+  imageUrl: string | null;
+}
+
+export interface MarketingSheetOptions {
+  sheetData: MarketingSheetPayload;
+  outPath: string;
+  logger?: Console;
+}
+
+export async function htmlForMarketingSheet({ sheetData, outPath, logger = console }: MarketingSheetOptions): Promise<string> {
+  return renderLabel(MARKETING_SHEET_TEMPLATE, { ...sheetData, type: 'marketingsheet' }, outPath, logger);
 }

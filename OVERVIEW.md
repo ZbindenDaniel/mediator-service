@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+773. ✅ A4 marketing sheet (Produktblatt) for items — printable shelf card with name, specs, price, CO₂, image, QR
+   - **Why:** Added a new `'marketingsheet'` PrintLabelType that routes through the existing print pipeline (HTML-to-PDF via Chromium). Template `item-a4.html` follows the `shelf-a4` pattern and is injected with a richer payload (Langtext specs, Verkaufspreis, calculated CO₂ savings, first attachment image URL). A third "A4 Produktblatt" button is added to the item label dialog in `PrintLabelButton`. A `PRINTER_QUEUE_MARKETING` env var allows routing to a dedicated A4 printer queue (falls back to `PRINTER_QUEUE`).
+   - **Deferred:** CO₂ badge only shown when a value can be calculated (category + quality known). Image only shown when an attachment exists. No dedicated printer queue is configured by default — operators must set `PRINTER_QUEUE_MARKETING` to target an A4 printer.
 772. ✅ Multiselect: waiting (queued) runs can now be stopped alongside running runs
    - **Why:** `stoppableCount` in `KiActionForm` and the stop handler in `handleBulkKi` both filtered only for `AGENTIC_RUN_STATUS_RUNNING`, silently excluding `AGENTIC_RUN_STATUS_QUEUED` items. The backend `cancelAgenticRun` already handles any status; the gate was purely frontend-side. Extended both filters to include `AGENTIC_RUN_STATUS_QUEUED`. Updated the UI count label to "laufende/wartende Artikel stoppen" and the empty-state message accordingly.
    - **Deferred:** Nothing deferred.
