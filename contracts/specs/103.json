@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "subCategory": 103,
+  "fields": [
+    { "key": "Modell",         "required": true,  "description": "Product model name/number (e.g. PowerEdge R730)" },
+    { "key": "Prozessor",      "required": true,  "description": "CPU model and count (e.g. 2x Intel Xeon E5-2670)" },
+    { "key": "RAM",            "required": true,  "description": "Total memory in GB" },
+    { "key": "Speicher",       "required": true,  "description": "Storage configuration (e.g. 4x 900 GB SAS)" },
+    { "key": "Speichertyp",    "required": false, "description": "Drive type (SSD, NVMe SSD, HDD, SAS HDD)" },
+    { "key": "Formfaktor",     "required": false, "description": "Physical form (Rack 1U/2U/4U, Tower, Blade)" },
+    { "key": "Betriebssystem", "required": false, "description": "Operating system installed" }
+  ]
+}

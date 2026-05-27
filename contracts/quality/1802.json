@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "subCategory": 1802,
+  "questions": [
+    {
+      "id": "screen_condition",
+      "type": "select",
+      "question": "Displayzustand?",
+      "values": ["Keine Auffälligkeiten", "Geringe Kratzer", "Deutliche Mängel", "Gesprungenes Glas"],
+      "specField": "Displayzustand",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Keine Auffälligkeiten": 5,
+        "Geringe Kratzer": 3,
+        "Deutliche Mängel": 2,
+        "Gesprungenes Glas": 1
+      }
+    },
+    {
+      "id": "battery_condition",
+      "type": "select",
+      "question": "Akkuzustand?",
+      "values": ["Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt"],
+      "specField": "Akku",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Gut (>80%)": 5,
+        "Mittel (50–80%)": 4,
+        "Schwach (<50%)": 3,
+        "Defekt": 2
+      }
+    },
+    {
+      "id": "has_os",
+      "type": "boolean",
+      "question": "Betriebssystem installiert?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    },
+    {
+      "id": "os_installed",
+      "type": "text",
+      "question": "Welches Betriebssystem?",
+      "suggestions": [
+        "Android 14",
+        "Android 13",
+        "Android 12",
+        "iOS 18",
+        "iOS 17",
+        "/e/OS",
+        "LineageOS"
+      ],
+      "specField": "Betriebssystem",
+      "specValue": "%v",
+      "showIf": { "questionId": "has_os", "value": "true" }
+    },
+    {
+      "id": "network_lock",
+      "type": "select",
+      "question": "Netzsperrung?",
+      "values": ["Entsperrt", "Gesperrt", "Unbekannt"],
+      "specField": "Netzsperrung",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Entsperrt": 5,
+        "Gesperrt": 3,
+        "Unbekannt": 4
+      }
+    },
+    {
+      "id": "charging_cable_included",
+      "type": "boolean",
+      "question": "Ladekabel vorhanden?",
+      "qualityImpact": { "true": 5, "false": 4 }
+    }
+  ]
+}

@@ -90,8 +90,8 @@
 
 19. ✅ **Add instance specification fields (RAM, SSD, OS).** Now driven by quality contracts: `specField`/`specValue` in each question contributes to Langtext automatically after quality review. Subcategory contract 201 (Laptop) covers keyboard layout, RAM, storage, battery.
 
-40. **Quality contract: add remaining subcategory contracts.** 201, 301, 401, 701, 102 now exist. Missing: 103 (Server), 204 (Tablet), 1802 (Smartphone), 302 (MFG), 105 (Mac) — add as JSON files, no code changes needed.
-44. **Spec contracts: add remaining subcategory contracts.** Currently only 201 (Laptop) and 701 (Graphikkarte) have spec contracts in contracts/specs/. Add JSON files for other high-volume subcategories (301 Drucker, 401 Flachbildschirm, 601 Mainboard, etc.) — no code changes needed, restart picks them up.
+40. ✅ **Quality contract: add remaining subcategory contracts.** Now covers: 102, 201, 301, 302, 401, 701, 103, 105, 204, 1802. Remaining low-volume subcategories (101/104/106/108 PC variants, 103 variants) deferred — 102 contract covers the same assessment pattern.
+44. ✅ **Spec contracts: add remaining subcategory contracts.** Now covers: 102, 103, 105, 201, 204, 301, 401, 601, 701. `Hersteller` omitted from all new contracts (first-class ItemRef field). Remaining niche subcategories (702, 1203, 1204, etc.) not added — low inventory volume.
 45. **Spec contracts: targeted enrich button in ItemKiTab.** When an item has missing required spec fields (visible as empty Langtext rows), add a "Gezielt anreichern" button in the KI tab that starts an agentic run pre-seeded with the missing field names as missingSpecFields. Requires fetching the spec contract client-side and computing the gap against the current Langtext.
 46. **Spec contracts: contract version stamping.** Add a specContractVersion nullable integer to agentic_runs to track which spec contract version was active when a run was completed. Enables detecting items that were enriched against an older contract version after the contract changes.
 

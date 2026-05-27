@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+774. ✅ Add missing quality and spec contracts for 5 + 6 subcategories
+   - **Why:** Quality contracts 103/105/302/204/1802 and spec contracts 102/103/105/204/301/401 were listed in todo items 40 and 44 as missing. Pure JSON files — no code change, backend registry auto-discovers them on restart. `Hersteller` intentionally omitted from all new spec contracts (it is a first-class `ItemRef` field, not a `Langtext` spec). OS suggestion lists duplicated per-file (no cross-file reference in current schema).
+   - **Deferred:** `1802` spec contract (model + OS captured by quality contract; low spec-tracking value). `101/104/106/108` quality contracts (identical pattern to 102; no meaningful difference). `302` spec contract (field set identical to 301). Remaining subcategories not in scope for this pass.
 775. ✅ Search now covers SerialNumber, MacAddress, EAN; desktop camera capture restored in item creation
    - **Why (search):** The `/api/search` SQL only matched reference-level text fields plus ItemUUID/Artikel_Nummer/BoxID. Operators scanning barcodes (EAN) or typing a serial/MAC found nothing. Added `i.SerialNumber`, `i.MacAddress`, and `r.EAN` to both the token-presence LIKE expressions and the exact-match equality checks in the item search path, and `r.EAN` to the reference (dedupe) search path. JS-side scoring updated accordingly.
    - **Why (camera):** `PhotoCaptureModal` (webcam via `getUserMedia`) was built and wired in `ItemCreate.tsx` but the "Foto aufnehmen" trigger button was commented out. Added `isCameraAvailable` guard and restored the button — it renders only when the browser exposes camera access, so devices without cameras are unaffected.

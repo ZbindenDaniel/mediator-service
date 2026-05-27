@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "subCategory": 102,
+  "fields": [
+    { "key": "Modell",         "required": true,  "description": "Product model name/number" },
+    { "key": "Prozessor",      "required": true,  "description": "CPU model and speed" },
+    { "key": "RAM",            "required": true,  "description": "Memory in GB" },
+    { "key": "Speicher",       "required": true,  "description": "Storage size and type (e.g. 256 GB SSD)" },
+    { "key": "Speichertyp",    "required": false, "description": "Drive type (SSD, NVMe SSD, HDD)" },
+    { "key": "Betriebssystem", "required": false, "description": "Operating system installed" },
+    { "key": "Formfaktor",     "required": false, "description": "Case form factor (Tower, SFF, Mini, Desktop)" }
+  ]
+}

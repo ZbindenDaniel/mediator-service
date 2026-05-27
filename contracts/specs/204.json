@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "subCategory": 204,
+  "fields": [
+    { "key": "Modell",         "required": true,  "description": "Product model name/number" },
+    { "key": "Betriebssystem", "required": true,  "description": "Operating system (Android, iPadOS, ChromeOS)" },
+    { "key": "Speicher",       "required": true,  "description": "Internal storage (e.g. 64 GB)" },
+    { "key": "Display",        "required": false, "description": "Screen size and resolution" },
+    { "key": "Akku",           "required": false, "description": "Battery condition" },
+    { "key": "Mobilfunk",      "required": false, "description": "Whether cellular/SIM is supported" }
+  ]
+}
