@@ -1,10 +1,11 @@
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
 
-const CONTRACTS_DIR = join(process.cwd(), 'contracts', 'quality');
+// __dirname is reliable across dev and dist; process.cwd() varies by launch directory
+const CONTRACTS_DIR = resolve(__dirname, '../../contracts/quality');
 
 function loadContractFile(filename: string): QualityContract | null {
   try {

@@ -54,20 +54,17 @@ export default function QualityReviewModal({ itemId, subCategory, onDone, onCanc
         aria-label="Qualität bewerten"
         onClick={(e) => e.stopPropagation()}
       >
-        {saving ? (
-          <div className="card"><p className="muted">Wird gespeichert…</p></div>
-        ) : (
-          <>
-            <QualityReviewStep
-              subCategory={subCategory ?? undefined}
-              onComplete={(result) => void handleComplete(result)}
-              onSkip={onCancel}
-              layout="embedded"
-              initialAnswers={initialAnswers}
-            />
-            {error && <p className="error" style={{ margin: '0.5rem 1rem' }}>{error}</p>}
-          </>
-        )}
+        {/* Keep QualityReviewStep mounted during save so answers are not lost on error */}
+        <QualityReviewStep
+          subCategory={subCategory ?? undefined}
+          onComplete={(result) => void handleComplete(result)}
+          onSkip={onCancel}
+          layout="embedded"
+          initialAnswers={initialAnswers}
+          disabled={saving}
+        />
+        {saving && <p className="muted" style={{ margin: '0.5rem 1rem' }}>Wird gespeichert…</p>}
+        {error && <p className="error" style={{ margin: '0.5rem 1rem' }}>{error}</p>}
       </div>
     </div>,
     document.body
