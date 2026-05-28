@@ -12,9 +12,27 @@ interface Props {
   inline?: boolean;
 }
 
+function formatPrintReason(reason: string): string {
+  const r = reason.toLowerCase();
+  if (reason === 'printer_queue_not_configured' || reason === 'print_not_attempted') {
+    return 'Kein Drucker konfiguriert';
+  }
+  if (r.includes('timeout') || r.includes('timed out') || r === 'status_timeout') {
+    return 'Drucker antwortet nicht';
+  }
+  if (
+    r.includes('connection refused') || r.includes('econnrefused') ||
+    r.includes('network is unreachable') || r.includes('ehostunreach') || r.includes('enetunreach')
+  ) {
+    return 'Drucker nicht erreichbar';
+  }
+  return 'Druckfehler';
+}
+
 export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline = false }: Props) {
   const [status, setStatus] = useState('');
   const [preview, setPreview] = useState('');
+  const [printSent, setPrintSent] = useState<boolean | null>(null);
   const [isLabelDialogOpen, setIsLabelDialogOpen] = useState(false);
   const labelDialogRef = useRef<HTMLDivElement | null>(null);
   const labelResolverRef = useRef<((choice: PrintLabelType | null) => void) | null>(null);
@@ -81,6 +99,8 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
     try {
       event?.preventDefault();
       setStatus('drucken...');
+      setPrintSent(null);
+      setPreview('');
       const actor = (await ensureUser()).trim();
       if (!actor) {
         logger.warn?.('Print request blocked: no actor resolved for label print');
@@ -109,10 +129,13 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
         const data = result.data ?? {};
         setPreview(data.previewUrl || '');
         if (data.sent) {
+          setPrintSent(true);
           setStatus('Gesendet an Drucker');
         } else if (data.reason) {
-          setStatus(`Druckfehler: ${data.reason}`);
+          setPrintSent(false);
+          setStatus(formatPrintReason(data.reason));
         } else {
+          setPrintSent(null);
           setStatus('Vorschau bereit');
         }
       } else {
@@ -122,11 +145,13 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
           entityId: result.entityId,
           error: result.data?.error || result.data?.reason
         });
-        setStatus('Error: ' + (result.data.error || result.data.reason || result.status));
+        setPrintSent(false);
+        setStatus('Fehler: ' + (result.data.error || result.data.reason || result.status));
       }
     } catch (err) {
       logError('Print failed', err, { boxId, itemId });
-      setStatus('Print failed');
+      setPrintSent(false);
+      setStatus('Druckfehler');
     }
   }
 
@@ -152,10 +177,22 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
         </div>
   ) : null;
 
+  const pdfLink = preview ? (
+    <a
+      href={preview}
+      target="_blank"
+      rel="noopener"
+      className={printSent === false ? 'btn btn--primary print-label-pdf-link' : 'mono print-label-pdf-link'}
+    >
+      {printSent === false ? 'Label als PDF öffnen' : 'PDF'}
+    </a>
+  ) : null;
+
   if (inline) {
     return (
       <>
         <button type="button" className="btn" onClick={handleClick}>Label drucken</button>
+        {pdfLink}
         {labelDialog}
       </>
     );
@@ -171,11 +208,11 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
         </h3>
       </div>
       {status && (
-        <div>
-          {status}
-          {preview && (
-            <> – <a className="mono" href={preview} target="_blank" rel="noopener">PDF</a></>
-          )}
+        <div className="print-label-status">
+          <span className={printSent === false ? 'print-label-status__error' : ''}>
+            {status}
+          </span>
+          {pdfLink && <> – {pdfLink}</>}
         </div>
       )}
       {labelDialog}
