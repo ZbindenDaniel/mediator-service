@@ -15,19 +15,28 @@ interface OverviewCounts {
   boxes: number;
 }
 
-export default function SystemStatusCard() {
+interface Props {
+  authToken?: string;
+  onAuthFailure?: () => void;
+}
+
+export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
   const [co2, setCo2] = useState<number | null>(null);
 
   useEffect(() => {
+    const authHeaders: Record<string, string> = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
     void Promise.all([
       fetch('/api/health')
         .then(r => setHealthOk(r.ok))
         .catch(() => setHealthOk(false)),
-      fetch('/api/admin/config')
-        .then(r => r.ok ? r.json() as Promise<AdminConfig> : null)
+      fetch('/api/admin/config', { headers: authHeaders })
+        .then(r => {
+          if (r.status === 401) { onAuthFailure?.(); return null; }
+          return r.ok ? r.json() as Promise<AdminConfig> : null;
+        })
         .then(d => { if (d) setConfig(d); })
         .catch(err => logError('Failed to load admin config', err)),
       fetch('/api/overview')
@@ -39,7 +48,7 @@ export default function SystemStatusCard() {
         })
         .catch(err => logError('Failed to load overview for system status', err)),
     ]);
-  }, []);
+  }, [authToken, onAuthFailure]);
 
   return (
     <div className="card">

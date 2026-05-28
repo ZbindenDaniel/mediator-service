@@ -14,17 +14,24 @@ interface QueueData {
   recentFailed: LabelJob[];
 }
 
-export default function PrintQueueCard() {
+interface Props {
+  authToken?: string;
+  onAuthFailure?: () => void;
+}
+
+export default function PrintQueueCard({ authToken, onAuthFailure }: Props) {
   const [queue, setQueue] = useState<QueueData | null>(null);
   const [printerOk, setPrinterOk] = useState<boolean | null>(null);
   const [printerReason, setPrinterReason] = useState('');
 
   async function load() {
     try {
+      const authHeaders: Record<string, string> = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
       const [qRes, pRes] = await Promise.all([
-        fetch('/api/admin/label-queue'),
+        fetch('/api/admin/label-queue', { headers: authHeaders }),
         fetch('/api/printer/status'),
       ]);
+      if (qRes.status === 401) { onAuthFailure?.(); return; }
       if (qRes.ok) setQueue(await qRes.json() as QueueData);
       if (pRes.ok) {
         const p = await pRes.json() as { ok?: boolean; reason?: string };

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { requireAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -11,7 +12,8 @@ const action = defineHttpAction({
   label: 'Admin: label queue',
   appliesTo: () => false,
   matches: (path, method) => path === '/api/admin/label-queue' && method === 'GET',
-  handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
+  handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
+    if (!requireAdminAuth(req, res)) return;
     try {
       const pending = (ctx.db.prepare(`SELECT COUNT(*) as c FROM label_queue WHERE Status = 'Queued'`).get() as { c: number }).c;
       const failed = (ctx.db.prepare(`SELECT COUNT(*) as c FROM label_queue WHERE Status = 'Error'`).get() as { c: number }).c;

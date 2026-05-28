@@ -160,6 +160,7 @@ if (!PRINTER_QUEUE_MARKETING) {
   console.warn('[config] PRINTER_QUEUE_MARKETING not set; marketing sheets will fall back to PRINTER_QUEUE.');
 }
 export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
+export const ADMIN_SECRET = (process.env.ADMIN_SECRET || '').trim();
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
 const parsedPrintTimeout = Number.parseInt(process.env.PRINT_TIMEOUT_MS || '', 10);
 export const PRINT_TIMEOUT_MS = Number.isFinite(parsedPrintTimeout) && parsedPrintTimeout > 0 ? parsedPrintTimeout : 15000;

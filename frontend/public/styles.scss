@@ -3375,6 +3375,35 @@ button:focus {
     padding: var(--pad);
 }
 
+.admin-gate {
+    max-width: 320px;
+    margin-top: 24px;
+
+    h2 {
+        font-size: 1rem;
+        margin: 0 0 12px;
+    }
+}
+
+.admin-gate__form {
+    display: flex;
+    gap: 8px;
+
+    input[type="password"] {
+        flex: 1;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+}
+
+.admin-gate__error {
+    color: var(--danger, #c0392b);
+    font-size: 0.85rem;
+    margin: 8px 0 0;
+}
+
 .admin-page__title {
     font-size: 1.3rem;
     margin: 0 0 12px;
