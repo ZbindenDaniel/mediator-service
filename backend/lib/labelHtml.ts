@@ -158,12 +158,13 @@ export interface MarketingSheetPayload {
   materialNumber: string | null;
   description: string | null;
   specs: Record<string, string | string[]> | null;
+  instanceSpecs: Record<string, string | string[]> | null;
+  quality: number | null;
   price: number | null;
   currency: string;
   category: string | null;
   manufacturer: string | null;
   co2SavedKg: number | null;
-  imageUrl: string | null;
 }
 
 export interface MarketingSheetOptions {

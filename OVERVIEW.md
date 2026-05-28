@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+778. ✅ item-a4 marketing sheet: landscape orientation, removed image, added instance specs + quality fields
+   - **Why:** The sheet is placed alongside the physical item so no image is needed. Landscape A4 gives more horizontal room for a 3-column layout (QR/meta/price | reference specs | instance specs). Instance specs (`InstanceSpecs` from quality review) and the quality badge (1–5 scale with color coding) are now injected via two new payload fields (`instanceSpecs`, `quality`) added to `MarketingSheetPayload` and `buildMarketingSheetPayload`. The image attachment query and `imageUrl` field are removed from the payload.
+   - **Deferred:** Nothing deferred.
 777. ✅ Print label failure UX: human-readable errors + PDF link surfaced in both inline and card modes
    - **Why:** When the printer was not configured or unreachable, the component showed raw machine strings (e.g. `printer_queue_not_configured`) and only surfaced the preview URL in the card variant — the inline mode (used in tab-actions) showed nothing at all. Added `formatPrintReason()` to map known reason strings to German ("Kein Drucker konfiguriert", "Drucker antwortet nicht", "Drucker nicht erreichbar"). On failure, the PDF link renders as a `btn--primary` button labeled "Label als PDF öffnen" so the operator can always print manually. On success it stays as a subtle "PDF" text link. Inline mode now renders the same PDF link as a sibling button in the tab-actions group.
    - **Deferred:** A "retry" button (re-attempt print without regenerating the PDF) — not added; the existing "Label drucken" button already re-triggers the full flow. Persistent per-item print-failure state (cleared on page reload) — sessionStorage or event log would be needed.

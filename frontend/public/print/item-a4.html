@@ -6,7 +6,7 @@
   <title>Produktblatt A4</title>
   <style>
     @page {
-      size: A4;
+      size: A4 landscape;
       margin: 12mm;
     }
 
@@ -29,8 +29,8 @@
     }
 
     .sheet {
-      width: 186mm;
-      min-height: 267mm;
+      width: 273mm;
+      min-height: 186mm;
       background: #fff;
       display: flex;
       flex-direction: column;
@@ -42,7 +42,7 @@
     .header {
       background: #1f2937;
       color: #fff;
-      padding: 6mm 8mm 5mm;
+      padding: 5mm 8mm 4mm;
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
@@ -54,165 +54,84 @@
     }
 
     .item-name {
-      font-size: 20pt;
+      font-size: 18pt;
       font-weight: 700;
       line-height: 1.2;
       margin: 0;
     }
 
     .item-category {
-      font-size: 10pt;
+      font-size: 9pt;
       font-weight: 400;
       color: #9ca3af;
-      margin-top: 1.5mm;
-    }
-
-    .item-manufacturer {
-      font-size: 10pt;
-      font-weight: 600;
-      color: #d1d5db;
       margin-top: 1mm;
     }
 
-    /* ── Body ────────────────────────────────────────────────── */
+    .item-manufacturer {
+      font-size: 9pt;
+      font-weight: 600;
+      color: #d1d5db;
+      margin-top: 0.5mm;
+    }
+
+    /* ── Body: 3-column grid ─────────────────────────────────── */
     .body {
       display: grid;
-      grid-template-columns: 80mm 1fr;
-      gap: 0;
+      grid-template-columns: 60mm 1fr 1fr;
       flex: 1;
     }
 
-    /* ── Left column: image + QR ─────────────────────────────── */
+    /* ── Left column: QR + meta + price ─────────────────────── */
     .left-col {
       display: flex;
       flex-direction: column;
-      padding: 6mm;
-      gap: 4mm;
+      padding: 5mm 5mm 5mm 5mm;
+      gap: 3mm;
       border-right: 1.5px solid #e5e7eb;
-    }
-
-    .item-image {
-      width: 100%;
-      aspect-ratio: 4 / 3;
-      object-fit: contain;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 2mm;
-    }
-
-    .item-image-placeholder {
-      width: 100%;
-      aspect-ratio: 4 / 3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 2mm;
-      color: #9ca3af;
-      font-size: 9pt;
     }
 
     .qr-row {
       display: flex;
-      align-items: center;
-      gap: 3mm;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2mm;
     }
 
     .qr-img,
     .qr-canvas {
-      width: 20mm;
-      height: 20mm;
+      width: 28mm;
+      height: 28mm;
       image-rendering: pixelated;
-      flex-shrink: 0;
     }
 
     .qr-label {
-      font-size: 7.5pt;
+      font-size: 7pt;
       color: #6b7280;
       line-height: 1.4;
     }
 
     .material-number {
-      font-size: 7.5pt;
+      font-size: 7pt;
       color: #6b7280;
       font-family: 'Courier New', monospace;
     }
 
-    /* ── Right column: specs + price ─────────────────────────── */
-    .right-col {
+    /* ── Quality badge ───────────────────────────────────────── */
+    .quality-badge {
       display: flex;
-      flex-direction: column;
-      padding: 6mm;
-      gap: 4mm;
-    }
-
-    .section-title {
-      font-size: 8pt;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #6b7280;
-      margin-bottom: 2mm;
-    }
-
-    .description {
-      font-size: 9.5pt;
-      color: #374151;
-      line-height: 1.5;
-    }
-
-    .specs-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 8.5pt;
-    }
-
-    .specs-table tr:nth-child(odd) td {
-      background: #f9fafb;
-    }
-
-    .specs-table td {
-      padding: 1.2mm 2mm;
-      vertical-align: top;
-      color: #374151;
-    }
-
-    .specs-table td:first-child {
-      font-weight: 600;
-      color: #1f2937;
-      width: 40%;
-      white-space: nowrap;
-    }
-
-    /* ── Price block ─────────────────────────────────────────── */
-    .price-block {
-      margin-top: auto;
-      padding: 4mm;
-      background: #f0fdf4;
-      border: 1.5px solid #86efac;
-      border-radius: 2mm;
-      display: flex;
-      justify-content: space-between;
       align-items: center;
-    }
-
-    .price-amount {
-      font-size: 22pt;
-      font-weight: 700;
-      color: #166534;
-    }
-
-    .price-currency {
-      font-size: 11pt;
-      font-weight: 600;
-      color: #166534;
-      margin-right: 1mm;
-    }
-
-    .price-label {
+      gap: 2mm;
+      border-radius: 2mm;
+      padding: 2mm 3mm;
       font-size: 8pt;
-      color: #15803d;
+      font-weight: 600;
+    }
+
+    .quality-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
     }
 
     /* ── CO₂ badge ───────────────────────────────────────────── */
@@ -224,19 +143,105 @@
       border: 1px solid #86efac;
       border-radius: 2mm;
       padding: 2mm 3mm;
-      font-size: 8pt;
+      font-size: 7.5pt;
       color: #166534;
     }
 
     .co2-value {
       font-weight: 700;
+    }
+
+    /* ── Price block ─────────────────────────────────────────── */
+    .price-block {
+      margin-top: auto;
+      padding: 3mm 4mm;
+      background: #f0fdf4;
+      border: 1.5px solid #86efac;
+      border-radius: 2mm;
+    }
+
+    .price-label {
+      font-size: 7.5pt;
+      color: #15803d;
+    }
+
+    .price-line {
+      display: flex;
+      align-items: baseline;
+      gap: 1mm;
+    }
+
+    .price-currency {
       font-size: 10pt;
+      font-weight: 600;
+      color: #166534;
+    }
+
+    .price-amount {
+      font-size: 18pt;
+      font-weight: 700;
+      color: #166534;
     }
 
     .no-price {
-      font-size: 9pt;
+      margin-top: auto;
+      font-size: 8pt;
       color: #9ca3af;
       font-style: italic;
+    }
+
+    /* ── Middle + Right columns ──────────────────────────────── */
+    .mid-col {
+      display: flex;
+      flex-direction: column;
+      padding: 5mm;
+      gap: 3mm;
+      border-right: 1.5px solid #e5e7eb;
+    }
+
+    .right-col {
+      display: flex;
+      flex-direction: column;
+      padding: 5mm;
+      gap: 3mm;
+    }
+
+    .section-title {
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      margin-bottom: 1.5mm;
+    }
+
+    .description {
+      font-size: 9pt;
+      color: #374151;
+      line-height: 1.5;
+    }
+
+    .specs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8pt;
+    }
+
+    .specs-table tr:nth-child(odd) td {
+      background: #f9fafb;
+    }
+
+    .specs-table td {
+      padding: 1mm 2mm;
+      vertical-align: top;
+      color: #374151;
+    }
+
+    .specs-table td:first-child {
+      font-weight: 600;
+      color: #1f2937;
+      width: 42%;
+      white-space: nowrap;
     }
 
     .error {
@@ -277,28 +282,44 @@
     </div>
 
     <div class="body">
+      <!-- Left column: QR + CO₂ + quality + price -->
       <div class="left-col">
-        <img class="item-image" id="itemImage" alt="Produktbild" hidden />
-        <div class="item-image-placeholder" id="itemImagePlaceholder">Kein Bild vorhanden</div>
+        <div class="qr-row">
+          <img class="qr-img" id="qrImage" alt="QR-Code" hidden />
+          <canvas class="qr-canvas" id="qrCanvas" hidden></canvas>
+          <div class="qr-label">Artikel scannen für<br>mehr Informationen</div>
+          <div class="material-number" id="materialNumber"></div>
+        </div>
+
+        <div id="qualitySection" hidden>
+          <div class="section-title">Zustand</div>
+          <div class="quality-badge" id="qualityBadge">
+            <span class="quality-dot" id="qualityDot"></span>
+            <span id="qualityLabel"></span>
+          </div>
+        </div>
 
         <div id="co2Section" hidden>
           <div class="co2-badge">
             <span>🌱</span>
-            <span>Eingesparte CO₂: <span class="co2-value" id="co2Value"></span> kg</span>
+            <span>CO₂ eingespart: <span class="co2-value" id="co2Value"></span> kg</span>
           </div>
         </div>
 
-        <div class="qr-row">
-          <img class="qr-img" id="qrImage" alt="QR-Code" hidden />
-          <canvas class="qr-canvas" id="qrCanvas" hidden></canvas>
-          <div>
-            <div class="qr-label">Artikel scannen für<br>mehr Informationen</div>
-            <div class="material-number" id="materialNumber"></div>
+        <div id="priceSection">
+          <div class="price-block" id="priceBlock" hidden>
+            <div class="price-label">Verkaufspreis</div>
+            <div class="price-line">
+              <span class="price-currency" id="priceCurrency">CHF</span>
+              <span class="price-amount" id="priceAmount"></span>
+            </div>
           </div>
+          <div class="no-price" id="noPrice" hidden>Preis auf Anfrage</div>
         </div>
       </div>
 
-      <div class="right-col">
+      <!-- Middle column: description + reference specs -->
+      <div class="mid-col">
         <div id="descriptionSection" hidden>
           <div class="section-title">Beschreibung</div>
           <div class="description" id="description"></div>
@@ -308,18 +329,13 @@
           <div class="section-title">Spezifikationen</div>
           <table class="specs-table" id="specsTable"></table>
         </div>
+      </div>
 
-        <div id="priceSection">
-          <div class="price-block" id="priceBlock" hidden>
-            <div>
-              <div class="price-label">Verkaufspreis</div>
-              <div>
-                <span class="price-currency" id="priceCurrency">CHF</span>
-                <span class="price-amount" id="priceAmount"></span>
-              </div>
-            </div>
-          </div>
-          <div class="no-price" id="noPrice" hidden>Preis auf Anfrage</div>
+      <!-- Right column: instance specs from quality review -->
+      <div class="right-col">
+        <div id="instanceSpecsSection" hidden>
+          <div class="section-title">Gerätedetails</div>
+          <table class="specs-table" id="instanceSpecsTable"></table>
         </div>
       </div>
     </div>
@@ -329,35 +345,43 @@
 
   <script>
     (function init() {
-      const sheetEl = document.getElementById('sheet');
-      const itemNameEl = document.getElementById('itemName');
-      const itemCategoryEl = document.getElementById('itemCategory');
-      const itemManufacturerEl = document.getElementById('itemManufacturer');
-      const itemImageEl = document.getElementById('itemImage');
-      const itemImagePlaceholderEl = document.getElementById('itemImagePlaceholder');
-      const co2SectionEl = document.getElementById('co2Section');
-      const co2ValueEl = document.getElementById('co2Value');
-      const qrImageEl = document.getElementById('qrImage');
-      const qrCanvasEl = document.getElementById('qrCanvas');
-      const materialNumberEl = document.getElementById('materialNumber');
-      const descriptionSectionEl = document.getElementById('descriptionSection');
-      const descriptionEl = document.getElementById('description');
-      const specsSectionEl = document.getElementById('specsSection');
-      const specsTableEl = document.getElementById('specsTable');
-      const priceBlockEl = document.getElementById('priceBlock');
-      const priceAmountEl = document.getElementById('priceAmount');
-      const priceCurrencyEl = document.getElementById('priceCurrency');
-      const noPriceEl = document.getElementById('noPrice');
-      const errorEl = document.getElementById('error');
+      var QUALITY_LABELS = {1: 'Ersatzteil', 2: 'Upcycling', 3: 'Ok', 4: 'Gut', 5: 'Neuwertig'};
+      var QUALITY_COLORS = {1: '#9333ea', 2: '#ef4444', 3: '#eab308', 4: '#f97316', 5: '#22c55e'};
+      var QUALITY_BG    = {1: '#faf5ff', 2: '#fef2f2', 3: '#fefce8', 4: '#fff7ed', 5: '#f0fdf4'};
 
-      function drawMatrix(modules, margin) {
+      var sheetEl              = document.getElementById('sheet');
+      var itemNameEl           = document.getElementById('itemName');
+      var itemCategoryEl       = document.getElementById('itemCategory');
+      var itemManufacturerEl   = document.getElementById('itemManufacturer');
+      var qrImageEl            = document.getElementById('qrImage');
+      var qrCanvasEl           = document.getElementById('qrCanvas');
+      var materialNumberEl     = document.getElementById('materialNumber');
+      var qualitySectionEl     = document.getElementById('qualitySection');
+      var qualityBadgeEl       = document.getElementById('qualityBadge');
+      var qualityDotEl         = document.getElementById('qualityDot');
+      var qualityLabelEl       = document.getElementById('qualityLabel');
+      var co2SectionEl         = document.getElementById('co2Section');
+      var co2ValueEl           = document.getElementById('co2Value');
+      var priceBlockEl         = document.getElementById('priceBlock');
+      var priceAmountEl        = document.getElementById('priceAmount');
+      var priceCurrencyEl      = document.getElementById('priceCurrency');
+      var noPriceEl            = document.getElementById('noPrice');
+      var descriptionSectionEl = document.getElementById('descriptionSection');
+      var descriptionEl        = document.getElementById('description');
+      var specsSectionEl       = document.getElementById('specsSection');
+      var specsTableEl         = document.getElementById('specsTable');
+      var instanceSpecsSectionEl = document.getElementById('instanceSpecsSection');
+      var instanceSpecsTableEl   = document.getElementById('instanceSpecsTable');
+      var errorEl              = document.getElementById('error');
+
+      function drawMatrix(modules) {
         if (!qrCanvasEl || !Array.isArray(modules) || modules.length === 0) return false;
         try {
-          const size = modules.length;
-          const pixelSize = 400;
-          const scale = Math.floor(pixelSize / size);
-          const offset = Math.floor((pixelSize - size * scale) / 2);
-          const ctx = qrCanvasEl.getContext('2d');
+          var size = modules.length;
+          var pixelSize = 400;
+          var scale = Math.floor(pixelSize / size);
+          var offset = Math.floor((pixelSize - size * scale) / 2);
+          var ctx = qrCanvasEl.getContext('2d');
           if (!ctx) return false;
           qrCanvasEl.width = pixelSize;
           qrCanvasEl.height = pixelSize;
@@ -383,27 +407,24 @@
         if (sheetEl) sheetEl.hidden = true;
       }
 
-      function renderSpecs(specs) {
-        if (!specs || typeof specs !== 'object' || Array.isArray(specs)) return;
-        var entries = Object.entries(specs).filter(function(e) {
-          return e[1] !== null && e[1] !== undefined && e[1] !== '';
-        });
-        if (entries.length === 0) return;
-        var rows = entries.map(function(entry) {
-          var key = entry[0];
-          var val = Array.isArray(entry[1]) ? entry[1].join(', ') : String(entry[1]);
-          return '<tr><td>' + escHtml(key) + '</td><td>' + escHtml(val) + '</td></tr>';
-        }).join('');
-        specsTableEl.innerHTML = rows;
-        specsSectionEl.hidden = false;
-      }
-
       function escHtml(s) {
         return String(s)
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;');
+      }
+
+      function buildTableRows(specs) {
+        if (!specs || typeof specs !== 'object' || Array.isArray(specs)) return '';
+        var entries = Object.entries(specs).filter(function(e) {
+          return e[1] !== null && e[1] !== undefined && e[1] !== '';
+        });
+        if (entries.length === 0) return '';
+        return entries.map(function(entry) {
+          var val = Array.isArray(entry[1]) ? entry[1].join(', ') : String(entry[1]);
+          return '<tr><td>' + escHtml(entry[0]) + '</td><td>' + escHtml(val) + '</td></tr>';
+        }).join('');
       }
 
       function render(payload) {
@@ -417,19 +438,6 @@
           if (itemManufacturerEl && payload.manufacturer) itemManufacturerEl.textContent = payload.manufacturer;
           if (materialNumberEl && payload.materialNumber) materialNumberEl.textContent = payload.materialNumber;
 
-          // Image
-          if (payload.imageUrl && itemImageEl) {
-            itemImageEl.src = payload.imageUrl;
-            itemImageEl.hidden = false;
-            if (itemImagePlaceholderEl) itemImagePlaceholderEl.hidden = true;
-          }
-
-          // CO₂
-          if (typeof payload.co2SavedKg === 'number' && payload.co2SavedKg > 0 && co2SectionEl && co2ValueEl) {
-            co2ValueEl.textContent = payload.co2SavedKg.toFixed(1);
-            co2SectionEl.hidden = false;
-          }
-
           // QR code
           var hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
           if (qrImageEl) {
@@ -441,17 +449,25 @@
             }
           }
           if (!hasDataUri && Array.isArray(payload.qrModules)) {
-            drawMatrix(payload.qrModules, payload.qrMargin);
+            drawMatrix(payload.qrModules);
           }
 
-          // Description
-          if (payload.description && descriptionSectionEl && descriptionEl) {
-            descriptionEl.textContent = payload.description;
-            descriptionSectionEl.hidden = false;
+          // Quality
+          var q = typeof payload.quality === 'number' ? Math.round(payload.quality) : null;
+          if (q && q >= 1 && q <= 5 && qualitySectionEl && qualityBadgeEl && qualityDotEl && qualityLabelEl) {
+            qualityDotEl.style.backgroundColor = QUALITY_COLORS[q] || '#9ca3af';
+            qualityBadgeEl.style.backgroundColor = QUALITY_BG[q] || '#f9fafb';
+            qualityBadgeEl.style.border = '1px solid ' + (QUALITY_COLORS[q] || '#9ca3af') + '44';
+            qualityLabelEl.style.color = QUALITY_COLORS[q] || '#374151';
+            qualityLabelEl.textContent = QUALITY_LABELS[q] || String(q);
+            qualitySectionEl.hidden = false;
           }
 
-          // Specs from Langtext
-          if (payload.specs) renderSpecs(payload.specs);
+          // CO₂
+          if (typeof payload.co2SavedKg === 'number' && payload.co2SavedKg > 0 && co2SectionEl && co2ValueEl) {
+            co2ValueEl.textContent = payload.co2SavedKg.toFixed(1);
+            co2SectionEl.hidden = false;
+          }
 
           // Price
           if (typeof payload.price === 'number') {
@@ -460,6 +476,30 @@
             if (priceBlockEl) priceBlockEl.hidden = false;
           } else {
             if (noPriceEl) noPriceEl.hidden = false;
+          }
+
+          // Description
+          if (payload.description && descriptionSectionEl && descriptionEl) {
+            descriptionEl.textContent = payload.description;
+            descriptionSectionEl.hidden = false;
+          }
+
+          // Reference specs (Langtext)
+          if (payload.specs && specsTableEl && specsSectionEl) {
+            var rows = buildTableRows(payload.specs);
+            if (rows) {
+              specsTableEl.innerHTML = rows;
+              specsSectionEl.hidden = false;
+            }
+          }
+
+          // Instance specs (from quality review)
+          if (payload.instanceSpecs && instanceSpecsTableEl && instanceSpecsSectionEl) {
+            var iRows = buildTableRows(payload.instanceSpecs);
+            if (iRows) {
+              instanceSpecsTableEl.innerHTML = iRows;
+              instanceSpecsSectionEl.hidden = false;
+            }
           }
 
           if (sheetEl) sheetEl.hidden = false;

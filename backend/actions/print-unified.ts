@@ -236,7 +236,7 @@ function buildShelfLabelPayload(box: Box): ShelfLabelPayload {
   };
 }
 
-function buildMarketingSheetPayload(item: Item, imageUrl: string | null): MarketingSheetPayload {
+function buildMarketingSheetPayload(item: Item): MarketingSheetPayload {
   const categoryLabel = resolveCategoryLabel(item.Unterkategorien_A, {
     labelType: 'marketingsheet',
     itemId: item.ItemUUID
@@ -246,6 +246,12 @@ function buildMarketingSheetPayload(item: Item, imageUrl: string | null): Market
   const langtext = item.Langtext;
   if (langtext && typeof langtext === 'object' && !Array.isArray(langtext)) {
     specs = langtext as Record<string, string | string[]>;
+  }
+
+  let instanceSpecs: Record<string, string | string[]> | null = null;
+  const rawInstanceSpecs = item.InstanceSpecs;
+  if (rawInstanceSpecs && typeof rawInstanceSpecs === 'object' && !Array.isArray(rawInstanceSpecs)) {
+    instanceSpecs = rawInstanceSpecs as Record<string, string | string[]>;
   }
 
   const co2Result = calculateCo2Savings({
@@ -261,12 +267,13 @@ function buildMarketingSheetPayload(item: Item, imageUrl: string | null): Market
     materialNumber: item.Artikel_Nummer?.trim() || null,
     description: item.Kurzbeschreibung?.trim() || null,
     specs,
+    instanceSpecs,
+    quality: typeof item.Quality === 'number' ? item.Quality : null,
     price: typeof item.Verkaufspreis === 'number' ? item.Verkaufspreis : null,
     currency: 'CHF',
     category: categoryLabel || null,
     manufacturer: item.Hersteller?.trim() || null,
     co2SavedKg: co2Result ? Math.round(co2Result.co2SavedKg * 10) / 10 : null,
-    imageUrl
   };
 }
 
@@ -383,18 +390,7 @@ export async function handleUnifiedPrintRequest(
         const item = ctx.getItem.get(id) as Item | undefined;
         if (!item) return sendJson(res, 404, { error: resolveNotFoundMessage(labelType) });
         if (labelType === 'marketingsheet') {
-          let imageUrl: string | null = null;
-          try {
-            const firstAttachment = ctx.db.prepare(
-              `SELECT FileName, FilePath FROM item_attachments WHERE ItemUUID = ? ORDER BY CreatedAt DESC LIMIT 1`
-            ).get(id) as { FileName: string; FilePath: string } | undefined;
-            if (firstAttachment?.FilePath) {
-              imageUrl = `/media/instances/${encodeURIComponent(id)}/${encodeURIComponent(firstAttachment.FileName)}`;
-            }
-          } catch (attachErr) {
-            console.warn('[print-unified] Failed to resolve item image for marketing sheet', { itemId: id, error: attachErr });
-          }
-          payload = buildMarketingSheetPayload(item, imageUrl);
+          payload = buildMarketingSheetPayload(item);
         } else {
           payload = buildItemLabelPayload(item);
         }
