@@ -1,6 +1,9 @@
 # Todo
 
 ## Confirmed Decisions
+- **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
+- **Multi-instance agentic safety (Phase 2, deferred):** Replace `setImmediate` dispatch with a polling loop using `SELECT ... FOR UPDATE SKIP LOCKED` so multiple instances don't double-claim queued runs. SQL template is in the plan at `~/.claude/plans/okay-i-shifted-it-fluttering-sonnet.md`.
+
 - **CO₂ savings calculation:** ADEME 2022 formula (E_new × R_reuse × L_factor − O_refurb); coefficients in `contracts/impact/co2.json`; computed at runtime (no DB column in Phase 1). Phase 2 path: add `co2_einsparung_kg REAL` to items table once volume warrants pre-computation.
 
 - **Batch run conflicts:** when an agentic run is already in progress, new start requests should be ignored (no parallel start via repeated triggers).
