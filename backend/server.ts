@@ -517,15 +517,13 @@ function createAgenticServiceDependencies(
   }
 
   return {
-    // db and sync statement fields are no longer passed; agentic/index.ts stubs them as any
-    db: null as any,
-    getAgenticRun: getAgenticRun as any,
-    getItemReference: getItemReference as any,
-    upsertAgenticRun: upsertAgenticRun as any,
-    updateAgenticRunStatus: updateAgenticRunStatus as any,
+    getAgenticRun,
+    getItemReference,
+    upsertAgenticRun,
+    updateAgenticRunStatus,
     updateQueuedAgenticRunQueueState,
     logEvent,
-    findByMaterial: { all: (artikelNummer: string) => [] } as any,
+    findByMaterial,
     logger,
     now: overrides.now ?? (() => new Date()),
     invokeModel: boundAgenticInvokeModel

@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+783. ✅ Wire initDb() at server startup; fix findByMaterial stub in agentic dependencies
+   - **Why:** `initDb()` was written during the Postgres migration but never called — tables would never be created. Also `createAgenticServiceDependencies` passed `findByMaterial: { all: () => [] }` (always empty) instead of the real async function, silently breaking material-lookup in agentic runs. Fixed both in `server.ts`.
+   - **Deferred:** Nothing.
 782. ✅ Migrate agentic action files and search.ts from old synchronous SQLite API to async pg helpers
    - **Why:** 12 files in `backend/actions/` still called `ctx.getAgenticRun.get()`, `ctx.upsertAgenticRun.run()`, `ctx.updateAgenticRunStatus.run()`, `ctx.db.prepare().all/get`, and `ctx.db.transaction()` — patterns that were removed when the DB layer was rewritten for PostgreSQL. These would crash at runtime. Fixed by converting all `.get/.run/.all` method calls on ctx helpers to direct `await ctx.helper(args)` async calls; replaced `ctx.db.prepare()` with `query`/`queryOne` from `../db-client`; replaced `ctx.db.transaction()` with `withTransaction`; removed `db: ctx.db` from AgenticServiceDependencies objects passed to agentic service functions.
    - **Deferred:** `agentic/index.ts` still types `AgenticServiceDependencies` with SQLite `Database.Statement` — the agentic service internals use `.get/.run/.all` on those statements. That layer requires a separate migration pass.
