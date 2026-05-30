@@ -54,15 +54,15 @@ export type AgenticModelInvokerFn = (
 ) => Promise<AgenticModelInvocationResult>;
 
 export interface AgenticServiceDependencies {
-  db: Database.Database;
-  getAgenticRun: Database.Statement;
-  getItemReference: Database.Statement;
-  upsertAgenticRun: Database.Statement;
-  updateAgenticRunStatus: Database.Statement;
+  db?: any;
+  getAgenticRun: any;
+  getItemReference: any;
+  upsertAgenticRun: any;
+  updateAgenticRunStatus: any;
   updateQueuedAgenticRunQueueState?: (update: AgenticRunQueueUpdate) => void;
   logEvent: (payload: LogEventPayload) => void;
-  updateAgenticReview?: Database.Statement;
-  findByMaterial?: { all?: (artikelNummer: string) => Array<{ ItemUUID?: string | null }> };
+  updateAgenticReview?: any;
+  findByMaterial?: any;
   now?: () => Date;
   logger?: AgenticServiceLogger;
   invokeModel?: AgenticModelInvokerFn;

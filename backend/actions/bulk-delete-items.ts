@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import type { BulkRemoveResult } from '../db';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
+import { withTransaction } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -111,67 +112,65 @@ const action = defineHttpAction({
       let results: BulkRemoveResult[] = [];
       if (instanceItems.length) {
         try {
-          const runInstanceDeletes = ctx.db.transaction(
-            (items: Array<{ itemId: string; boxId: string | null; quantity: number }>): BulkRemoveResult[] => {
-              const deleted: BulkRemoveResult[] = [];
-              for (const entry of items) {
-                try {
-                  ctx.deleteItem.run(entry.itemId);
-                } catch (deleteErr) {
-                  console.error('[bulk-delete-items] Failed to delete item instance', {
-                    actor,
-                    itemId: entry.itemId,
-                    quantityBefore: entry.quantity,
-                    error: deleteErr
-                  });
-                  throw deleteErr;
-                }
-                ctx.logEvent({
-                  Actor: actor,
-                  EntityType: 'Item',
-                  EntityId: entry.itemId,
-                  Event: 'Removed',
-                  Meta: JSON.stringify({
-                    fromBox: entry.boxId,
-                    before: entry.quantity,
-                    after: 0,
-                    clearedBox: true
-                  })
-                });
-                try {
-                  const correlationId = generateShopwareCorrelationId('bulk-delete-instance', entry.itemId);
-                  const payload = JSON.stringify({
-                    actor,
-                    quantityBefore: entry.quantity,
-                    quantityAfter: 0,
-                    boxId: entry.boxId,
-                    itemUUID: entry.itemId,
-                    trigger: 'bulk-delete-items'
-                  });
-                  ctx.enqueueShopwareSyncJob({
-                    CorrelationId: correlationId,
-                    JobType: 'item-delete',
-                    Payload: payload
-                  });
-                } catch (queueErr) {
-                  console.error('[bulk-delete-items] Failed to enqueue Shopware sync job for instance delete', {
-                    actor,
-                    itemId: entry.itemId,
-                    error: queueErr
-                  });
-                }
-                deleted.push({
+          const instanceResults = await withTransaction(async (_client) => {
+            const deleted: BulkRemoveResult[] = [];
+            for (const entry of instanceItems) {
+              try {
+                ctx.deleteItem.run(entry.itemId);
+              } catch (deleteErr) {
+                console.error('[bulk-delete-items] Failed to delete item instance', {
+                  actor,
                   itemId: entry.itemId,
-                  fromBoxId: entry.boxId,
+                  quantityBefore: entry.quantity,
+                  error: deleteErr
+                });
+                throw deleteErr;
+              }
+              ctx.logEvent({
+                Actor: actor,
+                EntityType: 'Item',
+                EntityId: entry.itemId,
+                Event: 'Removed',
+                Meta: JSON.stringify({
+                  fromBox: entry.boxId,
                   before: entry.quantity,
                   after: 0,
                   clearedBox: true
+                })
+              });
+              try {
+                const correlationId = generateShopwareCorrelationId('bulk-delete-instance', entry.itemId);
+                const payload = JSON.stringify({
+                  actor,
+                  quantityBefore: entry.quantity,
+                  quantityAfter: 0,
+                  boxId: entry.boxId,
+                  itemUUID: entry.itemId,
+                  trigger: 'bulk-delete-items'
+                });
+                ctx.enqueueShopwareSyncJob({
+                  CorrelationId: correlationId,
+                  JobType: 'item-delete',
+                  Payload: payload
+                });
+              } catch (queueErr) {
+                console.error('[bulk-delete-items] Failed to enqueue Shopware sync job for instance delete', {
+                  actor,
+                  itemId: entry.itemId,
+                  error: queueErr
                 });
               }
-              return deleted;
+              deleted.push({
+                itemId: entry.itemId,
+                fromBoxId: entry.boxId,
+                before: entry.quantity,
+                after: 0,
+                clearedBox: true
+              });
             }
-          );
-          results = results.concat(runInstanceDeletes(instanceItems));
+            return deleted;
+          });
+          results = results.concat(instanceResults);
         } catch (dbErr) {
           console.error('[bulk-delete-items] Instance deletion transaction failed', dbErr);
           return sendJson(res, 500, { error: (dbErr as Error).message });

@@ -494,7 +494,6 @@ const action = defineHttpAction({
           return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic status lookup' });
         }
         const result = getAgenticStatus(artikelNummer, {
-          db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,
@@ -608,7 +607,7 @@ const action = defineHttpAction({
         if (action === 'close') {
           let run: any;
           try {
-            run = ctx.getAgenticRun.get(artikelNummer);
+            run = await ctx.getAgenticRun(artikelNummer);
           } catch (err) {
             console.error('Failed to load agentic run for close request Artikelnummer', { artikelNummer, err });
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
@@ -631,7 +630,7 @@ const action = defineHttpAction({
 
           try {
             if (!run) {
-              const upsertResult = ctx.upsertAgenticRun.run({
+              await ctx.upsertAgenticRun({
                 Artikel_Nummer: artikelNummer,
                 SearchQuery: null,
                 Status: status,
@@ -642,9 +641,6 @@ const action = defineHttpAction({
                 LastReviewNotes: notes || null,
                 LastSearchLinksJson: run?.LastSearchLinksJson ?? null
               });
-              if (!upsertResult || upsertResult.changes === 0) {
-                throw new Error('Agentic close upsert had no effect');
-              }
             } else {
               const result = ctx.updateAgenticReview.run(transitionPayload);
               if (!result || result.changes === 0) {
@@ -672,7 +668,7 @@ const action = defineHttpAction({
         } else {
           let run: any;
           try {
-            run = ctx.getAgenticRun.get(artikelNummer);
+            run = await ctx.getAgenticRun(artikelNummer);
           } catch (err) {
             console.error('Failed to load agentic run for review request Artikelnummer', { artikelNummer, err });
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
@@ -723,7 +719,7 @@ const action = defineHttpAction({
 
         if (decision === 'rejected') {
           try {
-            ctx.updateAgenticRunStatus.run(
+            await ctx.updateAgenticRunStatus(
               normalizeAgenticStatusUpdate({
                 Artikel_Nummer: artikelNummer,
                 LastAttemptAt: null,
@@ -803,7 +799,6 @@ const action = defineHttpAction({
 
       try {
         const result = getAgenticStatus(artikelNummer, {
-          db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,

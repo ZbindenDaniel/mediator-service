@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { query, queryOne, execute } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -35,7 +36,7 @@ const action = defineHttpAction({
       const childUUID = instanceMatch[2] ? decodeURIComponent(instanceMatch[2]) : null;
 
       if (method === 'GET') {
-        const accessories = ctx.db.prepare(`
+        const accessories = await query(`
           SELECT ir.Id, ir.ChildItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
                  ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
                  i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
@@ -43,11 +44,11 @@ const action = defineHttpAction({
           FROM item_relations ir
           JOIN items i ON i.ItemUUID = ir.ChildItemUUID
           LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-          WHERE ir.ParentItemUUID = ?
+          WHERE ir.ParentItemUUID = $1
           ORDER BY ir.CreatedAt
-        `).all(parentUUID);
+        `, [parentUUID]);
 
-        const devices = ctx.db.prepare(`
+        const devices = await query(`
           SELECT ir.Id, ir.ParentItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
                  ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
                  i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
@@ -55,9 +56,9 @@ const action = defineHttpAction({
           FROM item_relations ir
           JOIN items i ON i.ItemUUID = ir.ParentItemUUID
           LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-          WHERE ir.ChildItemUUID = ?
+          WHERE ir.ChildItemUUID = $1
           ORDER BY ir.CreatedAt
-        `).all(parentUUID);
+        `, [parentUUID]);
 
         return sendJson(res, 200, { connectedAccessories: accessories, connectedToDevices: devices });
       }
@@ -68,18 +69,18 @@ const action = defineHttpAction({
         if (!child) return sendJson(res, 400, { error: 'childItemUUID is required' });
         if (child === parentUUID) return sendJson(res, 400, { error: 'cannot link item to itself' });
 
-        const parentExists = ctx.db.prepare('SELECT ItemUUID FROM items WHERE ItemUUID = ?').get(parentUUID);
+        const parentExists = await queryOne('SELECT ItemUUID FROM items WHERE ItemUUID = $1', [parentUUID]);
         if (!parentExists) return sendJson(res, 404, { error: 'parent item not found' });
-        const childExists = ctx.db.prepare('SELECT ItemUUID FROM items WHERE ItemUUID = ?').get(child);
+        const childExists = await queryOne('SELECT ItemUUID FROM items WHERE ItemUUID = $1', [child]);
         if (!childExists) return sendJson(res, 404, { error: 'child item not found' });
 
         const relationType = typeof data.relationType === 'string' ? data.relationType.trim() : 'Zubehör';
         const notes = typeof data.notes === 'string' ? data.notes.trim() || null : null;
         try {
-          ctx.db.prepare(`
+          await execute(`
             INSERT INTO item_relations (ParentItemUUID, ChildItemUUID, RelationType, Notes)
-            VALUES (?, ?, ?, ?)
-          `).run(parentUUID, child, relationType, notes);
+            VALUES ($1, $2, $3, $4)
+          `, [parentUUID, child, relationType, notes]);
           ctx.logEvent({
             EntityType: 'Item',
             EntityId: parentUUID,
@@ -88,7 +89,7 @@ const action = defineHttpAction({
           });
           return sendJson(res, 201, { ok: true });
         } catch (err: any) {
-          if (String(err?.message).includes('UNIQUE')) return sendJson(res, 409, { error: 'relation already exists' });
+          if (String(err?.message).includes('unique') || String(err?.message).includes('UNIQUE')) return sendJson(res, 409, { error: 'relation already exists' });
           throw err;
         }
       }
@@ -96,11 +97,11 @@ const action = defineHttpAction({
       if (method === 'PATCH' && childUUID) {
         const data = await readJson(req) as Record<string, unknown>;
         const notes = typeof data.notes === 'string' ? data.notes.trim() || null : null;
-        const result = ctx.db.prepare(`
-          UPDATE item_relations SET Notes = ?, UpdatedAt = datetime('now')
-          WHERE ParentItemUUID = ? AND ChildItemUUID = ?
-        `).run(notes, parentUUID, childUUID);
-        if (result.changes === 0) return sendJson(res, 404, { error: 'relation not found' });
+        const affected = await execute(`
+          UPDATE item_relations SET Notes = $1, UpdatedAt = $2
+          WHERE ParentItemUUID = $3 AND ChildItemUUID = $4
+        `, [notes, new Date().toISOString(), parentUUID, childUUID]);
+        if (affected === 0) return sendJson(res, 404, { error: 'relation not found' });
         ctx.logEvent({
           EntityType: 'Item',
           EntityId: parentUUID,
@@ -111,10 +112,11 @@ const action = defineHttpAction({
       }
 
       if (method === 'DELETE' && childUUID) {
-        const result = ctx.db.prepare(
-          'DELETE FROM item_relations WHERE ParentItemUUID = ? AND ChildItemUUID = ?'
-        ).run(parentUUID, childUUID);
-        if (result.changes === 0) return sendJson(res, 404, { error: 'relation not found' });
+        const affected = await execute(
+          'DELETE FROM item_relations WHERE ParentItemUUID = $1 AND ChildItemUUID = $2',
+          [parentUUID, childUUID]
+        );
+        if (affected === 0) return sendJson(res, 404, { error: 'relation not found' });
         ctx.logEvent({
           EntityType: 'Item',
           EntityId: parentUUID,
@@ -135,7 +137,7 @@ const action = defineHttpAction({
 
       if (method === 'GET') {
         // Compatible child accessory refs, with available (unconnected) instance count
-        const compatibleChildren = ctx.db.prepare(`
+        const compatibleChildren = await query(`
           SELECT irr.Id, irr.ChildArtikel_Nummer AS Artikel_Nummer,
                  irr.RelationType, irr.Notes, irr.CreatedAt,
                  r.Artikelbeschreibung, r.Kurzbeschreibung,
@@ -146,20 +148,20 @@ const action = defineHttpAction({
                  ) AS availableCount
           FROM item_ref_relations irr
           LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ChildArtikel_Nummer
-          WHERE irr.ParentArtikel_Nummer = ?
+          WHERE irr.ParentArtikel_Nummer = $1
           ORDER BY irr.CreatedAt
-        `).all(parentNr);
+        `, [parentNr]);
 
         // Device refs this ref is an accessory for
-        const compatibleParents = ctx.db.prepare(`
+        const compatibleParents = await query(`
           SELECT irr.Id, irr.ParentArtikel_Nummer AS Artikel_Nummer,
                  irr.RelationType, irr.Notes, irr.CreatedAt,
                  r.Artikelbeschreibung, r.Kurzbeschreibung
           FROM item_ref_relations irr
           LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ParentArtikel_Nummer
-          WHERE irr.ChildArtikel_Nummer = ?
+          WHERE irr.ChildArtikel_Nummer = $1
           ORDER BY irr.CreatedAt
-        `).all(parentNr);
+        `, [parentNr]);
 
         return sendJson(res, 200, { compatibleAccessoryRefs: compatibleChildren, compatibleParentRefs: compatibleParents });
       }
@@ -173,22 +175,23 @@ const action = defineHttpAction({
         const relationType = typeof data.relationType === 'string' ? data.relationType.trim() : 'Zubehör';
         const notes = typeof data.notes === 'string' ? data.notes.trim() || null : null;
         try {
-          ctx.db.prepare(`
+          await execute(`
             INSERT INTO item_ref_relations (ParentArtikel_Nummer, ChildArtikel_Nummer, RelationType, Notes)
-            VALUES (?, ?, ?, ?)
-          `).run(parentNr, child, relationType, notes);
+            VALUES ($1, $2, $3, $4)
+          `, [parentNr, child, relationType, notes]);
           return sendJson(res, 201, { ok: true });
         } catch (err: any) {
-          if (String(err?.message).includes('UNIQUE')) return sendJson(res, 409, { error: 'relation already exists' });
+          if (String(err?.message).includes('unique') || String(err?.message).includes('UNIQUE')) return sendJson(res, 409, { error: 'relation already exists' });
           throw err;
         }
       }
 
       if (method === 'DELETE' && childNr) {
-        const result = ctx.db.prepare(
-          'DELETE FROM item_ref_relations WHERE ParentArtikel_Nummer = ? AND ChildArtikel_Nummer = ?'
-        ).run(parentNr, childNr);
-        if (result.changes === 0) return sendJson(res, 404, { error: 'relation not found' });
+        const affected = await execute(
+          'DELETE FROM item_ref_relations WHERE ParentArtikel_Nummer = $1 AND ChildArtikel_Nummer = $2',
+          [parentNr, childNr]
+        );
+        if (affected === 0) return sendJson(res, 404, { error: 'relation not found' });
         return sendJson(res, 200, { ok: true });
       }
 

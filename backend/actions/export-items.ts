@@ -1342,18 +1342,16 @@ const action = defineHttpAction({
         createdAfter: createdAfter || null,
         updatedAfter: updatedAfter || null
       });
-      const log = ctx.db.transaction((rows: any[], a: string) => {
-        for (const row of rows) {
-          ctx.logEvent({
-            Actor: a,
-            EntityType: 'Item',
-            EntityId: row.ItemUUID,
-            Event: 'Exported',
-            Meta: JSON.stringify({ createdAfter, updatedAfter })
-          });
-        }
-      });
-      log(items, actor);
+      // Log export events without a DB transaction — logEvent uses ctx helpers, not raw SQL
+      for (const row of items) {
+        ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Item',
+          EntityId: row.ItemUUID,
+          Event: 'Exported',
+          Meta: JSON.stringify({ createdAfter, updatedAfter })
+        });
+      }
       const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
       const stagedExport = await stageItemsExport({
         archiveBaseName: `items-export-${Date.now()}`,

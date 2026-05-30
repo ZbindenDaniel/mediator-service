@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
+import { withTransaction } from '../db-client';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
 // TODO(agent): Remove category-based shelf label fallback assumptions from any remaining admin tooling.
@@ -134,76 +135,65 @@ const action = defineHttpAction({
         const prefix = `S-${location}-${floor}-`;
         const nowDate = new Date();
         const now = nowDate.toISOString();
-        const shelfTxn = ctx.db.transaction(
-          (payload: {
-            actor: string;
-            prefix: string;
-            location: string;
-            floor: string;
-            label: string;
-            notes: string | null;
-            now: string;
-          }) => {
-            const maxRow = ctx.getMaxShelfIndex.get({ prefix: payload.prefix }) as
-              | { MaxIndex: number | null }
-              | undefined;
-            let nextIndex = typeof maxRow?.MaxIndex === 'number' && Number.isFinite(maxRow.MaxIndex)
-              ? maxRow.MaxIndex + 1
-              : 1;
-            let attempts = 0;
-            const maxAttempts = 25;
+        const shelfId = await withTransaction(async (_client) => {
+          const payload = {
+            actor,
+            prefix,
+            location: location!,
+            floor: floor!,
+            label: resolvedShelfLabel,
+            notes: resolvedNotes,
+            now
+          };
+          const maxRow = ctx.getMaxShelfIndex.get({ prefix: payload.prefix }) as
+            | { MaxIndex: number | null }
+            | undefined;
+          let nextIndex = typeof maxRow?.MaxIndex === 'number' && Number.isFinite(maxRow.MaxIndex)
+            ? maxRow.MaxIndex + 1
+            : 1;
+          let attempts = 0;
+          const maxAttempts = 25;
 
-            while (attempts < maxAttempts) {
-              const candidate = `${payload.prefix}${String(nextIndex).padStart(4, '0')}`;
-              const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
-              if (existing?.BoxID) {
-                console.warn('[shelf] Shelf ID collision detected, retrying', {
-                  candidate,
-                  location: payload.location,
-                  floor: payload.floor
-                });
-                attempts += 1;
-                nextIndex += 1;
-                continue;
-              }
-
-              ctx.runUpsertBox({
-                BoxID: candidate,
-                LocationId: candidate,
-                Label: payload.label,
-                CreatedAt: payload.now,
-                Notes: payload.notes,
-                PhotoPath: null,
-                PlacedBy: payload.actor,
-                PlacedAt: null,
-                UpdatedAt: payload.now
+          while (attempts < maxAttempts) {
+            const candidate = `${payload.prefix}${String(nextIndex).padStart(4, '0')}`;
+            const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
+            if (existing?.BoxID) {
+              console.warn('[shelf] Shelf ID collision detected, retrying', {
+                candidate,
+                location: payload.location,
+                floor: payload.floor
               });
-              ctx.logEvent({
-                Actor: payload.actor,
-                EntityType: 'Box',
-                EntityId: candidate,
-                Event: 'Created',
-                Meta: JSON.stringify({
-                  type: 'shelf',
-                  location: payload.location,
-                  floor: payload.floor
-                })
-              });
-              return candidate;
+              attempts += 1;
+              nextIndex += 1;
+              continue;
             }
 
-            throw new Error('Failed to allocate shelf ID');
+            ctx.runUpsertBox({
+              BoxID: candidate,
+              LocationId: candidate,
+              Label: payload.label,
+              CreatedAt: payload.now,
+              Notes: payload.notes,
+              PhotoPath: null,
+              PlacedBy: payload.actor,
+              PlacedAt: null,
+              UpdatedAt: payload.now
+            });
+            ctx.logEvent({
+              Actor: payload.actor,
+              EntityType: 'Box',
+              EntityId: candidate,
+              Event: 'Created',
+              Meta: JSON.stringify({
+                type: 'shelf',
+                location: payload.location,
+                floor: payload.floor
+              })
+            });
+            return candidate;
           }
-        );
 
-        const shelfId = shelfTxn({
-          actor,
-          prefix,
-          location,
-          floor,
-          label: resolvedShelfLabel,
-          notes: resolvedNotes,
-          now
+          throw new Error('Failed to allocate shelf ID');
         });
         console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, actor });
         return sendJson(res, 200, { ok: true, id: shelfId });
@@ -259,7 +249,8 @@ const action = defineHttpAction({
       const prefix = `B-${dd}${mm}${yy}-`;
       // TODO(agent): Revisit box ID collision retry caps once contention telemetry is available.
       const maxAttempts = 25;
-      const txn = ctx.db.transaction((payload: { actor: string; now: string; prefix: string; startSeq: number }) => {
+      const id = await withTransaction(async (_client) => {
+        const payload = { actor, now, prefix, startSeq: seq + 1 };
         let attempts = 0;
         let nextSeq = payload.startSeq;
         let candidate = '';
@@ -311,7 +302,6 @@ const action = defineHttpAction({
           throw error;
         }
       });
-      const id = txn({ actor, now, prefix, startSeq: seq + 1 });
       sendJson(res, 200, { ok: true, id });
     } catch (err) {
       console.error('[create-box] Create box failed', err);

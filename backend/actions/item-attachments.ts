@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { defineHttpAction } from './index';
 import { MEDIA_UPLOAD_STAGING_DIR } from '../lib/media';
+import { queryOne, query, execute, insert } from '../db-client';
 
 const ATTACHMENT_ROUTE_RE = /^\/api\/item\/([^/]+)\/attachments(?:\/(\d+))?$/;
 const INSTANCES_SUBDIR = 'instances';
@@ -31,15 +32,16 @@ const action = defineHttpAction({
     const itemUUID = decodeURIComponent(match[1]);
     const attachmentId = match[2] != null ? parseInt(match[2], 10) : null;
 
-    const itemRow = ctx.db.prepare('SELECT ItemUUID FROM items WHERE ItemUUID = ?').get(itemUUID);
+    const itemRow = await queryOne('SELECT ItemUUID FROM items WHERE ItemUUID = $1', [itemUUID]);
     if (!itemRow) return sendJson(res, 404, { error: 'item not found' });
 
     // ── GET: list attachments ─────────────────────────────────────────────────
     if (method === 'GET') {
-      const attachments = ctx.db.prepare(`
-        SELECT Id, ItemUUID, FileName, FilePath, MimeType, Label, FileSize, CreatedAt
-        FROM item_attachments WHERE ItemUUID = ? ORDER BY CreatedAt DESC
-      `).all(itemUUID);
+      const attachments = await query(
+        `SELECT Id, ItemUUID, FileName, FilePath, MimeType, Label, FileSize, CreatedAt
+         FROM item_attachments WHERE ItemUUID = $1 ORDER BY CreatedAt DESC`,
+        [itemUUID]
+      );
       return sendJson(res, 200, { attachments });
     }
 
@@ -80,10 +82,11 @@ const action = defineHttpAction({
       fs.writeFileSync(path.join(dir, safeName), body);
 
       const relativePath = [INSTANCES_SUBDIR, itemUUID, safeName].join('/');
-      ctx.db.prepare(`
-        INSERT INTO item_attachments (ItemUUID, FileName, FilePath, MimeType, Label, FileSize)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(itemUUID, safeName, relativePath, mimeType, label, body.length);
+      await insert(
+        `INSERT INTO item_attachments (ItemUUID, FileName, FilePath, MimeType, Label, FileSize)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING Id`,
+        [itemUUID, safeName, relativePath, mimeType, label, body.length]
+      );
 
       ctx.logEvent({
         EntityType: 'Item',
@@ -96,15 +99,16 @@ const action = defineHttpAction({
 
     // ── DELETE: remove attachment ─────────────────────────────────────────────
     if (method === 'DELETE' && attachmentId !== null) {
-      const row = ctx.db.prepare(
-        'SELECT Id, FileName, FilePath FROM item_attachments WHERE Id = ? AND ItemUUID = ?'
-      ).get(attachmentId, itemUUID) as { Id: number; FileName: string; FilePath: string } | undefined;
+      const row = await queryOne<{ Id: number; FileName: string; FilePath: string }>(
+        'SELECT Id, FileName, FilePath FROM item_attachments WHERE Id = $1 AND ItemUUID = $2',
+        [attachmentId, itemUUID]
+      );
       if (!row) return sendJson(res, 404, { error: 'attachment not found' });
 
       const fullPath = path.join(MEDIA_UPLOAD_STAGING_DIR, row.FilePath);
       try { fs.unlinkSync(fullPath); } catch { /* already gone */ }
 
-      ctx.db.prepare('DELETE FROM item_attachments WHERE Id = ? AND ItemUUID = ?').run(attachmentId, itemUUID);
+      await execute('DELETE FROM item_attachments WHERE Id = $1 AND ItemUUID = $2', [attachmentId, itemUUID]);
       ctx.logEvent({
         EntityType: 'Item',
         EntityId: itemUUID,

@@ -4,6 +4,7 @@ import { ALT_DOC_DIRS } from '../config';
 import { resolveAltDocDirPath, buildExternalDocUrl } from '../lib/alt-doc-resolver';
 import { listFilesInAltDocDirectory } from '../lib/media-request';
 import type { ExternalDocSummary } from '../../models/external-doc';
+import { queryOne } from '../db-client';
 
 const ROUTE_RE = /^\/api\/items\/([^/]+)\/external-docs$/;
 
@@ -29,9 +30,10 @@ const action = defineHttpAction({
       return sendJson(res, 200, { docs: [] });
     }
 
-    const itemRow = ctx.db.prepare(
-      'SELECT i.ItemUUID, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = ?'
-    ).get(itemUUID) as { ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null } | undefined;
+    const itemRow = await queryOne<{ ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
+      'SELECT i.ItemUUID, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = $1',
+      [itemUUID]
+    );
 
     if (!itemRow) return sendJson(res, 404, { error: 'item not found' });
 

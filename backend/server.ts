@@ -94,7 +94,8 @@ import {
   enqueueShopwareSyncJob,
   insertAgenticRunReviewHistoryEntry,
   listStubs,
-  createStub
+  createStub,
+  initDb
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
@@ -980,6 +981,15 @@ function formatListenerUrl(protocol: 'http' | 'https', hostname: string, port: n
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  initDb()
+    .then(() => {
+      console.info('[server] Database schema initialized.');
+    })
+    .catch((err) => {
+      console.error('[server] Failed to initialize database schema — aborting startup.', err);
+      process.exit(1);
+    });
+
   try {
     server.listen(HTTP_PORT, () => {
       console.log(`[server] HTTP server listening at ${formatListenerUrl('http', PUBLIC_HOSTNAME, HTTP_PORT)}`);

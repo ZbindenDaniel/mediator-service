@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
+import { withTransaction } from '../db-client';
 // TODO(agent): Verify non-bulk removals keep grouping/list views consistent after zeroing stock.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -39,7 +40,9 @@ const action = defineHttpAction({
       const isBulk = isBulkEinheit(item.Einheit);
       if (isBulk && currentQty <= 0) return sendJson(res, 400, { error: 'item has no stock' });
       const clearedBox = isBulk ? currentQty === 1 : true;
-      const txn = ctx.db.transaction((u: string, a: string) => {
+      const result = await withTransaction(async (_client) => {
+        const u = uuid;
+        const a = actor;
         if (isBulk) {
           try {
             ctx.decrementItemStock.run(u);
@@ -148,7 +151,6 @@ const action = defineHttpAction({
 
         return { updated, deleted: false };
       });
-      const result = txn(uuid, actor);
       if (isBulk) {
         console.log('Removed item', uuid, 'new qty', result.updated?.Auf_Lager);
       } else {

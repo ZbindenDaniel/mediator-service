@@ -7,6 +7,7 @@
 // TODO(search-deep-fields): Validate Kurzbeschreibung/Langtext weighting after ranking feedback.
 // TODO(search-helper): Verify helper scoring parity after rollout.
 import type { IncomingMessage, ServerResponse } from 'http';
+import { query } from '../db-client';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
@@ -500,6 +501,12 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// Convert SQLite-style ? placeholders to Postgres-style $1, $2, ... positional params
+function toPositional(sql: string): string {
+  let n = 0;
+  return sql.replace(/\?/g, () => `$${++n}`);
+}
+
 const action = defineHttpAction({
   key: 'search',
   label: 'Search',
@@ -664,7 +671,7 @@ const action = defineHttpAction({
 
         let rawRefs: any[] = [];
         try {
-          rawRefs = ctx.db.prepare(refSql).all(...refParams);
+          rawRefs = await query(toPositional(refSql), refParams);
         } catch (error) {
           console.error('[search] Failed to execute reference search query', { term: trimmed, error });
           throw error;
@@ -896,7 +903,7 @@ const action = defineHttpAction({
 
       let rawItems: any[] = [];
       try {
-        rawItems = ctx.db.prepare(itemSql).all(...itemParams);
+        rawItems = await query(toPositional(itemSql), itemParams);
       } catch (error) {
         console.error('[search] Failed to execute item search query', { term: trimmed, error });
         throw error;
@@ -988,7 +995,7 @@ const action = defineHttpAction({
         minTokenHits,
       ];
 
-      const rawBoxes = ctx.db.prepare(boxSql).all(...boxParams);
+      const rawBoxes = await query(toPositional(boxSql), boxParams);
 
       // ----- same JS scoring + response -----
       const scoredItems = rawItems

@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
+import { queryOne, withTransaction } from '../db-client';
 
 // TODO(agent): Validate Artikel_Nummer requirements for instance creation during add-item flows.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -61,7 +62,9 @@ const action = defineHttpAction({
           return sendJson(res, 500, { error: 'Failed to mint ItemUUID for instance creation' });
         }
       }
-      const txn = ctx.db.transaction((u: string, a: string) => {
+      const result = await withTransaction(async (_client) => {
+        const u = uuid;
+        const a = actor;
         if (isBulk) {
           try {
             ctx.incrementItemStock.run(u);
@@ -175,7 +178,6 @@ const action = defineHttpAction({
 
         return { updated: null, createdItemId: newItemUUID };
       });
-      const result = txn(uuid, actor);
       if (isBulk) {
         console.log(`Stock increased for ${uuid} by ${actor}`);
       } else {
@@ -187,9 +189,10 @@ const action = defineHttpAction({
       }
       let unplacedWarning: string | null = null;
       try {
-        const unplacedRow = ctx.db.prepare(
-          `SELECT COUNT(*) AS cnt FROM items WHERE (BoxID IS NULL OR BoxID = '') AND (Location IS NULL OR Location = '') AND Auf_Lager > 0`
-        ).get() as { cnt: number } | undefined;
+        const unplacedRow = await queryOne<{ cnt: number }>(
+          `SELECT COUNT(*) AS cnt FROM items WHERE (BoxID IS NULL OR BoxID = '') AND (Location IS NULL OR Location = '') AND Auf_Lager > 0`,
+          []
+        );
         const unplacedCount = unplacedRow?.cnt ?? 0;
         if (unplacedCount > 20) {
           unplacedWarning = `${unplacedCount} Artikel haben noch keinen Lagerort.`;

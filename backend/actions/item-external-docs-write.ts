@@ -6,6 +6,7 @@ import { ALT_DOC_DIRS } from '../config';
 import { resolveAltDocDirPath, buildExternalDocUrl } from '../lib/alt-doc-resolver';
 import { resolvePathWithinRoot } from '../lib/path-guard';
 import { emitMediaAudit } from '../lib/media-audit';
+import { queryOne } from '../db-client';
 
 // Matches both POST (no filename segment) and DELETE (with filename segment)
 const ROUTE_RE = /^\/api\/items\/([^/]+)\/external-docs\/([^/]+)(?:\/(.+))?$/;
@@ -35,9 +36,10 @@ const action = defineHttpAction({
     const dirConfig = ALT_DOC_DIRS.find(d => d.name === dirName);
     if (!dirConfig) return sendJson(res, 404, { error: 'directory not found' });
 
-    const itemRow = ctx.db.prepare(
-      'SELECT i.ItemUUID, i.Artikel_Nummer, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = ?'
-    ).get(itemUUID) as { ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null } | undefined;
+    const itemRow = await queryOne<{ ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
+      'SELECT i.ItemUUID, i.Artikel_Nummer, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = $1',
+      [itemUUID]
+    );
 
     if (!itemRow) return sendJson(res, 404, { error: 'item not found' });
 

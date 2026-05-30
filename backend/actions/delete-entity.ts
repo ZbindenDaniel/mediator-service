@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
+import { withTransaction } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -26,10 +27,10 @@ const action = defineHttpAction({
       const confirm = !!data.confirm;
       if (!actor || !confirm) return sendJson(res, 400, { error: 'actor and confirm=true required' });
       if (type === 'items') {
-        const item = ctx.getItem.get(id);
+        const item = await ctx.getItem(id);
         if (!item) return sendJson(res, 404, { error: 'item not found' });
-        ctx.db.transaction(() => {
-          ctx.deleteItem.run(id);
+        await withTransaction(async (_client) => {
+          await ctx.deleteItem(id);
           ctx.logEvent({
             Actor: actor,
             EntityType: 'Item',
@@ -45,7 +46,7 @@ const action = defineHttpAction({
               itemUUID: id,
               trigger: 'delete-entity'
             });
-            ctx.enqueueShopwareSyncJob({
+            await ctx.enqueueShopwareSyncJob({
               CorrelationId: correlationId,
               JobType: 'item-delete',
               Payload: payload
@@ -56,14 +57,14 @@ const action = defineHttpAction({
               error: queueErr
             });
           }
-        })();
+        });
       } else {
-        const box = ctx.getBox.get(id);
+        const box = await ctx.getBox(id);
         if (!box) return sendJson(res, 404, { error: 'box not found' });
-        const items = ctx.itemsByBox.all(id);
+        const items = await ctx.itemsByBox(id);
         if (items.length) return sendJson(res, 400, { error: 'box not empty' });
-        ctx.db.transaction(() => {
-          ctx.deleteBox.run(id);
+        await withTransaction(async (_client) => {
+          await ctx.deleteBox(id);
           ctx.logEvent({
             Actor: actor,
             EntityType: 'Box',
@@ -71,7 +72,7 @@ const action = defineHttpAction({
             Event: 'Deleted',
             Meta: null
           });
-        })();
+        });
       }
       sendJson(res, 200, { ok: true });
     } catch (err) {
