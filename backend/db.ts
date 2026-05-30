@@ -1,17 +1,5 @@
 import { randomBytes } from 'crypto';
-import Database from 'better-sqlite3';
-import fs from 'fs';
-import path from 'path';
-// TODO(agent): Confirm shelf detail queries cover LocationId/index performance expectations before expanding usage.
-// TODO(agent): Monitor structured Langtext serialization to retire legacy string normalization once migrations complete.
-// TODO(agent): Audit ImageNames persistence once asset synchronization tracks discrete files.
-// TODO(agent): Document CSV-based shelf seeding expectations once import tooling is formalized.
-// TODO(quality-migration): Confirm Quality defaults remain accurate once upstream ERP integration defines quality grades.
-// TODO(agent): Reconfirm recent activities search filtering once term usage is finalized.
-// TODO(agent): Review zero-stock updates for non-bulk items once list/grouping changes are finalized.
-// TODO(agent): Revisit events.csv import data validation once external event feeds land.
-// TODO(agent): Validate DB lifecycle logging once we add test-only database adapters.
-import { DB_PATH } from './config';
+import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, pool } from './db-client';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -39,220 +27,11 @@ import { normalizeQuality } from '../models/quality';
 import type { QualityAssessment, QualityAssessmentInsert } from '../models/quality';
 import type { QualityCheckResponse } from '../models/quality-contract';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
-import { resolveStandortLabel } from './standort-label';
 import { parseSequentialItemUUID } from './lib/itemIds';
 
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-const dbLogContext = { path: DB_PATH };
-let db: Database.Database;
-console.info('[db] Opening database connection', dbLogContext);
-try {
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  console.info('[db] Database connection ready', dbLogContext);
-} catch (err) {
-  console.error('[db] Failed to initialize database', err);
-  throw err;
-}
-
-try {
-  // Schema with boxes, label queue, and events; item tables ensured separately
-  db.exec(`
-CREATE TABLE IF NOT EXISTS boxes (
-  BoxID TEXT PRIMARY KEY,
-  LocationId TEXT,
-  Label TEXT,
-  CreatedAt TEXT,
-  Notes TEXT,
-  PhotoPath TEXT,
-  PlacedBy TEXT,
-  PlacedAt TEXT,
-  UpdatedAt TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS label_queue (
-  Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  ItemUUID TEXT NOT NULL,
-  CreatedAt TEXT NOT NULL,
-  Status TEXT NOT NULL DEFAULT 'Queued',
-  Error TEXT
-);
-
-CREATE TABLE IF NOT EXISTS events (
-  Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  CreatedAt TEXT NOT NULL,
-  Actor TEXT,
-  EntityType TEXT NOT NULL,
-  EntityId TEXT NOT NULL,
-  Event TEXT NOT NULL,
-  Level TEXT NOT NULL DEFAULT 'Information',
-  Meta TEXT
-);
-
-CREATE TABLE IF NOT EXISTS shopware_sync_queue (
-  Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  CorrelationId TEXT NOT NULL,
-  JobType TEXT NOT NULL,
-  Payload TEXT NOT NULL,
-  Status TEXT NOT NULL DEFAULT 'queued',
-  RetryCount INTEGER NOT NULL DEFAULT 0,
-  LastError TEXT,
-  LastAttemptAt TEXT,
-  NextAttemptAt TEXT,
-  CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  UpdatedAt TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status ON shopware_sync_queue(Status);
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_attempt
-  ON shopware_sync_queue (Status, COALESCE(NextAttemptAt, '1970-01-01'), Id);
-
-CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_correlation
-  ON shopware_sync_queue (CorrelationId);
-
-CREATE TABLE IF NOT EXISTS box_stubs (
-  Id TEXT PRIMARY KEY,
-  ShelfId TEXT NOT NULL REFERENCES boxes(BoxID),
-  Description TEXT NOT NULL,
-  NumberLooseItems INTEGER NOT NULL DEFAULT 0,
-  NumberLooseBoxes INTEGER NOT NULL DEFAULT 0,
-  CreatedAt TEXT NOT NULL,
-  CreatedBy TEXT NOT NULL,
-  IsActive INTEGER NOT NULL DEFAULT 1,
-  Notes TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_box_stubs_shelf ON box_stubs(ShelfId);
-CREATE INDEX IF NOT EXISTS idx_box_stubs_active ON box_stubs(IsActive) WHERE IsActive = 1;
-`);
-} catch (err) {
-  console.error('Failed to create schema', err);
-  throw err;
-}
-
-function ensureBoxLocationColumns(database: Database.Database = db): void {
-  let columns: Array<{ name: string }> = [];
-  try {
-    columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect boxes schema for box location columns', err);
-    throw err;
-  }
-
-  const hasLocationId = columns.some((column) => column.name === 'LocationId');
-  const hasLabel = columns.some((column) => column.name === 'Label');
-  const hasLegacyLocation = columns.some((column) => column.name === 'Location');
-  const hasLegacyStandortLabel = columns.some((column) => column.name === 'StandortLabel');
-
-  const alterations: Array<{ name: string; sql: string }> = [];
-  if (!hasLocationId) {
-    alterations.push({ name: 'LocationId', sql: 'ALTER TABLE boxes ADD COLUMN LocationId TEXT' });
-  }
-  if (!hasLabel) {
-    alterations.push({ name: 'Label', sql: 'ALTER TABLE boxes ADD COLUMN Label TEXT' });
-  }
-
-  for (const { name, sql } of alterations) {
-    try {
-      database.prepare(sql).run();
-      console.info('[db] Added missing boxes column', name);
-    } catch (err) {
-      console.error('Failed to add boxes column', name, err);
-      throw err;
-    }
-  }
-
-  if (!(hasLegacyLocation || hasLegacyStandortLabel) || !(hasLocationId || alterations.some((alter) => alter.name === 'LocationId'))) {
-    return;
-  }
-
-  const selectColumns = ['BoxID'];
-  if (hasLegacyLocation) {
-    selectColumns.push('Location');
-  }
-  if (hasLegacyStandortLabel) {
-    selectColumns.push('StandortLabel');
-  }
-  selectColumns.push('LocationId', 'Label');
-
-  const selectSql = `SELECT ${selectColumns.join(', ')} FROM boxes`;
-  let rows: Array<Record<string, any>> = [];
-  try {
-    rows = database.prepare(selectSql).all() as Array<Record<string, any>>;
-  } catch (err) {
-    console.error('Failed to load boxes for LocationId/Label migration', err);
-    throw err;
-  }
-
-  const updateFragments = ['LocationId=@LocationId', 'Label=@Label'];
-  if (hasLegacyLocation) {
-    updateFragments.push('Location=NULL');
-  }
-  if (hasLegacyStandortLabel) {
-    updateFragments.push('StandortLabel=NULL');
-  }
-  const updateSql = `UPDATE boxes SET ${updateFragments.join(', ')} WHERE BoxID=@BoxID`;
-  const updateBox = database.prepare(updateSql);
-
-  try {
-    const migrate = database.transaction((entries: Array<Record<string, any>>) => {
-      let migrated = 0;
-      for (const entry of entries) {
-        const nextLocationId = entry.LocationId ?? entry.Location ?? null;
-        const nextLabel =
-          entry.Label ?? entry.StandortLabel ?? (hasLegacyLocation ? resolveStandortLabel(entry.Location) : null);
-        if (
-          nextLocationId !== entry.LocationId ||
-          nextLabel !== entry.Label ||
-          (hasLegacyLocation && entry.Location !== null) ||
-          (hasLegacyStandortLabel && entry.StandortLabel !== null)
-        ) {
-          const result = updateBox.run({
-            BoxID: entry.BoxID,
-            LocationId: nextLocationId ?? null,
-            Label: nextLabel ?? null
-          });
-          migrated += typeof result.changes === 'number' ? result.changes : 0;
-        }
-      }
-      return migrated;
-    });
-    const migratedCount = migrate(rows);
-    console.info('[db] Migrated boxes LocationId/Label columns', { migratedCount });
-  } catch (err) {
-    console.error('Failed to migrate boxes LocationId/Label columns', err);
-    throw err;
-  }
-}
-
-ensureBoxLocationColumns();
-
-function ensureBoxPhotoPathColumn(database: Database.Database = db): void {
-  let hasColumn = false;
-  try {
-    const columns = database.prepare(`PRAGMA table_info(boxes)`).all() as Array<{ name: string }>;
-    hasColumn = columns.some((column) => column.name === 'PhotoPath');
-  } catch (err) {
-    console.error('Failed to inspect boxes schema for PhotoPath column', err);
-    throw err;
-  }
-
-  if (hasColumn) {
-    return;
-  }
-
-  console.info('Adding PhotoPath column to boxes table for existing deployments');
-
-  try {
-    database.prepare('ALTER TABLE boxes ADD COLUMN PhotoPath TEXT').run();
-  } catch (err) {
-    console.error('Failed to add PhotoPath column to boxes table', err);
-    throw err;
-  }
-}
-
-ensureBoxPhotoPathColumn();
-
-// TODO(agent): Allow runtime refresh of event allow lists without requiring a process restart.
+// ---------------------------------------------------------------------------
+// Event log allow-lists (computed at import time from env, no DB needed)
+// ---------------------------------------------------------------------------
 
 const rawEventLogLevels = process.env.EVENT_LOG_LEVELS ?? null;
 const {
@@ -266,9 +45,7 @@ if (!hadEventLogLevelInput) {
   console.info('[db] EVENT_LOG_LEVELS not configured; defaulting to all event levels.');
 } else {
   if (invalidEventLogLevels.length > 0) {
-    console.warn('[db] EVENT_LOG_LEVELS contains unknown values; ignoring invalid entries.', {
-      invalid: invalidEventLogLevels
-    });
+    console.warn('[db] EVENT_LOG_LEVELS contains unknown values; ignoring invalid entries.', { invalid: invalidEventLogLevels });
   }
   if (usedEventLogFallback) {
     console.warn('[db] EVENT_LOG_LEVELS produced no recognized levels; defaulting to all levels.');
@@ -276,18 +53,10 @@ if (!hadEventLogLevelInput) {
 }
 
 const computedAllowList = resolvedLevels.length > 0 ? resolvedLevels : [...EVENT_LOG_LEVELS];
-
 if (resolvedLevels.length === 0) {
   console.warn('[db] EVENT_LOG_LEVEL_ALLOW_LIST resolved empty; reverting to full level set.');
 }
-
-export const EVENT_LOG_LEVEL_ALLOW_LIST: readonly EventLogLevel[] = Object.freeze([
-  ...computedAllowList
-]);
-
-const EVENT_LOG_LEVEL_SQL_LIST = EVENT_LOG_LEVEL_ALLOW_LIST
-  .map((level) => `'${level.replace(/'/g, "''")}'`)
-  .join(', ');
+export const EVENT_LOG_LEVEL_ALLOW_LIST: readonly EventLogLevel[] = Object.freeze([...computedAllowList]);
 
 const rawEventLogTopics = process.env.EVENT_LOG_TOPICS ?? null;
 const {
@@ -301,9 +70,7 @@ if (!hadEventLogTopicInput) {
   console.info('[db] EVENT_LOG_TOPICS not configured; defaulting to all topics.');
 } else {
   if (invalidEventLogTopics.length > 0) {
-    console.warn('[db] EVENT_LOG_TOPICS contains unknown values; ignoring invalid entries.', {
-      invalid: invalidEventLogTopics
-    });
+    console.warn('[db] EVENT_LOG_TOPICS contains unknown values; ignoring invalid entries.', { invalid: invalidEventLogTopics });
   }
   if (usedEventLogTopicFallback) {
     console.warn('[db] EVENT_LOG_TOPICS produced no recognized topics; defaulting to all topics.');
@@ -311,11 +78,9 @@ if (!hadEventLogTopicInput) {
 }
 
 const computedTopicAllowList = resolvedEventLogTopics.length > 0 ? resolvedEventLogTopics : [...EVENT_TOPICS];
-
 if (resolvedEventLogTopics.length === 0) {
   console.warn('[db] EVENT_LOG_TOPIC_ALLOW_LIST resolved empty; reverting to full topic set.');
 }
-
 export const EVENT_LOG_TOPIC_ALLOW_LIST: readonly string[] = Object.freeze([...computedTopicAllowList]);
 const EVENT_LOG_TOPIC_EVENT_KEYS: readonly string[] = eventKeysForTopics(EVENT_LOG_TOPIC_ALLOW_LIST);
 const EVENT_TOPIC_FILTER_ENABLED =
@@ -329,275 +94,276 @@ if (!EVENT_TOPIC_FILTER_ENABLED && EVENT_LOG_TOPIC_ALLOW_LIST.length < EVENT_TOP
   });
 }
 
+const EVENT_LOG_LEVEL_SQL_LIST = EVENT_LOG_LEVEL_ALLOW_LIST
+  .map((level) => `'${level.replace(/'/g, "''")}'`)
+  .join(', ');
+
 const EVENT_LOG_TOPIC_SQL_LIST = EVENT_LOG_TOPIC_EVENT_KEYS.map((key) => `'${key.replace(/'/g, "''")}'`).join(', ');
 
 function levelFilterExpression(alias?: string): string {
-  if (EVENT_LOG_LEVEL_ALLOW_LIST.length === 0) {
-    return '0';
-  }
-
-  const column = alias ? `${alias}.Level` : 'Level';
+  if (EVENT_LOG_LEVEL_ALLOW_LIST.length === 0) return '0=1';
+  const column = alias ? `${alias}."Level"` : '"Level"';
   return `${column} IN (${EVENT_LOG_LEVEL_SQL_LIST})`;
 }
 
 function topicFilterExpression(alias?: string): string {
-  if (!EVENT_TOPIC_FILTER_ENABLED) {
-    return '1';
-  }
-
-  if (!EVENT_LOG_TOPIC_SQL_LIST) {
-    return '0';
-  }
-
-  const column = alias ? `${alias}.Event` : 'Event';
+  if (!EVENT_TOPIC_FILTER_ENABLED) return '1=1';
+  if (!EVENT_LOG_TOPIC_SQL_LIST) return '0=1';
+  const column = alias ? `${alias}."Event"` : '"Event"';
   return `${column} IN (${EVENT_LOG_TOPIC_SQL_LIST})`;
 }
 
-const CREATE_ITEM_REFS_SQL = `
+// ---------------------------------------------------------------------------
+// Schema initialization — run once at startup via initDb()
+// ---------------------------------------------------------------------------
+
+export async function initDb(): Promise<void> {
+  console.info('[db] Initializing Postgres schema');
+
+  await pool.query(`
+CREATE TABLE IF NOT EXISTS boxes (
+  "BoxID"      TEXT PRIMARY KEY,
+  "LocationId" TEXT,
+  "Label"      TEXT,
+  "CreatedAt"  TEXT,
+  "Notes"      TEXT,
+  "PhotoPath"  TEXT,
+  "PlacedBy"   TEXT,
+  "PlacedAt"   TEXT,
+  "UpdatedAt"  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS label_queue (
+  "Id"        SERIAL PRIMARY KEY,
+  "ItemUUID"  TEXT NOT NULL,
+  "CreatedAt" TEXT NOT NULL,
+  "Status"    TEXT NOT NULL DEFAULT 'Queued',
+  "Error"     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  "Id"         SERIAL PRIMARY KEY,
+  "CreatedAt"  TEXT NOT NULL,
+  "Actor"      TEXT,
+  "EntityType" TEXT NOT NULL,
+  "EntityId"   TEXT NOT NULL,
+  "Event"      TEXT NOT NULL,
+  "Level"      TEXT NOT NULL DEFAULT 'Information',
+  "Meta"       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS shopware_sync_queue (
+  "Id"            SERIAL PRIMARY KEY,
+  "CorrelationId" TEXT NOT NULL,
+  "JobType"       TEXT NOT NULL,
+  "Payload"       TEXT NOT NULL,
+  "Status"        TEXT NOT NULL DEFAULT 'queued',
+  "RetryCount"    INTEGER NOT NULL DEFAULT 0,
+  "LastError"     TEXT,
+  "LastAttemptAt" TEXT,
+  "NextAttemptAt" TEXT,
+  "CreatedAt"     TEXT NOT NULL,
+  "UpdatedAt"     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status ON shopware_sync_queue("Status");
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_status_attempt
+  ON shopware_sync_queue ("Status", COALESCE("NextAttemptAt", '1970-01-01'), "Id");
+CREATE INDEX IF NOT EXISTS idx_shopware_sync_queue_correlation
+  ON shopware_sync_queue ("CorrelationId");
+
 CREATE TABLE IF NOT EXISTS item_refs (
-  Artikel_Nummer TEXT PRIMARY KEY,
-  -- TODO(agentic-search-term): Backfill Suchbegriff for legacy references when defaults are finalized.
-  Suchbegriff TEXT,
-  Grafikname TEXT,
-  ImageNames TEXT,
-  Artikelbeschreibung TEXT,
-  Verkaufspreis REAL,
-  Kurzbeschreibung TEXT,
-  Langtext TEXT,
-  Hersteller TEXT,
-  Länge_mm INTEGER,
-  Breite_mm INTEGER,
-  Höhe_mm INTEGER,
-  Gewicht_kg REAL,
-  Hauptkategorien_A TEXT,
-  Unterkategorien_A TEXT,
-  Hauptkategorien_B TEXT,
-  Unterkategorien_B TEXT,
-  Veröffentlicht_Status TEXT,
-  Quality INTEGER DEFAULT NULL,
-  Shopartikel INTEGER,
-  Artikeltyp TEXT,
-  Einheit TEXT,
-  EntityType TEXT,
-  EAN TEXT,
-  ShopwareProductId TEXT
+  "Artikel_Nummer"    TEXT PRIMARY KEY,
+  "Suchbegriff"       TEXT,
+  "Grafikname"        TEXT,
+  "ImageNames"        TEXT,
+  "Artikelbeschreibung" TEXT,
+  "Verkaufspreis"     REAL,
+  "Kurzbeschreibung"  TEXT,
+  "Langtext"          TEXT,
+  "Hersteller"        TEXT,
+  "Länge_mm"          INTEGER,
+  "Breite_mm"         INTEGER,
+  "Höhe_mm"           INTEGER,
+  "Gewicht_kg"        REAL,
+  "Hauptkategorien_A" TEXT,
+  "Unterkategorien_A" TEXT,
+  "Hauptkategorien_B" TEXT,
+  "Unterkategorien_B" TEXT,
+  "Veröffentlicht_Status" TEXT,
+  "Quality"           INTEGER DEFAULT NULL,
+  "Shopartikel"       INTEGER,
+  "Artikeltyp"        TEXT,
+  "Einheit"           TEXT,
+  "EntityType"        TEXT,
+  "EAN"               TEXT,
+  "ShopwareProductId" TEXT
 );
-`;
 
-const CREATE_ITEMS_SQL = `
 CREATE TABLE IF NOT EXISTS items (
-  ItemUUID TEXT PRIMARY KEY,
-  Artikel_Nummer TEXT,
-  BoxID TEXT,
-  Location TEXT,
-  UpdatedAt TEXT NOT NULL,
-  Datum_erfasst TEXT,
-  Auf_Lager INTEGER,
-  Quality INTEGER DEFAULT NULL,
-  ShopwareVariantId TEXT,
-  FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE SET NULL ON UPDATE CASCADE,
-  FOREIGN KEY(BoxID) REFERENCES boxes(BoxID) ON DELETE SET NULL ON UPDATE CASCADE
+  "ItemUUID"         TEXT PRIMARY KEY,
+  "Artikel_Nummer"   TEXT REFERENCES item_refs("Artikel_Nummer") ON DELETE SET NULL ON UPDATE CASCADE,
+  "BoxID"            TEXT REFERENCES boxes("BoxID") ON DELETE SET NULL ON UPDATE CASCADE,
+  "Location"         TEXT,
+  "UpdatedAt"        TEXT NOT NULL,
+  "Datum_erfasst"    TEXT,
+  "Auf_Lager"        INTEGER,
+  "Quality"          INTEGER DEFAULT NULL,
+  "ShopwareVariantId" TEXT,
+  "SerialNumber"     TEXT,
+  "MacAddress"       TEXT,
+  "QualityId"        INTEGER,
+  "InstanceSpecs"    TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_items_mat ON items(Artikel_Nummer);
-CREATE INDEX IF NOT EXISTS idx_items_box ON items(BoxID);
-`;
 
-const CREATE_QUALITY_ASSESSMENTS_SQL = `
+CREATE INDEX IF NOT EXISTS idx_items_mat ON items("Artikel_Nummer");
+CREATE INDEX IF NOT EXISTS idx_items_box ON items("BoxID");
+
 CREATE TABLE IF NOT EXISTS quality_assessments (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  tag TEXT NOT NULL CHECK(tag IN ('Ersatzteil','Upcycling','Ok','Gut','Neuwertig')),
-  value INTEGER NOT NULL CHECK(value BETWEEN 1 AND 5),
-  is_complete INTEGER,
-  has_defects INTEGER,
-  is_functional INTEGER,
-  notes TEXT,
-  reviewed_at TEXT NOT NULL,
-  reviewed_by TEXT NOT NULL
+  "id"               SERIAL PRIMARY KEY,
+  "tag"              TEXT NOT NULL CHECK("tag" IN ('Ersatzteil','Upcycling','Ok','Gut','Neuwertig')),
+  "value"            INTEGER NOT NULL CHECK("value" BETWEEN 1 AND 5),
+  "is_complete"      INTEGER,
+  "has_defects"      INTEGER,
+  "is_functional"    INTEGER,
+  "notes"            TEXT,
+  "reviewed_at"      TEXT NOT NULL,
+  "reviewed_by"      TEXT NOT NULL,
+  "responses"        TEXT,
+  "contract_version" TEXT,
+  "derived_specs"    TEXT
 );
-`;
 
-const UPSERT_ITEM_REFERENCE_SQL = `
-  INSERT INTO item_refs (
-    Artikel_Nummer, Suchbegriff, Grafikname, ImageNames, Artikelbeschreibung, Verkaufspreis, Kurzbeschreibung,
-    Langtext, Hersteller, Länge_mm, Breite_mm, Höhe_mm, Gewicht_kg,
-    Hauptkategorien_A, Unterkategorien_A, Hauptkategorien_B, Unterkategorien_B,
-    Veröffentlicht_Status, Quality, Shopartikel, Artikeltyp, Einheit, EntityType, EAN, ShopwareProductId
-  )
-  VALUES (
-    @Artikel_Nummer, @Suchbegriff, @Grafikname, @ImageNames, @Artikelbeschreibung, @Verkaufspreis, @Kurzbeschreibung,
-    @Langtext, @Hersteller, @Länge_mm, @Breite_mm, @Höhe_mm, @Gewicht_kg,
-    @Hauptkategorien_A, @Unterkategorien_A, @Hauptkategorien_B, @Unterkategorien_B,
-    @Veröffentlicht_Status, @Quality, @Shopartikel, @Artikeltyp, @Einheit, @EntityType, @EAN, @ShopwareProductId
-  )
-  ON CONFLICT(Artikel_Nummer) DO UPDATE SET
-    Suchbegriff=excluded.Suchbegriff,
-    Grafikname=excluded.Grafikname,
-    ImageNames=excluded.ImageNames,
-    Artikelbeschreibung=excluded.Artikelbeschreibung,
-    Verkaufspreis=excluded.Verkaufspreis,
-    Kurzbeschreibung=excluded.Kurzbeschreibung,
-    Langtext=excluded.Langtext,
-    Hersteller=excluded.Hersteller,
-    Länge_mm=excluded.Länge_mm,
-    Breite_mm=excluded.Breite_mm,
-    Höhe_mm=excluded.Höhe_mm,
-    Gewicht_kg=excluded.Gewicht_kg,
-    Hauptkategorien_A=excluded.Hauptkategorien_A,
-    Unterkategorien_A=excluded.Unterkategorien_A,
-    Hauptkategorien_B=excluded.Hauptkategorien_B,
-    Unterkategorien_B=excluded.Unterkategorien_B,
-    Veröffentlicht_Status=excluded.Veröffentlicht_Status,
-    Quality=excluded.Quality,
-    Shopartikel=excluded.Shopartikel,
-    Artikeltyp=excluded.Artikeltyp,
-    Einheit=excluded.Einheit,
-    EntityType=excluded.EntityType,
-    EAN=excluded.EAN,
-    ShopwareProductId=excluded.ShopwareProductId
-`;
+CREATE TABLE IF NOT EXISTS box_stubs (
+  "Id"               TEXT PRIMARY KEY,
+  "ShelfId"          TEXT NOT NULL REFERENCES boxes("BoxID"),
+  "Description"      TEXT NOT NULL,
+  "NumberLooseItems" INTEGER NOT NULL DEFAULT 0,
+  "NumberLooseBoxes" INTEGER NOT NULL DEFAULT 0,
+  "CreatedAt"        TEXT NOT NULL,
+  "CreatedBy"        TEXT NOT NULL,
+  "IsActive"         INTEGER NOT NULL DEFAULT 1,
+  "Notes"            TEXT
+);
 
-const UPSERT_ITEM_INSTANCE_SQL = `
-  INSERT INTO items (
-    ItemUUID, Artikel_Nummer, BoxID, Location, UpdatedAt, Datum_erfasst, Auf_Lager, Quality, ShopwareVariantId, SerialNumber, MacAddress
-  )
-  VALUES (
-    @ItemUUID, @Artikel_Nummer, @BoxID, @Location, @UpdatedAt, @Datum_erfasst, @Auf_Lager, @Quality, @ShopwareVariantId, @SerialNumber, @MacAddress
-  )
-  ON CONFLICT(ItemUUID) DO UPDATE SET
-    Artikel_Nummer=excluded.Artikel_Nummer,
-    BoxID=excluded.BoxID,
-    Location=excluded.Location,
-    -- TODO(import-updated-at): Import action may pass source timestamps; keep this propagation aligned with import-item fallback semantics.
-    UpdatedAt=excluded.UpdatedAt,
-    Datum_erfasst=excluded.Datum_erfasst,
-    Auf_Lager=excluded.Auf_Lager,
-    Quality=excluded.Quality,
-    ShopwareVariantId=excluded.ShopwareVariantId,
-    SerialNumber=excluded.SerialNumber,
-    MacAddress=excluded.MacAddress
-`;
+CREATE INDEX IF NOT EXISTS idx_box_stubs_shelf ON box_stubs("ShelfId");
+CREATE INDEX IF NOT EXISTS idx_box_stubs_active ON box_stubs("IsActive") WHERE "IsActive" = 1;
 
-type ItemInstanceRow = {
-  ItemUUID: string;
-  Artikel_Nummer: string | null;
-  BoxID: string | null;
-  Location: string | null;
-  UpdatedAt: string;
-  Datum_erfasst: string | null;
-  Auf_Lager: number | null;
-  Quality: number | null;
-  ShopwareVariantId: string | null;
-  SerialNumber: string | null;
-  MacAddress: string | null;
-};
+CREATE TABLE IF NOT EXISTS item_ref_relations (
+  "Id"                   SERIAL PRIMARY KEY,
+  "ParentArtikel_Nummer" TEXT NOT NULL,
+  "ChildArtikel_Nummer"  TEXT NOT NULL,
+  "RelationType"         TEXT NOT NULL DEFAULT 'Zubehör',
+  "Notes"                TEXT,
+  "CreatedAt"            TEXT NOT NULL,
+  UNIQUE ("ParentArtikel_Nummer", "ChildArtikel_Nummer")
+);
 
-type ItemRefRow = {
-  Artikel_Nummer: string;
-  Suchbegriff: string | null;
-  Grafikname: string | null;
-  ImageNames: string | null;
-  Artikelbeschreibung: string | null;
-  Verkaufspreis: number | null;
-  Kurzbeschreibung: string | null;
-  Langtext: string | null;
-  Hersteller: string | null;
-  Länge_mm: number | null;
-  Breite_mm: number | null;
-  Höhe_mm: number | null;
-  Gewicht_kg: number | null;
-  Hauptkategorien_A: number | null;
-  Unterkategorien_A: number | null;
-  Hauptkategorien_B: number | null;
-  Unterkategorien_B: number | null;
-  Veröffentlicht_Status: string | null;
-  Quality: number | null;
-  Shopartikel: number | null;
-  Artikeltyp: string | null;
-  Einheit: string | null;
-  EntityType: string | null;
-  EAN: string | null;
-  ShopwareProductId: string | null;
-};
+CREATE INDEX IF NOT EXISTS idx_item_ref_relations_parent ON item_ref_relations("ParentArtikel_Nummer");
+CREATE INDEX IF NOT EXISTS idx_item_ref_relations_child  ON item_ref_relations("ChildArtikel_Nummer");
 
-function parseLangtextForRow<T extends Record<string, unknown>>(
-  row: T,
-  context: string
-): T {
-  if (!row || typeof row !== 'object') return row;
-  const artikelNummer = typeof row.Artikel_Nummer === 'string' ? row.Artikel_Nummer : null;
-  const itemUUID = typeof row.ItemUUID === 'string' ? row.ItemUUID : null;
-  let result = { ...row } as Record<string, unknown>;
+CREATE TABLE IF NOT EXISTS item_relations (
+  "Id"             SERIAL PRIMARY KEY,
+  "ParentItemUUID" TEXT NOT NULL,
+  "ChildItemUUID"  TEXT NOT NULL,
+  "RelationType"   TEXT NOT NULL DEFAULT 'Zubehör',
+  "Notes"          TEXT,
+  "CreatedAt"      TEXT NOT NULL,
+  "UpdatedAt"      TEXT NOT NULL,
+  UNIQUE ("ParentItemUUID", "ChildItemUUID")
+);
 
-  if (Object.prototype.hasOwnProperty.call(row, 'Langtext')) {
-    const rawValue = row.Langtext;
-    const parsed = parseLangtext(rawValue, { logger: console, context, artikelNummer, itemUUID });
-    result.Langtext = parsed ?? (rawValue === undefined ? null : (rawValue as string | null));
-  }
+CREATE INDEX IF NOT EXISTS idx_item_relations_parent ON item_relations("ParentItemUUID");
+CREATE INDEX IF NOT EXISTS idx_item_relations_child  ON item_relations("ChildItemUUID");
 
-  if (Object.prototype.hasOwnProperty.call(row, 'InstanceSpecs')) {
-    const rawSpecs = row.InstanceSpecs;
-    if (rawSpecs !== null && rawSpecs !== undefined) {
-      const parsed = parseLangtext(rawSpecs, { logger: console, context: `${context}:instanceSpecs`, artikelNummer, itemUUID });
-      result.InstanceSpecs = parsed ?? null;
-    }
-  }
+CREATE TABLE IF NOT EXISTS item_attachments (
+  "Id"        SERIAL PRIMARY KEY,
+  "ItemUUID"  TEXT NOT NULL,
+  "FileName"  TEXT NOT NULL,
+  "FilePath"  TEXT NOT NULL,
+  "MimeType"  TEXT,
+  "Label"     TEXT,
+  "FileSize"  INTEGER,
+  "CreatedAt" TEXT NOT NULL
+);
 
-  return result as T;
+CREATE INDEX IF NOT EXISTS idx_item_attachments_item ON item_attachments("ItemUUID");
+
+CREATE TABLE IF NOT EXISTS agentic_runs (
+  "Id"                 SERIAL PRIMARY KEY,
+  "Artikel_Nummer"     TEXT NOT NULL UNIQUE REFERENCES item_refs("Artikel_Nummer") ON DELETE CASCADE ON UPDATE CASCADE,
+  "SearchQuery"        TEXT,
+  "LastSearchLinksJson" TEXT,
+  "Status"             TEXT NOT NULL,
+  "LastModified"       TEXT NOT NULL,
+  "ReviewState"        TEXT NOT NULL DEFAULT 'not_required',
+  "ReviewedBy"         TEXT,
+  "LastReviewDecision" TEXT,
+  "LastReviewNotes"    TEXT,
+  "RetryCount"         INTEGER NOT NULL DEFAULT 0,
+  "NextRetryAt"        TEXT,
+  "LastError"          TEXT,
+  "LastAttemptAt"      TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agentic_runs_artikel_nummer ON agentic_runs("Artikel_Nummer");
+
+CREATE TABLE IF NOT EXISTS agentic_request_logs (
+  "UUID"                  TEXT PRIMARY KEY,
+  "Search"                TEXT,
+  "Status"                TEXT,
+  "Error"                 TEXT,
+  "CreatedAt"             TEXT NOT NULL,
+  "UpdatedAt"             TEXT NOT NULL,
+  "NotifiedAt"            TEXT,
+  "LastNotificationError" TEXT,
+  "PayloadJson"           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_status ON agentic_request_logs("Status");
+
+CREATE TABLE IF NOT EXISTS agentic_run_review_history (
+  "Id"             SERIAL PRIMARY KEY,
+  "Artikel_Nummer" TEXT NOT NULL REFERENCES item_refs("Artikel_Nummer") ON DELETE CASCADE ON UPDATE CASCADE,
+  "Status"         TEXT NOT NULL,
+  "ReviewState"    TEXT NOT NULL,
+  "ReviewDecision" TEXT,
+  "ReviewNotes"    TEXT,
+  "ReviewMetadata" TEXT,
+  "ReviewedBy"     TEXT,
+  "RecordedAt"     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_run_review_history_artikel_nummer_recorded_at
+  ON agentic_run_review_history ("Artikel_Nummer", "RecordedAt", "Id");
+`);
+
+  console.info('[db] Postgres schema ready');
 }
 
-function wrapLangtextAwareStatement<T extends Database.Statement>(
-  statement: T,
-  context: string
-): T {
-  const handler: ProxyHandler<T> = {
-    get(target, prop, receiver) {
-      if (prop === 'get') {
-        return (...args: unknown[]) => {
-          const row = target.get.apply(target, args as any[]) as unknown;
-          if (!row || typeof row !== 'object') {
-            return row;
-          }
-          return parseLangtextForRow({ ...(row as Record<string, unknown>) }, `${context}:get`);
-        };
-      }
-      if (prop === 'all') {
-        return (...args: unknown[]) => {
-          const rows = target.all.apply(target, args as any[]) as unknown[];
-          return rows.map((row, index) => {
-            if (!row || typeof row !== 'object') {
-              return row;
-            }
-            return parseLangtextForRow({ ...(row as Record<string, unknown>) }, `${context}:all#${index}`);
-          });
-        };
-      }
-      if (prop === 'iterate') {
-        return (...args: unknown[]) => {
-          const iterator = target.iterate.apply(target, args as any[]) as IterableIterator<unknown>;
-          function* generator(): IterableIterator<unknown> {
-            let index = 0;
-            for (const row of iterator) {
-              if (row && typeof row === 'object') {
-                yield parseLangtextForRow({ ...(row as Record<string, unknown>) }, `${context}:iter#${index}`);
-              } else {
-                yield row;
-              }
-              index += 1;
-            }
-          }
-          return generator();
-        };
-      }
-      return Reflect.get(target, prop, receiver);
-    }
-  };
-  return new Proxy(statement, handler) as T;
+// ---------------------------------------------------------------------------
+// Close pool (graceful shutdown)
+// ---------------------------------------------------------------------------
+
+export async function closeDatabase(options: { reason?: string; suppressErrors?: boolean } = {}): Promise<void> {
+  const { reason, suppressErrors = false } = options;
+  console.info('[db] Closing database pool', { reason: reason ?? null });
+  try {
+    await pool.end();
+    console.info('[db] Database pool closed', { reason: reason ?? null });
+  } catch (error) {
+    console.error('[db] Failed to close database pool', { reason: reason ?? null, error });
+    if (!suppressErrors) throw error;
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Value helpers
+// ---------------------------------------------------------------------------
 
 function asNullableString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  const str = String(value);
-  return str;
+  return String(value);
 }
 
 function asNullableTrimmedString(value: unknown): string | null {
@@ -661,6 +427,83 @@ function resolveQualityValue(value: unknown, context: string): number | null {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Langtext parsing helpers
+// ---------------------------------------------------------------------------
+
+function parseLangtextForRow<T extends Record<string, unknown>>(row: T, context: string): T {
+  if (!row || typeof row !== 'object') return row;
+  const artikelNummer = typeof row['Artikel_Nummer'] === 'string' ? row['Artikel_Nummer'] : null;
+  const itemUUID = typeof row['ItemUUID'] === 'string' ? row['ItemUUID'] : null;
+  const result = { ...row } as Record<string, unknown>;
+
+  if (Object.prototype.hasOwnProperty.call(row, 'Langtext')) {
+    const rawValue = row['Langtext'];
+    const parsed = parseLangtext(rawValue, { logger: console, context, artikelNummer, itemUUID });
+    result['Langtext'] = parsed ?? (rawValue === undefined ? null : (rawValue as string | null));
+  }
+
+  if (Object.prototype.hasOwnProperty.call(row, 'InstanceSpecs')) {
+    const rawSpecs = row['InstanceSpecs'];
+    if (rawSpecs !== null && rawSpecs !== undefined) {
+      const parsed = parseLangtext(rawSpecs, { logger: console, context: `${context}:instanceSpecs`, artikelNummer, itemUUID });
+      result['InstanceSpecs'] = parsed ?? null;
+    }
+  }
+
+  return result as T;
+}
+
+function parseLangtextRows<T extends Record<string, unknown>>(rows: T[], context: string): T[] {
+  return rows.map((row, i) => parseLangtextForRow(row, `${context}#${i}`));
+}
+
+// ---------------------------------------------------------------------------
+// Row preparation
+// ---------------------------------------------------------------------------
+
+type ItemInstanceRow = {
+  ItemUUID: string;
+  Artikel_Nummer: string | null;
+  BoxID: string | null;
+  Location: string | null;
+  UpdatedAt: string;
+  Datum_erfasst: string | null;
+  Auf_Lager: number | null;
+  Quality: number | null;
+  ShopwareVariantId: string | null;
+  SerialNumber: string | null;
+  MacAddress: string | null;
+};
+
+type ItemRefRow = {
+  Artikel_Nummer: string;
+  Suchbegriff: string | null;
+  Grafikname: string | null;
+  ImageNames: string | null;
+  Artikelbeschreibung: string | null;
+  Verkaufspreis: number | null;
+  Kurzbeschreibung: string | null;
+  Langtext: string | null;
+  Hersteller: string | null;
+  Länge_mm: number | null;
+  Breite_mm: number | null;
+  Höhe_mm: number | null;
+  Gewicht_kg: number | null;
+  Hauptkategorien_A: number | null;
+  Unterkategorien_A: number | null;
+  Hauptkategorien_B: number | null;
+  Unterkategorien_B: number | null;
+  Veröffentlicht_Status: string | null;
+  Quality: number | null;
+  Shopartikel: number | null;
+  Artikeltyp: string | null;
+  Einheit: string | null;
+  EntityType: string | null;
+  EAN: string | null;
+  ShopwareProductId: string | null;
+};
 
 function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
   const artikelNummer = asNullableTrimmedString(instance.Artikel_Nummer);
@@ -732,17 +575,12 @@ type ItemPersistencePayload = {
 
 function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   const instance = prepareInstanceRow(item);
-
   const directives = item as Item & ItemPersistenceDirectives;
   const skipReferencePersistence = directives.__skipReferencePersistence === true;
   const referenceOverride = directives.__referenceRowOverride ?? null;
 
-  if ('__skipReferencePersistence' in directives) {
-    delete directives.__skipReferencePersistence;
-  }
-  if ('__referenceRowOverride' in directives) {
-    delete directives.__referenceRowOverride;
-  }
+  if ('__skipReferencePersistence' in directives) delete directives.__skipReferencePersistence;
+  if ('__referenceRowOverride' in directives) delete directives.__referenceRowOverride;
 
   let preparedOverride: ItemRefRow | null = null;
   if (referenceOverride) {
@@ -765,465 +603,99 @@ function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
   const referenceKey = instance.Artikel_Nummer ?? preparedOverride?.Artikel_Nummer ?? instance.ItemUUID;
 
   if (!instance.Artikel_Nummer && !preparedOverride) {
-    // TODO: Backfill existing deployments to remove duplicate item_ref rows once Artikel_Nummer values are assigned.
-    console.info('[db] Persisting item reference with ItemUUID fallback key', {
-      itemUUID: instance.ItemUUID
-    });
+    console.info('[db] Persisting item reference with ItemUUID fallback key', { itemUUID: instance.ItemUUID });
   }
 
   try {
     const ref = preparedOverride ?? prepareRefRow({ ...(item as ItemRef), Artikel_Nummer: referenceKey });
     return { instance, ref: skipReferencePersistence ? null : ref };
   } catch (err) {
-    console.error('Failed to prepare item reference payload', {
-      itemUUID: instance.ItemUUID,
-      error: err
-    });
+    console.error('Failed to prepare item reference payload', { itemUUID: instance.ItemUUID, error: err });
     throw err;
   }
 }
 
-function ensureItemTables(database: Database.Database = db): void {
-  try {
-    database.exec(CREATE_ITEM_REFS_SQL);
-  } catch (err) {
-    console.error('Failed to ensure item_refs schema', err);
-    throw err;
-  }
+// ---------------------------------------------------------------------------
+// SQL fragments
+// ---------------------------------------------------------------------------
 
-  try {
-    database.exec(CREATE_ITEMS_SQL);
-  } catch (err) {
-    console.error('Failed to ensure items schema', err);
-    throw err;
-  }
-}
-
-function ensureItemImageNamesColumn(database: Database.Database = db): void {
-  let refColumns: Array<{ name: string }> = [];
-  try {
-    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect item_refs schema for ImageNames column', err);
-    throw err;
-  }
-
-  if (refColumns.some((column) => column.name === 'ImageNames')) {
-    return;
-  }
-
-  try {
-    database.prepare('ALTER TABLE item_refs ADD COLUMN ImageNames TEXT').run();
-    console.info('[db] Added ImageNames column to item_refs');
-  } catch (err) {
-    console.error('Failed to add ImageNames column to item_refs', err);
-    throw err;
-  }
-}
-
-function ensureItemSearchTermColumn(database: Database.Database = db): void {
-  let refColumns: Array<{ name: string }> = [];
-  try {
-    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect item_refs schema for Suchbegriff column', err);
-    throw err;
-  }
-
-  if (refColumns.some((column) => column.name === 'Suchbegriff')) {
-    return;
-  }
-
-  try {
-    database.prepare('ALTER TABLE item_refs ADD COLUMN Suchbegriff TEXT').run();
-    console.info('[db] Added Suchbegriff column to item_refs');
-  } catch (err) {
-    console.error('Failed to add Suchbegriff column to item_refs', err);
-    throw err;
-  }
-}
-
-const LOCATION_WITH_BOX_FALLBACK = "COALESCE(NULLIF(i.Location,''), NULLIF(b.Label,''))";
-
-const ITEM_REFERENCE_JOIN_KEY = "COALESCE(NULLIF(i.Artikel_Nummer,''), i.ItemUUID)";
-// TODO(item-entity-filter): Extract shared projections for instance/reference list unions once API coverage expands.
+const LOCATION_WITH_BOX_FALLBACK = `COALESCE(NULLIF(i."Location",''), NULLIF(b."Label",''))`;
+const ITEM_REFERENCE_JOIN_KEY = `COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID")`;
 
 const ITEM_JOIN_BASE = `
   FROM items i
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
+  LEFT JOIN item_refs r ON r."Artikel_Nummer" = ${ITEM_REFERENCE_JOIN_KEY}
 `;
 
-ensureItemTables(db);
-ensureItemImageNamesColumn(db);
-ensureItemSearchTermColumn(db);
-
-try {
-  db.exec(`
-CREATE TABLE IF NOT EXISTS item_ref_relations (
-  Id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-  ParentArtikel_Nummer TEXT NOT NULL,
-  ChildArtikel_Nummer  TEXT NOT NULL,
-  RelationType         TEXT NOT NULL DEFAULT 'Zubehör',
-  Notes                TEXT,
-  CreatedAt            TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (ParentArtikel_Nummer, ChildArtikel_Nummer)
-);
-CREATE INDEX IF NOT EXISTS idx_item_ref_relations_parent ON item_ref_relations(ParentArtikel_Nummer);
-CREATE INDEX IF NOT EXISTS idx_item_ref_relations_child  ON item_ref_relations(ChildArtikel_Nummer);
-
-CREATE TABLE IF NOT EXISTS item_relations (
-  Id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  ParentItemUUID TEXT NOT NULL,
-  ChildItemUUID  TEXT NOT NULL,
-  RelationType   TEXT NOT NULL DEFAULT 'Zubehör',
-  Notes          TEXT,
-  CreatedAt      TEXT NOT NULL DEFAULT (datetime('now')),
-  UpdatedAt      TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (ParentItemUUID, ChildItemUUID)
-);
-CREATE INDEX IF NOT EXISTS idx_item_relations_parent ON item_relations(ParentItemUUID);
-CREATE INDEX IF NOT EXISTS idx_item_relations_child  ON item_relations(ChildItemUUID);
-
-CREATE TABLE IF NOT EXISTS item_attachments (
-  Id        INTEGER PRIMARY KEY AUTOINCREMENT,
-  ItemUUID  TEXT NOT NULL,
-  FileName  TEXT NOT NULL,
-  FilePath  TEXT NOT NULL,
-  MimeType  TEXT,
-  Label     TEXT,
-  FileSize  INTEGER,
-  CreatedAt TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_item_attachments_item ON item_attachments(ItemUUID);
-`);
-  console.info('[db] Accessory/attachment schema ensured');
-} catch (err) {
-  console.error('[db] Failed to create accessory/attachment schema', err);
-  throw err;
-}
-// TODO(agent): Keep shelf label joins aligned with box list payloads for location rendering.
 const ITEM_JOIN_WITH_BOX = `${ITEM_JOIN_BASE}
-  LEFT JOIN boxes b ON i.BoxID = b.BoxID
-  LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
+  LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
+  LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
 `;
 
-function ensureItemShopwareColumns(database: Database.Database = db): void {
-  let refColumns: Array<{ name: string }> = [];
-  try {
-    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
-  } catch (err) {
-    console.error('Failed to inspect item_refs schema for Shopware columns', err);
-    throw err;
-  }
-
-  if (!refColumns.some((column) => column.name === 'ShopwareProductId')) {
-    try {
-      database.prepare('ALTER TABLE item_refs ADD COLUMN ShopwareProductId TEXT').run();
-      console.info('[db] Added ShopwareProductId column to item_refs');
-    } catch (err) {
-      console.error('Failed to add ShopwareProductId column to item_refs', err);
-      throw err;
-    }
-  }
-
-  let itemColumns: Array<{ name: string }> = [];
-  try {
-    itemColumns = database.prepare(`PRAGMA table_info(items)`).all() as Array<{ name: string }>; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
-  } catch (err) {
-    console.error('Failed to inspect items schema for Shopware columns', err);
-    throw err;
-  }
-
-  if (!itemColumns.some((column) => column.name === 'ShopwareVariantId')) {
-    try {
-      database.prepare('ALTER TABLE items ADD COLUMN ShopwareVariantId TEXT').run();
-      console.info('[db] Added ShopwareVariantId column to items');
-    } catch (err) {
-      console.error('Failed to add ShopwareVariantId column to items', err);
-      throw err;
-    }
-  }
+function itemSelectColumns(locationExpr: string, extraColumns: string[] = []): string {
+  const extras = extraColumns.length ? `,\n  ${extraColumns.join(',\n  ')}` : '';
+  return `
+SELECT
+  i."ItemUUID" AS "ItemUUID",
+  i."Artikel_Nummer" AS "Artikel_Nummer",
+  i."BoxID" AS "BoxID",
+  ${locationExpr} AS "Location",
+  shelf."Label" AS "ShelfLabel",
+  i."UpdatedAt" AS "UpdatedAt",
+  i."Datum_erfasst" AS "Datum_erfasst",
+  i."Auf_Lager" AS "Auf_Lager",
+  CAST(COALESCE(r."Quality", i."Quality") AS INTEGER) AS "Quality",
+  i."ShopwareVariantId" AS "ShopwareVariantId",
+  i."SerialNumber" AS "SerialNumber",
+  i."MacAddress" AS "MacAddress",
+  i."InstanceSpecs" AS "InstanceSpecs",
+  r."Suchbegriff" AS "Suchbegriff",
+  r."Grafikname" AS "Grafikname",
+  r."ImageNames" AS "ImageNames",
+  r."Artikelbeschreibung" AS "Artikelbeschreibung",
+  r."Verkaufspreis" AS "Verkaufspreis",
+  r."Kurzbeschreibung" AS "Kurzbeschreibung",
+  r."Langtext" AS "Langtext",
+  r."Hersteller" AS "Hersteller",
+  r."Länge_mm" AS "Länge_mm",
+  r."Breite_mm" AS "Breite_mm",
+  r."Höhe_mm" AS "Höhe_mm",
+  r."Gewicht_kg" AS "Gewicht_kg",
+  CAST(r."Hauptkategorien_A" AS INTEGER) AS "Hauptkategorien_A",
+  CAST(r."Unterkategorien_A" AS INTEGER) AS "Unterkategorien_A",
+  CAST(r."Hauptkategorien_B" AS INTEGER) AS "Hauptkategorien_B",
+  CAST(r."Unterkategorien_B" AS INTEGER) AS "Unterkategorien_B",
+  r."Veröffentlicht_Status" AS "Veröffentlicht_Status",
+  r."Shopartikel" AS "Shopartikel",
+  r."Artikeltyp" AS "Artikeltyp",
+  r."Einheit" AS "Einheit",
+  r."EntityType" AS "EntityType",
+  r."EAN" AS "EAN",
+  r."ShopwareProductId" AS "ShopwareProductId",
+  CASE
+    WHEN EXISTS (SELECT 1 FROM item_relations ir WHERE ir."ChildItemUUID" = i."ItemUUID") THEN 'connected'
+    WHEN i."Artikel_Nummer" IS NOT NULL
+      AND EXISTS (SELECT 1 FROM item_ref_relations irr WHERE irr."ChildArtikel_Nummer" = i."Artikel_Nummer") THEN 'available'
+    ELSE NULL
+  END AS "ZubehoerMode"${extras}
+`;
 }
 
-ensureItemShopwareColumns(db);
-
-function ensureItemQualityColumns(database: Database.Database = db): void {
-  const addQualityColumn = (table: 'items' | 'item_refs') => {
-    try {
-      database.prepare(`ALTER TABLE ${table} ADD COLUMN Quality INTEGER`).run();
-      console.info('[db] Added Quality column', { table });
-    } catch (err) {
-      console.error('Failed to add Quality column', { table, error: err });
-      throw err;
-    }
-  };
-
-  const inspectTable = (table: 'items' | 'item_refs') => {
-    let columns: Array<{ name: string }>; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
-    try {
-      columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-    } catch (err) {
-      console.error('Failed to inspect table for Quality column', { table, error: err });
-      throw err;
-    }
-    const hasQuality = columns.some((column) => column.name === 'Quality');
-    if (!hasQuality) {
-      addQualityColumn(table);
-    }
-  };
-
-  inspectTable('item_refs');
-  inspectTable('items');
-}
-
-ensureItemQualityColumns(db);
-
-function ensureQualityAssessmentSchema(database: Database.Database = db): void {
-  try {
-    database.exec(CREATE_QUALITY_ASSESSMENTS_SQL);
-  } catch (err) {
-    console.error('[db] Failed to create quality_assessments table', err);
-    throw err;
-  }
-  let itemColumns: Array<{ name: string }>;
-  try {
-    itemColumns = database.prepare('PRAGMA table_info(items)').all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('[db] Failed to inspect items table for QualityId column', err);
-    throw err;
-  }
-  if (!itemColumns.some((col) => col.name === 'QualityId')) {
-    try {
-      database.prepare('ALTER TABLE items ADD COLUMN QualityId INTEGER REFERENCES quality_assessments(id)').run();
-      console.info('[db] Added QualityId column to items');
-    } catch (err) {
-      console.error('[db] Failed to add QualityId column to items', err);
-      throw err;
-    }
-  }
-}
-
-ensureQualityAssessmentSchema(db);
-
-function ensureQualityAssessmentContractColumns(database: Database.Database = db): void {
-  let columns: Array<{ name: string }>;
-  try {
-    columns = database.prepare('PRAGMA table_info(quality_assessments)').all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('[db] Failed to inspect quality_assessments schema', err);
-    throw err;
-  }
-  const additions: Array<{ name: string; sql: string }> = [];
-  if (!columns.some((c) => c.name === 'responses')) {
-    additions.push({ name: 'responses', sql: 'ALTER TABLE quality_assessments ADD COLUMN responses TEXT' });
-  }
-  if (!columns.some((c) => c.name === 'contract_version')) {
-    additions.push({ name: 'contract_version', sql: 'ALTER TABLE quality_assessments ADD COLUMN contract_version TEXT' });
-  }
-  if (!columns.some((c) => c.name === 'derived_specs')) {
-    additions.push({ name: 'derived_specs', sql: 'ALTER TABLE quality_assessments ADD COLUMN derived_specs TEXT' });
-  }
-  for (const { name, sql } of additions) {
-    try {
-      database.prepare(sql).run();
-      console.info(`[db] Added ${name} column to quality_assessments`);
-    } catch (err) {
-      console.error(`[db] Failed to add ${name} column to quality_assessments`, err);
-      throw err;
-    }
-  }
-}
-
-ensureQualityAssessmentContractColumns(db);
-
-function ensureInstanceSpecsColumn(database: Database.Database = db): void {
-  let itemColumns: Array<{ name: string }>;
-  try {
-    itemColumns = database.prepare('PRAGMA table_info(items)').all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('[db] Failed to inspect items table for InstanceSpecs column', err);
-    throw err;
-  }
-  if (!itemColumns.some((col) => col.name === 'InstanceSpecs')) {
-    try {
-      database.prepare('ALTER TABLE items ADD COLUMN InstanceSpecs TEXT').run();
-      console.info('[db] Added InstanceSpecs column to items');
-    } catch (err) {
-      console.error('[db] Failed to add InstanceSpecs column to items', err);
-      throw err;
-    }
-  }
-}
-
-ensureInstanceSpecsColumn(db);
-
-function ensureItemEanColumn(database: Database.Database = db): void {
-  let refColumns: Array<{ name: string }> = [];
-  try {
-    refColumns = database.prepare(`PRAGMA table_info(item_refs)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect item_refs schema for EAN column', err);
-    throw err;
-  }
-  if (!refColumns.some((column) => column.name === 'EAN')) {
-    try {
-      database.prepare('ALTER TABLE item_refs ADD COLUMN EAN TEXT').run();
-      console.info('[db] Added EAN column to item_refs');
-    } catch (err) {
-      console.error('Failed to add EAN column to item_refs', err);
-      throw err;
-    }
-  }
-}
-
-ensureItemEanColumn(db);
-
-function ensureItemInstanceIdentifierColumns(database: Database.Database = db): void {
-  let columns: Array<{ name: string }> = [];
-  try {
-    columns = database.prepare(`PRAGMA table_info(items)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect items schema for identifier columns', err);
-    throw err;
-  }
-  const columnNames = columns.map((c) => c.name);
-  if (!columnNames.includes('SerialNumber')) {
-    try {
-      database.prepare('ALTER TABLE items ADD COLUMN SerialNumber TEXT').run();
-      console.info('[db] Added SerialNumber column to items');
-    } catch (err) {
-      console.error('Failed to add SerialNumber column to items', err);
-      throw err;
-    }
-  }
-  if (!columnNames.includes('MacAddress')) {
-    try {
-      database.prepare('ALTER TABLE items ADD COLUMN MacAddress TEXT').run();
-      console.info('[db] Added MacAddress column to items');
-    } catch (err) {
-      console.error('Failed to add MacAddress column to items', err);
-      throw err;
-    }
-  }
-}
-
-ensureItemInstanceIdentifierColumns(db);
-ensureAgenticRunSchema(db);
-
-let upsertItemReferenceStatement: Database.Statement;
-let upsertItemInstanceStatement: Database.Statement;
-let getItemReferenceStatement: Database.Statement;
-let getMaxArtikelNummerStatement: Database.Statement;
-let getItemStatement: Database.Statement;
-let findByMaterialStatement: Database.Statement;
-let itemsByBoxStatement: Database.Statement;
-let boxesByLocationStatement: Database.Statement;
-let getAdjacentItemIdsStatement: Database.Statement;
-try {
-  upsertItemReferenceStatement = db.prepare(UPSERT_ITEM_REFERENCE_SQL);
-  upsertItemInstanceStatement = db.prepare(UPSERT_ITEM_INSTANCE_SQL);
-  getItemReferenceStatement = db.prepare(`
-    SELECT
-      Artikel_Nummer,
-      Grafikname,
-      ImageNames,
-      Artikelbeschreibung,
-      Suchbegriff,
-      Verkaufspreis,
-      Kurzbeschreibung,
-      Langtext,
-      Hersteller,
-      Länge_mm,
-      Breite_mm,
-      Höhe_mm,
-      Gewicht_kg,
-      Hauptkategorien_A,
-      Unterkategorien_A,
-      Hauptkategorien_B,
-      Unterkategorien_B,
-      Veröffentlicht_Status,
-      Quality,
-      Shopartikel,
-      Artikeltyp,
-      Einheit,
-      EntityType,
-      ShopwareProductId
-    FROM item_refs
-    WHERE Artikel_Nummer = ?
-  `);
-  getMaxArtikelNummerStatement = db.prepare(`
-    SELECT Artikel_Nummer FROM item_refs
-    WHERE Artikel_Nummer IS NOT NULL AND Artikel_Nummer != ''
-    ORDER BY CAST(Artikel_Nummer AS INTEGER) DESC
-    LIMIT 1
-  `);
-  getItemStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
-${ITEM_JOIN_WITH_BOX}
-WHERE i.ItemUUID = ?
-`);
-  // TODO(agentic-instance-status): Keep agentic run joins aligned with Artikel_Nummer reference semantics.
-  // TODO(agentic-runs): Track empty Artikel_Nummer joins and confirm default status coverage in list/find queries.
-  // TODO(agent): Confirm findByMaterial stock filtering stays aligned with list endpoint policy.
-  findByMaterialStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
-  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
-  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
-])}
-${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
-WHERE i.Artikel_Nummer = ?
-  AND COALESCE(i.Auf_Lager, 0) > 0
-ORDER BY i.UpdatedAt DESC
-`);
-  getAdjacentItemIdsStatement = db.prepare(`
-    SELECT
-      (SELECT ItemUUID FROM items WHERE ItemUUID < @ItemUUID ORDER BY ItemUUID DESC LIMIT 1) AS previousId,
-      (SELECT ItemUUID FROM items WHERE ItemUUID > @ItemUUID ORDER BY ItemUUID ASC LIMIT 1) AS nextId
-  `);
-  itemsByBoxStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}
-${ITEM_JOIN_WITH_BOX}
-WHERE i.BoxID = ?
-ORDER BY i.ItemUUID
-`);
-  boxesByLocationStatement = db.prepare(`
-    SELECT * FROM boxes WHERE LocationId = ? ORDER BY BoxID
-  `);
-} catch (err) {
-  console.error('Failed to prepare item persistence statements', err);
-  throw err;
-}
-
-function runItemPersistenceStatements(payload: ItemPersistencePayload): void {
-  if (payload.ref) {
-    upsertItemReferenceStatement.run(payload.ref);
-  }
-  upsertItemInstanceStatement.run(payload.instance);
-}
-
-function createShopwareQueuePayload(payload: unknown, context: string): string {
-  try {
-    return JSON.stringify(payload ?? null);
-  } catch (err) {
-    console.error('[db] Failed to serialize Shopware queue payload', { context, error: err });
-    throw err;
-  }
-}
+// ---------------------------------------------------------------------------
+// Shopware correlation ID helper
+// ---------------------------------------------------------------------------
 
 let shopwareCorrelationCounter = 0;
 
 function normaliseCorrelationSegment(value: string, fallback: string): string {
   const trimmed = value.trim().toLowerCase();
-  if (!trimmed) {
-    return fallback;
-  }
+  if (!trimmed) return fallback;
   const sanitized = trimmed.replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
   return sanitized || fallback;
 }
 
 function nextShopwareCorrelationSequence(): string {
-  shopwareCorrelationCounter = (shopwareCorrelationCounter + 1) % 1679616; // 36^5 ~= 60M rotations
+  shopwareCorrelationCounter = (shopwareCorrelationCounter + 1) % 1679616;
   return shopwareCorrelationCounter.toString(36).padStart(5, '0');
 }
 
@@ -1241,1536 +713,719 @@ export function generateShopwareCorrelationId(context: string, itemUUID: string 
   }
 }
 
-// TODO(agent): Keep exporter metadata selections (ItemUUID, BoxID, Location, UpdatedAt) stable for importer parity.
-function itemSelectColumns(locationExpr: string, extraColumns: string[] = []): string {
-  const extras = extraColumns.length ? `,\n  ${extraColumns.join(',\n  ')}` : '';
-  return `
-SELECT
-  i.ItemUUID AS ItemUUID,
-  i.Artikel_Nummer AS Artikel_Nummer,
-  i.BoxID AS BoxID,
-  ${locationExpr} AS Location,
-  shelf.Label AS ShelfLabel,
-  i.UpdatedAt AS UpdatedAt,
-  i.Datum_erfasst AS Datum_erfasst,
-  i.Auf_Lager AS Auf_Lager,
-  CAST(COALESCE(r.Quality, i.Quality) AS INTEGER) AS Quality,
-  i.ShopwareVariantId AS ShopwareVariantId,
-  i.SerialNumber AS SerialNumber,
-  i.MacAddress AS MacAddress,
-  i.InstanceSpecs AS InstanceSpecs,
-  -- TODO(agentic-search-term): Keep Suchbegriff in item selects for detail hydration.
-  r.Suchbegriff AS Suchbegriff,
-  r.Grafikname AS Grafikname,
-  r.ImageNames AS ImageNames,
-  r.Artikelbeschreibung AS Artikelbeschreibung,
-  r.Verkaufspreis AS Verkaufspreis,
-  r.Kurzbeschreibung AS Kurzbeschreibung,
-  r.Langtext AS Langtext,
-  r.Hersteller AS Hersteller,
-  r.Länge_mm AS Länge_mm,
-  r.Breite_mm AS Breite_mm,
-  r.Höhe_mm AS Höhe_mm,
-  r.Gewicht_kg AS Gewicht_kg,
-  CAST(r.Hauptkategorien_A AS INTEGER) AS Hauptkategorien_A,
-  CAST(r.Unterkategorien_A AS INTEGER) AS Unterkategorien_A,
-  CAST(r.Hauptkategorien_B AS INTEGER) AS Hauptkategorien_B,
-  CAST(r.Unterkategorien_B AS INTEGER) AS Unterkategorien_B,
-  r.Veröffentlicht_Status AS Veröffentlicht_Status,
-  r.Shopartikel AS Shopartikel,
-  r.Artikeltyp AS Artikeltyp,
-  r.Einheit AS Einheit,
-  r.EntityType AS EntityType,
-  r.EAN AS EAN,
-  r.ShopwareProductId AS ShopwareProductId,
-  CASE
-    WHEN EXISTS (SELECT 1 FROM item_relations ir WHERE ir.ChildItemUUID = i.ItemUUID) THEN 'connected'
-    WHEN i.Artikel_Nummer IS NOT NULL
-      AND EXISTS (SELECT 1 FROM item_ref_relations irr WHERE irr.ChildArtikel_Nummer = i.Artikel_Nummer) THEN 'available'
-    ELSE NULL
-  END AS ZubehoerMode${extras}
-`;
+function createShopwareQueuePayload(payload: unknown, context: string): string {
+  try {
+    return JSON.stringify(payload ?? null);
+  } catch (err) {
+    console.error('[db] Failed to serialize Shopware queue payload', { context, error: err });
+    throw err;
+  }
 }
 
-export function persistItemReference(ref: ItemRef): void {
+// ---------------------------------------------------------------------------
+// Item persistence
+// ---------------------------------------------------------------------------
+
+const UPSERT_ITEM_REFERENCE_SQL = `
+  INSERT INTO item_refs (
+    "Artikel_Nummer", "Suchbegriff", "Grafikname", "ImageNames", "Artikelbeschreibung", "Verkaufspreis", "Kurzbeschreibung",
+    "Langtext", "Hersteller", "Länge_mm", "Breite_mm", "Höhe_mm", "Gewicht_kg",
+    "Hauptkategorien_A", "Unterkategorien_A", "Hauptkategorien_B", "Unterkategorien_B",
+    "Veröffentlicht_Status", "Quality", "Shopartikel", "Artikeltyp", "Einheit", "EntityType", "EAN", "ShopwareProductId"
+  )
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+  ON CONFLICT("Artikel_Nummer") DO UPDATE SET
+    "Suchbegriff"=EXCLUDED."Suchbegriff",
+    "Grafikname"=EXCLUDED."Grafikname",
+    "ImageNames"=EXCLUDED."ImageNames",
+    "Artikelbeschreibung"=EXCLUDED."Artikelbeschreibung",
+    "Verkaufspreis"=EXCLUDED."Verkaufspreis",
+    "Kurzbeschreibung"=EXCLUDED."Kurzbeschreibung",
+    "Langtext"=EXCLUDED."Langtext",
+    "Hersteller"=EXCLUDED."Hersteller",
+    "Länge_mm"=EXCLUDED."Länge_mm",
+    "Breite_mm"=EXCLUDED."Breite_mm",
+    "Höhe_mm"=EXCLUDED."Höhe_mm",
+    "Gewicht_kg"=EXCLUDED."Gewicht_kg",
+    "Hauptkategorien_A"=EXCLUDED."Hauptkategorien_A",
+    "Unterkategorien_A"=EXCLUDED."Unterkategorien_A",
+    "Hauptkategorien_B"=EXCLUDED."Hauptkategorien_B",
+    "Unterkategorien_B"=EXCLUDED."Unterkategorien_B",
+    "Veröffentlicht_Status"=EXCLUDED."Veröffentlicht_Status",
+    "Quality"=EXCLUDED."Quality",
+    "Shopartikel"=EXCLUDED."Shopartikel",
+    "Artikeltyp"=EXCLUDED."Artikeltyp",
+    "Einheit"=EXCLUDED."Einheit",
+    "EntityType"=EXCLUDED."EntityType",
+    "EAN"=EXCLUDED."EAN",
+    "ShopwareProductId"=EXCLUDED."ShopwareProductId"
+`;
+
+const UPSERT_ITEM_INSTANCE_SQL = `
+  INSERT INTO items (
+    "ItemUUID","Artikel_Nummer","BoxID","Location","UpdatedAt","Datum_erfasst","Auf_Lager","Quality","ShopwareVariantId","SerialNumber","MacAddress"
+  )
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+  ON CONFLICT("ItemUUID") DO UPDATE SET
+    "Artikel_Nummer"=EXCLUDED."Artikel_Nummer",
+    "BoxID"=EXCLUDED."BoxID",
+    "Location"=EXCLUDED."Location",
+    "UpdatedAt"=EXCLUDED."UpdatedAt",
+    "Datum_erfasst"=EXCLUDED."Datum_erfasst",
+    "Auf_Lager"=EXCLUDED."Auf_Lager",
+    "Quality"=EXCLUDED."Quality",
+    "ShopwareVariantId"=EXCLUDED."ShopwareVariantId",
+    "SerialNumber"=EXCLUDED."SerialNumber",
+    "MacAddress"=EXCLUDED."MacAddress"
+`;
+
+async function upsertItemReferenceRow(row: ItemRefRow): Promise<void> {
+  await execute(UPSERT_ITEM_REFERENCE_SQL, [
+    row.Artikel_Nummer, row.Suchbegriff, row.Grafikname, row.ImageNames, row.Artikelbeschreibung,
+    row.Verkaufspreis, row.Kurzbeschreibung, row.Langtext, row.Hersteller,
+    row.Länge_mm, row.Breite_mm, row.Höhe_mm, row.Gewicht_kg,
+    row.Hauptkategorien_A, row.Unterkategorien_A, row.Hauptkategorien_B, row.Unterkategorien_B,
+    row.Veröffentlicht_Status, row.Quality, row.Shopartikel, row.Artikeltyp,
+    row.Einheit, row.EntityType, row.EAN, row.ShopwareProductId
+  ]);
+}
+
+async function upsertItemInstanceRow(row: ItemInstanceRow): Promise<void> {
+  await execute(UPSERT_ITEM_INSTANCE_SQL, [
+    row.ItemUUID, row.Artikel_Nummer, row.BoxID, row.Location,
+    row.UpdatedAt, row.Datum_erfasst, row.Auf_Lager, row.Quality,
+    row.ShopwareVariantId, row.SerialNumber, row.MacAddress
+  ]);
+}
+
+async function runItemPersistenceStatements(payload: ItemPersistencePayload): Promise<void> {
+  if (payload.ref) await upsertItemReferenceRow(payload.ref);
+  await upsertItemInstanceRow(payload.instance);
+}
+
+export async function persistItemReference(ref: ItemRef): Promise<void> {
   try {
     const row = prepareRefRow(ref);
-    upsertItemReferenceStatement.run(row);
+    await upsertItemReferenceRow(row);
   } catch (err) {
     console.error('Failed to persist item reference', { artikelNummer: ref.Artikel_Nummer, error: err });
     throw err;
   }
 }
 
-export function persistItemInstance(instance: ItemInstance): void {
+export async function persistItemInstance(instance: ItemInstance): Promise<void> {
   try {
     const row = prepareInstanceRow(instance);
-    upsertItemInstanceStatement.run(row);
+    await upsertItemInstanceRow(row);
   } catch (err) {
     console.error('Failed to persist item instance', { itemUUID: instance.ItemUUID, error: err });
     throw err;
   }
 }
 
-export function persistItemWithinTransaction(item: Item): void {
+export async function persistItemWithinTransaction(item: Item): Promise<void> {
   const payload = prepareItemPersistencePayload(item);
   try {
-    runItemPersistenceStatements(payload);
+    await runItemPersistenceStatements(payload);
   } catch (err) {
     console.error('Failed to persist item within transaction', { itemUUID: item.ItemUUID, error: err });
     throw err;
   }
 }
 
-export function persistItem(item: Item): void {
+export async function persistItem(item: Item): Promise<void> {
   const payload = prepareItemPersistencePayload(item);
-  const txn = db.transaction((data: ItemPersistencePayload) => {
-    runItemPersistenceStatements(data);
-    try {
-      const correlationId = generateShopwareCorrelationId('persistItem', data.instance.ItemUUID);
-      const payload = createShopwareQueuePayload(
-        {
-          artikelNummer: data.instance.Artikel_Nummer ?? null,
-          boxId: data.instance.BoxID ?? null,
-          itemUUID: data.instance.ItemUUID,
-          trigger: 'persistItem'
-        },
-        'persistItem'
-      );
-      enqueueShopwareSyncJob({
-        CorrelationId: correlationId,
-        JobType: 'item-upsert',
-        Payload: payload
-      });
-    } catch (error) {
-      console.error('[db] Failed to enqueue Shopware sync job during persistItem transaction', {
-        itemUUID: data.instance.ItemUUID,
-        error
-      });
-    }
-  });
   try {
-    txn(payload);
+    await withTransaction(async (client) => {
+      await runItemPersistenceStatements(payload);
+      try {
+        const correlationId = generateShopwareCorrelationId('persistItem', payload.instance.ItemUUID);
+        const p = createShopwareQueuePayload(
+          { artikelNummer: payload.instance.Artikel_Nummer ?? null, boxId: payload.instance.BoxID ?? null, itemUUID: payload.instance.ItemUUID, trigger: 'persistItem' },
+          'persistItem'
+        );
+        await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'item-upsert', Payload: p });
+      } catch (error) {
+        console.error('[db] Failed to enqueue Shopware sync job during persistItem transaction', { itemUUID: payload.instance.ItemUUID, error });
+      }
+    });
   } catch (err) {
     console.error('Failed to persist item', { itemUUID: item.ItemUUID, error: err });
     throw err;
   }
 }
 
-// TODO(agentic-run-migration): Drop legacy ItemUUID columns from agentic_runs once all deployments are rebuilt.
-// TODO(agentic-run-reset-once): Remove legacy reset gate once all deployments have moved to reference-scoped runs.
-// TODO(agentic-run-legacy): Remove legacy schema warnings once agentic_runs migrations are completed.
-export function ensureAgenticRunSchema(database: Database.Database = db): void {
-  const createAgenticRunsSql = `
-CREATE TABLE IF NOT EXISTS agentic_runs (
-  Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  Artikel_Nummer TEXT NOT NULL UNIQUE,
-  SearchQuery TEXT,
-  LastSearchLinksJson TEXT,
-  Status TEXT NOT NULL,
-  LastModified TEXT NOT NULL DEFAULT (datetime('now')),
-  ReviewState TEXT NOT NULL DEFAULT 'not_required',
-  ReviewedBy TEXT,
-  LastReviewDecision TEXT,
-  LastReviewNotes TEXT,
-  RetryCount INTEGER NOT NULL DEFAULT 0,
-  NextRetryAt TEXT,
-  LastError TEXT,
-  LastAttemptAt TEXT,
-  FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE CASCADE ON UPDATE CASCADE
-);
-`;
-  try {
-    database.exec(createAgenticRunsSql);
-  } catch (err) {
-    console.error('Failed to ensure agentic_runs schema', err);
-    throw err;
-  }
+// ---------------------------------------------------------------------------
+// Box operations
+// ---------------------------------------------------------------------------
 
-  try {
-    const columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
-    const hasArtikelNummer = columns.some((entry) => entry.name === 'Artikel_Nummer');
-    if (!hasArtikelNummer) {
-      console.warn('[db] Legacy agentic_runs schema detected; Artikel_Nummer column is missing.');
-      console.warn('[db] agentic_runs is legacy and must be migrated manually; no rows will be deleted.');
-      const legacySchemaError = new Error('Legacy agentic_runs schema requires manual migration before startup.');
-      console.error('[db] Refusing to proceed with legacy agentic_runs schema.', { error: legacySchemaError });
-      throw legacySchemaError;
-    } else {
-      console.info('[db] Skipping legacy agentic_runs reset; schema already reference-scoped.');
-    }
-  } catch (err) {
-    console.error('Failed to validate legacy agentic_runs schema handling', err);
-    throw err;
-  }
-
-  ensureAgenticRunReferenceKeyColumns(database);
-  ensureAgenticRunQueueColumns(database);
-}
-
-export function closeDatabase(options: { reason?: string; suppressErrors?: boolean } = {}): void {
-  const { reason, suppressErrors = false } = options;
-  console.info('[db] Closing database connection', { ...dbLogContext, reason: reason ?? null });
-  try {
-    db.close();
-    console.info('[db] Database connection closed', { ...dbLogContext, reason: reason ?? null });
-  } catch (error) {
-    console.error('[db] Failed to close database connection', { ...dbLogContext, reason: reason ?? null, error });
-    if (!suppressErrors) {
-      throw error;
-    }
-  }
-}
-
-function ensureAgenticRunReferenceKeyColumns(database: Database.Database = db): void {
-  let columns: Array<{ name: string }> = [];
-  try {
-    columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect agentic_runs schema for reference key columns', err);
-    throw err;
-  }
-
-  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
-  const hasArtikelNummer = hasColumn('Artikel_Nummer');
-  const hasItemUUID = hasColumn('ItemUUID');
-
-  if (!hasArtikelNummer) {
-    try {
-      database.prepare('ALTER TABLE agentic_runs ADD COLUMN Artikel_Nummer TEXT').run();
-      console.info('[db] Added missing agentic_runs Artikel_Nummer column');
-    } catch (err) {
-      console.error('Failed to add agentic_runs Artikel_Nummer column', err);
-      throw err;
-    }
-  }
-
-  try {
-    database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_agentic_runs_artikel_nummer ON agentic_runs(Artikel_Nummer);');
-  } catch (err) {
-    console.error('Failed to ensure agentic_runs Artikel_Nummer index', err);
-    throw err;
-  }
-
-  if (!hasItemUUID) {
-    return;
-  }
-}
-
-function ensureAgenticRunQueueColumns(database: Database.Database = db): void {
-  let columns: Array<{ name: string }> = [];
-  try {
-    columns = database.prepare(`PRAGMA table_info(agentic_runs)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect agentic_runs schema for queue metadata columns', err);
-    throw err;
-  }
-
-  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
-
-  const alterations: Array<{ name: string; sql: string }> = [];
-  if (!hasColumn('RetryCount')) {
-    alterations.push({ name: 'RetryCount', sql: 'ALTER TABLE agentic_runs ADD COLUMN RetryCount INTEGER NOT NULL DEFAULT 0' });
-  }
-  if (!hasColumn('NextRetryAt')) {
-    alterations.push({ name: 'NextRetryAt', sql: "ALTER TABLE agentic_runs ADD COLUMN NextRetryAt TEXT" });
-  }
-  if (!hasColumn('LastError')) {
-    alterations.push({ name: 'LastError', sql: "ALTER TABLE agentic_runs ADD COLUMN LastError TEXT" });
-  }
-  if (!hasColumn('LastAttemptAt')) {
-    alterations.push({ name: 'LastAttemptAt', sql: "ALTER TABLE agentic_runs ADD COLUMN LastAttemptAt TEXT" });
-  }
-  if (!hasColumn('LastReviewDecision')) {
-    alterations.push({ name: 'LastReviewDecision', sql: "ALTER TABLE agentic_runs ADD COLUMN LastReviewDecision TEXT" });
-  }
-  if (!hasColumn('LastReviewNotes')) {
-    alterations.push({ name: 'LastReviewNotes', sql: "ALTER TABLE agentic_runs ADD COLUMN LastReviewNotes TEXT" });
-  }
-  if (!hasColumn('LastSearchLinksJson')) {
-    alterations.push({ name: 'LastSearchLinksJson', sql: "ALTER TABLE agentic_runs ADD COLUMN LastSearchLinksJson TEXT" });
-  }
-
-  const addedColumns: string[] = [];
-  for (const { name, sql } of alterations) {
-    try {
-      database.prepare(sql).run();
-      addedColumns.push(name);
-      console.info('[db] Added missing agentic_runs column', name);
-    } catch (err) {
-      console.error('Failed to add agentic_runs column', name, err);
-      throw err;
-    }
-  }
-
-  try {
-    const result = database.prepare(
-      `UPDATE agentic_runs
-          SET LastReviewDecision = LOWER(TRIM(ReviewState))
-        WHERE ReviewState IN ('approved', 'rejected')
-          AND (LastReviewDecision IS NULL OR TRIM(LastReviewDecision) = '')`
-    ).run();
-    if ((result?.changes ?? 0) > 0) {
-      console.info('[db] Backfilled LastReviewDecision for agentic_runs rows', {
-        count: result?.changes ?? 0,
-        addedColumns
-      });
-    }
-  } catch (err) {
-    console.error('Failed to backfill LastReviewDecision values for agentic_runs', err);
-    throw err;
-  }
-}
-
-const CREATE_AGENTIC_REQUEST_LOGS_SQL = `
-CREATE TABLE IF NOT EXISTS agentic_request_logs (
-  UUID TEXT PRIMARY KEY,
-  Search TEXT,
-  Status TEXT,
-  Error TEXT,
-  CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  UpdatedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  NotifiedAt TEXT,
-  LastNotificationError TEXT,
-  PayloadJson TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_status ON agentic_request_logs(Status);
-CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_notification_pending
-  ON agentic_request_logs (Status, NotifiedAt, UpdatedAt)
-  WHERE Status = 'SUCCESS' AND NotifiedAt IS NULL;
+const UPSERT_BOX_SQL = `
+  INSERT INTO boxes ("BoxID","LocationId","Label","CreatedAt","Notes","PhotoPath","PlacedBy","PlacedAt","UpdatedAt")
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+  ON CONFLICT("BoxID") DO UPDATE SET
+    "LocationId"=COALESCE(EXCLUDED."LocationId", boxes."LocationId"),
+    "Label"=COALESCE(EXCLUDED."Label", boxes."Label"),
+    "CreatedAt"=COALESCE(EXCLUDED."CreatedAt", boxes."CreatedAt"),
+    "Notes"=COALESCE(EXCLUDED."Notes", boxes."Notes"),
+    "PhotoPath"=COALESCE(EXCLUDED."PhotoPath", boxes."PhotoPath"),
+    "PlacedBy"=COALESCE(EXCLUDED."PlacedBy", boxes."PlacedBy"),
+    "PlacedAt"=COALESCE(EXCLUDED."PlacedAt", boxes."PlacedAt"),
+    "UpdatedAt"=EXCLUDED."UpdatedAt"
 `;
 
+// upsertBox kept for backward-compat import shape; callers should use runUpsertBox
+export const upsertBox = {
+  async run(box: Box): Promise<void> {
+    await execute(UPSERT_BOX_SQL, [
+      box.BoxID, box.LocationId ?? null, box.Label ?? null, box.CreatedAt ?? null,
+      box.Notes ?? null, box.PhotoPath ?? null, box.PlacedBy ?? null, box.PlacedAt ?? null,
+      box.UpdatedAt
+    ]);
+  }
+};
 
-const CREATE_AGENTIC_RUN_REVIEW_HISTORY_SQL = `
-CREATE TABLE IF NOT EXISTS agentic_run_review_history (
-  Id INTEGER PRIMARY KEY AUTOINCREMENT,
-  Artikel_Nummer TEXT NOT NULL,
-  Status TEXT NOT NULL,
-  ReviewState TEXT NOT NULL,
-  ReviewDecision TEXT,
-  ReviewNotes TEXT,
-  ReviewMetadata TEXT,
-  ReviewedBy TEXT,
-  RecordedAt TEXT NOT NULL DEFAULT (datetime('now')),
-  FOREIGN KEY(Artikel_Nummer) REFERENCES item_refs(Artikel_Nummer) ON DELETE CASCADE ON UPDATE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_agentic_run_review_history_artikel_nummer_recorded_at
-  ON agentic_run_review_history (Artikel_Nummer, RecordedAt, Id);
-`;
-
-function ensureAgenticRunReviewHistorySchema(database: Database.Database = db): void {
+export async function runUpsertBox(box: Box, logger: Pick<Console, 'error' | 'warn'> = console): Promise<boolean> {
   try {
-    database.exec(CREATE_AGENTIC_RUN_REVIEW_HISTORY_SQL);
-  } catch (err) {
-    console.error('Failed to ensure agentic_run_review_history schema', err);
-    throw err;
-  }
-}
-
-function ensureAgenticRunReviewHistoryColumns(database: Database.Database = db): void {
-  let columns: Array<{ name: string }> = [];
-  try {
-    columns = database.prepare(`PRAGMA table_info(agentic_run_review_history)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect agentic_run_review_history schema for missing columns', err);
-    throw err;
-  }
-
-  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
-  const alterations: Array<{ name: string; sql: string }> = [];
-  if (!hasColumn('ReviewMetadata')) {
-    alterations.push({
-      name: 'ReviewMetadata',
-      sql: 'ALTER TABLE agentic_run_review_history ADD COLUMN ReviewMetadata TEXT'
-    });
-  }
-
-  for (const { name, sql } of alterations) {
-    try {
-      database.prepare(sql).run();
-      console.info('[db] Added missing agentic_run_review_history column', name);
-    } catch (err) {
-      console.error('Failed to add agentic_run_review_history column', name, err);
-      throw err;
-    }
-  }
-}
-
-
-function ensureAgenticRequestLogSchema(database: Database.Database = db): void {
-  try {
-    database.exec(CREATE_AGENTIC_REQUEST_LOGS_SQL);
-  } catch (err) {
-    console.error('Failed to ensure agentic_request_logs schema', err);
-    throw err;
-  }
-
-  ensureAgenticRequestLogColumns(database);
-}
-
-function ensureAgenticRequestLogColumns(database: Database.Database = db): void {
-  let columns: Array<{ name: string }> = [];
-  try {
-    columns = database.prepare(`PRAGMA table_info(agentic_request_logs)`).all() as Array<{ name: string }>;
-  } catch (err) {
-    console.error('Failed to inspect agentic_request_logs schema for missing columns', err);
-    throw err;
-  }
-
-  const hasColumn = (column: string) => columns.some((entry) => entry.name === column);
-
-  const alterations: Array<{ name: string; sql: string }> = [];
-  if (!hasColumn('NotifiedAt')) {
-    alterations.push({ name: 'NotifiedAt', sql: "ALTER TABLE agentic_request_logs ADD COLUMN NotifiedAt TEXT" });
-  }
-  if (!hasColumn('LastNotificationError')) {
-    alterations.push({
-      name: 'LastNotificationError',
-      sql: 'ALTER TABLE agentic_request_logs ADD COLUMN LastNotificationError TEXT'
-    });
-  }
-  if (!hasColumn('PayloadJson')) {
-    alterations.push({ name: 'PayloadJson', sql: "ALTER TABLE agentic_request_logs ADD COLUMN PayloadJson TEXT" });
-  }
-
-  for (const { name, sql } of alterations) {
-    try {
-      database.prepare(sql).run();
-      console.info('[db] Added missing agentic_request_logs column', name);
-    } catch (err) {
-      console.error('Failed to add agentic_request_logs column', name, err);
-      throw err;
-    }
-  }
-
-  try {
-    database.exec(`
-      CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_status ON agentic_request_logs(Status);
-      CREATE INDEX IF NOT EXISTS idx_agentic_request_logs_notification_pending
-        ON agentic_request_logs (Status, NotifiedAt, UpdatedAt)
-        WHERE Status = 'SUCCESS' AND NotifiedAt IS NULL;
-    `);
-  } catch (err) {
-    console.error('Failed to ensure agentic_request_logs indexes', err);
-    throw err;
-  }
-}
-
-ensureAgenticRunReviewHistorySchema(db);
-ensureAgenticRunReviewHistoryColumns(db);
-ensureAgenticRequestLogSchema(db);
-
-export { db };
-
-// TODO(agent): Keep named-parameter binding guards aligned with upsertBox schema changes.
-export const upsertBox = db.prepare(
-  `
-      INSERT INTO boxes (BoxID, LocationId, Label, CreatedAt, Notes, PhotoPath, PlacedBy, PlacedAt, UpdatedAt)
-      VALUES (@BoxID, @LocationId, @Label, @CreatedAt, @Notes, @PhotoPath, @PlacedBy, @PlacedAt, @UpdatedAt)
-      ON CONFLICT(BoxID) DO UPDATE SET
-      LocationId=COALESCE(excluded.LocationId, boxes.LocationId),
-      Label=COALESCE(excluded.Label, boxes.Label),
-      CreatedAt=COALESCE(excluded.CreatedAt, boxes.CreatedAt),
-      Notes=COALESCE(excluded.Notes, boxes.Notes),
-      PhotoPath=COALESCE(excluded.PhotoPath, boxes.PhotoPath),
-      PlacedBy=COALESCE(excluded.PlacedBy, boxes.PlacedBy),
-      PlacedAt=COALESCE(excluded.PlacedAt, boxes.PlacedAt),
-      UpdatedAt=excluded.UpdatedAt
-  `
-);
-
-function extractMissingNamedParams(sql: string, bindings: Record<string, unknown>): string[] {
-  const missing: string[] = [];
-  if (!sql) {
-    return missing;
-  }
-  const seen = new Set<string>();
-  const regex = /@([A-Za-z0-9_]+)/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(sql))) {
-    const name = match[1];
-    if (seen.has(name)) {
-      continue;
-    }
-    seen.add(name);
-    if (!Object.prototype.hasOwnProperty.call(bindings, name)) {
-      missing.push(name);
-    }
-  }
-  return missing;
-}
-
-export function runUpsertBox(box: Box, logger: Pick<Console, 'error' | 'warn'> = console): boolean {
-  const missingParams = extractMissingNamedParams(upsertBox.source || '', box as unknown as Record<string, unknown>);
-  if (missingParams.length > 0) {
-    try {
-      logger.warn?.('[db:upsertBox] Missing named parameters detected before execution', {
-        missingParams,
-        provided: Object.keys(box)
-      });
-    } catch (logError) {
-      console.error('[db:upsertBox] Failed to log missing parameter warning', logError);
-    }
-  }
-
-  try {
-    upsertBox.run(box);
+    await upsertBox.run(box);
     return true;
   } catch (error) {
-    if (error instanceof RangeError && /Missing named parameter/i.test(error.message)) {
-      logger.error?.('[db:upsertBox] Missing named parameter error during execution', {
-        error: error.message,
-        missingParams
-      });
-      return false;
-    }
     logger.error?.('[db:upsertBox] Failed to upsert box', { error });
-    throw error;
+    return false;
   }
 }
 
-export const queueLabel = db.prepare(`INSERT INTO label_queue (ItemUUID, CreatedAt) VALUES (?, datetime('now'))`);
-export const getItem = wrapLangtextAwareStatement(getItemStatement, 'db:getItem');
-export const getItemReference = wrapLangtextAwareStatement(
-  getItemReferenceStatement,
-  'db:getItemReference'
-);
-export const findByMaterial = wrapLangtextAwareStatement(findByMaterialStatement, 'db:findByMaterial');
-export const itemsByBox = wrapLangtextAwareStatement(itemsByBoxStatement, 'db:itemsByBox');
-export const boxesByLocation = boxesByLocationStatement;
-export const getBox = db.prepare(`SELECT * FROM boxes WHERE BoxID = ?`);
+export async function getBox(boxId: string): Promise<Record<string, unknown> | null> {
+  return queryOne(`SELECT * FROM boxes WHERE "BoxID" = $1`, [boxId]);
+}
+
+export async function boxesByLocation(locationId: string): Promise<Record<string, unknown>[]> {
+  return query(`SELECT * FROM boxes WHERE "LocationId" = $1 ORDER BY "BoxID"`, [locationId]);
+}
+
+export interface ListBoxesHelper {
+  all: () => Promise<any[]>;
+  byType: (type: string) => Promise<any[]>;
+}
+
+const LIST_BOXES_SQL = `
+  SELECT b.*, shelf."Label" AS "ShelfLabel",
+    COUNT(i."ItemUUID") AS "ItemCount",
+    COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg"
+  FROM boxes b
+  LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
+  LEFT JOIN items i ON i."BoxID" = b."BoxID"
+  LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
+  GROUP BY b."BoxID", shelf."Label"
+  ORDER BY b."BoxID"
+`;
+
+export const listBoxes: ListBoxesHelper = {
+  all: async () => query(LIST_BOXES_SQL),
+  byType: async (type: string) => {
+    const normalized = (type ?? '').toString().trim().toUpperCase();
+    if (!normalized || !/^[A-Z0-9]$/.test(normalized)) {
+      console.warn('[db:listBoxes] Invalid box type filter', { type });
+      return [];
+    }
+    return query(
+      `SELECT b.*, shelf."Label" AS "ShelfLabel",
+        COUNT(i."ItemUUID") AS "ItemCount",
+        COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg"
+       FROM boxes b
+       LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
+       LEFT JOIN items i ON i."BoxID" = b."BoxID"
+       LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
+       WHERE SUBSTRING(b."BoxID", 1, 1) = $1
+       GROUP BY b."BoxID", shelf."Label"
+       ORDER BY b."BoxID"`,
+      [normalized]
+    );
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Item queries
+// ---------------------------------------------------------------------------
+
+export async function getItem(uuid: string): Promise<any> {
+  const rows = await query(`${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}${ITEM_JOIN_WITH_BOX}WHERE i."ItemUUID" = $1`, [uuid]);
+  const row = rows[0] ?? null;
+  if (!row) return null;
+  return parseLangtextForRow(row as Record<string, unknown>, 'db:getItem');
+}
+
+export async function getItemReference(artikelNummer: string): Promise<any> {
+  const row = await queryOne(
+    `SELECT "Artikel_Nummer","Grafikname","ImageNames","Artikelbeschreibung","Suchbegriff","Verkaufspreis",
+            "Kurzbeschreibung","Langtext","Hersteller","Länge_mm","Breite_mm","Höhe_mm","Gewicht_kg",
+            "Hauptkategorien_A","Unterkategorien_A","Hauptkategorien_B","Unterkategorien_B",
+            "Veröffentlicht_Status","Quality","Shopartikel","Artikeltyp","Einheit","EntityType","ShopwareProductId"
+     FROM item_refs WHERE "Artikel_Nummer" = $1`,
+    [artikelNummer]
+  );
+  if (!row) return null;
+  return parseLangtextForRow(row as Record<string, unknown>, 'db:getItemReference');
+}
+
+export async function findByMaterial(artikelNummer: string): Promise<any[]> {
+  const rows = await query(
+    `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+      "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+    ])}${ITEM_JOIN_WITH_BOX}
+     LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
+     WHERE i."Artikel_Nummer" = $1 AND COALESCE(i."Auf_Lager", 0) > 0
+     ORDER BY i."UpdatedAt" DESC`,
+    [artikelNummer]
+  );
+  return parseLangtextRows(rows as Record<string, unknown>[], 'db:findByMaterial');
+}
+
+export async function itemsByBox(boxId: string): Promise<any[]> {
+  const rows = await query(
+    `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}${ITEM_JOIN_WITH_BOX}WHERE i."BoxID" = $1 ORDER BY i."ItemUUID"`,
+    [boxId]
+  );
+  return parseLangtextRows(rows as Record<string, unknown>[], 'db:itemsByBox');
+}
+
+export async function getAdjacentItemIds(itemUUID: string): Promise<{ previousId: string | null; nextId: string | null }> {
+  const row = await queryOne<{ previousId: string | null; nextId: string | null }>(
+    `SELECT
+       (SELECT "ItemUUID" FROM items WHERE "ItemUUID" < $1 ORDER BY "ItemUUID" DESC LIMIT 1) AS "previousId",
+       (SELECT "ItemUUID" FROM items WHERE "ItemUUID" > $1 ORDER BY "ItemUUID" ASC  LIMIT 1) AS "nextId"`,
+    [itemUUID]
+  );
+  return row ?? { previousId: null, nextId: null };
+}
+
+export async function listItems(): Promise<any[]> {
+  const rows = await query(
+    `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+      "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+    ])}${ITEM_JOIN_WITH_BOX}
+     LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
+     WHERE COALESCE(i."Auf_Lager", 0) > 0
+     ORDER BY i."ItemUUID"`
+  );
+  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItems');
+}
+
+export async function listItemsWithFilters(filters: {
+  searchTerm: string | null;
+  subcategoryFilter: string | null;
+  boxFilter: string | null;
+  agenticStatus: string | null;
+  unplacedOnly: number | null;
+}): Promise<any[]> {
+  const rows = await query(
+    `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+      "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+    ])}${ITEM_JOIN_WITH_BOX}
+     LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
+     WHERE COALESCE(i."Auf_Lager", 0) > 0
+     AND ($1::TEXT IS NULL OR $1 = '' OR LOWER(COALESCE(r."Artikelbeschreibung",'')) LIKE $1
+          OR LOWER(COALESCE(i."Artikel_Nummer",'')) LIKE $1 OR LOWER(COALESCE(i."ItemUUID",'')) LIKE $1)
+     AND ($2::TEXT IS NULL OR $2 = '' OR LOWER(COALESCE(CAST(r."Unterkategorien_A" AS TEXT),'')) LIKE $2)
+     AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
+     AND ($4::TEXT IS NULL OR $4 = '' OR COALESCE(ar."Status",'notStarted') = $4)
+     AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
+     ORDER BY i."ItemUUID"`,
+    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatus, filters.unplacedOnly]
+  );
+  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsWithFilters');
+}
+
+export async function listItemReferencesWithFilters(filters: {
+  searchTerm: string | null;
+  subcategoryFilter: string | null;
+  boxFilter: string | null;
+  agenticStatus: string | null;
+  unplacedOnly: number | null;
+}): Promise<any[]> {
+  const rows = await query(
+    `SELECT
+      COALESCE(NULLIF(i."ItemUUID",''), r."Artikel_Nummer") AS "ItemUUID",
+      COALESCE(NULLIF(r."Artikel_Nummer",''), i."ItemUUID") AS "Artikel_Nummer",
+      i."BoxID",${LOCATION_WITH_BOX_FALLBACK} AS "Location",shelf."Label" AS "ShelfLabel",
+      i."UpdatedAt",i."Datum_erfasst",i."Auf_Lager",i."ShopwareVariantId",
+      r."Grafikname",r."ImageNames",r."Artikelbeschreibung",r."Verkaufspreis",r."Kurzbeschreibung",
+      r."Langtext",r."Hersteller",r."Länge_mm",r."Breite_mm",r."Höhe_mm",r."Gewicht_kg",
+      CAST(r."Hauptkategorien_A" AS INTEGER) AS "Hauptkategorien_A",
+      CAST(r."Unterkategorien_A" AS INTEGER) AS "Unterkategorien_A",
+      CAST(r."Hauptkategorien_B" AS INTEGER) AS "Hauptkategorien_B",
+      CAST(r."Unterkategorien_B" AS INTEGER) AS "Unterkategorien_B",
+      r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",
+      COALESCE(ar."Status",'notStarted') AS "AgenticStatus",
+      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState"
+     FROM item_refs r
+     LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+     LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
+     LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
+     LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = COALESCE(NULLIF(i."Artikel_Nummer",''), NULLIF(r."Artikel_Nummer",''))
+     WHERE (i."ItemUUID" IS NULL OR i."ItemUUID" = '')
+     AND ($1::TEXT IS NULL OR $1 = '' OR LOWER(COALESCE(r."Artikelbeschreibung",'')) LIKE $1
+          OR LOWER(COALESCE(r."Artikel_Nummer",'')) LIKE $1 OR LOWER(COALESCE(i."ItemUUID",'')) LIKE $1)
+     AND ($2::TEXT IS NULL OR $2 = '' OR LOWER(COALESCE(CAST(r."Unterkategorien_A" AS TEXT),'')) LIKE $2)
+     AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
+     AND ($4::TEXT IS NULL OR $4 = '' OR COALESCE(ar."Status",'notStarted') = $4)
+     AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
+     ORDER BY COALESCE(NULLIF(r."Artikel_Nummer",''), i."ItemUUID")`,
+    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatus, filters.unplacedOnly]
+  );
+  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemReferencesWithFilters');
+}
+
+export async function listItemReferences(): Promise<any[]> {
+  return query(
+    `SELECT r."Artikel_Nummer", i."ItemUUID" AS "InstanceItemUUID"
+     FROM item_refs r
+     LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+     ORDER BY COALESCE(NULLIF(r."Artikel_Nummer",''), i."ItemUUID")`
+  );
+}
+
+export interface ListItemsForExportFilters {
+  createdAfter: string | null;
+  updatedAfter: string | null;
+  itemIds?: string[] | null;
+}
+
+function normalizeItemIdFilters(rawItemIds: unknown): string[] {
+  if (!Array.isArray(rawItemIds)) return [];
+  const normalized: string[] = [];
+  for (const candidate of rawItemIds) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (trimmed && !normalized.includes(trimmed)) normalized.push(trimmed);
+  }
+  return normalized;
+}
+
+export const listItemsForExport = {
+  async all(filters: Partial<ListItemsForExportFilters>): Promise<any[]> {
+    const createdAfter = filters?.createdAfter ?? null;
+    const updatedAfter = filters?.updatedAfter ?? null;
+    const itemIds = normalizeItemIdFilters(filters?.itemIds);
+
+    let sql = `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+      "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+    ])}${ITEM_JOIN_WITH_BOX}
+     LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
+     WHERE ($1::TEXT IS NULL OR i."Datum_erfasst" >= $1)
+       AND ($2::TEXT IS NULL OR i."UpdatedAt" >= $2)`;
+
+    const params: unknown[] = [createdAfter, updatedAfter];
+
+    if (itemIds.length > 0) {
+      const placeholders = itemIds.map((_, idx) => `$${idx + 3}`).join(', ');
+      sql += ` AND i."ItemUUID" IN (${placeholders})`;
+      params.push(...itemIds);
+    }
+
+    sql += ` ORDER BY COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID"), i."ItemUUID"`;
+    const rows = await query(sql, params);
+    return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsForExport');
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Item mutations
+// ---------------------------------------------------------------------------
+
+export async function decrementItemStock(itemUUID: string): Promise<number> {
+  return execute(
+    `UPDATE items SET "Auf_Lager"="Auf_Lager"-1,
+       "BoxID"=CASE WHEN "Auf_Lager"-1<=0 THEN NULL ELSE "BoxID" END,
+       "Location"=CASE WHEN "Auf_Lager"-1<=0 THEN NULL ELSE "Location" END,
+       "UpdatedAt"=$2
+     WHERE "ItemUUID"=$1 AND "Auf_Lager">0`,
+    [itemUUID, new Date().toISOString()]
+  );
+}
+
+export async function incrementItemStock(itemUUID: string): Promise<number> {
+  return execute(
+    `UPDATE items SET "Auf_Lager"="Auf_Lager"+1, "UpdatedAt"=$2 WHERE "ItemUUID"=$1`,
+    [itemUUID, new Date().toISOString()]
+  );
+}
+
+export async function zeroItemStock(itemUUID: string): Promise<number> {
+  return execute(
+    `UPDATE items SET "Auf_Lager"=0,"BoxID"=NULL,"Location"=NULL,"UpdatedAt"=$2 WHERE "ItemUUID"=$1`,
+    [itemUUID, new Date().toISOString()]
+  );
+}
+
+export async function deleteItem(itemUUID: string): Promise<number> {
+  return execute(`DELETE FROM items WHERE "ItemUUID"=$1`, [itemUUID]);
+}
+
+export async function deleteBox(boxId: string): Promise<number> {
+  return execute(`DELETE FROM boxes WHERE "BoxID"=$1`, [boxId]);
+}
+
+// ---------------------------------------------------------------------------
+// Bulk operations
+// ---------------------------------------------------------------------------
+
+export type BulkMoveResult = { itemId: string; fromBoxId: string | null; toBoxId: string; location: string | null };
+export type BulkRemoveResult = { itemId: string; fromBoxId: string | null; before: number; after: number; clearedBox: boolean };
+
+export async function bulkMoveItems(itemIds: string[], toBoxId: string, actor: string, location: string | null): Promise<BulkMoveResult[]> {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) return [];
+  const uniqueIds = Array.from(new Set(itemIds));
+  const normalizedLocation = location ?? null;
+
+  return withTransaction(async () => {
+    const results: BulkMoveResult[] = [];
+    const now = new Date().toISOString();
+
+    for (const itemId of uniqueIds) {
+      const current = await queryOne<{ ItemUUID: string; BoxID: string | null; Location: string | null; Auf_Lager: number | null }>(
+        `SELECT "ItemUUID","BoxID","Location","Auf_Lager" FROM items WHERE "ItemUUID"=$1`, [itemId]
+      );
+      if (!current) {
+        console.warn('[db] bulkMoveItems missing item', { itemId });
+        throw new Error(`Item ${itemId} not found`);
+      }
+
+      await execute(
+        `UPDATE items SET "BoxID"=$2,"Location"=$3,"UpdatedAt"=$4 WHERE "ItemUUID"=$1`,
+        [itemId, toBoxId, normalizedLocation, now]
+      );
+
+      await logEvent({ Actor: actor, EntityType: 'Item', EntityId: itemId, Event: 'Moved', Meta: JSON.stringify({ from: current.BoxID ?? null, to: toBoxId }) });
+
+      try {
+        const correlationId = generateShopwareCorrelationId('bulkMoveItems', itemId);
+        const p = createShopwareQueuePayload({ actor, fromBoxId: current.BoxID ?? null, toBoxId, location: normalizedLocation, itemUUID: itemId, trigger: 'bulk-move-items' }, 'bulkMoveItems');
+        await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'item-move', Payload: p });
+      } catch (error) {
+        console.error('[db] Failed to enqueue Shopware sync job for bulk move', { itemId, error });
+      }
+
+      results.push({ itemId, fromBoxId: current.BoxID ?? null, toBoxId, location: normalizedLocation });
+    }
+    return results;
+  });
+}
+
+export async function bulkRemoveItemStock(itemIds: string[], actor: string): Promise<BulkRemoveResult[]> {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) return [];
+  const uniqueIds = Array.from(new Set(itemIds));
+
+  return withTransaction(async () => {
+    const results: BulkRemoveResult[] = [];
+    const now = new Date().toISOString();
+
+    for (const itemId of uniqueIds) {
+      const current = await queryOne<{ ItemUUID: string; BoxID: string | null; Location: string | null; Auf_Lager: number | null }>(
+        `SELECT "ItemUUID","BoxID","Location","Auf_Lager" FROM items WHERE "ItemUUID"=$1`, [itemId]
+      );
+      if (!current) throw new Error(`Item ${itemId} not found`);
+
+      const beforeQty = typeof current.Auf_Lager === 'number' ? current.Auf_Lager : 0;
+      if (beforeQty <= 0) throw new Error(`Item ${itemId} has no stock`);
+
+      await decrementItemStock(itemId);
+
+      const updated = await queryOne<{ Auf_Lager: number | null; BoxID: string | null }>(
+        `SELECT "Auf_Lager","BoxID" FROM items WHERE "ItemUUID"=$1`, [itemId]
+      );
+      const afterQty = typeof updated?.Auf_Lager === 'number' ? updated.Auf_Lager : 0;
+      const clearedBox = afterQty <= 0;
+
+      await logEvent({ Actor: actor, EntityType: 'Item', EntityId: itemId, Event: 'Removed', Meta: JSON.stringify({ fromBox: current.BoxID ?? null, before: beforeQty, after: afterQty, clearedBox }) });
+
+      try {
+        const correlationId = generateShopwareCorrelationId('bulkRemoveItemStock', itemId);
+        const p = createShopwareQueuePayload({ actor, before: beforeQty, after: afterQty, clearedBox, itemUUID: itemId, trigger: 'bulk-delete-items' }, 'bulkRemoveItemStock');
+        await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'stock-decrement', Payload: p });
+      } catch (error) {
+        console.error('[db] Failed to enqueue Shopware sync job for bulk stock removal', { itemId, error });
+      }
+
+      results.push({ itemId, fromBoxId: current.BoxID ?? null, before: beforeQty, after: afterQty, clearedBox });
+    }
+    return results;
+  });
+}
+
+export type BulkUpdateShopFieldsGroup = { artikelNummer: string; itemIds: string[] };
+
+export async function bulkUpdateItemRefShopFields(
+  groups: BulkUpdateShopFieldsGroup[],
+  shopartikel: number | null,
+  veröffentlichtStatus: string | null,
+  verkaufspreis: number | null,
+  actor: string
+): Promise<string[]> {
+  if (!Array.isArray(groups) || groups.length === 0) return [];
+
+  return withTransaction(async () => {
+    const updated: string[] = [];
+    for (const group of groups) {
+      const { artikelNummer, itemIds } = group;
+      await execute(
+        `UPDATE item_refs SET
+           "Verkaufspreis"=COALESCE($2,"Verkaufspreis"),
+           "Shopartikel"=COALESCE($3,"Shopartikel"),
+           "Veröffentlicht_Status"=COALESCE($4,"Veröffentlicht_Status")
+         WHERE "Artikel_Nummer"=$1`,
+        [artikelNummer, verkaufspreis, shopartikel, veröffentlichtStatus]
+      );
+      await logEvent({ Actor: actor, EntityType: 'Item', EntityId: artikelNummer, Event: 'ShopStatusUpdated', Meta: JSON.stringify({ shopartikel, veröffentlichtStatus, verkaufspreis }) });
+
+      for (const itemId of itemIds) {
+        try {
+          const correlationId = generateShopwareCorrelationId('bulkUpdateShopStatus', itemId);
+          const p = createShopwareQueuePayload({ artikelNummer, itemUUID: itemId, trigger: 'bulk-update-shop-status', actor }, 'bulkUpdateShopStatus');
+          await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'item-upsert', Payload: p });
+        } catch (error) {
+          console.error('[db] Failed to enqueue Shopware sync job for bulk shop status update', { itemId, error });
+        }
+      }
+      updated.push(artikelNummer);
+    }
+    return updated;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Item UUID resolution
+// ---------------------------------------------------------------------------
 
 export interface CanonicalItemUUIDResolution {
   itemUUID: string | null;
   usedFallback: boolean;
 }
 
-export function resolveCanonicalItemUUIDForArtikelnummer(
+export async function resolveCanonicalItemUUIDForArtikelnummer(
   artikelNummer: string | null | undefined,
   options: {
-    findByMaterial?: { all?: (artikelNummer: string) => Array<{ ItemUUID?: string | null }> };
     logger?: Pick<Console, 'info' | 'warn' | 'error'>;
   } = {}
-): CanonicalItemUUIDResolution {
+): Promise<CanonicalItemUUIDResolution> {
   const logger = options.logger ?? console;
   const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
   if (!normalizedArtikelNummer) {
-    logger.warn?.('[db] Unable to resolve canonical ItemUUID without Artikelnummer', {
-      artikelNummer: artikelNummer ?? null
-    });
-    return { itemUUID: null, usedFallback: false };
-  }
-
-  if (!options.findByMaterial?.all) {
-    logger.warn?.('[db] Missing findByMaterial helper for canonical ItemUUID resolution', {
-      artikelNummer: normalizedArtikelNummer
-    });
+    logger.warn?.('[db] Unable to resolve canonical ItemUUID without Artikelnummer', { artikelNummer: artikelNummer ?? null });
     return { itemUUID: null, usedFallback: false };
   }
 
   let instances: Array<{ ItemUUID?: string | null }> = [];
   try {
-    instances = options.findByMaterial.all(normalizedArtikelNummer) ?? [];
+    instances = await findByMaterial(normalizedArtikelNummer);
   } catch (err) {
-    logger.error?.('[db] Failed to load instances for canonical ItemUUID resolution', {
-      artikelNummer: normalizedArtikelNummer,
-      error: err
-    });
+    logger.error?.('[db] Failed to load instances for canonical ItemUUID resolution', { artikelNummer: normalizedArtikelNummer, error: err });
     return { itemUUID: null, usedFallback: false };
   }
 
   const canonical = instances.find((instance) => {
     const candidate = typeof instance?.ItemUUID === 'string' ? instance.ItemUUID.trim() : '';
-    if (!candidate) {
-      return false;
-    }
+    if (!candidate) return false;
     const parsed = parseSequentialItemUUID(candidate);
-    return parsed?.kind === 'artikelnummer'
-      && parsed.artikelNummer === normalizedArtikelNummer
-      && parsed.sequence === 1;
+    return parsed?.kind === 'artikelnummer' && parsed.artikelNummer === normalizedArtikelNummer && parsed.sequence === 1;
   });
 
-  if (canonical?.ItemUUID) {
-    return { itemUUID: canonical.ItemUUID, usedFallback: false };
-  }
+  if (canonical?.ItemUUID) return { itemUUID: canonical.ItemUUID, usedFallback: false };
 
   const fallback = instances.find((instance) => typeof instance?.ItemUUID === 'string' && instance.ItemUUID.trim());
   if (fallback?.ItemUUID) {
-    logger.info?.('[db] Falling back to non-canonical ItemUUID for reference', {
-      artikelNummer: normalizedArtikelNummer,
-      fallbackItemUUID: fallback.ItemUUID
-    });
+    logger.info?.('[db] Falling back to non-canonical ItemUUID for reference', { artikelNummer: normalizedArtikelNummer, fallbackItemUUID: fallback.ItemUUID });
     return { itemUUID: fallback.ItemUUID, usedFallback: true };
   }
 
-  logger.warn?.('[db] Failed to resolve any ItemUUID for reference', {
-    artikelNummer: normalizedArtikelNummer
-  });
+  logger.warn?.('[db] Failed to resolve any ItemUUID for reference', { artikelNummer: normalizedArtikelNummer });
   return { itemUUID: null, usedFallback: false };
 }
-// TODO(agent): Revisit list box queries once typed/location filters are stabilized for UI consumers.
-// TODO(agent): Confirm shelf label projection stays aligned with BoxList rendering.
-// TODO(agent): Validate list box aggregate fields remain aligned with Box model contracts after query changes.
-const listBoxesStatement = db.prepare(`
-  SELECT
-    b.*,
-    shelf.Label AS ShelfLabel,
-    COUNT(i.ItemUUID) AS ItemCount,
-    COALESCE(SUM(COALESCE(i.Auf_Lager, 0) * COALESCE(r.Gewicht_kg, 0)), 0) AS TotalWeightKg
-  FROM boxes b
-  LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
-  LEFT JOIN items i ON i.BoxID = b.BoxID
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-  GROUP BY b.BoxID
-  ORDER BY b.BoxID
-`);
-const listBoxesByTypeStatement = db.prepare(
-  `
-    SELECT
-      b.*,
-      shelf.Label AS ShelfLabel,
-      COUNT(i.ItemUUID) AS ItemCount,
-      COALESCE(SUM(COALESCE(i.Auf_Lager, 0) * COALESCE(r.Gewicht_kg, 0)), 0) AS TotalWeightKg
-    FROM boxes b
-    LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
-    LEFT JOIN items i ON i.BoxID = b.BoxID
-    LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-    WHERE SUBSTR(b.BoxID, 1, 1) = @type
-    GROUP BY b.BoxID
-    ORDER BY b.BoxID
-  `
-);
 
-export interface ListBoxesHelper {
-  all: () => any[];
-  byType: (type: string) => any[];
+// ---------------------------------------------------------------------------
+// ID generation queries
+// ---------------------------------------------------------------------------
+
+export async function getMaxShelfIndex(prefix: string): Promise<number | null> {
+  const row = await queryOne<{ MaxIndex: string | null }>(
+    `SELECT MAX(CAST(SUBSTRING("BoxID", LENGTH($1) + 1) AS INTEGER)) AS "MaxIndex"
+     FROM boxes WHERE "BoxID" LIKE $2`,
+    [prefix, `${prefix}%`]
+  );
+  return row?.MaxIndex != null ? Number(row.MaxIndex) : null;
 }
 
-export const listBoxes: ListBoxesHelper = {
-  all: () => listBoxesStatement.all(),
-  byType: (type: string) => {
-    const normalized = (type ?? '').toString().trim().toUpperCase();
-    if (!normalized) {
-      console.warn('[db:listBoxes] Refusing to filter boxes by empty type');
-      return [];
-    }
-    if (!/^[A-Z0-9]$/.test(normalized)) {
-      console.warn('[db:listBoxes] Invalid box type filter provided', { type });
-      return [];
-    }
-
-    try {
-      return listBoxesByTypeStatement.all({ type: normalized });
-    } catch (err) {
-      console.error('[db:listBoxes] Failed to list boxes by type', { type: normalized, err });
-      return [];
-    }
-  }
-};
-export const getAdjacentItemIds = getAdjacentItemIdsStatement;
-
-const upsertAgenticRequestLogStatement = db.prepare(
-  `
-    INSERT INTO agentic_request_logs (
-      UUID, Search, Status, Error, CreatedAt, UpdatedAt, NotifiedAt, LastNotificationError, PayloadJson
-    )
-    VALUES (
-      @UUID,
-      @Search,
-      @Status,
-      @Error,
-      COALESCE(@CreatedAt, datetime('now')),
-      COALESCE(@UpdatedAt, datetime('now')),
-      @NotifiedAt,
-      @LastNotificationError,
-      @PayloadJson
-    )
-    ON CONFLICT(UUID) DO UPDATE SET
-      Search=COALESCE(excluded.Search, agentic_request_logs.Search),
-      Status=COALESCE(excluded.Status, agentic_request_logs.Status),
-      Error=CASE WHEN @ErrorIsSet THEN excluded.Error ELSE agentic_request_logs.Error END,
-      UpdatedAt=COALESCE(excluded.UpdatedAt, agentic_request_logs.UpdatedAt),
-      NotifiedAt=COALESCE(excluded.NotifiedAt, agentic_request_logs.NotifiedAt),
-      LastNotificationError=CASE
-        WHEN @LastNotificationErrorIsSet THEN excluded.LastNotificationError
-        ELSE agentic_request_logs.LastNotificationError
-      END,
-      PayloadJson=COALESCE(excluded.PayloadJson, agentic_request_logs.PayloadJson)
-  `
-);
-
-const startAgenticRequestLogStatement = db.prepare(
-  `
-    INSERT INTO agentic_request_logs (UUID, Search, Status, Error, CreatedAt, UpdatedAt, LastNotificationError)
-    VALUES (@UUID, @Search, @Status, NULL, @Now, @Now, NULL)
-    ON CONFLICT(UUID) DO UPDATE SET
-      Search=excluded.Search,
-      Status=excluded.Status,
-      Error=NULL,
-      UpdatedAt=excluded.UpdatedAt,
-      LastNotificationError=NULL,
-      NotifiedAt=NULL,
-      PayloadJson=NULL
-  `
-);
-
-const completeAgenticRequestLogStatement = db.prepare(
-  `
-    UPDATE agentic_request_logs
-       SET Status = @Status,
-           Error = @Error,
-           UpdatedAt = @Now
-     WHERE UUID = @UUID
-  `
-);
-
-const saveAgenticRequestPayloadStatement = db.prepare(
-  `
-    UPDATE agentic_request_logs
-       SET PayloadJson = @PayloadJson,
-           UpdatedAt = @Now
-     WHERE UUID = @UUID
-  `
-);
-
-const markAgenticRequestNotificationSuccessStatement = db.prepare(
-  `
-    UPDATE agentic_request_logs
-       SET NotifiedAt = @NotifiedAt,
-           LastNotificationError = NULL,
-           UpdatedAt = @UpdatedAt
-     WHERE UUID = @UUID
-  `
-);
-
-const markAgenticRequestNotificationFailureStatement = db.prepare(
-  `
-    UPDATE agentic_request_logs
-       SET LastNotificationError = @Error,
-           UpdatedAt = @UpdatedAt
-     WHERE UUID = @UUID
-  `
-);
-
-const selectPendingAgenticRequestNotificationsStatement = db.prepare(
-  `
-    SELECT UUID, PayloadJson
-      FROM agentic_request_logs
-     WHERE Status = 'SUCCESS'
-       AND NotifiedAt IS NULL
-       AND PayloadJson IS NOT NULL
-     ORDER BY UpdatedAt ASC
-     LIMIT @Limit
-  `
-);
-
-const getAgenticRequestLogStatement = db.prepare(
-  `
-    SELECT UUID, Search, Status, Error, CreatedAt, UpdatedAt, NotifiedAt, LastNotificationError, PayloadJson
-      FROM agentic_request_logs
-     WHERE UUID = ?
-  `
-);
-
-type AgenticRequestNotificationRow = {
-  UUID: string;
-  PayloadJson: string | null;
-};
-
-function resolveAgenticRequestPayload(json: string | null, uuid: string): unknown {
-  if (json === null) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(json);
-  } catch (err) {
-    console.error('[db] Failed to parse agentic request payload_json', { uuid, error: err });
-    return null;
-  }
+export async function getMaxBoxId(): Promise<string | null> {
+  const row = await queryOne<{ BoxID: string }>(
+    `SELECT "BoxID" FROM boxes
+     WHERE "BoxID" SIMILAR TO 'B-[0-9A-Za-z]{6}-[0-9A-Za-z]{4}'
+     ORDER BY CAST(SUBSTRING("BoxID", 10) AS INTEGER) DESC
+     LIMIT 1`
+  );
+  return row?.BoxID ?? null;
 }
 
-export function upsertAgenticRequestLog(log: AgenticRequestLogUpsert): void {
-  const uuid = typeof log.UUID === 'string' ? log.UUID.trim() : '';
-  if (!uuid) {
-    console.warn('[db] Skipping agentic request log upsert due to missing UUID');
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const createdAt = toIsoString(log.CreatedAt) ?? log.CreatedAt ?? now;
-  const updatedAt = toIsoString(log.UpdatedAt) ?? log.UpdatedAt ?? now;
-  const notifiedAt = toIsoString(log.NotifiedAt) ?? null;
-  const errorIsSet = Object.prototype.hasOwnProperty.call(log, 'Error');
-  const lastNotificationErrorIsSet = Object.prototype.hasOwnProperty.call(log, 'LastNotificationError');
-
-  const payload = {
-    UUID: uuid,
-    Search: asNullableTrimmedString(log.Search),
-    Status: asNullableTrimmedString(log.Status),
-    Error: errorIsSet ? asNullableString(log.Error) : null,
-    CreatedAt: createdAt,
-    UpdatedAt: updatedAt,
-    NotifiedAt: notifiedAt,
-    LastNotificationError: lastNotificationErrorIsSet ? asNullableString(log.LastNotificationError) : null,
-    PayloadJson: log.PayloadJson ?? null,
-    ErrorIsSet: errorIsSet ? 1 : 0,
-    LastNotificationErrorIsSet: lastNotificationErrorIsSet ? 1 : 0
-  };
-
-  try {
-    upsertAgenticRequestLogStatement.run(payload);
-  } catch (err) {
-    console.error('[db] Failed to upsert agentic_request_logs row', { uuid, error: err });
-    throw err;
-  }
+export async function getMaxItemId(pattern: string, sequenceStartIndex: number): Promise<string | null> {
+  const row = await queryOne<{ ItemUUID: string }>(
+    `SELECT "ItemUUID" FROM items
+     WHERE "ItemUUID" LIKE $1
+     ORDER BY CAST(SUBSTRING("ItemUUID", $2, 4) AS INTEGER) DESC
+     LIMIT 1`,
+    [pattern, sequenceStartIndex]
+  );
+  return row?.ItemUUID ?? null;
 }
 
-export function logAgenticRequestStart(uuid: string, search: string | null): void {
-  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
-  if (!trimmedUuid) {
-    console.warn('[db] Cannot persist agentic request start without UUID');
-    return;
-  }
-
-  const now = new Date().toISOString();
-  try {
-    startAgenticRequestLogStatement.run({
-      UUID: trimmedUuid,
-      Search: asNullableTrimmedString(search),
-      Status: 'RUNNING',
-      Now: now
-    });
-  } catch (err) {
-    console.error('[db] Failed to persist agentic request start', { uuid: trimmedUuid, error: err });
-    throw err;
-  }
+export async function getMaxArtikelNummer(): Promise<string | null> {
+  const row = await queryOne<{ Artikel_Nummer: string }>(
+    `SELECT "Artikel_Nummer" FROM item_refs
+     WHERE "Artikel_Nummer" IS NOT NULL AND "Artikel_Nummer" != ''
+     ORDER BY CAST("Artikel_Nummer" AS INTEGER) DESC
+     LIMIT 1`
+  );
+  return row?.Artikel_Nummer ?? null;
 }
 
-export function logAgenticRequestEnd(uuid: string, status: string, error: string | null): void {
-  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
-  if (!trimmedUuid) {
-    console.warn('[db] Cannot persist agentic request completion without UUID');
-    return;
-  }
-
-  const now = new Date().toISOString();
-  try {
-    const result = completeAgenticRequestLogStatement.run({
-      UUID: trimmedUuid,
-      Status: asNullableTrimmedString(status),
-      Error: asNullableString(error),
-      Now: now
-    });
-
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic request completion updated zero rows; inserting fallback entry', { uuid: trimmedUuid });
-      upsertAgenticRequestLog({
-        UUID: trimmedUuid,
-        Status: status,
-        Error: error,
-        UpdatedAt: now
-      });
-    }
-  } catch (err) {
-    console.error('[db] Failed to persist agentic request completion', { uuid: trimmedUuid, error: err });
-    throw err;
-  }
-}
-
-export function saveAgenticRequestPayload(uuid: string, payload: unknown): void {
-  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
-  if (!trimmedUuid) {
-    console.warn('[db] Cannot persist agentic request payload without UUID');
-    return;
-  }
-
-  let payloadJson: string | null = null;
-  try {
-    payloadJson = JSON.stringify(payload ?? null);
-  } catch (err) {
-    console.error('[db] Failed to serialize agentic request payload', { uuid: trimmedUuid, error: err });
-  }
-
-  const now = new Date().toISOString();
-  try {
-    const result = saveAgenticRequestPayloadStatement.run({
-      UUID: trimmedUuid,
-      PayloadJson: payloadJson,
-      Now: now
-    });
-
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic request payload update affected zero rows; inserting fallback entry', {
-        uuid: trimmedUuid
-      });
-      upsertAgenticRequestLog({
-        UUID: trimmedUuid,
-        PayloadJson: payloadJson,
-        UpdatedAt: now
-      });
-    }
-  } catch (err) {
-    console.error('[db] Failed to persist agentic request payload', { uuid: trimmedUuid, error: err });
-    throw err;
-  }
-}
-
-export function markAgenticRequestNotificationSuccess(uuid: string, completedAtIso: string | null = null): void {
-  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
-  if (!trimmedUuid) {
-    console.warn('[db] Cannot mark agentic request notification success without UUID');
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const notifiedAt = toIsoString(completedAtIso) ?? now;
-  try {
-    const result = markAgenticRequestNotificationSuccessStatement.run({
-      UUID: trimmedUuid,
-      NotifiedAt: notifiedAt,
-      UpdatedAt: now
-    });
-
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic notification success update affected zero rows; inserting fallback entry', {
-        uuid: trimmedUuid
-      });
-      upsertAgenticRequestLog({
-        UUID: trimmedUuid,
-        NotifiedAt: notifiedAt,
-        LastNotificationError: null,
-        UpdatedAt: now
-      });
-    }
-  } catch (err) {
-    console.error('[db] Failed to mark agentic notification success', { uuid: trimmedUuid, error: err });
-    throw err;
-  }
-}
-
-export function markAgenticRequestNotificationFailure(uuid: string, errorMessage: string): void {
-  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
-  if (!trimmedUuid) {
-    console.warn('[db] Cannot mark agentic request notification failure without UUID');
-    return;
-  }
-
-  const now = new Date().toISOString();
-  try {
-    const result = markAgenticRequestNotificationFailureStatement.run({
-      UUID: trimmedUuid,
-      Error: asNullableString(errorMessage),
-      UpdatedAt: now
-    });
-
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic notification failure update affected zero rows; inserting fallback entry', {
-        uuid: trimmedUuid
-      });
-      upsertAgenticRequestLog({
-        UUID: trimmedUuid,
-        LastNotificationError: errorMessage,
-        UpdatedAt: now
-      });
-    }
-  } catch (err) {
-    console.error('[db] Failed to mark agentic notification failure', { uuid: trimmedUuid, error: err });
-    throw err;
-  }
-}
-
-export function listPendingAgenticRequestNotifications(limit = 10): AgenticRequestNotification[] {
-  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 10;
-
-  let rows: AgenticRequestNotificationRow[] = [];
-  try {
-    rows = selectPendingAgenticRequestNotificationsStatement.all({ Limit: effectiveLimit }) as AgenticRequestNotificationRow[];
-  } catch (err) {
-    console.error('[db] Failed to query pending agentic request notifications', { limit: effectiveLimit, error: err });
-    throw err;
-  }
-
-  const notifications: AgenticRequestNotification[] = [];
-  for (const row of rows) {
-    const payload = resolveAgenticRequestPayload(row.PayloadJson, row.UUID);
-    if (payload !== null) {
-      notifications.push({ UUID: row.UUID, Payload: payload });
-    }
-  }
-
-  return notifications;
-}
-
-export function getAgenticRequestLog(uuid: string): AgenticRequestLog | null {
-  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
-  if (!trimmedUuid) {
-    return null;
-  }
-
-  try {
-    const row = getAgenticRequestLogStatement.get(trimmedUuid) as AgenticRequestLog | undefined;
-    return row ?? null;
-  } catch (err) {
-    console.error('[db] Failed to load agentic_request_logs row', { uuid: trimmedUuid, error: err });
-    throw err;
-  }
-}
-
-const hasItemReferenceByArtikelNummerStatement = db.prepare(`
-  SELECT 1 AS ExistsFlag
-  FROM item_refs
-  WHERE Artikel_Nummer = ?
-  LIMIT 1
-`);
-
-export function hasItemReferenceByArtikelNummer(artikelNummer: string): boolean {
+export async function hasItemReferenceByArtikelNummer(artikelNummer: string): Promise<boolean> {
   const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
-  if (!normalizedArtikelNummer) {
-    return false;
-  }
-
+  if (!normalizedArtikelNummer) return false;
   try {
-    const row = hasItemReferenceByArtikelNummerStatement.get(normalizedArtikelNummer) as
-      | { ExistsFlag?: number }
-      | undefined;
+    const row = await queryOne<{ ExistsFlag: number }>(
+      `SELECT 1 AS "ExistsFlag" FROM item_refs WHERE "Artikel_Nummer"=$1 LIMIT 1`,
+      [normalizedArtikelNummer]
+    );
     return Boolean(row?.ExistsFlag);
   } catch (err) {
-    console.error('[db] Failed to check item_refs parent for Artikel_Nummer', {
-      artikelNummer: normalizedArtikelNummer,
-      error: err,
-    });
+    console.error('[db] Failed to check item_refs parent for Artikel_Nummer', { artikelNummer: normalizedArtikelNummer, error: err });
     throw err;
   }
 }
 
-export const upsertAgenticRun = db.prepare(
-  `
-    INSERT INTO agentic_runs (
-      Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy, LastReviewDecision, LastReviewNotes
-    )
-    VALUES (
-      @Artikel_Nummer, @SearchQuery, @LastSearchLinksJson, @Status, @LastModified, @ReviewState, @ReviewedBy, @LastReviewDecision, @LastReviewNotes
-    )
-    ON CONFLICT(Artikel_Nummer) DO UPDATE SET
-      SearchQuery=COALESCE(excluded.SearchQuery, agentic_runs.SearchQuery),
-      LastSearchLinksJson=COALESCE(excluded.LastSearchLinksJson, agentic_runs.LastSearchLinksJson),
-      Status=excluded.Status,
-      LastModified=excluded.LastModified,
-      ReviewState=excluded.ReviewState,
-      ReviewedBy=excluded.ReviewedBy,
-      LastReviewDecision=COALESCE(excluded.LastReviewDecision, agentic_runs.LastReviewDecision),
-      LastReviewNotes=COALESCE(excluded.LastReviewNotes, agentic_runs.LastReviewNotes),
-      RetryCount=CASE WHEN excluded.Status = 'queued' THEN 0 ELSE agentic_runs.RetryCount END,
-      NextRetryAt=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.NextRetryAt END,
-      LastError=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.LastError END,
-      LastAttemptAt=CASE WHEN excluded.Status = 'queued' THEN NULL ELSE agentic_runs.LastAttemptAt END
-  `
-);
-export const getAgenticRun = db.prepare(`
-  SELECT Id, Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy,
-         LastReviewDecision, LastReviewNotes,
-         RetryCount, NextRetryAt, LastError, LastAttemptAt
-  FROM agentic_runs
-  WHERE Artikel_Nummer = ?
-`);
-// TODO(agentic-retries): Align status update flags with queue helper defaults when additional
-// retry metadata fields are introduced.
-export const updateAgenticRunStatus = db.prepare(
-  `
-    UPDATE agentic_runs
-       SET Status=@Status,
-           SearchQuery=COALESCE(@SearchQuery, SearchQuery),
-           LastSearchLinksJson=CASE WHEN @LastSearchLinksJsonIsSet THEN @LastSearchLinksJson ELSE LastSearchLinksJson END,
-           LastModified=@LastModified,
-           ReviewState=@ReviewState,
-           ReviewedBy=CASE WHEN @ReviewedByIsSet THEN @ReviewedBy ELSE ReviewedBy END,
-           LastReviewDecision=CASE
-             WHEN @LastReviewDecisionIsSet THEN COALESCE(@LastReviewDecision, LastReviewDecision)
-             ELSE LastReviewDecision
-           END,
-           LastReviewNotes=CASE
-             WHEN @LastReviewNotesIsSet THEN COALESCE(@LastReviewNotes, LastReviewNotes)
-             ELSE LastReviewNotes
-           END,
-           RetryCount=CASE WHEN @RetryCountIsSet THEN @RetryCount ELSE RetryCount END,
-           NextRetryAt=CASE WHEN @NextRetryAtIsSet THEN @NextRetryAt ELSE NextRetryAt END,
-           LastError=CASE WHEN @LastErrorIsSet THEN @LastError ELSE LastError END,
-           LastAttemptAt=CASE WHEN @LastAttemptAtIsSet THEN @LastAttemptAt ELSE LastAttemptAt END
-     WHERE Artikel_Nummer=@Artikel_Nummer
-  `
-);
+// ---------------------------------------------------------------------------
+// Label queue
+// ---------------------------------------------------------------------------
 
-
-export const insertAgenticRunReviewHistoryEntry = db.prepare(
-  `
-    INSERT INTO agentic_run_review_history (
-      Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewMetadata, ReviewedBy, RecordedAt
-    )
-    VALUES (
-      @Artikel_Nummer, @Status, @ReviewState, @ReviewDecision, @ReviewNotes, @ReviewMetadata, @ReviewedBy, @RecordedAt
-    )
-  `
-);
-
-const selectAgenticRunReviewHistoryByArtikelNummer = db.prepare(
-  `
-    SELECT Id, Artikel_Nummer, Status, ReviewState, ReviewDecision, ReviewNotes, ReviewMetadata, ReviewedBy, RecordedAt
-      FROM agentic_run_review_history
-     WHERE Artikel_Nummer = @Artikel_Nummer
-     ORDER BY datetime(RecordedAt) ASC, Id ASC
-  `
-);
-
-
-const selectRecentAgenticRunReviewHistoryBySubcategory = db.prepare(
-  `
-    SELECT h.Id, h.Artikel_Nummer, h.Status, h.ReviewState, h.ReviewDecision, h.ReviewNotes, h.ReviewMetadata, h.ReviewedBy, h.RecordedAt
-      FROM agentic_run_review_history h
-      JOIN item_refs r ON r.Artikel_Nummer = h.Artikel_Nummer
-     WHERE CAST(r.Unterkategorien_A AS INTEGER) = @Subcategory
-       AND (
-         LOWER(COALESCE(h.ReviewState, '')) IN ('approved', 'rejected')
-         OR COALESCE(TRIM(h.ReviewDecision), '') <> ''
-       )
-     ORDER BY datetime(h.RecordedAt) DESC, h.Id DESC
-     LIMIT @Limit
-  `
-);
-
-export function listAgenticRunReviewHistory(artikelNummer: string): AgenticRunReviewHistoryEntry[] {
-  const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
-  if (!normalizedArtikelNummer) {
-    return [];
-  }
-
-  try {
-    return selectAgenticRunReviewHistoryByArtikelNummer.all({
-      Artikel_Nummer: normalizedArtikelNummer
-    }) as AgenticRunReviewHistoryEntry[];
-  } catch (err) {
-    console.error('[db] Failed to list agentic run review history', {
-      artikelNummer: normalizedArtikelNummer,
-      error: err
-    });
-    throw err;
-  }
+export async function queueLabel(itemUUID: string): Promise<void> {
+  await execute(
+    `INSERT INTO label_queue ("ItemUUID","CreatedAt") VALUES ($1,$2)`,
+    [itemUUID, new Date().toISOString()]
+  );
 }
 
-
-export function listRecentAgenticRunReviewHistoryBySubcategory(
-  subcategory: number,
-  limit = 10
-): AgenticRunReviewHistoryEntry[] {
-  const normalizedSubcategory = Number.isInteger(subcategory) ? subcategory : Number.parseInt(String(subcategory), 10);
-  const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
-  if (!Number.isInteger(normalizedSubcategory) || normalizedSubcategory <= 0) {
-    return [];
-  }
-
-  try {
-    return selectRecentAgenticRunReviewHistoryBySubcategory.all({
-      Subcategory: normalizedSubcategory,
-      Limit: normalizedLimit
-    }) as AgenticRunReviewHistoryEntry[];
-  } catch (err) {
-    console.error('[db] Failed to list recent agentic run review history by subcategory', {
-      subcategory: normalizedSubcategory,
-      limit: normalizedLimit,
-      error: err
-    });
-    throw err;
-  }
+export async function nextLabelJob(): Promise<LabelJob | null> {
+  return queryOne<LabelJob>(`SELECT * FROM label_queue WHERE "Status"='Queued' ORDER BY "Id" LIMIT 1`);
 }
 
-export function persistAgenticRunError(params: {
-  artikelNummer: string;
-  error: string | null;
-  attemptAt?: string | null;
-}): void {
-  const artikelNummer = typeof params.artikelNummer === 'string' ? params.artikelNummer.trim() : '';
-  if (!artikelNummer) {
-    console.warn('[db] Skipping agentic run error persistence for empty Artikel_Nummer');
-    return;
-  }
-
-  const normalizedError =
-    typeof params.error === 'string' && params.error.trim()
-      ? params.error.trim().slice(0, 500)
-      : params.error === null
-        ? null
-        : String(params.error).slice(0, 500);
-  const attemptAt = params.attemptAt ?? new Date().toISOString();
-
-  try {
-    const result = updateAgenticRunErrorStatement.run({
-      Artikel_Nummer: artikelNummer,
-      LastError: normalizedError,
-      LastAttemptAt: attemptAt,
-      LastModified: attemptAt
-    });
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic run error persistence affected zero rows', { artikelNummer });
-    }
-  } catch (err) {
-    console.error('[db] Failed to persist agentic run error', { artikelNummer, error: err });
-    throw err;
-  }
+export async function updateLabelJobStatus(id: number, status: string, error: string | null): Promise<void> {
+  await execute(`UPDATE label_queue SET "Status"=$2,"Error"=$3 WHERE "Id"=$1`, [id, status, error]);
 }
 
-// TODO(agentic-observability): Capture structured failure codes once agentic retry policies solidify.
-const updateAgenticRunErrorStatement = db.prepare(
-  `
-    UPDATE agentic_runs
-       SET LastError = @LastError,
-           LastAttemptAt = COALESCE(@LastAttemptAt, LastAttemptAt),
-           LastModified = COALESCE(@LastModified, LastModified)
-     WHERE Artikel_Nummer = @Artikel_Nummer
-  `
-);
-
-const selectQueuedAgenticRuns = db.prepare(`
-  SELECT Id, Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy,
-         LastReviewDecision, LastReviewNotes,
-         RetryCount, NextRetryAt, LastError, LastAttemptAt
-  FROM agentic_runs
-  WHERE Status = 'queued'
-    AND (NextRetryAt IS NULL OR datetime(NextRetryAt) <= datetime('now'))
-  ORDER BY datetime(LastModified) ASC, Id ASC
-  LIMIT @limit
-`);
-
-const updateQueuedAgenticRunQueueStatement = db.prepare(`
-  UPDATE agentic_runs
-     SET Status = COALESCE(@Status, Status),
-         LastModified = @LastModified,
-         RetryCount = @RetryCount,
-         NextRetryAt = @NextRetryAt,
-         LastError = @LastError,
-         LastAttemptAt = @LastAttemptAt
-   WHERE Artikel_Nummer = @Artikel_Nummer
-`);
-
-export type AgenticRunQueueUpdate = {
-  Artikel_Nummer: string;
-  Status?: string | null;
-  LastModified: string;
-  RetryCount: number;
-  NextRetryAt: string | null;
-  LastError: string | null;
-  LastAttemptAt: string;
-};
-
-export function fetchQueuedAgenticRuns(limit = 5): AgenticRun[] {
-  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
-  try {
-    return selectQueuedAgenticRuns.all({ limit: effectiveLimit }) as AgenticRun[];
-  } catch (err) {
-    console.error('[db] Failed to fetch queued agentic runs', err);
-    throw err;
-  }
-}
-
-export function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate): void {
-  const payload = {
-    ...update,
-    Status: update.Status ?? null,
-    NextRetryAt: update.NextRetryAt ?? null,
-    LastError: update.LastError ?? null
-  };
-
-  try {
-    const result = updateQueuedAgenticRunQueueStatement.run(payload);
-    if ((result?.changes ?? 0) === 0) {
-      console.warn('[db] Agentic run queue update had no effect', { artikelNummer: update.Artikel_Nummer });
-    }
-  } catch (err) {
-    console.error('[db] Failed to update queued agentic run state', { artikelNummer: update.Artikel_Nummer, error: err });
-    throw err;
-  }
-}
-
-
-export const nextLabelJob = db.prepare(`SELECT * FROM label_queue WHERE Status = 'Queued' ORDER BY Id LIMIT 1`);
-export const updateLabelJobStatus = db.prepare(`UPDATE label_queue SET Status = ?, Error = ? WHERE Id = ?`);
-
-const insertShopwareSyncJob = db.prepare(`
-  INSERT INTO shopware_sync_queue (
-    CorrelationId,
-    JobType,
-    Payload,
-    Status,
-    RetryCount,
-    LastError,
-    LastAttemptAt,
-    NextAttemptAt,
-    CreatedAt,
-    UpdatedAt
-  )
-  VALUES (
-    @CorrelationId,
-    @JobType,
-    @Payload,
-    @Status,
-    @RetryCount,
-    @LastError,
-    @LastAttemptAt,
-    @NextAttemptAt,
-    datetime('now'),
-    datetime('now')
-  )
-`);
-
-const getShopwareSyncJobByIdStatement = db.prepare(`SELECT * FROM shopware_sync_queue WHERE Id = ?`);
-
-const clearShopwareSyncQueueStatement = db.prepare(`DELETE FROM shopware_sync_queue`);
-const listShopwareSyncQueueStatement = db.prepare(`SELECT * FROM shopware_sync_queue ORDER BY Id`);
-
-export function clearShopwareSyncQueue(): void {
-  try {
-    clearShopwareSyncQueueStatement.run();
-  } catch (err) {
-    console.error('[db] Failed to clear Shopware sync queue', err);
-    throw err;
-  }
-}
-
-export function listShopwareSyncQueue(): ShopwareSyncQueueEntry[] {
-  try {
-    return listShopwareSyncQueueStatement.all() as ShopwareSyncQueueEntry[];
-  } catch (err) {
-    console.error('[db] Failed to list Shopware sync queue entries', err);
-    throw err;
-  }
-}
-
-export function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): ShopwareSyncQueueEntry {
-  const entry = {
-    CorrelationId: job.CorrelationId,
-    JobType: job.JobType,
-    Payload: job.Payload,
-    Status: job.Status ?? 'queued',
-    RetryCount: job.RetryCount ?? 0,
-    LastError: job.LastError ?? null,
-    LastAttemptAt: job.LastAttemptAt ?? null,
-    NextAttemptAt: job.NextAttemptAt ?? null
-  };
-
-  try {
-    const result = insertShopwareSyncJob.run(entry);
-    const inserted = getShopwareSyncJobByIdStatement.get(result.lastInsertRowid) as ShopwareSyncQueueEntry | undefined;
-    if (!inserted) {
-      throw new Error('Failed to fetch inserted Shopware sync job');
-    }
-    return inserted;
-  } catch (err) {
-    console.error('[db] Failed to enqueue Shopware sync job', {
-      correlationId: job.CorrelationId,
-      jobType: job.JobType,
-      error: err
-    });
-    throw err;
-  }
-}
-
-const selectDueShopwareSyncJobs = db.prepare(`
-  SELECT *
-  FROM shopware_sync_queue
-  WHERE Status = 'queued'
-    AND (NextAttemptAt IS NULL OR NextAttemptAt <= @Now)
-  ORDER BY CreatedAt ASC, Id ASC
-  LIMIT @Limit
-`);
-
-const markShopwareSyncJobProcessing = db.prepare(`
-  UPDATE shopware_sync_queue
-  SET Status = 'processing',
-      LastAttemptAt = @LastAttemptAt,
-      UpdatedAt = @LastAttemptAt
-  WHERE Id = @Id
-    AND Status = 'queued'
-`);
-
-export function claimShopwareSyncJobs(limit: number, attemptIso: string): ShopwareSyncQueueEntry[] {
-  const candidates = selectDueShopwareSyncJobs.all({ Now: attemptIso, Limit: limit }) as ShopwareSyncQueueEntry[];
-  if (!candidates.length) {
-    return [];
-  }
-
-  const claimed: ShopwareSyncQueueEntry[] = [];
-  const claimTxn = db.transaction((jobs: ShopwareSyncQueueEntry[]) => {
-    for (const job of jobs) {
-      try {
-        const result = markShopwareSyncJobProcessing.run({ Id: job.Id, LastAttemptAt: attemptIso });
-        if (result.changes > 0) {
-          claimed.push({
-            ...job,
-            Status: 'processing',
-            LastAttemptAt: attemptIso,
-            UpdatedAt: attemptIso
-          });
-        }
-      } catch (err) {
-        console.error('[db] Failed to mark Shopware sync job as processing', {
-          jobId: job.Id,
-          error: err
-        });
-        throw err;
-      }
-    }
-  });
-
-  try {
-    claimTxn(candidates);
-  } catch (err) {
-    console.error('[db] Failed to claim Shopware sync jobs', err);
-    throw err;
-  }
-
-  return claimed;
-}
-
-const markShopwareSyncJobSucceededStatement = db.prepare(`
-  UPDATE shopware_sync_queue
-  SET Status = 'succeeded',
-      RetryCount = 0,
-      LastError = NULL,
-      NextAttemptAt = NULL,
-      UpdatedAt = @UpdatedAt
-  WHERE Id = @Id
-`);
-
-export function markShopwareSyncJobSucceeded(id: number, completedAtIso: string): void {
-  try {
-    markShopwareSyncJobSucceededStatement.run({ Id: id, UpdatedAt: completedAtIso });
-  } catch (err) {
-    console.error('[db] Failed to mark Shopware sync job succeeded', { jobId: id, error: err });
-    throw err;
-  }
-}
-
-const rescheduleShopwareSyncJobStatement = db.prepare(`
-  UPDATE shopware_sync_queue
-  SET Status = 'queued',
-      RetryCount = @RetryCount,
-      LastError = @LastError,
-      NextAttemptAt = @NextAttemptAt,
-      UpdatedAt = @UpdatedAt
-  WHERE Id = @Id
-`);
-
-export function rescheduleShopwareSyncJob(params: {
-  id: number;
-  retryCount: number;
-  error: string | null;
-  nextAttemptAt: string;
-  updatedAt: string;
-}): void {
-  try {
-    rescheduleShopwareSyncJobStatement.run({
-      Id: params.id,
-      RetryCount: params.retryCount,
-      LastError: params.error,
-      NextAttemptAt: params.nextAttemptAt,
-      UpdatedAt: params.updatedAt
-    });
-  } catch (err) {
-    console.error('[db] Failed to reschedule Shopware sync job', { jobId: params.id, error: err });
-    throw err;
-  }
-}
-
-const markShopwareSyncJobFailedStatement = db.prepare(`
-  UPDATE shopware_sync_queue
-  SET Status = 'failed',
-      LastError = @LastError,
-      NextAttemptAt = NULL,
-      UpdatedAt = @UpdatedAt
-  WHERE Id = @Id
-`);
-
-export function markShopwareSyncJobFailed(params: { id: number; error: string | null; updatedAt: string }): void {
-  try {
-    markShopwareSyncJobFailedStatement.run({
-      Id: params.id,
-      LastError: params.error,
-      UpdatedAt: params.updatedAt
-    });
-  } catch (err) {
-    console.error('[db] Failed to mark Shopware sync job failed', { jobId: params.id, error: err });
-    throw err;
-  }
-}
-
-export function getShopwareSyncJobById(id: number): ShopwareSyncQueueEntry | undefined {
-  try {
-    return getShopwareSyncJobByIdStatement.get(id) as ShopwareSyncQueueEntry | undefined;
-  } catch (err) {
-    console.error('[db] Failed to load Shopware sync job by id', { jobId: id, error: err });
-    throw err;
-  }
-}
-
-type ItemMutationSnapshot = {
-  ItemUUID: string;
-  BoxID: string | null;
-  Location: string | null;
-  Auf_Lager: number | null;
-};
-
-const getItemMutationSnapshot = db.prepare(
-  `SELECT ItemUUID, BoxID, Location, Auf_Lager FROM items WHERE ItemUUID = ?`
-);
-
-const updateItemBoxPlacement = db.prepare(
-  `UPDATE items
-   SET BoxID = @BoxID,
-       Location = @Location,
-       UpdatedAt = datetime('now')
-   WHERE ItemUUID = @ItemUUID`
-);
-export const decrementItemStock = db.prepare(
-  `UPDATE items
-   SET Auf_Lager = Auf_Lager - 1,
-       BoxID = CASE WHEN Auf_Lager - 1 <= 0 THEN NULL ELSE BoxID END,
-       Location = CASE WHEN Auf_Lager - 1 <= 0 THEN NULL ELSE Location END,
-       UpdatedAt = datetime('now')
-   WHERE ItemUUID = ? AND Auf_Lager > 0`
-);
-export const incrementItemStock = db.prepare(
-  `UPDATE items
-   SET Auf_Lager = Auf_Lager + 1,
-       UpdatedAt = datetime('now')
-   WHERE ItemUUID = ?`
-);
-export const zeroItemStock = db.prepare(
-  `UPDATE items
-   SET Auf_Lager = 0,
-       BoxID = NULL,
-       Location = NULL,
-       UpdatedAt = datetime('now')
-   WHERE ItemUUID = ?`
-);
-export const deleteItem = db.prepare(`DELETE FROM items WHERE ItemUUID = ?`);
-export const deleteBox = db.prepare(`DELETE FROM boxes WHERE BoxID = ?`);
-// COALESCE preserves existing column values when a null is passed (meaning "do not change")
-const updateItemRefShopFieldsStatement = db.prepare(`
-  UPDATE item_refs
-     SET Verkaufspreis = COALESCE(@Verkaufspreis, Verkaufspreis),
-         Shopartikel = COALESCE(@Shopartikel, Shopartikel),
-         Veröffentlicht_Status = COALESCE(@Veröffentlicht_Status, Veröffentlicht_Status)
-   WHERE Artikel_Nummer = @Artikel_Nummer
-`);
-const insertEventStatement = db.prepare(`
-  INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
-  VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
-`);
-const insertEventImportStatement = db.prepare(`
-  INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
-  VALUES (@CreatedAt, @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
-`);
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
 
 export type LogEventPayload = {
   Actor?: string | null;
@@ -2790,797 +1445,773 @@ export type EventLogInsertPayload = {
   Meta?: string | null;
 };
 
-export function logEvent(payload: LogEventPayload): void {
+export async function logEvent(payload: LogEventPayload): Promise<void> {
   const resolvedLevel = resolveEventLogLevel(payload.Event);
-  const entry = {
-    Actor: payload.Actor ?? null,
-    EntityType: payload.EntityType,
-    EntityId: payload.EntityId,
-    Event: payload.Event,
-    Level: resolvedLevel,
-    Meta: payload.Meta ?? null
-  };
-
   try {
-    insertEventStatement.run(entry);
+    await execute(
+      `INSERT INTO events ("CreatedAt","Actor","EntityType","EntityId","Event","Level","Meta")
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [new Date().toISOString(), payload.Actor ?? null, payload.EntityType, payload.EntityId, payload.Event, resolvedLevel, payload.Meta ?? null]
+    );
   } catch (err) {
-    console.warn('[db] Failed to persist event log entry', {
-      entityType: entry.EntityType,
-      entityId: entry.EntityId,
-      event: entry.Event,
-      level: entry.Level,
-      error: err
-    });
+    console.warn('[db] Failed to persist event log entry', { entityType: payload.EntityType, entityId: payload.EntityId, event: payload.Event, error: err });
   }
 }
 
-export function insertEventLogEntry(payload: EventLogInsertPayload): boolean {
-  const entry = {
-    CreatedAt: payload.CreatedAt,
-    Actor: payload.Actor ?? null,
-    EntityType: payload.EntityType,
-    EntityId: payload.EntityId,
-    Event: payload.Event,
-    Level: payload.Level,
-    Meta: payload.Meta ?? null
-  };
-
+export async function insertEventLogEntry(payload: EventLogInsertPayload): Promise<boolean> {
   try {
-    insertEventImportStatement.run(entry);
+    await execute(
+      `INSERT INTO events ("CreatedAt","Actor","EntityType","EntityId","Event","Level","Meta")
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [payload.CreatedAt, payload.Actor ?? null, payload.EntityType, payload.EntityId, payload.Event, payload.Level, payload.Meta ?? null]
+    );
     return true;
   } catch (err) {
-    console.error('[db] Failed to import event log entry', {
-      entityType: entry.EntityType,
-      entityId: entry.EntityId,
-      event: entry.Event,
-      level: entry.Level,
-      error: err
-    });
+    console.error('[db] Failed to import event log entry', { entityType: payload.EntityType, entityId: payload.EntityId, error: err });
     return false;
   }
 }
 
-export type BulkMoveResult = {
-  itemId: string;
-  fromBoxId: string | null;
-  toBoxId: string;
-  location: string | null;
-};
-
-export type BulkRemoveResult = {
-  itemId: string;
-  fromBoxId: string | null;
-  before: number;
-  after: number;
-  clearedBox: boolean;
-};
-
-export function bulkMoveItems(
-  itemIds: string[],
-  toBoxId: string,
-  actor: string,
-  location: string | null
-): BulkMoveResult[] {
-  if (!Array.isArray(itemIds) || itemIds.length === 0) {
-    return [];
-  }
-
-  const uniqueIds = Array.from(new Set(itemIds));
-  const normalizedLocation = location ?? null;
-
-  const runTxn = db.transaction((ids: string[]): BulkMoveResult[] => {
-    const results: BulkMoveResult[] = [];
-
-    for (const itemId of ids) {
-      const current = getItemMutationSnapshot.get(itemId) as ItemMutationSnapshot | undefined;
-      if (!current) {
-        console.warn('[db] bulkMoveItems missing item', { itemId });
-        throw new Error(`Item ${itemId} not found`);
-      }
-
-      updateItemBoxPlacement.run({ ItemUUID: itemId, BoxID: toBoxId, Location: normalizedLocation });
-      logEvent({
-        Actor: actor,
-        EntityType: 'Item',
-        EntityId: itemId,
-        Event: 'Moved',
-        Meta: JSON.stringify({ from: current.BoxID ?? null, to: toBoxId })
-      });
-
-      try {
-        const correlationId = generateShopwareCorrelationId('bulkMoveItems', itemId);
-        const payload = createShopwareQueuePayload(
-          {
-            actor,
-            fromBoxId: current.BoxID ?? null,
-            toBoxId,
-            location: normalizedLocation,
-            itemUUID: itemId,
-            trigger: 'bulk-move-items'
-          },
-          'bulkMoveItems'
-        );
-        enqueueShopwareSyncJob({
-          CorrelationId: correlationId,
-          JobType: 'item-move',
-          Payload: payload
-        });
-      } catch (error) {
-        console.error('[db] Failed to enqueue Shopware sync job for bulk move', { itemId, error });
-      }
-
-      results.push({
-        itemId,
-        fromBoxId: current.BoxID ?? null,
-        toBoxId,
-        location: normalizedLocation
-      });
-    }
-
-    return results;
-  });
-
-  try {
-    return runTxn(uniqueIds);
-  } catch (err) {
-    console.error('[db] bulkMoveItems transaction failed', err);
-    throw err;
-  }
-}
-
-export function bulkRemoveItemStock(itemIds: string[], actor: string): BulkRemoveResult[] {
-  if (!Array.isArray(itemIds) || itemIds.length === 0) {
-    return [];
-  }
-
-  const uniqueIds = Array.from(new Set(itemIds));
-
-  const runTxn = db.transaction((ids: string[]): BulkRemoveResult[] => {
-    const results: BulkRemoveResult[] = [];
-
-    for (const itemId of ids) {
-      const current = getItemMutationSnapshot.get(itemId) as ItemMutationSnapshot | undefined;
-      if (!current) {
-        console.warn('[db] bulkRemoveItemStock missing item', { itemId });
-        throw new Error(`Item ${itemId} not found`);
-      }
-
-      const beforeQty = typeof current.Auf_Lager === 'number' ? current.Auf_Lager : 0;
-      if (beforeQty <= 0) {
-        console.warn('[db] bulkRemoveItemStock insufficient stock', { itemId, beforeQty });
-        throw new Error(`Item ${itemId} has no stock`);
-      }
-
-      decrementItemStock.run(itemId);
-      const updated = getItemMutationSnapshot.get(itemId) as ItemMutationSnapshot | undefined;
-      const afterQty = typeof updated?.Auf_Lager === 'number' ? updated.Auf_Lager : 0;
-      const clearedBox = afterQty <= 0;
-
-      logEvent({
-        Actor: actor,
-        EntityType: 'Item',
-        EntityId: itemId,
-        Event: 'Removed',
-        Meta: JSON.stringify({
-          fromBox: current.BoxID ?? null,
-          before: beforeQty,
-          after: afterQty,
-          clearedBox
-        })
-      });
-
-      try {
-        const correlationId = generateShopwareCorrelationId('bulkRemoveItemStock', itemId);
-        const payload = createShopwareQueuePayload(
-          {
-            actor,
-            before: beforeQty,
-            after: afterQty,
-            clearedBox,
-            itemUUID: itemId,
-            trigger: 'bulk-delete-items'
-          },
-          'bulkRemoveItemStock'
-        );
-        enqueueShopwareSyncJob({
-          CorrelationId: correlationId,
-          JobType: 'stock-decrement',
-          Payload: payload
-        });
-      } catch (error) {
-        console.error('[db] Failed to enqueue Shopware sync job for bulk stock removal', {
-          itemId,
-          error
-        });
-      }
-
-      results.push({
-        itemId,
-        fromBoxId: current.BoxID ?? null,
-        before: beforeQty,
-        after: afterQty,
-        clearedBox
-      });
-    }
-
-    return results;
-  });
-
-  try {
-    return runTxn(uniqueIds);
-  } catch (err) {
-    console.error('[db] bulkRemoveItemStock transaction failed', err);
-    throw err;
-  }
-}
-
-export type BulkUpdateShopFieldsGroup = {
-  artikelNummer: string;
-  itemIds: string[];
-};
-
-export function bulkUpdateItemRefShopFields(
-  groups: BulkUpdateShopFieldsGroup[],
-  shopartikel: number | null,
-  veröffentlichtStatus: string | null,
-  verkaufspreis: number | null,
-  actor: string
-): string[] {
-  if (!Array.isArray(groups) || groups.length === 0) {
-    return [];
-  }
-
-  const runTxn = db.transaction((grps: BulkUpdateShopFieldsGroup[]): string[] => {
-    const updated: string[] = [];
-
-    for (const group of grps) {
-      const { artikelNummer, itemIds } = group;
-
-      updateItemRefShopFieldsStatement.run({
-        Artikel_Nummer: artikelNummer,
-        Shopartikel: shopartikel,
-        Veröffentlicht_Status: veröffentlichtStatus,
-        Verkaufspreis: verkaufspreis
-      });
-
-      logEvent({
-        Actor: actor,
-        EntityType: 'Item',
-        EntityId: artikelNummer,
-        Event: 'ShopStatusUpdated',
-        Meta: JSON.stringify({ shopartikel, veröffentlichtStatus, verkaufspreis })
-      });
-
-      for (const itemId of itemIds) {
-        try {
-          const correlationId = generateShopwareCorrelationId('bulkUpdateShopStatus', itemId);
-          const payload = createShopwareQueuePayload(
-            {
-              artikelNummer,
-              itemUUID: itemId,
-              trigger: 'bulk-update-shop-status',
-              actor
-            },
-            'bulkUpdateShopStatus'
-          );
-          enqueueShopwareSyncJob({
-            CorrelationId: correlationId,
-            JobType: 'item-upsert',
-            Payload: payload
-          });
-        } catch (error) {
-          console.error('[db] Failed to enqueue Shopware sync job for bulk shop status update', { itemId, error });
-        }
-      }
-
-      updated.push(artikelNummer);
-    }
-
-    return updated;
-  });
-
-  try {
-    return runTxn(groups);
-  } catch (err) {
-    console.error('[db] bulkUpdateItemRefShopFields transaction failed', err);
-    throw err;
-  }
-}
-
-export const listEventsForBox = db.prepare(`
-  SELECT *
-  FROM events
-  WHERE EntityType='Box'
-    AND EntityId=?
-    AND ${levelFilterExpression()}
-    AND ${topicFilterExpression()}
-  ORDER BY Id DESC
-  LIMIT 200`);
-export const listEventsForItem = db.prepare(`
-  SELECT *
-  FROM events
-  WHERE EntityType='Item'
-    AND EntityId=?
-    AND ${levelFilterExpression()}
-    AND ${topicFilterExpression()}
-  ORDER BY Id DESC
-  LIMIT 200`);
-export const listRecentEvents = db.prepare(`
-  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
-         r.Artikelbeschreibung AS Artikelbeschreibung,
-         COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
-  FROM events e
-  LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
-  WHERE ${levelFilterExpression('e')}
-    AND ${topicFilterExpression('e')}
-  ORDER BY e.Id DESC LIMIT 3`);
-export const listRecentActivities = db.prepare(`
-  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
-         r.Artikelbeschreibung AS Artikelbeschreibung,
-         COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
-  FROM events e
-  LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
-  WHERE ${levelFilterExpression('e')}
-    AND ${topicFilterExpression('e')}
-  ORDER BY e.CreatedAt DESC
-  LIMIT @limit`);
-// TODO(agent): Validate activities term search coverage for box/shelf IDs once event UX copy is finalized.
-export const listRecentActivitiesByTerm = db.prepare(`
-  SELECT e.Id, e.CreatedAt, e.Actor, e.EntityType, e.EntityId, e.Event, e.Level, e.Meta,
-         r.Artikelbeschreibung AS Artikelbeschreibung,
-         COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) AS Artikel_Nummer
-  FROM events e
-  LEFT JOIN items i ON e.EntityType='Item' AND e.EntityId = i.ItemUUID
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = ${ITEM_REFERENCE_JOIN_KEY}
-  WHERE ${levelFilterExpression('e')}
-    AND ${topicFilterExpression('e')}
-    AND (
-      e.EntityId LIKE @term
-      OR COALESCE(i.Artikel_Nummer, r.Artikel_Nummer) LIKE @term
-      OR i.BoxID LIKE @term
-    )
-  ORDER BY e.CreatedAt DESC
-  LIMIT @limit`);
-export const countEvents = db.prepare(
-  `SELECT COUNT(*) as c FROM events WHERE ${levelFilterExpression()} AND ${topicFilterExpression()}`
-);
-export const countBoxes = db.prepare(`SELECT COUNT(*) as c FROM boxes`);
-export const countItems = db.prepare(`SELECT COUNT(*) as c FROM items`);
-export const countItemsNoBox = db.prepare(`SELECT COUNT(*) as c FROM items WHERE BoxID IS NULL OR BoxID = ''`);
-// TODO(agentic-overview): Extend overview aggregates with shop/quality splits once chart layering is prioritized.
-export const listItemsForCo2 = db.prepare(`
-  SELECT r.Unterkategorien_A, i.Datum_erfasst, i.Quality
-  FROM items i
-  LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-  WHERE r.Unterkategorien_A IS NOT NULL
-`);
-
-export const countAgenticRunsByStatus = db.prepare(`
-  SELECT COALESCE(NULLIF(TRIM(Status), ''), 'notStarted') AS status, COUNT(*) as c
-  FROM agentic_runs
-  GROUP BY COALESCE(NULLIF(TRIM(Status), ''), 'notStarted')
-`);
-export const countEnrichedItemReferences = db.prepare(`
-  SELECT COUNT(*) as c
-  FROM item_refs
-  WHERE Langtext IS NOT NULL AND TRIM(Langtext) != ''
-`);
-export const sumInventoryWeightKg = db.prepare(`
-  SELECT COALESCE(SUM(COALESCE(i.Auf_Lager, 0) * COALESCE(r.Gewicht_kg, 0)), 0) AS total
-  FROM items i
-  LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
-`);
-export const listRecentBoxes = db.prepare(
-  `SELECT BoxID, LocationId, Label, UpdatedAt FROM boxes ORDER BY datetime(UpdatedAt) DESC, BoxID DESC LIMIT 5`
-);
-// TODO(agent): Revisit shelf index padding once shelf label requirements are finalized.
-export const getMaxShelfIndex = db.prepare(
-  `
-  SELECT MAX(CAST(substr(BoxID, length(@prefix) + 1) AS INTEGER)) AS MaxIndex
-  FROM boxes
-  WHERE BoxID LIKE @prefix || '%'
-  `
-);
-export const getMaxBoxId = db.prepare(
-  // TODO(agent): Revisit box ID ordering to account for date segments if ID sequencing changes.
-  `SELECT BoxID
-   FROM boxes
-   WHERE BoxID GLOB 'B-??????-????'
-   ORDER BY CAST(substr(BoxID, 10) AS INTEGER) DESC
-   LIMIT 1`
-);
-// TODO(agent): Revisit ItemUUID sequence width parsing if Artikelnummer-based IDs evolve.
-export const getMaxItemId = db.prepare(
-  `SELECT ItemUUID
-   FROM items
-   WHERE ItemUUID LIKE @pattern
-   ORDER BY CAST(substr(ItemUUID, @sequenceStartIndex, 4) AS INTEGER) DESC
-   LIMIT 1`
-);
-export const getMaxArtikelNummer = getMaxArtikelNummerStatement;
-
-export const updateAgenticReview = db.prepare(`
-  UPDATE agentic_runs
-  SET ReviewState = @ReviewState,
-      ReviewedBy = @ReviewedBy,
-      LastModified = @LastModified,
-      LastReviewDecision = @LastReviewDecision,
-      LastReviewNotes = @LastReviewNotes,
-      Status = COALESCE(@Status, Status)
-  WHERE Artikel_Nummer = @Artikel_Nummer
-`);
-
-// TODO(agent): Capture metrics on Langtext parsing for list endpoints to guide frontend rollout timing.
-// TODO(agent): Backfill reference exports once Artikel_Nummer auditing is complete.
-const listItemReferencesStatement = db.prepare(`
-  SELECT
-    r.Artikel_Nummer,
-    i.ItemUUID AS InstanceItemUUID
-  FROM item_refs r
-  LEFT JOIN items i ON i.Artikel_Nummer = r.Artikel_Nummer
-  ORDER BY COALESCE(NULLIF(r.Artikel_Nummer, ''), i.ItemUUID)
-`);
-
-export const listItemReferences = listItemReferencesStatement;
-
-// TODO(agent): Confirm zero-stock filtering impact on list queries before expanding list usage.
-// TODO(agentic-status-ui): Evaluate whether additional agentic audit fields should be projected once frontend requires them.
-const listItemsStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
-  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
-  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
-])}
-${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
-WHERE COALESCE(i.Auf_Lager, 0) > 0
-ORDER BY i.ItemUUID
-`);
-
-export const listItems = wrapLangtextAwareStatement(listItemsStatement, 'db:listItems');
-
-// TODO(agent): Validate zero-stock filtering for filtered listings once reference-only views are audited.
-// TODO(subcategory-filter): Confirm whether Unterkategorien_B should be included in subcategory filters.
-const listItemsWithFiltersStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
-  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
-  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
-])}
-${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
-  WHERE COALESCE(i.Auf_Lager, 0) > 0
-AND (
-    @searchTerm IS NULL
-    OR @searchTerm = ''
-    OR LOWER(COALESCE(r.Artikelbeschreibung, '')) LIKE @searchTerm
-    OR LOWER(COALESCE(i.Artikel_Nummer, '')) LIKE @searchTerm
-    OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
-  )
-AND (
-  @subcategoryFilter IS NULL
-  OR @subcategoryFilter = ''
-  OR LOWER(COALESCE(CAST(r.Unterkategorien_A AS TEXT), '')) LIKE @subcategoryFilter
-)
-AND (
-  @boxFilter IS NULL
-  OR @boxFilter = ''
-  OR LOWER(COALESCE(i.BoxID, '')) LIKE @boxFilter
-)
-AND (
-  @agenticStatus IS NULL
-  OR @agenticStatus = ''
-  OR COALESCE(ar.Status, 'notStarted') = @agenticStatus
-)
-AND (
-  @unplacedOnly IS NULL
-  OR @unplacedOnly = 0
-  OR i.BoxID IS NULL
-)
-ORDER BY i.ItemUUID
-`);
-
-export const listItemsWithFilters = wrapLangtextAwareStatement(
-  listItemsWithFiltersStatement,
-  'db:listItemsWithFilters'
-);
-
-const listItemReferencesWithFiltersStatement = db.prepare(`
-SELECT
-  COALESCE(NULLIF(i.ItemUUID, ''), r.Artikel_Nummer) AS ItemUUID,
-  COALESCE(NULLIF(r.Artikel_Nummer, ''), i.ItemUUID) AS Artikel_Nummer,
-  i.BoxID AS BoxID,
-  ${LOCATION_WITH_BOX_FALLBACK} AS Location,
-  shelf.Label AS ShelfLabel,
-  i.UpdatedAt AS UpdatedAt,
-  i.Datum_erfasst AS Datum_erfasst,
-  i.Auf_Lager AS Auf_Lager,
-  i.ShopwareVariantId AS ShopwareVariantId,
-  r.Grafikname AS Grafikname,
-  r.ImageNames AS ImageNames,
-  r.Artikelbeschreibung AS Artikelbeschreibung,
-  r.Verkaufspreis AS Verkaufspreis,
-  r.Kurzbeschreibung AS Kurzbeschreibung,
-  r.Langtext AS Langtext,
-  r.Hersteller AS Hersteller,
-  r.Länge_mm AS Länge_mm,
-  r.Breite_mm AS Breite_mm,
-  r.Höhe_mm AS Höhe_mm,
-  r.Gewicht_kg AS Gewicht_kg,
-  CAST(r.Hauptkategorien_A AS INTEGER) AS Hauptkategorien_A,
-  CAST(r.Unterkategorien_A AS INTEGER) AS Unterkategorien_A,
-  CAST(r.Hauptkategorien_B AS INTEGER) AS Hauptkategorien_B,
-  CAST(r.Unterkategorien_B AS INTEGER) AS Unterkategorien_B,
-  r.Veröffentlicht_Status AS Veröffentlicht_Status,
-  r.Shopartikel AS Shopartikel,
-  r.Artikeltyp AS Artikeltyp,
-  r.Einheit AS Einheit,
-  r.EntityType AS EntityType,
-  r.EAN AS EAN,
-  r.ShopwareProductId AS ShopwareProductId,
-  COALESCE(ar.Status, 'notStarted') AS AgenticStatus,
-  COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState
-FROM item_refs r
-LEFT JOIN items i ON i.Artikel_Nummer = r.Artikel_Nummer
-LEFT JOIN boxes b ON i.BoxID = b.BoxID
-LEFT JOIN boxes shelf ON b.LocationId = shelf.BoxID
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = COALESCE(NULLIF(i.Artikel_Nummer, ''), NULLIF(r.Artikel_Nummer, ''))
-WHERE (
-  i.ItemUUID IS NULL
-  OR i.ItemUUID = ''
-)
-AND (
-  @searchTerm IS NULL
-  OR @searchTerm = ''
-  OR LOWER(COALESCE(r.Artikelbeschreibung, '')) LIKE @searchTerm
-  OR LOWER(COALESCE(r.Artikel_Nummer, '')) LIKE @searchTerm
-  OR LOWER(COALESCE(i.ItemUUID, '')) LIKE @searchTerm
-)
-AND (
-  @subcategoryFilter IS NULL
-  OR @subcategoryFilter = ''
-  OR LOWER(COALESCE(CAST(r.Unterkategorien_A AS TEXT), '')) LIKE @subcategoryFilter
-)
-AND (
-  @boxFilter IS NULL
-  OR @boxFilter = ''
-  OR LOWER(COALESCE(i.BoxID, '')) LIKE @boxFilter
-)
-AND (
-  @agenticStatus IS NULL
-  OR @agenticStatus = ''
-  OR COALESCE(ar.Status, 'notStarted') = @agenticStatus
-)
-AND (
-  @unplacedOnly IS NULL
-  OR @unplacedOnly = 0
-  OR i.BoxID IS NULL
-)
-ORDER BY COALESCE(NULLIF(r.Artikel_Nummer, ''), i.ItemUUID)
-`);
-
-export const listItemReferencesWithFilters = wrapLangtextAwareStatement(
-  listItemReferencesWithFiltersStatement,
-  'db:listItemReferencesWithFilters'
-);
-
-// TODO(agent): Capture real-world export sorting expectations once Artikel_Nummer coverage is universal.
-// TODO(agent): Add export-level item ID filtering to reduce payload size for targeted ERP syncs.
-const listItemsForExportStatement = db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
-  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
-  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
-])}
-${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
-WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
-  AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
--- Maintain Artikel_Nummer ordering for predictable export manifests and use ItemUUID as a stable tie-breaker.
-ORDER BY COALESCE(NULLIF(i.Artikel_Nummer, ''), i.ItemUUID), i.ItemUUID
-`);
-
-const listItemsForExportStatements = new Map<number, Database.Statement>();
-const baseListItemsForExport = wrapLangtextAwareStatement(
-  listItemsForExportStatement,
-  'db:listItemsForExport'
-);
-
-export interface ListItemsForExportFilters {
-  createdAfter: string | null;
-  updatedAfter: string | null;
-  itemIds?: string[] | null;
-}
-
-function normalizeItemIdFilters(rawItemIds: unknown): string[] {
-  if (!Array.isArray(rawItemIds)) {
-    return [];
-  }
-  const normalized: string[] = [];
-  for (const candidate of rawItemIds) {
-    if (typeof candidate !== 'string') {
-      continue;
-    }
-    const trimmed = candidate.trim();
-    if (!trimmed) {
-      continue;
-    }
-    if (!normalized.includes(trimmed)) {
-      normalized.push(trimmed);
-    }
-  }
-  return normalized;
-}
-
-function getListItemsForExportStatement(itemIdCount: number): Database.Statement {
-  if (!Number.isFinite(itemIdCount) || itemIdCount <= 0) {
-    return baseListItemsForExport;
-  }
-
-  const cached = listItemsForExportStatements.get(itemIdCount);
-  if (cached) {
-    return cached;
-  }
-
-  const placeholderList = Array.from({ length: itemIdCount }, (_value, index) => `@itemId${index}`).join(', ');
-  const filteredStatement = wrapLangtextAwareStatement(
-    db.prepare(`
-${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
-  "COALESCE(ar.Status, 'notStarted') AS AgenticStatus",
-  "COALESCE(ar.ReviewState, 'not_required') AS AgenticReviewState"
-])}
-${ITEM_JOIN_WITH_BOX}
-LEFT JOIN agentic_runs ar ON ar.Artikel_Nummer = NULLIF(i.Artikel_Nummer, '')
-WHERE (@createdAfter IS NULL OR i.Datum_erfasst >= @createdAfter)
-  AND (@updatedAfter IS NULL OR i.UpdatedAt >= @updatedAfter)
-  AND i.ItemUUID IN (${placeholderList})
-ORDER BY COALESCE(NULLIF(i.Artikel_Nummer, ''), i.ItemUUID), i.ItemUUID
-`),
-    `db:listItemsForExport:itemIds:${itemIdCount}`
+export async function listEventsForBox(boxId: string): Promise<EventLog[]> {
+  return query<EventLog>(
+    `SELECT * FROM events WHERE "EntityType"='Box' AND "EntityId"=$1
+     AND ${levelFilterExpression()} AND ${topicFilterExpression()}
+     ORDER BY "Id" DESC LIMIT 200`,
+    [boxId]
   );
-  listItemsForExportStatements.set(itemIdCount, filteredStatement);
-  return filteredStatement;
 }
 
-export const listItemsForExport = {
-  all(filters: Partial<ListItemsForExportFilters>) {
-    const normalizedFilters: ListItemsForExportFilters = {
-      createdAfter: filters?.createdAfter ?? null,
-      updatedAfter: filters?.updatedAfter ?? null,
-      itemIds: filters?.itemIds
-    };
-    const normalizedItemIds = normalizeItemIdFilters(normalizedFilters.itemIds);
-    const bindings: Record<string, unknown> = {
-      createdAfter: normalizedFilters.createdAfter,
-      updatedAfter: normalizedFilters.updatedAfter
-    };
-    normalizedItemIds.forEach((itemId, index) => {
-      bindings[`itemId${index}`] = itemId;
-    });
-    const statement = getListItemsForExportStatement(normalizedItemIds.length);
-    return statement.all(bindings);
+export async function listEventsForItem(itemId: string): Promise<EventLog[]> {
+  return query<EventLog>(
+    `SELECT * FROM events WHERE "EntityType"='Item' AND "EntityId"=$1
+     AND ${levelFilterExpression()} AND ${topicFilterExpression()}
+     ORDER BY "Id" DESC LIMIT 200`,
+    [itemId]
+  );
+}
+
+export async function listRecentEvents(): Promise<any[]> {
+  return query(
+    `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
+            r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
+     FROM events e
+     LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
+     LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     ORDER BY e."Id" DESC LIMIT 3`
+  );
+}
+
+export async function listRecentActivities(limit: number): Promise<any[]> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
+  return query(
+    `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
+            r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
+     FROM events e
+     LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
+     LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     ORDER BY e."CreatedAt" DESC LIMIT $1`,
+    [effectiveLimit]
+  );
+}
+
+export async function listRecentActivitiesByTerm(term: string, limit: number): Promise<any[]> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
+  return query(
+    `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
+            r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
+     FROM events e
+     LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
+     LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     AND (e."EntityId" LIKE $1 OR COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") LIKE $1 OR i."BoxID" LIKE $1)
+     ORDER BY e."CreatedAt" DESC LIMIT $2`,
+    [term, effectiveLimit]
+  );
+}
+
+export async function countEvents(): Promise<number> {
+  const row = await queryOne<{ c: string }>(`SELECT COUNT(*) as c FROM events WHERE ${levelFilterExpression()} AND ${topicFilterExpression()}`);
+  return Number(row?.c ?? 0);
+}
+
+export async function countBoxes(): Promise<number> {
+  const row = await queryOne<{ c: string }>(`SELECT COUNT(*) as c FROM boxes`);
+  return Number(row?.c ?? 0);
+}
+
+export async function countItems(): Promise<number> {
+  const row = await queryOne<{ c: string }>(`SELECT COUNT(*) as c FROM items`);
+  return Number(row?.c ?? 0);
+}
+
+export async function countItemsNoBox(): Promise<number> {
+  const row = await queryOne<{ c: string }>(`SELECT COUNT(*) as c FROM items WHERE "BoxID" IS NULL OR "BoxID"=''`);
+  return Number(row?.c ?? 0);
+}
+
+export async function listItemsForCo2(): Promise<any[]> {
+  return query(
+    `SELECT r."Unterkategorien_A", i."Datum_erfasst", i."Quality"
+     FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer"=i."Artikel_Nummer"
+     WHERE r."Unterkategorien_A" IS NOT NULL`
+  );
+}
+
+export async function countAgenticRunsByStatus(): Promise<Array<{ status: string; c: string }>> {
+  return query(
+    `SELECT COALESCE(NULLIF(TRIM("Status"),''),'notStarted') AS status, COUNT(*) as c
+     FROM agentic_runs GROUP BY COALESCE(NULLIF(TRIM("Status"),''),'notStarted')`
+  );
+}
+
+export async function countEnrichedItemReferences(): Promise<number> {
+  const row = await queryOne<{ c: string }>(
+    `SELECT COUNT(*) as c FROM item_refs WHERE "Langtext" IS NOT NULL AND TRIM("Langtext")!=''`
+  );
+  return Number(row?.c ?? 0);
+}
+
+export async function sumInventoryWeightKg(): Promise<number> {
+  const row = await queryOne<{ total: string }>(
+    `SELECT COALESCE(SUM(COALESCE(i."Auf_Lager",0)*COALESCE(r."Gewicht_kg",0)),0) AS total
+     FROM items i LEFT JOIN item_refs r ON i."Artikel_Nummer"=r."Artikel_Nummer"`
+  );
+  return Number(row?.total ?? 0);
+}
+
+export async function listRecentBoxes(): Promise<any[]> {
+  return query(
+    `SELECT "BoxID","LocationId","Label","UpdatedAt" FROM boxes ORDER BY "UpdatedAt" DESC, "BoxID" DESC LIMIT 5`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Agentic runs
+// ---------------------------------------------------------------------------
+
+export async function upsertAgenticRun(params: {
+  Artikel_Nummer: string;
+  SearchQuery?: string | null;
+  LastSearchLinksJson?: string | null;
+  Status: string;
+  LastModified: string;
+  ReviewState: string;
+  ReviewedBy?: string | null;
+  LastReviewDecision?: string | null;
+  LastReviewNotes?: string | null;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT("Artikel_Nummer") DO UPDATE SET
+       "SearchQuery"=COALESCE(EXCLUDED."SearchQuery",agentic_runs."SearchQuery"),
+       "LastSearchLinksJson"=COALESCE(EXCLUDED."LastSearchLinksJson",agentic_runs."LastSearchLinksJson"),
+       "Status"=EXCLUDED."Status",
+       "LastModified"=EXCLUDED."LastModified",
+       "ReviewState"=EXCLUDED."ReviewState",
+       "ReviewedBy"=EXCLUDED."ReviewedBy",
+       "LastReviewDecision"=COALESCE(EXCLUDED."LastReviewDecision",agentic_runs."LastReviewDecision"),
+       "LastReviewNotes"=COALESCE(EXCLUDED."LastReviewNotes",agentic_runs."LastReviewNotes"),
+       "RetryCount"=CASE WHEN EXCLUDED."Status"='queued' THEN 0 ELSE agentic_runs."RetryCount" END,
+       "NextRetryAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."NextRetryAt" END,
+       "LastError"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastError" END,
+       "LastAttemptAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastAttemptAt" END`,
+    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null]
+  );
+}
+
+export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun | null> {
+  return queryOne<AgenticRun>(
+    `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
+            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
+     FROM agentic_runs WHERE "Artikel_Nummer"=$1`,
+    [artikelNummer]
+  );
+}
+
+export async function updateAgenticRunStatus(params: {
+  Artikel_Nummer: string;
+  Status: string;
+  SearchQuery?: string | null;
+  LastSearchLinksJson?: string | null;
+  LastSearchLinksJsonIsSet?: boolean;
+  LastModified: string;
+  ReviewState: string;
+  ReviewedBy?: string | null;
+  ReviewedByIsSet?: boolean;
+  LastReviewDecision?: string | null;
+  LastReviewDecisionIsSet?: boolean;
+  LastReviewNotes?: string | null;
+  LastReviewNotesIsSet?: boolean;
+  RetryCount?: number | null;
+  RetryCountIsSet?: boolean;
+  NextRetryAt?: string | null;
+  NextRetryAtIsSet?: boolean;
+  LastError?: string | null;
+  LastErrorIsSet?: boolean;
+  LastAttemptAt?: string | null;
+  LastAttemptAtIsSet?: boolean;
+}): Promise<void> {
+  await execute(
+    `UPDATE agentic_runs SET
+       "Status"=$2,
+       "SearchQuery"=COALESCE($3,"SearchQuery"),
+       "LastSearchLinksJson"=CASE WHEN $4 THEN $5 ELSE "LastSearchLinksJson" END,
+       "LastModified"=$6,
+       "ReviewState"=$7,
+       "ReviewedBy"=CASE WHEN $8 THEN $9 ELSE "ReviewedBy" END,
+       "LastReviewDecision"=CASE WHEN $10 THEN COALESCE($11,"LastReviewDecision") ELSE "LastReviewDecision" END,
+       "LastReviewNotes"=CASE WHEN $12 THEN COALESCE($13,"LastReviewNotes") ELSE "LastReviewNotes" END,
+       "RetryCount"=CASE WHEN $14 THEN $15 ELSE "RetryCount" END,
+       "NextRetryAt"=CASE WHEN $16 THEN $17 ELSE "NextRetryAt" END,
+       "LastError"=CASE WHEN $18 THEN $19 ELSE "LastError" END,
+       "LastAttemptAt"=CASE WHEN $20 THEN $21 ELSE "LastAttemptAt" END
+     WHERE "Artikel_Nummer"=$1`,
+    [
+      params.Artikel_Nummer,
+      params.Status,
+      params.SearchQuery ?? null,
+      params.LastSearchLinksJsonIsSet ?? false, params.LastSearchLinksJson ?? null,
+      params.LastModified,
+      params.ReviewState,
+      params.ReviewedByIsSet ?? false, params.ReviewedBy ?? null,
+      params.LastReviewDecisionIsSet ?? false, params.LastReviewDecision ?? null,
+      params.LastReviewNotesIsSet ?? false, params.LastReviewNotes ?? null,
+      params.RetryCountIsSet ?? false, params.RetryCount ?? 0,
+      params.NextRetryAtIsSet ?? false, params.NextRetryAt ?? null,
+      params.LastErrorIsSet ?? false, params.LastError ?? null,
+      params.LastAttemptAtIsSet ?? false, params.LastAttemptAt ?? null
+    ]
+  );
+}
+
+export async function updateAgenticReview(params: {
+  Artikel_Nummer: string;
+  ReviewState: string;
+  ReviewedBy: string | null;
+  LastModified: string;
+  LastReviewDecision: string | null;
+  LastReviewNotes: string | null;
+  Status?: string | null;
+}): Promise<void> {
+  await execute(
+    `UPDATE agentic_runs SET
+       "ReviewState"=$2,"ReviewedBy"=$3,"LastModified"=$4,
+       "LastReviewDecision"=$5,"LastReviewNotes"=$6,
+       "Status"=COALESCE($7,"Status")
+     WHERE "Artikel_Nummer"=$1`,
+    [params.Artikel_Nummer, params.ReviewState, params.ReviewedBy, params.LastModified, params.LastReviewDecision, params.LastReviewNotes, params.Status ?? null]
+  );
+}
+
+export async function insertAgenticRunReviewHistoryEntry(params: {
+  Artikel_Nummer: string;
+  Status: string;
+  ReviewState: string;
+  ReviewDecision: string | null;
+  ReviewNotes: string | null;
+  ReviewMetadata: string | null;
+  ReviewedBy: string | null;
+  RecordedAt: string;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO agentic_run_review_history ("Artikel_Nummer","Status","ReviewState","ReviewDecision","ReviewNotes","ReviewMetadata","ReviewedBy","RecordedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [params.Artikel_Nummer, params.Status, params.ReviewState, params.ReviewDecision, params.ReviewNotes, params.ReviewMetadata, params.ReviewedBy, params.RecordedAt]
+  );
+}
+
+export async function listAgenticRunReviewHistory(artikelNummer: string): Promise<AgenticRunReviewHistoryEntry[]> {
+  const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalizedArtikelNummer) return [];
+  try {
+    return query<AgenticRunReviewHistoryEntry>(
+      `SELECT "Id","Artikel_Nummer","Status","ReviewState","ReviewDecision","ReviewNotes","ReviewMetadata","ReviewedBy","RecordedAt"
+       FROM agentic_run_review_history WHERE "Artikel_Nummer"=$1 ORDER BY "RecordedAt" ASC, "Id" ASC`,
+      [normalizedArtikelNummer]
+    );
+  } catch (err) {
+    console.error('[db] Failed to list agentic run review history', { artikelNummer: normalizedArtikelNummer, error: err });
+    throw err;
   }
+}
+
+export async function listRecentAgenticRunReviewHistoryBySubcategory(subcategory: number, limit = 10): Promise<AgenticRunReviewHistoryEntry[]> {
+  const normalizedSubcategory = Number.isInteger(subcategory) ? subcategory : Number.parseInt(String(subcategory), 10);
+  const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 10;
+  if (!Number.isInteger(normalizedSubcategory) || normalizedSubcategory <= 0) return [];
+  try {
+    return query<AgenticRunReviewHistoryEntry>(
+      `SELECT h."Id",h."Artikel_Nummer",h."Status",h."ReviewState",h."ReviewDecision",h."ReviewNotes",h."ReviewMetadata",h."ReviewedBy",h."RecordedAt"
+       FROM agentic_run_review_history h
+       JOIN item_refs r ON r."Artikel_Nummer"=h."Artikel_Nummer"
+       WHERE CAST(r."Unterkategorien_A" AS INTEGER)=$1
+         AND (LOWER(COALESCE(h."ReviewState",'')) IN ('approved','rejected') OR COALESCE(TRIM(h."ReviewDecision"),'') <> '')
+       ORDER BY h."RecordedAt" DESC, h."Id" DESC LIMIT $2`,
+      [normalizedSubcategory, normalizedLimit]
+    );
+  } catch (err) {
+    console.error('[db] Failed to list recent agentic run review history by subcategory', { subcategory: normalizedSubcategory, error: err });
+    throw err;
+  }
+}
+
+export async function persistAgenticRunError(params: { artikelNummer: string; error: string | null; attemptAt?: string | null }): Promise<void> {
+  const artikelNummer = typeof params.artikelNummer === 'string' ? params.artikelNummer.trim() : '';
+  if (!artikelNummer) {
+    console.warn('[db] Skipping agentic run error persistence for empty Artikel_Nummer');
+    return;
+  }
+  const normalizedError =
+    typeof params.error === 'string' && params.error.trim()
+      ? params.error.trim().slice(0, 500)
+      : params.error === null ? null : String(params.error).slice(0, 500);
+  const attemptAt = params.attemptAt ?? new Date().toISOString();
+  try {
+    const count = await execute(
+      `UPDATE agentic_runs SET "LastError"=$2,"LastAttemptAt"=COALESCE($3,"LastAttemptAt"),"LastModified"=COALESCE($3,"LastModified")
+       WHERE "Artikel_Nummer"=$1`,
+      [artikelNummer, normalizedError, attemptAt]
+    );
+    if (count === 0) console.warn('[db] Agentic run error persistence affected zero rows', { artikelNummer });
+  } catch (err) {
+    console.error('[db] Failed to persist agentic run error', { artikelNummer, error: err });
+    throw err;
+  }
+}
+
+export type AgenticRunQueueUpdate = {
+  Artikel_Nummer: string;
+  Status?: string | null;
+  LastModified: string;
+  RetryCount: number;
+  NextRetryAt: string | null;
+  LastError: string | null;
+  LastAttemptAt: string;
 };
 
-let insertQualityAssessmentStatement: Database.Statement;
-let getQualityAssessmentStatement: Database.Statement;
-let updateItemQualityStatement: Database.Statement;
-let updateItemLangtextStatement: Database.Statement;
-try {
-  insertQualityAssessmentStatement = db.prepare(`
-    INSERT INTO quality_assessments (tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by, responses, contract_version, derived_specs)
-    VALUES (@tag, @value, @is_complete, @has_defects, @is_functional, @notes, @reviewed_at, @reviewed_by, @responses, @contract_version, @derived_specs)
-  `);
-  getQualityAssessmentStatement = db.prepare(`
-    SELECT id, tag, value, is_complete, has_defects, is_functional, notes, reviewed_at, reviewed_by, responses, contract_version, derived_specs
-    FROM quality_assessments WHERE id = ?
-  `);
-  updateItemQualityStatement = db.prepare(`
-    UPDATE items SET QualityId = @qualityId, Quality = @value WHERE ItemUUID = @itemUUID
-  `);
-  updateItemLangtextStatement = db.prepare(`
-    UPDATE item_refs SET Langtext = @langtext WHERE Artikel_Nummer = (SELECT Artikel_Nummer FROM items WHERE ItemUUID = @itemUUID)
-  `);
-} catch (err) {
-  console.error('[db] Failed to prepare quality assessment statements', err);
-  throw err;
+export async function fetchQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
+  const now = new Date().toISOString();
+  try {
+    return query<AgenticRun>(
+      `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
+              "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
+       FROM agentic_runs
+       WHERE "Status"='queued' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= $2)
+       ORDER BY "LastModified" ASC, "Id" ASC LIMIT $1`,
+      [effectiveLimit, now]
+    );
+  } catch (err) {
+    console.error('[db] Failed to fetch queued agentic runs', err);
+    throw err;
+  }
 }
+
+export async function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate): Promise<void> {
+  try {
+    const count = await execute(
+      `UPDATE agentic_runs SET
+         "Status"=COALESCE($2,"Status"),
+         "LastModified"=$3,
+         "RetryCount"=$4,
+         "NextRetryAt"=$5,
+         "LastError"=$6,
+         "LastAttemptAt"=$7
+       WHERE "Artikel_Nummer"=$1`,
+      [update.Artikel_Nummer, update.Status ?? null, update.LastModified, update.RetryCount, update.NextRetryAt ?? null, update.LastError ?? null, update.LastAttemptAt]
+    );
+    if (count === 0) console.warn('[db] Agentic run queue update had no effect', { artikelNummer: update.Artikel_Nummer });
+  } catch (err) {
+    console.error('[db] Failed to update queued agentic run state', { artikelNummer: update.Artikel_Nummer, error: err });
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Agentic request logs
+// ---------------------------------------------------------------------------
+
+export async function upsertAgenticRequestLog(log: AgenticRequestLogUpsert): Promise<void> {
+  const uuid = typeof log.UUID === 'string' ? log.UUID.trim() : '';
+  if (!uuid) {
+    console.warn('[db] Skipping agentic request log upsert due to missing UUID');
+    return;
+  }
+  const now = new Date().toISOString();
+  const createdAt = toIsoString(log.CreatedAt) ?? now;
+  const updatedAt = toIsoString(log.UpdatedAt) ?? now;
+  const notifiedAt = toIsoString(log.NotifiedAt) ?? null;
+  const errorIsSet = Object.prototype.hasOwnProperty.call(log, 'Error');
+  const lastNotificationErrorIsSet = Object.prototype.hasOwnProperty.call(log, 'LastNotificationError');
+
+  try {
+    await execute(
+      `INSERT INTO agentic_request_logs ("UUID","Search","Status","Error","CreatedAt","UpdatedAt","NotifiedAt","LastNotificationError","PayloadJson")
+       VALUES ($1,$2,$3,$4,COALESCE($5,$6),COALESCE($7,$6),$8,$9,$10)
+       ON CONFLICT("UUID") DO UPDATE SET
+         "Search"=COALESCE(EXCLUDED."Search",agentic_request_logs."Search"),
+         "Status"=COALESCE(EXCLUDED."Status",agentic_request_logs."Status"),
+         "Error"=CASE WHEN $11 THEN EXCLUDED."Error" ELSE agentic_request_logs."Error" END,
+         "UpdatedAt"=COALESCE(EXCLUDED."UpdatedAt",agentic_request_logs."UpdatedAt"),
+         "NotifiedAt"=COALESCE(EXCLUDED."NotifiedAt",agentic_request_logs."NotifiedAt"),
+         "LastNotificationError"=CASE WHEN $12 THEN EXCLUDED."LastNotificationError" ELSE agentic_request_logs."LastNotificationError" END,
+         "PayloadJson"=COALESCE(EXCLUDED."PayloadJson",agentic_request_logs."PayloadJson")`,
+      [
+        uuid,
+        asNullableTrimmedString(log.Search),
+        asNullableTrimmedString(log.Status),
+        errorIsSet ? asNullableString(log.Error) : null,
+        createdAt, now,
+        updatedAt,
+        notifiedAt,
+        lastNotificationErrorIsSet ? asNullableString(log.LastNotificationError) : null,
+        log.PayloadJson ?? null,
+        errorIsSet,
+        lastNotificationErrorIsSet
+      ]
+    );
+  } catch (err) {
+    console.error('[db] Failed to upsert agentic_request_logs row', { uuid, error: err });
+    throw err;
+  }
+}
+
+export async function logAgenticRequestStart(uuid: string, search: string | null): Promise<void> {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) { console.warn('[db] Cannot persist agentic request start without UUID'); return; }
+  const now = new Date().toISOString();
+  try {
+    await execute(
+      `INSERT INTO agentic_request_logs ("UUID","Search","Status","Error","CreatedAt","UpdatedAt","LastNotificationError")
+       VALUES ($1,$2,'RUNNING',NULL,$3,$3,NULL)
+       ON CONFLICT("UUID") DO UPDATE SET
+         "Search"=EXCLUDED."Search","Status"=EXCLUDED."Status","Error"=NULL,
+         "UpdatedAt"=EXCLUDED."UpdatedAt","LastNotificationError"=NULL,"NotifiedAt"=NULL,"PayloadJson"=NULL`,
+      [trimmedUuid, asNullableTrimmedString(search), now]
+    );
+  } catch (err) {
+    console.error('[db] Failed to persist agentic request start', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export async function logAgenticRequestEnd(uuid: string, status: string, error: string | null): Promise<void> {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) { console.warn('[db] Cannot persist agentic request completion without UUID'); return; }
+  const now = new Date().toISOString();
+  try {
+    const count = await execute(
+      `UPDATE agentic_request_logs SET "Status"=$2,"Error"=$3,"UpdatedAt"=$4 WHERE "UUID"=$1`,
+      [trimmedUuid, asNullableTrimmedString(status), asNullableString(error), now]
+    );
+    if (count === 0) {
+      console.warn('[db] Agentic request completion updated zero rows; inserting fallback entry', { uuid: trimmedUuid });
+      await upsertAgenticRequestLog({ UUID: trimmedUuid, Status: status, Error: error, UpdatedAt: now });
+    }
+  } catch (err) {
+    console.error('[db] Failed to persist agentic request completion', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export async function saveAgenticRequestPayload(uuid: string, payload: unknown): Promise<void> {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) { console.warn('[db] Cannot persist agentic request payload without UUID'); return; }
+  let payloadJson: string | null = null;
+  try { payloadJson = JSON.stringify(payload ?? null); } catch (err) { console.error('[db] Failed to serialize agentic request payload', { uuid: trimmedUuid, error: err }); }
+  const now = new Date().toISOString();
+  try {
+    const count = await execute(
+      `UPDATE agentic_request_logs SET "PayloadJson"=$2,"UpdatedAt"=$3 WHERE "UUID"=$1`,
+      [trimmedUuid, payloadJson, now]
+    );
+    if (count === 0) await upsertAgenticRequestLog({ UUID: trimmedUuid, PayloadJson: payloadJson, UpdatedAt: now });
+  } catch (err) {
+    console.error('[db] Failed to persist agentic request payload', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export async function markAgenticRequestNotificationSuccess(uuid: string, completedAtIso: string | null = null): Promise<void> {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) { console.warn('[db] Cannot mark agentic request notification success without UUID'); return; }
+  const now = new Date().toISOString();
+  const notifiedAt = toIsoString(completedAtIso) ?? now;
+  try {
+    const count = await execute(
+      `UPDATE agentic_request_logs SET "NotifiedAt"=$2,"LastNotificationError"=NULL,"UpdatedAt"=$3 WHERE "UUID"=$1`,
+      [trimmedUuid, notifiedAt, now]
+    );
+    if (count === 0) await upsertAgenticRequestLog({ UUID: trimmedUuid, NotifiedAt: notifiedAt, LastNotificationError: null, UpdatedAt: now });
+  } catch (err) {
+    console.error('[db] Failed to mark agentic notification success', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export async function markAgenticRequestNotificationFailure(uuid: string, errorMessage: string): Promise<void> {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) { console.warn('[db] Cannot mark agentic request notification failure without UUID'); return; }
+  const now = new Date().toISOString();
+  try {
+    const count = await execute(
+      `UPDATE agentic_request_logs SET "LastNotificationError"=$2,"UpdatedAt"=$3 WHERE "UUID"=$1`,
+      [trimmedUuid, asNullableString(errorMessage), now]
+    );
+    if (count === 0) await upsertAgenticRequestLog({ UUID: trimmedUuid, LastNotificationError: errorMessage, UpdatedAt: now });
+  } catch (err) {
+    console.error('[db] Failed to mark agentic notification failure', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+export async function listPendingAgenticRequestNotifications(limit = 10): Promise<AgenticRequestNotification[]> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 10;
+  let rows: Array<{ UUID: string; PayloadJson: string | null }> = [];
+  try {
+    rows = await query(
+      `SELECT "UUID","PayloadJson" FROM agentic_request_logs
+       WHERE "Status"='SUCCESS' AND "NotifiedAt" IS NULL AND "PayloadJson" IS NOT NULL
+       ORDER BY "UpdatedAt" ASC LIMIT $1`,
+      [effectiveLimit]
+    );
+  } catch (err) {
+    console.error('[db] Failed to query pending agentic request notifications', { limit: effectiveLimit, error: err });
+    throw err;
+  }
+  const notifications: AgenticRequestNotification[] = [];
+  for (const row of rows) {
+    if (row.PayloadJson === null) continue;
+    try {
+      const parsed = JSON.parse(row.PayloadJson);
+      notifications.push({ UUID: row.UUID, Payload: parsed });
+    } catch (err) {
+      console.error('[db] Failed to parse agentic request payload_json', { uuid: row.UUID, error: err });
+    }
+  }
+  return notifications;
+}
+
+export async function getAgenticRequestLog(uuid: string): Promise<AgenticRequestLog | null> {
+  const trimmedUuid = typeof uuid === 'string' ? uuid.trim() : '';
+  if (!trimmedUuid) return null;
+  try {
+    return queryOne<AgenticRequestLog>(
+      `SELECT "UUID","Search","Status","Error","CreatedAt","UpdatedAt","NotifiedAt","LastNotificationError","PayloadJson"
+       FROM agentic_request_logs WHERE "UUID"=$1`,
+      [trimmedUuid]
+    );
+  } catch (err) {
+    console.error('[db] Failed to load agentic_request_logs row', { uuid: trimmedUuid, error: err });
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shopware sync queue
+// ---------------------------------------------------------------------------
+
+export async function clearShopwareSyncQueue(): Promise<void> {
+  await execute(`DELETE FROM shopware_sync_queue`);
+}
+
+export async function listShopwareSyncQueue(): Promise<ShopwareSyncQueueEntry[]> {
+  return query<ShopwareSyncQueueEntry>(`SELECT * FROM shopware_sync_queue ORDER BY "Id"`);
+}
+
+export async function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): Promise<ShopwareSyncQueueEntry> {
+  const now = new Date().toISOString();
+  const entry = {
+    CorrelationId: job.CorrelationId,
+    JobType: job.JobType,
+    Payload: job.Payload,
+    Status: job.Status ?? 'queued',
+    RetryCount: job.RetryCount ?? 0,
+    LastError: job.LastError ?? null,
+    LastAttemptAt: job.LastAttemptAt ?? null,
+    NextAttemptAt: job.NextAttemptAt ?? null
+  };
+  try {
+    return insert<ShopwareSyncQueueEntry>(
+      `INSERT INTO shopware_sync_queue ("CorrelationId","JobType","Payload","Status","RetryCount","LastError","LastAttemptAt","NextAttemptAt","CreatedAt","UpdatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) RETURNING *`,
+      [entry.CorrelationId, entry.JobType, entry.Payload, entry.Status, entry.RetryCount, entry.LastError, entry.LastAttemptAt, entry.NextAttemptAt, now]
+    );
+  } catch (err) {
+    console.error('[db] Failed to enqueue Shopware sync job', { correlationId: job.CorrelationId, jobType: job.JobType, error: err });
+    throw err;
+  }
+}
+
+export async function claimShopwareSyncJobs(limit: number, attemptIso: string): Promise<ShopwareSyncQueueEntry[]> {
+  try {
+    return query<ShopwareSyncQueueEntry>(
+      `UPDATE shopware_sync_queue SET "Status"='processing',"LastAttemptAt"=$2,"UpdatedAt"=$2
+       WHERE "Id" IN (
+         SELECT "Id" FROM shopware_sync_queue
+         WHERE "Status"='queued' AND ("NextAttemptAt" IS NULL OR "NextAttemptAt" <= $2)
+         ORDER BY "CreatedAt" ASC, "Id" ASC LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING *`,
+      [limit, attemptIso]
+    );
+  } catch (err) {
+    console.error('[db] Failed to claim Shopware sync jobs', err);
+    throw err;
+  }
+}
+
+export async function markShopwareSyncJobSucceeded(id: number, completedAtIso: string): Promise<void> {
+  try {
+    await execute(
+      `UPDATE shopware_sync_queue SET "Status"='succeeded',"RetryCount"=0,"LastError"=NULL,"NextAttemptAt"=NULL,"UpdatedAt"=$2 WHERE "Id"=$1`,
+      [id, completedAtIso]
+    );
+  } catch (err) {
+    console.error('[db] Failed to mark Shopware sync job succeeded', { jobId: id, error: err });
+    throw err;
+  }
+}
+
+export async function rescheduleShopwareSyncJob(params: { id: number; retryCount: number; error: string | null; nextAttemptAt: string; updatedAt: string }): Promise<void> {
+  try {
+    await execute(
+      `UPDATE shopware_sync_queue SET "Status"='queued',"RetryCount"=$2,"LastError"=$3,"NextAttemptAt"=$4,"UpdatedAt"=$5 WHERE "Id"=$1`,
+      [params.id, params.retryCount, params.error, params.nextAttemptAt, params.updatedAt]
+    );
+  } catch (err) {
+    console.error('[db] Failed to reschedule Shopware sync job', { jobId: params.id, error: err });
+    throw err;
+  }
+}
+
+export async function markShopwareSyncJobFailed(params: { id: number; error: string | null; updatedAt: string }): Promise<void> {
+  try {
+    await execute(
+      `UPDATE shopware_sync_queue SET "Status"='failed',"LastError"=$2,"NextAttemptAt"=NULL,"UpdatedAt"=$3 WHERE "Id"=$1`,
+      [params.id, params.error, params.updatedAt]
+    );
+  } catch (err) {
+    console.error('[db] Failed to mark Shopware sync job failed', { jobId: params.id, error: err });
+    throw err;
+  }
+}
+
+export async function getShopwareSyncJobById(id: number): Promise<ShopwareSyncQueueEntry | undefined> {
+  const row = await queryOne<ShopwareSyncQueueEntry>(`SELECT * FROM shopware_sync_queue WHERE "Id"=$1`, [id]);
+  return row ?? undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Quality assessments
+// ---------------------------------------------------------------------------
 
 export interface QualityAssessmentInsertWithContract extends QualityAssessmentInsert {
   checkResponse?: QualityCheckResponse;
 }
 
-export function insertQualityAssessment(assessment: QualityAssessmentInsertWithContract): number {
+export async function insertQualityAssessment(assessment: QualityAssessmentInsertWithContract): Promise<number> {
   const { checkResponse } = assessment;
-  const result = insertQualityAssessmentStatement.run({
-    tag: assessment.tag,
-    value: assessment.value,
-    is_complete: assessment.is_complete === null ? null : assessment.is_complete ? 1 : 0,
-    has_defects: assessment.has_defects === null ? null : assessment.has_defects ? 1 : 0,
-    is_functional: assessment.is_functional === null ? null : assessment.is_functional ? 1 : 0,
-    notes: assessment.notes,
-    reviewed_at: assessment.reviewed_at,
-    reviewed_by: assessment.reviewed_by,
-    responses: checkResponse ? JSON.stringify(checkResponse.answers) : null,
-    contract_version: checkResponse
-      ? JSON.stringify({ general: checkResponse.generalContractVersion, ...(checkResponse.subCategoryContractVersion !== undefined ? { subCat: checkResponse.subCategoryContractVersion } : {}) })
-      : null,
-    derived_specs: checkResponse && Object.keys(checkResponse.derivedSpecs).length > 0 ? JSON.stringify(checkResponse.derivedSpecs) : null,
-  });
-  return Number(result.lastInsertRowid);
+  const row = await insert<{ id: number }>(
+    `INSERT INTO quality_assessments ("tag","value","is_complete","has_defects","is_functional","notes","reviewed_at","reviewed_by","responses","contract_version","derived_specs")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+    [
+      assessment.tag,
+      assessment.value,
+      assessment.is_complete === null ? null : assessment.is_complete ? 1 : 0,
+      assessment.has_defects === null ? null : assessment.has_defects ? 1 : 0,
+      assessment.is_functional === null ? null : assessment.is_functional ? 1 : 0,
+      assessment.notes,
+      assessment.reviewed_at,
+      assessment.reviewed_by,
+      checkResponse ? JSON.stringify(checkResponse.answers) : null,
+      checkResponse ? JSON.stringify({ general: checkResponse.generalContractVersion, ...(checkResponse.subCategoryContractVersion !== undefined ? { subCat: checkResponse.subCategoryContractVersion } : {}) }) : null,
+      checkResponse && Object.keys(checkResponse.derivedSpecs).length > 0 ? JSON.stringify(checkResponse.derivedSpecs) : null
+    ]
+  );
+  return Number(row.id);
 }
 
-export function getQualityAssessment(id: number): QualityAssessment | null {
-  const row = getQualityAssessmentStatement.get(id) as Record<string, unknown> | undefined;
+export async function getQualityAssessment(id: number): Promise<QualityAssessment | null> {
+  const row = await queryOne<Record<string, unknown>>(
+    `SELECT id,tag,value,is_complete,has_defects,is_functional,notes,reviewed_at,reviewed_by FROM quality_assessments WHERE id=$1`,
+    [id]
+  );
   if (!row) return null;
   return {
-    id: row.id as number,
-    tag: row.tag as QualityAssessment['tag'],
-    value: row.value as number,
-    is_complete: row.is_complete === null ? null : Boolean(row.is_complete),
-    has_defects: row.has_defects === null ? null : Boolean(row.has_defects),
-    is_functional: row.is_functional === null ? null : Boolean(row.is_functional),
-    notes: (row.notes as string | null) ?? null,
-    reviewed_at: row.reviewed_at as string,
-    reviewed_by: row.reviewed_by as string
+    id: row['id'] as number,
+    tag: row['tag'] as QualityAssessment['tag'],
+    value: row['value'] as number,
+    is_complete: row['is_complete'] === null ? null : Boolean(row['is_complete']),
+    has_defects: row['has_defects'] === null ? null : Boolean(row['has_defects']),
+    is_functional: row['is_functional'] === null ? null : Boolean(row['is_functional']),
+    notes: (row['notes'] as string | null) ?? null,
+    reviewed_at: row['reviewed_at'] as string,
+    reviewed_by: row['reviewed_by'] as string
   };
 }
 
-export function updateItemQualityAssessment(itemUUID: string, qualityId: number, value: number): void {
-  updateItemQualityStatement.run({ qualityId, value, itemUUID });
+export async function updateItemQualityAssessment(itemUUID: string, qualityId: number, value: number): Promise<void> {
+  await execute(`UPDATE items SET "QualityId"=$2,"Quality"=$3 WHERE "ItemUUID"=$1`, [itemUUID, qualityId, value]);
 }
 
-/** Returns the saved responses and notes for an item's current quality assessment, or empty responses if none. */
-export function getItemQualityResponses(itemUUID: string): { responses: Record<string, string>; notes: string | null } {
-  const itemRow = db.prepare('SELECT QualityId FROM items WHERE ItemUUID = ?').get(itemUUID) as { QualityId: number | null } | undefined;
+export async function getItemQualityResponses(itemUUID: string): Promise<{ responses: Record<string, string>; notes: string | null }> {
+  const itemRow = await queryOne<{ QualityId: number | null }>(`SELECT "QualityId" FROM items WHERE "ItemUUID"=$1`, [itemUUID]);
   if (!itemRow || itemRow.QualityId == null) return { responses: {}, notes: null };
-  const qaRow = getQualityAssessmentStatement.get(itemRow.QualityId) as Record<string, unknown> | undefined;
+  const qaRow = await queryOne<Record<string, unknown>>(
+    `SELECT responses,notes FROM quality_assessments WHERE id=$1`,
+    [itemRow.QualityId]
+  );
   if (!qaRow) return { responses: {}, notes: null };
   let responses: Record<string, string> = {};
-  if (typeof qaRow.responses === 'string') {
+  if (typeof qaRow['responses'] === 'string') {
     try {
-      const parsed = JSON.parse(qaRow.responses) as unknown;
+      const parsed = JSON.parse(qaRow['responses']) as unknown;
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         responses = parsed as Record<string, string>;
       }
     } catch { /* stored JSON is corrupt — return empty */ }
   }
-  return { responses, notes: (qaRow.notes as string | null) ?? null };
+  return { responses, notes: (qaRow['notes'] as string | null) ?? null };
 }
 
-/** Stores per-instance quality-derived spec key-value pairs into items.InstanceSpecs (JSON payload). */
-export function updateItemInstanceSpecs(itemUUID: string, derivedSpecs: Record<string, string>): void {
-  const row = db.prepare('SELECT InstanceSpecs FROM items WHERE ItemUUID = ?').get(itemUUID) as { InstanceSpecs: string | null } | undefined;
+export async function updateItemInstanceSpecs(itemUUID: string, derivedSpecs: Record<string, string>): Promise<void> {
+  const row = await queryOne<{ InstanceSpecs: string | null }>(`SELECT "InstanceSpecs" FROM items WHERE "ItemUUID"=$1`, [itemUUID]);
   if (!row) return;
-
   const existing = parseLangtext(row.InstanceSpecs) ?? {};
   const base: Record<string, string | string[]> = typeof existing === 'string' ? {} : { ...existing };
-  for (const [key, value] of Object.entries(derivedSpecs)) {
-    base[key] = value;
-  }
+  for (const [key, value] of Object.entries(derivedSpecs)) base[key] = value;
   const serialized = stringifyLangtext(base);
   if (serialized !== null) {
-    db.prepare('UPDATE items SET InstanceSpecs = ? WHERE ItemUUID = ?').run(serialized, itemUUID);
+    await execute(`UPDATE items SET "InstanceSpecs"=$2 WHERE "ItemUUID"=$1`, [itemUUID, serialized]);
   }
 }
 
-/** Merges derived spec key-value pairs into the item's Langtext (as a JSON payload). */
-export function updateItemLangtextSpecs(itemUUID: string, derivedSpecs: Record<string, string>): void {
-  const row = db.prepare(
-    'SELECT Langtext FROM item_refs WHERE Artikel_Nummer = (SELECT Artikel_Nummer FROM items WHERE ItemUUID = ?)'
-  ).get(itemUUID) as { Langtext: string | null } | undefined;
+export async function updateItemLangtextSpecs(itemUUID: string, derivedSpecs: Record<string, string>): Promise<void> {
+  const row = await queryOne<{ Langtext: string | null }>(
+    `SELECT "Langtext" FROM item_refs WHERE "Artikel_Nummer"=(SELECT "Artikel_Nummer" FROM items WHERE "ItemUUID"=$1)`,
+    [itemUUID]
+  );
   if (!row) return;
-
   const existing = parseLangtext(row.Langtext) ?? {};
   const base: Record<string, string | string[]> = typeof existing === 'string' ? {} : { ...existing };
-  for (const [key, value] of Object.entries(derivedSpecs)) {
-    base[key] = value;
-  }
+  for (const [key, value] of Object.entries(derivedSpecs)) base[key] = value;
   const serialized = stringifyLangtext(base);
   if (serialized !== null) {
-    updateItemLangtextStatement.run({ langtext: serialized, itemUUID });
+    await execute(
+      `UPDATE item_refs SET "Langtext"=$1 WHERE "Artikel_Nummer"=(SELECT "Artikel_Nummer" FROM items WHERE "ItemUUID"=$2)`,
+      [serialized, itemUUID]
+    );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Box stubs
+// ---------------------------------------------------------------------------
 
 export type BoxStub = {
   Id: string;
@@ -3593,21 +2224,15 @@ export type BoxStub = {
   Notes: string | null;
 };
 
-const listStubsStatement = db.prepare(
-  'SELECT * FROM box_stubs ORDER BY CreatedAt DESC'
-);
-
 export const listStubs = {
-  active: (): BoxStub[] => (listStubsStatement.all() as BoxStub[]).filter((r) => r.IsActive === 1),
-  all: (): BoxStub[] => listStubsStatement.all() as BoxStub[],
+  active: async (): Promise<BoxStub[]> => {
+    const rows = await query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`);
+    return rows.filter((r) => r.IsActive === 1);
+  },
+  all: async (): Promise<BoxStub[]> => query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`)
 };
 
-const insertStubStatement = db.prepare(`
-  INSERT INTO box_stubs (Id, ShelfId, Description, NumberLooseItems, NumberLooseBoxes, CreatedAt, CreatedBy, IsActive, Notes)
-  VALUES (@Id, @ShelfId, @Description, @NumberLooseItems, 0, @CreatedAt, @CreatedBy, 1, @Notes)
-`);
-
-export function createStub(params: {
+export async function createStub(params: {
   id: string;
   shelfId: string;
   description: string;
@@ -3615,17 +2240,17 @@ export function createStub(params: {
   createdAt: string;
   createdBy: string;
   notes: string | null;
-}): void {
-  insertStubStatement.run({
-    Id: params.id,
-    ShelfId: params.shelfId,
-    Description: params.description,
-    NumberLooseItems: params.numberLooseItems,
-    CreatedAt: params.createdAt,
-    CreatedBy: params.createdBy,
-    Notes: params.notes ?? null,
-  });
+}): Promise<void> {
+  await execute(
+    `INSERT INTO box_stubs ("Id","ShelfId","Description","NumberLooseItems","NumberLooseBoxes","CreatedAt","CreatedBy","IsActive","Notes")
+     VALUES ($1,$2,$3,$4,0,$5,$6,1,$7)`,
+    [params.id, params.shelfId, params.description, params.numberLooseItems, params.createdAt, params.createdBy, params.notes ?? null]
+  );
 }
+
+// ---------------------------------------------------------------------------
+// Type re-exports
+// ---------------------------------------------------------------------------
 
 export type {
   AgenticRun,

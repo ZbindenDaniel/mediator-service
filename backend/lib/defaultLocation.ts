@@ -1,9 +1,7 @@
-import type Database from 'better-sqlite3';
 import { defaultShelfLocationBySubcategory, itemCategories } from '../../models';
-import { db } from '../db';
+import { getBox, runUpsertBox } from '../db';
 
 interface EnsureDefaultLocationOptions {
-  database?: Database.Database;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
 
@@ -53,11 +51,10 @@ function resolveSubcategoryLabel(code: number): string | null {
   return null;
 }
 
-export function ensureDefaultLocationForSubcategory(
+export async function ensureDefaultLocationForSubcategory(
   subcategoryCode: unknown,
   options: EnsureDefaultLocationOptions = {}
-): string | null {
-  const database = options.database ?? db;
+): Promise<string | null> {
   const logger = options.logger ?? console;
 
   const normalizedCode = normalizeSubcategoryCode(subcategoryCode);
@@ -93,9 +90,7 @@ export function ensureDefaultLocationForSubcategory(
   const locationId = formatLocationId({ location, floor, index: 1 });
 
   try {
-    const existing = database
-      .prepare(`SELECT BoxID, LocationId, Label FROM boxes WHERE BoxID = ? OR LocationId = ? LIMIT 1`)
-      .get(locationId, locationId) as { BoxID?: string; LocationId?: string | null; Label?: string | null } | undefined;
+    const existing = await getBox(locationId) as { BoxID?: string; LocationId?: string | null; Label?: string | null } | null;
 
     if (existing?.BoxID) {
       return existing.BoxID;
@@ -103,24 +98,19 @@ export function ensureDefaultLocationForSubcategory(
 
     const label = resolveSubcategoryLabel(normalizedCode);
     const now = new Date().toISOString();
-    const insertPayload = {
+
+    await runUpsertBox({
       BoxID: locationId,
       LocationId: locationId,
       Label: label ? `Regal ${label}` : locationId,
       CreatedAt: now,
       UpdatedAt: now
-    };
-
-    database
-      .prepare(
-        `INSERT OR IGNORE INTO boxes (BoxID, LocationId, Label, CreatedAt, UpdatedAt) VALUES (@BoxID, @LocationId, @Label, @CreatedAt, @UpdatedAt)`
-      )
-      .run(insertPayload);
+    }, logger);
 
     logger.info('[default-location] Created missing default location box', {
       subcategoryCode: normalizedCode,
       locationId,
-      label: insertPayload.Label
+      label: label ? `Regal ${label}` : locationId
     });
 
     return locationId;
