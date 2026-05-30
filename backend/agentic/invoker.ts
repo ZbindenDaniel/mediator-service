@@ -1,6 +1,5 @@
 import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, type AgenticModelInvocationInput, type AgenticModelInvocationResult, type LangtextPayload } from '../../models';
 import {
-  db,
   getItem,
   findByMaterial,
   getAgenticRun,
@@ -16,6 +15,7 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
 } from '../db';
+import { query as dbQuery } from '../db-client';
 import { modelConfig, searchConfig } from './config';
 import { runItemFlow } from './flow/item-flow';
 import { selectExampleItemBlock, STATIC_EXAMPLE_ITEM_BLOCK } from './example-selector';
@@ -320,83 +320,35 @@ export class AgenticModelInvoker {
   private readonly applyAgenticResult: (payload: AgenticResultPayload) => void;
   private readonly persistAgenticRunError: (artikelNummer: string, errorMessage: string, attemptAt?: string) => void;
   // TODO(agentic-examples): Re-evaluate reviewed-example decision source if review lifecycle stores a dedicated final-decision field again.
-  private readonly selectReviewedExampleBySubcategory: { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
-
-  private buildReviewedExampleStatement(): { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> } {
-    const reviewedExampleQuery = `
-      SELECT
-        r.Artikel_Nummer,
-        r.Artikelbeschreibung,
-        r.Kurzbeschreibung,
-        r.Langtext,
-        r.Hersteller,
-        r.Länge_mm,
-        r.Breite_mm,
-        r.Höhe_mm,
-        r.Gewicht_kg,
-        r.Verkaufspreis,
-        %REVIEW_DECISION_FIELD% AS LastReviewDecision,
-        %REVIEWED_AT_FIELD% AS ReviewedAt
+  // Replaced sync SQLite statement with async Postgres query using canonical schema column names
+  private async queryReviewedExamplesBySubcategory(artikelNummer: string): Promise<Array<Record<string, unknown>>> {
+    return dbQuery(
+      `SELECT
+        r."Artikel_Nummer",
+        r."Artikelbeschreibung",
+        r."Kurzbeschreibung",
+        r."Langtext",
+        r."Hersteller",
+        r."Länge_mm",
+        r."Breite_mm",
+        r."Höhe_mm",
+        r."Gewicht_kg",
+        r."Verkaufspreis",
+        ar."ReviewState" AS "LastReviewDecision",
+        ar."LastModified" AS "ReviewedAt"
       FROM item_refs r
-      JOIN agentic_runs ar ON ar.Artikel_Nummer = r.Artikel_Nummer
-      WHERE CAST(r.Unterkategorien_A AS INTEGER) = (
-        SELECT CAST(base.Unterkategorien_A AS INTEGER)
+      JOIN agentic_runs ar ON ar."Artikel_Nummer" = r."Artikel_Nummer"
+      WHERE CAST(r."Unterkategorien_A" AS INTEGER) = (
+        SELECT CAST(base."Unterkategorien_A" AS INTEGER)
         FROM item_refs base
-        WHERE base.Artikel_Nummer = @Artikel_Nummer
+        WHERE base."Artikel_Nummer" = $1
       )
-        AND r.Artikel_Nummer <> @Artikel_Nummer
-        AND LOWER(COALESCE(%REVIEW_DECISION_FIELD%, '')) = 'approved'
-      ORDER BY datetime(%REVIEWED_AT_FIELD%) DESC, ar.Id DESC
-      LIMIT 5
-    `;
-
-    try {
-      const columnRows = db.prepare('PRAGMA table_info(agentic_runs)').all() as Array<Record<string, unknown>>;
-      const hasColumn = (name: string) => columnRows.some((column) => String(column.name ?? '').trim() === name);
-      const reviewDecisionField = hasColumn('ReviewState') ? 'ar.ReviewState' : hasColumn('LastReviewDecision') ? 'ar.LastReviewDecision' : "'approved'";
-      const reviewedAtField = hasColumn('LastModified')
-        ? 'ar.LastModified'
-        : hasColumn('UpdatedAt')
-          ? 'ar.UpdatedAt'
-          : "datetime('now')";
-
-      if (!hasColumn('ReviewState') && hasColumn('LastReviewDecision')) {
-        this.logger.warn?.({
-          msg: 'agentic example selector falling back to LastReviewDecision because ReviewState is unavailable'
-        });
-      }
-
-      if (!hasColumn('LastModified') && hasColumn('UpdatedAt')) {
-        this.logger.warn?.({
-          msg: 'agentic example selector falling back to UpdatedAt because LastModified is unavailable'
-        });
-      }
-
-      if (!hasColumn('LastModified') && !hasColumn('UpdatedAt')) {
-        this.logger.warn?.({
-          msg: 'agentic example selector missing LastModified/UpdatedAt; using current timestamp fallback for ordering'
-        });
-      }
-
-      this.logger.info?.({
-        msg: 'agentic example selector prepared with dynamic review/timestamp fields',
-        reviewDecisionField,
-        reviewedAtField
-      });
-
-      const statement = db.prepare(
-        reviewedExampleQuery
-          .split('%REVIEW_DECISION_FIELD%').join(reviewDecisionField)
-          .split('%REVIEWED_AT_FIELD%').join(reviewedAtField)
-      );
-      return statement as { all: (params: { Artikel_Nummer: string }) => Array<Record<string, unknown>> };
-    } catch (err) {
-      this.logger.error?.({
-        err,
-        msg: 'failed to prepare reviewed example selector statement'
-      });
-      throw err;
-    }
+        AND r."Artikel_Nummer" <> $1
+        AND LOWER(COALESCE(ar."ReviewState", '')) = 'approved'
+      ORDER BY ar."LastModified" DESC, ar."Id" DESC
+      LIMIT 5`,
+      [artikelNummer]
+    );
   }
 
   constructor(options: AgenticModelInvokerOptions = {}) {
@@ -405,7 +357,6 @@ export class AgenticModelInvoker {
       apiKey: searchConfig.tavilyApiKey,
       logger: this.logger
     });
-    this.selectReviewedExampleBySubcategory = this.buildReviewedExampleStatement();
     // TODO(agentic-error-handling): Align DB error persistence with future retry scheduling metadata once available.
     this.persistAgenticRunError = (artikelNummer: string, errorMessage: string, attemptAt?: string) => {
       try {
@@ -420,15 +371,17 @@ export class AgenticModelInvoker {
           { artikelNummer: payload.artikelNummer ?? '', payload },
           {
             ctx: {
-              db,
-              getItemReference,
-              getAgenticRun,
+              // Cast async db functions to match legacy sync AgenticResultHandlerContext shape;
+              // result-handler.ts is pending its own async migration
+              db: null as any,
+              getItemReference: getItemReference as any,
+              getAgenticRun: getAgenticRun as any,
               persistItemReference,
-              updateAgenticRunStatus,
-              upsertAgenticRun,
-              insertAgenticRunReviewHistoryEntry,
+              updateAgenticRunStatus: updateAgenticRunStatus as any,
+              upsertAgenticRun: upsertAgenticRun as any,
+              insertAgenticRunReviewHistoryEntry: insertAgenticRunReviewHistoryEntry as any,
               logEvent,
-              getAgenticRequestLog
+              getAgenticRequestLog: getAgenticRequestLog as any
             },
             logger: this.logger
           }
@@ -549,7 +502,7 @@ export class AgenticModelInvoker {
 
     if (parsed?.kind === 'artikelnummer') {
       try {
-        row = getItem.get(itemId) as Record<string, unknown> | undefined;
+        row = await getItem(itemId) as Record<string, unknown> | undefined;
         if (row) {
           source = 'items';
           this.logger.debug?.({
@@ -567,7 +520,7 @@ export class AgenticModelInvoker {
 
     if (!row) {
       try {
-        row = getItemReference.get(artikelNummer) as Record<string, unknown> | undefined;
+        row = await getItemReference(artikelNummer) as Record<string, unknown> | undefined;
         if (row) {
           source = 'item_refs';
           this.logger.debug?.({
@@ -585,7 +538,7 @@ export class AgenticModelInvoker {
 
     if (!row) {
       try {
-        const results = findByMaterial?.all ? (findByMaterial.all(artikelNummer) as Record<string, unknown>[]) : [];
+        const results = await findByMaterial(artikelNummer) as Record<string, unknown>[];
         row = Array.isArray(results) && results.length > 0 ? results[0] : undefined;
         if (row) {
           source = 'findByMaterial fallback';
@@ -617,10 +570,10 @@ export class AgenticModelInvoker {
     return target;
   }
 
-  private mergeTargetWithRequestPayload(
+  private async mergeTargetWithRequestPayload(
     target: Record<string, unknown>,
     requestId: string | null | undefined
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const sanitizedRequestId = typeof requestId === 'string' ? requestId.trim() : '';
     if (!sanitizedRequestId) {
       return target;
@@ -628,7 +581,7 @@ export class AgenticModelInvoker {
 
     let requestLog: { PayloadJson: string | null } | null;
     try {
-      requestLog = getAgenticRequestLog(sanitizedRequestId);
+      requestLog = await getAgenticRequestLog(sanitizedRequestId);
     } catch (err) {
       this.logger.error?.({ err, msg: 'failed to load request log for agentic invocation', requestId: sanitizedRequestId });
       return target;
@@ -793,7 +746,7 @@ export class AgenticModelInvoker {
       if (!target.Artikelbeschreibung && input.searchQuery) {
         target.Artikelbeschreibung = input.searchQuery;
       }
-      target = this.mergeTargetWithRequestPayload({ ...target }, input.requestId ?? null);
+      target = await this.mergeTargetWithRequestPayload({ ...target }, input.requestId ?? null);
       target = pruneUnneededSpecFieldsFromTarget({
         target: target as AgenticTarget,
         unneededSpecFields: normalizedUnneededSpecFields,
@@ -808,7 +761,7 @@ export class AgenticModelInvoker {
 
       let exampleItemBlock: string | null = STATIC_EXAMPLE_ITEM_BLOCK;
       try {
-        const candidates = this.selectReviewedExampleBySubcategory.all({ Artikel_Nummer: trimmedItemId }) as Array<Record<string, unknown>>;
+        const candidates = await this.queryReviewedExamplesBySubcategory(trimmedItemId);
         const exampleSelection = selectExampleItemBlock({
           candidates,
           currentItemId: trimmedItemId,

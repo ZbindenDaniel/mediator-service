@@ -843,7 +843,7 @@ const action = defineHttpAction({
         // TODO(agentic-card-metrics): Keep agent card metrics payload lean while preserving denominator context.
         let agenticReviewAutomation: ItemDetailResponse['agenticReviewAutomation'] = null;
         try {
-          const aggregatedSignals = loadSubcategoryReviewAutomationSignals(item.Artikel_Nummer ?? '', {
+          const aggregatedSignals = await loadSubcategoryReviewAutomationSignals(item.Artikel_Nummer ?? '', {
             getItemReference: ctx.getItemReference,
             listRecentReviewHistoryBySubcategory: listRecentAgenticRunReviewHistoryBySubcategory,
             logger: console

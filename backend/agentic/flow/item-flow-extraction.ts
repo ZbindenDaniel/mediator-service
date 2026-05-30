@@ -824,7 +824,7 @@ export async function runExtractionAttempts({
     information_present_low_trigger: { extraction: 0, supervisor: 0, user: 0 }
   };
   try {
-    const aggregatedSignals = loadSubcategoryReviewAutomationSignals(itemId, {
+    const aggregatedSignals = await loadSubcategoryReviewAutomationSignals(itemId, {
       getItemReference,
       listRecentReviewHistoryBySubcategory: listRecentAgenticRunReviewHistoryBySubcategory,
       logger: logger ?? console
@@ -920,7 +920,7 @@ export async function runExtractionAttempts({
     logger?.info?.({
       msg: 'review automation signal prompt injection complete',
       itemId,
-      subcategory: getItemReference.get(itemId)?.Unterkategorien_A ?? null,
+      subcategory: (await getItemReference(itemId))?.Unterkategorien_A ?? null,
       sampleSize: aggregatedSignals.sampleSize,
       activeTriggers,
       injectedPlaceholderFragments: {

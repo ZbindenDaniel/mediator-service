@@ -75,14 +75,14 @@ const action = defineHttpAction({
 
       let id: number;
       try {
-        id = insertQualityAssessment(assessment);
+        id = await insertQualityAssessment(assessment);
       } catch (err) {
         console.error('[quality-review] Failed to insert quality assessment', { itemUUID, error: err });
         return sendJson(res, 500, { error: 'Failed to save quality assessment' });
       }
 
       try {
-        updateItemQualityAssessment(itemUUID, id, checkResponse.qualityValue);
+        await updateItemQualityAssessment(itemUUID, id, checkResponse.qualityValue);
       } catch (err) {
         console.error('[quality-review] Failed to update item quality fields', { itemUUID, id, error: err });
         return sendJson(res, 500, { error: 'Failed to link quality assessment to item' });
@@ -90,7 +90,7 @@ const action = defineHttpAction({
 
       if (Object.keys(checkResponse.derivedSpecs).length > 0) {
         try {
-          updateItemInstanceSpecs(itemUUID, checkResponse.derivedSpecs);
+          await updateItemInstanceSpecs(itemUUID, checkResponse.derivedSpecs);
         } catch (err) {
           // Non-fatal: store failure doesn't fail the whole review
           console.warn('[quality-review] Failed to store derived specs into InstanceSpecs', { itemUUID, error: err });

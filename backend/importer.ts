@@ -853,19 +853,19 @@ type ArtikelNummerMintState = {
   mintedCount: number;
 };
 
-function resolveArtikelNummerMintState(): ArtikelNummerMintState {
+async function resolveArtikelNummerMintState(): Promise<ArtikelNummerMintState> {
   let baseValue = 0;
   try {
-    const row = getMaxArtikelNummer.get() as { Artikel_Nummer?: string | null } | undefined;
-    if (row && typeof row.Artikel_Nummer === 'string') {
-      const normalized = row.Artikel_Nummer.trim();
+    const maxArtikelNummer = await getMaxArtikelNummer();
+    if (maxArtikelNummer && typeof maxArtikelNummer === 'string') {
+      const normalized = maxArtikelNummer.trim();
       if (normalized) {
         const parsed = Number.parseInt(normalized, 10);
         if (!Number.isNaN(parsed)) {
           baseValue = parsed;
         } else {
           console.warn('[importer] Ignoring non-numeric max Artikel_Nummer value', {
-            provided: row.Artikel_Nummer,
+            provided: maxArtikelNummer,
           });
         }
       }
@@ -1018,7 +1018,7 @@ function normalizeItemUuidValue(rawValue: unknown): ItemUuidNormalizationResult 
 
 function applyOps(row: Record<string, string>, runState: Map<string, unknown>): Record<string, string> {
   const ctx = {
-    queueLabel: (itemUUID: string) => queueLabel.run(itemUUID),
+    queueLabel: (itemUUID: string) => void queueLabel(itemUUID),
     log: (...a: unknown[]) => console.log('[ops]', ...a),
     runState,
   };
@@ -1064,7 +1064,7 @@ export async function ingestCsvFile(
     const itemSequenceByArtikelNummer = new Map<string, number>();
     const itemSequenceByDate = new Map<string, number>();
     const runState = new Map<string, unknown>();
-    const artikelNummerMintState = resolveArtikelNummerMintState();
+    const artikelNummerMintState = await resolveArtikelNummerMintState();
 
     for (const [index, r] of records.entries()) {
       const rowNumber = index + 1;
@@ -1404,7 +1404,7 @@ export async function ingestCsvFile(
           });
         } else {
           try {
-            const hasExistingRef = hasItemReferenceByArtikelNummer(artikelNummer);
+            const hasExistingRef = await hasItemReferenceByArtikelNummer(artikelNummer);
             if (hasExistingRef) {
               console.info('[importer] Skipping item reference persistence because Artikel-Nummer already exists', refLogContext);
               continue;
@@ -1469,7 +1469,8 @@ export async function ingestCsvFile(
 
       if (!baseItemUUID && artikelNummer) {
         try {
-          const existing = findByMaterial.get(artikelNummer) as { ItemUUID?: string } | undefined;
+          const materialRows = await findByMaterial(artikelNummer);
+          const existing = (materialRows[0] as { ItemUUID?: string } | undefined);
           if (existing?.ItemUUID) {
             baseItemUUID = existing.ItemUUID;
             uuidSource = 'artikelnummer-fallback';
@@ -1560,7 +1561,7 @@ export async function ingestCsvFile(
       let refAction: 'created' | 'updated' | 'skipped-existing' = 'updated';
       try {
         if (artikelNummer) {
-          refAction = hasItemReferenceByArtikelNummer(artikelNummer) ? 'updated' : 'created';
+          refAction = (await hasItemReferenceByArtikelNummer(artikelNummer)) ? 'updated' : 'created';
         }
       } catch (error) {
         console.error('[importer] Failed to resolve item reference action for instance persistence logs', {
@@ -1576,7 +1577,7 @@ export async function ingestCsvFile(
       const existingItemUUIDs = new Set<string>();
       if (artikelNummer) {
         try {
-          const existingInstances = findByMaterial.all(artikelNummer) as Array<{ ItemUUID?: string | null }>;
+          const existingInstances = (await findByMaterial(artikelNummer)) as Array<{ ItemUUID?: string | null }>;
           for (const existingInstance of existingInstances) {
             const existingItemUUID =
               typeof existingInstance?.ItemUUID === 'string' ? existingInstance.ItemUUID.trim() : '';
@@ -1819,7 +1820,7 @@ export async function ingestEventsCsv(data: Buffer | string): Promise<{ count: n
           continue;
         }
 
-        const inserted = insertEventLogEntry({
+        const inserted = await insertEventLogEntry({
           CreatedAt: createdAt as string,
           Actor: actor || null,
           EntityType: entityType,
@@ -2042,7 +2043,7 @@ export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ cou
 
         let hasParentItemReference = false;
         try {
-          hasParentItemReference = hasItemReferenceByArtikelNummer(artikelNummer);
+          hasParentItemReference = await hasItemReferenceByArtikelNummer(artikelNummer);
         } catch (lookupError) {
           console.error('[importer] Failed to verify item_refs parent for agentic_runs row', {
             rowNumber,
@@ -2063,7 +2064,7 @@ export async function ingestAgenticRunsCsv(data: Buffer | string): Promise<{ cou
         }
 
         try {
-          upsertAgenticRun.run(run);
+          await upsertAgenticRun(run);
           count++;
         } catch (upsertError) {
           console.error('[importer] Failed to upsert agentic run from agentic_runs row', {

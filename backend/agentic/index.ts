@@ -1031,10 +1031,10 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
 }
 
 // TODO(agentic-queue-dispatch): Add queue-level metrics once dispatch cadence is in production.
-export function dispatchQueuedAgenticRuns(
+export async function dispatchQueuedAgenticRuns(
   deps: AgenticServiceDependencies,
   { limit }: { limit?: number } = {}
-): { scheduled: number; skipped: number; failed: number } {
+): Promise<{ scheduled: number; skipped: number; failed: number }> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
@@ -1101,7 +1101,7 @@ export function dispatchQueuedAgenticRuns(
   let queuedRuns: AgenticRun[] = [];
 
   try {
-    queuedRuns = fetchQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
+    queuedRuns = await fetchQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
   } catch (err) {
     logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
       error: toErrorMessage(err),
@@ -1930,7 +1930,7 @@ export async function resumeStaleAgenticRuns(
       });
       let reviewHistory: AgenticRunReviewHistoryEntry[] = [];
       try {
-        reviewHistory = listAgenticRunReviewHistory(run.Artikel_Nummer);
+        reviewHistory = await listAgenticRunReviewHistory(run.Artikel_Nummer);
       } catch (historyErr) {
         logger.warn?.('[agentic-service] Failed to load review history during stale run resume', {
           artikelNummer: run.Artikel_Nummer,
