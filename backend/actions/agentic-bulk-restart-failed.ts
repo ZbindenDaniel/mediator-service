@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { query } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -35,9 +36,10 @@ const action = defineHttpAction({
 
     let failedRuns: Array<{ Artikel_Nummer: string }> = [];
     try {
-      failedRuns = ctx.db.prepare(
-        `SELECT Artikel_Nummer FROM agentic_runs WHERE Status = 'failed' AND Artikel_Nummer IS NOT NULL`
-      ).all() as Array<{ Artikel_Nummer: string }>;
+      failedRuns = await query<{ Artikel_Nummer: string }>(
+        `SELECT Artikel_Nummer FROM agentic_runs WHERE Status = 'failed' AND Artikel_Nummer IS NOT NULL`,
+        []
+      );
     } catch (err) {
       console.error('[agentic-bulk-restart-failed] Failed to query failed runs', err);
       return sendJson(res, 500, { error: 'Failed to load failed runs' });
@@ -56,7 +58,7 @@ const action = defineHttpAction({
         const identifier = run.Artikel_Nummer?.trim();
         if (!identifier) { skipped++; continue; }
 
-        ctx.upsertAgenticRun.run({
+        await ctx.upsertAgenticRun({
           Artikel_Nummer: identifier,
           SearchQuery: null,
           Status: 'queued',

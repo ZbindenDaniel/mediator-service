@@ -639,13 +639,10 @@ const action = defineHttpAction({
                 ReviewedBy: reviewedBy,
                 LastReviewDecision: reviewDecisionToPersist,
                 LastReviewNotes: notes || null,
-                LastSearchLinksJson: run?.LastSearchLinksJson ?? null
+                LastSearchLinksJson: null
               });
             } else {
-              const result = ctx.updateAgenticReview.run(transitionPayload);
-              if (!result || result.changes === 0) {
-                throw new Error('Agentic review update had no effect');
-              }
+              await ctx.updateAgenticReview(transitionPayload);
             }
           } catch (dbErr) {
             console.error('Agentic close transition failed for Artikelnummer', {
@@ -693,10 +690,7 @@ const action = defineHttpAction({
           });
 
           try {
-            const result = ctx.updateAgenticReview.run(transitionPayload);
-            if (!result || result.changes === 0) {
-              throw new Error('Agentic review update had no effect');
-            }
+            await ctx.updateAgenticReview(transitionPayload);
           } catch (dbErr) {
             console.error('Agentic review transition failed for Artikelnummer', {
               artikelNummer,

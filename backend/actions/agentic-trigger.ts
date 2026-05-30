@@ -392,7 +392,6 @@ const action = defineHttpAction({
         context: contextLabel,
         logger: console,
         service: {
-          db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,

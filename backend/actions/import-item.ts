@@ -23,6 +23,7 @@ import { resolveCategoryLabelToCode, resolveSubcategoryLabelToCodeWithParent } f
 import { normalizeQuality, resolveQualityFromLabel } from '../../models/quality';
 import { getSpecContract } from '../contracts/registry';
 import { applySpecContract } from '../../models/spec-contract';
+import { queryOne, withTransaction } from '../db-client';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -74,7 +75,7 @@ async function ensureUniqueItemUUID(
 
   const resolveNextSequenceFromDb = async (current: string): Promise<string | null> => {
     const context = resolveSequentialContext(current);
-    if (!context || !ctx?.db?.prepare) {
+    if (!context) {
       return null;
     }
 
@@ -82,14 +83,14 @@ async function ensureUniqueItemUUID(
     const pattern = `${context.prefix}${context.identifier}-%`;
 
     try {
-      const statement = ctx.db.prepare(
+      const row = await queryOne<{ ItemUUID?: string }>(
         `SELECT ItemUUID
          FROM items
-         WHERE ItemUUID LIKE ?
-         ORDER BY CAST(substr(ItemUUID, ?, 4) AS INTEGER) DESC
-         LIMIT 1`
+         WHERE ItemUUID LIKE $1
+         ORDER BY CAST(substr(ItemUUID, $2, 4) AS INTEGER) DESC
+         LIMIT 1`,
+        [pattern, sequenceStartIndex]
       );
-      const row = statement.get(pattern, sequenceStartIndex) as { ItemUUID?: string } | undefined;
       const parsed = row?.ItemUUID ? parseSequentialItemUUID(row.ItemUUID, context.prefix) : null;
       if (row?.ItemUUID && !parsed) {
         console.warn('[import-item] Unable to parse ItemUUID from collision query result', {
@@ -122,10 +123,7 @@ async function ensureUniqueItemUUID(
       });
     } else {
       try {
-        const existingLookup = ctx.getItem?.get ? ctx.getItem.get(itemUUID) : null;
-        existing = typeof (existingLookup as Promise<unknown>)?.then === 'function'
-          ? await existingLookup
-          : existingLookup;
+        existing = ctx.getItem ? await ctx.getItem(itemUUID) : null;
       } catch (lookupError) {
         console.error('[import-item] Failed to verify ItemUUID uniqueness during mint', {
           attempt,
@@ -537,8 +535,7 @@ const action = defineHttpAction({
         try {
           let existing: unknown = null;
           try {
-            const lookup = ctx?.getItem?.get ? ctx.getItem.get(incomingItemUUID) : null;
-            existing = typeof (lookup as Promise<unknown>)?.then === 'function' ? await lookup : lookup;
+            existing = ctx?.getItem ? await ctx.getItem(incomingItemUUID) : null;
           } catch (lookupError) {
             console.error('[import-item] Failed to verify caller-provided ItemUUID for new import', {
               actor,
@@ -599,7 +596,7 @@ const action = defineHttpAction({
 
           let referenceRow: unknown;
           try {
-            referenceRow = ctx.getItemReference.get(incomingArtikelNummer);
+            referenceRow = await ctx.getItemReference(incomingArtikelNummer);
           } catch (lookupErr) {
             console.error('[import-item] Failed to fetch item reference for creation-by-reference branch', {
               artikelNummer: incomingArtikelNummer,
@@ -846,9 +843,9 @@ const action = defineHttpAction({
       });
       let existingReferenceSuchbegriff = '';
       let hasExistingReference = false;
-      if (resolvedArtikelNummer && ctx.getItemReference?.get) {
+      if (resolvedArtikelNummer && ctx.getItemReference) {
         try {
-          const existingReference = ctx.getItemReference.get(resolvedArtikelNummer) as ItemRef | undefined;
+          const existingReference = await ctx.getItemReference(resolvedArtikelNummer) as ItemRef | undefined;
           if (existingReference) {
             hasExistingReference = true;
             existingReferenceSuchbegriff =
@@ -970,9 +967,10 @@ const action = defineHttpAction({
       let ean: string | null = null;
       if (eanRaw) {
         if (EAN_VALID_RE.test(eanRaw)) {
-          const existingEanRow = ctx.db
-            .prepare(`SELECT Artikel_Nummer FROM item_refs WHERE EAN = ? LIMIT 1`)
-            .get(eanRaw) as { Artikel_Nummer: string } | undefined;
+          const existingEanRow = await queryOne<{ Artikel_Nummer: string }>(
+            `SELECT Artikel_Nummer FROM item_refs WHERE EAN = $1 LIMIT 1`,
+            [eanRaw]
+          );
           if (existingEanRow && existingEanRow.Artikel_Nummer !== resolvedArtikelNummer) {
             console.warn('[import-item] EAN already assigned to a different Artikel_Nummer; skipping EAN field', {
               ean: eanRaw,
@@ -1445,9 +1443,9 @@ const action = defineHttpAction({
       }
 
       let hasExistingAgenticRun = false;
-      if (canonicalAgenticArtikelNummer && ctx.getAgenticRun?.get) {
+      if (canonicalAgenticArtikelNummer && ctx.getAgenticRun) {
         try {
-          const existingRun = ctx.getAgenticRun.get(canonicalAgenticArtikelNummer) as { Status?: string | null } | undefined;
+          const existingRun = await ctx.getAgenticRun(canonicalAgenticArtikelNummer) as { Status?: string | null } | undefined;
           if (existingRun) {
             hasExistingAgenticRun = true;
           }
@@ -1488,22 +1486,27 @@ const action = defineHttpAction({
         }
       }
 
-      const txn = ctx.db.transaction(
-        (
-          boxId: string | null,
-          itemDataList: Array<{ ItemUUID: string } & Record<string, unknown>>,
-          a: string,
-          search: string,
-          status: string,
-          boxLocation: string | null,
-          boxPhotoPath: string | null,
-          agenticEnabled: boolean,
-          manuallySkipped: boolean,
-          seedArtikelNummer: string | null
-        ) => {
+      const itemDataList = itemUUIDs.map((uuid) => ({
+        ...data,
+        ItemUUID: uuid,
+        Auf_Lager: creationPlan.quantityPerItem
+      }));
+      // withTransaction provides atomicity for multi-step item+box+agentic persistence
+      try {
+        await withTransaction(async () => {
+          const boxId = BoxID;
+          const a = actor;
+          const search = agenticSearchQuery;
+          const status = agenticStatus;
+          const boxLocation = boxLocationIdToPersist;
+          const boxPhotoPath = preservedBoxPhotoPath;
+          const agenticEnabled = Boolean(ctx.agenticServiceEnabled);
+          const manuallySkipped = agenticRunManuallySkipped;
+          const seedArtikelNummer = agenticSeedArtikelNummer;
+
           let agenticRunPersisted = false;
           if (boxId) {
-            ctx.runUpsertBox({
+            await ctx.runUpsertBox({
               BoxID: boxId,
               LocationId: boxLocation,
               Label: boxLabelToPersist,
@@ -1522,13 +1525,13 @@ const action = defineHttpAction({
           }
           try {
             for (const itemData of itemDataList) {
-              ctx.persistItemWithinTransaction(itemData);
+              await ctx.persistItemWithinTransaction(itemData);
               const shouldPersistAgenticRun = Boolean(seedArtikelNummer && !agenticRunPersisted);
 
               let itemExists: { ItemUUID: string } | undefined;
               if (!isUpdateRequest) {
                 try {
-                  itemExists = ctx.getItem.get(itemData.ItemUUID) as { ItemUUID: string } | undefined;
+                  itemExists = ctx.getItem ? await ctx.getItem(itemData.ItemUUID) as { ItemUUID: string } | undefined : undefined;
                 } catch (lookupErr) {
                   console.error('[import-item] Failed to check existing item state during event logging', lookupErr);
                 }
@@ -1546,8 +1549,8 @@ const action = defineHttpAction({
                 let previousAgenticRun: { Status?: string | null } | null = null;
                 if (!manuallySkipped) {
                   try {
-                    previousAgenticRun = ctx.getAgenticRun?.get
-                      ? ((ctx.getAgenticRun.get(seedArtikelNummer as string) as { Status?: string | null } | undefined) ?? null)
+                    previousAgenticRun = ctx.getAgenticRun
+                      ? ((await ctx.getAgenticRun(seedArtikelNummer as string) as { Status?: string | null } | undefined) ?? null)
                       : null;
                   } catch (agenticLookupErr) {
                     console.error('[import-item] Failed to load existing agentic run before upsert', agenticLookupErr);
@@ -1567,7 +1570,7 @@ const action = defineHttpAction({
                 };
 
                 try {
-                  ctx.upsertAgenticRun.run(agenticRun);
+                  await ctx.upsertAgenticRun(agenticRun);
                 } catch (agenticPersistErr) {
                   console.error('[import-item] Failed to upsert agentic run during import transaction', {
                     Artikel_Nummer: seedArtikelNummer,
@@ -1630,26 +1633,7 @@ const action = defineHttpAction({
             });
             throw persistError;
           }
-        }
-      );
-      const itemDataList = itemUUIDs.map((uuid) => ({
-        ...data,
-        ItemUUID: uuid,
-        Auf_Lager: creationPlan.quantityPerItem
-      }));
-      try {
-        txn(
-          BoxID,
-          itemDataList,
-          actor,
-          agenticSearchQuery,
-          agenticStatus,
-          boxLocationIdToPersist,
-          preservedBoxPhotoPath,
-          Boolean(ctx.agenticServiceEnabled),
-          agenticRunManuallySkipped,
-          agenticSeedArtikelNummer
-        );
+        });
       } catch (transactionError) {
         const artikelNummerForLog =
           agenticSeedArtikelNummer || canonicalAgenticArtikelNummer || resolvedArtikelNummer || incomingArtikelNummer || null;
@@ -1681,8 +1665,8 @@ const action = defineHttpAction({
         : [];
       for (const artikelNummer of artikelNummernToTrigger) {
         try {
-          const persistedAgenticRun = ctx.getAgenticRun?.get
-            ? ((ctx.getAgenticRun.get(artikelNummer) as { Artikel_Nummer?: string; SearchQuery?: string | null } | undefined) ?? null)
+          const persistedAgenticRun = ctx.getAgenticRun
+            ? ((await ctx.getAgenticRun(artikelNummer) as { Artikel_Nummer?: string; SearchQuery?: string | null } | undefined) ?? null)
             : null;
           if (!persistedAgenticRun) {
             console.warn('[import-item] Agentic run missing immediately after import transaction', {
@@ -1728,7 +1712,6 @@ const action = defineHttpAction({
                 context: 'import-item',
                 logger: console,
                 service: {
-                  db: ctx.db,
                   getAgenticRun: ctx.getAgenticRun,
                   upsertAgenticRun: ctx.upsertAgenticRun,
                   updateAgenticRunStatus: ctx.updateAgenticRunStatus,
@@ -1776,8 +1759,8 @@ const action = defineHttpAction({
       let responseBoxId: string | null = BoxID;
       try {
         const primaryItemUUID = itemUUIDs[0];
-        const persistedItem = ctx.getItem?.get
-          ? ((ctx.getItem.get(primaryItemUUID) as { Artikel_Nummer?: string | null; BoxID?: string | null } | undefined) ??
+        const persistedItem = ctx.getItem
+          ? ((await ctx.getItem(primaryItemUUID) as { Artikel_Nummer?: string | null; BoxID?: string | null } | undefined) ??
               null)
           : null;
         if (persistedItem) {

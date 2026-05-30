@@ -26,6 +26,7 @@ import { getSpecContract } from '../contracts/registry';
 import { applySpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
 import { calculateCo2Savings } from '../lib/co2Calculator';
+import { query as dbQuery, withTransaction } from '../db-client';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -610,7 +611,7 @@ const action = defineHttpAction({
 
     if (req.method === 'GET') {
       try {
-        let item = (ctx.getItem.get(itemId) as Item | undefined) ?? null;
+        let item = (await ctx.getItem(itemId) as Item | undefined) ?? null;
         let identifierMode: 'itemUUID' | 'artikelNummer' = 'itemUUID';
         let resolvedItemId = itemId;
         let fallbackReference: ItemRef | null = null;
@@ -619,11 +620,11 @@ const action = defineHttpAction({
         if (!item) {
           identifierMode = 'artikelNummer';
           try {
-            if (ctx.getItemReference?.get) {
-              fallbackReference = (ctx.getItemReference.get(itemId) as ItemRef | undefined) ?? null;
+            if (ctx.getItemReference) {
+              fallbackReference = (await ctx.getItemReference(itemId) as ItemRef | undefined) ?? null;
             }
-            if (ctx.findByMaterial?.all) {
-              const materialInstances = ctx.findByMaterial.all(itemId) as Item[] | undefined;
+            if (ctx.findByMaterial) {
+              const materialInstances = await ctx.findByMaterial(itemId) as Item[] | undefined;
               fallbackInstances = Array.isArray(materialInstances) ? materialInstances : [];
             }
             if (fallbackInstances.length > 0) {
@@ -677,8 +678,8 @@ const action = defineHttpAction({
 
         if (!item) return sendJson(res, 404, { error: 'Not found' });
 
-        const box = ctx.getBox.get(item.BoxID);
-        const events = ctx.listEventsForItem.all(resolvedItemId);
+        const box = await ctx.getBox(item.BoxID);
+        const events = await ctx.listEventsForItem(resolvedItemId);
         console.info('[save-item] GET detail identifier mode in use', {
           identifierMode,
           requestedIdentifier: itemId
@@ -691,7 +692,7 @@ const action = defineHttpAction({
             console.warn('[save-item] Missing Artikel_Nummer for agentic run lookup', { itemId });
           }
           agentic = ctx.getAgenticRun && agenticArtikelNummer
-            ? ((ctx.getAgenticRun.get(agenticArtikelNummer) as AgenticRun | undefined) ?? null)
+            ? ((await ctx.getAgenticRun(agenticArtikelNummer) as AgenticRun | undefined) ?? null)
             : null;
           if (agentic) {
             try {
@@ -718,8 +719,8 @@ const action = defineHttpAction({
         // TODO(stock-visibility): Verify Auf_Lager instance summary data feeds withdrawal availability.
         let instances: ItemInstanceSummary[] = [];
         try {
-          if (item.Artikel_Nummer && ctx.findByMaterial?.all) {
-            const rawInstances = ctx.findByMaterial.all(item.Artikel_Nummer) as Item[] | undefined;
+          if (item.Artikel_Nummer && ctx.findByMaterial) {
+            const rawInstances = await ctx.findByMaterial(item.Artikel_Nummer) as Item[] | undefined;
             if (Array.isArray(rawInstances)) {
               const normalizedInstances: ItemInstanceSummary[] = [];
               let zeroStockCount = 0;
@@ -811,10 +812,10 @@ const action = defineHttpAction({
           artikelNummer = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
           if (!artikelNummer) {
             console.warn('[save-item] Missing Artikel_Nummer for reference lookup', { itemId });
-          } else if (!ctx.getItemReference?.get) {
+          } else if (!ctx.getItemReference) {
             console.warn('[save-item] Missing getItemReference helper for reference lookup', { itemId, artikelNummer });
           } else {
-            reference = (ctx.getItemReference.get(artikelNummer) as ItemRef | undefined) ?? null;
+            reference = (await ctx.getItemReference(artikelNummer) as ItemRef | undefined) ?? null;
             if (!reference) {
               console.warn('[save-item] Missing reference for Artikel_Nummer', { itemId, artikelNummer });
             }
@@ -895,7 +896,7 @@ const action = defineHttpAction({
         let compatibleParentRefs: unknown[] = [];
         let attachments: unknown[] = [];
         try {
-          connectedAccessories = ctx.db.prepare(`
+          connectedAccessories = await dbQuery(`
             SELECT ir.Id, ir.ChildItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
                    ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
                    i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
@@ -903,11 +904,11 @@ const action = defineHttpAction({
             FROM item_relations ir
             JOIN items i ON i.ItemUUID = ir.ChildItemUUID
             LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-            WHERE ir.ParentItemUUID = ?
+            WHERE ir.ParentItemUUID = $1
             ORDER BY ir.CreatedAt
-          `).all(resolvedItemId) as unknown[];
+          `, [resolvedItemId]);
 
-          connectedToDevices = ctx.db.prepare(`
+          connectedToDevices = await dbQuery(`
             SELECT ir.Id, ir.ParentItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
                    ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
                    i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
@@ -915,12 +916,12 @@ const action = defineHttpAction({
             FROM item_relations ir
             JOIN items i ON i.ItemUUID = ir.ParentItemUUID
             LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-            WHERE ir.ChildItemUUID = ?
+            WHERE ir.ChildItemUUID = $1
             ORDER BY ir.CreatedAt
-          `).all(resolvedItemId) as unknown[];
+          `, [resolvedItemId]);
 
           if (item.Artikel_Nummer) {
-            compatibleAccessoryRefs = ctx.db.prepare(`
+            compatibleAccessoryRefs = await dbQuery(`
               SELECT irr.ChildArtikel_Nummer AS Artikel_Nummer,
                      irr.RelationType, irr.Notes, irr.CreatedAt,
                      r.Artikelbeschreibung, r.Kurzbeschreibung,
@@ -931,25 +932,25 @@ const action = defineHttpAction({
                      ) AS availableCount
               FROM item_ref_relations irr
               LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ChildArtikel_Nummer
-              WHERE irr.ParentArtikel_Nummer = ?
+              WHERE irr.ParentArtikel_Nummer = $1
               ORDER BY irr.CreatedAt
-            `).all(item.Artikel_Nummer) as unknown[];
+            `, [item.Artikel_Nummer]);
 
-            compatibleParentRefs = ctx.db.prepare(`
+            compatibleParentRefs = await dbQuery(`
               SELECT irr.ParentArtikel_Nummer AS Artikel_Nummer,
                      irr.RelationType, irr.Notes, irr.CreatedAt,
                      r.Artikelbeschreibung, r.Kurzbeschreibung
               FROM item_ref_relations irr
               LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ParentArtikel_Nummer
-              WHERE irr.ChildArtikel_Nummer = ?
+              WHERE irr.ChildArtikel_Nummer = $1
               ORDER BY irr.CreatedAt
-            `).all(item.Artikel_Nummer) as unknown[];
+            `, [item.Artikel_Nummer]);
           }
 
-          attachments = ctx.db.prepare(`
+          attachments = await dbQuery(`
             SELECT Id, ItemUUID, FileName, FilePath, MimeType, Label, FileSize, CreatedAt
-            FROM item_attachments WHERE ItemUUID = ? ORDER BY CreatedAt DESC
-          `).all(resolvedItemId) as unknown[];
+            FROM item_attachments WHERE ItemUUID = $1 ORDER BY CreatedAt DESC
+          `, [resolvedItemId]);
         } catch (relationErr) {
           console.error('[save-item] Failed to load relations/attachments for item detail', {
             itemId,
@@ -1058,7 +1059,7 @@ const action = defineHttpAction({
       const data = raw ? JSON.parse(raw) : {};
       const actor = (data.actor || '').trim();
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
-      const existing = ctx.getItem.get(itemId) || {};
+      const existing = await ctx.getItem(itemId) || {};
       const mediaArtikelNummer = data.Artikel_Nummer || existing.Artikel_Nummer || null;
       let grafik = existing.Grafikname || '';
       let grafikWasExplicitlyUpdated = false;
@@ -1246,8 +1247,8 @@ const action = defineHttpAction({
       }
       let existingReference: ItemRef | null = null;
       try {
-        if (ctx.getItemReference?.get) {
-          existingReference = (ctx.getItemReference.get(artikelNummer) as ItemRef | undefined) ?? null;
+        if (ctx.getItemReference) {
+          existingReference = (await ctx.getItemReference(artikelNummer) as ItemRef | undefined) ?? null;
         } else {
           console.warn('[save-item] Missing getItemReference helper for reference update', { itemId, artikelNummer });
         }
@@ -1357,39 +1358,38 @@ const action = defineHttpAction({
         ...referenceUpdates,
         Artikel_Nummer: artikelNummer
       };
-      const txn = ctx.db.transaction((ref: ItemRef, a: string) => {
-        ctx.persistItemReference(ref);
-        ctx.logEvent({
-          Actor: a,
-          EntityType: 'Item',
-          EntityId: itemId,
-          Event: 'Updated',
-          Meta: null
-        });
-        try {
-          const correlationId = generateShopwareCorrelationId('save-item', itemId);
-          const payload = JSON.stringify({
-            actor: a,
-            artikelNummer: ref.Artikel_Nummer ?? null,
-            boxId: existing.BoxID ?? null,
-            location: existing.Location ?? null,
-            itemUUID: itemId,
-            trigger: 'save-item'
-          });
-          ctx.enqueueShopwareSyncJob({
-            CorrelationId: correlationId,
-            JobType: 'item-upsert',
-            Payload: payload
-          });
-        } catch (queueErr) {
-          console.error('[save-item] Failed to enqueue Shopware sync job', {
-            itemId,
-            error: queueErr
-          });
-        }
-      });
       try {
-        txn(reference, actor);
+        await withTransaction(async () => {
+          await ctx.persistItemReference(reference);
+          ctx.logEvent({
+            Actor: actor,
+            EntityType: 'Item',
+            EntityId: itemId,
+            Event: 'Updated',
+            Meta: null
+          });
+          try {
+            const correlationId = generateShopwareCorrelationId('save-item', itemId);
+            const payload = JSON.stringify({
+              actor,
+              artikelNummer: reference.Artikel_Nummer ?? null,
+              boxId: existing.BoxID ?? null,
+              location: existing.Location ?? null,
+              itemUUID: itemId,
+              trigger: 'save-item'
+            });
+            ctx.enqueueShopwareSyncJob({
+              CorrelationId: correlationId,
+              JobType: 'item-upsert',
+              Payload: payload
+            });
+          } catch (queueErr) {
+            console.error('[save-item] Failed to enqueue Shopware sync job', {
+              itemId,
+              error: queueErr
+            });
+          }
+        });
       } catch (error) {
         console.error('[save-item] Failed to persist item reference update', { itemId, artikelNummer, error });
         return sendJson(res, 500, { error: 'Failed to persist item reference' });

@@ -15,7 +15,6 @@ const action = defineHttpAction({
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const health = checkAgenticHealth({
-        db: ctx.db,
         getAgenticRun: ctx.getAgenticRun,
         getItemReference: ctx.getItemReference,
         upsertAgenticRun: ctx.upsertAgenticRun,

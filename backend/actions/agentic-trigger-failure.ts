@@ -123,21 +123,10 @@ const action = defineHttpAction({
 
       const failureSummary = errorText || null;
 
-      let failedAt: string | null = null;
-      try {
-        const row = ctx.db.prepare("SELECT datetime('now') as now").get();
-        failedAt = row?.now ?? null;
-      } catch (timeErr) {
-        console.error('Failed to compute failure timestamp from database', timeErr);
-      }
-      if (!failedAt) {
-        failedAt = new Date().toISOString();
-      }
-
-      const nowIso = failedAt || new Date().toISOString();
+      const nowIso = new Date().toISOString();
       let existingRun: AgenticRun | null = null;
       try {
-        existingRun = ctx.getAgenticRun.get(artikelNummer) || null;
+        existingRun = await ctx.getAgenticRun(artikelNummer) || null;
       } catch (loadErr) {
         console.error('Failed to load existing agentic run for trigger failure metadata', loadErr);
       }
@@ -165,14 +154,7 @@ const action = defineHttpAction({
       };
 
       try {
-        const updateResult = ctx.updateAgenticRunStatus.run(normalizeAgenticStatusUpdate(runUpdate));
-        if (!updateResult?.changes) {
-          console.warn('Agentic run missing during failure update, creating new record', artikelNummer);
-          ctx.upsertAgenticRun.run({
-            ...runUpdate,
-            LastSearchLinksJson: existingRun?.LastSearchLinksJson ?? null
-          });
-        }
+        await ctx.updateAgenticRunStatus(normalizeAgenticStatusUpdate(runUpdate));
       } catch (updateErr) {
         console.error('Failed to update agentic run after trigger failure', {
           artikelNummer,
@@ -198,7 +180,7 @@ const action = defineHttpAction({
 
       let updatedRun: any = null;
       try {
-        updatedRun = ctx.getAgenticRun.get(artikelNummer) || null;
+        updatedRun = await ctx.getAgenticRun(artikelNummer) || null;
       } catch (loadErr) {
         console.error('Failed to load updated agentic run after failure', loadErr);
       }
