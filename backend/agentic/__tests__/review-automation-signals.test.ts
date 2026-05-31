@@ -115,14 +115,14 @@ describe('review automation signal aggregation', () => {
     );
   });
 
-  test('loads subcategory history window before aggregating signals', () => {
+  test('loads subcategory history window before aggregating signals', async () => {
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
     const history = [
       makeHistoryEntry(1, { bad_format: true, missing_spec: ['weight'], information_present: false }),
       makeHistoryEntry(2, { bad_format: false, missing_spec: ['weight'], information_present: true })
     ];
 
-    const signals = loadSubcategoryReviewAutomationSignals('R-200', {
+    const signals = await loadSubcategoryReviewAutomationSignals('R-200', {
       getItemReference: {
         get: jest.fn(() => ({ Unterkategorien_A: 12 }))
       },

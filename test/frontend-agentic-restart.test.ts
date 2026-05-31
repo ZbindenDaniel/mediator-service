@@ -1,4 +1,4 @@
-import { buildAgenticRestartRequestPayload } from '../frontend/src/components/ItemDetail';
+import { buildAgenticRestartRequestPayload } from '../frontend/src/lib/agentic';
 
 describe('buildAgenticRestartRequestPayload', () => {
   test('includes normalized review metadata when provided', () => {

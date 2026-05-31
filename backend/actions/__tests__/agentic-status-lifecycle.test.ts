@@ -49,17 +49,16 @@ describe('agentic-status lifecycle transitions', () => {
   // TODO(agentic-status-tests): Extend lifecycle coverage for db exception payload details if transition contracts evolve.
   // TODO(agentic-review-history-tests): Add assertion for review history source metadata if schema introduces explicit source column.
   it('finalizes checklist submit as approved when no negative checklist signal is present', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = { get: jest.fn(() => baseRun) };
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn(async () => baseRun);
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      getItemReference: jest.fn(async () => null),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
@@ -72,7 +71,7 @@ describe('agentic-status lifecycle transitions', () => {
     await action.handle(req, res, ctx);
 
     expect(getStatus()).toBe(200);
-    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+    expect(updateAgenticReview).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'approved',
@@ -81,7 +80,7 @@ describe('agentic-status lifecycle transitions', () => {
         ReviewedBy: 'qa-user'
       })
     );
-    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+    expect(ctx.insertAgenticRunReviewHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         Status: AGENTIC_RUN_STATUS_APPROVED,
@@ -92,22 +91,18 @@ describe('agentic-status lifecycle transitions', () => {
   });
 
   it('finalizes close path as approved and overwrites pending state', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = {
-      get: jest
-        .fn()
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' })
-    };
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn()
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'pending', Status: 'review' }))
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' }));
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      getItemReference: jest.fn(async () => null),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/close', {
@@ -119,7 +114,7 @@ describe('agentic-status lifecycle transitions', () => {
     await action.handle(req, res, ctx);
 
     expect(getStatus()).toBe(200);
-    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+    expect(updateAgenticReview).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'approved',
@@ -128,7 +123,7 @@ describe('agentic-status lifecycle transitions', () => {
       })
     );
     expect(getBody().agentic?.ReviewState).toBe('approved');
-    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+    expect(ctx.insertAgenticRunReviewHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'approved',
@@ -139,22 +134,18 @@ describe('agentic-status lifecycle transitions', () => {
 
 
   it('finalizes checklist submit as rejected when at least one negative checklist signal is present', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = {
-      get: jest
-        .fn()
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'rejected', Status: AGENTIC_RUN_STATUS_REJECTED, LastReviewDecision: 'rejected' })
-    };
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn()
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'pending', Status: 'review' }))
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'rejected', Status: AGENTIC_RUN_STATUS_REJECTED, LastReviewDecision: 'rejected' }));
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      getItemReference: jest.fn(async () => null),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
@@ -168,7 +159,7 @@ describe('agentic-status lifecycle transitions', () => {
     await action.handle(req, res, ctx);
 
     expect(getStatus()).toBe(200);
-    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+    expect(updateAgenticReview).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'rejected',
@@ -177,7 +168,7 @@ describe('agentic-status lifecycle transitions', () => {
       })
     );
     expect(getBody().agentic?.ReviewState).toBe('rejected');
-    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+    expect(ctx.insertAgenticRunReviewHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         Status: AGENTIC_RUN_STATUS_REJECTED,
@@ -188,22 +179,18 @@ describe('agentic-status lifecycle transitions', () => {
   });
 
   it('keeps checklist decision approved when only unnecessary specs are marked', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = {
-      get: jest
-        .fn()
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' })
-    };
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn()
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'pending', Status: 'review' }))
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' }));
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      getItemReference: jest.fn(async () => null),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
@@ -217,7 +204,7 @@ describe('agentic-status lifecycle transitions', () => {
     await action.handle(req, res, ctx);
 
     expect(getStatus()).toBe(200);
-    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+    expect(updateAgenticReview).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'approved',
@@ -226,7 +213,7 @@ describe('agentic-status lifecycle transitions', () => {
       })
     );
     expect(getBody().agentic?.ReviewState).toBe('approved');
-    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+    expect(ctx.insertAgenticRunReviewHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'approved',
@@ -236,23 +223,19 @@ describe('agentic-status lifecycle transitions', () => {
   });
 
   it('keeps checklist decision approved when only manual price is updated', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = {
-      get: jest
-        .fn()
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' })
-    };
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn()
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'pending', Status: 'review' }))
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' }));
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn(() => ({ Artikel_Nummer: 'A-100', Verkaufspreis: null, Shopartikel: 0 })) },
-      persistItemReference: jest.fn(),
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'A-100', Verkaufspreis: null, Shopartikel: 0 })),
+      persistItemReference: jest.fn(async () => undefined),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
@@ -266,7 +249,7 @@ describe('agentic-status lifecycle transitions', () => {
     await action.handle(req, res, ctx as any);
 
     expect(getStatus()).toBe(200);
-    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+    expect(updateAgenticReview).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'approved',
@@ -284,22 +267,18 @@ describe('agentic-status lifecycle transitions', () => {
   });
 
   it('accepts explicit final decision and clears pending by rejecting', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = {
-      get: jest
-        .fn()
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'rejected', Status: AGENTIC_RUN_STATUS_REJECTED, LastReviewDecision: 'rejected' })
-    };
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn()
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'pending', Status: 'review' }))
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'rejected', Status: AGENTIC_RUN_STATUS_REJECTED, LastReviewDecision: 'rejected' }));
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      getItemReference: jest.fn(async () => null),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
@@ -313,7 +292,7 @@ describe('agentic-status lifecycle transitions', () => {
     await action.handle(req, res, ctx);
 
     expect(getStatus()).toBe(200);
-    expect(updateAgenticReview.run).toHaveBeenCalledWith(
+    expect(updateAgenticReview).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'rejected',
@@ -323,7 +302,7 @@ describe('agentic-status lifecycle transitions', () => {
     );
     expect(getBody().agentic?.ReviewState).toBe('rejected');
     expect(getBody().agentic?.ReviewState).not.toBe('pending');
-    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalledWith(
+    expect(ctx.insertAgenticRunReviewHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'A-100',
         ReviewState: 'rejected',
@@ -334,24 +313,20 @@ describe('agentic-status lifecycle transitions', () => {
 
 
   it('applies manual review price and shop article updates when provided', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = {
-      get: jest
-        .fn()
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'pending', Status: 'review' })
-        .mockReturnValueOnce({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' })
-    };
-    const persistItemReference = jest.fn();
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn()
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'pending', Status: 'review' }))
+      .mockReturnValueOnce(Promise.resolve({ ...baseRun, ReviewState: 'approved', Status: AGENTIC_RUN_STATUS_APPROVED, LastReviewDecision: 'approved' }));
+    const persistItemReference = jest.fn(async () => undefined);
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn(() => ({ Artikel_Nummer: 'A-100', Verkaufspreis: null, Shopartikel: 0 })) },
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'A-100', Verkaufspreis: null, Shopartikel: 0 })),
       persistItemReference,
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => ({ changes: 1 })) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
@@ -375,18 +350,17 @@ describe('agentic-status lifecycle transitions', () => {
     );
   });
 
-  it('does not fail review when history insert throws', async () => {
-    const updateAgenticReview = { run: jest.fn(() => ({ changes: 1 })) };
-    const getAgenticRun = { get: jest.fn(() => baseRun) };
+  it('applies fallback sale price when an approved item lacks Verkaufspreis', async () => {
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn(async () => ({ ...baseRun, ReviewState: 'in_review', Status: 'review' }));
     const ctx = {
-      db: {},
       getAgenticRun,
-      getItemReference: { get: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      updateAgenticRunStatus: { run: jest.fn() },
+      getItemReference: jest.fn(async () => null),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
       updateAgenticReview,
       logEvent: jest.fn(),
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn(() => { throw new Error('history-down'); }) }
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined)
     };
 
     const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
@@ -399,8 +373,33 @@ describe('agentic-status lifecycle transitions', () => {
     await action.handle(req, res, ctx);
 
     expect(getStatus()).toBe(200);
-    expect(updateAgenticReview.run).toHaveBeenCalled();
-    expect(ctx.insertAgenticRunReviewHistoryEntry.run).toHaveBeenCalled();
+  });
+
+  it('does not fail review when history insert throws', async () => {
+    const updateAgenticReview = jest.fn(async () => undefined);
+    const getAgenticRun = jest.fn(async () => baseRun);
+    const ctx = {
+      getAgenticRun,
+      getItemReference: jest.fn(async () => null),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => undefined),
+      updateAgenticReview,
+      logEvent: jest.fn(),
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => { throw new Error('history-down'); })
+    };
+
+    const req = createJsonRequest('/api/item-refs/A-100/agentic/review', {
+      actor: 'qa-user',
+      action: 'review',
+      notes: 'checklist complete'
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(200);
+    expect(updateAgenticReview).toHaveBeenCalled();
+    expect(ctx.insertAgenticRunReviewHistoryEntry).toHaveBeenCalled();
   });
 
 });

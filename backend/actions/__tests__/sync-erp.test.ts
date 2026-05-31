@@ -201,12 +201,8 @@ describe('sync-erp payload normalization', () => {
     const req = createJsonRequest({ itemIds: ['I-MISSING-0001'] });
     const { res, getStatus, getBody } = createMockResponse();
     const ctx = {
-      listItemsForExport: {
-        all: jest.fn(() => [{ ItemUUID: 'I-MISSING-0001', Artikel_Nummer: null }])
-      },
-      listBoxes: {
-        all: jest.fn(() => [])
-      }
+      listItemsForExport: jest.fn(async () => [{ ItemUUID: 'I-MISSING-0001', Artikel_Nummer: null }]),
+      listBoxes: jest.fn(async () => [])
     };
 
     await action.handle(req, res, ctx);

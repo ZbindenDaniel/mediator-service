@@ -1,5 +1,24 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => fn({})),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 1),
+  insert: jest.fn(async () => ({})),
+  namedQuery: jest.fn(async () => []),
+  namedQueryOne: jest.fn(async () => null),
+  namedExecute: jest.fn(async () => 0),
+  execBatch: jest.fn(async () => undefined),
+  namedToPositional: jest.fn((sql: string, params: Record<string, unknown>) => ({ text: sql, values: Object.values(params) })),
+  getPoolInstance: jest.fn(() => null),
+  closePool: jest.fn(async () => undefined),
+}));
+
 import action from '../search';
+import * as dbClient from '../../db-client';
+
+const mockQuery = dbClient.query as jest.Mock;
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -25,6 +44,11 @@ function createRequest(url: string): IncomingMessage {
   return { url, method: 'GET' } as IncomingMessage;
 }
 
+beforeEach(() => {
+  mockQuery.mockReset();
+  mockQuery.mockResolvedValue([]);
+});
+
 describe('search action', () => {
   it('matches search route', () => {
     expect(action.matches('/api/search', 'GET')).toBe(true);
@@ -47,16 +71,9 @@ describe('search action', () => {
       }
     ];
 
-    const prepare = jest.fn(() => ({
-      all: jest.fn(() => rawRefs)
-    }));
+    mockQuery.mockResolvedValue(rawRefs);
 
-    const ctx = {
-      db: {
-        prepare
-      }
-    };
-
+    const ctx = {};
     const req = createRequest('/api/search?term=widget&scope=refs');
     const { res, getStatus, getBody } = createMockResponse();
 

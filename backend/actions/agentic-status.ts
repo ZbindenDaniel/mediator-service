@@ -372,6 +372,11 @@ function persistManualReviewHistoryEntry(
       }),
       ReviewedBy: payload.reviewedBy,
       RecordedAt: payload.recordedAt
+    }).catch((historyErr: unknown) => {
+      console.error('[agentic-review] Review history insert failed (non-fatal)', {
+        artikelNummer: payload.artikelNummer,
+        error: historyErr
+      });
     });
 
     console.info('[agentic-review] Persisted manual review history entry', {

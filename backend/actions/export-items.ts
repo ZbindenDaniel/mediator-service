@@ -784,10 +784,11 @@ function resolveExportValue(
   rawRow: Record<string, unknown>,
   langtextFormat: LangtextExportFormat
 ): unknown {
+  const isErpBoundary = langtextFormat === 'html' || langtextFormat === 'markdown';
   const normalizeMediaStringForBoundary = (mediaValue: string): string =>
-    langtextFormat === 'html' ? normalizeMediaStringForErpExport(mediaValue) : normalizeMediaStringForExport(mediaValue);
+    isErpBoundary ? normalizeMediaStringForErpExport(mediaValue) : normalizeMediaStringForExport(mediaValue);
   const normalizeMediaListForBoundary = (mediaAssets: string[]): string[] =>
-    langtextFormat === 'html' ? normalizeMediaListForErpExport(mediaAssets) : normalizeMediaListForExport(mediaAssets);
+    isErpBoundary ? normalizeMediaListForErpExport(mediaAssets) : normalizeMediaListForExport(mediaAssets);
 
   const field = fieldMap[column];
   if (!field) {

@@ -186,7 +186,7 @@ describe('handleAgenticRunTrigger', () => {
 
       expect(reportFailure).not.toHaveBeenCalled();
       expect(alertFn).toHaveBeenCalledWith('Trigger skipped');
-      expect(logger.warn).toHaveBeenCalledWith('Agentic trigger skipped without ItemUUID', {
+      expect(logger.warn).toHaveBeenCalledWith('Agentic trigger skipped without Artikel_Nummer', {
         context: 'test-skipped-empty-id',
         reason: 'missing-artikel-nummer'
       });

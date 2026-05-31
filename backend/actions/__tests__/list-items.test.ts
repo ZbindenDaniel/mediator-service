@@ -32,20 +32,16 @@ describe('list-items action', () => {
 
   it('returns grouped and raw item data', async () => {
     const ctx = {
-      listItemsWithFilters: {
-        all: jest.fn(() => [
-          {
-            ItemUUID: 'I-ABC-0001',
-            Artikel_Nummer: 'ABC',
-            Quality: 1,
-            BoxID: 'BOX-1',
-            Location: null
-          }
-        ])
-      },
-      listItemReferencesWithFilters: {
-        all: jest.fn(() => [])
-      }
+      listItemsWithFilters: jest.fn(async () => [
+        {
+          ItemUUID: 'I-ABC-0001',
+          Artikel_Nummer: 'ABC',
+          Quality: 1,
+          BoxID: 'BOX-1',
+          Location: null
+        }
+      ]),
+      listItemReferencesWithFilters: jest.fn(async () => [])
     };
 
     const req = createRequest('/api/items?search=widget');

@@ -99,6 +99,7 @@ export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
     Artikeltyp: { note: 'Product type' },
     Einheit: { note: 'Unit of measure' },
     EntityType: { note: 'Source entity type' },
+    EAN: { note: 'European Article Number / barcode' },
     ShopwareProductId: { note: 'Shopware parent product id' }
   },
   items: {
@@ -110,7 +111,11 @@ export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
     Datum_erfasst: { note: 'Capture timestamp' },
     Auf_Lager: { note: 'Stock availability flag', aliases: ['stock'] },
     Quality: { note: 'Optional quality/review state for item instance data' },
-    ShopwareVariantId: { note: 'Shopware variant id' }
+    ShopwareVariantId: { note: 'Shopware variant id' },
+    SerialNumber: { note: 'Device serial number for instance tracking' },
+    MacAddress: { note: 'Network MAC address for hardware identification' },
+    QualityId: { note: 'Foreign key to quality_assessments for structured quality data' },
+    InstanceSpecs: { note: 'JSON blob of instance-specific specs overriding reference data' }
   }
 };
 

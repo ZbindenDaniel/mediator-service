@@ -1,6 +1,28 @@
 import fs from 'fs';
 import type { IncomingMessage, ServerResponse } from 'http';
+
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => fn({})),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+  insert: jest.fn(async () => ({})),
+  namedQuery: jest.fn(async () => []),
+  namedQueryOne: jest.fn(async () => null),
+  namedExecute: jest.fn(async () => 0),
+  execBatch: jest.fn(async () => undefined),
+  namedToPositional: jest.fn((sql: string, params: Record<string, unknown>) => ({ text: sql, values: Object.values(params) })),
+  getPoolInstance: jest.fn(() => null),
+  closePool: jest.fn(async () => undefined),
+}));
+
 import action from '../item-attachments';
+import * as dbClient from '../../db-client';
+
+const mockQueryOne = dbClient.queryOne as jest.Mock;
+const mockQuery = dbClient.query as jest.Mock;
+const mockExecute = dbClient.execute as jest.Mock;
+const mockInsert = dbClient.insert as jest.Mock;
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -27,44 +49,25 @@ function makeRequest(
   return req as IncomingMessage;
 }
 
-function makeDb(config: {
-  itemExists?: boolean;
-  attachments?: object[];
-  attachmentRow?: { Id: number; FileName: string; FilePath: string } | null;
-}) {
-  return {
-    prepare: jest.fn((sql: string) => {
-      if (sql.includes('SELECT ItemUUID FROM items')) {
-        return { get: jest.fn(() => config.itemExists !== false ? { ItemUUID: 'test-uuid' } : undefined) };
-      }
-      if (sql.includes('SELECT Id, ItemUUID, FileName')) {
-        return { all: jest.fn(() => config.attachments ?? []) };
-      }
-      if (sql.includes('INSERT INTO item_attachments')) {
-        return { run: jest.fn() };
-      }
-      if (sql.includes('SELECT Id, FileName, FilePath FROM item_attachments')) {
-        return { get: jest.fn(() => config.attachmentRow ?? undefined) };
-      }
-      if (sql.includes('DELETE FROM item_attachments')) {
-        return { run: jest.fn() };
-      }
-      return { get: jest.fn(), all: jest.fn(() => []), run: jest.fn() };
-    })
-  };
-}
+beforeEach(() => {
+  mockQueryOne.mockReset();
+  mockQuery.mockReset();
+  mockExecute.mockReset();
+  mockInsert.mockReset();
+  mockQueryOne.mockResolvedValue(null);
+  mockQuery.mockResolvedValue([]);
+  mockExecute.mockResolvedValue(0);
+  mockInsert.mockResolvedValue({ Id: 1 });
+  jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined as any);
+  jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+  jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  // spies are reset in beforeEach; restoreAllMocks not available in custom harness
+});
 
 describe('item-attachments action', () => {
-  beforeEach(() => {
-    jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined as any);
-    jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-    jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
   describe('matches()', () => {
     it('matches GET, POST, DELETE on /api/item/:uuid/attachments', () => {
       expect(action.matches('/api/item/test-uuid/attachments', 'GET')).toBe(true);
@@ -84,7 +87,8 @@ describe('item-attachments action', () => {
 
   describe('GET', () => {
     it('returns 404 when item does not exist', async () => {
-      const ctx = { db: makeDb({ itemExists: false }), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue(null);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/no-such-uuid/attachments', 'GET');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -98,7 +102,9 @@ describe('item-attachments action', () => {
       const attachments = [
         { Id: 1, FileName: 'doc.pdf', FilePath: 'instances/test-uuid/doc.pdf', MimeType: 'application/pdf', Label: null, FileSize: 1024, CreatedAt: '2024-01-01' }
       ];
-      const ctx = { db: makeDb({ attachments }), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      mockQuery.mockResolvedValue(attachments);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments', 'GET');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -110,7 +116,9 @@ describe('item-attachments action', () => {
     });
 
     it('returns empty list when item has no attachments', async () => {
-      const ctx = { db: makeDb({ attachments: [] }), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      mockQuery.mockResolvedValue([]);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments', 'GET');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -123,7 +131,9 @@ describe('item-attachments action', () => {
 
   describe('POST', () => {
     it('logs AttachmentAdded and returns 201 on successful upload', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      mockInsert.mockResolvedValue({ Id: 1 });
+      const ctx = { logEvent: jest.fn() };
       const fileData = Buffer.from('file contents here');
       const req = makeRequest('/api/item/test-uuid/attachments', 'POST', {
         'x-filename': 'document.pdf',
@@ -148,7 +158,8 @@ describe('item-attachments action', () => {
     });
 
     it('records optional label in Meta when X-Label header is provided', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments', 'POST', {
         'x-filename': 'photo.jpg',
         'content-type': 'image/jpeg',
@@ -162,7 +173,8 @@ describe('item-attachments action', () => {
     });
 
     it('returns 400 when X-Filename header is missing', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments', 'POST', {
         'content-type': 'application/pdf'
       }, Buffer.from('data'));
@@ -176,7 +188,8 @@ describe('item-attachments action', () => {
     });
 
     it('returns 400 when file body is empty', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments', 'POST', {
         'x-filename': 'empty.pdf',
         'content-type': 'application/pdf'
@@ -191,7 +204,8 @@ describe('item-attachments action', () => {
     });
 
     it('returns 404 when item does not exist', async () => {
-      const ctx = { db: makeDb({ itemExists: false }), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue(null);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/no-such-uuid/attachments', 'POST', {
         'x-filename': 'file.pdf',
         'content-type': 'application/pdf'
@@ -205,7 +219,8 @@ describe('item-attachments action', () => {
     });
 
     it('sanitises filename by replacing unsafe characters', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments', 'POST', {
         'x-filename': 'my file (1).pdf',
         'content-type': 'application/pdf'
@@ -221,8 +236,8 @@ describe('item-attachments action', () => {
 
   describe('DELETE', () => {
     it('logs AttachmentRemoved and returns 200 on successful deletion', async () => {
-      const attachmentRow = { Id: 1, FileName: 'old.pdf', FilePath: 'instances/test-uuid/old.pdf' };
-      const ctx = { db: makeDb({ attachmentRow }), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue({ Id: 1, FileName: 'old.pdf', FilePath: 'instances/test-uuid/old.pdf' });
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments/1', 'DELETE');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -240,7 +255,11 @@ describe('item-attachments action', () => {
     });
 
     it('returns 404 when attachment does not exist', async () => {
-      const ctx = { db: makeDb({ attachmentRow: null }), logEvent: jest.fn() };
+      // First queryOne = item exists; second queryOne = attachment not found
+      mockQueryOne
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'test-uuid' }))
+        .mockReturnValueOnce(Promise.resolve(null));
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments/99', 'DELETE');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -252,7 +271,8 @@ describe('item-attachments action', () => {
     });
 
     it('returns 404 when item does not exist', async () => {
-      const ctx = { db: makeDb({ itemExists: false }), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue(null);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/no-item/attachments/1', 'DELETE');
       const { res, getStatus } = createMockResponse();
 
@@ -263,13 +283,11 @@ describe('item-attachments action', () => {
     });
 
     it('still completes deletion even when file is already gone from disk', async () => {
-      jest.restoreAllMocks(); // restore to allow unlinkSync to throw
-      jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined as any);
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      mockQueryOne.mockResolvedValue({ Id: 1, FileName: 'gone.pdf', FilePath: 'instances/test-uuid/gone.pdf' });
+      // Override the unlinkSync spy set in beforeEach to throw
       jest.spyOn(fs, 'unlinkSync').mockImplementation(() => { throw new Error('ENOENT'); });
 
-      const attachmentRow = { Id: 1, FileName: 'gone.pdf', FilePath: 'instances/test-uuid/gone.pdf' };
-      const ctx = { db: makeDb({ attachmentRow }), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments/1', 'DELETE');
       const { res, getStatus } = createMockResponse();
 

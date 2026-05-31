@@ -134,7 +134,7 @@ describe('forwardAgenticTrigger review metadata', () => {
     expect(result.body).toEqual({ agentic: fakeRun });
   });
 
-  it('handles agentic start errors by propagating the rejection', async () => {
+  it('handles agentic start errors by returning a failure response', async () => {
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
     const mockedStartAgenticRun =
       startAgenticRun as jest.MockedFunction<typeof startAgenticRun>;
@@ -145,13 +145,19 @@ describe('forwardAgenticTrigger review metadata', () => {
       artikelNummer: 'bad'
     };
 
-    await expect(
-      forwardAgenticTrigger(payload, {
-        context: 'unit-test',
-        logger,
-        service: { logger } as any
-      })
-    ).rejects.toThrow('start failure');
+    const result = await forwardAgenticTrigger(payload, {
+      context: 'unit-test',
+      logger,
+      service: { logger } as any
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(500);
+    expect(result.body).toEqual({ error: 'agentic-start-failed' });
+    expect(logger.error).toHaveBeenCalledWith(
+      '[agentic-trigger] Failed to start agentic run',
+      expect.objectContaining({ error: 'start failure' })
+    );
   });
 
   it('restarts existing runs for bulk trigger context when start declines as already-exists', async () => {

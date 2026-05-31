@@ -31,9 +31,9 @@ describe('sequential ItemUUID generation', () => {
       logger
     );
 
-    expect(id).toBe('I.12345-0001');
+    expect(id).toBe('I-12345-0001');
     const parsed = parseSequentialItemUUID(id);
-    expect(parsed).toEqual({ kind: 'artikelnummer', prefix: 'I.', artikelNummer: '12345', sequence: 1 });
+    expect(parsed).toEqual({ kind: 'artikelnummer', prefix: 'I-', artikelNummer: '12345', sequence: 1 });
     expect(logger.error).not.toHaveBeenCalled();
   });
 
@@ -44,14 +44,14 @@ describe('sequential ItemUUID generation', () => {
       '12345',
       {
         now: () => new Date('2024-06-02T23:45:00.000Z'),
-        getMaxItemId: () => ({ ItemUUID: 'I.12345-0042' })
+        getMaxItemId: () => ({ ItemUUID: 'I-12345-0042' })
       },
       logger
     );
 
-    expect(id).toBe('I.12345-0043');
+    expect(id).toBe('I-12345-0043');
     const parsed = parseSequentialItemUUID(id);
-    expect(parsed).toEqual({ kind: 'artikelnummer', prefix: 'I.', artikelNummer: '12345', sequence: 43 });
+    expect(parsed).toEqual({ kind: 'artikelnummer', prefix: 'I-', artikelNummer: '12345', sequence: 43 });
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -62,12 +62,12 @@ describe('sequential ItemUUID generation', () => {
       '12345',
       {
         now: () => new Date('2024-06-03T00:05:00.000Z'),
-        getMaxItemId: () => ({ ItemUUID: 'I.99999-0100' })
+        getMaxItemId: () => ({ ItemUUID: 'I-99999-0100' })
       },
       logger
     );
 
-    expect(id).toBe('I.12345-0001');
+    expect(id).toBe('I-12345-0001');
     expect(logger.warn).toHaveBeenCalled();
   });
 
@@ -83,7 +83,7 @@ describe('sequential ItemUUID generation', () => {
       logger
     );
 
-    expect(id).toBe('I.12345-0001');
+    expect(id).toBe('I-12345-0001');
     const warned = logger.warn.mock.calls.some(([message]) =>
       typeof message === 'string' && message.includes('Ignoring non-sequential ItemUUID')
     );

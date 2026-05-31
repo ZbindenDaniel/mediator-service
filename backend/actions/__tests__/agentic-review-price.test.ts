@@ -15,7 +15,7 @@ describe('agentic review price fallback', () => {
     resetPriceLookupCache();
   });
 
-  it('applies fallback sale price when an approved item lacks Verkaufspreis', () => {
+  it('applies fallback sale price when an approved item lacks Verkaufspreis', async () => {
     const reference: ItemRef = {
       Artikel_Nummer: 'ART-123',
       Artikeltyp: 'part',
@@ -23,11 +23,11 @@ describe('agentic review price fallback', () => {
     };
     const persistItemReference = jest.fn();
     const ctx = {
-      getItemReference: { get: jest.fn().mockReturnValue(reference) },
+      getItemReference: jest.fn(async () => reference),
       persistItemReference
     };
 
-    applyPriceFallbackAfterReview(reference.Artikel_Nummer, ctx, logger);
+    await applyPriceFallbackAfterReview(reference.Artikel_Nummer, ctx, logger);
 
     expect(persistItemReference).toHaveBeenCalledTimes(1);
     const payload = persistItemReference.mock.calls[0][0] as ItemRef;
@@ -35,7 +35,7 @@ describe('agentic review price fallback', () => {
     expect(payload.Artikel_Nummer).toBe(reference.Artikel_Nummer);
   });
 
-  it('does not override an existing Verkaufspreis', () => {
+  it('does not override an existing Verkaufspreis', async () => {
     const reference: ItemRef = {
       Artikel_Nummer: 'ART-999',
       Artikeltyp: 'part',
@@ -44,11 +44,11 @@ describe('agentic review price fallback', () => {
     };
     const persistItemReference = jest.fn();
     const ctx = {
-      getItemReference: { get: jest.fn().mockReturnValue(reference) },
+      getItemReference: jest.fn(async () => reference),
       persistItemReference
     };
 
-    applyPriceFallbackAfterReview(reference.Artikel_Nummer, ctx, logger);
+    await applyPriceFallbackAfterReview(reference.Artikel_Nummer, ctx, logger);
 
     expect(persistItemReference).not.toHaveBeenCalled();
   });

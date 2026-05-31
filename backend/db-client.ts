@@ -1,22 +1,32 @@
 import { Pool, PoolClient } from 'pg';
 import { DATABASE_URL } from './config';
 
-if (!DATABASE_URL) {
-  throw new Error('[db-client] DATABASE_URL is required. Set DATABASE_URL to a PostgreSQL connection string.');
+// Defer pool creation so module import doesn't throw in test environments.
+// Actual connection errors surface on first query.
+let _pool: Pool | null = null;
+
+function getPool(): Pool {
+  if (!_pool) {
+    if (!DATABASE_URL) {
+      throw new Error('[db-client] DATABASE_URL is required. Set DATABASE_URL to a PostgreSQL connection string.');
+    }
+    _pool = new Pool({ connectionString: DATABASE_URL });
+    _pool.on('error', (err) => {
+      console.error('[db-client] Unexpected Postgres pool error', err);
+    });
+  }
+  return _pool;
 }
 
-export const pool = new Pool({ connectionString: DATABASE_URL });
-
-pool.on('error', (err) => {
-  console.error('[db-client] Unexpected Postgres pool error', err);
-});
+/** Exposed for direct use in scripts and integration tests that already have DATABASE_URL set. */
+export function getPoolInstance(): Pool { return getPool(); }
 
 /** Execute a query and return all rows. */
 export async function query<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = []
 ): Promise<T[]> {
-  const result = await (pool.query as any)(sql, params);
+  const result = await (getPool().query as any)(sql, params);
   return result.rows as T[];
 }
 
@@ -34,7 +44,7 @@ export async function execute(
   sql: string,
   params: unknown[] = []
 ): Promise<number> {
-  const result = await pool.query(sql, params as any[]);
+  const result = await getPool().query(sql, params as any[]);
   return result.rowCount ?? 0;
 }
 
@@ -43,7 +53,7 @@ export async function insert<T = Record<string, unknown>>(
   sql: string,
   params: unknown[] = []
 ): Promise<T> {
-  const result = await (pool.query as any)(sql, params);
+  const result = await (getPool().query as any)(sql, params);
   const row = result.rows[0];
   if (!row) throw new Error('[db-client] INSERT returned no row');
   return row as T;
@@ -53,7 +63,7 @@ export async function insert<T = Record<string, unknown>>(
 export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query('BEGIN');
     const result = await fn(client);
@@ -116,10 +126,10 @@ export async function namedExecute(
 
 /** Execute multiple statements in a single batch (schema setup). */
 export async function execBatch(sql: string): Promise<void> {
-  await pool.query(sql);
+  await getPool().query(sql);
 }
 
 /** Close the pool (used on graceful shutdown). */
 export async function closePool(): Promise<void> {
-  await pool.end();
+  if (_pool) await _pool.end();
 }

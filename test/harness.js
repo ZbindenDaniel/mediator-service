@@ -308,6 +308,15 @@ function matchExpected(received, expected) {
     return matchObjectContaining(received, expected.sample);
   }
 
+  if (expected && expected._type === 'arrayContaining') {
+    if (!Array.isArray(received)) return false;
+    return expected.sample.every(item => received.some(r => matchExpected(r, item)));
+  }
+
+  if (expected && expected._type === 'stringContaining') {
+    return typeof received === 'string' && received.includes(expected.str);
+  }
+
   if (Array.isArray(expected)) {
     if (!Array.isArray(received) || received.length !== expected.length) {
       return false;
@@ -516,6 +525,42 @@ function createMatchers() {
     },
     toThrowError(received, expected) {
       assertThrowsMatch(received, expected);
+    },
+    toBeInstanceOf(received, constructor) {
+      if (!(received instanceof constructor)) {
+        throw new assert.AssertionError({
+          message: `Expected ${safeStringify(received)} to be an instance of ${constructor.name || constructor}`
+        });
+      }
+    },
+    toBeGreaterThanOrEqual(received, expected) {
+      if (!(received >= expected)) {
+        throw new assert.AssertionError({
+          message: `Expected ${received} to be >= ${expected}`
+        });
+      }
+    },
+    toBeLessThanOrEqual(received, expected) {
+      if (!(received <= expected)) {
+        throw new assert.AssertionError({
+          message: `Expected ${received} to be <= ${expected}`
+        });
+      }
+    },
+    toBeLessThan(received, expected) {
+      if (!(received < expected)) {
+        throw new assert.AssertionError({
+          message: `Expected ${received} to be < ${expected}`
+        });
+      }
+    },
+    toBeCloseTo(received, expected, numDigits = 2) {
+      const precision = Math.pow(10, -numDigits) / 2;
+      if (Math.abs(received - expected) >= precision) {
+        throw new assert.AssertionError({
+          message: `Expected ${received} to be close to ${expected} (within ${numDigits} digits)`
+        });
+      }
     }
   };
   if (!loggedMatcherRegistration) {
@@ -574,6 +619,20 @@ expect.any = (constructor) => {
     throw new TypeError('any expects a constructor function');
   }
   return createAny(constructor);
+};
+
+expect.arrayContaining = (sample) => {
+  if (!Array.isArray(sample)) {
+    throw new TypeError('arrayContaining expects an array');
+  }
+  return { _type: 'arrayContaining', sample };
+};
+
+expect.stringContaining = (str) => {
+  if (typeof str !== 'string') {
+    throw new TypeError('stringContaining expects a string');
+  }
+  return { _type: 'stringContaining', str };
 };
 
 function createMockFunction(implementation = () => undefined, restoreCallback = null) {
@@ -673,7 +732,7 @@ const jestApi = {
     if (implementation && typeof implementation !== 'function') {
       throw new TypeError('jest.fn() implementation must be a function');
     }
-    return createMockFunction(implementation || (() => undefined));
+    return trackMock(createMockFunction(implementation || (() => undefined)));
   },
   spyOn(target, method) {
     if (!target) {

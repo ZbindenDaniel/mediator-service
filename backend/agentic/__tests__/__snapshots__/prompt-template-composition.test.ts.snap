@@ -100,6 +100,7 @@ exports[`prompt template composition snapshots renders extract.md with shared fr
     - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
     - Kurzbeschreibung: One concise paragraph; bullets only if they clarify.
     - Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays of strings.
+    - Empty string values ("") in Spezifikationen are contract placeholders — fill them when evidence is available; do not return them as empty strings.
     - Anti-pattern: Never return placeholder-only \`Spezifikationen\` (e.g., \`{"Feature": "N/A"}\`) when sources contain concrete technical specs.
     - Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.
     - Numeric fields: extract only when present; otherwise keep defaults.
@@ -224,6 +225,14 @@ exports[`prompt template composition snapshots renders search-planner.md with sh
     3. Only one fallback variant if the first two query shapes fail to cover required missing fields.
   - Do not force \`site:\` filters or source-domain constraints when constructing queries.
   - Omit any explanations outside the JSON response.
+  - When \`deviceLabelText\` is present in the input: it contains text extracted directly from a
+    device nameplate or label photographed by the user (manufacturer name, model/type designation,
+    part number, order number, technical ratings). Treat it as a high-confidence identification
+    source that is more precise than the generic \`searchTerm\`. When \`deviceLabelText\` is present:
+    1. Base your primary search query on the most specific identifier in the label text
+       (type code, order number, or manufacturer + model combination).
+    2. Use \`searchTerm\` only as a fallback or to fill remaining query slots.
+    3. Do not repeat the same identifier across multiple plans.
 </rules>
 "
 `;

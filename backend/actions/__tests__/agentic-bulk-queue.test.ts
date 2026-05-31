@@ -1,4 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => fn({})),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+  insert: jest.fn(async () => ({})),
+  namedQuery: jest.fn(async () => []),
+  namedQueryOne: jest.fn(async () => null),
+  namedExecute: jest.fn(async () => 0),
+  execBatch: jest.fn(async () => undefined),
+  namedToPositional: jest.fn((sql: string, params: Record<string, unknown>) => ({ text: sql, values: Object.values(params) })),
+  getPoolInstance: jest.fn(() => null),
+  closePool: jest.fn(async () => undefined),
+}));
+
 import action from '../agentic-bulk-queue';
 
 describe('agentic-bulk-queue action', () => {

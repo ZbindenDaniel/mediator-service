@@ -367,16 +367,18 @@ describe('export-items Langtext quality enrichment', () => {
   };
 
   const serializeForMode = (mode: 'backup' | 'erp'): string => {
-    let dataLine = '';
+    let csvContent = '';
 
     jest.isolateModules(() => {
       // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
       const { serializeItemsToCsv } = require('../export-items');
       const { csv } = serializeItemsToCsv([{ ...baseRow }], undefined, { exportMode: mode });
-      [, dataLine] = csv.split('\n');
+      // Skip header line; search the rest (data may span multiple lines for multi-line quoted fields)
+      const headerEnd = csv.indexOf('\n');
+      csvContent = headerEnd >= 0 ? csv.slice(headerEnd + 1) : csv;
     });
 
-    return dataLine;
+    return csvContent;
   };
 
   for (const [mode, snippet] of [

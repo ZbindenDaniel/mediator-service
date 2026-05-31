@@ -1,30 +1,54 @@
-import type Database from 'better-sqlite3';
-import { startAgenticRun, type AgenticServiceDependencies } from '../backend/agentic';
+jest.mock('../backend/db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => {
+    const client = {
+      query: jest.fn(async () => ({ rows: [{ runningcount: 0 }] }))
+    };
+    return fn(client);
+  }),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 1),
+  insert: jest.fn(async () => ({})),
+  namedQuery: jest.fn(async () => []),
+  namedQueryOne: jest.fn(async () => null),
+  namedExecute: jest.fn(async () => 0),
+  execBatch: jest.fn(async () => undefined),
+  namedToPositional: jest.fn((sql: string, params: Record<string, unknown>) => ({ text: sql, values: Object.values(params) })),
+  getPoolInstance: jest.fn(() => null),
+  closePool: jest.fn(async () => undefined),
+}));
+
+import { startAgenticRun, dispatchQueuedAgenticRuns, type AgenticServiceDependencies } from '../backend/agentic';
+import * as dbClient from '../backend/db-client';
 import type { AgenticRun } from '../models';
+
+const mockQuery = dbClient.query as jest.Mock;
+const mockWithTransaction = dbClient.withTransaction as jest.Mock;
 
 // TODO(agent): Revisit requestId propagation assertions if the dispatch queue batching strategy changes.
 
 describe('agentic direct dispatch', () => {
   function createDeps(options: {
     existing?: AgenticRun | null;
-    refreshed?: AgenticRun | null;
+    queued?: AgenticRun | null;
     invokeResult?: { ok: boolean; message?: string | null };
     invokeMock?: jest.Mock;
   }): {
     deps: AgenticServiceDependencies;
     invokeModel: jest.Mock;
     upsertAgenticRun: jest.Mock;
+    updateAgenticRunStatus: jest.Mock;
     logEvent: jest.Mock;
     getAgenticRun: jest.Mock;
     logger: { info: jest.Mock; warn: jest.Mock; error: jest.Mock };
   } {
     const existing = options.existing ?? null;
-    const refreshed = options.refreshed ?? existing ?? null;
-    const getAgenticRun = jest.fn<AgenticRun | null, [string]>(() => refreshed);
-    getAgenticRun.mockImplementationOnce(() => existing);
+    const queued = options.queued ?? null;
+    const getAgenticRun = jest.fn(async (_id: string) => queued);
+    getAgenticRun.mockReturnValueOnce(Promise.resolve(existing));
 
-    const upsertAgenticRun = jest.fn();
-    const updateAgenticRunStatus = { run: jest.fn(() => ({ changes: 1 })) };
+    const upsertAgenticRun = jest.fn(async () => undefined);
+    const updateAgenticRunStatus = jest.fn(async () => ({ changes: 1 }));
     const logEvent = jest.fn();
     const invokeModel =
       options.invokeMock ?? jest.fn().mockResolvedValue(options.invokeResult ?? { ok: true, message: null });
@@ -35,22 +59,27 @@ describe('agentic direct dispatch', () => {
     };
 
     const deps: AgenticServiceDependencies = {
-      db: { transaction: (fn: unknown) => fn } as unknown as Database.Database,
-      getAgenticRun: { get: getAgenticRun } as unknown as Database.Statement,
-      upsertAgenticRun: { run: upsertAgenticRun } as unknown as Database.Statement,
-      updateAgenticRunStatus: updateAgenticRunStatus as unknown as Database.Statement,
-      logEvent: logEvent as unknown as (payload: any) => void,
+      getAgenticRun,
+      upsertAgenticRun,
+      updateAgenticRunStatus,
+      logEvent,
       invokeModel,
       logger,
       now: () => new Date('2024-01-01T00:00:00.000Z'),
-      getItemReference: undefined
+      getItemReference: async (id: string) => ({ Artikel_Nummer: id, Artikelbeschreibung: 'Test item' })
     };
 
-    return { deps, invokeModel, upsertAgenticRun, logEvent, getAgenticRun, logger };
+    return { deps, invokeModel, upsertAgenticRun, updateAgenticRunStatus, logEvent, getAgenticRun, logger };
   }
 
-  test('startAgenticRun invokes the model immediately for new runs', async () => {
-    const createdRun: AgenticRun = {
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockQuery.mockResolvedValue([]);
+    jest.clearAllMocks();
+  });
+
+  test('startAgenticRun queues a new run and dispatch invokes the model', async () => {
+    const queuedRun: AgenticRun = {
       Id: 1,
       Artikel_Nummer: 'item-new-1',
       SearchQuery: 'Neuer Artikel',
@@ -66,12 +95,13 @@ describe('agentic direct dispatch', () => {
       LastAttemptAt: null
     };
 
-    const { deps, invokeModel, upsertAgenticRun, logEvent } = createDeps({ existing: null, refreshed: createdRun });
+    const { deps, invokeModel, upsertAgenticRun, logEvent } = createDeps({ existing: null, queued: queuedRun });
 
+    // startAgenticRun should queue the run but NOT immediately invoke model
     const result = await startAgenticRun(
       {
-        itemId: createdRun.Artikel_Nummer,
-        searchQuery: createdRun.SearchQuery ?? '',
+        itemId: queuedRun.Artikel_Nummer,
+        searchQuery: queuedRun.SearchQuery ?? '',
         actor: 'unit-test',
         context: 'direct-dispatch',
         request: { id: 'req-start-direct' }
@@ -81,27 +111,26 @@ describe('agentic direct dispatch', () => {
 
     expect(result.queued).toBe(true);
     expect(result.created).toBe(true);
+    expect(upsertAgenticRun).toHaveBeenCalledTimes(1);
+    expect(logEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ Event: 'AgenticRunQueued', EntityId: queuedRun.Artikel_Nummer })
+    );
+
+    // Now dispatch queued runs — mock query to return the queued run
+    mockQuery.mockResolvedValue([queuedRun]);
+    await dispatchQueuedAgenticRuns(deps);
+    await new Promise((resolve) => setImmediate(resolve));
+
     expect(invokeModel).toHaveBeenCalledTimes(1);
     expect(invokeModel).toHaveBeenCalledWith(
       expect.objectContaining({
-        itemId: createdRun.Artikel_Nummer,
-        searchQuery: createdRun.SearchQuery,
-        context: 'direct-dispatch',
-        requestId: 'req-start-direct',
-        review: {
-          decision: null,
-          notes: null,
-          reviewedBy: null
-        }
+        itemId: queuedRun.Artikel_Nummer,
+        searchQuery: queuedRun.SearchQuery
       })
-    );
-    expect(upsertAgenticRun).toHaveBeenCalledTimes(1);
-    expect(logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ Event: 'AgenticRunQueued', EntityId: createdRun.Artikel_Nummer })
     );
   });
 
-  test('startAgenticRun requeues existing runs and forwards stored review metadata', async () => {
+  test('startAgenticRun declines when a run already exists (deduplicated)', async () => {
     const existingRun: AgenticRun = {
       Id: 2,
       Artikel_Nummer: 'item-existing-1',
@@ -118,7 +147,7 @@ describe('agentic direct dispatch', () => {
       LastAttemptAt: '2024-01-01T12:05:00.000Z'
     };
 
-    const { deps, invokeModel, logEvent, upsertAgenticRun } = createDeps({ existing: existingRun });
+    const { deps, logEvent, upsertAgenticRun } = createDeps({ existing: existingRun, queued: existingRun });
 
     const result = await startAgenticRun(
       {
@@ -130,30 +159,20 @@ describe('agentic direct dispatch', () => {
       deps
     );
 
-    expect(result.queued).toBe(true);
+    // New behavior: if run already exists, startAgenticRun declines (returns queued: false)
+    // Re-queueing existing runs is now handled via restartAgenticRun
+    expect(result.queued).toBe(false);
     expect(result.created).toBe(false);
-    expect(upsertAgenticRun).toHaveBeenCalledTimes(1);
-    expect(invokeModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        requestId: 'req-requeue',
-        review: {
-          decision: 'approved',
-          notes: 'OK',
-          reviewedBy: 'qa.user'
-        }
-      })
-    );
-    expect(logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ Event: 'AgenticRunRequeued', EntityId: existingRun.Artikel_Nummer })
-    );
+    expect(result.reason).toBe('already-exists');
+    expect(upsertAgenticRun).not.toHaveBeenCalled();
   });
 
-  test('auto-cancels run when asynchronous invocation reports failure', async () => {
+  test('auto-cancels run when dispatch invocation reports failure', async () => {
     const existingRun: AgenticRun = {
       Id: 3,
       Artikel_Nummer: 'item-fail-1',
       SearchQuery: 'Fehlgeschlagen',
-      Status: 'running',
+      Status: 'queued',
       LastModified: '2024-01-02T10:00:00.000Z',
       ReviewState: 'not_required',
       ReviewedBy: null,
@@ -166,27 +185,22 @@ describe('agentic direct dispatch', () => {
     };
 
     const failingInvoke = jest.fn().mockResolvedValue({ ok: false, message: 'flow-failed' });
-    const { deps, invokeModel, getAgenticRun, logEvent } = createDeps({
-      existing: existingRun,
+    const { deps, getAgenticRun, logEvent, updateAgenticRunStatus } = createDeps({
+      existing: null,
+      queued: existingRun,
       invokeMock: failingInvoke
     });
 
-    await startAgenticRun(
-      {
-        itemId: existingRun.Artikel_Nummer,
-        searchQuery: existingRun.SearchQuery ?? '',
-        actor: 'qa.user',
-        request: { id: 'req-failure' }
-      },
-      deps
-    );
+    // Mock query to return the queued run for dispatch
+    mockQuery.mockResolvedValue([existingRun]);
+    await dispatchQueuedAgenticRuns(deps);
 
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(invokeModel).toHaveBeenCalledTimes(1);
+    expect(failingInvoke).toHaveBeenCalledTimes(1);
     expect(getAgenticRun).toHaveBeenCalled();
-    const updateCalls = (deps.updateAgenticRunStatus.run as jest.Mock).mock.calls;
-    expect(updateCalls.some((call) => call?.[0]?.Status === 'cancelled')).toBe(true);
+    const updateCalls = updateAgenticRunStatus.mock.calls;
+    expect(updateCalls.some((call: any[]) => call?.[0]?.Status === 'cancelled')).toBe(true);
     expect(logEvent).toHaveBeenCalledWith(
       expect.objectContaining({ Event: 'AgenticRunCancelled', EntityId: existingRun.Artikel_Nummer })
     );

@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, pool } from './db-client';
+import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, getPoolInstance, execBatch } from './db-client';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -114,13 +114,68 @@ function topicFilterExpression(alias?: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Named SQL constants for item_refs and items tables — used by agentic prompt
+// builder (backend/agentic/flow/prompts.ts) to extract schema columns.
+// ---------------------------------------------------------------------------
+
+// Unquoted column names so that agentic/flow/prompts.ts can parse column identifiers
+// without stripping double-quote delimiters from each token.
+export const CREATE_ITEM_REFS_SQL = `
+CREATE TABLE IF NOT EXISTS item_refs (
+  Artikel_Nummer    TEXT PRIMARY KEY,
+  Suchbegriff       TEXT,
+  Grafikname        TEXT,
+  ImageNames        TEXT,
+  Artikelbeschreibung TEXT,
+  Verkaufspreis     REAL,
+  Kurzbeschreibung  TEXT,
+  Langtext          TEXT,
+  Hersteller        TEXT,
+  Länge_mm          INTEGER,
+  Breite_mm         INTEGER,
+  Höhe_mm           INTEGER,
+  Gewicht_kg        REAL,
+  Hauptkategorien_A TEXT,
+  Unterkategorien_A TEXT,
+  Hauptkategorien_B TEXT,
+  Unterkategorien_B TEXT,
+  Veröffentlicht_Status TEXT,
+  Quality           INTEGER DEFAULT NULL,
+  Shopartikel       INTEGER,
+  Artikeltyp        TEXT,
+  Einheit           TEXT,
+  EntityType        TEXT,
+  EAN               TEXT,
+  ShopwareProductId TEXT
+);
+`;
+
+export const CREATE_ITEMS_SQL = `
+CREATE TABLE IF NOT EXISTS items (
+  ItemUUID          TEXT PRIMARY KEY,
+  Artikel_Nummer    TEXT,
+  BoxID             TEXT,
+  Location          TEXT,
+  UpdatedAt         TEXT NOT NULL,
+  Datum_erfasst     TEXT,
+  Auf_Lager         INTEGER,
+  Quality           INTEGER DEFAULT NULL,
+  ShopwareVariantId TEXT,
+  SerialNumber      TEXT,
+  MacAddress        TEXT,
+  QualityId         INTEGER,
+  InstanceSpecs     TEXT
+);
+`;
+
+// ---------------------------------------------------------------------------
 // Schema initialization — run once at startup via initDb()
 // ---------------------------------------------------------------------------
 
 export async function initDb(): Promise<void> {
   console.info('[db] Initializing Postgres schema');
 
-  await pool.query(`
+  await execBatch(`
 CREATE TABLE IF NOT EXISTS boxes (
   "BoxID"      TEXT PRIMARY KEY,
   "LocationId" TEXT,
@@ -349,7 +404,7 @@ export async function closeDatabase(options: { reason?: string; suppressErrors?:
   const { reason, suppressErrors = false } = options;
   console.info('[db] Closing database pool', { reason: reason ?? null });
   try {
-    await pool.end();
+    await getPoolInstance().end();
     console.info('[db] Database pool closed', { reason: reason ?? null });
   } catch (error) {
     console.error('[db] Failed to close database pool', { reason: reason ?? null, error });

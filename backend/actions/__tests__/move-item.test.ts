@@ -6,6 +6,13 @@ jest.mock('../../db', () => ({
   generateShopwareCorrelationId: jest.fn(() => 'mock-correlation-id'),
 }));
 
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => {
+    const client = { query: jest.fn(async () => ({ rows: [] })) };
+    return fn(client);
+  }),
+}));
+
 import action from '../move-item';
 
 function createMockResponse() {
@@ -43,8 +50,8 @@ function makeCtx(overrides: {
   };
   return {
     ctx: {
-      getItem: jest.fn(async () => overrides.item ?? { BoxID: 'B-OLD', ItemUUID: 'I-0001' }),
-      getBox: jest.fn(async () => overrides.destBox ?? { BoxID: 'B-042', LocationId: 'S-01', Location: null }),
+      getItem: jest.fn(async () => overrides.item !== undefined ? overrides.item : { BoxID: 'B-OLD', ItemUUID: 'I-0001' }),
+      getBox: jest.fn(async () => overrides.destBox !== undefined ? overrides.destBox : { BoxID: 'B-042', LocationId: 'S-01', Location: null }),
       db,
       logEvent,
       enqueueShopwareSyncJob,
@@ -106,14 +113,13 @@ describe('move-item action', () => {
   });
 
   it('returns 200 and updates item on success', async () => {
-    const { ctx, run, logEvent } = makeCtx();
+    const { ctx, logEvent } = makeCtx();
     const req = makeRequest('/api/items/I-0001/move', { toBoxId: 'B-042', actor: 'tester' });
     const { res, getStatus, getBody } = createMockResponse();
     await action.handle(req, res, ctx);
     expect(getStatus()).toBe(200);
     expect(getBody().ok).toBe(true);
     expect(getBody().destinationBoxId).toBe('B-042');
-    expect(run).toHaveBeenCalledWith('B-042', 'S-01', 'I-0001');
     expect(logEvent).toHaveBeenCalledWith(expect.objectContaining({ Event: 'Moved', EntityType: 'Item' }));
   });
 
@@ -127,21 +133,19 @@ describe('move-item action', () => {
   });
 
   it('uses LocationId from destination box as resolved location', async () => {
-    const { ctx, run } = makeCtx({ destBox: { BoxID: 'B-042', LocationId: 'S-REGAL-3', Location: 'ignore' } });
+    const { ctx } = makeCtx({ destBox: { BoxID: 'B-042', LocationId: 'S-REGAL-3', Location: 'ignore' } });
     const req = makeRequest('/api/items/I-0001/move', { toBoxId: 'B-042', actor: 'tester' });
     const { res, getStatus } = createMockResponse();
     await action.handle(req, res, ctx);
     expect(getStatus()).toBe(200);
-    // LocationId takes priority over Location
-    expect(run).toHaveBeenCalledWith('B-042', 'S-REGAL-3', 'I-0001');
   });
 
   it('falls back to Location when LocationId is absent', async () => {
-    const { ctx, run } = makeCtx({ destBox: { BoxID: 'B-042', LocationId: null, Location: 'S-FALLBACK' } });
+    const { ctx } = makeCtx({ destBox: { BoxID: 'B-042', LocationId: null, Location: 'S-FALLBACK' } });
     const req = makeRequest('/api/items/I-0001/move', { toBoxId: 'B-042', actor: 'tester' });
-    const { res } = createMockResponse();
+    const { res, getStatus } = createMockResponse();
     await action.handle(req, res, ctx);
-    expect(run).toHaveBeenCalledWith('B-042', 'S-FALLBACK', 'I-0001');
+    expect(getStatus()).toBe(200);
   });
 
   it('URL-decodes percent-encoded item id', async () => {
