@@ -1338,7 +1338,7 @@ const action = defineHttpAction({
       }
       const createdAfter = url.searchParams.get('createdAfter');
       const updatedAfter = url.searchParams.get('updatedAfter');
-      const items = ctx.listItemsForExport.all({
+      const items = await ctx.listItemsForExport({
         createdAfter: createdAfter || null,
         updatedAfter: updatedAfter || null
       });
@@ -1352,7 +1352,7 @@ const action = defineHttpAction({
           Meta: JSON.stringify({ createdAfter, updatedAfter })
         });
       }
-      const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
+      const boxes = typeof ctx.listBoxes === 'function' ? await ctx.listBoxes() : [];
       const stagedExport = await stageItemsExport({
         archiveBaseName: `items-export-${Date.now()}`,
         boxes: Array.isArray(boxes) ? boxes : [],

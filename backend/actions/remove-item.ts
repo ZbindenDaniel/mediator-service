@@ -28,7 +28,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/remove$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(uuid);
+      const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
       for await (const c of req) raw += c;
@@ -45,7 +45,7 @@ const action = defineHttpAction({
         const a = actor;
         if (isBulk) {
           try {
-            ctx.decrementItemStock.run(u);
+            await ctx.decrementItemStock(u);
           } catch (updateErr) {
             console.error('[remove-item] Failed to decrement bulk stock', {
               actor: a,
@@ -55,7 +55,7 @@ const action = defineHttpAction({
             });
             throw updateErr;
           }
-          const updated = ctx.getItem.get(u);
+          const updated = await ctx.getItem(u);
           ctx.logEvent({
             Actor: a,
             EntityType: 'Item',
@@ -93,7 +93,7 @@ const action = defineHttpAction({
         }
 
         try {
-          ctx.zeroItemStock.run(u);
+          await ctx.zeroItemStock(u);
         } catch (updateErr) {
           console.error('[remove-item] Failed to zero item stock for instance removal', {
             actor: a,
@@ -104,7 +104,7 @@ const action = defineHttpAction({
           throw updateErr;
         }
 
-        const updated = ctx.getItem.get(u);
+        const updated = await ctx.getItem(u);
         console.info('[remove-item] Cleared item instance stock', {
           actor: a,
           itemId: u,

@@ -21,7 +21,7 @@ const action = defineHttpAction({
     }
 
     try {
-      const neighbors = ctx.getAdjacentItemIds.get({ ItemUUID: itemId }) as
+      const neighbors = await ctx.getAdjacentItemIds(itemId) as
         | { previousId?: string | null; nextId?: string | null }
         | undefined;
       const previousId = typeof neighbors?.previousId === 'string' && neighbors.previousId.trim()

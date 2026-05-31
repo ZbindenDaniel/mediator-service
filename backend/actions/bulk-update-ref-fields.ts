@@ -79,7 +79,7 @@ const action = defineHttpAction({
       const groupMap = new Map<string, string[]>();
 
       for (const itemId of itemIds) {
-        const item = ctx.getItem.get(itemId);
+        const item = await ctx.getItem(itemId);
         if (!item) {
           missing.push(itemId);
           continue;

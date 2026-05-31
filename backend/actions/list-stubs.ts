@@ -16,7 +16,7 @@ const action = defineHttpAction({
       const url = new URL(req.url ?? '/api/stubs', 'http://localhost');
       const activeOnly = url.searchParams.get('isActive') !== 'false';
       const shelfId = url.searchParams.get('shelfId');
-      const stubs = activeOnly ? ctx.listStubs.active() : ctx.listStubs.all();
+      const stubs = activeOnly ? await ctx.listStubs.active() : await ctx.listStubs.all();
       const filtered = shelfId ? stubs.filter((s: any) => s.ShelfId === shelfId) : stubs;
       sendJson(res, 200, { stubs: filtered });
     } catch (err) {

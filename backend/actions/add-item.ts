@@ -28,7 +28,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/add$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(uuid);
+      const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
       for await (const c of req) raw += c;
@@ -44,7 +44,7 @@ const action = defineHttpAction({
           const attempts = 5;
           for (let index = 0; index < attempts; index += 1) {
             const candidate = await ctx.generateItemUUID(item.Artikel_Nummer ?? null);
-            if (!ctx.getItem.get(candidate)) {
+            if (!await ctx.getItem(candidate)) {
               newItemUUID = candidate;
               break;
             }
@@ -67,7 +67,7 @@ const action = defineHttpAction({
         const a = actor;
         if (isBulk) {
           try {
-            ctx.incrementItemStock.run(u);
+            await ctx.incrementItemStock(u);
           } catch (updateErr) {
             console.error('[add-item] Failed to increment bulk stock', {
               actor: a,
@@ -77,7 +77,7 @@ const action = defineHttpAction({
             });
             throw updateErr;
           }
-          const updated = ctx.getItem.get(u);
+          const updated = await ctx.getItem(u);
           ctx.logEvent({
             Actor: a,
             EntityType: 'Item',

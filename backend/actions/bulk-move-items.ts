@@ -50,7 +50,7 @@ const action = defineHttpAction({
       if (!toBoxId) return sendJson(res, 400, { error: 'toBoxId is required' });
       if (!confirm) return sendJson(res, 400, { error: 'confirm=true required' });
 
-      const destination = ctx.getBox.get(toBoxId);
+      const destination = await ctx.getBox(toBoxId);
       if (!destination) return sendJson(res, 404, { error: 'Behälter nicht gefunden!' });
       const locationRaw = destination?.Location;
       const normalizedLocation = typeof locationRaw === 'string' ? locationRaw.trim() : null;
@@ -61,7 +61,7 @@ const action = defineHttpAction({
       const missing: string[] = [];
       const validItemIds: string[] = [];
       for (const id of itemIds) {
-        const item = ctx.getItem.get(id);
+        const item = await ctx.getItem(id);
         if (!item) {
           missing.push(id);
         } else {

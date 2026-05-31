@@ -260,7 +260,7 @@ const action = defineHttpAction({
 
     if (requestedItems) {
       try {
-        items = ctx.listItemsForExport.all({
+        items = await ctx.listItemsForExport({
           createdAfter: createdAfter || null,
           updatedAfter: updatedAfter || null
         });

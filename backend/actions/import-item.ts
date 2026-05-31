@@ -590,7 +590,7 @@ const action = defineHttpAction({
         }
       } else if (incomingArtikelNummer && !incomingItemUUID) {
         try {
-          if (!ctx?.getItemReference?.get) {
+          if (!ctx?.getItemReference) {
             throw new Error('Missing getItemReference dependency for reference lookup');
           }
 
@@ -1319,8 +1319,8 @@ const action = defineHttpAction({
             { BoxID, actor }
           );
           try {
-            const existingBox = ctx.getBox?.get
-              ? (ctx.getBox.get(BoxID) as {
+            const existingBox = ctx.getBox
+              ? (await ctx.getBox(BoxID) as {
                   LocationId?: string | null;
                   Label?: string | null;
                   PhotoPath?: string | null;
@@ -1348,9 +1348,9 @@ const action = defineHttpAction({
       // TODO(import-item): Revisit batch ItemUUID reservation strategy once generator supports bulk allocation.
       let itemUUIDs: string[] = [];
       let hadExistingInstanceForArtikel = false;
-      if (resolvedArtikelNummer && ctx.findByMaterial?.all) {
+      if (resolvedArtikelNummer && ctx.findByMaterial) {
         try {
-          const existingInstances = ctx.findByMaterial.all(resolvedArtikelNummer) as Array<{ ItemUUID?: string }> | undefined;
+          const existingInstances = await ctx.findByMaterial(resolvedArtikelNummer) as Array<{ ItemUUID?: string }> | undefined;
           hadExistingInstanceForArtikel = Array.isArray(existingInstances)
             && existingInstances.some((instance) => typeof instance?.ItemUUID === 'string' && instance.ItemUUID.trim());
         } catch (lookupErr) {

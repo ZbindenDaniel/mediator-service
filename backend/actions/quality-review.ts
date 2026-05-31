@@ -24,7 +24,7 @@ const action = defineHttpAction({
       const itemUUID = match ? decodeURIComponent(match[1]) : '';
       if (!itemUUID) return sendJson(res, 400, { error: 'invalid item id' });
 
-      const item = ctx.getItem.get(itemUUID);
+      const item = await ctx.getItem(itemUUID);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
 
       if (req.method === 'GET') {

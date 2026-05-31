@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+785. ✅ Fix 10 backend/actions files: replace .get()/.run()/.all() calls on ctx functions with await async calls
+   - **Why:** ctx helpers are now plain async functions (not objects with .get/.run/.all methods) after the Postgres migration; calling them the old way throws at runtime. Also fixed list-stubs.ts where missing await on ctx.listStubs.active()/all() would cause .filter() to be called on a Promise.
+   - **Deferred:** Nothing.
 784. ✅ Fix agentic/index.ts: all deps.db/sync statement calls replaced with async Postgres helpers
    - **Why:** The agentic orchestrator was the last file still using SQLite deps.db.prepare/transaction and .get/.run/.all patterns — all agentic run operations would throw at runtime. Converted AgenticServiceDependencies interface to async function types; replaced all call sites.
    - **Deferred:** Nothing.

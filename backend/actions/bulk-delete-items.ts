@@ -72,7 +72,7 @@ const action = defineHttpAction({
       const instanceItems: Array<{ itemId: string; boxId: string | null; quantity: number }> = [];
 
       for (const id of itemIds) {
-        const item = ctx.getItem.get(id);
+        const item = await ctx.getItem(id);
         if (!item) {
           missing.push(id);
           continue;
@@ -116,7 +116,7 @@ const action = defineHttpAction({
             const deleted: BulkRemoveResult[] = [];
             for (const entry of instanceItems) {
               try {
-                ctx.deleteItem.run(entry.itemId);
+                await ctx.deleteItem(entry.itemId);
               } catch (deleteErr) {
                 console.error('[bulk-delete-items] Failed to delete item instance', {
                   actor,

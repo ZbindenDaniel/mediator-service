@@ -387,7 +387,7 @@ export async function handleUnifiedPrintRequest(
 
     try {
       if (labelType === 'item' || labelType === 'smallitem' || labelType === 'marketingsheet') {
-        const item = ctx.getItem.get(id) as Item | undefined;
+        const item = await ctx.getItem(id) as Item | undefined;
         if (!item) return sendJson(res, 404, { error: resolveNotFoundMessage(labelType) });
         if (labelType === 'marketingsheet') {
           payload = buildMarketingSheetPayload(item);
@@ -397,7 +397,7 @@ export async function handleUnifiedPrintRequest(
         entityType = 'Item';
         entityId = item.ItemUUID;
       } else {
-        const box = ctx.getBox.get(id) as Box | undefined;
+        const box = await ctx.getBox(id) as Box | undefined;
         if (!box) return sendJson(res, 404, { error: resolveNotFoundMessage(labelType) });
         if (labelType === 'shelf' && !box.BoxID.startsWith('S-')) {
           console.warn('[print-unified] Shelf print requested for non-shelf box id', {

@@ -102,9 +102,9 @@ const action = defineHttpAction({
       };
 
       const instanceItems =
-        filters.entityFilter === 'references' ? [] : ctx.listItemsWithFilters.all(bindings);
+        filters.entityFilter === 'references' ? [] : await ctx.listItemsWithFilters(bindings);
       const referenceItems =
-        filters.entityFilter === 'instances' ? [] : ctx.listItemReferencesWithFilters.all(bindings);
+        filters.entityFilter === 'instances' ? [] : await ctx.listItemReferencesWithFilters(bindings);
       const items = [...instanceItems, ...referenceItems];
       const groupedItems = groupItemsForResponse(instanceItems, { logger: console });
 

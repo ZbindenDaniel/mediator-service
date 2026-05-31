@@ -18,12 +18,12 @@ const action = defineHttpAction({
     const OVERVIEW_EVENT_LIMIT = 3;
     try {
       const counts = {
-        boxes: ctx.countBoxes.get().c || 0,
-        items: ctx.countItems.get().c || 0,
-        itemsNoBox: ctx.countItemsNoBox.get().c || 0
+        boxes: await ctx.countBoxes() || 0,
+        items: await ctx.countItems() || 0,
+        itemsNoBox: await ctx.countItemsNoBox() || 0
       };
-      const recentBoxes = ctx.listRecentBoxes.all();
-      const recentEvents = ctx.listRecentEvents.all();
+      const recentBoxes = await ctx.listRecentBoxes();
+      const recentEvents = await ctx.listRecentEvents();
 
       let agenticStateCounts: Record<AgenticRunStatus, number> = AGENTIC_RUN_STATUSES.reduce((acc, status) => {
         acc[status] = 0;
@@ -61,7 +61,7 @@ const action = defineHttpAction({
       }
 
       try {
-        const totalEvents = ctx.countEvents.get().c || 0;
+        const totalEvents = await ctx.countEvents() || 0;
         if (totalEvents > OVERVIEW_EVENT_LIMIT) {
           console.info('Overview recent events truncated', {
             limit: OVERVIEW_EVENT_LIMIT,
