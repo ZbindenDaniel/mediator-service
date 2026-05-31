@@ -365,23 +365,20 @@ export class AgenticModelInvoker {
         this.logger.warn?.({ err, msg: 'failed to persist agentic run error state', artikelNummer });
       }
     };
-    this.applyAgenticResult = (payload: AgenticResultPayload) => {
+    this.applyAgenticResult = async (payload: AgenticResultPayload) => {
       try {
-        handleAgenticResult(
+        await handleAgenticResult(
           { artikelNummer: payload.artikelNummer ?? '', payload },
           {
             ctx: {
-              // Cast async db functions to match legacy sync AgenticResultHandlerContext shape;
-              // result-handler.ts is pending its own async migration
-              db: null as any,
-              getItemReference: getItemReference as any,
-              getAgenticRun: getAgenticRun as any,
+              getItemReference,
+              getAgenticRun,
               persistItemReference,
-              updateAgenticRunStatus: updateAgenticRunStatus as any,
-              upsertAgenticRun: upsertAgenticRun as any,
-              insertAgenticRunReviewHistoryEntry: insertAgenticRunReviewHistoryEntry as any,
+              updateAgenticRunStatus,
+              upsertAgenticRun,
+              insertAgenticRunReviewHistoryEntry,
               logEvent,
-              getAgenticRequestLog: getAgenticRequestLog as any
+              getAgenticRequestLog
             },
             logger: this.logger
           }
