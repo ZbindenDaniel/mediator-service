@@ -145,18 +145,16 @@ const action = defineHttpAction({
             notes: resolvedNotes,
             now
           };
-          const maxRow = ctx.getMaxShelfIndex.get({ prefix: payload.prefix }) as
-            | { MaxIndex: number | null }
-            | undefined;
-          let nextIndex = typeof maxRow?.MaxIndex === 'number' && Number.isFinite(maxRow.MaxIndex)
-            ? maxRow.MaxIndex + 1
+          const maxIndex = await ctx.getMaxShelfIndex(payload.prefix);
+          let nextIndex = typeof maxIndex === 'number' && Number.isFinite(maxIndex)
+            ? maxIndex + 1
             : 1;
           let attempts = 0;
           const maxAttempts = 25;
 
           while (attempts < maxAttempts) {
             const candidate = `${payload.prefix}${String(nextIndex).padStart(4, '0')}`;
-            const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
+            const existing = await ctx.getBox(candidate) as { BoxID?: string } | undefined;
             if (existing?.BoxID) {
               console.warn('[shelf] Shelf ID collision detected, retrying', {
                 candidate,
@@ -207,7 +205,7 @@ const action = defineHttpAction({
         if (!/^B-[A-Za-z0-9]/.test(requestedBoxId)) {
           return sendJson(res, 400, { error: 'boxId format invalid; must start with B-' });
         }
-        const existingBox = ctx.getBox.get(requestedBoxId) as { BoxID?: string } | undefined;
+        const existingBox = await ctx.getBox(requestedBoxId) as { BoxID?: string } | undefined;
         if (existingBox?.BoxID) {
           return sendJson(res, 409, { error: 'Box mit dieser ID existiert bereits' });
         }
@@ -235,10 +233,10 @@ const action = defineHttpAction({
         return sendJson(res, 200, { ok: true, id: requestedBoxId });
       }
 
-      const last = ctx.getMaxBoxId.get() as { BoxID: string } | undefined;
+      const lastBoxId = await ctx.getMaxBoxId() as string | null;
       let seq = 0;
-      if (last?.BoxID) {
-        const m = last.BoxID.match(/^B-\d{6}-(\d+)$/);
+      if (lastBoxId) {
+        const m = lastBoxId.match(/^B-\d{6}-(\d+)$/);
         if (m) seq = parseInt(m[1], 10);
       }
       const nowDate = new Date();
@@ -257,7 +255,7 @@ const action = defineHttpAction({
         try {
           while (attempts < maxAttempts) {
             candidate = `${payload.prefix}${String(nextSeq).padStart(4, '0')}`;
-            const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
+            const existing = await ctx.getBox(candidate) as { BoxID?: string } | undefined;
             if (existing?.BoxID) {
               console.warn('[create-box] Box ID collision detected, retrying', {
                 actor: payload.actor,

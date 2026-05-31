@@ -17,6 +17,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0k. **`csv-ingest-datum-erfasst.test.ts` crashes test runner.** This test imports `backend/db` expecting a SQLite `db.prepare()` export, but `backend/db.ts` was rewritten for Postgres and no longer exports a `db` object. The test needs to be rewritten or removed.
+
 0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
 0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.
 0h. ✅ **Review flow only showed Ja/Abbrechen.** Extended dialog system with `confirmThreeWay`; `askFlag` now offers Ja/Nein/Abbrechen so reviewers can flag individual steps as wrong without aborting the review.

@@ -182,6 +182,15 @@ function describe(name, fn) {
   }
 }
 
+// Allow describe.skip to register a suite without running any of its tests.
+describe.skip = function skipDescribe(name) {
+  // Register an empty suite so the name appears in output but no tests run.
+  const parent = currentSuite;
+  const suite = createSuite(name, parent);
+  suite.skip = true;
+  parent.children.push(suite);
+};
+
 function registerHook(store, fn) {
   store.push(fn);
 }
@@ -206,7 +215,13 @@ function test(name, fn) {
   currentSuite.tests.push({ name, fn });
 }
 
+// Allow test.skip to mark tests as skipped without running them.
+test.skip = function skipTest(name) {
+  currentSuite.tests.push({ name, fn: null, skip: true });
+};
+
 const it = test;
+it.skip = test.skip;
 
 function safeStringify(value) {
   try {
@@ -791,6 +806,10 @@ const jestApi = {
 };
 
 async function runSuite(suite, depth = 0, results = { passed: 0, failed: 0, details: [] }) {
+  if (suite.skip) {
+    return results;
+  }
+
   for (const hook of suite.beforeAll) {
     await hook();
   }
@@ -800,6 +819,11 @@ async function runSuite(suite, depth = 0, results = { passed: 0, failed: 0, deta
   }
 
   for (const testCase of suite.tests) {
+    if (testCase.skip || !testCase.fn) {
+      results.details.push({ suite: suite.name, name: testCase.name, status: 'skipped' });
+      console.log(`- ${testCase.name} (skipped)`);
+      continue;
+    }
     for (const hook of suite.beforeEach) {
       await hook();
     }

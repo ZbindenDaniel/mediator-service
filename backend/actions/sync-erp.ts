@@ -577,7 +577,7 @@ const action = defineHttpAction({
         });
       }
 
-      const items = await ctx.listItemsForExport.all({
+      const items = await ctx.listItemsForExport({
         createdAfter: null,
         updatedAfter: null,
         itemIds
@@ -591,7 +591,7 @@ const action = defineHttpAction({
         });
       }
 
-      const boxes = typeof ctx.listBoxes?.all === 'function' ? await ctx.listBoxes.all() : [];
+      const boxes = typeof ctx.listBoxes === 'function' ? await ctx.listBoxes() : [];
       const scopedArtikelNummern = resolveArtikelNummerMirrorScope(items, console);
       const explicitMediaSources = resolveExplicitMediaMirrorSources(items, console);
       console.info('[sync-erp] script_item_scope', {

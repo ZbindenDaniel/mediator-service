@@ -43,8 +43,8 @@ function makeCtx(overrides: {
   };
   return {
     ctx: {
-      getItem: { get: jest.fn(() => overrides.item ?? { BoxID: 'B-OLD', ItemUUID: 'I-0001' }) },
-      getBox: { get: jest.fn(() => overrides.destBox ?? { BoxID: 'B-042', LocationId: 'S-01', Location: null }) },
+      getItem: jest.fn(async () => overrides.item ?? { BoxID: 'B-OLD', ItemUUID: 'I-0001' }),
+      getBox: jest.fn(async () => overrides.destBox ?? { BoxID: 'B-042', LocationId: 'S-01', Location: null }),
       db,
       logEvent,
       enqueueShopwareSyncJob,
@@ -149,6 +149,6 @@ describe('move-item action', () => {
     const req = makeRequest('/api/items/I-0001%2Fspecial/move', { toBoxId: 'B-042', actor: 'tester' });
     const { res } = createMockResponse();
     await action.handle(req, res, ctx);
-    expect(ctx.getItem.get).toHaveBeenCalledWith('I-0001/special');
+    expect(ctx.getItem).toHaveBeenCalledWith('I-0001/special');
   });
 });
