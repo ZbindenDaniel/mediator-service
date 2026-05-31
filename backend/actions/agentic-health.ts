@@ -14,7 +14,7 @@ const action = defineHttpAction({
   matches: (path, method) => path === '/api/agentic/health' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const health = checkAgenticHealth({
+      const health = await checkAgenticHealth({
         getAgenticRun: ctx.getAgenticRun,
         getItemReference: ctx.getItemReference,
         upsertAgenticRun: ctx.upsertAgenticRun,

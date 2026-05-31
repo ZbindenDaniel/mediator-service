@@ -519,8 +519,8 @@ function createAgenticServiceDependencies(
   return {
     getAgenticRun,
     getItemReference,
-    upsertAgenticRun,
-    updateAgenticRunStatus,
+    upsertAgenticRun: upsertAgenticRun as (params: Record<string, unknown>) => Promise<void>,
+    updateAgenticRunStatus: updateAgenticRunStatus as (params: Record<string, unknown>) => Promise<{ changes?: number } | void>,
     updateQueuedAgenticRunQueueState,
     logEvent,
     findByMaterial,

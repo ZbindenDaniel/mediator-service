@@ -1720,7 +1720,7 @@ const action = defineHttpAction({
                   logger: console,
                   now: () => new Date(),
                   invokeModel: ctx.agenticInvokeModel,
-                  getItemReference: undefined
+                  getItemReference: ctx.getItemReference
                 }
               })
                 .then((result) => {

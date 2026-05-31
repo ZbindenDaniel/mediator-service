@@ -493,7 +493,7 @@ const action = defineHttpAction({
         if (!artikelNummer) {
           return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic status lookup' });
         }
-        const result = getAgenticStatus(artikelNummer, {
+        const result = await getAgenticStatus(artikelNummer, {
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,
@@ -792,7 +792,7 @@ const action = defineHttpAction({
       }
 
       try {
-        const result = getAgenticStatus(artikelNummer, {
+        const result = await getAgenticStatus(artikelNummer, {
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,

@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+784. ✅ Fix agentic/index.ts: all deps.db/sync statement calls replaced with async Postgres helpers
+   - **Why:** The agentic orchestrator was the last file still using SQLite deps.db.prepare/transaction and .get/.run/.all patterns — all agentic run operations would throw at runtime. Converted AgenticServiceDependencies interface to async function types; replaced all call sites.
+   - **Deferred:** Nothing.
 783. ✅ Wire initDb() at server startup; fix findByMaterial stub in agentic dependencies
    - **Why:** `initDb()` was written during the Postgres migration but never called — tables would never be created. Also `createAgenticServiceDependencies` passed `findByMaterial: { all: () => [] }` (always empty) instead of the real async function, silently breaking material-lookup in agentic runs. Fixed both in `server.ts`.
    - **Deferred:** Nothing.
