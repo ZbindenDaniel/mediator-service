@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+791. ✅ Fix Dockerfile: copy pruned node_modules from builder instead of re-running npm ci
+   - **Why:** The runtime stage ran `npm ci --omit=dev` which requires network access and fails on flaky connections (ECONNRESET). Builder already has all deps installed; pruning devDeps there and copying `node_modules` across eliminates the second network call entirely.
+   - **Deferred:** Nothing.
 790. ✅ Fix nginx "host not found in upstream" — use resolver + variable for deferred DNS
    - **Why:** `depends_on: service_healthy` only controls container start order; nginx still resolves `proxy_pass` hostnames at config-parse time. Even with mediator healthy, Docker DNS can fail at that exact moment. Using `resolver 127.0.0.11` (Docker's embedded DNS) with `set $upstream` moves resolution to request time, which is the standard fix for nginx + Docker Compose setups.
    - **Deferred:** Nothing.
