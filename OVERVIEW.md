@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+789. ✅ Fix docker-compose: build from source, healthcheck, proxy depends_on
+   - **Why:** Two blockers after the Postgres migration: (1) mediator still used the pre-migration image `2.2` which ignores `DATABASE_URL` and opens SQLite — fixed by switching to `build: .`; (2) nginx proxy crashed with "host not found in upstream mediator" because nginx resolves DNS at config-parse time and the old `depends_on: - mediator` only waits for container start, not network readiness — fixed by adding a healthcheck to mediator and upgrading proxy's `depends_on` to `condition: service_healthy`.
+   - **Deferred:** Nothing.
 788. ✅ Add postgres service to docker-compose.yml; uncomment depends_on
    - **Why:** The Postgres migration required the service but the compose file only had the volume declared — the postgres container itself and health-check dependency were missing, so `docker compose up` would fail to provide a database.
    - **Deferred:** Nothing.
