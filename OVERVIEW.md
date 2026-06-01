@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+790. ✅ Fix nginx "host not found in upstream" — use resolver + variable for deferred DNS
+   - **Why:** `depends_on: service_healthy` only controls container start order; nginx still resolves `proxy_pass` hostnames at config-parse time. Even with mediator healthy, Docker DNS can fail at that exact moment. Using `resolver 127.0.0.11` (Docker's embedded DNS) with `set $upstream` moves resolution to request time, which is the standard fix for nginx + Docker Compose setups.
+   - **Deferred:** Nothing.
 789. ✅ Fix docker-compose: build from source, healthcheck, proxy depends_on
    - **Why:** Two blockers after the Postgres migration: (1) mediator still used the pre-migration image `2.2` which ignores `DATABASE_URL` and opens SQLite — fixed by switching to `build: .`; (2) nginx proxy crashed with "host not found in upstream mediator" because nginx resolves DNS at config-parse time and the old `depends_on: - mediator` only waits for container start, not network readiness — fixed by adding a healthcheck to mediator and upgrading proxy's `depends_on` to `condition: service_healthy`.
    - **Deferred:** Nothing.
