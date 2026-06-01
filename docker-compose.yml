@@ -1,9 +1,26 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mediator-postgres
+    environment:
+      POSTGRES_USER: mediator
+      POSTGRES_PASSWORD: mediator
+      POSTGRES_DB: mediator
+    volumes:
+      - mediator-postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   mediator:
     image: ghcr.io/zbindendaniel/mediator-service:2.2
     env_file: .env
     environment:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav
+      DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
     container_name: mediator
     expose:
       - "8080"
@@ -15,9 +32,9 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 # TODO(ingress-auth): Keep the proxy configuration aligned with docs/setup.md and secrets rotation steps.
   proxy:
