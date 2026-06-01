@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+788. ✅ Add postgres service to docker-compose.yml; uncomment depends_on
+   - **Why:** The Postgres migration required the service but the compose file only had the volume declared — the postgres container itself and health-check dependency were missing, so `docker compose up` would fail to provide a database.
+   - **Deferred:** Nothing.
 787. ✅ Fix test suite after PostgreSQL migration: 382 tests passing, 9 skipped, 0 failing
    - **Why:** After the Postgres migration, many tests failed due to: (1) old SQLite `{ get: jest.fn() }` mock shapes needing async fn mocks; (2) `jest.mock()` not hoisting in custom harness — extended harness skip detection to catch `db-client`/`db` mock patterns; (3) harness missing matchers (`toBeInstanceOf`, `expect.arrayContaining`, `expect.stringContaining`, etc.) and `jest.clearAllMocks()` not tracking inline `jest.fn()` calls; (4) `startAgenticRun` architecture changed to only queue, requiring `dispatchQueuedAgenticRuns` separately; (5) `withTransaction` mock missing `client.query` for concurrency checks; (6) ItemUUID prefix changed `I.` → `I-`; (7) log messages changed; (8) `collectMediaAssets` test used wrong MEDIA_DIR path; (9) `resolvePhotoCaptureAttribute` returned `'user'` instead of `'environment'`; (10) missing `CREATE_ITEM_REFS_SQL`/`CREATE_ITEMS_SQL` constants needed for agentic prompt column extraction; (11) snapshot updates for new prompt content; (12) fully-commented-out test files causing Jest "no tests" failures.
    - **Deferred:** ~44 test files skipped (SQLite-based tests needing Postgres rewrites, old AgenticServiceDependencies interface tests, frontend module resolution issues, CSV import ZIP requirement). Listed in jest.config.cjs testPathIgnorePatterns with comments.
