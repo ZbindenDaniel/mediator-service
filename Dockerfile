@@ -16,6 +16,9 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+# Prune devDependencies in-place so runtime stage can copy node_modules without a network call
+RUN npm prune --omit=dev
+
 
 ############################
 # Runtime stage
@@ -54,9 +57,9 @@ WORKDIR /app
 # Copy env file
 COPY .env /app/.env
 
-# Install production dependencies
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# Copy pruned node_modules from builder — avoids a second npm install (no network needed)
+COPY --from=builder /app/node_modules ./node_modules
+COPY package.json ./
 
 # Copy build artifacts and static assets
 COPY --from=builder /app/dist ./dist
