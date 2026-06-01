@@ -33,7 +33,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/ > /dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
