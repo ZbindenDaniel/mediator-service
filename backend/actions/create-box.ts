@@ -177,7 +177,7 @@ const action = defineHttpAction({
               PlacedAt: null,
               UpdatedAt: payload.now
             });
-            ctx.logEvent({
+            await ctx.logEvent({
               Actor: payload.actor,
               EntityType: 'Box',
               EntityId: candidate,
@@ -222,7 +222,7 @@ const action = defineHttpAction({
           PlacedAt: null,
           UpdatedAt: now
         });
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: actor,
           EntityType: 'Box',
           EntityId: requestedBoxId,
@@ -279,7 +279,7 @@ const action = defineHttpAction({
               PlacedAt: null,
               UpdatedAt: payload.now
             });
-            ctx.logEvent({
+            await ctx.logEvent({
               Actor: payload.actor,
               EntityType: 'Box',
               EntityId: candidate,

@@ -31,7 +31,7 @@ const action = defineHttpAction({
         if (!item) return sendJson(res, 404, { error: 'item not found' });
         await withTransaction(async (_client) => {
           await ctx.deleteItem(id);
-          ctx.logEvent({
+          await ctx.logEvent({
             Actor: actor,
             EntityType: 'Item',
             EntityId: id,
@@ -65,7 +65,7 @@ const action = defineHttpAction({
         if (items.length) return sendJson(res, 400, { error: 'box not empty' });
         await withTransaction(async (_client) => {
           await ctx.deleteBox(id);
-          ctx.logEvent({
+          await ctx.logEvent({
             Actor: actor,
             EntityType: 'Box',
             EntityId: id,

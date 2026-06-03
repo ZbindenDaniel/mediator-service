@@ -126,7 +126,7 @@ const action = defineHttpAction({
                 });
                 throw deleteErr;
               }
-              ctx.logEvent({
+              await ctx.logEvent({
                 Actor: actor,
                 EntityType: 'Item',
                 EntityId: entry.itemId,

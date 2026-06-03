@@ -455,7 +455,7 @@ export async function handleUnifiedPrintRequest(
       }
 
       previewUrl = `/prints/${path.basename(htmlPath)}`;
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: entityType,
         EntityId: entityId,
@@ -500,7 +500,7 @@ export async function handleUnifiedPrintRequest(
     }
 
     if (printResult.sent) {
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: entityType,
         EntityId: entityId,
@@ -513,7 +513,7 @@ export async function handleUnifiedPrintRequest(
         })
       });
     } else {
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: entityType,
         EntityId: entityId,

@@ -164,7 +164,7 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: 'Failed to update agentic run' });
       }
 
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: artikelNummer,

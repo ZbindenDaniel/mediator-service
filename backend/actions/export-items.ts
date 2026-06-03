@@ -1345,7 +1345,7 @@ const action = defineHttpAction({
       });
       // Log export events without a DB transaction — logEvent uses ctx helpers, not raw SQL
       for (const row of items) {
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: actor,
           EntityType: 'Item',
           EntityId: row.ItemUUID,

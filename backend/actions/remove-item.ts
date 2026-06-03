@@ -56,7 +56,7 @@ const action = defineHttpAction({
             throw updateErr;
           }
           const updated = await ctx.getItem(u);
-          ctx.logEvent({
+          await ctx.logEvent({
             Actor: a,
             EntityType: 'Item',
             EntityId: u,
@@ -112,7 +112,7 @@ const action = defineHttpAction({
           quantityAfter: updated?.Auf_Lager ?? 0
         });
 
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: a,
           EntityType: 'Item',
           EntityId: u,

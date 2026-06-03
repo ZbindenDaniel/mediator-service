@@ -67,7 +67,7 @@ const action = defineHttpAction({
       params.push(uuid);
 
       await execute(`UPDATE items SET ${setClauses.join(', ')} WHERE ItemUUID=$${params.length}`, params);
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: uuid,

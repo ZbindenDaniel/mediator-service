@@ -44,7 +44,7 @@ const action = defineHttpAction({
         : new Date().toISOString();
       const source = typeof data.source === 'string' && data.source ? data.source : 'qr-scanner';
 
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: 'Box',
         EntityId: boxId,

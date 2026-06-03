@@ -38,6 +38,13 @@
 
 1. **Fix eventLog display on item and box detail.** Empty state added (shows "Keine Aktivitäten." instead of blank). If events are still absent when they should exist, the data-fetch path needs investigation.
 
+1c. **Investigate remaining tester-reported bugs (need runtime testing):**
+   - "KI lauf kann nicht geloescht werden" — `agentic-delete.ts` looks correct; check browser network tab for 400/404 response and whether `actor` is sent in request body
+   - "ki erfassung indefinite" — agentic capture stuck; likely related to item 2 below (agentic runs broken for references)
+   - "bearbeiten fehler, KI-Status nicht angezeigt" — `save-item.ts` silently sets `agentic = null` on fetch error; check if `getAgenticRun` errors after migration
+   - "list button broken" — unclear; may self-resolve now that box-detail is fixed
+   - "artikel dupliziert nach umlagern" — likely stale frontend state; may self-resolve with box-detail fix (box item list can now reload after move)
+
 1b. ✅ **Restore bulk-action controls.** `BulkItemActionBar` restored inside `MultiItemDetailPanel` in Layout; reads `selectedIds` from PanelContext and `selectedItems/onClearSelection/onActionComplete` from `BulkSelectionContext`.
 
 2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started

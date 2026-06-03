@@ -88,7 +88,7 @@ const action = defineHttpAction({
         [itemUUID, safeName, relativePath, mimeType, label, body.length]
       );
 
-      ctx.logEvent({
+      await ctx.logEvent({
         EntityType: 'Item',
         EntityId: itemUUID,
         Event: 'AttachmentAdded',
@@ -109,7 +109,7 @@ const action = defineHttpAction({
       try { fs.unlinkSync(fullPath); } catch { /* already gone */ }
 
       await execute('DELETE FROM item_attachments WHERE Id = $1 AND ItemUUID = $2', [attachmentId, itemUUID]);
-      ctx.logEvent({
+      await ctx.logEvent({
         EntityType: 'Item',
         EntityId: itemUUID,
         Event: 'AttachmentRemoved',

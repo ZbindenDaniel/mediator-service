@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+792. ✅ Fix post-migration bugs: box-detail 500, create-stub missing await, logEvent not awaited
+   - **Why:** `box-detail.ts` was still guarding with `typeof ctx.getBox.get !== 'function'` — an SQLite statement check that always fires on async functions, returning 500 for every box/shelf request. This broke the box/crate tab, relocation UI, and item list after moves (stale frontend state). `create-stub.ts` called `ctx.createStub()` without await, silently losing DB errors. All `ctx.logEvent()` call sites across 12 action files lacked `await`, causing move/delete events to be silently dropped or recorded late.
+   - **Deferred:** Several tester-reported issues still need investigation at runtime: "KI lauf kann nicht geloescht werden", "ki erfassung indefinite", "bearbeiten fehler", "list button broken", item duplication after move (now more likely to self-resolve with box-detail fixed). All noted in todo.md.
 791. ✅ Fix Dockerfile: copy pruned node_modules from builder instead of re-running npm ci
    - **Why:** The runtime stage ran `npm ci --omit=dev` which requires network access and fails on flaky connections (ECONNRESET). Builder already has all deps installed; pruning devDeps there and copying `node_modules` across eliminates the second network call entirely.
    - **Deferred:** Nothing.

@@ -81,7 +81,7 @@ const action = defineHttpAction({
             INSERT INTO item_relations (ParentItemUUID, ChildItemUUID, RelationType, Notes)
             VALUES ($1, $2, $3, $4)
           `, [parentUUID, child, relationType, notes]);
-          ctx.logEvent({
+          await ctx.logEvent({
             EntityType: 'Item',
             EntityId: parentUUID,
             Event: 'AccessoryLinked',
@@ -102,7 +102,7 @@ const action = defineHttpAction({
           WHERE ParentItemUUID = $3 AND ChildItemUUID = $4
         `, [notes, new Date().toISOString(), parentUUID, childUUID]);
         if (affected === 0) return sendJson(res, 404, { error: 'relation not found' });
-        ctx.logEvent({
+        await ctx.logEvent({
           EntityType: 'Item',
           EntityId: parentUUID,
           Event: 'AccessoryRelationUpdated',
@@ -117,7 +117,7 @@ const action = defineHttpAction({
           [parentUUID, childUUID]
         );
         if (affected === 0) return sendJson(res, 404, { error: 'relation not found' });
-        ctx.logEvent({
+        await ctx.logEvent({
           EntityType: 'Item',
           EntityId: parentUUID,
           Event: 'AccessoryUnlinked',

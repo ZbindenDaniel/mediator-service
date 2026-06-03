@@ -78,7 +78,7 @@ const action = defineHttpAction({
             throw updateErr;
           }
           const updated = await ctx.getItem(u);
-          ctx.logEvent({
+          await ctx.logEvent({
             Actor: a,
             EntityType: 'Item',
             EntityId: u,
@@ -141,7 +141,7 @@ const action = defineHttpAction({
           throw createErr;
         }
 
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: a,
           EntityType: 'Item',
           EntityId: newItemUUID,

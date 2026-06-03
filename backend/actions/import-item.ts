@@ -1537,7 +1537,7 @@ const action = defineHttpAction({
                 }
               }
               const eventType = isUpdateRequest || itemExists ? 'Updated' : 'Created';
-              ctx.logEvent({
+              await ctx.logEvent({
                 Actor: a,
                 EntityType: 'Item',
                 EntityId: itemData.ItemUUID,
@@ -1597,7 +1597,7 @@ const action = defineHttpAction({
 
                   if (shouldEmitAgenticQueuedEvent) {
                     try {
-                      ctx.logEvent({
+                      await ctx.logEvent({
                         Actor: a,
                         EntityType: 'Item',
                         EntityId: seedArtikelNummer,

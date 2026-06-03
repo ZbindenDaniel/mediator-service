@@ -38,7 +38,7 @@ const action = defineHttpAction({
       const id = randomBytes(16).toString('hex');
       const createdAt = new Date().toISOString();
 
-      ctx.createStub({ id, shelfId, description, numberLooseItems, createdAt, createdBy, notes });
+      await ctx.createStub({ id, shelfId, description, numberLooseItems, createdAt, createdBy, notes });
 
       sendJson(res, 201, { id, shelfId, description, numberLooseItems, createdAt, createdBy, isActive: 1, notes });
     } catch (err) {

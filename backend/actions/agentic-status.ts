@@ -754,7 +754,7 @@ const action = defineHttpAction({
       });
 
       // TODO(agentic-review-metrics): Keep review event metadata aligned with frontend contract changes.
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: artikelNummer,

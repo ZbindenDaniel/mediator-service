@@ -197,7 +197,7 @@ type AgenticBulkQueueResult = {
           }
 
           try {
-            ctx.logEvent({
+            await ctx.logEvent({
               Actor: actor,
               EntityType: 'Item',
               EntityId: identifier,

@@ -1361,7 +1361,7 @@ const action = defineHttpAction({
       try {
         await withTransaction(async () => {
           await ctx.persistItemReference(reference);
-          ctx.logEvent({
+          await ctx.logEvent({
             Actor: actor,
             EntityType: 'Item',
             EntityId: itemId,

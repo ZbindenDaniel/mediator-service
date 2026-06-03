@@ -43,7 +43,7 @@ const action = defineHttpAction({
           `UPDATE items SET BoxID=$1, Location=$2, UpdatedAt=$3 WHERE ItemUUID=$4`,
           [toBoxId, normalizedLocation, new Date().toISOString(), uuid]
         );
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: actor,
           EntityType: 'Item',
           EntityId: uuid,
