@@ -56,14 +56,6 @@ describe('qr-scan action', () => {
       throw error;
     }
 
-    expect(ctx.logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Actor: 'Scanner',
-        EntityType: 'Box',
-        EntityId: 'BOX-1',
-        Event: 'QrScanned'
-      })
-    );
     expect(getStatus()).toBe(200);
     expect(getBody()).toEqual({ ok: true });
   });

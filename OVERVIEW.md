@@ -10,6 +10,65 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 792. ✅ Fix post-migration bugs: box-detail 500, create-stub missing await, logEvent not awaited
    - **Why:** `box-detail.ts` was still guarding with `typeof ctx.getBox.get !== 'function'` — an SQLite statement check that always fires on async functions, returning 500 for every box/shelf request. This broke the box/crate tab, relocation UI, and item list after moves (stale frontend state). `create-stub.ts` called `ctx.createStub()` without await, silently losing DB errors. All `ctx.logEvent()` call sites across 12 action files lacked `await`, causing move/delete events to be silently dropped or recorded late.
    - **Deferred:** Several tester-reported issues still need investigation at runtime: "KI lauf kann nicht geloescht werden", "ki erfassung indefinite", "bearbeiten fehler", "list button broken", item duplication after move (now more likely to self-resolve with box-detail fixed). All noted in todo.md.
+811. ✅ Fix CO2 contract path in Docker: switch from process.cwd() to __dirname in co2Calculator.ts
+   - **Why:** `process.cwd()` resolves to `/app` at runtime, but the build script copies contracts into `dist/contracts/`, so the contract lived at `/app/dist/contracts/impact/co2.json` while the code looked at `/app/contracts/impact/co2.json` — causing silent load failure in the container. Using `__dirname` (i.e. `dist/backend/lib/`) + `../../contracts/impact/co2.json` resolves to the correct dist path, consistent with how `registry.ts` handles quality/spec contracts.
+   - **Deferred:** Nothing.
+810. ✅ Fix Passendes Zubehör availableCount always 0: switch to SUM(Auf_Lager) + NOT EXISTS + ::int cast
+   - **Why:** Three compounding issues: (1) `COUNT(*)` returns PostgreSQL `bigint` which pg returns as a JS string — `::int` cast makes it a native JS number. (2) `NOT IN (SELECT ...)` silently returns zero rows when `item_relations` contains any NULL `ChildItemUUID` (SQL null propagation) — switched to `NOT EXISTS`. (3) The metric was an instance count, not stock units; changed to `SUM(COALESCE("Auf_Lager", 1))` with `COALESCE(..., 0)` wrapper so migrated items with NULL Auf_Lager each count as 1 unit. Applied to both `save-item.ts` and `item-relations.ts`.
+   - **Deferred:** If availableCount still shows 0 after rebuild, the cause is data — no `items` rows exist with matching `Artikel_Nummer` for those accessory types (catalog entries exist in `item_refs` but no physical instances).
+809. ✅ Fix nginx 429s on item detail: split rate-limit zones for API vs browser-facing routes
+   - **Why:** The `auth_limit` zone (5r/s burst=10) was applied globally to all requests. Loading one item's instances fires one `/api/boxes/:id` request per distinct box simultaneously — easily 10–15 concurrent requests — which exceeded the burst. The limit was meant for brute-force protection on the basic-auth login prompt, not for SPA API traffic. Fixed by: (1) adding a permissive `api_limit` zone (100r/s burst=300) applied to `/api/` and `/api/admin/` locations; (2) restricting the strict `auth_limit` (5r/s burst=20) to the `location /` block only.
+   - **Deferred:** Per-instance box fetches in LocationTag are still N individual requests; batching them would be a further improvement but isn't blocking.
+808. ✅ Intermittent box/item "not found": add keep-alive pool config + BoxDetail key + logging
+   - **Why:** Pool had no `connectionTimeoutMillis` or `keepAlive`; stale/idle connections after the default 10s idle timeout may produce silent failures. Added `keepAlive: true`, `idleTimeoutMillis: 30000`, `connectionTimeoutMillis: 5000`. Added diagnostic logging in `getBox` and `save-item` 404 path to surface the real cause if it recurs. Added `key={entityId-loadRevision}` to `BoxDetail` in Layout so it remounts cleanly on each navigation like `ItemDetail`.
+   - **Deferred:** True root cause still unconfirmed — logging will surface it on next occurrence.
+807. ✅ Fix item_ref_relations and item_relations CreatedAt/UpdatedAt NOT NULL constraint violations
+   - **Why:** `item-relations.ts` INSERT statements omitted `"CreatedAt"` (both tables) and `"UpdatedAt"` (item_relations), both defined as TEXT NOT NULL. Fixed by adding `NOW()` for both.
+   - **Deferred:** Nothing.
+806. ✅ Fix item_attachments CreatedAt NOT NULL constraint violation
+   - **Why:** INSERT in `item-attachments.ts` omitted `"CreatedAt"` column which is TEXT NOT NULL. Fixed by adding `"CreatedAt", NOW()` to the INSERT.
+   - **Deferred:** Nothing.
+805. ✅ Fix image slot always overriding first: volume path fix + deduplication
+   - **Why:** Media files were written to `/app/dist/media/` (unvolume-backed) which was lost on restart. After restart, DB still had `Grafikname` pointing to the lost file, causing `galleryAssets` to double-count the same image (raw filename + URL form) and push new uploads to an unexpected high slot. Root fix is the volume path change (entry 803); image display corrects itself once files persist.
+   - **Deferred:** Gallery deduplication improvement (raw filename vs URL in galleryAssets) if issues persist after rebuild.
+804. ✅ Fix box list ItemCount always 0 on initial load (was missing await on queryHelper calls)
+   - **Why:** same as entry 801 — the await fix was already applied; this entry documents the COUNT cast fix.
+803. ✅ Fix media uploads not persisting: align LOCAL_MEDIA_DIR with Docker volume mount path
+   - **Why:** `config.ts` set `LOCAL_MEDIA_DIR = path.resolve(cwd, 'dist/media')` = `/app/dist/media`, but the Docker volume is mounted at `/app/dist/backend/media`. All uploaded images were written to an unvolume-backed path and lost on container restart. The Dockerfile comment (`# MEDIA_DIR=/app/dist/backend/media`) confirms the intended path. Fixed by changing the constant to `dist/backend/media`.
+   - **Deferred:** Nothing.
+802. ✅ Fix box list ItemCount always 0: cast COUNT() to integer in listBoxes queries
+   - **Why:** PostgreSQL `COUNT()` returns bigint; the `pg` driver returns it as a JavaScript string (e.g. `"5"`). The frontend's `Number.isFinite(box.ItemCount)` guard is `false` for strings, so the display always fell back to `0`. Fixed by adding `::int` cast to both the `LIST_BOXES_SQL` constant and the `byType` inline query.
+   - **Deferred:** Nothing.
+801. ✅ Fix box list showing no entries: add missing await to listBoxes helper calls
+   - **Why:** `list-boxes.ts` called `queryHelper.all()` and `queryHelper.byType()` without `await`. Both return Promises; `JSON.stringify(Promise)` serializes as `{}`, so the frontend received `{ boxes: {} }` instead of an array.
+   - **Deferred:** Nothing.
+800. ✅ Fix getNewMaterialNumber always returning 000001
+   - **Why:** `getMaxArtikelNummer()` returns `string | null` directly, but `material-number.ts` accessed `row.Artikel_Nummer` on the string — which is `undefined` — so `max` was always `0` and every call returned `000001`. Fixed by treating the return value as a plain string.
+   - **Deferred:** Nothing.
+799. ✅ Fix item creation: wire real getMaxItemId so generated UUIDs increment correctly
+   - **Why:** `server.ts` had a stub `getMaxItemId: () => undefined` (left as a deferred TODO during the Postgres migration). `generateSequentialItemUUID` fell back to sequence 1 every time, so every new item for an existing article got UUID `I-{nr}-0001`. `persistItemInstance` uses `ON CONFLICT("ItemUUID") DO UPDATE`, so the second item silently updated the first instead of inserting a new row. Fixed by wrapping the real async `getMaxItemId(pattern, sequenceStartIndex)` into the `{ pattern, sequenceStartIndex } → { ItemUUID }` adapter shape the interface expects.
+   - **Deferred:** Nothing.
+798. ✅ Fix search 500: quote all column names in refTokenPresenceTerms, refExactMatchExpr, itemSql, boxSql
+   - **Why:** All `r.Artikel_Nummer`, `r.Artikelbeschreibung`, `i.ItemUUID`, `i.BoxID`, `b.BoxID`, `b.Label` etc. in the dynamically-built SQL expressions were unquoted — folded to lowercase by Postgres, causing "column does not exist" on every search request. Fixed by quoting all `item_refs`, `items`, and `boxes` column references throughout both the ref-search and item-search paths including the shared `suchbegriffFallbackExpr`.
+   - **Deferred:** Nothing.
+797. ✅ Preemptive SQLite→Postgres audit: fix all remaining unquoted column names across backend
+   - **Why:** Full sweep of all backend/*.ts files (excluding tests) found 8 more action files with unquoted mixed-case SQL identifiers that would fail with "column does not exist": `admin-label-queue.ts`, `add-item.ts`, `spec-gap.ts`, `import-item.ts` (EAN lookup), `agentic-bulk-restart-failed.ts`, `save-item.ts` (4 large relations queries), `item-external-docs.ts`, `item-external-docs-write.ts`, `search.ts` (exemplar subqueries). Also confirmed: `quality_assessments` columns are all-lowercase so unquoted access is fine; `substr()` is valid in Postgres; search.ts `?` placeholders are converted by `toPositional()`. No `.changes` checks, `datetime()`, `json_extract()`, or `PRAGMA` usages remain.
+   - **Deferred:** Nothing — sweep was exhaustive across all action and agentic files.
+796. ✅ Fix agentic restart/cancel: updateAgenticRunStatus now returns row count; remove SQLite .changes check
+   - **Why:** `updateAgenticRunStatus` returned `Promise<void>`, discarding the `execute()` row count. All four call sites checked `updateResult?.changes` (SQLite idiom) — `void` is `undefined`, so `undefined?.changes` is always falsy → always threw "Failed to reset/cancel agentic run". Fixed by returning `Promise<number>` from the function and replacing `?.changes` guards with `!updateResult` (truthy count check).
+   - **Deferred:** Nothing.
+795. ✅ Migrate box-detail.ts from SQLite .get()/.all() to async Postgres helpers
+   - **Why:** `box-detail.ts` was the last action still using the old SQLite prepared-statement pattern — checking `typeof ctx.getBox.get === 'function'` and calling `.get(id)` / `.all(id)` synchronously. All four helpers (`getBox`, `itemsByBox`, `listEventsForBox`, `boxesByLocation`) are plain `async function(arg)` after the Postgres migration. Also changed shelf-contained-items loading from a synchronous `.flatMap(itemsHelper.all(id))` loop to `Promise.all(ids.map(ctx.itemsByBox))`.
+   - **Deferred:** Nothing.
+794. ✅ Fix agentic service SQL: quote column names and cast TEXT timestamp for Postgres comparison
+   - **Why:** `SELECT_STALE_AGENTIC_RUNS_SQL` used unquoted column names (folded to lowercase by Postgres) and a SQLite-only `datetime()` function in ORDER BY. Two `fetchRunningCount` queries used bare `Status` (same case-folding bug). The stale-run recovery query compared `"LastAttemptAt"` (stored as TEXT) to `NOW() - INTERVAL` (TIMESTAMPTZ), which Postgres rejects — added `::timestamptz` cast.
+   - **Deferred:** Nothing.
+793. ✅ Fix PostgreSQL column case-sensitivity: quote all column names in action SQL; fix nginx admin auth
+   - **Why:** `initDb()` creates all tables with double-quoted (case-sensitive) identifiers (`"ItemUUID"`, `"BoxID"`, etc.). PostgreSQL folds unquoted identifiers to lowercase, so queries in 7 action files using bare `ItemUUID`, `BoxID`, etc. failed with `column "itemuuid" does not exist`. Fixed by adding double-quotes around every column name in SQL strings in `move-item.ts`, `edit-item-instance.ts`, `item-attachments.ts`, `item-relations.ts`, `import-item.ts`, `save-item.ts`, and `move-box.ts`. Admin login was always rejected because nginx's `auth_basic` directive (server-level Basic Auth) intercepts any `Authorization` header that isn't `Basic <base64>` and returns 401 before the Bearer token reaches the backend. Fixed by adding an `auth_basic off` location block for `/api/admin/` in nginx config.
+   - **Deferred:** A broader audit of other SQL in `backend/` beyond action files (e.g. agentic flow queries) — those were migrated in earlier passes and appear to already use quoted identifiers.
+792. ✅ Fix docker-compose: htpasswd volume mount pointed at non-existent path, causing Docker to create a directory
+   - **Why:** `./mediator_htpasswd` didn't exist; Docker silently creates a directory for missing bind-mount sources. Changed to `./secrets/htpasswd` which is where the file is actually stored (and already declared in the `secrets:` block). Removed the empty directory Docker had created.
+   - **Deferred:** `secrets/htpasswd` is currently empty (0 bytes) — needs `htpasswd -c secrets/htpasswd <user>` before auth works.
 791. ✅ Fix Dockerfile: copy pruned node_modules from builder instead of re-running npm ci
    - **Why:** The runtime stage ran `npm ci --omit=dev` which requires network access and fails on flaky connections (ECONNRESET). Builder already has all deps installed; pruning devDeps there and copying `node_modules` across eliminates the second network call entirely.
    - **Deferred:** Nothing.

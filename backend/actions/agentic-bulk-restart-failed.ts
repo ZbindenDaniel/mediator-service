@@ -37,7 +37,7 @@ const action = defineHttpAction({
     let failedRuns: Array<{ Artikel_Nummer: string }> = [];
     try {
       failedRuns = await query<{ Artikel_Nummer: string }>(
-        `SELECT Artikel_Nummer FROM agentic_runs WHERE Status = 'failed' AND Artikel_Nummer IS NOT NULL`,
+        `SELECT "Artikel_Nummer" FROM agentic_runs WHERE "Status" = 'failed' AND "Artikel_Nummer" IS NOT NULL`,
         []
       );
     } catch (err) {

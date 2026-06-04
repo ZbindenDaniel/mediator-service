@@ -520,7 +520,7 @@ function createAgenticServiceDependencies(
     getAgenticRun,
     getItemReference,
     upsertAgenticRun: upsertAgenticRun as (params: Record<string, unknown>) => Promise<void>,
-    updateAgenticRunStatus: updateAgenticRunStatus as (params: Record<string, unknown>) => Promise<{ changes?: number } | void>,
+    updateAgenticRunStatus: updateAgenticRunStatus as (params: Record<string, unknown>) => Promise<number>,
     updateQueuedAgenticRunQueueState,
     logEvent,
     findByMaterial,
@@ -874,8 +874,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         // TODO(agent): Formalize ItemUUID generator typing once action contexts are consolidated.
         const generateItemId = async (artikelNummer: string | null | undefined) =>
           generateSequentialItemUUID(artikelNummer, {
-            // getMaxItemId is now async; wrap with a sync stub returning undefined and let the async path handle ID generation
-            getMaxItemId: () => undefined,
+            getMaxItemId: async (params) => {
+              const result = await getMaxItemId(params.pattern, params.sequenceStartIndex);
+              return result ? { ItemUUID: result } : null;
+            },
             now: () => new Date()
           });
         await action.handle?.(req, res, {

@@ -190,7 +190,7 @@ const action = defineHttpAction({
       let unplacedWarning: string | null = null;
       try {
         const unplacedRow = await queryOne<{ cnt: number }>(
-          `SELECT COUNT(*) AS cnt FROM items WHERE (BoxID IS NULL OR BoxID = '') AND (Location IS NULL OR Location = '') AND Auf_Lager > 0`,
+          `SELECT COUNT(*) AS cnt FROM items WHERE ("BoxID" IS NULL OR "BoxID" = '') AND ("Location" IS NULL OR "Location" = '') AND "Auf_Lager" > 0`,
           []
         );
         const unplacedCount = unplacedRow?.cnt ?? 0;

@@ -40,7 +40,7 @@ const action = defineHttpAction({
 
       await withTransaction(async (client) => {
         await client.query(
-          `UPDATE items SET BoxID=$1, Location=$2, UpdatedAt=$3 WHERE ItemUUID=$4`,
+          `UPDATE items SET "BoxID"=$1, "Location"=$2, "UpdatedAt"=$3 WHERE "ItemUUID"=$4`,
           [toBoxId, normalizedLocation, new Date().toISOString(), uuid]
         );
         await ctx.logEvent({

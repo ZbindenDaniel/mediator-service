@@ -676,7 +676,10 @@ const action = defineHttpAction({
           }
         }
 
-        if (!item) return sendJson(res, 404, { error: 'Not found' });
+        if (!item) {
+          console.warn('[save-item] Item not found in DB', { itemId, identifierMode });
+          return sendJson(res, 404, { error: 'Not found' });
+        }
 
         const box = await ctx.getBox(item.BoxID);
         const events = await ctx.listEventsForItem(resolvedItemId);
@@ -897,59 +900,61 @@ const action = defineHttpAction({
         let attachments: unknown[] = [];
         try {
           connectedAccessories = await dbQuery(`
-            SELECT ir.Id, ir.ChildItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
-                   ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
-                   i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
-                   i.BoxID, i.Location
+            SELECT ir."Id", ir."ChildItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
+                   ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
+                   i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
+                   i."BoxID", i."Location"
             FROM item_relations ir
-            JOIN items i ON i.ItemUUID = ir.ChildItemUUID
-            LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-            WHERE ir.ParentItemUUID = $1
-            ORDER BY ir.CreatedAt
+            JOIN items i ON i."ItemUUID" = ir."ChildItemUUID"
+            LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
+            WHERE ir."ParentItemUUID" = $1
+            ORDER BY ir."CreatedAt"
           `, [resolvedItemId]);
 
           connectedToDevices = await dbQuery(`
-            SELECT ir.Id, ir.ParentItemUUID AS ItemUUID, ir.RelationType, ir.Notes,
-                   ir.CreatedAt AS RelationCreatedAt, ir.UpdatedAt,
-                   i.Artikel_Nummer, r.Artikelbeschreibung, r.Kurzbeschreibung,
-                   i.BoxID, i.Location
+            SELECT ir."Id", ir."ParentItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
+                   ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
+                   i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
+                   i."BoxID", i."Location"
             FROM item_relations ir
-            JOIN items i ON i.ItemUUID = ir.ParentItemUUID
-            LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer
-            WHERE ir.ChildItemUUID = $1
-            ORDER BY ir.CreatedAt
+            JOIN items i ON i."ItemUUID" = ir."ParentItemUUID"
+            LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
+            WHERE ir."ChildItemUUID" = $1
+            ORDER BY ir."CreatedAt"
           `, [resolvedItemId]);
 
           if (item.Artikel_Nummer) {
             compatibleAccessoryRefs = await dbQuery(`
-              SELECT irr.ChildArtikel_Nummer AS Artikel_Nummer,
-                     irr.RelationType, irr.Notes, irr.CreatedAt,
-                     r.Artikelbeschreibung, r.Kurzbeschreibung,
-                     (
-                       SELECT COUNT(*) FROM items i2
-                       WHERE i2.Artikel_Nummer = irr.ChildArtikel_Nummer
-                         AND i2.ItemUUID NOT IN (SELECT ChildItemUUID FROM item_relations)
-                     ) AS availableCount
+              SELECT irr."ChildArtikel_Nummer" AS "Artikel_Nummer",
+                     irr."RelationType", irr."Notes", irr."CreatedAt",
+                     r."Artikelbeschreibung", r."Kurzbeschreibung",
+                     COALESCE((
+                       SELECT SUM(COALESCE(i2."Auf_Lager", 1)) FROM items i2
+                       WHERE i2."Artikel_Nummer" = irr."ChildArtikel_Nummer"
+                         AND NOT EXISTS (
+                           SELECT 1 FROM item_relations ir WHERE ir."ChildItemUUID" = i2."ItemUUID"
+                         )
+                     ), 0)::int AS "availableCount"
               FROM item_ref_relations irr
-              LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ChildArtikel_Nummer
-              WHERE irr.ParentArtikel_Nummer = $1
-              ORDER BY irr.CreatedAt
+              LEFT JOIN item_refs r ON r."Artikel_Nummer" = irr."ChildArtikel_Nummer"
+              WHERE irr."ParentArtikel_Nummer" = $1
+              ORDER BY irr."CreatedAt"
             `, [item.Artikel_Nummer]);
 
             compatibleParentRefs = await dbQuery(`
-              SELECT irr.ParentArtikel_Nummer AS Artikel_Nummer,
-                     irr.RelationType, irr.Notes, irr.CreatedAt,
-                     r.Artikelbeschreibung, r.Kurzbeschreibung
+              SELECT irr."ParentArtikel_Nummer" AS "Artikel_Nummer",
+                     irr."RelationType", irr."Notes", irr."CreatedAt",
+                     r."Artikelbeschreibung", r."Kurzbeschreibung"
               FROM item_ref_relations irr
-              LEFT JOIN item_refs r ON r.Artikel_Nummer = irr.ParentArtikel_Nummer
-              WHERE irr.ChildArtikel_Nummer = $1
-              ORDER BY irr.CreatedAt
+              LEFT JOIN item_refs r ON r."Artikel_Nummer" = irr."ParentArtikel_Nummer"
+              WHERE irr."ChildArtikel_Nummer" = $1
+              ORDER BY irr."CreatedAt"
             `, [item.Artikel_Nummer]);
           }
 
           attachments = await dbQuery(`
-            SELECT Id, ItemUUID, FileName, FilePath, MimeType, Label, FileSize, CreatedAt
-            FROM item_attachments WHERE ItemUUID = $1 ORDER BY CreatedAt DESC
+            SELECT "Id", "ItemUUID", "FileName", "FilePath", "MimeType", "Label", "FileSize", "CreatedAt"
+            FROM item_attachments WHERE "ItemUUID" = $1 ORDER BY "CreatedAt" DESC
           `, [resolvedItemId]);
         } catch (relationErr) {
           console.error('[save-item] Failed to load relations/attachments for item detail', {

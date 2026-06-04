@@ -32,14 +32,14 @@ const action = defineHttpAction({
     const itemUUID = decodeURIComponent(match[1]);
     const attachmentId = match[2] != null ? parseInt(match[2], 10) : null;
 
-    const itemRow = await queryOne('SELECT ItemUUID FROM items WHERE ItemUUID = $1', [itemUUID]);
+    const itemRow = await queryOne('SELECT "ItemUUID" FROM items WHERE "ItemUUID" = $1', [itemUUID]);
     if (!itemRow) return sendJson(res, 404, { error: 'item not found' });
 
     // ── GET: list attachments ─────────────────────────────────────────────────
     if (method === 'GET') {
       const attachments = await query(
-        `SELECT Id, ItemUUID, FileName, FilePath, MimeType, Label, FileSize, CreatedAt
-         FROM item_attachments WHERE ItemUUID = $1 ORDER BY CreatedAt DESC`,
+        `SELECT "Id", "ItemUUID", "FileName", "FilePath", "MimeType", "Label", "FileSize", "CreatedAt"
+         FROM item_attachments WHERE "ItemUUID" = $1 ORDER BY "CreatedAt" DESC`,
         [itemUUID]
       );
       return sendJson(res, 200, { attachments });
@@ -83,8 +83,8 @@ const action = defineHttpAction({
 
       const relativePath = [INSTANCES_SUBDIR, itemUUID, safeName].join('/');
       await insert(
-        `INSERT INTO item_attachments (ItemUUID, FileName, FilePath, MimeType, Label, FileSize)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING Id`,
+        `INSERT INTO item_attachments ("ItemUUID", "FileName", "FilePath", "MimeType", "Label", "FileSize", "CreatedAt")
+         VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING "Id"`,
         [itemUUID, safeName, relativePath, mimeType, label, body.length]
       );
 
@@ -100,7 +100,7 @@ const action = defineHttpAction({
     // ── DELETE: remove attachment ─────────────────────────────────────────────
     if (method === 'DELETE' && attachmentId !== null) {
       const row = await queryOne<{ Id: number; FileName: string; FilePath: string }>(
-        'SELECT Id, FileName, FilePath FROM item_attachments WHERE Id = $1 AND ItemUUID = $2',
+        'SELECT "Id", "FileName", "FilePath" FROM item_attachments WHERE "Id" = $1 AND "ItemUUID" = $2',
         [attachmentId, itemUUID]
       );
       if (!row) return sendJson(res, 404, { error: 'attachment not found' });

@@ -950,7 +950,11 @@ export async function runUpsertBox(box: Box, logger: Pick<Console, 'error' | 'wa
 }
 
 export async function getBox(boxId: string): Promise<Record<string, unknown> | null> {
-  return queryOne(`SELECT * FROM boxes WHERE "BoxID" = $1`, [boxId]);
+  const row = await queryOne(`SELECT * FROM boxes WHERE "BoxID" = $1`, [boxId]);
+  if (!row) {
+    console.warn('[db] getBox returned null', { boxId });
+  }
+  return row;
 }
 
 export async function boxesByLocation(locationId: string): Promise<Record<string, unknown>[]> {
@@ -964,7 +968,7 @@ export interface ListBoxesHelper {
 
 const LIST_BOXES_SQL = `
   SELECT b.*, shelf."Label" AS "ShelfLabel",
-    COUNT(i."ItemUUID") AS "ItemCount",
+    COUNT(i."ItemUUID")::int AS "ItemCount",
     COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg"
   FROM boxes b
   LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
@@ -984,7 +988,7 @@ export const listBoxes: ListBoxesHelper = {
     }
     return query(
       `SELECT b.*, shelf."Label" AS "ShelfLabel",
-        COUNT(i."ItemUUID") AS "ItemCount",
+        COUNT(i."ItemUUID")::int AS "ItemCount",
         COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg"
        FROM boxes b
        LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
@@ -1708,8 +1712,8 @@ export async function updateAgenticRunStatus(params: {
   LastErrorIsSet?: boolean;
   LastAttemptAt?: string | null;
   LastAttemptAtIsSet?: boolean;
-}): Promise<void> {
-  await execute(
+}): Promise<number> {
+  return execute(
     `UPDATE agentic_runs SET
        "Status"=$2,
        "SearchQuery"=COALESCE($3,"SearchQuery"),

@@ -37,7 +37,7 @@ const action = defineHttpAction({
     if (!dirConfig) return sendJson(res, 404, { error: 'directory not found' });
 
     const itemRow = await queryOne<{ ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
-      'SELECT i.ItemUUID, i.Artikel_Nummer, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = $1',
+      'SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
       [itemUUID]
     );
 

@@ -10,7 +10,14 @@ function getPool(): Pool {
     if (!DATABASE_URL) {
       throw new Error('[db-client] DATABASE_URL is required. Set DATABASE_URL to a PostgreSQL connection string.');
     }
-    _pool = new Pool({ connectionString: DATABASE_URL });
+    _pool = new Pool({
+      connectionString: DATABASE_URL,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+      // keep connections alive to avoid stale-connection 404s after idle periods
+      keepAlive: true,
+    });
     _pool.on('error', (err) => {
       console.error('[db-client] Unexpected Postgres pool error', err);
     });

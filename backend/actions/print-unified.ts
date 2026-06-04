@@ -413,7 +413,7 @@ export async function handleUnifiedPrintRequest(
           });
         }
         const items = labelType === 'box'
-          ? ((ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [])
+          ? ((await ctx.itemsByBox?.(box.BoxID) as Item[] | undefined) || [])
           : [];
         if (labelType === 'box') {
           payload = buildBoxLabelPayload(box, items);

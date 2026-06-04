@@ -25,18 +25,15 @@
 - Terms:
   - **QR payload**: JSON serialized into the QR image (must include `id`).
   - **Scan return flow**: scanner sends `qrReturn` state back to originating route via `returnTo`.
-  - **Audit event**: persisted `QrScanned` event in event log.
 - Entities:
   - Label payloads (`BoxLabelPayload`, `ItemLabelPayload`, `ShelfLabelPayload`).
   - Scanner payload (`BoxQrPayload` in frontend scanner).
   - Event log entry (`logEvent` payload with `Meta` JSON).
 - Relationships:
-  - Print action builds label payload -> `labelHtml` creates QR data URI from minimal QR payload -> user scans in `/scan` -> scanner validates+routes and posts to `/api/qr-scan/log` -> backend logs `QrScanned`.
 
 ## Data contracts
 - Canonical model links:
   - `models/print-label.ts` (`PrintLabelResponsePayload.qrPayload`).
-  - `models/event-resources.json` (`QrScanned` event taxonomy entry).
   - `backend/lib/labelHtml.ts` (`BoxLabelPayload` / `ItemLabelPayload` / `ShelfLabelPayload`; minimal embedded QR payload fields).
   - `frontend/src/components/QrScannerPage.tsx` (`BoxQrPayload`, `qrReturn` payload handling).
 - Key fields:
@@ -47,7 +44,6 @@
 - Enums:
   - `QrScanIntent`: `add-item` | `relocate-box` | `shelf-add-box` | `search`.
   - `QrCallback`: currently `NavigateToEntity`.
-  - Event key: `QrScanned`.
 - Sync requirements across layers:
   - QR payload `id` semantics must stay aligned between label generation (`backend/lib/labelHtml.ts`) and scanner validation/routing (`frontend/src/components/QrScannerPage.tsx`).
   - `PrintLabelResponsePayload.qrPayload` shape should mirror what print templates/scanner expect when debugging print outputs.
@@ -104,13 +100,11 @@
    - Depending on `returnTo` and optional callback/intent, scanner either navigates directly or returns payload to caller.
 4. **Backend audit log**
    - Scanner posts decoded payload + timestamp to `/api/qr-scan/log`.
-   - Backend writes `QrScanned` event with `Meta` containing payload, timestamps, source, and user agent.
 
 ## Logging & error handling
 - Log identifiers/events:
   - Frontend logger entries around invalid query params, scan resolution, routing, scan logging failures.
   - Backend console logs: successful scan event logging and structured failure messages.
-  - Persisted event: `QrScanned` with `EntityType: 'Box'` and `EntityId` from `payload.id`.
 - Warning conditions:
   - Invalid `returnTo`, callback, or intent query/state values are ignored with warning logs.
   - Backend returns 400 for malformed scan log payloads.
@@ -153,7 +147,6 @@
 
 ## Test/validation checklist
 - Static checks:
-  - Keep `QrScanned` present in `models/event-resources.json`.
   - Keep scanner intent/callback unions aligned between `QrScanButton` and `QrScannerPage`.
   - `search` intent must be present in the `QrScanIntent` enum in `QrScannerPage.tsx`.
 - Runtime checks:

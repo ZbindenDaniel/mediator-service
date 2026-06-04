@@ -132,7 +132,8 @@ if (MEDIA_STORAGE_MODE === 'webdav') {
 
 const WEB_DAV_SUBDIR = 'shopbilder';
 const ERP_MEDIA_MIRROR_SUBDIR = 'shopbilder-import';
-export const LOCAL_MEDIA_DIR = path.resolve(process.cwd(), 'dist/media');
+// dist/backend/media matches the Docker volume mount path in docker-compose.yml
+export const LOCAL_MEDIA_DIR = path.resolve(process.cwd(), 'dist/backend/media');
 export const MEDIA_STAGING_DIR = LOCAL_MEDIA_DIR;
 
 // TODO(print-queues): Confirm per-label printer queue overrides once label routing settles for all templates.

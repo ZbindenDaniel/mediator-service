@@ -93,7 +93,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                   ) : entityType === 'item' && entityId ? (
                     <ItemDetail key={`${entityId}-${loadRevision}`} itemId={entityId} />
                   ) : entityType === 'box' && entityId ? (
-                    <BoxDetail boxId={entityId} />
+                    <BoxDetail key={`${entityId}-${loadRevision}`} boxId={entityId} />
                   ) : (
                     <div className="panel-tab-body">
                       <OverviewPanel />

@@ -84,10 +84,10 @@ async function ensureUniqueItemUUID(
 
     try {
       const row = await queryOne<{ ItemUUID?: string }>(
-        `SELECT ItemUUID
+        `SELECT "ItemUUID"
          FROM items
-         WHERE ItemUUID LIKE $1
-         ORDER BY CAST(substr(ItemUUID, $2, 4) AS INTEGER) DESC
+         WHERE "ItemUUID" LIKE $1
+         ORDER BY CAST(substr("ItemUUID", $2, 4) AS INTEGER) DESC
          LIMIT 1`,
         [pattern, sequenceStartIndex]
       );
@@ -968,7 +968,7 @@ const action = defineHttpAction({
       if (eanRaw) {
         if (EAN_VALID_RE.test(eanRaw)) {
           const existingEanRow = await queryOne<{ Artikel_Nummer: string }>(
-            `SELECT Artikel_Nummer FROM item_refs WHERE EAN = $1 LIMIT 1`,
+            `SELECT "Artikel_Nummer" FROM item_refs WHERE "EAN" = $1 LIMIT 1`,
             [eanRaw]
           );
           if (existingEanRow && existingEanRow.Artikel_Nummer !== resolvedArtikelNummer) {

@@ -31,7 +31,7 @@ const action = defineHttpAction({
     }
 
     const itemRow = await queryOne<{ ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
-      'SELECT i.ItemUUID, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = $1',
+      'SELECT i."ItemUUID", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
       [itemUUID]
     );
 

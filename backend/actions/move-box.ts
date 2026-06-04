@@ -326,7 +326,7 @@ const action = defineHttpAction({
         try {
           await withTransaction(async (client) => {
             await client.query(
-              `UPDATE boxes SET Label=$1, Notes=$2, PhotoPath=$3, UpdatedAt=$4 WHERE BoxID=$5`,
+              `UPDATE boxes SET "Label"=$1, "Notes"=$2, "PhotoPath"=$3, "UpdatedAt"=$4 WHERE "BoxID"=$5`,
               [nextLabel ?? null, notes, nextPhotoPath, new Date().toISOString(), id]
             );
             await ctx.logEvent({
@@ -359,7 +359,7 @@ const action = defineHttpAction({
       const effectiveLoc = hasLocation ? locationRaw : effectiveLocationId;
       await withTransaction(async (client) => {
         await client.query(
-          `UPDATE boxes SET LocationId=$1, Label=$2, Notes=$3, PhotoPath=$4, PlacedBy=$5, PlacedAt=$6, UpdatedAt=$7 WHERE BoxID=$8`,
+          `UPDATE boxes SET "LocationId"=$1, "Label"=$2, "Notes"=$3, "PhotoPath"=$4, "PlacedBy"=$5, "PlacedAt"=$6, "UpdatedAt"=$7 WHERE "BoxID"=$8`,
           [effectiveLoc, nextLabel ?? null, notes, nextPhotoPath, actor, new Date().toISOString(), new Date().toISOString(), id]
         );
         await ctx.logEvent({

@@ -18,7 +18,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/instance$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = await queryOne('SELECT ItemUUID FROM items WHERE ItemUUID = $1', [uuid]);
+      const item = await queryOne('SELECT "ItemUUID" FROM items WHERE "ItemUUID" = $1', [uuid]);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
 
       let raw = '';
@@ -49,21 +49,21 @@ const action = defineHttpAction({
 
       if (serialNumber !== undefined) {
         params.push(serialNumber);
-        setClauses.push(`SerialNumber=$${params.length}`);
+        setClauses.push(`"SerialNumber"=$${params.length}`);
         changed.SerialNumber = serialNumber;
       }
       if (macAddress !== undefined) {
         params.push(macAddress);
-        setClauses.push(`MacAddress=$${params.length}`);
+        setClauses.push(`"MacAddress"=$${params.length}`);
         changed.MacAddress = macAddress;
       }
       if (quality !== undefined) {
         params.push(quality);
-        setClauses.push(`Quality=$${params.length}`);
+        setClauses.push(`"Quality"=$${params.length}`);
         changed.Quality = quality;
       }
       params.push(new Date().toISOString());
-      setClauses.push(`UpdatedAt=$${params.length}`);
+      setClauses.push(`"UpdatedAt"=$${params.length}`);
       params.push(uuid);
 
       await execute(`UPDATE items SET ${setClauses.join(', ')} WHERE ItemUUID=$${params.length}`, params);

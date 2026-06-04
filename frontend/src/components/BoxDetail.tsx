@@ -804,7 +804,7 @@ export default function BoxDetail({ boxId }: Props) {
             <PrintLabelButton boxId={box.BoxID} inline />
             <button
               type="button"
-              className="btn"
+              className="btn mobile-only"
               onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=items`)}
             >
               Einscannen
@@ -817,7 +817,7 @@ export default function BoxDetail({ boxId }: Props) {
             {isShelf && (
               <button
                 type="button"
-                className="btn"
+                className="btn mobile-only"
                 onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=boxes`)}
               >
                 Behälter einlagern

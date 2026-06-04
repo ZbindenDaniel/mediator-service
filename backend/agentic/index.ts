@@ -57,7 +57,7 @@ export interface AgenticServiceDependencies {
   getAgenticRun: (id: string) => Promise<AgenticRun | null>;
   getItemReference: (id: string) => Promise<any>;
   upsertAgenticRun: (params: Record<string, unknown>) => Promise<void>;
-  updateAgenticRunStatus: (params: Record<string, unknown>) => Promise<{ changes?: number } | void>;
+  updateAgenticRunStatus: (params: Record<string, unknown>) => Promise<number>;
   updateQueuedAgenticRunQueueState?: (update: AgenticRunQueueUpdate) => void;
   logEvent: (payload: LogEventPayload) => void;
   updateAgenticReview?: any;
@@ -119,11 +119,11 @@ const AGENTIC_STATUS_UPDATE_FLAGS: AgenticRunStatusFlag[] = [
 ];
 
 const SELECT_STALE_AGENTIC_RUNS_SQL = `
-  SELECT Id, Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy,
-         LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
+  SELECT "Id", "Artikel_Nummer", "SearchQuery", "LastSearchLinksJson", "Status", "LastModified", "ReviewState", "ReviewedBy",
+         "LastReviewDecision", "LastReviewNotes", "RetryCount", "NextRetryAt", "LastError", "LastAttemptAt"
     FROM agentic_runs
-   WHERE Status IN ('queued', 'running')
-   ORDER BY datetime(LastModified) ASC, Id ASC
+   WHERE "Status" IN ('queued', 'running')
+   ORDER BY "LastModified" ASC, "Id" ASC
 `;
 
 const MAX_CONCURRENT_RUNNING_RUNS = 3;
@@ -283,7 +283,7 @@ function resolveNow(deps: AgenticServiceDependencies): Date {
 
 async function fetchRunningCount(deps: AgenticServiceDependencies, logger: AgenticServiceLogger): Promise<number> {
   const runningRow = await queryOne<{ runningcount?: number }>(
-    `SELECT COUNT(*) as runningcount FROM agentic_runs WHERE Status = $1`,
+    `SELECT COUNT(*) as runningcount FROM agentic_runs WHERE "Status" = $1`,
     [AGENTIC_RUN_STATUS_RUNNING]
   );
   const count = Number.isFinite(runningRow?.runningcount) ? Number(runningRow?.runningcount) : 0;
@@ -782,7 +782,7 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
     try {
       promoted = await withTransaction(async (client) => {
         const countResult = await client.query(
-          `SELECT COUNT(*) as runningcount FROM agentic_runs WHERE Status = $1`,
+          `SELECT COUNT(*) as runningcount FROM agentic_runs WHERE "Status" = $1`,
           [AGENTIC_RUN_STATUS_RUNNING]
         );
         const currentRunningCount = Number(countResult.rows[0]?.runningcount ?? 0);
@@ -825,7 +825,7 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
             LastAttemptAtIsSet: true
           })
         );
-        if (!(updateResult as { changes?: number } | undefined)?.changes) {
+        if (!updateResult) {
           logger.warn?.('[agentic-service] Agentic run mark-running updated zero rows', {
             artikelNummer: payload.artikelNummer
           });
@@ -922,7 +922,7 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
             })
           );
 
-          if (!(updateResult as { changes?: number } | undefined)?.changes) {
+          if (!updateResult) {
             logger.warn?.('[agentic-service] Auto-cancel updated zero rows after failure', {
               artikelNummer: payload.artikelNummer,
               reason
@@ -1055,7 +1055,7 @@ export async function dispatchQueuedAgenticRuns(
       `SELECT "Artikel_Nummer", "RetryCount", "LastAttemptAt"
          FROM agentic_runs
         WHERE "Status" = 'running'
-          AND "LastAttemptAt" < NOW() - INTERVAL '${STALE_RUN_TIMEOUT_MINUTES} minutes'`,
+          AND "LastAttemptAt"::timestamptz < NOW() - INTERVAL '${STALE_RUN_TIMEOUT_MINUTES} minutes'`,
       []
     );
     for (const staleRun of staleRuns) {
@@ -1399,7 +1399,7 @@ export async function cancelAgenticRun(
           LastAttemptAtIsSet: true
         })
       );
-      if (!(updateResult as { changes?: number } | undefined)?.changes) {
+      if (!updateResult) {
         throw new Error('Failed to cancel agentic run');
       }
 
@@ -1711,7 +1711,7 @@ export async function restartAgenticRun(
             LastAttemptAtIsSet: true
           })
         );
-        if (!(updateResult as { changes?: number } | undefined)?.changes) {
+        if (!updateResult) {
           throw new Error('Failed to reset agentic run');
         }
       } else {

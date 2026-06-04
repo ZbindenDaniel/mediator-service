@@ -13,10 +13,10 @@ const action = defineHttpAction({
   matches: (path, method) => path === '/api/getNewMaterialNumber' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const row = await ctx.getMaxArtikelNummer();
+      const maxStr: string | null = await ctx.getMaxArtikelNummer();
       let max = 0;
-      if (row && row.Artikel_Nummer) {
-        max = parseInt(row.Artikel_Nummer, 10) || 0;
+      if (maxStr) {
+        max = parseInt(maxStr, 10) || 0;
       }
       const next = String(max + 1).padStart(6, '0');
       sendJson(res, 200, { nextArtikelNummer: next });

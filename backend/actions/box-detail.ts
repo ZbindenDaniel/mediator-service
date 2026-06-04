@@ -68,16 +68,19 @@ const action = defineHttpAction({
 
         if (containedBoxes.length > 0) {
           try {
-            const shelfContainedItems = (
-              await Promise.all(
-                containedBoxes.map(async (contained: { BoxID?: string | null }) => {
-                  const containedId = typeof contained?.BoxID === 'string' ? contained.BoxID.trim() : '';
-                  if (!containedId) return [];
+            // prefer the clearer stashed-style batch load, with defensive array normalization
+            const shelfItemArrays = await Promise.all(
+              containedBoxes
+                .map((contained: { BoxID?: string | null }) =>
+                  typeof contained?.BoxID === 'string' ? contained.BoxID.trim() : ''
+                )
+                .filter(Boolean)
+                .map(async (containedId: string) => {
                   const result = await ctx.itemsByBox(containedId);
                   return Array.isArray(result) ? result : [];
                 })
-              )
-            ).flat();
+            );
+            const shelfContainedItems = shelfItemArrays.flat();
             if (shelfContainedItems.length > 0) {
               console.info('box-detail loaded items from shelf-contained boxes', {
                 ...logContext,

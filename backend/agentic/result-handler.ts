@@ -41,7 +41,7 @@ export interface AgenticResultHandlerContext {
   getItemReference: (artikelNummer: string) => Promise<ItemRef | null>;
   getAgenticRun: (artikelNummer: string) => Promise<AgenticRun | null>;
   persistItemReference: (item: ItemRef) => Promise<void>;
-  updateAgenticRunStatus: (update: Record<string, unknown> | any) => Promise<void>;
+  updateAgenticRunStatus: (update: Record<string, unknown> | any) => Promise<number>;
   upsertAgenticRun: (update: Record<string, unknown> | any) => Promise<void>;
   insertAgenticRunReviewHistoryEntry?: (entry: Record<string, unknown> | any) => Promise<void>;
   logEvent: (event: {

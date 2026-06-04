@@ -39,10 +39,10 @@ const action = defineHttpAction({
       }
 
       const rows = await query<{ Artikel_Nummer: string; Langtext: string | null }>(
-        `SELECT Artikel_Nummer, Langtext
+        `SELECT "Artikel_Nummer", "Langtext"
          FROM item_refs
-         WHERE CAST(Unterkategorien_A AS INTEGER) = $1
-           AND Langtext IS NOT NULL`,
+         WHERE CAST("Unterkategorien_A" AS INTEGER) = $1
+           AND "Langtext" IS NOT NULL`,
         [subcategoryCode]
       );
 
