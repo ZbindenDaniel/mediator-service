@@ -20,7 +20,7 @@ export async function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
     getItemReference: (id: string) => Promise<ItemRef | undefined>;
-    persistItemReference?: (ref: ItemRef) => void;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
   },
   logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
 ): Promise<void> {
@@ -87,7 +87,7 @@ export async function applyPriceFallbackAfterReview(
       ...reference,
       Verkaufspreis: fallbackPrice
     };
-    ctx.persistItemReference(updatedReference);
+    await ctx.persistItemReference(updatedReference);
     logger.info?.('[agentic-review] Applied fallback sale price after Artikelnummer review', {
       artikelNummer: reference.Artikel_Nummer ?? trimmedArtikelNummer,
       appliedPrice: fallbackPrice
@@ -106,7 +106,7 @@ export async function pruneUnneededSpecsAfterReview(
   unneededSpec: string[],
   ctx: {
     getItemReference: (id: string) => Promise<ItemRef | undefined>;
-    persistItemReference?: (ref: ItemRef) => void;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
   },
   logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
 ): Promise<void> {
@@ -170,7 +170,7 @@ export async function pruneUnneededSpecsAfterReview(
       return;
     }
 
-    ctx.persistItemReference({
+    await ctx.persistItemReference({
       ...reference,
       Langtext: nextLangtext as typeof reference.Langtext
     });
@@ -194,7 +194,7 @@ export async function applyManualReviewReferenceUpdates(
   reviewMetadata: { review_price: number | null; shop_article: boolean | null },
   ctx: {
     getItemReference: (id: string) => Promise<ItemRef | undefined>;
-    persistItemReference?: (ref: ItemRef) => void;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
   },
   logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
 ): Promise<void> {
@@ -237,7 +237,7 @@ export async function applyManualReviewReferenceUpdates(
       ...(shouldSetPrice ? { Verkaufspreis: reviewMetadata.review_price } : {}),
       ...(shouldSetShop ? { Shopartikel: reviewMetadata.shop_article ? 1 : 0 } : {})
     };
-    ctx.persistItemReference(nextReference);
+    await ctx.persistItemReference(nextReference);
     logger.info?.('[agentic-review] Applied manual review reference updates', {
       artikelNummer: trimmedArtikelNummer,
       priceUpdated: shouldSetPrice,

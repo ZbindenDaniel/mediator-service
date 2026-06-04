@@ -98,7 +98,7 @@ const action = defineHttpAction({
               itemUUID: u,
               trigger: 'add-item'
             });
-            ctx.enqueueShopwareSyncJob({
+            await ctx.enqueueShopwareSyncJob({
               CorrelationId: correlationId,
               JobType: 'stock-increment',
               Payload: payload
@@ -118,7 +118,7 @@ const action = defineHttpAction({
 
         const now = new Date();
         try {
-          ctx.persistItemWithinTransaction({
+          await ctx.persistItemWithinTransaction({
             ItemUUID: newItemUUID,
             Artikel_Nummer: item.Artikel_Nummer ?? null,
             BoxID: item.BoxID ?? null,
@@ -162,7 +162,7 @@ const action = defineHttpAction({
             sourceItemUUID: u,
             trigger: 'add-item'
           });
-          ctx.enqueueShopwareSyncJob({
+          await ctx.enqueueShopwareSyncJob({
             CorrelationId: correlationId,
             JobType: 'item-upsert',
             Payload: payload

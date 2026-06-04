@@ -78,7 +78,7 @@ const action = defineHttpAction({
               itemUUID: u,
               trigger: 'remove-item'
             });
-            ctx.enqueueShopwareSyncJob({
+            await ctx.enqueueShopwareSyncJob({
               CorrelationId: correlationId,
               JobType: 'stock-decrement',
               Payload: payload
@@ -136,7 +136,7 @@ const action = defineHttpAction({
             itemUUID: u,
             trigger: 'remove-item'
           });
-          ctx.enqueueShopwareSyncJob({
+          await ctx.enqueueShopwareSyncJob({
             CorrelationId: correlationId,
             JobType: 'item-delete',
             Payload: payload

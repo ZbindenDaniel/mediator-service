@@ -66,7 +66,7 @@ const action = defineHttpAction({
       setClauses.push(`"UpdatedAt"=$${params.length}`);
       params.push(uuid);
 
-      await execute(`UPDATE items SET ${setClauses.join(', ')} WHERE ItemUUID=$${params.length}`, params);
+      await execute(`UPDATE items SET ${setClauses.join(', ')} WHERE "ItemUUID"=$${params.length}`, params);
       await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',

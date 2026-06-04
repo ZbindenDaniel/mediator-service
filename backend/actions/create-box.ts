@@ -166,7 +166,7 @@ const action = defineHttpAction({
               continue;
             }
 
-            ctx.runUpsertBox({
+            await ctx.runUpsertBox({
               BoxID: candidate,
               LocationId: candidate,
               Label: payload.label,
@@ -211,7 +211,7 @@ const action = defineHttpAction({
         }
         const nowDate = new Date();
         const now = nowDate.toISOString();
-        ctx.runUpsertBox({
+        await ctx.runUpsertBox({
           BoxID: requestedBoxId,
           LocationId: null,
           Label: null,
@@ -267,7 +267,7 @@ const action = defineHttpAction({
               continue;
             }
 
-            ctx.runUpsertBox({
+            await ctx.runUpsertBox({
               BoxID: candidate,
               // TODO(agent): Capture an initial Label once box creation collects placement context.
               LocationId: null,

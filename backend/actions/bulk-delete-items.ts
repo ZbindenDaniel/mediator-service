@@ -148,7 +148,7 @@ const action = defineHttpAction({
                   itemUUID: entry.itemId,
                   trigger: 'bulk-delete-items'
                 });
-                ctx.enqueueShopwareSyncJob({
+                await ctx.enqueueShopwareSyncJob({
                   CorrelationId: correlationId,
                   JobType: 'item-delete',
                   Payload: payload
