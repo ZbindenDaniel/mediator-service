@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+794. ✅ Fix migration script usability: add `npm run migrate`, pre-flight checks, and concrete docs
+   - **Why:** `docs/setup.md` step 2 referenced `npm run migrate` but the script didn't exist in package.json; operators had no working path to run the migration. Added the npm script, fs.existsSync guard with actionable error messages, and replaced the vague setup.md mention with exact commands and env var examples.
+   - **Deferred:** Nothing.
 793. ✅ Fix bulk reference field update (missing await) and deps.logEvent not awaited in agentic service
    - **Why:** `bulk-update-ref-fields.ts` called `ctx.bulkUpdateItemRefShopFields()` without `await` — the returned Promise was assigned directly to a `string[]` variable, so the DB transaction never ran and `updatedArtikelNummern.length` always returned 0 (Promise object has no `.length`). `AgenticServiceDependencies.logEvent` was typed as `() => void` (sync) but is async; all 5 call sites in `agentic/index.ts` called it without `await`, silently swallowing DB errors for event logging during agentic dispatch.
    - **Deferred:** Root cause of "agentic runs for references immediately fall back to not started" is not yet identified through static analysis — no obvious code bug remains after these fixes. Needs runtime log investigation to confirm whether dispatch fails, runs complete but aren't stored, or something else.

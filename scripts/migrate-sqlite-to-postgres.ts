@@ -14,16 +14,27 @@
 import Database from 'better-sqlite3';
 import { Pool } from 'pg';
 import * as path from 'path';
+import * as fs from 'fs';
 
 const DB_PATH = process.env.DB_PATH ?? './data/mediator.sqlite';
 const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
   console.error('[migrate] DATABASE_URL is required');
+  console.error('[migrate] Set it to your PostgreSQL connection string, e.g.:');
+  console.error('[migrate]   export DATABASE_URL=postgres://mediator:mediator@localhost:5432/mediator');
   process.exit(1);
 }
 
-const sqlite = new Database(path.resolve(DB_PATH), { readonly: true });
+const resolvedDbPath = path.resolve(DB_PATH);
+if (!fs.existsSync(resolvedDbPath)) {
+  console.error(`[migrate] SQLite file not found: ${resolvedDbPath}`);
+  console.error('[migrate] Set DB_PATH to the path of your existing SQLite database, e.g.:');
+  console.error('[migrate]   export DB_PATH=/path/to/mediator.sqlite');
+  process.exit(1);
+}
+
+const sqlite = new Database(resolvedDbPath, { readonly: true });
 const pg = new Pool({ connectionString: DATABASE_URL });
 
 // Tables with a SERIAL primary key — sequences must be reset after insert
