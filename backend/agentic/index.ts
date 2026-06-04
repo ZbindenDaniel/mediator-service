@@ -59,7 +59,7 @@ export interface AgenticServiceDependencies {
   upsertAgenticRun: (params: Record<string, unknown>) => Promise<void>;
   updateAgenticRunStatus: (params: Record<string, unknown>) => Promise<number>;
   updateQueuedAgenticRunQueueState?: (update: AgenticRunQueueUpdate) => void;
-  logEvent: (payload: LogEventPayload) => void;
+  logEvent: (payload: LogEventPayload) => Promise<void> | void;
   updateAgenticReview?: any;
   findByMaterial?: (artikelNummer: string) => Promise<any[]>;
   now?: () => Date;
@@ -670,7 +670,7 @@ async function persistQueuedRun(
   }
 
   try {
-    deps.logEvent({
+    await deps.logEvent({
       Actor: payload.actor,
       EntityType: 'Item',
       EntityId: payload.artikelNummer,
@@ -942,7 +942,7 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         }
 
         try {
-          deps.logEvent({
+          await deps.logEvent({
             Actor: 'agentic-service',
             EntityType: 'Item',
             EntityId: payload.artikelNummer,
@@ -1404,7 +1404,7 @@ export async function cancelAgenticRun(
       }
 
       try {
-        deps.logEvent({
+        await deps.logEvent({
           Actor: actor,
           EntityType: 'Item',
           EntityId: artikelNummer,
@@ -1529,7 +1529,7 @@ export async function deleteAgenticRun(
       });
 
       try {
-        deps.logEvent({
+        await deps.logEvent({
           Actor: actor,
           EntityType: 'Item',
           EntityId: artikelNummer,
@@ -1729,7 +1729,7 @@ export async function restartAgenticRun(
       }
 
       try {
-        deps.logEvent({
+        await deps.logEvent({
           Actor: actor,
           EntityType: 'Item',
           EntityId: artikelNummer,
