@@ -2,8 +2,6 @@
   "version": 1,
   "subCategory": 601,
   "fields": [
-    { "key": "Hersteller",     "required": true,  "description": "GPU manufacturer (e.g. NVIDIA, AMD, Intel)" },
-    { "key": "Modell",         "required": true,  "description": "GPU model name (e.g. GeForce RTX 3060)" },
     { "key": "Prozessor", "required": true,  "description": "Prozessor" },
     { "key": "Schnittstellen",  "required": true,  "description": "Bus interface (e.g. PCIe 4.0 x16)" },
     { "key": "RAM-Slots",       "required": false, "description": "number of Ram Slots (e.g. 1, 2, 4)" },

@@ -2,7 +2,6 @@
   "version": 1,
   "subCategory": 103,
   "fields": [
-    { "key": "Modell",         "required": true,  "description": "Product model name/number (e.g. PowerEdge R730)" },
     { "key": "Prozessor",      "required": true,  "description": "CPU model and count (e.g. 2x Intel Xeon E5-2670)" },
     { "key": "RAM",            "required": true,  "description": "Total memory in GB" },
     { "key": "Speicher",       "required": true,  "description": "Storage configuration (e.g. 4x 900 GB SAS)" },

@@ -54,19 +54,6 @@
       "showIf": { "questionId": "has_os", "value": "true" }
     },
     {
-      "id": "network_lock",
-      "type": "select",
-      "question": "Netzsperrung?",
-      "values": ["Entsperrt", "Gesperrt", "Unbekannt"],
-      "specField": "Netzsperrung",
-      "specValue": "%v",
-      "qualityImpact": {
-        "Entsperrt": 5,
-        "Gesperrt": 3,
-        "Unbekannt": 4
-      }
-    },
-    {
       "id": "charging_cable_included",
       "type": "boolean",
       "question": "Ladekabel vorhanden?",

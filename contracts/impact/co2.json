@@ -3,9 +3,9 @@
   "methodology": "ADEME 2022 — CO2_saved = E_new × R_reuse × L_factor − O_refurb",
   "r_reuse": 0.85,
   "o_refurb_kg": {
-    "light": 5,
-    "medium": 10,
-    "heavy": 20
+    "light": 1,
+    "medium": 1,
+    "heavy": 1
   },
   "quality_to_refurb_intensity": {
     "5": "light",

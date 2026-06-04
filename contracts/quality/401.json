@@ -17,30 +17,6 @@
       }
     },
     {
-      "id": "resolution",
-      "type": "select",
-      "question": "Auflösung?",
-      "values": ["HD (1366×768)", "FHD (1920×1080)", "QHD (2560×1440)", "4K (3840×2160)", "Andere"],
-      "specField": "Auflösung",
-      "specValue": "%v"
-    },
-    {
-      "id": "panel_type",
-      "type": "select",
-      "question": "Panel-Typ?",
-      "values": ["IPS", "TN", "VA", "OLED", "Unbekannt"],
-      "specField": "Panel",
-      "specValue": "%v"
-    },
-    {
-      "id": "connection_type",
-      "type": "select",
-      "question": "Hauptanschluss?",
-      "values": ["HDMI", "DisplayPort", "VGA", "USB-C", "Mehrere"],
-      "specField": "Anschluss",
-      "specValue": "%v"
-    },
-    {
       "id": "stand_included",
       "type": "boolean",
       "question": "Standfuss / VESA-Halter vorhanden?",

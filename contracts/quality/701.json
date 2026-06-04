@@ -11,14 +11,6 @@
       "specValue": "%v GB"
     },
     {
-      "id": "interface",
-      "type": "select",
-      "question": "Anschlusstyp?",
-      "values": ["PCIe x16", "PCIe x8", "AGP", "Anderes"],
-      "specField": "Anschluss",
-      "specValue": "%v"
-    },
-    {
       "id": "display_outputs",
       "type": "select",
       "question": "Anzahl Displayausgänge?",

@@ -2,7 +2,6 @@
   "version": 1,
   "subCategory": 401,
   "fields": [
-    { "key": "Modell",           "required": true,  "description": "Product model name/number" },
     { "key": "Bildschirmgrösse", "required": true,  "description": "Screen size in inches (e.g. 24\")" },
     { "key": "Auflösung",        "required": true,  "description": "Native resolution (e.g. FHD 1920×1080, 4K 3840×2160)" },
     { "key": "Panel",            "required": false, "description": "Panel technology (IPS, TN, VA, OLED)" },
