@@ -25,7 +25,8 @@
     "models/**/*",
     "types/**/*",
     "test/**/*",
-    "frontend/**/*"
+    "frontend/**/*",
+    "scripts/migrate-sqlite-to-postgres.ts"
   ],
   "exclude": [
     "**/__tests__/**",
