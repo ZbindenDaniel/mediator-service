@@ -6,6 +6,7 @@ import { resolveStandortLabel } from '../standort-label';
 import { MEDIA_UPLOAD_STAGING_DIR, resolveUploadMediaPath } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
+import { withTransaction } from '../db-client';
 
 const BOX_MEDIA_PREFIX = '/media/';
 const BOX_MEDIA_FOLDER = 'boxes';
@@ -250,7 +251,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/boxes\/([^/]+)\/move$/);
       const id = match ? decodeURIComponent(match[1]) : '';
       if (!id) return sendJson(res, 400, { error: 'invalid box id' });
-      const box = ctx.getBox.get(id);
+      const box = await ctx.getBox(id);
       if (!box) return sendJson(res, 404, { error: 'box not found' });
       let raw = '';
       for await (const c of req) raw += c;
@@ -322,22 +323,20 @@ const action = defineHttpAction({
       }
 
       if (!hasLocation && (hasNotesField || hasPhotoMutation || hasLabelField)) {
-        const noteTxn = ctx.db.transaction(
-          (boxId: string, note: string, photoPath: string | null, a: string, labelValue: string | null, locationId: string | null) => {
-            ctx.db
-              .prepare(`UPDATE boxes SET Label=?, Notes=?, PhotoPath=?, UpdatedAt=datetime('now') WHERE BoxID=?`)
-              .run(labelValue, note, photoPath, boxId);
-            ctx.logEvent({
-              Actor: a,
-              EntityType: 'Box',
-              EntityId: boxId,
-              Event: 'Note',
-              Meta: JSON.stringify({ notes: note, photoPath, label: labelValue, locationId })
-            });
-          }
-        );
         try {
-          noteTxn(id, notes, nextPhotoPath, actor, nextLabel ?? null, effectiveLocationId || null);
+          await withTransaction(async (client) => {
+            await client.query(
+              `UPDATE boxes SET "Label"=$1, "Notes"=$2, "PhotoPath"=$3, "UpdatedAt"=$4 WHERE "BoxID"=$5`,
+              [nextLabel ?? null, notes, nextPhotoPath, new Date().toISOString(), id]
+            );
+            await ctx.logEvent({
+              Actor: actor,
+              EntityType: 'Box',
+              EntityId: id,
+              Event: 'Note',
+              Meta: JSON.stringify({ notes, photoPath: nextPhotoPath, label: nextLabel ?? null, locationId: effectiveLocationId || null })
+            });
+          });
           console.info('[move-box] Processed note/photo update', {
             boxId: id,
             actor,
@@ -357,23 +356,20 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'location is required' });
       }
 
-      const txn = ctx.db.transaction(
-        (boxId: string, loc: string, note: string, photoPath: string | null, a: string, resolvedLabel: string | null) => {
-          ctx.db
-            .prepare(
-              `UPDATE boxes SET LocationId=?, Label=?, Notes=?, PhotoPath=?, PlacedBy=?, PlacedAt=datetime('now'), UpdatedAt=datetime('now') WHERE BoxID=?`
-            )
-            .run(loc, resolvedLabel, note, photoPath, a, boxId);
-          ctx.logEvent({
-            Actor: a,
-            EntityType: 'Box',
-            EntityId: boxId,
-            Event: 'Moved',
-            Meta: JSON.stringify({ locationId: loc, notes: note, label: resolvedLabel, photoPath })
-          });
-        }
-      );
-      txn(id, hasLocation ? locationRaw : effectiveLocationId, notes, nextPhotoPath, actor, nextLabel ?? null);
+      const effectiveLoc = hasLocation ? locationRaw : effectiveLocationId;
+      await withTransaction(async (client) => {
+        await client.query(
+          `UPDATE boxes SET "LocationId"=$1, "Label"=$2, "Notes"=$3, "PhotoPath"=$4, "PlacedBy"=$5, "PlacedAt"=$6, "UpdatedAt"=$7 WHERE "BoxID"=$8`,
+          [effectiveLoc, nextLabel ?? null, notes, nextPhotoPath, actor, new Date().toISOString(), new Date().toISOString(), id]
+        );
+        await ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Box',
+          EntityId: id,
+          Event: 'Moved',
+          Meta: JSON.stringify({ locationId: effectiveLoc, notes, label: nextLabel ?? null, photoPath: nextPhotoPath })
+        });
+      });
       console.info('[move-box] Processed move update', {
         boxId: id,
         actor,

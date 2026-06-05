@@ -7,6 +7,7 @@
 // TODO(search-deep-fields): Validate Kurzbeschreibung/Langtext weighting after ranking feedback.
 // TODO(search-helper): Verify helper scoring parity after rollout.
 import type { IncomingMessage, ServerResponse } from 'http';
+import { query } from '../db-client';
 import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
@@ -500,6 +501,12 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// Convert SQLite-style ? placeholders to Postgres-style $1, $2, ... positional params
+function toPositional(sql: string): string {
+  let n = 0;
+  return sql.replace(/\?/g, () => `$${++n}`);
+}
+
 const action = defineHttpAction({
   key: 'search',
   label: 'Search',
@@ -530,7 +537,7 @@ const action = defineHttpAction({
       // require at least 50% of tokens (min 1)
       const minTokenHits = Math.max(1, Math.ceil(tokens.length * 0.5));
       const suchbegriffFallbackExpr =
-        "COALESCE(NULLIF(r.Suchbegriff, ''), r.Artikelbeschreibung, r.Artikel_Nummer, '')";
+        `COALESCE(NULLIF(r."Suchbegriff", ''), r."Artikelbeschreibung", r."Artikel_Nummer", '')`;
 
       const scopeParam = url.searchParams.get("scope");
       const dedupeParam = url.searchParams.get("dedupe");
@@ -572,13 +579,13 @@ const action = defineHttpAction({
             .map(
               () => `
     CASE WHEN (
-      lower(r.Artikel_Nummer) LIKE ?
-      OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
-      OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?
+      lower(r."Artikel_Nummer") LIKE ?
+      OR lower(COALESCE(r."Artikelbeschreibung", '')) LIKE ?
+      OR lower(COALESCE(r."Kurzbeschreibung", '')) LIKE ?
       OR lower(${suchbegriffFallbackExpr}) LIKE ?
-      OR lower(COALESCE(r.Langtext, '')) LIKE ?
-      OR lower(COALESCE(r.Hersteller, '')) LIKE ?
-      OR lower(COALESCE(r.EAN, '')) LIKE ?
+      OR lower(COALESCE(r."Langtext", '')) LIKE ?
+      OR lower(COALESCE(r."Hersteller", '')) LIKE ?
+      OR lower(COALESCE(r."EAN", '')) LIKE ?
     ) THEN 1 ELSE 0 END
   `
             )
@@ -586,11 +593,11 @@ const action = defineHttpAction({
 
           refExactMatchExpr = `
     CASE WHEN (
-      lower(r.Artikel_Nummer) = ?
-      OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
+      lower(r."Artikel_Nummer") = ?
+      OR lower(COALESCE(r."Artikelbeschreibung", '')) = ?
       OR lower(${suchbegriffFallbackExpr}) = ?
-      OR lower(COALESCE(r.Hersteller, '')) = ?
-      OR lower(COALESCE(r.EAN, '')) = ?
+      OR lower(COALESCE(r."Hersteller", '')) = ?
+      OR lower(COALESCE(r."EAN", '')) = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -606,26 +613,26 @@ const action = defineHttpAction({
           ELSE (CAST((${refTokenPresenceTerms}) AS REAL) / ?) * 0.99
         END AS sql_score,
         (
-          SELECT i.ItemUUID
+          SELECT i."ItemUUID"
           FROM items i
-          WHERE i.Artikel_Nummer = r.Artikel_Nummer
-          ORDER BY i.UpdatedAt DESC
+          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
+          ORDER BY i."UpdatedAt" DESC
           LIMIT 1
         ) AS exemplar_item_uuid,
         (
-          SELECT i.BoxID
+          SELECT i."BoxID"
           FROM items i
-          WHERE i.Artikel_Nummer = r.Artikel_Nummer
-          AND i.BoxID IS NOT NULL
-          ORDER BY i.UpdatedAt DESC
+          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
+          AND i."BoxID" IS NOT NULL
+          ORDER BY i."UpdatedAt" DESC
           LIMIT 1
         ) AS exemplar_box_id,
         (
-          SELECT COALESCE(i.Location, b.Label)
+          SELECT COALESCE(i."Location", b."Label")
           FROM items i
-          LEFT JOIN boxes b ON i.BoxID = b.BoxID
-          WHERE i.Artikel_Nummer = r.Artikel_Nummer
-          ORDER BY i.UpdatedAt DESC
+          LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
+          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
+          ORDER BY i."UpdatedAt" DESC
           LIMIT 1
         ) AS exemplar_location
       FROM item_refs r
@@ -664,7 +671,7 @@ const action = defineHttpAction({
 
         let rawRefs: any[] = [];
         try {
-          rawRefs = ctx.db.prepare(refSql).all(...refParams);
+          rawRefs = await query(toPositional(refSql), refParams);
         } catch (error) {
           console.error('[search] Failed to execute reference search query', { term: trimmed, error });
           throw error;
@@ -790,32 +797,32 @@ const action = defineHttpAction({
       try {
         itemTokenPresenceTerms = tokens.map(() => `
     CASE WHEN (
-      lower(i.ItemUUID)            LIKE ?
-      OR lower(i.Artikel_Nummer)   LIKE ?
-      OR lower(COALESCE(r.Artikelbeschreibung, '')) LIKE ?
+      lower(i."ItemUUID")            LIKE ?
+      OR lower(i."Artikel_Nummer")   LIKE ?
+      OR lower(COALESCE(r."Artikelbeschreibung", '')) LIKE ?
       OR lower(${suchbegriffFallbackExpr}) LIKE ?
-      ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) LIKE ?\n      OR lower(COALESCE(r.Langtext, '')) LIKE ?" : ''}
-      OR lower(COALESCE(r.Hersteller, '')) LIKE ?
-      OR lower(i.BoxID)            LIKE ?
-      OR lower(COALESCE(i.SerialNumber, '')) LIKE ?
-      OR lower(COALESCE(i.MacAddress, ''))   LIKE ?
-      OR lower(COALESCE(r.EAN, ''))          LIKE ?
+      ${deepSearch ? `OR lower(COALESCE(r."Kurzbeschreibung", '')) LIKE ?\n      OR lower(COALESCE(r."Langtext", '')) LIKE ?` : ''}
+      OR lower(COALESCE(r."Hersteller", '')) LIKE ?
+      OR lower(i."BoxID")            LIKE ?
+      OR lower(COALESCE(i."SerialNumber", '')) LIKE ?
+      OR lower(COALESCE(i."MacAddress", ''))   LIKE ?
+      OR lower(COALESCE(r."EAN", ''))          LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
 
         // exact match if ANY field equals the normalized query
         itemExactMatchExpr = `
     CASE WHEN (
-      lower(i.ItemUUID)            = ?
-      OR lower(i.Artikel_Nummer)   = ?
-      OR lower(COALESCE(r.Artikelbeschreibung, '')) = ?
+      lower(i."ItemUUID")            = ?
+      OR lower(i."Artikel_Nummer")   = ?
+      OR lower(COALESCE(r."Artikelbeschreibung", '')) = ?
       OR lower(${suchbegriffFallbackExpr}) = ?
-      ${deepSearch ? "OR lower(COALESCE(r.Kurzbeschreibung, '')) = ?\n      OR lower(COALESCE(r.Langtext, '')) = ?" : ''}
-      OR lower(COALESCE(r.Hersteller, '')) = ?
-      OR lower(i.BoxID)            = ?
-      OR lower(COALESCE(i.SerialNumber, '')) = ?
-      OR lower(COALESCE(i.MacAddress, ''))   = ?
-      OR lower(COALESCE(r.EAN, ''))          = ?
+      ${deepSearch ? `OR lower(COALESCE(r."Kurzbeschreibung", '')) = ?\n      OR lower(COALESCE(r."Langtext", '')) = ?` : ''}
+      OR lower(COALESCE(r."Hersteller", '')) = ?
+      OR lower(i."BoxID")            = ?
+      OR lower(COALESCE(i."SerialNumber", '')) = ?
+      OR lower(COALESCE(i."MacAddress", ''))   = ?
+      OR lower(COALESCE(r."EAN", ''))          = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -823,36 +830,36 @@ const action = defineHttpAction({
     SELECT *
     FROM (
       SELECT
-        i.ItemUUID,
-        i.Artikel_Nummer,
-        i.BoxID,
-        COALESCE(i.Location, b.Label) AS Location,
-        i.UpdatedAt,
-        i.Datum_erfasst,
-        i.Auf_Lager,
-        r.Grafikname,
-        r.Artikelbeschreibung,
-        r.Verkaufspreis,
-        r.Kurzbeschreibung,
-        r.Suchbegriff,
-        r.Langtext,
-        r.Hersteller,
-        r.Länge_mm,
-        r.Breite_mm,
-        r.Höhe_mm,
-        r.Gewicht_kg,
-        r.Hauptkategorien_A,
-        r.Unterkategorien_A,
-        r.Hauptkategorien_B,
-        r.Unterkategorien_B,
-        r.Veröffentlicht_Status,
-        r.Shopartikel,
-        r.Artikeltyp,
-        r.Einheit,
-        r.EntityType,
-        i.SerialNumber,
-        i.MacAddress,
-        r.EAN,
+        i."ItemUUID",
+        i."Artikel_Nummer",
+        i."BoxID",
+        COALESCE(i."Location", b."Label") AS "Location",
+        i."UpdatedAt",
+        i."Datum_erfasst",
+        i."Auf_Lager",
+        r."Grafikname",
+        r."Artikelbeschreibung",
+        r."Verkaufspreis",
+        r."Kurzbeschreibung",
+        r."Suchbegriff",
+        r."Langtext",
+        r."Hersteller",
+        r."Länge_mm",
+        r."Breite_mm",
+        r."Höhe_mm",
+        r."Gewicht_kg",
+        r."Hauptkategorien_A",
+        r."Unterkategorien_A",
+        r."Hauptkategorien_B",
+        r."Unterkategorien_B",
+        r."Veröffentlicht_Status",
+        r."Shopartikel",
+        r."Artikeltyp",
+        r."Einheit",
+        r."EntityType",
+        i."SerialNumber",
+        i."MacAddress",
+        r."EAN",
         (${itemTokenPresenceTerms}) AS token_hits,
         ${itemExactMatchExpr} AS exact_match,
         CASE
@@ -860,8 +867,8 @@ const action = defineHttpAction({
           ELSE (CAST((${itemTokenPresenceTerms}) AS REAL) / ?) * 0.99
         END AS sql_score
       FROM items i
-      LEFT JOIN boxes b ON i.BoxID = b.BoxID
-      LEFT JOIN item_refs r ON i.Artikel_Nummer = r.Artikel_Nummer
+      LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
+      LEFT JOIN item_refs r ON i."Artikel_Nummer" = r."Artikel_Nummer"
     )
     WHERE token_hits >= ?
     ORDER BY exact_match DESC, sql_score DESC
@@ -896,7 +903,7 @@ const action = defineHttpAction({
 
       let rawItems: any[] = [];
       try {
-        rawItems = ctx.db.prepare(itemSql).all(...itemParams);
+        rawItems = await query(toPositional(itemSql), itemParams);
       } catch (error) {
         console.error('[search] Failed to execute item search query', { term: trimmed, error });
         throw error;
@@ -941,17 +948,17 @@ const action = defineHttpAction({
       // ---------------- BOXES ----------------
       const boxTokenPresenceTerms = tokens.map(() => `
     CASE WHEN (
-      lower(b.BoxID)    LIKE ?
-      OR lower(b.Label) LIKE ?
-      OR lower(COALESCE(b.Label, '')) LIKE ?
+      lower(b."BoxID")    LIKE ?
+      OR lower(b."Label") LIKE ?
+      OR lower(COALESCE(b."Label", '')) LIKE ?
     ) THEN 1 ELSE 0 END
   `).join(" + ");
 
       const boxExactMatchExpr = `
     CASE WHEN (
-      lower(b.BoxID)    = ?
-      OR lower(b.Label) = ?
-      OR lower(COALESCE(b.Label, '')) = ?
+      lower(b."BoxID")    = ?
+      OR lower(b."Label") = ?
+      OR lower(COALESCE(b."Label", '')) = ?
     ) THEN 1 ELSE 0 END
   `;
 
@@ -959,7 +966,7 @@ const action = defineHttpAction({
     SELECT *
     FROM (
       SELECT
-        b.BoxID, b.Label, b.Label,
+        b."BoxID", b."Label", b."Label",
         (${boxTokenPresenceTerms}) AS token_hits,
         ${boxExactMatchExpr} AS exact_match,
         CASE
@@ -988,7 +995,7 @@ const action = defineHttpAction({
         minTokenHits,
       ];
 
-      const rawBoxes = ctx.db.prepare(boxSql).all(...boxParams);
+      const rawBoxes = await query(toPositional(boxSql), boxParams);
 
       // ----- same JS scoring + response -----
       const scoredItems = rawItems

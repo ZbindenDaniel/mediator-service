@@ -33,23 +33,23 @@ const action = defineHttpAction({
 
       let events: unknown[];
       if (hasTerm) {
-        if (!ctx.listRecentActivitiesByTerm?.all) {
+        if (!ctx.listRecentActivitiesByTerm) {
           console.error('Activities term helper missing; falling back to unfiltered feed', {
             term: normalizedTerm,
             limit
           });
-          events = ctx.listRecentActivities.all({ limit });
+          events = await ctx.listRecentActivities(limit);
         } else {
-          events = ctx.listRecentActivitiesByTerm.all({ limit, term: `%${normalizedTerm}%` });
+          events = await ctx.listRecentActivitiesByTerm(`%${normalizedTerm}%`, limit);
         }
       } else {
-        events = ctx.listRecentActivities.all({ limit });
+        events = await ctx.listRecentActivities(limit);
       }
       if (hasTerm) {
         console.info('Activities feed filtered by search term', { term: normalizedTerm, limit });
       }
       try {
-        const totalEvents = ctx.countEvents.get().c || 0;
+        const totalEvents = await ctx.countEvents() || 0;
         if (totalEvents > limit) {
           console.info('Activities feed truncated to requested limit', {
             limit,

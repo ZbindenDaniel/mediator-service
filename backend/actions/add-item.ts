@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
+import { queryOne, withTransaction } from '../db-client';
 
 // TODO(agent): Validate Artikel_Nummer requirements for instance creation during add-item flows.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -27,7 +28,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/add$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(uuid);
+      const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
       for await (const c of req) raw += c;
@@ -43,7 +44,7 @@ const action = defineHttpAction({
           const attempts = 5;
           for (let index = 0; index < attempts; index += 1) {
             const candidate = await ctx.generateItemUUID(item.Artikel_Nummer ?? null);
-            if (!ctx.getItem.get(candidate)) {
+            if (!await ctx.getItem(candidate)) {
               newItemUUID = candidate;
               break;
             }
@@ -61,10 +62,12 @@ const action = defineHttpAction({
           return sendJson(res, 500, { error: 'Failed to mint ItemUUID for instance creation' });
         }
       }
-      const txn = ctx.db.transaction((u: string, a: string) => {
+      const result = await withTransaction(async (_client) => {
+        const u = uuid;
+        const a = actor;
         if (isBulk) {
           try {
-            ctx.incrementItemStock.run(u);
+            await ctx.incrementItemStock(u);
           } catch (updateErr) {
             console.error('[add-item] Failed to increment bulk stock', {
               actor: a,
@@ -74,8 +77,8 @@ const action = defineHttpAction({
             });
             throw updateErr;
           }
-          const updated = ctx.getItem.get(u);
-          ctx.logEvent({
+          const updated = await ctx.getItem(u);
+          await ctx.logEvent({
             Actor: a,
             EntityType: 'Item',
             EntityId: u,
@@ -95,7 +98,7 @@ const action = defineHttpAction({
               itemUUID: u,
               trigger: 'add-item'
             });
-            ctx.enqueueShopwareSyncJob({
+            await ctx.enqueueShopwareSyncJob({
               CorrelationId: correlationId,
               JobType: 'stock-increment',
               Payload: payload
@@ -115,7 +118,7 @@ const action = defineHttpAction({
 
         const now = new Date();
         try {
-          ctx.persistItemWithinTransaction({
+          await ctx.persistItemWithinTransaction({
             ItemUUID: newItemUUID,
             Artikel_Nummer: item.Artikel_Nummer ?? null,
             BoxID: item.BoxID ?? null,
@@ -138,7 +141,7 @@ const action = defineHttpAction({
           throw createErr;
         }
 
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: a,
           EntityType: 'Item',
           EntityId: newItemUUID,
@@ -159,7 +162,7 @@ const action = defineHttpAction({
             sourceItemUUID: u,
             trigger: 'add-item'
           });
-          ctx.enqueueShopwareSyncJob({
+          await ctx.enqueueShopwareSyncJob({
             CorrelationId: correlationId,
             JobType: 'item-upsert',
             Payload: payload
@@ -175,7 +178,6 @@ const action = defineHttpAction({
 
         return { updated: null, createdItemId: newItemUUID };
       });
-      const result = txn(uuid, actor);
       if (isBulk) {
         console.log(`Stock increased for ${uuid} by ${actor}`);
       } else {
@@ -187,9 +189,10 @@ const action = defineHttpAction({
       }
       let unplacedWarning: string | null = null;
       try {
-        const unplacedRow = ctx.db.prepare(
-          `SELECT COUNT(*) AS cnt FROM items WHERE (BoxID IS NULL OR BoxID = '') AND (Location IS NULL OR Location = '') AND Auf_Lager > 0`
-        ).get() as { cnt: number } | undefined;
+        const unplacedRow = await queryOne<{ cnt: number }>(
+          `SELECT COUNT(*) AS cnt FROM items WHERE ("BoxID" IS NULL OR "BoxID" = '') AND ("Location" IS NULL OR "Location" = '') AND "Auf_Lager" > 0`,
+          []
+        );
         const unplacedCount = unplacedRow?.cnt ?? 0;
         if (unplacedCount > 20) {
           unplacedWarning = `${unplacedCount} Artikel haben noch keinen Lagerort.`;

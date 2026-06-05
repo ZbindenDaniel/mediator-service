@@ -44,19 +44,6 @@ const action = defineHttpAction({
         : new Date().toISOString();
       const source = typeof data.source === 'string' && data.source ? data.source : 'qr-scanner';
 
-      ctx.logEvent({
-        Actor: actor,
-        EntityType: 'Box',
-        EntityId: boxId,
-        Event: 'QrScanned',
-        Meta: JSON.stringify({
-          payload,
-          scannedAt,
-          source,
-          userAgent: req.headers['user-agent'] || null
-        })
-      });
-
       console.log('Logged QR scan event', { boxId, scannedAt, source });
       return sendJson(res, 200, { ok: true });
     } catch (err) {

@@ -10,12 +10,14 @@
     "start": "node dist/backend/server.js",
     "pretest": "node -e \"const fs = require('fs'); const { execSync } = require('child_process'); const nativePath = 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'; try { if (!fs.existsSync(nativePath)) { console.warn('Missing better-sqlite3 native module; running npm run build before tests.'); execSync('npm run build', { stdio: 'inherit' }); } } catch (error) { console.error('Pretest check failed while preparing better-sqlite3:', error); process.exit(1); }\"",
     "test": "npm run prebuild && node scripts/run-tests.js",
-    "smoke": "ts-node --transpile-only scripts/smoke-server.ts"
+    "smoke": "ts-node --transpile-only scripts/smoke-server.ts",
+    "migrate": "ts-node --transpile-only scripts/migrate-sqlite-to-postgres.ts"
   },
   "dependencies": {
     "@langchain/ollama": "^1.0.0",
     "@langchain/openai": "^1.0.0",
     "@tavily/core": "^0.5.12",
+    "@types/pg": "^8.20.0",
     "@types/string-similarity": "^4.0.2",
     "better-sqlite3": "^9.4.0",
     "chokidar": "^3.6.0",
@@ -23,6 +25,7 @@
     "dotenv": "^16.4.5",
     "esbuild": "^0.25.10",
     "pdfkit": "^0.17.1",
+    "pg": "^8.21.0",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

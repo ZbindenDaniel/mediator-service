@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
+import { withTransaction } from '../db-client';
 import type { AgenticRun } from '../../models';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -55,8 +56,8 @@ type AgenticBulkQueueResult = {
     // TODO(agentic-queue): Drop any remaining instance-list dependencies now that queueing is reference-first.
     let references: Array<{ Artikel_Nummer?: string | null }> = [];
     try {
-      if (ctx.listItemReferences?.all) {
-        references = ctx.listItemReferences.all();
+      if (ctx.listItemReferences) {
+        references = await ctx.listItemReferences();
       }
     } catch (err) {
       console.error('[agentic-bulk-queue] Failed to load item references for queue operation', err);
@@ -113,12 +114,13 @@ type AgenticBulkQueueResult = {
       references: references.length
     });
 
-    const queueTransaction = ctx.db.transaction(
-      (records: QueueCandidate[], options: { mode: AgenticQueueMode; actor: string }): AgenticBulkQueueResult => {
+    let result: AgenticBulkQueueResult;
+    try {
+      result = await withTransaction(async () => {
         let queued = 0;
         let skipped = 0;
 
-        for (const record of records) {
+        for (const record of queueCandidates) {
           const identifier = record?.artikelNummer?.trim();
           if (!identifier) {
             skipped += 1;
@@ -129,14 +131,14 @@ type AgenticBulkQueueResult = {
             continue;
           }
 
-          if (!ctx.getItemReference?.get) {
+          if (!ctx.getItemReference) {
             console.warn('[agentic-bulk-queue] Missing getItemReference helper for agentic reference preflight', {
               artikelNummer: identifier,
               context: 'item-list-bulk'
             });
           } else {
             try {
-              const referenceRow = ctx.getItemReference.get(identifier);
+              const referenceRow = await ctx.getItemReference(identifier);
               if (!referenceRow) {
                 skipped += 1;
                 console.warn('[agentic-bulk-queue] Skipping agentic run without item reference', {
@@ -158,13 +160,13 @@ type AgenticBulkQueueResult = {
 
           let existingRun: AgenticRun | undefined;
           try {
-            existingRun = ctx.getAgenticRun.get(identifier) as AgenticRun | undefined;
+            existingRun = await ctx.getAgenticRun(identifier) as AgenticRun | undefined;
           } catch (loadErr) {
             console.error('[agentic-bulk-queue] Failed to load existing agentic run', { artikelNummer: identifier }, loadErr);
             throw loadErr;
           }
 
-          if (options.mode === 'missing' && existingRun) {
+          if (mode === 'missing' && existingRun) {
             skipped += 1;
             console.info('[agentic-bulk-queue] Skipping candidate with existing run during missing-mode queue', {
               identifier,
@@ -187,10 +189,7 @@ type AgenticBulkQueueResult = {
           };
 
           try {
-            const result = ctx.upsertAgenticRun.run(upsertPayload);
-            if (result && typeof result.changes === 'number' && result.changes < 1) {
-              throw new Error('Agentic run upsert returned zero changes');
-            }
+            await ctx.upsertAgenticRun(upsertPayload);
           } catch (upsertErr) {
             skipped += 1;
             console.error('[agentic-bulk-queue] Failed to queue agentic run', { artikelNummer: identifier }, upsertErr);
@@ -198,13 +197,13 @@ type AgenticBulkQueueResult = {
           }
 
           try {
-            ctx.logEvent({
-              Actor: options.actor,
+            await ctx.logEvent({
+              Actor: actor,
               EntityType: 'Item',
               EntityId: identifier,
               Event: 'AgenticSearchQueued',
               Meta: JSON.stringify({
-                mode: options.mode,
+                mode,
                 previousStatus: existingRun?.Status ?? null,
                 hadExistingRun: Boolean(existingRun),
                 referenceOnly: record.referenceOnly
@@ -220,12 +219,7 @@ type AgenticBulkQueueResult = {
         }
 
         return { queued, skipped };
-      }
-    );
-
-    let result: AgenticBulkQueueResult;
-    try {
-      result = queueTransaction(queueCandidates, { mode, actor });
+      });
     } catch (err) {
       console.error('[agentic-bulk-queue] Transaction failed while queuing agentic runs', err);
       return sendJson(res, 500, { error: 'Failed to queue agentic runs' });

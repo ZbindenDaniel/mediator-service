@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { normalizeQuality } from '../../models/quality';
+import { execute, queryOne } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -17,7 +18,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/instance$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(uuid);
+      const item = await queryOne('SELECT "ItemUUID" FROM items WHERE "ItemUUID" = $1', [uuid]);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
 
       let raw = '';
@@ -42,29 +43,31 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'no editable fields provided' });
       }
 
-      const setClauses: string[] = [`UpdatedAt=datetime('now')`];
+      const setClauses: string[] = [];
       const params: unknown[] = [];
       const changed: Record<string, unknown> = {};
 
       if (serialNumber !== undefined) {
-        setClauses.push('SerialNumber=?');
         params.push(serialNumber);
+        setClauses.push(`"SerialNumber"=$${params.length}`);
         changed.SerialNumber = serialNumber;
       }
       if (macAddress !== undefined) {
-        setClauses.push('MacAddress=?');
         params.push(macAddress);
+        setClauses.push(`"MacAddress"=$${params.length}`);
         changed.MacAddress = macAddress;
       }
       if (quality !== undefined) {
-        setClauses.push('Quality=?');
         params.push(quality);
+        setClauses.push(`"Quality"=$${params.length}`);
         changed.Quality = quality;
       }
+      params.push(new Date().toISOString());
+      setClauses.push(`"UpdatedAt"=$${params.length}`);
       params.push(uuid);
 
-      ctx.db.prepare(`UPDATE items SET ${setClauses.join(', ')} WHERE ItemUUID=?`).run(...params);
-      ctx.logEvent({
+      await execute(`UPDATE items SET ${setClauses.join(', ')} WHERE "ItemUUID"=$${params.length}`, params);
+      await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: uuid,

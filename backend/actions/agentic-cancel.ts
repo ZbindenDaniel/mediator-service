@@ -81,7 +81,6 @@ const action = defineHttpAction({
       const result = await cancelAgenticRun(
         { itemId, actor, reason, request: requestContext },
         {
-          db: ctx.db,
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,

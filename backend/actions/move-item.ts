@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
+import { withTransaction } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -17,7 +18,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/move$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(uuid);
+      const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
       for await (const c of req) raw += c;
@@ -28,7 +29,7 @@ const action = defineHttpAction({
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
 
       if (!toBoxId) return sendJson(res, 400, { error: 'toBoxId is required' });
-      const dest = ctx.getBox.get(toBoxId);
+      const dest = await ctx.getBox(toBoxId);
       if (!dest) {
         console.warn('[move-item] Destination box not found', { itemId: uuid, boxId: toBoxId });
         return sendJson(res, 404, { error: 'Behälter nicht gefunden!' });
@@ -36,38 +37,42 @@ const action = defineHttpAction({
       const rawLocationId = typeof dest.LocationId === 'string' ? dest.LocationId.trim() : null;
       const rawLocation = typeof dest.Location === 'string' ? dest.Location.trim() : null;
       const normalizedLocation = rawLocationId || rawLocation || null;
-      const txn = ctx.db.transaction((u: string, to: string, a: string, from: string, location: string | null) => {
-        ctx.db.prepare(`UPDATE items SET BoxID=?, Location=?, UpdatedAt=datetime('now') WHERE ItemUUID=?`).run(to, location, u);
-        ctx.logEvent({
-          Actor: a,
+
+      await withTransaction(async (client) => {
+        await client.query(
+          `UPDATE items SET "BoxID"=$1, "Location"=$2, "UpdatedAt"=$3 WHERE "ItemUUID"=$4`,
+          [toBoxId, normalizedLocation, new Date().toISOString(), uuid]
+        );
+        await ctx.logEvent({
+          Actor: actor,
           EntityType: 'Item',
-          EntityId: u,
+          EntityId: uuid,
           Event: 'Moved',
-          Meta: JSON.stringify({ from, to })
+          Meta: JSON.stringify({ from: item.BoxID, to: toBoxId })
         });
         try {
-          const correlationId = generateShopwareCorrelationId('move-item', u);
+          const correlationId = generateShopwareCorrelationId('move-item', uuid);
           const payload = JSON.stringify({
-            actor: a,
-            fromBoxId: from || null,
-            toBoxId: to,
-            location,
-            itemUUID: u,
+            actor,
+            fromBoxId: item.BoxID || null,
+            toBoxId,
+            location: normalizedLocation,
+            itemUUID: uuid,
             trigger: 'move-item'
           });
-          ctx.enqueueShopwareSyncJob({
+          await ctx.enqueueShopwareSyncJob({
             CorrelationId: correlationId,
             JobType: 'item-move',
             Payload: payload
           });
         } catch (queueErr) {
           console.error('[move-item] Failed to enqueue Shopware sync job', {
-            itemId: u,
+            itemId: uuid,
             error: queueErr
           });
         }
       });
-      txn(uuid, toBoxId, actor, item.BoxID, normalizedLocation);
+
       sendJson(res, 200, { ok: true, destinationBoxId: toBoxId, locationId: normalizedLocation });
     } catch (err) {
       console.error('Move item failed', err);

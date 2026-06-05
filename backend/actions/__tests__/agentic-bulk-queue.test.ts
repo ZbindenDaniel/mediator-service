@@ -1,4 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => fn({})),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+  insert: jest.fn(async () => ({})),
+  namedQuery: jest.fn(async () => []),
+  namedQueryOne: jest.fn(async () => null),
+  namedExecute: jest.fn(async () => 0),
+  execBatch: jest.fn(async () => undefined),
+  namedToPositional: jest.fn((sql: string, params: Record<string, unknown>) => ({ text: sql, values: Object.values(params) })),
+  getPoolInstance: jest.fn(() => null),
+  closePool: jest.fn(async () => undefined),
+}));
+
 import action from '../agentic-bulk-queue';
 
 describe('agentic-bulk-queue action', () => {
@@ -36,16 +52,10 @@ describe('agentic-bulk-queue action', () => {
       { Artikel_Nummer: 'R-002' }
     ];
     const ctx = {
-      listItemReferences: { all: jest.fn(() => references) },
-      getItemReference: {
-        get: jest.fn((id: string) => ({ Artikel_Nummer: id }))
-      },
-      getAgenticRun: {
-        get: jest.fn((id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'completed', SearchQuery: 'foo' } : undefined))
-      },
-      upsertAgenticRun: {
-        run: jest.fn(() => ({ changes: 1 }))
-      },
+      listItemReferences: jest.fn(async () => references),
+      getItemReference: jest.fn(async (id: string) => ({ Artikel_Nummer: id })),
+      getAgenticRun: jest.fn(async (id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'completed', SearchQuery: 'foo' } : undefined)),
+      upsertAgenticRun: jest.fn(async () => undefined),
       logEvent: jest.fn(),
       db: {
         transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
@@ -57,10 +67,10 @@ describe('agentic-bulk-queue action', () => {
 
     await action.handle(req, res, ctx);
 
-    expect(ctx.listItemReferences.all).toHaveBeenCalled();
-    expect(ctx.getAgenticRun.get).toHaveBeenCalledTimes(2);
-    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(1);
-    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledWith(
+    expect(ctx.listItemReferences).toHaveBeenCalled();
+    expect(ctx.getAgenticRun).toHaveBeenCalledTimes(2);
+    expect(ctx.upsertAgenticRun).toHaveBeenCalledTimes(1);
+    expect(ctx.upsertAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({ Artikel_Nummer: 'R-002', Status: 'queued', ReviewState: 'not_required' })
     );
     expect(ctx.logEvent).toHaveBeenCalledTimes(1);
@@ -77,16 +87,10 @@ describe('agentic-bulk-queue action', () => {
       { Artikel_Nummer: 'R-002' }
     ];
     const ctx = {
-      listItemReferences: { all: jest.fn(() => references) },
-      getItemReference: {
-        get: jest.fn((id: string) => ({ Artikel_Nummer: id }))
-      },
-      getAgenticRun: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'R-001', Status: 'completed', SearchQuery: 'foo' }))
-      },
-      upsertAgenticRun: {
-        run: jest.fn(() => ({ changes: 1 }))
-      },
+      listItemReferences: jest.fn(async () => references),
+      getItemReference: jest.fn(async (id: string) => ({ Artikel_Nummer: id })),
+      getAgenticRun: jest.fn(async () => ({ Artikel_Nummer: 'R-001', Status: 'completed', SearchQuery: 'foo' })),
+      upsertAgenticRun: jest.fn(async () => undefined),
       logEvent: jest.fn(),
       db: {
         transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
@@ -98,9 +102,9 @@ describe('agentic-bulk-queue action', () => {
 
     await action.handle(req, res, ctx);
 
-    expect(ctx.listItemReferences.all).toHaveBeenCalled();
-    expect(ctx.getAgenticRun.get).toHaveBeenCalledTimes(2);
-    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(2);
+    expect(ctx.listItemReferences).toHaveBeenCalled();
+    expect(ctx.getAgenticRun).toHaveBeenCalledTimes(2);
+    expect(ctx.upsertAgenticRun).toHaveBeenCalledTimes(2);
     expect(ctx.logEvent).toHaveBeenCalledTimes(2);
     expect(getStatus()).toBe(200);
     expect(getBody()).toEqual(expect.objectContaining({ queued: 2, skipped: 0, mode: 'all', total: 2 }));
@@ -109,14 +113,10 @@ describe('agentic-bulk-queue action', () => {
   it('queues reference-only rows without existing runs when mode is missing', async () => {
     const references = [{ Artikel_Nummer: 'R-001' }, { Artikel_Nummer: 'R-002' }];
     const ctx = {
-      listItemReferences: { all: jest.fn(() => references) },
-      getItemReference: {
-        get: jest.fn((id: string) => ({ Artikel_Nummer: id }))
-      },
-      getAgenticRun: {
-        get: jest.fn((id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'queued' } : undefined))
-      },
-      upsertAgenticRun: { run: jest.fn(() => ({ changes: 1 })) },
+      listItemReferences: jest.fn(async () => references),
+      getItemReference: jest.fn(async (id: string) => ({ Artikel_Nummer: id })),
+      getAgenticRun: jest.fn(async (id: string) => (id === 'R-001' ? { Artikel_Nummer: id, Status: 'queued' } : undefined)),
+      upsertAgenticRun: jest.fn(async () => undefined),
       logEvent: jest.fn(),
       db: {
         transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
@@ -128,8 +128,8 @@ describe('agentic-bulk-queue action', () => {
 
     await action.handle(req, res, ctx);
 
-    expect(ctx.getAgenticRun.get).toHaveBeenCalledTimes(2);
-    expect(ctx.upsertAgenticRun.run).toHaveBeenCalledTimes(1);
+    expect(ctx.getAgenticRun).toHaveBeenCalledTimes(2);
+    expect(ctx.upsertAgenticRun).toHaveBeenCalledTimes(1);
     expect(ctx.logEvent).toHaveBeenCalledTimes(1);
     expect(getStatus()).toBe(200);
     expect(getBody()).toEqual(expect.objectContaining({ queued: 1, skipped: 1, total: 2 }));

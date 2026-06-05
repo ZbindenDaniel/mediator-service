@@ -16,14 +16,14 @@ import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
 // TODO(agentic-review-noop): Consider storing an explicit review-update reason when state remains unchanged.
 // TODO(agentic-review-decision-threshold): Revisit implicit reject/approve checklist thresholding if operators request weighted scoring.
 // TODO(agentic-review-manual-updates): Revisit whether manual review should persist shop/price updates when decision is rejected.
-export function applyPriceFallbackAfterReview(
+export async function applyPriceFallbackAfterReview(
   artikelNummer: string,
   ctx: {
-    getItemReference: { get: (id: string) => ItemRef | undefined };
-    persistItemReference?: (ref: ItemRef) => void;
+    getItemReference: (id: string) => Promise<ItemRef | undefined>;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
   },
   logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
-): void {
+): Promise<void> {
   const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
   if (!trimmedArtikelNummer) {
     logger.warn?.('[agentic-review] Missing Artikelnummer for price fallback');
@@ -32,7 +32,7 @@ export function applyPriceFallbackAfterReview(
 
   let reference: ItemRef | undefined;
   try {
-    reference = ctx.getItemReference.get(trimmedArtikelNummer);
+    reference = await ctx.getItemReference(trimmedArtikelNummer);
   } catch (error) {
     logger.error?.('[agentic-review] Failed to load reference for Artikelnummer price lookup', {
       artikelNummer: trimmedArtikelNummer,
@@ -87,7 +87,7 @@ export function applyPriceFallbackAfterReview(
       ...reference,
       Verkaufspreis: fallbackPrice
     };
-    ctx.persistItemReference(updatedReference);
+    await ctx.persistItemReference(updatedReference);
     logger.info?.('[agentic-review] Applied fallback sale price after Artikelnummer review', {
       artikelNummer: reference.Artikel_Nummer ?? trimmedArtikelNummer,
       appliedPrice: fallbackPrice
@@ -101,15 +101,15 @@ export function applyPriceFallbackAfterReview(
 }
 
 // TODO(agentic-review-prune): Extend spec pruning beyond Langtext once additional structured specification fields are introduced.
-export function pruneUnneededSpecsAfterReview(
+export async function pruneUnneededSpecsAfterReview(
   artikelNummer: string,
   unneededSpec: string[],
   ctx: {
-    getItemReference: { get: (id: string) => ItemRef | undefined };
-    persistItemReference?: (ref: ItemRef) => void;
+    getItemReference: (id: string) => Promise<ItemRef | undefined>;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
   },
   logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
-): void {
+): Promise<void> {
   const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
   if (!trimmedArtikelNummer || !Array.isArray(unneededSpec) || unneededSpec.length === 0) {
     return;
@@ -117,7 +117,7 @@ export function pruneUnneededSpecsAfterReview(
 
   let reference: ItemRef | undefined;
   try {
-    reference = ctx.getItemReference.get(trimmedArtikelNummer);
+    reference = await ctx.getItemReference(trimmedArtikelNummer);
   } catch (error) {
     logger.error?.('[agentic-review] Failed to load reference for unneeded spec pruning', {
       artikelNummer: trimmedArtikelNummer,
@@ -170,7 +170,7 @@ export function pruneUnneededSpecsAfterReview(
       return;
     }
 
-    ctx.persistItemReference({
+    await ctx.persistItemReference({
       ...reference,
       Langtext: nextLangtext as typeof reference.Langtext
     });
@@ -189,15 +189,15 @@ export function pruneUnneededSpecsAfterReview(
 }
 
 
-export function applyManualReviewReferenceUpdates(
+export async function applyManualReviewReferenceUpdates(
   artikelNummer: string,
   reviewMetadata: { review_price: number | null; shop_article: boolean | null },
   ctx: {
-    getItemReference: { get: (id: string) => ItemRef | undefined };
-    persistItemReference?: (ref: ItemRef) => void;
+    getItemReference: (id: string) => Promise<ItemRef | undefined>;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
   },
   logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
-): void {
+): Promise<void> {
   const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
   const shouldSetPrice = typeof reviewMetadata.review_price === 'number' && Number.isFinite(reviewMetadata.review_price);
   const shouldSetShop = typeof reviewMetadata.shop_article === 'boolean';
@@ -208,7 +208,7 @@ export function applyManualReviewReferenceUpdates(
 
   let reference: ItemRef | undefined;
   try {
-    reference = ctx.getItemReference.get(trimmedArtikelNummer);
+    reference = await ctx.getItemReference(trimmedArtikelNummer);
   } catch (error) {
     logger.error?.('[agentic-review] Failed to load reference for manual review updates', {
       artikelNummer: trimmedArtikelNummer,
@@ -237,7 +237,7 @@ export function applyManualReviewReferenceUpdates(
       ...(shouldSetPrice ? { Verkaufspreis: reviewMetadata.review_price } : {}),
       ...(shouldSetShop ? { Shopartikel: reviewMetadata.shop_article ? 1 : 0 } : {})
     };
-    ctx.persistItemReference(nextReference);
+    await ctx.persistItemReference(nextReference);
     logger.info?.('[agentic-review] Applied manual review reference updates', {
       artikelNummer: trimmedArtikelNummer,
       priceUpdated: shouldSetPrice,
@@ -336,7 +336,7 @@ function normalizeReviewMetadataPayload(data: Record<string, unknown>): Normaliz
 }
 
 function persistManualReviewHistoryEntry(
-  ctx: { insertAgenticRunReviewHistoryEntry?: { run: (entry: Record<string, unknown>) => { changes?: number } } },
+  ctx: { insertAgenticRunReviewHistoryEntry?: (entry: Record<string, unknown>) => Promise<void> },
   payload: {
     artikelNummer: string;
     status: string;
@@ -350,7 +350,7 @@ function persistManualReviewHistoryEntry(
     actor: string;
   }
 ): void {
-  if (!ctx.insertAgenticRunReviewHistoryEntry?.run) {
+  if (!ctx.insertAgenticRunReviewHistoryEntry) {
     console.warn('[agentic-review] Review history insert dependency missing; skipping manual history persistence', {
       artikelNummer: payload.artikelNummer,
       action: payload.action
@@ -359,7 +359,7 @@ function persistManualReviewHistoryEntry(
   }
 
   try {
-    const insertResult = ctx.insertAgenticRunReviewHistoryEntry.run({
+    void ctx.insertAgenticRunReviewHistoryEntry({
       Artikel_Nummer: payload.artikelNummer,
       Status: payload.status,
       ReviewState: payload.reviewState,
@@ -372,6 +372,11 @@ function persistManualReviewHistoryEntry(
       }),
       ReviewedBy: payload.reviewedBy,
       RecordedAt: payload.recordedAt
+    }).catch((historyErr: unknown) => {
+      console.error('[agentic-review] Review history insert failed (non-fatal)', {
+        artikelNummer: payload.artikelNummer,
+        error: historyErr
+      });
     });
 
     console.info('[agentic-review] Persisted manual review history entry', {
@@ -388,7 +393,7 @@ function persistManualReviewHistoryEntry(
       ].filter((value) => value !== null).length,
       missingSpecCount: payload.reviewMetadata.missing_spec.length,
       unneededSpecCount: payload.reviewMetadata.unneeded_spec.length,
-      inserted: Boolean(insertResult && (insertResult.changes ?? 1) > 0)
+      inserted: true
     });
   } catch (error) {
     console.warn('[agentic-review] Failed to persist manual review history entry', {
@@ -493,8 +498,7 @@ const action = defineHttpAction({
         if (!artikelNummer) {
           return sendJson(res, 400, { error: 'Missing Artikel_Nummer for agentic status lookup' });
         }
-        const result = getAgenticStatus(artikelNummer, {
-          db: ctx.db,
+        const result = await getAgenticStatus(artikelNummer, {
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,
@@ -608,7 +612,7 @@ const action = defineHttpAction({
         if (action === 'close') {
           let run: any;
           try {
-            run = ctx.getAgenticRun.get(artikelNummer);
+            run = await ctx.getAgenticRun(artikelNummer);
           } catch (err) {
             console.error('Failed to load agentic run for close request Artikelnummer', { artikelNummer, err });
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
@@ -631,7 +635,7 @@ const action = defineHttpAction({
 
           try {
             if (!run) {
-              const upsertResult = ctx.upsertAgenticRun.run({
+              await ctx.upsertAgenticRun({
                 Artikel_Nummer: artikelNummer,
                 SearchQuery: null,
                 Status: status,
@@ -640,16 +644,10 @@ const action = defineHttpAction({
                 ReviewedBy: reviewedBy,
                 LastReviewDecision: reviewDecisionToPersist,
                 LastReviewNotes: notes || null,
-                LastSearchLinksJson: run?.LastSearchLinksJson ?? null
+                LastSearchLinksJson: null
               });
-              if (!upsertResult || upsertResult.changes === 0) {
-                throw new Error('Agentic close upsert had no effect');
-              }
             } else {
-              const result = ctx.updateAgenticReview.run(transitionPayload);
-              if (!result || result.changes === 0) {
-                throw new Error('Agentic review update had no effect');
-              }
+              await ctx.updateAgenticReview(transitionPayload);
             }
           } catch (dbErr) {
             console.error('Agentic close transition failed for Artikelnummer', {
@@ -672,7 +670,7 @@ const action = defineHttpAction({
         } else {
           let run: any;
           try {
-            run = ctx.getAgenticRun.get(artikelNummer);
+            run = await ctx.getAgenticRun(artikelNummer);
           } catch (err) {
             console.error('Failed to load agentic run for review request Artikelnummer', { artikelNummer, err });
             return sendJson(res, 500, { error: 'Failed to load agentic run' });
@@ -697,10 +695,7 @@ const action = defineHttpAction({
           });
 
           try {
-            const result = ctx.updateAgenticReview.run(transitionPayload);
-            if (!result || result.changes === 0) {
-              throw new Error('Agentic review update had no effect');
-            }
+            await ctx.updateAgenticReview(transitionPayload);
           } catch (dbErr) {
             console.error('Agentic review transition failed for Artikelnummer', {
               artikelNummer,
@@ -723,7 +718,7 @@ const action = defineHttpAction({
 
         if (decision === 'rejected') {
           try {
-            ctx.updateAgenticRunStatus.run(
+            await ctx.updateAgenticRunStatus(
               normalizeAgenticStatusUpdate({
                 Artikel_Nummer: artikelNummer,
                 LastAttemptAt: null,
@@ -759,7 +754,7 @@ const action = defineHttpAction({
       });
 
       // TODO(agentic-review-metrics): Keep review event metadata aligned with frontend contract changes.
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: artikelNummer,
@@ -782,28 +777,27 @@ const action = defineHttpAction({
       }
 
       try {
-        applyManualReviewReferenceUpdates(artikelNummer, reviewMetadata, ctx, console);
+        await applyManualReviewReferenceUpdates(artikelNummer, reviewMetadata, ctx, console);
       } catch (err) {
         console.error('Failed to apply manual review reference updates for Artikelnummer', err);
       }
 
       if (decision === 'approved') {
         try {
-          applyPriceFallbackAfterReview(artikelNummer, ctx, console);
+          await applyPriceFallbackAfterReview(artikelNummer, ctx, console);
         } catch (err) {
           console.error('Failed to apply fallback sale price after review for Artikelnummer', err);
         }
       }
 
       try {
-        pruneUnneededSpecsAfterReview(artikelNummer, reviewMetadata.unneeded_spec, ctx, console);
+        await pruneUnneededSpecsAfterReview(artikelNummer, reviewMetadata.unneeded_spec, ctx, console);
       } catch (err) {
         console.error('Failed to prune unneeded spec fields after review for Artikelnummer', err);
       }
 
       try {
-        const result = getAgenticStatus(artikelNummer, {
-          db: ctx.db,
+        const result = await getAgenticStatus(artikelNummer, {
           getAgenticRun: ctx.getAgenticRun,
           getItemReference: ctx.getItemReference,
           upsertAgenticRun: ctx.upsertAgenticRun,

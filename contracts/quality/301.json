@@ -3,36 +3,6 @@
   "subCategory": 301,
   "questions": [
     {
-      "id": "printer_type",
-      "type": "select",
-      "question": "Druckertyp?",
-      "values": ["Laser", "Tinte", "Nadel", "Thermisch"],
-      "specField": "Druckertyp",
-      "specValue": "%v"
-    },
-    {
-      "id": "color",
-      "type": "boolean",
-      "question": "Farbdruck möglich?",
-      "specField": "Farbe",
-      "specValue": "%v"
-    },
-    {
-      "id": "duplex",
-      "type": "boolean",
-      "question": "Automatischer Duplexdruck?",
-      "specField": "Duplex",
-      "specValue": "%v"
-    },
-    {
-      "id": "interface",
-      "type": "select",
-      "question": "Anschluss?",
-      "values": ["USB", "Netzwerk (LAN)", "WLAN", "Parallel", "Mehrere"],
-      "specField": "Anschluss",
-      "specValue": "%v"
-    },
-    {
       "id": "toner_ink_included",
       "type": "select",
       "question": "Toner / Tinte vorhanden?",

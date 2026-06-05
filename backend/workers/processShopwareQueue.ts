@@ -218,7 +218,7 @@ export async function processShopwareQueue(options: ProcessShopwareQueueOptions)
 
   let jobs: ShopwareSyncQueueEntry[] = [];
   try {
-    jobs = claimShopwareSyncJobs(options.batchSize ?? DEFAULT_BATCH_SIZE, batchStart.toISOString());
+    jobs = await claimShopwareSyncJobs(options.batchSize ?? DEFAULT_BATCH_SIZE, batchStart.toISOString());
   } catch (err) {
     logger.error?.('[shopware-worker] Failed to claim Shopware sync jobs', err);
     return;

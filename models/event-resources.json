@@ -9,7 +9,6 @@
   { "key": "Deleted", "label": "Gelöscht", "level": "important", "topic": "data" },
   { "key": "Exported", "label": "Exportiert", "level": "info", "topic": "export" },
   { "key": "Note", "label": "Notiz", "level": "info", "topic": "data" },
-  { "key": "QrScanned", "label": "QR-Code gescannt", "level": "info", "topic": "general" },
   { "key": "PrintSent", "label": "Etikett gedruckt", "level": "info", "topic": "printing" },
   { "key": "PrintFailed", "label": "Etikett konnte nicht gedruckt werden", "level": "error", "topic": "printing" },
   { "key": "PrintPreviewSaved", "label": "Etikettenvorschau gespeichert", "level": "info", "topic": "printing" },

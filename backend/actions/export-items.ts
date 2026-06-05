@@ -784,10 +784,11 @@ function resolveExportValue(
   rawRow: Record<string, unknown>,
   langtextFormat: LangtextExportFormat
 ): unknown {
+  const isErpBoundary = langtextFormat === 'html' || langtextFormat === 'markdown';
   const normalizeMediaStringForBoundary = (mediaValue: string): string =>
-    langtextFormat === 'html' ? normalizeMediaStringForErpExport(mediaValue) : normalizeMediaStringForExport(mediaValue);
+    isErpBoundary ? normalizeMediaStringForErpExport(mediaValue) : normalizeMediaStringForExport(mediaValue);
   const normalizeMediaListForBoundary = (mediaAssets: string[]): string[] =>
-    langtextFormat === 'html' ? normalizeMediaListForErpExport(mediaAssets) : normalizeMediaListForExport(mediaAssets);
+    isErpBoundary ? normalizeMediaListForErpExport(mediaAssets) : normalizeMediaListForExport(mediaAssets);
 
   const field = fieldMap[column];
   if (!field) {
@@ -1338,23 +1339,21 @@ const action = defineHttpAction({
       }
       const createdAfter = url.searchParams.get('createdAfter');
       const updatedAfter = url.searchParams.get('updatedAfter');
-      const items = ctx.listItemsForExport.all({
+      const items = await ctx.listItemsForExport({
         createdAfter: createdAfter || null,
         updatedAfter: updatedAfter || null
       });
-      const log = ctx.db.transaction((rows: any[], a: string) => {
-        for (const row of rows) {
-          ctx.logEvent({
-            Actor: a,
-            EntityType: 'Item',
-            EntityId: row.ItemUUID,
-            Event: 'Exported',
-            Meta: JSON.stringify({ createdAfter, updatedAfter })
-          });
-        }
-      });
-      log(items, actor);
-      const boxes = typeof ctx.listBoxes?.all === 'function' ? ctx.listBoxes.all() : [];
+      // Log export events without a DB transaction — logEvent uses ctx helpers, not raw SQL
+      for (const row of items) {
+        await ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Item',
+          EntityId: row.ItemUUID,
+          Event: 'Exported',
+          Meta: JSON.stringify({ createdAfter, updatedAfter })
+        });
+      }
+      const boxes = typeof ctx.listBoxes === 'function' ? await ctx.listBoxes() : [];
       const stagedExport = await stageItemsExport({
         archiveBaseName: `items-export-${Date.now()}`,
         boxes: Array.isArray(boxes) ? boxes : [],

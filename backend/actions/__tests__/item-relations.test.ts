@@ -1,5 +1,26 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => fn({})),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 1),
+  insert: jest.fn(async () => ({})),
+  namedQuery: jest.fn(async () => []),
+  namedQueryOne: jest.fn(async () => null),
+  namedExecute: jest.fn(async () => 0),
+  execBatch: jest.fn(async () => undefined),
+  namedToPositional: jest.fn((sql: string, params: Record<string, unknown>) => ({ text: sql, values: Object.values(params) })),
+  getPoolInstance: jest.fn(() => null),
+  closePool: jest.fn(async () => undefined),
+}));
+
 import action from '../item-relations';
+import * as dbClient from '../../db-client';
+
+const mockQuery = dbClient.query as jest.Mock;
+const mockQueryOne = dbClient.queryOne as jest.Mock;
+const mockExecute = dbClient.execute as jest.Mock;
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -20,57 +41,14 @@ function makeRequest(url: string, method: string, body?: unknown): IncomingMessa
   return req as IncomingMessage;
 }
 
-function makeDb(config: {
-  existingUUIDs?: string[];
-  accessories?: object[];
-  devices?: object[];
-  runChanges?: number;
-  throwOnInsert?: boolean;
-} = {}) {
-  return {
-    prepare: jest.fn((sql: string) => {
-      if (sql.includes('SELECT ItemUUID FROM items WHERE ItemUUID = ?')) {
-        return {
-          get: jest.fn((uuid: string) =>
-            config.existingUUIDs?.includes(uuid) ? { ItemUUID: uuid } : null
-          )
-        };
-      }
-      if (sql.includes('WHERE ir.ParentItemUUID = ?')) {
-        return { all: jest.fn(() => config.accessories ?? []) };
-      }
-      if (sql.includes('WHERE ir.ChildItemUUID = ?')) {
-        return { all: jest.fn(() => config.devices ?? []) };
-      }
-      if (sql.includes('INSERT INTO item_relations ')) {
-        return {
-          run: jest.fn(() => {
-            if (config.throwOnInsert) throw new Error('UNIQUE constraint failed');
-          })
-        };
-      }
-      if (sql.includes('UPDATE item_relations')) {
-        return { run: jest.fn(() => ({ changes: config.runChanges ?? 1 })) };
-      }
-      if (sql.includes('DELETE FROM item_relations WHERE ParentItemUUID')) {
-        return { run: jest.fn(() => ({ changes: config.runChanges ?? 1 })) };
-      }
-      // ref-level queries
-      if (sql.includes('INSERT INTO item_ref_relations')) {
-        return {
-          run: jest.fn(() => {
-            if (config.throwOnInsert) throw new Error('UNIQUE constraint failed');
-          })
-        };
-      }
-      if (sql.includes('DELETE FROM item_ref_relations')) {
-        return { run: jest.fn(() => ({ changes: config.runChanges ?? 1 })) };
-      }
-      // ref-level GET queries (two SELECT queries on item_ref_relations)
-      return { get: jest.fn(), all: jest.fn(() => []), run: jest.fn(() => ({ changes: 1 })) };
-    })
-  };
-}
+beforeEach(() => {
+  mockQuery.mockReset();
+  mockQueryOne.mockReset();
+  mockExecute.mockReset();
+  mockQuery.mockResolvedValue([]);
+  mockQueryOne.mockResolvedValue(null);
+  mockExecute.mockResolvedValue(1);
+});
 
 describe('item-relations action', () => {
   describe('matches()', () => {
@@ -97,7 +75,10 @@ describe('item-relations action', () => {
     it('returns connected accessories and devices', async () => {
       const accessories = [{ Id: 1, ItemUUID: 'child-1', RelationType: 'Zubehör' }];
       const devices = [{ Id: 2, ItemUUID: 'parent-1', RelationType: 'Zubehör' }];
-      const ctx = { db: makeDb({ accessories, devices }), logEvent: jest.fn() };
+      mockQuery
+        .mockReturnValueOnce(Promise.resolve(accessories))
+        .mockReturnValueOnce(Promise.resolve(devices));
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations', 'GET');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -109,7 +90,7 @@ describe('item-relations action', () => {
     });
 
     it('returns empty arrays when no relations exist', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations', 'GET');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -123,10 +104,10 @@ describe('item-relations action', () => {
 
   describe('Instance POST (link accessory)', () => {
     it('logs AccessoryLinked and returns 201 on success', async () => {
-      const ctx = {
-        db: makeDb({ existingUUIDs: ['parent-uuid', 'child-uuid'] }),
-        logEvent: jest.fn()
-      };
+      mockQueryOne
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'parent-uuid' }))
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'child-uuid' }));
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations', 'POST', {
         childItemUUID: 'child-uuid',
         relationType: 'Zubehör'
@@ -148,10 +129,10 @@ describe('item-relations action', () => {
     });
 
     it('defaults relationType to Zubehör when not specified', async () => {
-      const ctx = {
-        db: makeDb({ existingUUIDs: ['parent-uuid', 'child-uuid'] }),
-        logEvent: jest.fn()
-      };
+      mockQueryOne
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'parent-uuid' }))
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'child-uuid' }));
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations', 'POST', {
         childItemUUID: 'child-uuid'
       });
@@ -164,7 +145,7 @@ describe('item-relations action', () => {
     });
 
     it('returns 400 when childItemUUID is missing', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations', 'POST', {});
       const { res, getStatus } = createMockResponse();
 
@@ -175,7 +156,7 @@ describe('item-relations action', () => {
     });
 
     it('returns 400 when linking item to itself', async () => {
-      const ctx = { db: makeDb({ existingUUIDs: ['same-uuid'] }), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/same-uuid/relations', 'POST', {
         childItemUUID: 'same-uuid'
       });
@@ -189,7 +170,8 @@ describe('item-relations action', () => {
     });
 
     it('returns 404 when parent item does not exist', async () => {
-      const ctx = { db: makeDb({ existingUUIDs: ['child-uuid'] }), logEvent: jest.fn() };
+      mockQueryOne.mockResolvedValue(null);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/missing-parent/relations', 'POST', {
         childItemUUID: 'child-uuid'
       });
@@ -202,7 +184,10 @@ describe('item-relations action', () => {
     });
 
     it('returns 404 when child item does not exist', async () => {
-      const ctx = { db: makeDb({ existingUUIDs: ['parent-uuid'] }), logEvent: jest.fn() };
+      mockQueryOne
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'parent-uuid' }))
+        .mockReturnValueOnce(Promise.resolve(null));
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations', 'POST', {
         childItemUUID: 'missing-child'
       });
@@ -215,10 +200,11 @@ describe('item-relations action', () => {
     });
 
     it('returns 409 when relation already exists', async () => {
-      const ctx = {
-        db: makeDb({ existingUUIDs: ['parent-uuid', 'child-uuid'], throwOnInsert: true }),
-        logEvent: jest.fn()
-      };
+      mockQueryOne
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'parent-uuid' }))
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'child-uuid' }));
+      mockExecute.mockRejectedValue(new Error('UNIQUE constraint failed'));
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations', 'POST', {
         childItemUUID: 'child-uuid'
       });
@@ -234,7 +220,7 @@ describe('item-relations action', () => {
 
   describe('Instance PATCH (update relation)', () => {
     it('logs AccessoryRelationUpdated and returns 200 on success', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations/child-uuid', 'PATCH', {
         notes: 'Belongs together'
       });
@@ -254,7 +240,8 @@ describe('item-relations action', () => {
     });
 
     it('returns 404 when relation does not exist', async () => {
-      const ctx = { db: makeDb({ runChanges: 0 }), logEvent: jest.fn() };
+      mockExecute.mockResolvedValue(0);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations/child-uuid', 'PATCH', {
         notes: 'Note'
       });
@@ -270,7 +257,7 @@ describe('item-relations action', () => {
 
   describe('Instance DELETE (unlink accessory)', () => {
     it('logs AccessoryUnlinked and returns 200 on success', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations/child-uuid', 'DELETE');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -288,7 +275,8 @@ describe('item-relations action', () => {
     });
 
     it('returns 404 when relation does not exist', async () => {
-      const ctx = { db: makeDb({ runChanges: 0 }), logEvent: jest.fn() };
+      mockExecute.mockResolvedValue(0);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/parent-uuid/relations/child-uuid', 'DELETE');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -302,7 +290,7 @@ describe('item-relations action', () => {
 
   describe('Ref-level routes (no event logging)', () => {
     it('GET /api/ref/:artikelNr/relations returns compatible refs', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/ref/ART-1/relations', 'GET');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -314,7 +302,7 @@ describe('item-relations action', () => {
     });
 
     it('POST /api/ref/:artikelNr/relations creates ref relation without logging event', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/ref/ART-1/relations', 'POST', {
         childArtikelNummer: 'ART-2'
       });
@@ -324,12 +312,12 @@ describe('item-relations action', () => {
 
       expect(getStatus()).toBe(201);
       expect(getBody().ok).toBe(true);
-      // ref-level POST intentionally does not emit an event log
       expect(ctx.logEvent).not.toHaveBeenCalled();
     });
 
     it('POST /api/ref/:artikelNr/relations returns 409 on duplicate', async () => {
-      const ctx = { db: makeDb({ throwOnInsert: true }), logEvent: jest.fn() };
+      mockExecute.mockRejectedValue(new Error('UNIQUE constraint failed'));
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/ref/ART-1/relations', 'POST', {
         childArtikelNummer: 'ART-2'
       });
@@ -342,7 +330,7 @@ describe('item-relations action', () => {
     });
 
     it('DELETE /api/ref/:artikelNr/relations/:childNr removes ref relation without logging event', async () => {
-      const ctx = { db: makeDb({}), logEvent: jest.fn() };
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/ref/ART-1/relations/ART-2', 'DELETE');
       const { res, getStatus, getBody } = createMockResponse();
 
@@ -354,7 +342,8 @@ describe('item-relations action', () => {
     });
 
     it('DELETE /api/ref/:artikelNr/relations/:childNr returns 404 when relation not found', async () => {
-      const ctx = { db: makeDb({ runChanges: 0 }), logEvent: jest.fn() };
+      mockExecute.mockResolvedValue(0);
+      const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/ref/ART-1/relations/ART-2', 'DELETE');
       const { res, getStatus } = createMockResponse();
 

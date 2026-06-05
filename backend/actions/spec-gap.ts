@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { getSpecContract } from '../contracts/registry';
 import { checkSpecGap } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
+import { query } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -37,14 +38,13 @@ const action = defineHttpAction({
         return;
       }
 
-      const rows = ctx.db
-        .prepare(
-          `SELECT Artikel_Nummer, Langtext
-           FROM item_refs
-           WHERE CAST(Unterkategorien_A AS INTEGER) = @subcategory
-             AND Langtext IS NOT NULL`
-        )
-        .all({ subcategory: subcategoryCode }) as Array<{ Artikel_Nummer: string; Langtext: string | null }>;
+      const rows = await query<{ Artikel_Nummer: string; Langtext: string | null }>(
+        `SELECT "Artikel_Nummer", "Langtext"
+         FROM item_refs
+         WHERE CAST("Unterkategorien_A" AS INTEGER) = $1
+           AND "Langtext" IS NOT NULL`,
+        [subcategoryCode]
+      );
 
       const items: Array<{
         artikelNummer: string;

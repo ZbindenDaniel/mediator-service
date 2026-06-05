@@ -28,7 +28,16 @@ If printer checks fail after a CUPS restart, first verify `/run/cups` is visible
 ## Provisioning services
 
 1. Start the local dependencies with Docker Compose: `docker compose up -d`. The bundled configuration launches Postgres alongside the mediator so the backend can connect via the Compose network aliases.
-2. After the containers stabilise, run your migration/verification scripts (for example `npm run migrate` when available or `node scripts/verify-agentic-migration.js` for schema checks) to confirm the Postgres schema matches the latest models before exercising new features.
+2. **SQLite → PostgreSQL data migration (one-time, only when upgrading from a SQLite deployment):**
+   ```bash
+   # Point DB_PATH at your existing SQLite file (default: ./data/mediator.sqlite)
+   export DB_PATH=/path/to/mediator.sqlite
+   # DATABASE_URL must be set (already in .env for Docker Compose defaults)
+   npm run migrate
+   ```
+   The script prints a row-count summary at the end — verify the numbers match your SQLite source.
+   **Skip this step for fresh installations** — the backend creates all tables automatically on first start.
+   > Note: the script is safe to re-run only when the Postgres tables are empty. If you need to re-run it, truncate the target tables first.
 3. If you swap in an external Postgres instance, update the `.env` variables (`DATABASE_URL`, `PGHOST`, etc.) accordingly and document the change so teammates inherit the correct connection string.
 4. When running the mediator against the host-installed Ollama daemon, ensure Docker has access to the host gateway. The Compose stack now resolves `host.docker.internal` automatically; confirm the daemon listens on `http://127.0.0.1:11434` (default) so the container can reach `http://host.docker.internal:11434` without extra port publishing.
 

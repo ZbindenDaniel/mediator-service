@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
+import { withTransaction } from '../db-client';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
 // TODO(agent): Remove category-based shelf label fallback assumptions from any remaining admin tooling.
@@ -134,76 +135,63 @@ const action = defineHttpAction({
         const prefix = `S-${location}-${floor}-`;
         const nowDate = new Date();
         const now = nowDate.toISOString();
-        const shelfTxn = ctx.db.transaction(
-          (payload: {
-            actor: string;
-            prefix: string;
-            location: string;
-            floor: string;
-            label: string;
-            notes: string | null;
-            now: string;
-          }) => {
-            const maxRow = ctx.getMaxShelfIndex.get({ prefix: payload.prefix }) as
-              | { MaxIndex: number | null }
-              | undefined;
-            let nextIndex = typeof maxRow?.MaxIndex === 'number' && Number.isFinite(maxRow.MaxIndex)
-              ? maxRow.MaxIndex + 1
-              : 1;
-            let attempts = 0;
-            const maxAttempts = 25;
+        const shelfId = await withTransaction(async (_client) => {
+          const payload = {
+            actor,
+            prefix,
+            location: location!,
+            floor: floor!,
+            label: resolvedShelfLabel,
+            notes: resolvedNotes,
+            now
+          };
+          const maxIndex = await ctx.getMaxShelfIndex(payload.prefix);
+          let nextIndex = typeof maxIndex === 'number' && Number.isFinite(maxIndex)
+            ? maxIndex + 1
+            : 1;
+          let attempts = 0;
+          const maxAttempts = 25;
 
-            while (attempts < maxAttempts) {
-              const candidate = `${payload.prefix}${String(nextIndex).padStart(4, '0')}`;
-              const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
-              if (existing?.BoxID) {
-                console.warn('[shelf] Shelf ID collision detected, retrying', {
-                  candidate,
-                  location: payload.location,
-                  floor: payload.floor
-                });
-                attempts += 1;
-                nextIndex += 1;
-                continue;
-              }
-
-              ctx.runUpsertBox({
-                BoxID: candidate,
-                LocationId: candidate,
-                Label: payload.label,
-                CreatedAt: payload.now,
-                Notes: payload.notes,
-                PhotoPath: null,
-                PlacedBy: payload.actor,
-                PlacedAt: null,
-                UpdatedAt: payload.now
+          while (attempts < maxAttempts) {
+            const candidate = `${payload.prefix}${String(nextIndex).padStart(4, '0')}`;
+            const existing = await ctx.getBox(candidate) as { BoxID?: string } | undefined;
+            if (existing?.BoxID) {
+              console.warn('[shelf] Shelf ID collision detected, retrying', {
+                candidate,
+                location: payload.location,
+                floor: payload.floor
               });
-              ctx.logEvent({
-                Actor: payload.actor,
-                EntityType: 'Box',
-                EntityId: candidate,
-                Event: 'Created',
-                Meta: JSON.stringify({
-                  type: 'shelf',
-                  location: payload.location,
-                  floor: payload.floor
-                })
-              });
-              return candidate;
+              attempts += 1;
+              nextIndex += 1;
+              continue;
             }
 
-            throw new Error('Failed to allocate shelf ID');
+            await ctx.runUpsertBox({
+              BoxID: candidate,
+              LocationId: candidate,
+              Label: payload.label,
+              CreatedAt: payload.now,
+              Notes: payload.notes,
+              PhotoPath: null,
+              PlacedBy: payload.actor,
+              PlacedAt: null,
+              UpdatedAt: payload.now
+            });
+            await ctx.logEvent({
+              Actor: payload.actor,
+              EntityType: 'Box',
+              EntityId: candidate,
+              Event: 'Created',
+              Meta: JSON.stringify({
+                type: 'shelf',
+                location: payload.location,
+                floor: payload.floor
+              })
+            });
+            return candidate;
           }
-        );
 
-        const shelfId = shelfTxn({
-          actor,
-          prefix,
-          location,
-          floor,
-          label: resolvedShelfLabel,
-          notes: resolvedNotes,
-          now
+          throw new Error('Failed to allocate shelf ID');
         });
         console.info('[shelf] Created shelf', { boxId: shelfId, location, floor, actor });
         return sendJson(res, 200, { ok: true, id: shelfId });
@@ -217,13 +205,13 @@ const action = defineHttpAction({
         if (!/^B-[A-Za-z0-9]/.test(requestedBoxId)) {
           return sendJson(res, 400, { error: 'boxId format invalid; must start with B-' });
         }
-        const existingBox = ctx.getBox.get(requestedBoxId) as { BoxID?: string } | undefined;
+        const existingBox = await ctx.getBox(requestedBoxId) as { BoxID?: string } | undefined;
         if (existingBox?.BoxID) {
           return sendJson(res, 409, { error: 'Box mit dieser ID existiert bereits' });
         }
         const nowDate = new Date();
         const now = nowDate.toISOString();
-        ctx.runUpsertBox({
+        await ctx.runUpsertBox({
           BoxID: requestedBoxId,
           LocationId: null,
           Label: null,
@@ -234,7 +222,7 @@ const action = defineHttpAction({
           PlacedAt: null,
           UpdatedAt: now
         });
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: actor,
           EntityType: 'Box',
           EntityId: requestedBoxId,
@@ -245,10 +233,10 @@ const action = defineHttpAction({
         return sendJson(res, 200, { ok: true, id: requestedBoxId });
       }
 
-      const last = ctx.getMaxBoxId.get() as { BoxID: string } | undefined;
+      const lastBoxId = await ctx.getMaxBoxId() as string | null;
       let seq = 0;
-      if (last?.BoxID) {
-        const m = last.BoxID.match(/^B-\d{6}-(\d+)$/);
+      if (lastBoxId) {
+        const m = lastBoxId.match(/^B-\d{6}-(\d+)$/);
         if (m) seq = parseInt(m[1], 10);
       }
       const nowDate = new Date();
@@ -259,14 +247,15 @@ const action = defineHttpAction({
       const prefix = `B-${dd}${mm}${yy}-`;
       // TODO(agent): Revisit box ID collision retry caps once contention telemetry is available.
       const maxAttempts = 25;
-      const txn = ctx.db.transaction((payload: { actor: string; now: string; prefix: string; startSeq: number }) => {
+      const id = await withTransaction(async (_client) => {
+        const payload = { actor, now, prefix, startSeq: seq + 1 };
         let attempts = 0;
         let nextSeq = payload.startSeq;
         let candidate = '';
         try {
           while (attempts < maxAttempts) {
             candidate = `${payload.prefix}${String(nextSeq).padStart(4, '0')}`;
-            const existing = ctx.getBox.get(candidate) as { BoxID?: string } | undefined;
+            const existing = await ctx.getBox(candidate) as { BoxID?: string } | undefined;
             if (existing?.BoxID) {
               console.warn('[create-box] Box ID collision detected, retrying', {
                 actor: payload.actor,
@@ -278,7 +267,7 @@ const action = defineHttpAction({
               continue;
             }
 
-            ctx.runUpsertBox({
+            await ctx.runUpsertBox({
               BoxID: candidate,
               // TODO(agent): Capture an initial Label once box creation collects placement context.
               LocationId: null,
@@ -290,7 +279,7 @@ const action = defineHttpAction({
               PlacedAt: null,
               UpdatedAt: payload.now
             });
-            ctx.logEvent({
+            await ctx.logEvent({
               Actor: payload.actor,
               EntityType: 'Box',
               EntityId: candidate,
@@ -311,7 +300,6 @@ const action = defineHttpAction({
           throw error;
         }
       });
-      const id = txn({ actor, now, prefix, startSeq: seq + 1 });
       sendJson(res, 200, { ok: true, id });
     } catch (err) {
       console.error('[create-box] Create box failed', err);

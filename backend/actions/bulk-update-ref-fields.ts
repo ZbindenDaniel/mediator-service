@@ -79,7 +79,7 @@ const action = defineHttpAction({
       const groupMap = new Map<string, string[]>();
 
       for (const itemId of itemIds) {
-        const item = ctx.getItem.get(itemId);
+        const item = await ctx.getItem(itemId);
         if (!item) {
           missing.push(itemId);
           continue;
@@ -107,7 +107,7 @@ const action = defineHttpAction({
 
       let updatedArtikelNummern: string[] = [];
       try {
-        updatedArtikelNummern = ctx.bulkUpdateItemRefShopFields(groups, shopartikel, veröffentlicht, verkaufspreis, actor);
+        updatedArtikelNummern = await ctx.bulkUpdateItemRefShopFields(groups, shopartikel, veröffentlicht, verkaufspreis, actor);
       } catch (dbErr) {
         console.error('[bulk-update-ref-fields] Database transaction failed', dbErr);
         return sendJson(res, 500, { error: (dbErr as Error).message });

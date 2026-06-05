@@ -4,6 +4,7 @@
  * TODO(agentic-transcript-notes): Ensure terminal agentic runs record a transcript note summarizing the outcome for reviewers.
  * TODO(agentic-review-history): Evaluate retention window once downstream aggregation pipelines confirm read cadence.
  */
+import { withTransaction } from '../db-client';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
@@ -37,23 +38,20 @@ export interface AgenticResultLogger {
 }
 
 export interface AgenticResultHandlerContext {
-  db: {
-    transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>) => ReturnType<T>;
-  };
-  getItemReference: { get: (artikelNummer: string) => ItemRef | undefined };
-  getAgenticRun: { get: (artikelNummer: string) => AgenticRun | undefined };
-  persistItemReference: (item: ItemRef) => void;
-  updateAgenticRunStatus: { run: (update: Record<string, unknown>) => { changes?: number } };
-  upsertAgenticRun: { run: (update: Record<string, unknown>) => unknown };
-  insertAgenticRunReviewHistoryEntry?: { run: (entry: Record<string, unknown>) => unknown };
+  getItemReference: (artikelNummer: string) => Promise<ItemRef | null>;
+  getAgenticRun: (artikelNummer: string) => Promise<AgenticRun | null>;
+  persistItemReference: (item: ItemRef) => Promise<void>;
+  updateAgenticRunStatus: (update: Record<string, unknown> | any) => Promise<number>;
+  upsertAgenticRun: (update: Record<string, unknown> | any) => Promise<void>;
+  insertAgenticRunReviewHistoryEntry?: (entry: Record<string, unknown> | any) => Promise<void>;
   logEvent: (event: {
     Actor: string;
     EntityType: string;
     EntityId: string;
     Event: string;
     Meta: string;
-  }) => void;
-  getAgenticRequestLog?: (requestId: string) => AgenticRequestLog | null;
+  }) => Promise<void>;
+  getAgenticRequestLog?: (requestId: string) => Promise<AgenticRequestLog | null>;
 }
 
 export interface AgenticResultHandlerInput {
@@ -373,11 +371,11 @@ function collectLegacyIdentifierKeys(payload: Record<string, unknown>): string[]
   return Array.from(keys);
 }
 
-function loadAgenticRequestLog(
+async function loadAgenticRequestLog(
   ctx: AgenticResultHandlerContext,
   requestId: string,
   logger: AgenticResultLogger | undefined
-): AgenticRequestLog | null {
+): Promise<AgenticRequestLog | null> {
   if (typeof ctx.getAgenticRequestLog !== 'function') {
     logger?.error?.('Agentic result missing getAgenticRequestLog dependency');
     throw new AgenticResultProcessingError(
@@ -389,7 +387,7 @@ function loadAgenticRequestLog(
   }
 
   try {
-    return ctx.getAgenticRequestLog(requestId) ?? null;
+    return (await ctx.getAgenticRequestLog(requestId)) ?? null;
   } catch (err) {
     logger?.error?.('Agentic result failed to load request log', {
       requestId,
@@ -412,10 +410,10 @@ function resolveInitialSearch(
   return null;
 }
 
-export function handleAgenticResult(
+export async function handleAgenticResult(
   input: AgenticResultHandlerInput,
   deps: AgenticResultHandlerDependencies
-): AgenticResultHandlerSuccess {
+): Promise<AgenticResultHandlerSuccess> {
   const logger = deps.logger ?? console;
   const { ctx } = deps;
   const payload = (input.payload ?? {}) as Record<string, unknown>;
@@ -471,7 +469,7 @@ export function handleAgenticResult(
 
   let requestLog: AgenticRequestLog | null = null;
   try {
-    requestLog = loadAgenticRequestLog(ctx, requestId, logger);
+    requestLog = await loadAgenticRequestLog(ctx, requestId, logger);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === 'agentic-request-log-accessor-missing') {
@@ -564,21 +562,20 @@ export function handleAgenticResult(
   const eventName = statusForPersistence === AGENTIC_RUN_STATUS_FAILED ? 'AgenticResultFailed' : 'AgenticResultReceived';
   const nowIso = new Date().toISOString();
 
-  const txn = ctx.db.transaction(
-    (
-      artikelNummerInput: string,
-      agenticPayload: any,
-      status: string,
-      now: string,
-      errorText: string | null,
-      needsHumanReview: boolean,
-      summary: string | null,
-      actor: string,
-      review: { ReviewedBy: string | null; Decision: string | null; Notes: string | null }
-    ) => {
+  try {
+    await withTransaction(async () => {
+      const artikelNummerInput = artikelNummer;
+      const agenticPayload = payload.item as Record<string, unknown> | null | undefined;
+      const status = statusForPersistence;
+      const now = nowIso;
+      const needsHumanReview = needsReview;
+      const summary = summaryInput;
+      const actor = agenticActor;
+      const review = { ReviewedBy: reviewedByInput, Decision: reviewDecisionForPersistence, Notes: reviewNotesInput };
+
       let existingReference: ItemRef | null = null;
       try {
-        existingReference = ctx.getItemReference.get(artikelNummerInput) ?? null;
+        existingReference = await ctx.getItemReference(artikelNummerInput) ?? null;
       } catch (err) {
         logger.error?.('Agentic result failed to load item reference', {
           artikelNummer: artikelNummerInput,
@@ -592,7 +589,7 @@ export function handleAgenticResult(
 
       let existingRun: AgenticRun | undefined;
       try {
-        existingRun = ctx.getAgenticRun.get(artikelNummerInput) as AgenticRun | undefined;
+        existingRun = (await ctx.getAgenticRun(artikelNummerInput)) ?? undefined;
       } catch (err) {
         logger.error?.('Agentic result failed to load agentic run', {
           artikelNummer: artikelNummerInput,
@@ -625,7 +622,7 @@ export function handleAgenticResult(
           logger?.info?.({ msg: 'mapped legacy Marktpreis to Verkaufspreis', artikelNummer: artikelNummerInput });
         }
 
-        ctx.persistItemReference(merged as ItemRef);
+        await ctx.persistItemReference(merged as ItemRef);
       } else {
         logger?.info?.({
           msg: 'skipping item update for non-approved agentic run',
@@ -730,15 +727,12 @@ export function handleAgenticResult(
         // the updateAgenticRunStatus statement accepts native booleans.
         const normalizedRunUpdate = normalizeAgenticStatusUpdate(runUpdate);
 
-        const updateResult = ctx.updateAgenticRunStatus.run(normalizedRunUpdate);
-        if (!updateResult?.changes) {
-          logger.warn?.('Agentic run missing on status update, creating record', artikelNummerInput);
-          ctx.upsertAgenticRun.run(normalizedRunUpdate);
-        }
+        // upsertAgenticRun is INSERT ON CONFLICT DO UPDATE — handles both create and update
+        await ctx.upsertAgenticRun(normalizedRunUpdate as Record<string, unknown>);
 
-        if (ctx.insertAgenticRunReviewHistoryEntry?.run && reviewHistoryEligibility.shouldInsertHistory) {
+        if (ctx.insertAgenticRunReviewHistoryEntry && reviewHistoryEligibility.shouldInsertHistory) {
           try {
-            ctx.insertAgenticRunReviewHistoryEntry.run({
+            await ctx.insertAgenticRunReviewHistoryEntry({
               Artikel_Nummer: artikelNummerInput,
               Status: status,
               ReviewState: effectiveReviewState,
@@ -765,7 +759,7 @@ export function handleAgenticResult(
         }
       }
 
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
         EntityId: artikelNummerInput,
@@ -775,31 +769,13 @@ export function handleAgenticResult(
           ReviewState: effectiveReviewState,
           NeedsReview: needsHumanReview,
           Summary: summary,
-          Error: errorText,
+          Error: errorMessage,
           ReviewNotes: normalizedReviewNotes,
           ReviewDecision: normalizedReviewDecision,
           LastModified: now
         })
       });
-    }
-  );
-
-  try {
-    txn(
-      artikelNummer,
-      payload.item,
-      statusForPersistence,
-      nowIso,
-      errorMessage,
-      needsReview,
-      summaryInput,
-      agenticActor,
-      {
-        ReviewedBy: reviewedByInput,
-        Decision: reviewDecisionForPersistence,
-        Notes: reviewNotesInput
-      }
-    );
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message === 'Item not found') {
@@ -898,8 +874,8 @@ export function handleAgenticResult(
 export function createAgenticResultHandler(
   ctx: AgenticResultHandlerContext,
   logger?: AgenticResultLogger
-): (payload: AgenticResultPayload) => AgenticResultHandlerSuccess {
-  return (payload) => {
+): (payload: AgenticResultPayload) => Promise<AgenticResultHandlerSuccess> {
+  return async (payload) => {
     const payloadArtikelNummer = resolvePayloadArtikelNummer(payload as Record<string, unknown>) ?? '';
     return handleAgenticResult({ artikelNummer: payloadArtikelNummer, payload }, { ctx, logger });
   };

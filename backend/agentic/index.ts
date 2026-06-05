@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import { query, queryOne, execute, withTransaction } from '../db-client';
 import {
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
@@ -54,15 +54,14 @@ export type AgenticModelInvokerFn = (
 ) => Promise<AgenticModelInvocationResult>;
 
 export interface AgenticServiceDependencies {
-  db: Database.Database;
-  getAgenticRun: Database.Statement;
-  getItemReference: Database.Statement;
-  upsertAgenticRun: Database.Statement;
-  updateAgenticRunStatus: Database.Statement;
+  getAgenticRun: (id: string) => Promise<AgenticRun | null>;
+  getItemReference: (id: string) => Promise<any>;
+  upsertAgenticRun: (params: Record<string, unknown>) => Promise<void>;
+  updateAgenticRunStatus: (params: Record<string, unknown>) => Promise<number>;
   updateQueuedAgenticRunQueueState?: (update: AgenticRunQueueUpdate) => void;
-  logEvent: (payload: LogEventPayload) => void;
-  updateAgenticReview?: Database.Statement;
-  findByMaterial?: { all?: (artikelNummer: string) => Array<{ ItemUUID?: string | null }> };
+  logEvent: (payload: LogEventPayload) => Promise<void> | void;
+  updateAgenticReview?: any;
+  findByMaterial?: (artikelNummer: string) => Promise<any[]>;
   now?: () => Date;
   logger?: AgenticServiceLogger;
   invokeModel?: AgenticModelInvokerFn;
@@ -120,11 +119,11 @@ const AGENTIC_STATUS_UPDATE_FLAGS: AgenticRunStatusFlag[] = [
 ];
 
 const SELECT_STALE_AGENTIC_RUNS_SQL = `
-  SELECT Id, Artikel_Nummer, SearchQuery, LastSearchLinksJson, Status, LastModified, ReviewState, ReviewedBy,
-         LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
+  SELECT "Id", "Artikel_Nummer", "SearchQuery", "LastSearchLinksJson", "Status", "LastModified", "ReviewState", "ReviewedBy",
+         "LastReviewDecision", "LastReviewNotes", "RetryCount", "NextRetryAt", "LastError", "LastAttemptAt"
     FROM agentic_runs
-   WHERE Status IN ('queued', 'running')
-   ORDER BY datetime(LastModified) ASC, Id ASC
+   WHERE "Status" IN ('queued', 'running')
+   ORDER BY "LastModified" ASC, "Id" ASC
 `;
 
 const MAX_CONCURRENT_RUNNING_RUNS = 3;
@@ -282,11 +281,12 @@ function resolveNow(deps: AgenticServiceDependencies): Date {
   }
 }
 
-function fetchRunningCount(deps: AgenticServiceDependencies, logger: AgenticServiceLogger): number {
-  const runningRow = deps.db
-    .prepare(`SELECT COUNT(*) as runningCount FROM agentic_runs WHERE Status = @status`)
-    .get({ status: AGENTIC_RUN_STATUS_RUNNING }) as { runningCount?: number } | undefined;
-  const count = Number.isFinite(runningRow?.runningCount) ? Number(runningRow?.runningCount) : 0;
+async function fetchRunningCount(deps: AgenticServiceDependencies, logger: AgenticServiceLogger): Promise<number> {
+  const runningRow = await queryOne<{ runningcount?: number }>(
+    `SELECT COUNT(*) as runningcount FROM agentic_runs WHERE "Status" = $1`,
+    [AGENTIC_RUN_STATUS_RUNNING]
+  );
+  const count = Number.isFinite(runningRow?.runningcount) ? Number(runningRow?.runningcount) : 0;
   // logger.info?.('[agentic-service] Fetched running agentic run count', { runningCount: count });
   return count;
 }
@@ -331,15 +331,15 @@ function resolveAgenticArtikelNummer(
   return { artikelNummer: trimmed, reason: null, sourceItemId: trimmed };
 }
 
-function hasAgenticReference(
+async function hasAgenticReference(
   artikelNummer: string,
   deps: AgenticServiceDependencies,
   logger: AgenticServiceLogger,
   context: string | null,
   source: string
-): boolean {
+): Promise<boolean> {
   try {
-    const referenceRow = deps.getItemReference.get(artikelNummer) as { Artikel_Nummer?: string } | undefined;
+    const referenceRow = await deps.getItemReference(artikelNummer) as { Artikel_Nummer?: string } | undefined | null;
     if (!referenceRow) {
       logger.warn?.('[agentic-service] Missing item reference for agentic run', {
         artikelNummer,
@@ -614,13 +614,13 @@ export async function appendOutcomeTranscriptSection(
   }
 }
 
-function fetchAgenticRun(
+async function fetchAgenticRun(
   itemId: string,
   deps: AgenticServiceDependencies,
   logger: AgenticServiceLogger
-): AgenticRun | null {
+): Promise<AgenticRun | null> {
   try {
-    const result = deps.getAgenticRun.get(itemId) as AgenticRun | undefined;
+    const result = await deps.getAgenticRun(itemId);
     return attachTranscriptReference(result ?? null, itemId, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to load agentic run', {
@@ -631,7 +631,7 @@ function fetchAgenticRun(
   }
 }
 
-function persistQueuedRun(
+async function persistQueuedRun(
   payload: {
     artikelNummer: string;
     searchQuery: string;
@@ -642,7 +642,7 @@ function persistQueuedRun(
   },
   deps: AgenticServiceDependencies,
   logger: AgenticServiceLogger
-): AgenticRun | null {
+): Promise<AgenticRun | null> {
   const now = resolveNow(deps).toISOString();
   const reviewDecision = payload.review?.decision ?? null;
   const reviewNotes = payload.review?.notes ?? null;
@@ -650,7 +650,7 @@ function persistQueuedRun(
   const reviewedBy = payload.review?.reviewedBy ?? null;
 
   try {
-    deps.upsertAgenticRun.run({
+    await deps.upsertAgenticRun({
       Artikel_Nummer: payload.artikelNummer,
       SearchQuery: payload.searchQuery,
       Status: AGENTIC_RUN_STATUS_QUEUED,
@@ -670,7 +670,7 @@ function persistQueuedRun(
   }
 
   try {
-    deps.logEvent({
+    await deps.logEvent({
       Actor: payload.actor,
       EntityType: 'Item',
       EntityId: payload.artikelNummer,
@@ -703,7 +703,7 @@ interface BackgroundInvocationPayload {
   imageData?: string | null;
 }
 
-function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): void {
+async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): Promise<void> {
   const { deps, logger } = payload;
   const invokeModel = deps.invokeModel;
   if (!invokeModel) {
@@ -712,7 +712,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     let existingRun: AgenticRun | null = null;
 
     try {
-      existingRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
+      existingRun = await fetchAgenticRun(payload.artikelNummer, deps, logger);
     } catch (err) {
       logger.error?.('[agentic-service] Failed to load existing run after missing invoker', {
         artikelNummer: payload.artikelNummer,
@@ -762,7 +762,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     let existingRun: AgenticRun | null = null;
 
     try {
-      existingRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
+      existingRun = await fetchAgenticRun(payload.artikelNummer, deps, logger);
     } catch (err) {
       logger.error?.('[agentic-service] Failed to load existing run before invocation', {
         artikelNummer: payload.artikelNummer,
@@ -780,8 +780,12 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
     // execution, and closes the race window left by the dispatch-time cap check.
     let promoted = false;
     try {
-      const promoteTransaction = deps.db.transaction(() => {
-        const currentRunningCount = fetchRunningCount(deps, logger);
+      promoted = await withTransaction(async (client) => {
+        const countResult = await client.query(
+          `SELECT COUNT(*) as runningcount FROM agentic_runs WHERE "Status" = $1`,
+          [AGENTIC_RUN_STATUS_RUNNING]
+        );
+        const currentRunningCount = Number(countResult.rows[0]?.runningcount ?? 0);
         if (currentRunningCount >= MAX_CONCURRENT_RUNNING_RUNS) {
           logger.info?.('[agentic-service] Concurrency cap reached at promotion; leaving run queued', {
             artikelNummer: payload.artikelNummer,
@@ -790,7 +794,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
           });
           return false;
         }
-        const latestRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
+        const latestRun = await fetchAgenticRun(payload.artikelNummer, deps, logger);
         if (!latestRun || latestRun.Status !== AGENTIC_RUN_STATUS_QUEUED) {
           logger.info?.('[agentic-service] Run no longer queued at promotion; skipping invocation', {
             artikelNummer: payload.artikelNummer,
@@ -798,7 +802,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
           });
           return false;
         }
-        const updateResult = deps.updateAgenticRunStatus.run(
+        const updateResult = await deps.updateAgenticRunStatus(
           normalizeAgenticStatusUpdate({
             Artikel_Nummer: payload.artikelNummer,
             Status: AGENTIC_RUN_STATUS_RUNNING,
@@ -821,7 +825,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
             LastAttemptAtIsSet: true
           })
         );
-        if (!updateResult?.changes) {
+        if (!updateResult) {
           logger.warn?.('[agentic-service] Agentic run mark-running updated zero rows', {
             artikelNummer: payload.artikelNummer
           });
@@ -833,7 +837,6 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         });
         return true;
       });
-      promoted = promoteTransaction();
     } catch (err) {
       const errorMessage = toErrorMessage(err);
       logger.error?.('[agentic-service] Failed to mark agentic run running prior to invocation', {
@@ -867,7 +870,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
       try {
         let existingRun: AgenticRun | null = null;
         try {
-          existingRun = fetchAgenticRun(payload.artikelNummer, deps, logger);
+          existingRun = await fetchAgenticRun(payload.artikelNummer, deps, logger);
         } catch (loadErr) {
           logger.error?.('[agentic-service] Failed to load run during auto-cancel', {
             artikelNummer: payload.artikelNummer,
@@ -895,7 +898,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         });
 
         try {
-          const updateResult = deps.updateAgenticRunStatus.run(
+          const updateResult = await deps.updateAgenticRunStatus(
             normalizeAgenticStatusUpdate({
               Artikel_Nummer: payload.artikelNummer,
               Status: AGENTIC_RUN_STATUS_CANCELLED,
@@ -919,7 +922,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
             })
           );
 
-          if (!updateResult?.changes) {
+          if (!updateResult) {
             logger.warn?.('[agentic-service] Auto-cancel updated zero rows after failure', {
               artikelNummer: payload.artikelNummer,
               reason
@@ -939,7 +942,7 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
         }
 
         try {
-          deps.logEvent({
+          await deps.logEvent({
             Actor: 'agentic-service',
             EntityType: 'Item',
             EntityId: payload.artikelNummer,
@@ -1031,10 +1034,10 @@ function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): v
 }
 
 // TODO(agentic-queue-dispatch): Add queue-level metrics once dispatch cadence is in production.
-export function dispatchQueuedAgenticRuns(
+export async function dispatchQueuedAgenticRuns(
   deps: AgenticServiceDependencies,
   { limit }: { limit?: number } = {}
-): { scheduled: number; skipped: number; failed: number } {
+): Promise<{ scheduled: number; skipped: number; failed: number }> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
@@ -1044,17 +1047,17 @@ export function dispatchQueuedAgenticRuns(
   // updating the run's status.
   try {
     const nowIso = resolveNow(deps).toISOString();
-    const staleRunsStatement = deps.db.prepare(
-      `SELECT Artikel_Nummer, RetryCount, LastAttemptAt
-         FROM agentic_runs
-        WHERE Status = 'running'
-          AND datetime(LastAttemptAt) < datetime('now', '-${STALE_RUN_TIMEOUT_MINUTES} minutes')`
-    );
-    const staleRuns = staleRunsStatement.all() as Array<{
+    const staleRuns = await query<{
       Artikel_Nummer: string;
       RetryCount: number | null;
       LastAttemptAt: string | null;
-    }>;
+    }>(
+      `SELECT "Artikel_Nummer", "RetryCount", "LastAttemptAt"
+         FROM agentic_runs
+        WHERE "Status" = 'running'
+          AND "LastAttemptAt"::timestamptz < NOW() - INTERVAL '${STALE_RUN_TIMEOUT_MINUTES} minutes'`,
+      []
+    );
     for (const staleRun of staleRuns) {
       logger.warn?.('[agentic-service] Recovering stale running agentic run', {
         artikelNummer: staleRun.Artikel_Nummer,
@@ -1081,7 +1084,7 @@ export function dispatchQueuedAgenticRuns(
   let runningCount = 0;
 
   try {
-    runningCount = fetchRunningCount(deps, logger);
+    runningCount = await fetchRunningCount(deps, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to determine currently running agentic run count', {
       error: toErrorMessage(err)
@@ -1101,7 +1104,7 @@ export function dispatchQueuedAgenticRuns(
   let queuedRuns: AgenticRun[] = [];
 
   try {
-    queuedRuns = fetchQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
+    queuedRuns = await fetchQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
   } catch (err) {
     logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
       error: toErrorMessage(err),
@@ -1155,7 +1158,7 @@ export function dispatchQueuedAgenticRuns(
       if (imageData) {
         pendingOcrImageData.delete(artikelNummer);
       }
-      scheduleAgenticModelInvocation({
+      void scheduleAgenticModelInvocation({
         artikelNummer,
         searchQuery,
         context: null,
@@ -1196,8 +1199,7 @@ export function dispatchQueuedAgenticRuns(
 
 function validateDependencies(deps: AgenticServiceDependencies): void {
   if (
-    !deps?.db ||
-    !deps.getAgenticRun ||
+    !deps?.getAgenticRun ||
     !deps.getItemReference ||
     !deps.upsertAgenticRun ||
     !deps.updateAgenticRunStatus ||
@@ -1250,7 +1252,7 @@ export async function startAgenticRun(
     return { agentic: null, queued: false, created: false, reason: 'missing-search-query' };
   }
 
-  if (!hasAgenticReference(artikelNummer, deps, logger, input.context ?? null, 'startAgenticRun')) {
+  if (!await hasAgenticReference(artikelNummer, deps, logger, input.context ?? null, 'startAgenticRun')) {
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-reference', logger);
     return { agentic: null, queued: false, created: false, reason: 'missing-reference' };
   }
@@ -1265,14 +1267,14 @@ export async function startAgenticRun(
     let agentic: AgenticRun | null = null;
     let alreadyExists = false;
 
-    const createIfAbsent = deps.db.transaction(() => {
-      const existing = fetchAgenticRun(artikelNummer, deps, logger);
+    await withTransaction(async (_client) => {
+      const existing = await fetchAgenticRun(artikelNummer, deps, logger);
       if (existing) {
         alreadyExists = true;
         agentic = existing;
         return;
       }
-      agentic = persistQueuedRun(
+      agentic = await persistQueuedRun(
         {
           artikelNummer,
           searchQuery,
@@ -1285,8 +1287,6 @@ export async function startAgenticRun(
         logger
       );
     });
-
-    createIfAbsent();
 
     if (alreadyExists) {
       logger.info?.('[agentic-service] Skipping agentic run creation because canonical run already exists', {
@@ -1350,7 +1350,7 @@ export async function cancelAgenticRun(
       ? `Cancelled by ${actor}`
       : 'Agentic run cancelled';
 
-  const existing = fetchAgenticRun(artikelNummer, deps, logger);
+  const existing = await fetchAgenticRun(artikelNummer, deps, logger);
   if (!existing) {
     logger.warn?.('[agentic-service] cancelAgenticRun attempted without existing run', { artikelNummer });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-found', logger);
@@ -1359,71 +1359,70 @@ export async function cancelAgenticRun(
 
   const nowIso = resolveNow(deps).toISOString();
   recordRequestLogStart(request, existing.SearchQuery ?? null, logger);
-  const txn = deps.db.transaction((actorName: string) => {
-    const retryCount = existing.RetryCount ?? 0;
-    const lastAttemptAt = existing.LastAttemptAt ?? nowIso;
-    const lastError = (cancellationReason || existing.LastError) ?? null;
-
-    applyQueueUpdate(deps, logger, {
-      Artikel_Nummer: artikelNummer,
-      Status: AGENTIC_RUN_STATUS_CANCELLED,
-      LastModified: nowIso,
-      RetryCount: retryCount,
-      NextRetryAt: null,
-      LastError: lastError,
-      LastAttemptAt: lastAttemptAt
-    });
-
-    const updateResult = deps.updateAgenticRunStatus.run(
-      normalizeAgenticStatusUpdate({
-        Artikel_Nummer: artikelNummer,
-        Status: AGENTIC_RUN_STATUS_CANCELLED,
-        SearchQuery: existing.SearchQuery ?? null,
-        LastModified: nowIso,
-        ReviewState: 'not_required',
-        ReviewedBy: null,
-        ReviewedByIsSet: true,
-        LastReviewDecision: existing.LastReviewDecision ?? null,
-        LastReviewDecisionIsSet: true,
-        LastReviewNotes: existing.LastReviewNotes ?? null,
-        LastReviewNotesIsSet: true,
-        RetryCount: retryCount,
-        RetryCountIsSet: true,
-        NextRetryAt: null,
-        NextRetryAtIsSet: true,
-        LastError: lastError,
-        LastErrorIsSet: true,
-        LastAttemptAt: lastAttemptAt,
-        LastAttemptAtIsSet: true
-      })
-    );
-    if (!updateResult?.changes) {
-      throw new Error('Failed to cancel agentic run');
-    }
-
-    try {
-      deps.logEvent({
-        Actor: actor,
-        EntityType: 'Item',
-        EntityId: artikelNummer,
-        Event: 'AgenticRunCancelled',
-        Meta: JSON.stringify({
-          previousStatus: existing.Status ?? null,
-          cancelledAt: nowIso,
-          reason: cancellationReason ?? null
-        })
-      });
-    } catch (err) {
-      logger.error?.('[agentic-service] Failed to record agentic cancel event', {
-        artikelNummer,
-        error: toErrorMessage(err)
-      });
-      throw err;
-    }
-  });
 
   try {
-    txn(actor);
+    await withTransaction(async (_client) => {
+      const retryCount = existing.RetryCount ?? 0;
+      const lastAttemptAt = existing.LastAttemptAt ?? nowIso;
+      const lastError = (cancellationReason || existing.LastError) ?? null;
+
+      applyQueueUpdate(deps, logger, {
+        Artikel_Nummer: artikelNummer,
+        Status: AGENTIC_RUN_STATUS_CANCELLED,
+        LastModified: nowIso,
+        RetryCount: retryCount,
+        NextRetryAt: null,
+        LastError: lastError,
+        LastAttemptAt: lastAttemptAt
+      });
+
+      const updateResult = await deps.updateAgenticRunStatus(
+        normalizeAgenticStatusUpdate({
+          Artikel_Nummer: artikelNummer,
+          Status: AGENTIC_RUN_STATUS_CANCELLED,
+          SearchQuery: existing.SearchQuery ?? null,
+          LastModified: nowIso,
+          ReviewState: 'not_required',
+          ReviewedBy: null,
+          ReviewedByIsSet: true,
+          LastReviewDecision: existing.LastReviewDecision ?? null,
+          LastReviewDecisionIsSet: true,
+          LastReviewNotes: existing.LastReviewNotes ?? null,
+          LastReviewNotesIsSet: true,
+          RetryCount: retryCount,
+          RetryCountIsSet: true,
+          NextRetryAt: null,
+          NextRetryAtIsSet: true,
+          LastError: lastError,
+          LastErrorIsSet: true,
+          LastAttemptAt: lastAttemptAt,
+          LastAttemptAtIsSet: true
+        })
+      );
+      if (!updateResult) {
+        throw new Error('Failed to cancel agentic run');
+      }
+
+      try {
+        await deps.logEvent({
+          Actor: actor,
+          EntityType: 'Item',
+          EntityId: artikelNummer,
+          Event: 'AgenticRunCancelled',
+          Meta: JSON.stringify({
+            previousStatus: existing.Status ?? null,
+            cancelledAt: nowIso,
+            reason: cancellationReason ?? null
+          })
+        });
+      } catch (err) {
+        logger.error?.('[agentic-service] Failed to record agentic cancel event', {
+          artikelNummer,
+          error: toErrorMessage(err)
+        });
+        throw err;
+      }
+    });
     finalizeRequestLog(request, REQUEST_STATUS_CANCELLED, null, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to cancel agentic run', {
@@ -1453,7 +1452,7 @@ export async function cancelAgenticRun(
     });
   }
 
-  const refreshed = fetchAgenticRun(artikelNummer, deps, logger);
+  const refreshed = await fetchAgenticRun(artikelNummer, deps, logger);
   return { cancelled: true, agentic: refreshed };
 }
 
@@ -1488,7 +1487,7 @@ export async function deleteAgenticRun(
     return { deleted: false, agentic: null, reason: 'missing-actor' };
   }
 
-  const existing = fetchAgenticRun(artikelNummer, deps, logger);
+  const existing = await fetchAgenticRun(artikelNummer, deps, logger);
   if (!existing) {
     logger.warn?.('[agentic-service] deleteAgenticRun attempted without existing run', { artikelNummer });
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-found', logger);
@@ -1504,54 +1503,51 @@ export async function deleteAgenticRun(
 
   const nowIso = resolveNow(deps).toISOString();
   const deletionReason = input.reason && input.reason.trim() ? input.reason.trim() : null;
-  const deleteStatement = deps.db.prepare('DELETE FROM agentic_runs WHERE Artikel_Nummer = ?');
 
   recordRequestLogStart(request, existing.SearchQuery ?? null, logger);
-  const txn = deps.db.transaction(() => {
-    const deleteResult = deleteStatement.run(artikelNummer);
-    if (!deleteResult?.changes) {
-      throw new Error('Failed to delete agentic run');
-    }
-
-    const insertResult = deps.upsertAgenticRun.run({
-      Artikel_Nummer: artikelNummer,
-      SearchQuery: existing.SearchQuery ?? null,
-      Status: AGENTIC_RUN_STATUS_NOT_STARTED,
-      LastModified: nowIso,
-      ReviewState: 'not_required',
-      ReviewedBy: null,
-      LastReviewDecision: null,
-      LastReviewNotes: null,
-      LastSearchLinksJson: existing.LastSearchLinksJson ?? null
-    });
-
-    if (!insertResult?.changes) {
-      throw new Error('Failed to recreate agentic run after deletion');
-    }
-
-    try {
-      deps.logEvent({
-        Actor: actor,
-        EntityType: 'Item',
-        EntityId: artikelNummer,
-        Event: 'AgenticRunReset',
-        Meta: JSON.stringify({
-          previousStatus: existing.Status ?? null,
-          reason: deletionReason,
-          resetAt: nowIso
-        })
-      });
-    } catch (err) {
-      logger.error?.('[agentic-service] Failed to record agentic reset event', {
-        artikelNummer,
-        error: toErrorMessage(err)
-      });
-      throw err;
-    }
-  });
 
   try {
-    txn();
+    await withTransaction(async (client) => {
+      const deleteResult = await client.query(
+        'DELETE FROM agentic_runs WHERE "Artikel_Nummer" = $1',
+        [artikelNummer]
+      );
+      if (!deleteResult?.rowCount) {
+        throw new Error('Failed to delete agentic run');
+      }
+
+      await deps.upsertAgenticRun({
+        Artikel_Nummer: artikelNummer,
+        SearchQuery: existing.SearchQuery ?? null,
+        Status: AGENTIC_RUN_STATUS_NOT_STARTED,
+        LastModified: nowIso,
+        ReviewState: 'not_required',
+        ReviewedBy: null,
+        LastReviewDecision: null,
+        LastReviewNotes: null,
+        LastSearchLinksJson: existing.LastSearchLinksJson ?? null
+      });
+
+      try {
+        await deps.logEvent({
+          Actor: actor,
+          EntityType: 'Item',
+          EntityId: artikelNummer,
+          Event: 'AgenticRunReset',
+          Meta: JSON.stringify({
+            previousStatus: existing.Status ?? null,
+            reason: deletionReason,
+            resetAt: nowIso
+          })
+        });
+      } catch (err) {
+        logger.error?.('[agentic-service] Failed to record agentic reset event', {
+          artikelNummer,
+          error: toErrorMessage(err)
+        });
+        throw err;
+      }
+    });
     finalizeRequestLog(request, REQUEST_STATUS_SUCCESS, null, logger);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to delete agentic run', {
@@ -1562,7 +1558,7 @@ export async function deleteAgenticRun(
     throw err;
   }
 
-  const refreshed = fetchAgenticRun(artikelNummer, deps, logger);
+  const refreshed = await fetchAgenticRun(artikelNummer, deps, logger);
   return { deleted: true, agentic: refreshed };
 }
 
@@ -1599,7 +1595,7 @@ export async function restartAgenticRun(
     context: input.context ?? null
   });
 
-  const existing = fetchAgenticRun(artikelNummer, deps, logger);
+  const existing = await fetchAgenticRun(artikelNummer, deps, logger);
   const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
   if (!searchQuery) {
     logger.warn?.('[agentic-service] restartAgenticRun missing search query', {
@@ -1610,7 +1606,7 @@ export async function restartAgenticRun(
     return { agentic: existing, queued: false, created: !existing, reason: 'missing-search-query' };
   }
 
-  if (!hasAgenticReference(artikelNummer, deps, logger, input.context ?? null, 'restartAgenticRun')) {
+  if (!await hasAgenticReference(artikelNummer, deps, logger, input.context ?? null, 'restartAgenticRun')) {
     finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-reference', logger);
     return { agentic: existing, queued: false, created: false, reason: 'missing-reference' };
   }
@@ -1657,7 +1653,6 @@ export async function restartAgenticRun(
         ? 'merged'
         : 'preserved';
   recordRequestLogStart(request, searchQuery, logger);
-
   logger.info?.('[agentic-service] Restart review metadata transition', {
     artikelNummer,
     context,
@@ -1690,74 +1685,72 @@ export async function restartAgenticRun(
       existing
     )
   });
-  const txn = deps.db.transaction(() => {
-    if (existing) {
-      const updateResult = deps.updateAgenticRunStatus.run(
-        normalizeAgenticStatusUpdate({
+  try {
+    await withTransaction(async (_client) => {
+      if (existing) {
+        const updateResult = await deps.updateAgenticRunStatus(
+          normalizeAgenticStatusUpdate({
+            Artikel_Nummer: artikelNummer,
+            Status: AGENTIC_RUN_STATUS_QUEUED,
+            SearchQuery: searchQuery,
+            LastModified: nowIso,
+            ReviewState: reviewState,
+            ReviewedBy: reviewedBy,
+            ReviewedByIsSet: true,
+            LastReviewDecision: lastReviewDecision,
+            LastReviewDecisionIsSet: true,
+            LastReviewNotes: lastReviewNotes,
+            LastReviewNotesIsSet: true,
+            RetryCount: 0,
+            RetryCountIsSet: true,
+            NextRetryAt: null,
+            NextRetryAtIsSet: true,
+            LastError: null,
+            LastErrorIsSet: true,
+            LastAttemptAt: null,
+            LastAttemptAtIsSet: true
+          })
+        );
+        if (!updateResult) {
+          throw new Error('Failed to reset agentic run');
+        }
+      } else {
+        await deps.upsertAgenticRun({
           Artikel_Nummer: artikelNummer,
-          Status: AGENTIC_RUN_STATUS_QUEUED,
           SearchQuery: searchQuery,
+          Status: AGENTIC_RUN_STATUS_QUEUED,
           LastModified: nowIso,
           ReviewState: reviewState,
           ReviewedBy: reviewedBy,
-          ReviewedByIsSet: true,
           LastReviewDecision: lastReviewDecision,
-          LastReviewDecisionIsSet: true,
           LastReviewNotes: lastReviewNotes,
-          LastReviewNotesIsSet: true,
-          RetryCount: 0,
-          RetryCountIsSet: true,
-          NextRetryAt: null,
-          NextRetryAtIsSet: true,
-          LastError: null,
-          LastErrorIsSet: true,
-          LastAttemptAt: null,
-          LastAttemptAtIsSet: true
-        })
-      );
-      if (!updateResult?.changes) {
-        throw new Error('Failed to reset agentic run');
+          LastSearchLinksJson: null
+        });
       }
-    } else {
-      deps.upsertAgenticRun.run({
-        Artikel_Nummer: artikelNummer,
-        SearchQuery: searchQuery,
-        Status: AGENTIC_RUN_STATUS_QUEUED,
-        LastModified: nowIso,
-        ReviewState: reviewState,
-        ReviewedBy: reviewedBy,
-        LastReviewDecision: lastReviewDecision,
-        LastReviewNotes: lastReviewNotes,
-        LastSearchLinksJson: null
-      });
-    }
 
-    try {
-      deps.logEvent({
-        Actor: actor,
-        EntityType: 'Item',
-        EntityId: artikelNummer,
-        Event: 'AgenticRunRestarted',
-        Meta: JSON.stringify({
-          previousStatus: input.previousStatus ?? existing?.Status ?? null,
-          searchQuery,
-          context,
-          lastReviewDecision: review?.decision ?? null,
-          lastReviewNotes: review?.notes ?? null,
-          lastReviewActor: review?.reviewedBy ?? null
-        })
-      });
-    } catch (err) {
-      logger.error?.('[agentic-service] Failed to record agentic restart event', {
-        artikelNummer,
-        error: toErrorMessage(err)
-      });
-      throw err;
-    }
-  });
-
-  try {
-    txn();
+      try {
+        await deps.logEvent({
+          Actor: actor,
+          EntityType: 'Item',
+          EntityId: artikelNummer,
+          Event: 'AgenticRunRestarted',
+          Meta: JSON.stringify({
+            previousStatus: input.previousStatus ?? existing?.Status ?? null,
+            searchQuery,
+            context,
+            lastReviewDecision: review?.decision ?? null,
+            lastReviewNotes: review?.notes ?? null,
+            lastReviewActor: review?.reviewedBy ?? null
+          })
+        });
+      } catch (err) {
+        logger.error?.('[agentic-service] Failed to record agentic restart event', {
+          artikelNummer,
+          error: toErrorMessage(err)
+        });
+        throw err;
+      }
+    });
   } catch (err) {
     logger.error?.('[agentic-service] Failed to restart agentic run', {
       artikelNummer,
@@ -1767,7 +1760,7 @@ export async function restartAgenticRun(
     throw err;
   }
 
-  const refreshed = fetchAgenticRun(artikelNummer, deps, logger);
+  const refreshed = await fetchAgenticRun(artikelNummer, deps, logger);
 
   recordAgenticRequestLogUpdate(request, AGENTIC_RUN_STATUS_QUEUED, {
     searchQuery,
@@ -1868,8 +1861,7 @@ export async function resumeStaleAgenticRuns(
 
   let staleRuns: AgenticRun[] = [];
   try {
-    const statement = deps.db.prepare(SELECT_STALE_AGENTIC_RUNS_SQL);
-    staleRuns = statement.all() as AgenticRun[];
+    staleRuns = await query<AgenticRun>(SELECT_STALE_AGENTIC_RUNS_SQL, []);
   } catch (err) {
     logger.error?.('[agentic-service] Failed to query stale agentic runs during resume', {
       error: toErrorMessage(err)
@@ -1889,7 +1881,7 @@ export async function resumeStaleAgenticRuns(
   // Respect concurrency cap: only schedule queued runs up to the number of available slots.
   // Already-'running' runs (e.g. server crashed mid-run) get scheduled regardless because
   // their slot was already counted — the atomic gate in runInBackground will re-verify.
-  const resumeRunningCount = fetchRunningCount(deps, logger);
+  const resumeRunningCount = await fetchRunningCount(deps, logger);
   const availableSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - resumeRunningCount);
   let slotsUsed = 0;
 
@@ -1930,7 +1922,7 @@ export async function resumeStaleAgenticRuns(
       });
       let reviewHistory: AgenticRunReviewHistoryEntry[] = [];
       try {
-        reviewHistory = listAgenticRunReviewHistory(run.Artikel_Nummer);
+        reviewHistory = await listAgenticRunReviewHistory(run.Artikel_Nummer);
       } catch (historyErr) {
         logger.warn?.('[agentic-service] Failed to load review history during stale run resume', {
           artikelNummer: run.Artikel_Nummer,
@@ -1938,7 +1930,7 @@ export async function resumeStaleAgenticRuns(
         });
       }
 
-      scheduleAgenticModelInvocation({
+      void scheduleAgenticModelInvocation({
         artikelNummer: run.Artikel_Nummer,
         searchQuery,
         context: null,
@@ -2035,10 +2027,10 @@ export function recordAgenticRequestLogUpdate(
   );
 }
 
-export function getAgenticStatus(
+export async function getAgenticStatus(
   itemId: string,
   deps: AgenticServiceDependencies
-): AgenticRunStatusResult {
+): Promise<AgenticRunStatusResult> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
   const trimmed = (itemId || '').trim();
@@ -2056,13 +2048,13 @@ export function getAgenticStatus(
     return { agentic: null };
   }
 
-  return { agentic: fetchAgenticRun(resolved.artikelNummer, deps, logger) };
+  return { agentic: await fetchAgenticRun(resolved.artikelNummer, deps, logger) };
 }
 
-export function checkAgenticHealth(
+export async function checkAgenticHealth(
   deps: AgenticServiceDependencies,
   options: AgenticHealthOptions = {}
-): AgenticHealthStatus {
+): Promise<AgenticHealthStatus> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
   const request = normalizeRequestContext(options.request ?? null);
@@ -2074,22 +2066,22 @@ export function checkAgenticHealth(
       requestLogged: Boolean(request)
     });
     recordRequestLogStart(request, null, logger);
-    const statement = deps.db.prepare(
-      `SELECT Status as status, COUNT(*) as count, MAX(LastModified) as lastModified
+    const rows = await query<{ status: string; count: number; lastModified: string | null }>(
+      `SELECT "Status" as status, COUNT(*) as count, MAX("LastModified") as "lastModified"
          FROM agentic_runs
-        GROUP BY Status`
+        GROUP BY "Status"`,
+      []
     );
-    const rows = statement.all() as Array<{ status: string; count: number; lastModified: string | null }>;
     let queuedRuns = 0;
     let runningRuns = 0;
     let lastUpdatedAt: string | null = null;
 
     for (const row of rows) {
       if (row.status === AGENTIC_RUN_STATUS_QUEUED) {
-        queuedRuns += row.count ?? 0;
+        queuedRuns += Number(row.count ?? 0);
       }
       if (row.status === AGENTIC_RUN_STATUS_RUNNING) {
-        runningRuns += row.count ?? 0;
+        runningRuns += Number(row.count ?? 0);
       }
       if (row.lastModified && (!lastUpdatedAt || row.lastModified > lastUpdatedAt)) {
         lastUpdatedAt = row.lastModified;

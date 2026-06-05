@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { queryOne } from './db-client';
 import http from 'http';
 import type { IncomingMessage, ServerResponse } from 'http';
 import https from 'https';
@@ -36,7 +37,6 @@ import { ingestAgenticRunsCsv, ingestCsvFile, type IngestCsvFileOptions } from '
 import { computeChecksum, findArchiveDuplicate, normalizeCsvFilename } from './utils/csv-utils';
 import { ItemEinheit, normalizeItemEinheit } from '../models';
 import {
-  db,
   getItem,
   upsertBox,
   runUpsertBox,
@@ -94,7 +94,8 @@ import {
   enqueueShopwareSyncJob,
   insertAgenticRunReviewHistoryEntry,
   listStubs,
-  createStub
+  createStub,
+  initDb
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
@@ -323,13 +324,13 @@ function parseAufLagerValue(value: unknown, itemId: string): number {
 }
 
 async function runPrintWorker(): Promise<void> {
-  const job = nextLabelJob.get() as LabelJob | undefined;
+  const job = await nextLabelJob() as LabelJob | undefined;
   if (!job) return;
   try {
-    const item = getItem.get(job.ItemUUID) as Item | undefined;
+    const item = await getItem(job.ItemUUID) as Item | undefined;
     if (!item) {
       console.error('Label job item not found', job.ItemUUID);
-      updateLabelJobStatus.run('Error', 'item not found', job.Id);
+      await updateLabelJobStatus(job.Id, 'Error', 'item not found');
       return;
     }
     const einheit = resolveEinheit(item.Einheit, item.ItemUUID);
@@ -371,7 +372,7 @@ async function runPrintWorker(): Promise<void> {
       fs.mkdirSync(path.dirname(outPath), { recursive: true });
     } catch (dirErr) {
       console.error('Print worker failed to prepare preview directory', dirErr);
-      updateLabelJobStatus.run('Error', 'preview_directory_unavailable', job.Id);
+      void updateLabelJobStatus(job.Id, 'Error', 'preview_directory_unavailable');
       return;
     }
 
@@ -379,7 +380,7 @@ async function runPrintWorker(): Promise<void> {
       await htmlForItem({ itemData, outPath });
     } catch (htmlErr) {
       console.error('Print worker failed to generate HTML label', htmlErr);
-      updateLabelJobStatus.run('Error', (htmlErr as Error).message, job.Id);
+      void updateLabelJobStatus(job.Id, 'Error', (htmlErr as Error).message);
       return;
     }
 
@@ -404,18 +405,18 @@ async function runPrintWorker(): Promise<void> {
           jobId: job.Id,
           reason: result.reason
         });
-        updateLabelJobStatus.run('Error', result.reason || 'print_failed', job.Id);
+        void updateLabelJobStatus(job.Id, 'Error', result.reason || 'print_failed');
         return;
       }
-      updateLabelJobStatus.run('Done', null, job.Id);
+      void updateLabelJobStatus(job.Id, 'Done', null);
       console.log(`Printed label for ${item.ItemUUID}`);
     } catch (err) {
       console.error('Print worker encountered an unexpected error during print dispatch', err);
-      updateLabelJobStatus.run('Error', (err as Error).message, job.Id);
+      void updateLabelJobStatus(job.Id, 'Error', (err as Error).message);
     }
   } catch (e) {
     console.error('Print worker failed', e);
-    updateLabelJobStatus.run('Error', (e as Error).message, job.Id);
+    void updateLabelJobStatus(job.Id, 'Error', (e as Error).message);
   }
 }
 setInterval(runPrintWorker, 750);
@@ -426,7 +427,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 type ActionContext = {
-  db: typeof db;
   upsertBox: typeof upsertBox;
   runUpsertBox: typeof runUpsertBox;
   persistItem: typeof persistItem;
@@ -517,11 +517,10 @@ function createAgenticServiceDependencies(
   }
 
   return {
-    db,
     getAgenticRun,
     getItemReference,
-    upsertAgenticRun,
-    updateAgenticRunStatus,
+    upsertAgenticRun: upsertAgenticRun as (params: Record<string, unknown>) => Promise<void>,
+    updateAgenticRunStatus: updateAgenticRunStatus as (params: Record<string, unknown>) => Promise<number>,
     updateQueuedAgenticRunQueueState,
     logEvent,
     findByMaterial,
@@ -538,14 +537,14 @@ if (agenticServiceEnabled) {
   const agenticQueueDispatchLimit = 5;
   const agenticQueueDependencies = createAgenticServiceDependencies();
   const dispatchQueuedRuns = () => {
-    try {
-      const summary = dispatchQueuedAgenticRuns(agenticQueueDependencies, { limit: agenticQueueDispatchLimit });
+    // dispatchQueuedAgenticRuns is async; fire-and-forget with local error handling
+    void dispatchQueuedAgenticRuns(agenticQueueDependencies, { limit: agenticQueueDispatchLimit }).then((summary) => {
       if (summary.scheduled || summary.skipped || summary.failed) {
         console.info('[agentic-service] Queued agentic run dispatch summary', summary);
       }
-    } catch (err) {
+    }).catch((err: unknown) => {
       console.error('[agentic-service] Failed to dispatch queued agentic runs', err);
-    }
+    });
   };
   setInterval(dispatchQueuedRuns, agenticQueueDispatchIntervalMs);
   void (async () => {
@@ -778,9 +777,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         res.writeHead(404); return res.end('Not found');
       }
 
-      const itemRow = db.prepare(
-        'SELECT i.ItemUUID, i.SerialNumber, i.MacAddress, r.EAN FROM items i LEFT JOIN item_refs r ON r.Artikel_Nummer = i.Artikel_Nummer WHERE i.ItemUUID = ?'
-      ).get(itemUUID) as { ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null } | undefined;
+      const itemRow = await queryOne<{ ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
+        'SELECT i."ItemUUID", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
+        [itemUUID]
+      ) ?? undefined;
 
       if (!itemRow) {
         res.writeHead(404); return res.end('Not found');
@@ -874,12 +874,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         // TODO(agent): Formalize ItemUUID generator typing once action contexts are consolidated.
         const generateItemId = async (artikelNummer: string | null | undefined) =>
           generateSequentialItemUUID(artikelNummer, {
-            getMaxItemId: ({ pattern, sequenceStartIndex }) =>
-              getMaxItemId.get({ pattern, sequenceStartIndex }) as { ItemUUID: string } | undefined,
+            getMaxItemId: async (params) => {
+              const result = await getMaxItemId(params.pattern, params.sequenceStartIndex);
+              return result ? { ItemUUID: result } : null;
+            },
             now: () => new Date()
           });
         await action.handle?.(req, res, {
-          db,
           upsertBox,
           runUpsertBox,
           persistItem,
@@ -980,6 +981,15 @@ function formatListenerUrl(protocol: 'http' | 'https', hostname: string, port: n
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  initDb()
+    .then(() => {
+      console.info('[server] Database schema initialized.');
+    })
+    .catch((err) => {
+      console.error('[server] Failed to initialize database schema — aborting startup.', err);
+      process.exit(1);
+    });
+
   try {
     server.listen(HTTP_PORT, () => {
       console.log(`[server] HTTP server listening at ${formatListenerUrl('http', PUBLIC_HOSTNAME, HTTP_PORT)}`);

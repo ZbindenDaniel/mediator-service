@@ -14,7 +14,7 @@
       "id": "ram_gb",
       "type": "select",
       "question": "Wie viel RAM ist verbaut?",
-      "values": ["4", "8", "16", "24", "32", "64"],
+      "values": ["2","4", "8", "16", "24", "32", "64"],
       "specField": "RAM",
       "specValue": "%v GB"
     },
@@ -42,23 +42,9 @@
       }
     },
     {
-      "id": "macos_version",
-      "type": "text",
-      "question": "macOS-Version?",
-      "suggestions": [
-        "macOS Sequoia 15",
-        "macOS Sonoma 14",
-        "macOS Ventura 13",
-        "macOS Monterey 12",
-        "macOS Big Sur 11"
-      ],
-      "specField": "Betriebssystem",
-      "specValue": "%v"
-    },
-    {
       "id": "charger_included",
       "type": "boolean",
-      "question": "Netzteil / Ladekabel vorhanden?",
+      "question": "Netzteil vorhanden?",
       "qualityImpact": { "true": 5, "false": 4 }
     }
   ]

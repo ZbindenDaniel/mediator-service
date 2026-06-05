@@ -369,13 +369,14 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
   }
 
   const absolute = artifactPath;
-  const args = ['-d', effectiveQueue];
+  const args:string[] = [];
   if (printerHost) {
     args.push('-h', printerHost);
+    args.push('-d', effectiveQueue);
   }
-  if (jobName && jobName.trim()) {
-    args.push('-t', jobName.trim());
-  }
+  // if (jobName && jobName.trim()) {
+  //   args.push('-t', jobName.trim());
+  // }
   args.push(absolute);
 
   console.log('[print] Dispatching file to printer', {
@@ -406,9 +407,9 @@ async function runPrinterConnectionAttempt(options: {
   printerHost?: string;
 }): Promise<{ ok: boolean; reason?: string }> {
   const { queue, timeoutMs, printerHost } = options;
-  const lpstatArgs = ['-p', queue];
+  const lpstatArgs: string[] = [];
   if (printerHost) lpstatArgs.push('-h', printerHost);
-
+  lpstatArgs.push('-d', queue)
   return await new Promise((resolve) => {
     try {
       const child = spawn(LPSTAT_COMMAND, lpstatArgs, {

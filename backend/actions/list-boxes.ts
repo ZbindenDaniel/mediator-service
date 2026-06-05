@@ -38,7 +38,7 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: 'filtered list boxes unavailable' });
       }
 
-      let boxes = normalizedType ? queryHelper.byType(normalizedType) : queryHelper.all();
+      let boxes = normalizedType ? await queryHelper.byType(normalizedType) : await queryHelper.all();
 
       console.log('list-boxes', {
         count: boxes.length,

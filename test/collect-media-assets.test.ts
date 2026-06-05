@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { collectMediaAssets } from '../backend/actions/save-item';
+import { MEDIA_DIR } from '../backend/lib/media';
 
-const MEDIA_ROOT = path.join(__dirname, '../backend/media');
+const MEDIA_ROOT = MEDIA_DIR;
 
 function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
@@ -41,7 +42,7 @@ describe('collectMediaAssets', () => {
 
       expect(assets).toContain(`/media/${missingItemId}/${missingFile}`);
       expect(warnSpy).toHaveBeenCalled();
-      const warningCall = warnSpy.mock.calls.find((call) => call[0] === 'Media asset missing on disk');
+      const warningCall = warnSpy.mock.calls.find((call) => typeof call[0] === 'string' && call[0].includes('Media asset missing on disk'));
       expect(warningCall).toBeTruthy();
     } finally {
       warnSpy.mockRestore();

@@ -387,7 +387,7 @@ export async function handleUnifiedPrintRequest(
 
     try {
       if (labelType === 'item' || labelType === 'smallitem' || labelType === 'marketingsheet') {
-        const item = ctx.getItem.get(id) as Item | undefined;
+        const item = await ctx.getItem(id) as Item | undefined;
         if (!item) return sendJson(res, 404, { error: resolveNotFoundMessage(labelType) });
         if (labelType === 'marketingsheet') {
           payload = buildMarketingSheetPayload(item);
@@ -397,7 +397,7 @@ export async function handleUnifiedPrintRequest(
         entityType = 'Item';
         entityId = item.ItemUUID;
       } else {
-        const box = ctx.getBox.get(id) as Box | undefined;
+        const box = await ctx.getBox(id) as Box | undefined;
         if (!box) return sendJson(res, 404, { error: resolveNotFoundMessage(labelType) });
         if (labelType === 'shelf' && !box.BoxID.startsWith('S-')) {
           console.warn('[print-unified] Shelf print requested for non-shelf box id', {
@@ -413,7 +413,7 @@ export async function handleUnifiedPrintRequest(
           });
         }
         const items = labelType === 'box'
-          ? ((ctx.itemsByBox?.all(box.BoxID) as Item[] | undefined) || [])
+          ? ((await ctx.itemsByBox?.(box.BoxID) as Item[] | undefined) || [])
           : [];
         if (labelType === 'box') {
           payload = buildBoxLabelPayload(box, items);
@@ -455,7 +455,7 @@ export async function handleUnifiedPrintRequest(
       }
 
       previewUrl = `/prints/${path.basename(htmlPath)}`;
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: entityType,
         EntityId: entityId,
@@ -500,7 +500,7 @@ export async function handleUnifiedPrintRequest(
     }
 
     if (printResult.sent) {
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: entityType,
         EntityId: entityId,
@@ -513,7 +513,7 @@ export async function handleUnifiedPrintRequest(
         })
       });
     } else {
-      ctx.logEvent({
+      await ctx.logEvent({
         Actor: actor,
         EntityType: entityType,
         EntityId: entityId,

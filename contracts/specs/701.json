@@ -2,8 +2,6 @@
   "version": 1,
   "subCategory": 701,
   "fields": [
-    { "key": "Hersteller",     "required": true,  "description": "GPU manufacturer (e.g. NVIDIA, AMD, Intel)" },
-    { "key": "Modell",         "required": true,  "description": "GPU model name (e.g. GeForce RTX 3060)" },
     { "key": "Grafikspeicher", "required": true,  "description": "VRAM amount (e.g. 8 GB GDDR6)" },
     { "key": "Schnittstelle",  "required": true,  "description": "Bus interface (e.g. PCIe 4.0 x16)" },
     { "key": "Chipsatz",       "required": false, "description": "GPU chip model (e.g. GA106)" },

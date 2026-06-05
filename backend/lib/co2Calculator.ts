@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import type { Co2CalculationResult } from '../../models/co2';
 
-const CO2_CONTRACT_PATH = path.resolve(process.cwd(), 'contracts/impact/co2.json');
+// __dirname resolves to dist/backend/lib/ at runtime, so ../../contracts lands in dist/contracts/
+const CO2_CONTRACT_PATH = path.resolve(__dirname, '../../contracts/impact/co2.json');
 
 type RefurbIntensity = 'light' | 'medium' | 'heavy';
 

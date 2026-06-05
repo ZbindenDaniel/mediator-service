@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
+import { withTransaction } from '../db-client';
 // TODO(agent): Verify non-bulk removals keep grouping/list views consistent after zeroing stock.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -27,7 +28,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/remove$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
-      const item = ctx.getItem.get(uuid);
+      const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
       for await (const c of req) raw += c;
@@ -39,10 +40,12 @@ const action = defineHttpAction({
       const isBulk = isBulkEinheit(item.Einheit);
       if (isBulk && currentQty <= 0) return sendJson(res, 400, { error: 'item has no stock' });
       const clearedBox = isBulk ? currentQty === 1 : true;
-      const txn = ctx.db.transaction((u: string, a: string) => {
+      const result = await withTransaction(async (_client) => {
+        const u = uuid;
+        const a = actor;
         if (isBulk) {
           try {
-            ctx.decrementItemStock.run(u);
+            await ctx.decrementItemStock(u);
           } catch (updateErr) {
             console.error('[remove-item] Failed to decrement bulk stock', {
               actor: a,
@@ -52,8 +55,8 @@ const action = defineHttpAction({
             });
             throw updateErr;
           }
-          const updated = ctx.getItem.get(u);
-          ctx.logEvent({
+          const updated = await ctx.getItem(u);
+          await ctx.logEvent({
             Actor: a,
             EntityType: 'Item',
             EntityId: u,
@@ -75,7 +78,7 @@ const action = defineHttpAction({
               itemUUID: u,
               trigger: 'remove-item'
             });
-            ctx.enqueueShopwareSyncJob({
+            await ctx.enqueueShopwareSyncJob({
               CorrelationId: correlationId,
               JobType: 'stock-decrement',
               Payload: payload
@@ -90,7 +93,7 @@ const action = defineHttpAction({
         }
 
         try {
-          ctx.zeroItemStock.run(u);
+          await ctx.zeroItemStock(u);
         } catch (updateErr) {
           console.error('[remove-item] Failed to zero item stock for instance removal', {
             actor: a,
@@ -101,7 +104,7 @@ const action = defineHttpAction({
           throw updateErr;
         }
 
-        const updated = ctx.getItem.get(u);
+        const updated = await ctx.getItem(u);
         console.info('[remove-item] Cleared item instance stock', {
           actor: a,
           itemId: u,
@@ -109,7 +112,7 @@ const action = defineHttpAction({
           quantityAfter: updated?.Auf_Lager ?? 0
         });
 
-        ctx.logEvent({
+        await ctx.logEvent({
           Actor: a,
           EntityType: 'Item',
           EntityId: u,
@@ -133,7 +136,7 @@ const action = defineHttpAction({
             itemUUID: u,
             trigger: 'remove-item'
           });
-          ctx.enqueueShopwareSyncJob({
+          await ctx.enqueueShopwareSyncJob({
             CorrelationId: correlationId,
             JobType: 'item-delete',
             Payload: payload
@@ -148,7 +151,6 @@ const action = defineHttpAction({
 
         return { updated, deleted: false };
       });
-      const result = txn(uuid, actor);
       if (isBulk) {
         console.log('Removed item', uuid, 'new qty', result.updated?.Auf_Lager);
       } else {

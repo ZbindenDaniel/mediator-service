@@ -4,6 +4,21 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createFsSandbox, type FsSandbox } from '../../test-utils/fs-sandbox';
 
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => fn({})),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+  insert: jest.fn(async () => ({})),
+  namedQuery: jest.fn(async () => []),
+  namedQueryOne: jest.fn(async () => null),
+  namedExecute: jest.fn(async () => 0),
+  execBatch: jest.fn(async () => undefined),
+  namedToPositional: jest.fn((sql: string, params: Record<string, unknown>) => ({ text: sql, values: Object.values(params) })),
+  getPoolInstance: jest.fn(() => null),
+  closePool: jest.fn(async () => undefined),
+}));
+
 function createMockResponse() {
   let statusCode: number | undefined;
   let body: any;
@@ -41,21 +56,14 @@ type TestCtxOverrides = Partial<Record<string, any>>;
 
 function createTestContext(overrides: TestCtxOverrides = {}) {
   return {
-    generateItemUUID: jest.fn(() => 'I-ART-0001'),
-    getItemReference: {
-      get: jest.fn(() => ({ Artikel_Nummer: 'ART-1', Artikelbeschreibung: 'Widget' }))
-    },
-    getItem: {
-      get: jest.fn()
-    },
-    db: {
-      transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
-    },
-    persistItemWithinTransaction: jest.fn(),
+    generateItemUUID: jest.fn(async () => 'I-ART-0001'),
+    getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-1', Artikelbeschreibung: 'Widget' })),
+    getItem: jest.fn(async () => undefined),
+    persistItemWithinTransaction: jest.fn(async () => undefined),
     logEvent: jest.fn(),
-    runUpsertBox: jest.fn(),
-    upsertAgenticRun: { run: jest.fn() },
-    getAgenticRun: { get: jest.fn(() => null) },
+    runUpsertBox: jest.fn(async () => undefined),
+    upsertAgenticRun: jest.fn(async () => undefined),
+    getAgenticRun: jest.fn(async () => null),
     agenticServiceEnabled: false,
     ...overrides
   };
@@ -78,19 +86,14 @@ describe('import-item action', () => {
   });
 
   it('imports an item from a reference payload', async () => {
-    const getItemMock = jest
-      .fn()
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce({ Artikel_Nummer: 'ART-1', BoxID: null });
+    const getItemMock = jest.fn()
+      .mockReturnValueOnce(Promise.resolve(undefined))
+      .mockReturnValueOnce(Promise.resolve(undefined))
+      .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-1', BoxID: null }));
 
     const ctx = createTestContext({
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-MEDIA', Artikelbeschreibung: 'Media widget' }))
-      },
-      getItem: {
-        get: getItemMock
-      }
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-MEDIA', Artikelbeschreibung: 'Media widget' })),
+      getItem: getItemMock
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -114,13 +117,10 @@ describe('import-item action', () => {
 
   it('accepts payload ItemUUID + Artikel_Nummer for new import and persists provided ItemUUID', async () => {
     const ctx = createTestContext({
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-2', BoxID: null })
-      }
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-2', BoxID: null }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -142,14 +142,12 @@ describe('import-item action', () => {
       })
     );
     expect(ctx.generateItemUUID).not.toHaveBeenCalled();
-    expect(ctx.getItem.get).toHaveBeenCalledWith('I-ART-2-0007');
+    expect(ctx.getItem).toHaveBeenCalledWith('I-ART-2-0007');
   });
 
   it('rejects conflicting payload ItemUUID for new import', async () => {
     const ctx = createTestContext({
-      getItem: {
-        get: jest.fn(() => ({ ItemUUID: 'I-ART-2-0007', Artikel_Nummer: 'ART-EXISTING' }))
-      }
+      getItem: jest.fn(async () => ({ ItemUUID: 'I-ART-2-0007', Artikel_Nummer: 'ART-EXISTING' }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -176,13 +174,10 @@ describe('import-item action', () => {
 
   it('persists payload UpdatedAt when provided with a valid timestamp', async () => {
     const ctx = createTestContext({
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-4', BoxID: null })
-      }
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-4', BoxID: null }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -202,13 +197,10 @@ describe('import-item action', () => {
 
   it('falls back to ingestion UpdatedAt and logs warning when payload UpdatedAt is invalid', async () => {
     const ctx = createTestContext({
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-5', BoxID: null })
-      }
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-5', BoxID: null }))
     });
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
@@ -244,13 +236,10 @@ describe('import-item action', () => {
 
   it('writes imported media files into the sandboxed media root', async () => {
     const ctx = createTestContext({
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-1', BoxID: null })
-      }
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-1', BoxID: null }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -272,16 +261,11 @@ describe('import-item action', () => {
 
   it('persists filename-only Grafikname reference input unchanged', async () => {
     const ctx = createTestContext({
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-FILE', Artikelbeschreibung: 'Widget file', Grafikname: 'ART-FILE-1.png' }))
-      },
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-FILE', BoxID: null })
-      }
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-FILE', Artikelbeschreibung: 'Widget file', Grafikname: 'ART-FILE-1.png' })),
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-FILE', BoxID: null }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -304,16 +288,11 @@ describe('import-item action', () => {
 
   it('persists path-like Grafikname reference input as filename-only basename', async () => {
     const ctx = createTestContext({
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-PATH', Artikelbeschreibung: 'Widget path', Grafikname: '/media/ART-PATH/ART-PATH-1.png' }))
-      },
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-PATH', BoxID: null })
-      }
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-PATH', Artikelbeschreibung: 'Widget path', Grafikname: '/media/ART-PATH/ART-PATH-1.png' })),
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-PATH', BoxID: null }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -336,16 +315,11 @@ describe('import-item action', () => {
 
   it('keeps shared model media fields stable by preserving persisted Grafikname on create', async () => {
     const ctx = createTestContext({
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-MEDIA', Artikelbeschreibung: 'Media widget' }))
-      },
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-MEDIA', BoxID: null, Grafikname: 'ART-MEDIA-1.png' })
-      }
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-MEDIA', Artikelbeschreibung: 'Media widget' })),
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-MEDIA', BoxID: null, Grafikname: 'ART-MEDIA-1.png' }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -372,16 +346,11 @@ describe('import-item action', () => {
 
   it('normalizes legacy path-like reference Grafikname to filename-only for new writes when no new image is uploaded', async () => {
     const ctx = createTestContext({
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-LEGACY', Artikelbeschreibung: 'Legacy widget', Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.png' }))
-      },
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-LEGACY', BoxID: null })
-      }
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-LEGACY', Artikelbeschreibung: 'Legacy widget', Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.png' })),
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-LEGACY', BoxID: null }))
     });
 
     const req = createFormRequest('/api/import/item', {
@@ -406,17 +375,12 @@ describe('import-item action', () => {
 
   it('preserves minted path behavior when payload ItemUUID is not provided', async () => {
     const ctx = createTestContext({
-      generateItemUUID: jest.fn(() => 'I-ART-3-0001'),
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-3', Artikelbeschreibung: 'Widget 3' }))
-      },
-      getItem: {
-        get: jest
-          .fn()
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce(undefined)
-          .mockReturnValueOnce({ Artikel_Nummer: 'ART-3', BoxID: null })
-      }
+      generateItemUUID: jest.fn(async () => 'I-ART-3-0001'),
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-3', Artikelbeschreibung: 'Widget 3' })),
+      getItem: jest.fn()
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve(undefined))
+        .mockReturnValueOnce(Promise.resolve({ Artikel_Nummer: 'ART-3', BoxID: null }))
     });
 
     const req = createFormRequest('/api/import/item', {

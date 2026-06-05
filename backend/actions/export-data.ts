@@ -8,6 +8,7 @@ import { PUBLIC_ORIGIN } from '../config';
 import { eventLabel } from '../../models/event-labels';
 import { defineHttpAction } from './index';
 import { stageItemsExport } from './export-items';
+import { query } from '../db-client';
 
 // TODO(export-data): Confirm default entity list and format expectations once API consumers are documented.
 
@@ -259,7 +260,7 @@ const action = defineHttpAction({
 
     if (requestedItems) {
       try {
-        items = ctx.listItemsForExport.all({
+        items = await ctx.listItemsForExport({
           createdAfter: createdAfter || null,
           updatedAfter: updatedAfter || null
         });
@@ -274,16 +275,13 @@ const action = defineHttpAction({
 
     if (requestedBoxes) {
       try {
-        boxes = ctx.db.prepare(`
+        boxes = await query(`
           SELECT *
           FROM boxes
-          WHERE (@createdAfter IS NULL OR CreatedAt >= @createdAfter)
-            AND (@updatedAfter IS NULL OR UpdatedAt >= @updatedAfter)
+          WHERE ($1::text IS NULL OR CreatedAt >= $1)
+            AND ($2::text IS NULL OR UpdatedAt >= $2)
           ORDER BY BoxID
-        `).all({
-          createdAfter: createdAfter || null,
-          updatedAfter: updatedAfter || null
-        });
+        `, [createdAfter || null, updatedAfter || null]);
         console.info('[export-data] Boxes export loaded', {
           count: Array.isArray(boxes) ? boxes.length : 0
         });
@@ -345,19 +343,15 @@ const action = defineHttpAction({
 
       if (entity === 'agentic') {
         try {
-          const rows = ctx.db.prepare(`
+          const rows = await query(`
             SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
                    LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
             FROM agentic_runs
-            WHERE (@createdAfter IS NULL OR LastModified >= @createdAfter)
-              AND (@updatedAfter IS NULL OR LastModified >= @updatedAfter)
+            WHERE ($1::text IS NULL OR LastModified >= $1)
+              AND ($2::text IS NULL OR LastModified >= $2)
             ORDER BY Id DESC
-            LIMIT @limit
-          `).all({
-            createdAfter: createdAfter || null,
-            updatedAfter: updatedAfter || null,
-            limit
-          });
+            LIMIT $3
+          `, [createdAfter || null, updatedAfter || null, limit]);
           if (format === 'json') {
             entityPayloads.agentic = rows;
           } else {
@@ -383,18 +377,14 @@ const action = defineHttpAction({
 
       if (entity === 'events') {
         try {
-          const rows = ctx.db.prepare(`
+          const rows = await query(`
             SELECT Id, CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta
             FROM events
-            WHERE (@createdAfter IS NULL OR CreatedAt >= @createdAfter)
-              AND (@updatedAfter IS NULL OR CreatedAt >= @updatedAfter)
+            WHERE ($1::text IS NULL OR CreatedAt >= $1)
+              AND ($2::text IS NULL OR CreatedAt >= $2)
             ORDER BY Id DESC
-            LIMIT @limit
-          `).all({
-            createdAfter: createdAfter || null,
-            updatedAfter: updatedAfter || null,
-            limit
-          });
+            LIMIT $3
+          `, [createdAfter || null, updatedAfter || null, limit]);
           const labeledRows = rows.map((row: Record<string, unknown>) => ({
             ...row,
             EventLabel: eventLabel(String(row.Event || ''))

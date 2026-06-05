@@ -46,13 +46,13 @@ export interface ReviewAutomationSignalThresholds {
 }
 
 export interface ReviewAutomationSignalDependencies {
-  getItemReference: {
-    get: (artikelNummer: string) => { Unterkategorien_A?: number | string | null } | undefined;
-  };
-  listRecentReviewHistoryBySubcategory: (
-    subcategory: number,
-    limit: number
-  ) => AgenticRunReviewHistoryEntry[];
+  // Accepts either the legacy sync { get } shape or the new async function signature
+  getItemReference:
+    | { get: (artikelNummer: string) => { Unterkategorien_A?: number | string | null } | undefined }
+    | ((artikelNummer: string) => Promise<{ Unterkategorien_A?: number | string | null } | null>);
+  listRecentReviewHistoryBySubcategory:
+    | ((subcategory: number, limit: number) => AgenticRunReviewHistoryEntry[])
+    | ((subcategory: number, limit?: number) => Promise<AgenticRunReviewHistoryEntry[]>);
   logger?: ReviewAutomationSignalLogger;
 }
 
@@ -290,10 +290,10 @@ export function aggregateReviewAutomationSignals(
   }
 }
 
-export function loadSubcategoryReviewAutomationSignals(
+export async function loadSubcategoryReviewAutomationSignals(
   artikelNummer: string,
   deps: ReviewAutomationSignalDependencies
-): ReviewAutomationSignals {
+): Promise<ReviewAutomationSignals> {
   const logger = deps.logger ?? console;
   const normalizedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
   if (!normalizedArtikelNummer) {
@@ -304,7 +304,10 @@ export function loadSubcategoryReviewAutomationSignals(
   }
 
   try {
-    const reference = deps.getItemReference.get(normalizedArtikelNummer);
+    // Support both legacy sync { get } shape and new async function signature
+    const reference = typeof deps.getItemReference === 'function'
+      ? await (deps.getItemReference as (n: string) => Promise<{ Unterkategorien_A?: number | string | null } | null>)(normalizedArtikelNummer)
+      : (deps.getItemReference as { get: (n: string) => { Unterkategorien_A?: number | string | null } | undefined }).get(normalizedArtikelNummer);
     const subcategoryRaw = reference?.Unterkategorien_A;
     const subcategory = typeof subcategoryRaw === 'number'
       ? subcategoryRaw
@@ -318,7 +321,9 @@ export function loadSubcategoryReviewAutomationSignals(
       return aggregateReviewAutomationSignals([], logger);
     }
 
-    const history = deps.listRecentReviewHistoryBySubcategory(subcategory, AGGREGATION_WINDOW);
+    const historyResult = deps.listRecentReviewHistoryBySubcategory(subcategory, AGGREGATION_WINDOW);
+    // Support both sync and async return values
+    const history: AgenticRunReviewHistoryEntry[] = historyResult instanceof Promise ? await historyResult : historyResult;
     logger.info?.('[agentic-review-automation] Loaded reviewed history window for subcategory aggregation', {
       artikelNummer: normalizedArtikelNummer,
       subcategory,

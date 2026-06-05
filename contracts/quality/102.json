@@ -14,7 +14,7 @@
       "id": "has_os",
       "type": "boolean",
       "question": "Betriebssystem installiert?",
-      "qualityImpact": { "true": 5, "false": 4 }
+      "qualityImpact": { "true": 0, "false": 0 }
     },
     {
       "id": "os_installed",
@@ -39,8 +39,8 @@
     {
       "id": "power_cable_included",
       "type": "boolean",
-      "question": "Netzkabel vorhanden?",
-      "specField": "Netzkabel",
+      "question": "Netzteil vorhanden?",
+      "specField": "Netzteil",
       "specValue": "%v",
       "qualityImpact": { "true": 5, "false": 4 }
     }

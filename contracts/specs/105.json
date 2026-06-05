@@ -2,7 +2,6 @@
   "version": 1,
   "subCategory": 105,
   "fields": [
-    { "key": "Modell",          "required": true,  "description": "Apple model name (e.g. MacBook Pro 14\", iMac 24\", Mac Mini)" },
     { "key": "Prozessor",       "required": true,  "description": "CPU (e.g. Apple M2, Intel Core i7)" },
     { "key": "RAM",             "required": true,  "description": "Memory in GB (unified memory for Apple Silicon)" },
     { "key": "Speicher",        "required": true,  "description": "SSD storage size (e.g. 512 GB)" },
