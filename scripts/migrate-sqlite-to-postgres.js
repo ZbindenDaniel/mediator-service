@@ -103,9 +103,13 @@ async function fixColumnTypes() {
     }
   }
 }
-async function resetSequence(seqName, tableName, idCol) {
+async function resetSequence(tableName, idCol) {
   await pg.query(
-    `SELECT setval('${seqName}', COALESCE((SELECT MAX("${idCol}") FROM "${tableName}"), 0) + 1, false)`
+    `SELECT setval(
+       pg_get_serial_sequence('"${tableName}"', '${idCol}'),
+       COALESCE((SELECT MAX("${idCol}") FROM "${tableName}"), 0) + 1,
+       false
+     )`
   );
 }
 async function main() {
@@ -142,19 +146,15 @@ async function main() {
     }
   }
   const seqResets = [
-    ["label_queue_id_seq", "label_queue", "Id"],
-    ["agentic_runs_runid_seq", "agentic_runs", "RunId"],
-    ["events_id_seq", "events", "Id"],
-    ["quality_assessments_id_seq", "quality_assessments", "Id"],
-    ["shopware_sync_queue_id_seq", "shopware_sync_queue", "Id"]
+    ["label_queue", "Id"],
+    ["agentic_runs", "RunId"],
+    ["events", "Id"],
+    ["quality_assessments", "id"],
+    ["shopware_sync_queue", "Id"]
   ];
-  for (const [seq, table, col] of seqResets) {
-    try {
-      await resetSequence(seq, table, col);
-      console.log(`[migrate] reset sequence ${seq}`);
-    } catch {
-      console.warn(`[migrate] could not reset ${seq} (may not exist yet)`);
-    }
+  for (const [table, col] of seqResets) {
+    await resetSequence(table, col);
+    console.log(`[migrate] reset sequence for ${table}."${col}"`);
   }
   await fixColumnTypes();
   console.log("\n[migrate] Row counts:");
