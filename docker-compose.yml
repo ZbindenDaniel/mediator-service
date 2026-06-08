@@ -48,7 +48,7 @@ services:
   migrate:
     image: ${MEDIATOR_IMAGE:-mediator:latest}
     profiles: [migrate]
-    command: node scripts/migrate-sqlite-to-postgres.js
+    entrypoint: ["node", "scripts/migrate-sqlite-to-postgres.js"]
     environment:
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
       DB_PATH: /migration/mediator.sqlite
