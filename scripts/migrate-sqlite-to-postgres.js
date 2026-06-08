@@ -2,11 +2,13 @@
 /**
  * One-time data migration: SQLite → PostgreSQL
  *
- * Usage:
- *   1. Set DATABASE_URL and DB_PATH (path to existing SQLite file) in your environment
- *   2. Run: npx ts-node scripts/migrate-sqlite-to-postgres.ts
- *   3. Verify row counts printed at the end match your SQLite totals
- *   4. Keep the SQLite file as a backup for 1–2 weeks
+ * Usage (run from the project root on the host, with Postgres port 5432 exposed):
+ *   DB_PATH=/path/to/mediator.sqlite \
+ *   DATABASE_URL=postgres://mediator:mediator@localhost:5432/mediator \
+ *   node scripts/migrate-sqlite-to-postgres.js
+ *
+ *   Verify row counts printed at the end match your SQLite totals.
+ *   Keep the SQLite file as a backup for 1–2 weeks.
  *
  * Safe to run multiple times only if Postgres tables are empty first.
  * Sequences are reset after bulk insert so SERIAL columns continue correctly.
