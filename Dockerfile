@@ -57,8 +57,8 @@ WORKDIR /app
 # Copy env file
 COPY .env /app/.env
 
-## copy migration script into environment (can be removed once fully migrated)
-COPY scripts/migrate-sqlite-to-postgres.ts scripts/migrate-sqlite-to-postgres.ts
+## copy compiled migration script (ts-node not available at runtime)
+COPY scripts/migrate-sqlite-to-postgres.js scripts/migrate-sqlite-to-postgres.js
 
 # Copy pruned node_modules from builder — avoids a second npm install (no network needed)
 COPY --from=builder /app/node_modules ./node_modules
