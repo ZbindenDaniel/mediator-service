@@ -197,7 +197,7 @@ async function main(): Promise<void> {
   // Uses pg_get_serial_sequence to resolve the correct name regardless of column case.
   const seqResets: Array<[table: string, col: string]> = [
     ['label_queue', 'Id'],
-    ['agentic_runs', 'RunId'],
+    ['agentic_runs', 'Id'],
     ['events', 'Id'],
     ['quality_assessments', 'id'],
     ['shopware_sync_queue', 'Id'],

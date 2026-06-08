@@ -147,7 +147,7 @@ async function main() {
   }
   const seqResets = [
     ["label_queue", "Id"],
-    ["agentic_runs", "RunId"],
+    ["agentic_runs", "Id"],
     ["events", "Id"],
     ["quality_assessments", "id"],
     ["shopware_sync_queue", "Id"]
