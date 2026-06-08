@@ -24,7 +24,7 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
-  const [co2, setCo2] = useState<number | null>(null);
+  const [co2Labels, setCo2Labels] = useState<Record<string, number> | null>(null);
 
   useEffect(() => {
     const authHeaders: Record<string, string> = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
@@ -44,7 +44,7 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
         .then((d: any) => {
           if (!d) return;
           if (d.counts) setCounts({ items: d.counts.items ?? 0, boxes: d.counts.boxes ?? 0 });
-          if (typeof d.totalCo2SavedKg === 'number') setCo2(d.totalCo2SavedKg);
+          if (d.co2LabelCounts && typeof d.co2LabelCounts === 'object') setCo2Labels(d.co2LabelCounts);
         })
         .catch(err => logError('Failed to load overview for system status', err)),
     ]);
@@ -74,10 +74,10 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
           </div>
         </>
       )}
-      {co2 !== null && (
+      {co2Labels !== null && ((co2Labels['high'] ?? 0) + (co2Labels['medium'] ?? 0)) > 0 && (
         <div className="admin-status-row">
-          <span>CO₂ eingespart:</span>
-          <strong>{co2.toFixed(1)} kg</strong>
+          <span>CO₂ Potenzial:</span>
+          <strong>{(co2Labels['high'] ?? 0) + (co2Labels['medium'] ?? 0)} Geräte</strong>
         </div>
       )}
       {config !== null && (

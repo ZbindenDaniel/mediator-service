@@ -1,4 +1,5 @@
 import { renderLabelTemplate, type LabelHtmlTemplate } from './labelTemplateLoader';
+import type { Co2ImpactLabel } from '../../models/co2';
 
 // TODO(agent): Keep injected label payloads minimal and aligned with printer-specific templates.
 // TODO(agent): Confirm shelf label payload fields before adding more shelf metadata to QR payloads.
@@ -164,7 +165,7 @@ export interface MarketingSheetPayload {
   currency: string;
   category: string | null;
   manufacturer: string | null;
-  co2SavedKg: number | null;
+  co2ImpactLabel: Co2ImpactLabel | null;
 }
 
 export interface MarketingSheetOptions {

@@ -10,6 +10,8 @@ import {
   AGENTIC_RUN_STATUS_RUNNING,
   type AgenticRunStatus
 } from '../../../models';
+import type { Co2ImpactLabel } from '../../../models/co2';
+import { CO2_IMPACT_LABEL_DE } from '../../../models/co2';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 
 interface Counts {
@@ -29,7 +31,7 @@ interface Props {
   printerReason?: string | null;
   health: string;
   agentic?: AgenticOverviewStats;
-  totalCo2SavedKg?: number;
+  co2LabelCounts?: Partial<Record<Co2ImpactLabel, number>>;
   totalWeightKg?: number;
   className?: string;
 }
@@ -68,7 +70,7 @@ function formatWeight(kg: number): string {
   return `${Math.round(kg)} kg`;
 }
 
-export default function StatsCard({ counts, printerOk, printerReason, health, agentic, totalWeightKg, totalCo2SavedKg, className }: Props) {
+export default function StatsCard({ counts, printerOk, printerReason, health, agentic, totalWeightKg, co2LabelCounts, className }: Props) {
   const classes = ['card', className].filter(Boolean).join(' ');
 
   const pieSegments = useMemo<PieSegment[]>(() => {
@@ -119,10 +121,16 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               <div>Behälter gesamt <b>{counts.boxes}</b></div>
               <div>Artikel gesamt: <b>{counts.items}</b></div>
               <div>Artikel ohne Behälter: <b>{counts.itemsNoBox}</b></div>
-              {totalCo2SavedKg != null && totalCo2SavedKg > 0 && (
-                <><div>CO₂ gespart gesamt: <b>~{Math.round(totalCo2SavedKg / 5) * 5} kg</b></div>
-                <div>Heimatlose Artikel: <b>{counts.itemsNoBox}</b></div></>
-            )}
+              {co2LabelCounts && (['high', 'medium', 'low'] as Co2ImpactLabel[]).some(l => (co2LabelCounts[l] ?? 0) > 0) && (
+                <div>CO₂ Potenzial:{' '}
+                  {(['high', 'medium', 'low'] as Co2ImpactLabel[])
+                    .filter(l => (co2LabelCounts[l] ?? 0) > 0)
+                    .map(l => (
+                      <span key={l}>{CO2_IMPACT_LABEL_DE[l]}: <b>{co2LabelCounts[l]}</b> </span>
+                    ))
+                  }
+                </div>
+              )}
               {hitRate !== null && (
                 <div>KI-Trefferquote: <b>{hitRate}%</b></div>
               )}

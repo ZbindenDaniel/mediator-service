@@ -4,7 +4,7 @@ import StatsCard from './StatsCard';
 interface OverviewData {
   counts?: { boxes: number; items: number; itemsNoBox: number };
   agentic?: { stateCounts?: Record<string, number>; enrichedItems?: number };
-  totalCo2SavedKg?: number;
+  co2LabelCounts?: Record<string, number>;
 }
 
 export default function DashboardPanel() {
@@ -49,7 +49,7 @@ export default function DashboardPanel() {
         printerReason={printerReason}
         health={health}
         agentic={overview?.agentic}
-        totalCo2SavedKg={overview?.totalCo2SavedKg}
+        co2LabelCounts={overview?.co2LabelCounts}
         className="stats-card"
       />
     </div>

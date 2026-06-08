@@ -4,7 +4,7 @@
 - **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
 - **Multi-instance agentic safety (Phase 2, deferred):** Replace `setImmediate` dispatch with a polling loop using `SELECT ... FOR UPDATE SKIP LOCKED` so multiple instances don't double-claim queued runs. SQL template is in the plan at `~/.claude/plans/okay-i-shifted-it-fluttering-sonnet.md`.
 
-- **CO₂ savings calculation:** ADEME 2022 formula (E_new × R_reuse × L_factor − O_refurb); coefficients in `contracts/impact/co2.json`; computed at runtime (no DB column in Phase 1). Phase 2 path: add `co2_einsparung_kg REAL` to items table once volume warrants pre-computation.
+- **CO₂ recovery potential:** Label-based scoring (`irrelevant / low / medium / high`) replaces the old ADEME kg estimate. Formula: `score = E_new × (quality / 5)`; thresholds in `contracts/impact/co2.json` (v2). Quality assessment will be refined with longevity questions to sharpen the signal.
 
 - **Batch run conflicts:** when an agentic run is already in progress, new start requests should be ignored (no parallel start via repeated triggers).
 - **Qty=0 item visibility:** items with zero quantity should remain accessible only through explicit navigation (e.g., direct/scan/detail path), not broad default lists. A clear distinction between removed and deleted items has yet to be made.

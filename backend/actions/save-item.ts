@@ -25,7 +25,7 @@ import { listRecentAgenticRunReviewHistoryBySubcategory } from '../db';
 import { getSpecContract } from '../contracts/registry';
 import { applySpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
-import { calculateCo2Savings } from '../lib/co2Calculator';
+import { calculateCo2Impact } from '../lib/co2Calculator';
 import { query as dbQuery, withTransaction } from '../db-client';
 
 const MEDIA_PREFIX = '/media/';
@@ -990,9 +990,8 @@ const action = defineHttpAction({
           });
         }
 
-        const co2Einsparung = calculateCo2Savings({
+        const co2Impact = calculateCo2Impact({
           unterkategorien: sanitizedItem.Unterkategorien_A != null ? [sanitizedItem.Unterkategorien_A] : [],
-          datumErfasst: typeof sanitizedItem.Datum_erfasst === 'string' ? sanitizedItem.Datum_erfasst : null,
           quality: typeof sanitizedItem.Quality === 'number' ? sanitizedItem.Quality : null
         }, console);
 
@@ -1011,7 +1010,7 @@ const action = defineHttpAction({
           compatibleParentRefs: unknown[];
           attachments: unknown[];
           externalDocs: ExternalDocSummary[] | null;
-          co2Einsparung: ItemDetailResponse['co2Einsparung'];
+          co2Impact: ItemDetailResponse['co2Impact'];
         };
         try {
           const responseItem =
@@ -1033,7 +1032,7 @@ const action = defineHttpAction({
             compatibleParentRefs,
             attachments,
             externalDocs,
-            co2Einsparung
+            co2Impact
           };
         } catch (error) {
           console.error('[save-item] Failed to construct item detail response payload', {
