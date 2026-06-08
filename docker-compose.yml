@@ -54,7 +54,7 @@ services:
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
       DB_PATH: /migration/mediator.sqlite
     volumes:
-      - ${SQLITE_PATH:?Set SQLITE_PATH to the absolute path of your SQLite file on the host}:/migration/mediator.sqlite:ro
+      - ${SQLITE_PATH:?Set SQLITE_PATH to the absolute path of your SQLite file on the host}:/migration/mediator.sqlite
     depends_on:
       postgres:
         condition: service_healthy
