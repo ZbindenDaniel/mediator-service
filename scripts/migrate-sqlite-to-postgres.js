@@ -76,11 +76,10 @@ async function resetSequence(seqName, tableName, idCol) {
 async function main() {
   const tables = [
     "item_refs",
-    // parent of items.Artikel_Nummer FK — must precede items
-    "items",
-    "item_instances",
     "boxes",
     "locations",
+    "items",
+    "item_instances",
     "label_queue",
     "events",
     "agentic_runs",

@@ -105,13 +105,15 @@ async function resetSequence(seqName: string, tableName: string, idCol: string):
 }
 
 async function main(): Promise<void> {
-  // Ordered to respect foreign key dependencies
+  // Ordered to respect foreign key dependencies:
+  //   item_refs, boxes  → must precede items (FK on both) and box_stubs (FK on boxes)
+  //   item_refs         → must also precede agentic_runs
   const tables = [
-    'item_refs',       // parent of items.Artikel_Nummer FK — must precede items
-    'items',
-    'item_instances',
+    'item_refs',
     'boxes',
     'locations',
+    'items',
+    'item_instances',
     'label_queue',
     'events',
     'agentic_runs',
