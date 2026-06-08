@@ -49,11 +49,12 @@ services:
     image: ${MEDIATOR_IMAGE:-mediator:latest}
     profiles: [migrate]
     entrypoint: ["node", "scripts/migrate-sqlite-to-postgres.js"]
+    user: root  # needs to read the operator-supplied SQLite file regardless of ownership
     environment:
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
       DB_PATH: /migration/mediator.sqlite
     volumes:
-      - ${SQLITE_PATH:-./data/mediator.sqlite}:/migration/mediator.sqlite:ro
+      - ${SQLITE_PATH:?Set SQLITE_PATH to the absolute path of your SQLite file on the host}:/migration/mediator.sqlite:ro
     depends_on:
       postgres:
         condition: service_healthy
