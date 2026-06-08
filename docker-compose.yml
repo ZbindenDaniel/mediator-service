@@ -59,6 +59,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  migrate:
+    image: mediator
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
+      DB_PATH: /data/mediator.sqlite
+    volumes:
+      - ./data:/data:ro
+    command: ["node", "scripts/migrate-sqlite-to-postgres.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - migration
+
 volumes:
   mediator-data:
     name: mediator-data
