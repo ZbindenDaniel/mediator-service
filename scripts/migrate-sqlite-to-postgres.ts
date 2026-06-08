@@ -48,12 +48,27 @@ const SERIAL_TABLES: Record<string, string> = {
   shopware_sync_queue: 'shopware_sync_queue_id_seq',
 };
 
+// Returns a set of column names typed as integer/bigint in the given PG table.
+async function getIntegerColumns(pgTable: string): Promise<Set<string>> {
+  const res = await pg.query<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1
+       AND data_type IN ('integer', 'bigint', 'smallint')`,
+    [pgTable]
+  );
+  return new Set(res.rows.map(r => r.column_name));
+}
+
 async function migrateTable(tableName: string, pgTable: string): Promise<number> {
   const rows: Record<string, unknown>[] = sqlite.prepare(`SELECT * FROM "${tableName}"`).all() as any[];
   if (rows.length === 0) {
     console.log(`[migrate] ${tableName}: 0 rows (skipped)`);
     return 0;
   }
+
+  // SQLite stores numeric values loosely; coerce to integer where PG requires it
+  // (e.g. dimension fields like Länge_mm may hold "362.2" in older data)
+  const intCols = await getIntegerColumns(pgTable);
 
   const cols = Object.keys(rows[0]);
   const colList = cols.map(c => `"${c}"`).join(', ');
@@ -64,7 +79,11 @@ async function migrateTable(tableName: string, pgTable: string): Promise<number>
   try {
     await client.query('BEGIN');
     for (const row of rows) {
-      const values = cols.map(c => row[c] ?? null);
+      const values = cols.map(c => {
+        const v = row[c] ?? null;
+        if (v !== null && intCols.has(c)) return Math.round(Number(v));
+        return v;
+      });
       await client.query(sql, values);
     }
     await client.query('COMMIT');

@@ -27,12 +27,22 @@ const SERIAL_TABLES = {
   quality_assessments: "quality_assessments_id_seq",
   shopware_sync_queue: "shopware_sync_queue_id_seq"
 };
+async function getIntegerColumns(pgTable) {
+  const res = await pg.query(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1
+       AND data_type IN ('integer', 'bigint', 'smallint')`,
+    [pgTable]
+  );
+  return new Set(res.rows.map((r) => r.column_name));
+}
 async function migrateTable(tableName, pgTable) {
   const rows = sqlite.prepare(`SELECT * FROM "${tableName}"`).all();
   if (rows.length === 0) {
     console.log(`[migrate] ${tableName}: 0 rows (skipped)`);
     return 0;
   }
+  const intCols = await getIntegerColumns(pgTable);
   const cols = Object.keys(rows[0]);
   const colList = cols.map((c) => `"${c}"`).join(", ");
   const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
@@ -41,7 +51,11 @@ async function migrateTable(tableName, pgTable) {
   try {
     await client.query("BEGIN");
     for (const row of rows) {
-      const values = cols.map((c) => row[c] ?? null);
+      const values = cols.map((c) => {
+        const v = row[c] ?? null;
+        if (v !== null && intCols.has(c)) return Math.round(Number(v));
+        return v;
+      });
       await client.query(sql, values);
     }
     await client.query("COMMIT");
