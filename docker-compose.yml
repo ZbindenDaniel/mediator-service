@@ -1,12 +1,7 @@
-networks:
-  mediator-net:
-    name: mediator-net
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: mediator-postgres
-    networks: [mediator-net]
     environment:
       POSTGRES_USER: mediator
       POSTGRES_PASSWORD: mediator
@@ -30,7 +25,6 @@ services:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
     container_name: mediator
-    networks: [mediator-net]
     expose:
       - "8080"
     volumes:
@@ -51,24 +45,8 @@ services:
       postgres:
         condition: service_healthy
 
-  migrate:
-    image: ${MEDIATOR_IMAGE:-mediator:latest}
-    profiles: [migrate]
-    entrypoint: ["node", "scripts/migrate-sqlite-to-postgres.js"]
-    user: root  # needs to read the operator-supplied SQLite file regardless of ownership
-    networks: [mediator-net]
-    environment:
-      DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
-      DB_PATH: /tmp/mediator.sqlite
-    volumes:
-      - ${SQLITE_PATH:?Set SQLITE_PATH to the absolute path of your SQLite file on the host}:/tmp/mediator.sqlite
-    depends_on:
-      postgres:
-        condition: service_healthy
-
 # TODO(ingress-auth): Keep the proxy configuration aligned with docs/setup.md and secrets rotation steps.
   proxy:
-    networks: [mediator-net]
     image: nginx:1.25-alpine
     container_name: mediator-proxy
     ports:

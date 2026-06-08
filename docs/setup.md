@@ -30,24 +30,17 @@ If printer checks fail after a CUPS restart, first verify `/run/cups` is visible
 1. Start the local dependencies with Docker Compose: `docker compose up -d`. The bundled configuration launches Postgres alongside the mediator so the backend can connect via the Compose network aliases.
 2. **SQLite → PostgreSQL data migration (one-time, only when upgrading from a SQLite deployment):**
 
-   The migration runs inside the same container image — no repo or Node.js needed on the server.
+   Runs inside the already-running mediator container — no separate service or network config needed.
 
    ```bash
-   # 1. Copy the SQLite file to the VM
-   scp mediator.sqlite user@vm:/tmp/mediator.sqlite
+   # 1. Copy the SQLite file into the running container
+   docker cp /path/to/mediator.sqlite mediator:/tmp/mediator.sqlite
 
-   # 2. On the VM — start the stack if not already running
-   docker compose up -d postgres
-
-   # 3. Run the migration (exits automatically when done)
-   SQLITE_PATH=/tmp/mediator.sqlite docker compose run --rm migrate
-
-   # 4. Verify the printed row counts match your SQLite source, then clean up
-   rm /tmp/mediator.sqlite
+   # 2. Run the migration script inside the container
+   docker compose exec -e DB_PATH=/tmp/mediator.sqlite mediator node scripts/migrate-sqlite-to-postgres.js
    ```
 
-   If `MEDIATOR_IMAGE` is set in your environment (e.g. `ghcr.io/zbindendaniel/mediator-service:latest`), the migrate service uses that image automatically. Otherwise it falls back to the locally built `mediator:latest` tag.
-
+   The script prints a row-count summary at the end — verify the numbers match your SQLite source.
    **Skip this step for fresh installations** — the backend creates all tables automatically on first start.
    > Note: the script is safe to re-run only when the Postgres tables are empty. If you need to re-run it, truncate the target tables first.
 3. If you swap in an external Postgres instance, update the `.env` variables (`DATABASE_URL`, `PGHOST`, etc.) accordingly and document the change so teammates inherit the correct connection string.
