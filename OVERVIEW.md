@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+798. ✅ Fix remaining unsafe CAST in listItemReferencesWithFilters (missed by earlier replace_all)
+   - **Why:** The earlier fix replaced CAST→ROUND in itemSelectColumns and the agentic WHERE clause but listItemReferencesWithFilters has an independent SELECT block with different indentation that was missed. Same "30.0" crash risk.
+   - **Deferred:** Nothing.
 797. ✅ Fix migration: coerce SQLite float strings to integer for PG integer columns
    - **Why:** SQLite stored dimension values like `"362.2"` in INTEGER columns (Länge_mm etc.); PostgreSQL rejects these. Now queries `information_schema.columns` for each table's integer/bigint columns and rounds values before insert.
    - **Deferred:** Nothing.
