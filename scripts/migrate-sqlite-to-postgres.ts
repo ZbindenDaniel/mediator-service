@@ -88,15 +88,15 @@ async function resetSequence(seqName: string, tableName: string, idCol: string):
 async function main(): Promise<void> {
   // Ordered to respect foreign key dependencies
   const tables = [
+    'item_refs',       // parent of items.Artikel_Nummer FK — must precede items
     'items',
-    'item_references',
     'item_instances',
     'boxes',
     'locations',
     'label_queue',
     'events',
     'agentic_runs',
-    'agentic_request_log',
+    'agentic_request_logs',
     'quality_assessments',
     'shopware_sync_queue',
     'box_stubs',

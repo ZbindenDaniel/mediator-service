@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+796. ✅ Fix migrate-sqlite-to-postgres: wrong table name `item_references` → `item_refs` and wrong insert order
+   - **Why:** `item_references` doesn't exist in SQLite so item_refs was never populated, then `items` FK violation fired because the parent table was empty. Also renamed `agentic_request_log` → `agentic_request_logs` to match the schema.
+   - **Deferred:** Nothing.
 795. ✅ Replace CO2 savings estimate with CO2 recovery potential label (irrelevant / low / medium / high)
    - **Why:** The previous ADEME formula produced a precise kg value that implied unwarranted precision. The new model ranks devices by reuse viability: `score = E_new × (quality / 5)`, mapped to four labels via configurable thresholds in `contracts/impact/co2.json`. Age/lifecycle factor removed — quality carries the full signal and will be refined via future quality-assessment questions.
    - **Deferred:** Per-model PCF overrides, Boavizta API integration, ESG export, and quality longevity question (planned separately). The `typical_life_new_yr`/`total_achievable_life_yr` fields are retained in the contract in case lifecycle scoring is reintroduced.
