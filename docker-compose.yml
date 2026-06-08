@@ -52,9 +52,9 @@ services:
     user: root  # needs to read the operator-supplied SQLite file regardless of ownership
     environment:
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
-      DB_PATH: /migration/mediator.sqlite
+      DB_PATH: /tmp/mediator.sqlite
     volumes:
-      - ${SQLITE_PATH:?Set SQLITE_PATH to the absolute path of your SQLite file on the host}:/migration/mediator.sqlite
+      - ${SQLITE_PATH:?Set SQLITE_PATH to the absolute path of your SQLite file on the host}:/tmp/mediator.sqlite
     depends_on:
       postgres:
         condition: service_healthy
