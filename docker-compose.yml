@@ -19,6 +19,7 @@ services:
 
   mediator:
     build: .
+    image: ${MEDIATOR_IMAGE:-mediator:latest}
     env_file: .env
     environment:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav
@@ -40,6 +41,19 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate:
+    image: ${MEDIATOR_IMAGE:-mediator:latest}
+    profiles: [migrate]
+    command: node scripts/migrate-sqlite-to-postgres.js
+    environment:
+      DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
+      DB_PATH: /migration/mediator.sqlite
+    volumes:
+      - ${SQLITE_PATH:-./data/mediator.sqlite}:/migration/mediator.sqlite:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+799. ✅ Add migrate service to docker-compose so migration runs on VM without the repo
+   - **Why:** VM only runs Docker; operators need to migrate without cloning the repo or installing Node. The script is already in the image — adding a profiles:[migrate] service + SQLITE_PATH bind-mount makes it a single docker compose run command.
+   - **Deferred:** Nothing.
 798. ✅ Fix remaining unsafe CAST in listItemReferencesWithFilters (missed by earlier replace_all)
    - **Why:** The earlier fix replaced CAST→ROUND in itemSelectColumns and the agentic WHERE clause but listItemReferencesWithFilters has an independent SELECT block with different indentation that was missed. Same "30.0" crash risk.
    - **Deferred:** Nothing.
