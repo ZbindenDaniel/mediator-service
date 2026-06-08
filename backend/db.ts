@@ -716,10 +716,10 @@ SELECT
   r."Breite_mm" AS "Breite_mm",
   r."Höhe_mm" AS "Höhe_mm",
   r."Gewicht_kg" AS "Gewicht_kg",
-  CAST(r."Hauptkategorien_A" AS INTEGER) AS "Hauptkategorien_A",
-  CAST(r."Unterkategorien_A" AS INTEGER) AS "Unterkategorien_A",
-  CAST(r."Hauptkategorien_B" AS INTEGER) AS "Hauptkategorien_B",
-  CAST(r."Unterkategorien_B" AS INTEGER) AS "Unterkategorien_B",
+  ROUND(NULLIF(r."Hauptkategorien_A", '')::NUMERIC)::INTEGER AS "Hauptkategorien_A",
+  ROUND(NULLIF(r."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "Unterkategorien_A",
+  ROUND(NULLIF(r."Hauptkategorien_B", '')::NUMERIC)::INTEGER AS "Hauptkategorien_B",
+  ROUND(NULLIF(r."Unterkategorien_B", '')::NUMERIC)::INTEGER AS "Unterkategorien_B",
   r."Veröffentlicht_Status" AS "Veröffentlicht_Status",
   r."Shopartikel" AS "Shopartikel",
   r."Artikeltyp" AS "Artikeltyp",
@@ -1806,7 +1806,7 @@ export async function listRecentAgenticRunReviewHistoryBySubcategory(subcategory
       `SELECT h."Id",h."Artikel_Nummer",h."Status",h."ReviewState",h."ReviewDecision",h."ReviewNotes",h."ReviewMetadata",h."ReviewedBy",h."RecordedAt"
        FROM agentic_run_review_history h
        JOIN item_refs r ON r."Artikel_Nummer"=h."Artikel_Nummer"
-       WHERE CAST(r."Unterkategorien_A" AS INTEGER)=$1
+       WHERE ROUND(NULLIF(r."Unterkategorien_A", '')::NUMERIC)::INTEGER=$1
          AND (LOWER(COALESCE(h."ReviewState",'')) IN ('approved','rejected') OR COALESCE(TRIM(h."ReviewDecision"),'') <> '')
        ORDER BY h."RecordedAt" DESC, h."Id" DESC LIMIT $2`,
       [normalizedSubcategory, normalizedLimit]
