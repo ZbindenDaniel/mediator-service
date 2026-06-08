@@ -6,6 +6,8 @@ services:
       POSTGRES_USER: mediator
       POSTGRES_PASSWORD: mediator
       POSTGRES_DB: mediator
+    ports:
+      - "5432:5432"
     volumes:
       - mediator-postgres:/var/lib/postgresql/data
     restart: unless-stopped
