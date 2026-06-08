@@ -68,6 +68,41 @@ async function migrateTable(tableName, pgTable) {
   console.log(`[migrate] ${tableName}: ${rows.length} rows inserted`);
   return rows.length;
 }
+const INTEGER_COLUMNS = [
+  ["item_refs", "L\xE4nge_mm"],
+  ["item_refs", "Breite_mm"],
+  ["item_refs", "H\xF6he_mm"],
+  ["item_refs", "Quality"],
+  ["item_refs", "Shopartikel"],
+  ["items", "Auf_Lager"],
+  ["items", "Quality"],
+  ["items", "QualityId"],
+  ["box_stubs", "NumberLooseItems"],
+  ["box_stubs", "NumberLooseBoxes"],
+  ["box_stubs", "IsActive"],
+  ["shopware_sync_queue", "RetryCount"],
+  ["quality_assessments", "value"],
+  ["quality_assessments", "is_complete"],
+  ["quality_assessments", "has_defects"],
+  ["quality_assessments", "is_functional"]
+];
+async function fixColumnTypes() {
+  for (const [table, col] of INTEGER_COLUMNS) {
+    const exists = await pg.query(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)`,
+      [table]
+    );
+    if (!exists.rows[0].exists) continue;
+    try {
+      await pg.query(
+        `ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE INTEGER USING ROUND(NULLIF(TRIM("${col}"::TEXT), '')::NUMERIC)::INTEGER`
+      );
+      console.log(`[migrate] fixed column type: ${table}."${col}" \u2192 INTEGER`);
+    } catch (err) {
+      console.warn(`[migrate] could not fix ${table}."${col}": ${err.message}`);
+    }
+  }
+}
 async function resetSequence(seqName, tableName, idCol) {
   await pg.query(
     `SELECT setval('${seqName}', COALESCE((SELECT MAX("${idCol}") FROM "${tableName}"), 0) + 1, false)`
@@ -121,6 +156,7 @@ async function main() {
       console.warn(`[migrate] could not reset ${seq} (may not exist yet)`);
     }
   }
+  await fixColumnTypes();
   console.log("\n[migrate] Row counts:");
   for (const [table, count] of Object.entries(counts)) {
     console.log(`  ${table.padEnd(30)} ${count}`);

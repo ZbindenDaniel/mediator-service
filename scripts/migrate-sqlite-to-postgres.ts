@@ -98,6 +98,50 @@ async function migrateTable(tableName: string, pgTable: string): Promise<number>
   return rows.length;
 }
 
+// Explicit INTEGER columns from the current schema. After inserting raw SQLite
+// data the actual PG column type may be TEXT or NUMERIC (from an older schema),
+// so we force each column to INTEGER regardless, rounding any float values.
+const INTEGER_COLUMNS: Array<[table: string, column: string]> = [
+  ['item_refs', 'Länge_mm'],
+  ['item_refs', 'Breite_mm'],
+  ['item_refs', 'Höhe_mm'],
+  ['item_refs', 'Quality'],
+  ['item_refs', 'Shopartikel'],
+  ['items', 'Auf_Lager'],
+  ['items', 'Quality'],
+  ['items', 'QualityId'],
+  ['box_stubs', 'NumberLooseItems'],
+  ['box_stubs', 'NumberLooseBoxes'],
+  ['box_stubs', 'IsActive'],
+  ['shopware_sync_queue', 'RetryCount'],
+  ['quality_assessments', 'value'],
+  ['quality_assessments', 'is_complete'],
+  ['quality_assessments', 'has_defects'],
+  ['quality_assessments', 'is_functional'],
+];
+
+async function fixColumnTypes(): Promise<void> {
+  for (const [table, col] of INTEGER_COLUMNS) {
+    // Check table exists before attempting ALTER
+    const exists = await pg.query<{ exists: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)`,
+      [table]
+    );
+    if (!exists.rows[0].exists) continue;
+
+    try {
+      // USING clause handles TEXT "100.0", NUMERIC 100.0, or already-integer values safely
+      await pg.query(
+        `ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE INTEGER ` +
+        `USING ROUND(NULLIF(TRIM("${col}"::TEXT), '')::NUMERIC)::INTEGER`
+      );
+      console.log(`[migrate] fixed column type: ${table}."${col}" → INTEGER`);
+    } catch (err: any) {
+      console.warn(`[migrate] could not fix ${table}."${col}": ${err.message}`);
+    }
+  }
+}
+
 async function resetSequence(seqName: string, tableName: string, idCol: string): Promise<void> {
   await pg.query(
     `SELECT setval('${seqName}', COALESCE((SELECT MAX("${idCol}") FROM "${tableName}"), 0) + 1, false)`
@@ -162,6 +206,10 @@ async function main(): Promise<void> {
       console.warn(`[migrate] could not reset ${seq} (may not exist yet)`);
     }
   }
+
+  // Force all schema-defined INTEGER columns to the correct PG type.
+  // Guards against older DB schemas where these columns may be TEXT or NUMERIC.
+  await fixColumnTypes();
 
   console.log('\n[migrate] Row counts:');
   for (const [table, count] of Object.entries(counts)) {
