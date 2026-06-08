@@ -12,7 +12,7 @@ import {
 } from '../../models';
 import type { BoxLabelPayload, ItemLabelPayload, MarketingSheetPayload, ShelfLabelPayload } from '../lib/labelHtml';
 import { htmlForMarketingSheet, htmlForSmallItem } from '../lib/labelHtml';
-import { calculateCo2Savings } from '../lib/co2Calculator';
+import { calculateCo2Impact } from '../lib/co2Calculator';
 import type { PrintFileResult, PrintLabelType } from '../print';
 import { resolvePrinterQueue } from '../print';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
@@ -254,9 +254,8 @@ function buildMarketingSheetPayload(item: Item): MarketingSheetPayload {
     instanceSpecs = rawInstanceSpecs as Record<string, string | string[]>;
   }
 
-  const co2Result = calculateCo2Savings({
+  const co2Result = calculateCo2Impact({
     unterkategorien: [item.Unterkategorien_A],
-    datumErfasst: item.Datum_erfasst ?? null,
     quality: typeof item.Quality === 'number' ? item.Quality : null
   });
 
@@ -273,7 +272,7 @@ function buildMarketingSheetPayload(item: Item): MarketingSheetPayload {
     currency: 'CHF',
     category: categoryLabel || null,
     manufacturer: item.Hersteller?.trim() || null,
-    co2SavedKg: co2Result ? Math.round(co2Result.co2SavedKg * 10) / 10 : null,
+    co2ImpactLabel: co2Result && co2Result.label !== 'irrelevant' ? co2Result.label : null,
   };
 }
 

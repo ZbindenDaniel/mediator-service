@@ -18,6 +18,8 @@ import type {
   ItemInstanceSummary,
   ItemDetailReviewAutomationSignal
 } from '../../../models';
+import type { Co2ImpactLabel } from '../../../models/co2';
+import { CO2_IMPACT_LABEL_DE } from '../../../models/co2';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
@@ -304,7 +306,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [compatibleAccessoryRefs, setCompatibleAccessoryRefs] = useState<any[]>([]);
   const [compatibleParentRefs, setCompatibleParentRefs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
-  const [co2Einsparung, setCo2Einsparung] = useState<{ co2SavedKg: number; ageYears: number; lFactor: number } | null>(null);
+  const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -754,12 +756,12 @@ export default function ItemDetail({ itemId }: Props) {
       ['Verkaufspreis', item.Verkaufspreis ?? null]
     );
 
-    if (co2Einsparung && co2Einsparung.co2SavedKg > 0) {
-      rows.push(['CO₂ Einsparung', `~${Math.round(co2Einsparung.co2SavedKg)} kg CO₂e`]);
+    if (co2Impact && co2Impact.label !== 'irrelevant') {
+      rows.push(['CO₂ Potenzial', CO2_IMPACT_LABEL_DE[co2Impact.label]]);
     }
 
     return rows;
-  }, [agentic, co2Einsparung, events, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel]);
+  }, [agentic, co2Impact, events, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel]);
 
   const { referenceDetailRows, instanceDetailRows } = useMemo(() => {
     const referenceRows: [string, React.ReactNode][] = [];
@@ -1128,8 +1130,8 @@ export default function ItemDetail({ itemId }: Props) {
         setCompatibleAccessoryRefs(Array.isArray((data as any).compatibleAccessoryRefs) ? (data as any).compatibleAccessoryRefs : []);
         setCompatibleParentRefs(Array.isArray((data as any).compatibleParentRefs) ? (data as any).compatibleParentRefs : []);
         setAttachments(Array.isArray((data as any).attachments) ? (data as any).attachments : []);
-        const rawCo2 = (data as any).co2Einsparung;
-        setCo2Einsparung(rawCo2 && typeof rawCo2.co2SavedKg === 'number' ? rawCo2 : null);
+        const rawCo2 = (data as any).co2Impact;
+        setCo2Impact(rawCo2 && typeof rawCo2.label === 'string' ? rawCo2 : null);
         setAgenticError(null);
         setAgenticReviewIntent(null);
         setLoadError(null);

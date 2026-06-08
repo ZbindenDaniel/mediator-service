@@ -1,20 +1,12 @@
 {
-  "version": 1,
-  "methodology": "ADEME 2022 — CO2_saved = E_new × R_reuse × L_factor − O_refurb",
-  "r_reuse": 0.85,
-  "o_refurb_kg": {
-    "light": 1,
-    "medium": 1,
-    "heavy": 1
-  },
-  "quality_to_refurb_intensity": {
-    "5": "light",
-    "4": "light",
-    "3": "medium",
-    "2": "medium",
-    "1": "heavy"
-  },
-  "default_age_yr": 4,
+  "version": 2,
+  "methodology": "CO2 recovery potential: score = E_new × (quality / 5); label from score thresholds",
+  "label_thresholds": [
+    { "min": 150, "label": "high" },
+    { "min": 75,  "label": "medium" },
+    { "min": 25,  "label": "low" },
+    { "min": 0,   "label": "irrelevant" }
+  ],
   "categories": [
     { "unterkategorie": 201, "label": "Laptop",               "e_new_kg": 180, "typical_life_new_yr": 5, "total_achievable_life_yr": 8  },
     { "unterkategorie": 203, "label": "Netbook",              "e_new_kg": 180, "typical_life_new_yr": 5, "total_achievable_life_yr": 8  },

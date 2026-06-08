@@ -302,7 +302,7 @@
         <div id="co2Section" hidden>
           <div class="co2-badge">
             <span>🌱</span>
-            <span>CO₂ eingespart: <span class="co2-value" id="co2Value"></span> kg</span>
+            <span id="co2Label"></span>
           </div>
         </div>
 
@@ -361,7 +361,7 @@
       var qualityDotEl         = document.getElementById('qualityDot');
       var qualityLabelEl       = document.getElementById('qualityLabel');
       var co2SectionEl         = document.getElementById('co2Section');
-      var co2ValueEl           = document.getElementById('co2Value');
+      var co2LabelEl           = document.getElementById('co2Label');
       var priceBlockEl         = document.getElementById('priceBlock');
       var priceAmountEl        = document.getElementById('priceAmount');
       var priceCurrencyEl      = document.getElementById('priceCurrency');
@@ -464,8 +464,9 @@
           }
 
           // CO₂
-          if (typeof payload.co2SavedKg === 'number' && payload.co2SavedKg > 0 && co2SectionEl && co2ValueEl) {
-            co2ValueEl.textContent = payload.co2SavedKg.toFixed(1);
+          var CO2_LABELS_DE = { high: 'Hohes Potenzial', medium: 'Mittleres Potenzial', low: 'Geringes Potenzial' };
+          if (payload.co2ImpactLabel && CO2_LABELS_DE[payload.co2ImpactLabel] && co2SectionEl && co2LabelEl) {
+            co2LabelEl.textContent = CO2_LABELS_DE[payload.co2ImpactLabel];
             co2SectionEl.hidden = false;
           }
 
