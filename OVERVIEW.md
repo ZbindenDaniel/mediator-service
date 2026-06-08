@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+797. ✅ Fix migration: coerce SQLite float strings to integer for PG integer columns
+   - **Why:** SQLite stored dimension values like `"362.2"` in INTEGER columns (Länge_mm etc.); PostgreSQL rejects these. Now queries `information_schema.columns` for each table's integer/bigint columns and rounds values before insert.
+   - **Deferred:** Nothing.
 796. ✅ Fix migrate-sqlite-to-postgres: wrong table name `item_references` → `item_refs` and wrong insert order
    - **Why:** `item_references` doesn't exist in SQLite so item_refs was never populated, then `items` FK violation fired because the parent table was empty. Also renamed `agentic_request_log` → `agentic_request_logs` to match the schema.
    - **Deferred:** Nothing.
