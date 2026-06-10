@@ -19,28 +19,48 @@ interface UserMarksContextValue {
 
 const UserMarksContext = createContext<UserMarksContextValue | null>(null);
 
+// Custom event key for username changes within the same tab.
+export const USERNAME_CHANGED_EVENT = 'mediator:username-changed';
+
 export function UserMarksProvider({ children }: PropsWithChildren) {
   const [markedUUIDs, setMarkedUUIDs] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState<Map<string, string | null>>(new Map());
+  // Tracks the username the context last loaded marks for.
+  const [loadedForUser, setLoadedForUser] = useState('');
 
-  const username = getUser().trim();
-
-  useEffect(() => {
-    if (!username) return;
+  const loadMarks = useCallback(() => {
+    const username = getUser().trim();
+    if (!username || username === loadedForUser) return;
     void fetch(`/api/user-marks?username=${encodeURIComponent(username)}`)
       .then((r) => r.json())
-      .then((data: { markedUUIDs?: string[] }) => {
-        if (Array.isArray(data.markedUUIDs)) {
-          setMarkedUUIDs(new Set(data.markedUUIDs));
+      .then((data: { marks?: Array<{ itemUUID: string; note: string | null }> }) => {
+        if (Array.isArray(data.marks)) {
+          setMarkedUUIDs(new Set(data.marks.map((m) => m.itemUUID)));
+          setNotes(new Map(data.marks.map((m) => [m.itemUUID, m.note])));
+          setLoadedForUser(username);
         }
       })
       .catch((err) => console.error('[UserMarks] Failed to load marks', err));
-  }, [username]);
+  }, [loadedForUser]);
+
+  // Load on mount and whenever the username changes (same-tab dispatch from setUser).
+  useEffect(() => {
+    loadMarks();
+    const handleUsernameChange = () => loadMarks();
+    window.addEventListener(USERNAME_CHANGED_EVENT, handleUsernameChange);
+    window.addEventListener('storage', handleUsernameChange);
+    return () => {
+      window.removeEventListener(USERNAME_CHANGED_EVENT, handleUsernameChange);
+      window.removeEventListener('storage', handleUsernameChange);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isMarked = useCallback((itemUUID: string) => markedUUIDs.has(itemUUID), [markedUUIDs]);
   const getNote = useCallback((itemUUID: string) => notes.get(itemUUID) ?? null, [notes]);
 
   const saveMark = useCallback(async (itemUUID: string, note: string | null) => {
+    const username = getUser().trim();
     if (!username) return;
     const res = await fetch('/api/user-marks', {
       method: 'POST',
@@ -51,9 +71,10 @@ export function UserMarksProvider({ children }: PropsWithChildren) {
       setMarkedUUIDs((prev) => new Set([...prev, itemUUID]));
       setNotes((prev) => new Map([...prev, [itemUUID, note]]));
     }
-  }, [username]);
+  }, []);
 
   const removeMark = useCallback(async (itemUUID: string) => {
+    const username = getUser().trim();
     if (!username) return;
     const res = await fetch('/api/user-marks', {
       method: 'DELETE',
@@ -72,7 +93,7 @@ export function UserMarksProvider({ children }: PropsWithChildren) {
         return next;
       });
     }
-  }, [username]);
+  }, []);
 
   const toggleMark = useCallback(async (itemUUID: string, currentNote?: string | null) => {
     if (markedUUIDs.has(itemUUID)) {
