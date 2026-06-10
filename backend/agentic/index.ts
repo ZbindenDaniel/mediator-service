@@ -1099,6 +1099,45 @@ export async function dispatchQueuedAgenticRuns(
     });
   }
 
+  // Enforce the concurrency cap: if somehow more than MAX runs are RUNNING (race, restart, manual DB edits),
+  // cancel the oldest ones so the cap is respected before the next dispatch.
+  try {
+    const overCapRuns = await query<{ Artikel_Nummer: string; LastAttemptAt: string | null }>(
+      `SELECT "Artikel_Nummer", "LastAttemptAt"
+         FROM agentic_runs
+        WHERE "Status" = 'running'
+        ORDER BY "LastAttemptAt" DESC
+        OFFSET $1`,
+      [MAX_CONCURRENT_RUNNING_RUNS]
+    );
+    if (overCapRuns.length > 0) {
+      logger.warn?.('[agentic-service] Over-cap running runs detected; cancelling oldest', {
+        count: overCapRuns.length,
+        cap: MAX_CONCURRENT_RUNNING_RUNS
+      });
+      const nowIso = resolveNow(deps).toISOString();
+      const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
+      await Promise.allSettled(overCapRuns.map(run =>
+        updateQueueState({
+          Artikel_Nummer: run.Artikel_Nummer,
+          Status: AGENTIC_RUN_STATUS_FAILED,
+          LastModified: nowIso,
+          RetryCount: 0,
+          NextRetryAt: null,
+          LastError: 'over-cap-cancelled',
+          LastAttemptAt: run.LastAttemptAt ?? nowIso
+        }).catch(err => logger.error?.('[agentic-service] Failed to cancel over-cap run', {
+          artikelNummer: run.Artikel_Nummer,
+          error: toErrorMessage(err)
+        }))
+      ));
+    }
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to enforce concurrency cap on running runs', {
+      error: toErrorMessage(err)
+    });
+  }
+
   // TODO(agentic-queue-fairness): Revisit slot selection policy if we later prioritize runs beyond FIFO ordering.
   let runningCount = 0;
 
@@ -1214,8 +1253,8 @@ export async function dispatchQueuedAgenticRuns(
   }
 
   // Keep-busy: if slots remain after dispatching queued runs, fill them with notStarted runs.
-  // This processes items that have a search query but were never explicitly enqueued.
-  const remainingSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount - scheduled);
+  // Reserve 1 slot so an explicit queue trigger can always start immediately without waiting.
+  const remainingSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount - scheduled - 1);
   if (remainingSlots > 0) {
     try {
       const idleRuns = await fetchIdleFillAgenticRuns(remainingSlots);
