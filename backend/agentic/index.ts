@@ -36,6 +36,7 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
   fetchQueuedAgenticRuns,
+  fetchIdleFillAgenticRuns,
   updateQueuedAgenticRunQueueState,
   listAgenticRunReviewHistory,
   type AgenticRunQueueUpdate,
@@ -127,7 +128,10 @@ const SELECT_STALE_AGENTIC_RUNS_SQL = `
 `;
 
 const MAX_CONCURRENT_RUNNING_RUNS = 3;
-const STALE_RUN_TIMEOUT_MINUTES = 30;
+const STALE_RUN_TIMEOUT_MINUTES = 10;
+const MAX_AUTO_RETRIES = 5;
+// Backoff in minutes for each successive retry attempt (index = RetryCount at time of failure)
+const RETRY_BACKOFF_MINUTES = [2, 5, 10, 20, 30] as const;
 
 function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -887,21 +891,20 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         const lastAttemptAt = existingRun?.LastAttemptAt ?? cancelTimestamp;
         const lastError = message ?? reason;
 
-        applyQueueUpdate(deps, logger, {
-          Artikel_Nummer: payload.artikelNummer,
-          Status: AGENTIC_RUN_STATUS_CANCELLED,
-          LastModified: cancelTimestamp,
-          RetryCount: retryCount,
-          NextRetryAt: null,
-          LastError: lastError,
-          LastAttemptAt: lastAttemptAt
-        });
+        // Re-queue with backoff instead of permanently cancelling so transient failures recover automatically.
+        // Once MAX_AUTO_RETRIES is exhausted, fall back to CANCELLED so the user knows it truly gave up.
+        const willRetry = retryCount < MAX_AUTO_RETRIES;
+        const backoffMinutes = RETRY_BACKOFF_MINUTES[Math.min(retryCount, RETRY_BACKOFF_MINUTES.length - 1)];
+        const nextRetryAt = willRetry
+          ? new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString()
+          : null;
+        const recoveryStatus = willRetry ? AGENTIC_RUN_STATUS_QUEUED : AGENTIC_RUN_STATUS_CANCELLED;
 
         try {
           const updateResult = await deps.updateAgenticRunStatus(
             normalizeAgenticStatusUpdate({
               Artikel_Nummer: payload.artikelNummer,
-              Status: AGENTIC_RUN_STATUS_CANCELLED,
+              Status: recoveryStatus,
               SearchQuery: searchQuery,
               LastModified: cancelTimestamp,
               ReviewState: 'not_required',
@@ -913,7 +916,7 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
               LastReviewNotesIsSet: true,
               RetryCount: retryCount,
               RetryCountIsSet: true,
-              NextRetryAt: null,
+              NextRetryAt: nextRetryAt,
               NextRetryAtIsSet: true,
               LastError: lastError,
               LastErrorIsSet: true,
@@ -930,7 +933,10 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
           } else {
             logger.info?.('[agentic-service] Agentic run auto-cancelled after failure', {
               artikelNummer: payload.artikelNummer,
-              reason
+              reason,
+              recoveryStatus,
+              willRetry,
+              nextRetryAt
             });
           }
         } catch (updateErr) {
@@ -1044,7 +1050,8 @@ export async function dispatchQueuedAgenticRuns(
 
   // Recover stale "running" runs that have been in-progress beyond the timeout.
   // This unblocks the queue when a previous invocation hung or crashed without
-  // updating the run's status.
+  // updating the run's status. Updates are awaited before fetchRunningCount so the
+  // freed slots are visible in the same dispatch cycle (fire-and-forget caused a race).
   try {
     const nowIso = resolveNow(deps).toISOString();
     const staleRuns = await query<{
@@ -1052,30 +1059,81 @@ export async function dispatchQueuedAgenticRuns(
       RetryCount: number | null;
       LastAttemptAt: string | null;
     }>(
+      // NULL LastAttemptAt is also stale — it means promotion never recorded a timestamp
       `SELECT "Artikel_Nummer", "RetryCount", "LastAttemptAt"
          FROM agentic_runs
         WHERE "Status" = 'running'
-          AND "LastAttemptAt"::timestamptz < NOW() - INTERVAL '${STALE_RUN_TIMEOUT_MINUTES} minutes'`,
+          AND ("LastAttemptAt" IS NULL
+               OR "LastAttemptAt"::timestamptz < NOW() - INTERVAL '${STALE_RUN_TIMEOUT_MINUTES} minutes')`,
       []
     );
-    for (const staleRun of staleRuns) {
+    await Promise.allSettled(staleRuns.map(async (staleRun) => {
+      const retryCount = staleRun.RetryCount ?? 0;
+      const willRetry = retryCount < MAX_AUTO_RETRIES;
+      const backoffMinutes = RETRY_BACKOFF_MINUTES[Math.min(retryCount, RETRY_BACKOFF_MINUTES.length - 1)];
+      const nextRetryAt = willRetry
+        ? new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString()
+        : null;
       logger.warn?.('[agentic-service] Recovering stale running agentic run', {
         artikelNummer: staleRun.Artikel_Nummer,
         lastAttemptAt: staleRun.LastAttemptAt,
-        staleTimeoutMinutes: STALE_RUN_TIMEOUT_MINUTES
+        staleTimeoutMinutes: STALE_RUN_TIMEOUT_MINUTES,
+        willRetry,
+        retryCount,
+        nextRetryAt
       });
-      applyQueueUpdate(deps, logger, {
+      const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
+      await updateQueueState({
         Artikel_Nummer: staleRun.Artikel_Nummer,
-        Status: AGENTIC_RUN_STATUS_FAILED,
+        Status: willRetry ? AGENTIC_RUN_STATUS_QUEUED : AGENTIC_RUN_STATUS_FAILED,
         LastModified: nowIso,
-        RetryCount: staleRun.RetryCount ?? 0,
-        NextRetryAt: null,
+        RetryCount: retryCount,
+        NextRetryAt: nextRetryAt,
         LastError: 'stale-run-auto-cancelled',
         LastAttemptAt: staleRun.LastAttemptAt ?? nowIso
       });
-    }
+    }));
   } catch (err) {
     logger.error?.('[agentic-service] Failed to recover stale running runs', {
+      error: toErrorMessage(err)
+    });
+  }
+
+  // Enforce the concurrency cap: if somehow more than MAX runs are RUNNING (race, restart, manual DB edits),
+  // cancel the oldest ones so the cap is respected before the next dispatch.
+  try {
+    const overCapRuns = await query<{ Artikel_Nummer: string; LastAttemptAt: string | null }>(
+      `SELECT "Artikel_Nummer", "LastAttemptAt"
+         FROM agentic_runs
+        WHERE "Status" = 'running'
+        ORDER BY "LastAttemptAt" DESC
+        OFFSET $1`,
+      [MAX_CONCURRENT_RUNNING_RUNS]
+    );
+    if (overCapRuns.length > 0) {
+      logger.warn?.('[agentic-service] Over-cap running runs detected; cancelling oldest', {
+        count: overCapRuns.length,
+        cap: MAX_CONCURRENT_RUNNING_RUNS
+      });
+      const nowIso = resolveNow(deps).toISOString();
+      const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
+      await Promise.allSettled(overCapRuns.map(run =>
+        updateQueueState({
+          Artikel_Nummer: run.Artikel_Nummer,
+          Status: AGENTIC_RUN_STATUS_FAILED,
+          LastModified: nowIso,
+          RetryCount: 0,
+          NextRetryAt: null,
+          LastError: 'over-cap-cancelled',
+          LastAttemptAt: run.LastAttemptAt ?? nowIso
+        }).catch(err => logger.error?.('[agentic-service] Failed to cancel over-cap run', {
+          artikelNummer: run.Artikel_Nummer,
+          error: toErrorMessage(err)
+        }))
+      ));
+    }
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to enforce concurrency cap on running runs', {
       error: toErrorMessage(err)
     });
   }
@@ -1190,6 +1248,42 @@ export async function dispatchQueuedAgenticRuns(
         NextRetryAt: null,
         LastError: errorMessage,
         LastAttemptAt: lastAttemptAt
+      });
+    }
+  }
+
+  // Keep-busy: if slots remain after dispatching queued runs, fill them with notStarted runs.
+  // Reserve 1 slot so an explicit queue trigger can always start immediately without waiting.
+  const remainingSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount - scheduled - 1);
+  if (remainingSlots > 0) {
+    try {
+      const idleRuns = await fetchIdleFillAgenticRuns(remainingSlots);
+      for (const run of idleRuns) {
+        const artikelNummer = (run.Artikel_Nummer || '').trim();
+        const searchQuery = (run.SearchQuery || '').trim();
+        if (!artikelNummer || !searchQuery) continue;
+        try {
+          void scheduleAgenticModelInvocation({
+            artikelNummer,
+            searchQuery,
+            context: 'idle-fill',
+            review: null,
+            request: null,
+            imageData: null,
+            deps,
+            logger
+          });
+          scheduled += 1;
+        } catch (err) {
+          logger.error?.('[agentic-service] Failed to schedule idle-fill agentic run', {
+            artikelNummer,
+            error: toErrorMessage(err)
+          });
+        }
+      }
+    } catch (err) {
+      logger.error?.('[agentic-service] Failed to fetch idle-fill agentic runs', {
+        error: toErrorMessage(err)
       });
     }
   }

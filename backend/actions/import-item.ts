@@ -1300,7 +1300,11 @@ const action = defineHttpAction({
       const requestedStatus = (p.get('agenticStatus') || '').trim();
       const manualFallbackFlag = (p.get('agenticManualFallback') || '').trim().toLowerCase();
       const agenticManualFallback = manualFallbackFlag === 'true';
-      const resolvedAgenticStatus: AgenticRunStatus = resolveAgenticRunStatus(requestedStatus);
+      // Default to notStarted so bulk imports don't flood the queue; keep-busy picks them up
+      // when a slot is free. An explicit agenticStatus=queued in the payload overrides this.
+      const resolvedAgenticStatus: AgenticRunStatus = requestedStatus
+        ? resolveAgenticRunStatus(requestedStatus)
+        : AGENTIC_RUN_STATUS_NOT_STARTED;
       const agenticStatus: AgenticRunStatus = agenticManualFallback
         ? AGENTIC_RUN_STATUS_NOT_STARTED
         : resolvedAgenticStatus;
