@@ -1869,6 +1869,23 @@ export async function fetchQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
   }
 }
 
+export async function fetchIdleFillAgenticRuns(limit = 3): Promise<AgenticRun[]> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+  try {
+    return query<AgenticRun>(
+      `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
+              "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
+       FROM agentic_runs
+       WHERE "Status"='notStarted' AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
+       ORDER BY "LastModified" ASC, "Id" ASC LIMIT $1`,
+      [effectiveLimit]
+    );
+  } catch (err) {
+    console.error('[db] Failed to fetch idle-fill agentic runs', err);
+    throw err;
+  }
+}
+
 export async function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate): Promise<void> {
   try {
     const count = await execute(

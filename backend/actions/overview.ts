@@ -32,14 +32,14 @@ const action = defineHttpAction({
       }, {} as Record<AgenticRunStatus, number>);
       let enrichedItems = 0;
       try {
-        const rawStateCounts = (ctx.countAgenticRunsByStatus?.all?.() ?? []) as Array<{ status?: string | null; c?: number }>;
+        const rawStateCounts = (await ctx.countAgenticRunsByStatus?.()) as Array<{ status?: string | null; c?: string | number }> ?? [];
         agenticStateCounts = rawStateCounts.reduce((acc, row) => {
           const normalizedStatus = normalizeAgenticRunStatus(row?.status ?? AGENTIC_RUN_STATUS_NOT_STARTED);
-          const nextCount = typeof row?.c === 'number' && Number.isFinite(row.c) ? row.c : 0;
+          const nextCount = Number.isFinite(Number(row?.c)) ? Number(row.c) : 0;
           acc[normalizedStatus] = (acc[normalizedStatus] ?? 0) + nextCount;
           return acc;
         }, agenticStateCounts);
-        enrichedItems = ctx.countEnrichedItemReferences?.get?.()?.c || 0;
+        enrichedItems = (await ctx.countEnrichedItemReferences?.()) ?? 0;
       } catch (err) {
         console.error('Failed to load agentic overview aggregates', err);
       }
@@ -48,7 +48,7 @@ const action = defineHttpAction({
         high: 0, medium: 0, low: 0, irrelevant: 0
       };
       try {
-        const co2Rows = (ctx.listItemsForCo2?.all?.() ?? []) as Array<{ Unterkategorien_A?: unknown; Quality?: unknown }>;
+        const co2Rows = (await ctx.listItemsForCo2?.() ?? []) as Array<{ Unterkategorien_A?: unknown; Quality?: unknown }>;
         for (const row of co2Rows) {
           const result = calculateCo2Impact({
             unterkategorien: row.Unterkategorien_A != null ? [row.Unterkategorien_A] : [],
@@ -75,7 +75,7 @@ const action = defineHttpAction({
       }
       let totalWeightKg = 0;
       try {
-        totalWeightKg = (ctx.sumInventoryWeightKg?.get?.() as { total?: number } | undefined)?.total ?? 0;
+        totalWeightKg = (await ctx.sumInventoryWeightKg?.()) ?? 0;
       } catch (err) {
         console.error('Failed to load inventory weight aggregate', err);
       }
