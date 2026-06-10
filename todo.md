@@ -67,6 +67,11 @@
 
 ## Priority 2 — Feature Improvements
 
+**Per-user item marking (step 779) — deferred items:**
+- CSS polish for `.mark-btn` added; amber accent color is hardcoded (`#f59e0b`) — wire to a CSS variable once a warning/accent token is established.
+- Bulk mark action in `BulkItemActionBar` not yet added.
+- Note text not shown as tooltip on the star icon in the list — keep as tab-only for now.
+
 22. ✅ **Apply tab-gating to BoxDetail.** Done — each box tab now shows only its content slice; DetailTabBar renders inside BoxDetail.
 
 19. ~~**Wire `item × attachments` action panel slot.**~~ Superseded — ActionPanel deleted; inline button in AttachmentsCard already covers the use case.

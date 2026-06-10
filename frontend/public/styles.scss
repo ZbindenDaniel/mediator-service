@@ -3500,3 +3500,40 @@ button:focus {
         grid-template-columns: 1fr;
     }
 }
+
+// ── User item marks ───────────────────────────────────────────────────────────
+
+.mark-btn {
+    background: transparent;
+    border: none;
+    padding: 2px 4px;
+    cursor: pointer;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    border-radius: 3px;
+    transition: color 0.15s;
+    font-size: 1rem;
+
+    &:hover {
+        color: var(--fg);
+    }
+
+    &--active {
+        color: #f59e0b;
+    }
+}
+
+.filter-control--checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        margin: 0;
+        flex-shrink: 0;
+    }
+}

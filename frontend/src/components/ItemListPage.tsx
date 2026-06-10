@@ -27,6 +27,7 @@ import {
 } from '../lib/itemListFiltersStorage';
 import { groupItemsForDisplay, GroupedItemDisplay } from '../lib/itemGrouping';
 import { logError, logger } from '../utils/logger';
+import { useUserMarks } from '../context/UserMarksContext';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
 
@@ -410,6 +411,8 @@ export default function ItemListPage() {
   const [imageFilter, setImageFilter] = useState<ItemListFilters['imageFilter']>(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
   const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
   const [qualityFilter, setQualityFilter] = useState<ItemListFilters['qualityFilter']>(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
+  const [myMarksOnly, setMyMarksOnly] = useState(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
+  const { markedUUIDs } = useUserMarks();
   const [filtersReady, setFiltersReady] = useState(false);
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -447,6 +450,7 @@ export default function ItemListPage() {
       setImageFilter(mergedFilters.imageFilter);
       setQualityThreshold(mergedFilters.qualityThreshold);
       setQualityFilter(mergedFilters.qualityFilter);
+      setMyMarksOnly(mergedFilters.myMarksOnly);
       setIsDeepLinkFilterSession(hasUrlFilterParams);
 
       if (storedFilters) {
@@ -488,6 +492,7 @@ export default function ItemListPage() {
       setImageFilter(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
       setQualityThreshold(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
       setQualityFilter(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
+      setMyMarksOnly(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
       clearItemListFilters();
       setSelectedIds(new Set());
       console.info('Item list filters reset to defaults via header');
@@ -509,7 +514,8 @@ export default function ItemListPage() {
     sortKey,
     sortDirection,
     qualityThreshold,
-    qualityFilter
+    qualityFilter,
+    myMarksOnly
   }), [
     searchTerm,
     subcategoryFilter,
@@ -522,7 +528,8 @@ export default function ItemListPage() {
     sortKey,
     sortDirection,
     qualityThreshold,
-    qualityFilter
+    qualityFilter,
+    myMarksOnly
   ]);
 
   useEffect(() => {
@@ -740,39 +747,43 @@ export default function ItemListPage() {
     };
   }, [currentFilters, filtersReady, isDeepLinkFilterSession]);
 
-  const filtered = useMemo(
-    () =>
-      filterAndSortItems({
-        items,
-        placementFilter,
-        normalizedSearch,
-        normalizedSubcategoryFilter,
-        normalizedBoxFilter,
-        stockFilter,
-        normalizedAgenticFilter,
-        shopPublicationFilter,
-        imageFilter,
-        sortKey,
-        sortDirection,
-        qualityThreshold,
-        qualityFilter
-      }),
-    [
+  const filtered = useMemo(() => {
+    const sorted = filterAndSortItems({
       items,
-      normalizedBoxFilter,
-      normalizedAgenticFilter,
+      placementFilter,
       normalizedSearch,
       normalizedSubcategoryFilter,
-      placementFilter,
-      imageFilter,
-      sortDirection,
-      sortKey,
+      normalizedBoxFilter,
       stockFilter,
+      normalizedAgenticFilter,
       shopPublicationFilter,
+      imageFilter,
+      sortKey,
+      sortDirection,
       qualityThreshold,
       qualityFilter
-    ]
-  );
+    });
+    if (!myMarksOnly) return sorted;
+    return sorted.filter((group) =>
+      group.items.some((item) => item.ItemUUID && markedUUIDs.has(item.ItemUUID))
+    );
+  }, [
+    items,
+    normalizedBoxFilter,
+    normalizedAgenticFilter,
+    normalizedSearch,
+    normalizedSubcategoryFilter,
+    placementFilter,
+    imageFilter,
+    sortDirection,
+    sortKey,
+    stockFilter,
+    shopPublicationFilter,
+    qualityThreshold,
+    qualityFilter,
+    myMarksOnly,
+    markedUUIDs
+  ]);
 
   const visibleIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1126,6 +1137,18 @@ export default function ItemListPage() {
                     <option value="rated">Mit Bewertung</option>
                     <option value="missing">Ohne Bewertung</option>
                   </select>
+                </label>
+              </div>
+
+              <div className="filter-grid__item">
+                <label className="filter-control filter-control--checkbox">
+                  <input
+                    type="checkbox"
+                    aria-label="Nur meine Markierungen anzeigen"
+                    checked={myMarksOnly}
+                    onChange={(e) => setMyMarksOnly(e.target.checked)}
+                  />
+                  <span>Meine Markierungen</span>
                 </label>
               </div>
             </div>
