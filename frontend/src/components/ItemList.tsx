@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { GoBookmark, GoBookmarkFill } from 'react-icons/go';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import type { Item } from '../../../models';
 import LocationTag from './LocationTag';
 import { usePanelContext } from '../context/PanelContext';
+import { useUserMarks } from '../context/UserMarksContext';
 import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
 import ZubehoerBadge from './ZubehoerBadge';
@@ -83,6 +85,7 @@ export default function ItemList({
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
   const { entityId, setEntity } = usePanelContext();
+  const { isMarked, toggleMark } = useUserMarks();
   const navigateToItemDetail = useCallback((itemId: string, identifierType: 'itemUUID' | 'artikelNummer', source: 'click' | 'keyboard') => {
     try {
       if (onSelect) {
@@ -131,6 +134,7 @@ export default function ItemList({
                 type="checkbox"
               />
             </th>
+            <th className="col-mark" aria-label="Markierung" />
             <th className="col-number">A-Nr</th>
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
@@ -303,6 +307,21 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                     }}
                     type="checkbox"
                   />
+                </td>
+                <td className="col-mark">
+                  {representativeItemId && (
+                    <button
+                      type="button"
+                      className={`mark-btn${isMarked(representativeItemId) ? ' mark-btn--active' : ''}`}
+                      title={isMarked(representativeItemId) ? 'Markierung entfernen' : 'Merken'}
+                      aria-label={isMarked(representativeItemId) ? 'Markierung entfernen' : 'Merken'}
+                      onClick={(e) => { e.stopPropagation(); void toggleMark(representativeItemId); }}
+                    >
+                      {isMarked(representativeItemId)
+                        ? <GoBookmarkFill aria-hidden="true" />
+                        : <GoBookmark aria-hidden="true" />}
+                    </button>
+                  )}
                 </td>
                 <td className="col-number">{group.summary.Artikel_Nummer?.trim() || representative?.Artikel_Nummer?.trim() || '—'}</td>
                 <td className="col-desc">{representative?.Artikelbeschreibung ?? '—'}</td>

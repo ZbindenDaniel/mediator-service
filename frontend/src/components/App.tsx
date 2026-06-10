@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'rea
 import Layout from './Layout';
 import { DialogProvider } from './dialog';
 import { PanelProvider, usePanelContext } from '../context/PanelContext';
+import { UserMarksProvider } from '../context/UserMarksContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
@@ -83,9 +84,11 @@ export default function App() {
     <Router>
       <DialogProvider>
         <PanelProvider>
-          <Layout>
-            <AppRoutes />
-          </Layout>
+          <UserMarksProvider>
+            <Layout>
+              <AppRoutes />
+            </Layout>
+          </UserMarksProvider>
         </PanelProvider>
       </DialogProvider>
     </Router>

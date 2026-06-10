@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { GoDependabot, GoFileMedia, GoInfo, GoPaperclip, GoPencil, GoCpu, GoLog, GoTag, GoPlug } from 'react-icons/go';
+import { GoDependabot, GoFileMedia, GoInfo, GoPaperclip, GoPencil, GoCpu, GoLog, GoTag, GoPlug, GoBookmark } from 'react-icons/go';
 import { usePanelContext } from '../context/PanelContext';
 
 interface TabDef {
@@ -11,6 +11,8 @@ interface TabDef {
 interface Props {
   /** Dot indicator on the KI tab when an agentic review is pending. */
   agenticNeedsReview?: boolean;
+  /** Dot indicator on the Markierung tab when the item is marked by the current user. */
+  isMarked?: boolean;
 }
 
 const ITEM_BASE_TABS: TabDef[] = [
@@ -21,6 +23,7 @@ const ITEM_BASE_TABS: TabDef[] = [
   { id: 'attachments', label: 'Anhänge', icon: <GoPaperclip aria-hidden="true" /> },
   { id: 'accessories', label: 'Zubehör', icon: <GoPlug aria-hidden="true" /> },
   { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" /> },
+  { id: 'markierung', label: 'Markierung', icon: <GoBookmark aria-hidden="true" /> },
 ];
 
 const BOX_BASE_TABS: TabDef[] = [
@@ -40,7 +43,7 @@ function isShelfId(boxId: string): boolean {
   }
 }
 
-export default function DetailTabBar({ agenticNeedsReview = false }: Props) {
+export default function DetailTabBar({ agenticNeedsReview = false, isMarked = false }: Props) {
   const { entityType, entityId, activeTab, setTab } = usePanelContext();
 
   useEffect(() => {
@@ -117,6 +120,7 @@ export default function DetailTabBar({ agenticNeedsReview = false }: Props) {
         >
           {tab.icon}
           {tab.id === 'ki' && agenticNeedsReview && <span className="tab-badge" aria-label="Review ausstehend" />}
+          {tab.id === 'markierung' && isMarked && <span className="tab-badge" aria-label="Markiert" />}
         </button>
       ))}
     </nav>
