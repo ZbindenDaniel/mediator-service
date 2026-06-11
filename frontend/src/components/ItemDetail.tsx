@@ -278,6 +278,7 @@ function resolveAgenticSearchTerm(item: Item | null): string {
 export default function ItemDetail({ itemId }: Props) {
   const [item, setItem] = useState<Item | null>(null);
   const [events, setEvents] = useState<EventLog[]>([]);
+  const [allMarks, setAllMarks] = useState<Array<{ username: string; note: string | null; createdAt: string }>>([]);
   const [agentic, setAgentic] = useState<AgenticRun | null>(null);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
@@ -1114,6 +1115,12 @@ export default function ItemDetail({ itemId }: Props) {
         const data = (await res.json()) as ItemDetailResponse;
         setItem(data.item);
         setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
+        void fetch(`/api/item-marks?itemUUID=${encodeURIComponent(itemId)}`)
+          .then((r) => r.ok ? r.json() : { marks: [] })
+          .then((d: { marks?: Array<{ username: string; note: string | null; createdAt: string }> }) => {
+            setAllMarks(Array.isArray(d.marks) ? d.marks : []);
+          })
+          .catch(() => setAllMarks([]));
         setAgentic(data.agentic ?? null);
         try {
           setAgenticReviewAutomation(data.agenticReviewAutomation ?? null);
@@ -1142,6 +1149,7 @@ export default function ItemDetail({ itemId }: Props) {
         console.error('Failed to fetch item', res.status);
         setItem(null);
         setEvents([]);
+        setAllMarks([]);
         setAgentic(null);
         setAgenticReviewAutomation(null);
         setAgenticCardWarning('Metriken sind derzeit nicht verfügbar.');
@@ -1155,6 +1163,7 @@ export default function ItemDetail({ itemId }: Props) {
       console.error('Failed to fetch item', err);
       setItem(null);
       setEvents([]);
+      setAllMarks([]);
       setAgentic(null);
       setAgenticReviewAutomation(null);
       setAgenticCardWarning('Metriken sind derzeit nicht verfügbar.');
@@ -2873,7 +2882,14 @@ export default function ItemDetail({ itemId }: Props) {
         tabContent = <ItemEventsTab events={events} />;
         break;
       case 'markierung':
-        tabContent = <ItemMarkierungTab itemUUID={item.ItemUUID} />;
+        tabContent = <ItemMarkierungTab itemUUID={item.ItemUUID} allMarks={allMarks} onMarksChanged={() => {
+          void fetch(`/api/item-marks?itemUUID=${encodeURIComponent(item.ItemUUID)}`)
+            .then((r) => r.ok ? r.json() : { marks: [] })
+            .then((d: { marks?: Array<{ username: string; note: string | null; createdAt: string }> }) => {
+              setAllMarks(Array.isArray(d.marks) ? d.marks : []);
+            })
+            .catch(() => {});
+        }} />;
         break;
       default:
         tabContent = (

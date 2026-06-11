@@ -20,5 +20,7 @@
   { "key": "AgenticResultFailed", "label": "Ki-Ergebnis fehlgeschlagen", "level": "error", "topic": "agentic" },
   { "key": "AgenticReviewSubmitted", "label": "Ki-Review eingereicht", "level": "info", "topic": "agentic" },
   { "key": "AgenticReviewApproved", "label": "Ki-Ergebnis freigegeben", "level": "info", "topic": "agentic" },
-  { "key": "AgenticReviewRejected", "label": "Ki-Ergebnis abgelehnt", "level": "important", "topic": "agentic" }
+  { "key": "AgenticReviewRejected", "label": "Ki-Ergebnis abgelehnt", "level": "important", "topic": "agentic" },
+  { "key": "Marked",   "label": "Markiert",           "level": "info", "topic": "data" },
+  { "key": "Unmarked", "label": "Markierung gelöscht", "level": "info", "topic": "data" }
 ]

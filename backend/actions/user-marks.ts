@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { getUserMarks, markItem, unmarkItem, getUserMark } from '../db';
+import { getUserMarks, markItem, unmarkItem, getUserMark, getAllMarksForItem, logEvent } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -18,12 +18,22 @@ const action = defineHttpAction({
   label: 'User item marks',
   appliesTo: () => false,
   matches: (path, method) =>
-    (path === '/api/user-marks' || path.startsWith('/api/user-marks?'))
-    && ['GET', 'POST', 'DELETE'].includes(method),
+    ((path === '/api/user-marks' || path.startsWith('/api/user-marks?')) && ['GET', 'POST', 'DELETE'].includes(method))
+    || ((path === '/api/item-marks' || path.startsWith('/api/item-marks?')) && method === 'GET'),
 
   async handle(req: IncomingMessage, res: ServerResponse) {
     const method = req.method || 'GET';
     const url = new URL(req.url || '/', 'http://localhost');
+
+    // All marks for a single item (visible to all operators)
+    if (url.pathname === '/api/item-marks' && method === 'GET') {
+      const itemUUID = url.searchParams.get('itemUUID')?.trim() || '';
+      if (!itemUUID) return sendJson(res, 400, { error: 'itemUUID is required' });
+      const marks = await getAllMarksForItem(itemUUID);
+      return sendJson(res, 200, {
+        marks: marks.map((m) => ({ username: m.Username, note: m.Note, createdAt: m.CreatedAt }))
+      });
+    }
 
     if (method === 'GET') {
       const username = url.searchParams.get('username')?.trim() || '';
@@ -47,11 +57,13 @@ const action = defineHttpAction({
       const note = typeof body.note === 'string' ? body.note.trim() || null : null;
       await markItem(username, itemUUID, note);
       const saved = await getUserMark(username, itemUUID);
+      void logEvent({ Actor: username, EntityType: 'Item', EntityId: itemUUID, Event: 'Marked' });
       return sendJson(res, 200, { ok: true, note: saved?.Note ?? null });
     }
 
     if (method === 'DELETE') {
       await unmarkItem(username, itemUUID);
+      void logEvent({ Actor: username, EntityType: 'Item', EntityId: itemUUID, Event: 'Unmarked' });
       return sendJson(res, 200, { ok: true });
     }
 

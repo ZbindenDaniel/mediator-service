@@ -67,6 +67,16 @@ export function formatEventDescription(event: EventLog): React.ReactNode {
       }
       break;
     }
+
+    case 'Marked':
+    case 'Unmarked': {
+      const actor = str(event.Actor);
+      const base = eventLabel(event.Event);
+      if (actor) {
+        return <>{base} von {actor}</>;
+      }
+      break;
+    }
   }
 
   return eventLabel(event.Event);
