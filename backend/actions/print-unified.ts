@@ -454,13 +454,6 @@ export async function handleUnifiedPrintRequest(
       }
 
       previewUrl = `/prints/${path.basename(htmlPath)}`;
-      await ctx.logEvent({
-        Actor: actor,
-        EntityType: entityType,
-        EntityId: entityId,
-        Event: 'PrintPreviewSaved',
-        Meta: JSON.stringify({ file: previewUrl, labelType, qrPayload: labelPayload })
-      });
       console.log('Label preview generated', {
         ...logContext,
         previewUrl,
@@ -498,20 +491,7 @@ export async function handleUnifiedPrintRequest(
       printResult = { sent: false, reason: (err as Error).message };
     }
 
-    if (printResult.sent) {
-      await ctx.logEvent({
-        Actor: actor,
-        EntityType: entityType,
-        EntityId: entityId,
-        Event: 'PrintSent',
-        Meta: JSON.stringify({
-          transport: 'pdf',
-          file: previewUrl,
-          artifact: printResult.artifactPath,
-          labelType
-        })
-      });
-    } else {
+    if (!printResult.sent) {
       await ctx.logEvent({
         Actor: actor,
         EntityType: entityType,

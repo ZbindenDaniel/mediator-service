@@ -1141,14 +1141,14 @@ export default function ItemListPage() {
               </div>
 
               <div className="filter-grid__item">
-                <label className="filter-control filter-control--checkbox">
+                <label className="filter-control--checkbox">
                   <input
                     type="checkbox"
                     aria-label="Nur meine Markierungen anzeigen"
                     checked={myMarksOnly}
                     onChange={(e) => setMyMarksOnly(e.target.checked)}
                   />
-                  <span>Meine Markierungen</span>
+                  <span>Markiert</span>
                 </label>
               </div>
             </div>

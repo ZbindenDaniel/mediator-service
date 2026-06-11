@@ -1619,14 +1619,14 @@ input[type="checkbox"] {
 .status-info {
     width: 100%;
     display: flex;
-    justify-content: space-between;
+    // justify-content: space-between;
     align-items: center;
 }
 
 .stats-card-status-row {
     margin-top: 10px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    // grid-template-columns: minmax(0, 1fr);
     gap: 6px;
 }
 
@@ -2950,7 +2950,7 @@ button:focus {
 
     // TODO(stats-card-status-row): Reconfirm horizontal status alignment if desktop card spacing shifts.
     .stats-card-status-row {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        // grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         align-items: start;
         column-gap: 12px;
     }
@@ -3428,10 +3428,10 @@ button:focus {
 }
 
 .admin-page__grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 12px;
-    align-items: start;
+    // display: grid;
+    // grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    // gap: 12px;
+    // align-items: start;
 }
 
 .admin-export-row {
@@ -3527,9 +3527,11 @@ button:focus {
 }
 
 .filter-control--checkbox {
+    display: flex;
     flex-direction: row;
     align-items: center;
     gap: 6px;
+    align-self: center;
     cursor: pointer;
 
     input[type="checkbox"] {

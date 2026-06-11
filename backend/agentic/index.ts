@@ -1117,20 +1117,24 @@ export async function dispatchQueuedAgenticRuns(
       });
       const nowIso = resolveNow(deps).toISOString();
       const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
-      await Promise.allSettled(overCapRuns.map(run =>
-        updateQueueState({
-          Artikel_Nummer: run.Artikel_Nummer,
-          Status: AGENTIC_RUN_STATUS_FAILED,
-          LastModified: nowIso,
-          RetryCount: 0,
-          NextRetryAt: null,
-          LastError: 'over-cap-cancelled',
-          LastAttemptAt: run.LastAttemptAt ?? nowIso
-        }).catch(err => logger.error?.('[agentic-service] Failed to cancel over-cap run', {
-          artikelNummer: run.Artikel_Nummer,
-          error: toErrorMessage(err)
-        }))
-      ));
+      await Promise.allSettled(overCapRuns.map(async (run) => {
+        try {
+          await updateQueueState({
+            Artikel_Nummer: run.Artikel_Nummer,
+            Status: AGENTIC_RUN_STATUS_FAILED,
+            LastModified: nowIso,
+            RetryCount: 0,
+            NextRetryAt: null,
+            LastError: 'over-cap-cancelled',
+            LastAttemptAt: run.LastAttemptAt ?? nowIso
+          });
+        } catch (err) {
+          logger.error?.('[agentic-service] Failed to cancel over-cap run', {
+            artikelNummer: run.Artikel_Nummer,
+            error: toErrorMessage(err)
+          });
+        }
+      }));
     }
   } catch (err) {
     logger.error?.('[agentic-service] Failed to enforce concurrency cap on running runs', {
