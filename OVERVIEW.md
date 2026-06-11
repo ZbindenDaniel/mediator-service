@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+812. ✅ Fix "invalid input syntax for type integer: '30.0'" blocking all item fetches
+   - **Why:** `Hauptkategorien_A/B` and `Unterkategorien_A/B` are stored as TEXT columns. ERP imports can write float-like strings (e.g. `"30.0"`). PostgreSQL's direct `CAST(... AS INTEGER)` rejects these; casting through `::numeric` first (`NULLIF(col,'')::numeric::integer`) tolerates decimal strings. Fixed in 5 SQL expressions across `db.ts`, `spec-gap.ts`, and `agentic/invoker.ts`.
+   - **Deferred:** Nothing deferred.
 797. ✅ Fix agentic queue permanently stuck at concurrency cap + stats showing 0
    - **Why:** Two bugs caused the queue to deadlock: (1) `applyQueueUpdate` in stale-run recovery was fire-and-forget (async DB call never awaited), so `fetchRunningCount` ran before the FAILED updates committed — the cap still read 3 and every scheduled callback hit "Concurrency cap reached at promotion". Fixed by awaiting recovery updates via `Promise.allSettled` before counting. (2) Stale SQL missed runs with NULL `LastAttemptAt` (NULL < anything = NULL in SQL). Fixed with `OR "LastAttemptAt" IS NULL`. Additionally: `overview.ts` used SQLite `.all()` / `.get()` patterns on async Postgres functions — all five calls returned undefined silently, producing Ki-Läufe=0 and Enriched=0 in the stats pie chart.
    - **Deferred:** Random spot-check re-runs of already-approved items (product decision on scope/frequency). Multi-instance safety (`SELECT FOR UPDATE SKIP LOCKED`) deferred per confirmed decision.
