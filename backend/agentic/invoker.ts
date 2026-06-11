@@ -338,8 +338,8 @@ export class AgenticModelInvoker {
         ar."LastModified" AS "ReviewedAt"
       FROM item_refs r
       JOIN agentic_runs ar ON ar."Artikel_Nummer" = r."Artikel_Nummer"
-      WHERE CAST(r."Unterkategorien_A" AS INTEGER) = (
-        SELECT CAST(base."Unterkategorien_A" AS INTEGER)
+      WHERE CAST(NULLIF(r."Unterkategorien_A",'')::numeric AS INTEGER) = (
+        SELECT CAST(NULLIF(base."Unterkategorien_A",'')::numeric AS INTEGER)
         FROM item_refs base
         WHERE base."Artikel_Nummer" = $1
       )
