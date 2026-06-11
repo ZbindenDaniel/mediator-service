@@ -19,6 +19,7 @@ services:
 
   mediator:
     build: .
+    image: ${MEDIATOR_IMAGE:-mediator:latest}
     env_file: .env
     environment:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav

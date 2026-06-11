@@ -29,12 +29,17 @@ If printer checks fail after a CUPS restart, first verify `/run/cups` is visible
 
 1. Start the local dependencies with Docker Compose: `docker compose up -d`. The bundled configuration launches Postgres alongside the mediator so the backend can connect via the Compose network aliases.
 2. **SQLite → PostgreSQL data migration (one-time, only when upgrading from a SQLite deployment):**
+
+   Runs inside the already-running mediator container — no separate service or network config needed.
+
    ```bash
-   # Point DB_PATH at your existing SQLite file (default: ./data/mediator.sqlite)
-   export DB_PATH=/path/to/mediator.sqlite
-   # DATABASE_URL must be set (already in .env for Docker Compose defaults)
-   npm run migrate
+   # 1. Copy the SQLite file into the running container
+   docker cp /path/to/mediator.sqlite mediator:/tmp/mediator.sqlite
+
+   # 2. Run the migration script inside the container
+   docker compose exec -e DB_PATH=/tmp/mediator.sqlite mediator node scripts/migrate-sqlite-to-postgres.js
    ```
+
    The script prints a row-count summary at the end — verify the numbers match your SQLite source.
    **Skip this step for fresh installations** — the backend creates all tables automatically on first start.
    > Note: the script is safe to re-run only when the Postgres tables are empty. If you need to re-run it, truncate the target tables first.

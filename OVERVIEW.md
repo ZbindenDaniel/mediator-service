@@ -7,6 +7,18 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+799. ✅ Add migrate service to docker-compose so migration runs on VM without the repo
+   - **Why:** VM only runs Docker; operators need to migrate without cloning the repo or installing Node. The script is already in the image — adding a profiles:[migrate] service + SQLITE_PATH bind-mount makes it a single docker compose run command.
+   - **Deferred:** Nothing.
+798. ✅ Fix remaining unsafe CAST in listItemReferencesWithFilters (missed by earlier replace_all)
+   - **Why:** The earlier fix replaced CAST→ROUND in itemSelectColumns and the agentic WHERE clause but listItemReferencesWithFilters has an independent SELECT block with different indentation that was missed. Same "30.0" crash risk.
+   - **Deferred:** Nothing.
+797. ✅ Fix migration: coerce SQLite float strings to integer for PG integer columns
+   - **Why:** SQLite stored dimension values like `"362.2"` in INTEGER columns (Länge_mm etc.); PostgreSQL rejects these. Now queries `information_schema.columns` for each table's integer/bigint columns and rounds values before insert.
+   - **Deferred:** Nothing.
+796. ✅ Fix migrate-sqlite-to-postgres: wrong table name `item_references` → `item_refs` and wrong insert order
+   - **Why:** `item_references` doesn't exist in SQLite so item_refs was never populated, then `items` FK violation fired because the parent table was empty. Also renamed `agentic_request_log` → `agentic_request_logs` to match the schema.
+   - **Deferred:** Nothing.
 797. ✅ Fix agentic queue permanently stuck at concurrency cap + stats showing 0
    - **Why:** Two bugs caused the queue to deadlock: (1) `applyQueueUpdate` in stale-run recovery was fire-and-forget (async DB call never awaited), so `fetchRunningCount` ran before the FAILED updates committed — the cap still read 3 and every scheduled callback hit "Concurrency cap reached at promotion". Fixed by awaiting recovery updates via `Promise.allSettled` before counting. (2) Stale SQL missed runs with NULL `LastAttemptAt` (NULL < anything = NULL in SQL). Fixed with `OR "LastAttemptAt" IS NULL`. Additionally: `overview.ts` used SQLite `.all()` / `.get()` patterns on async Postgres functions — all five calls returned undefined silently, producing Ki-Läufe=0 and Enriched=0 in the stats pie chart.
    - **Deferred:** Random spot-check re-runs of already-approved items (product decision on scope/frequency). Multi-instance safety (`SELECT FOR UPDATE SKIP LOCKED`) deferred per confirmed decision.
