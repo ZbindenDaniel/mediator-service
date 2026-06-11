@@ -391,6 +391,17 @@ CREATE TABLE IF NOT EXISTS agentic_run_review_history (
 
 CREATE INDEX IF NOT EXISTS idx_agentic_run_review_history_artikel_nummer_recorded_at
   ON agentic_run_review_history ("Artikel_Nummer", "RecordedAt", "Id");
+
+CREATE TABLE IF NOT EXISTS user_item_marks (
+  "Username"  TEXT NOT NULL,
+  "ItemUUID"  TEXT NOT NULL,
+  "CreatedAt" TEXT NOT NULL DEFAULT (to_char(NOW() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+  "Note"      TEXT,
+  PRIMARY KEY ("Username", "ItemUUID"),
+  FOREIGN KEY ("ItemUUID") REFERENCES items("ItemUUID") ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_item_marks_username ON user_item_marks("Username");
 `);
 
   console.info('[db] Postgres schema ready');
@@ -1869,6 +1880,23 @@ export async function fetchQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
   }
 }
 
+export async function fetchIdleFillAgenticRuns(limit = 3): Promise<AgenticRun[]> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+  try {
+    return query<AgenticRun>(
+      `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
+              "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
+       FROM agentic_runs
+       WHERE "Status"='notStarted' AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
+       ORDER BY "LastModified" ASC, "Id" ASC LIMIT $1`,
+      [effectiveLimit]
+    );
+  } catch (err) {
+    console.error('[db] Failed to fetch idle-fill agentic runs', err);
+    throw err;
+  }
+}
+
 export async function updateQueuedAgenticRunQueueState(update: AgenticRunQueueUpdate): Promise<void> {
   try {
     const count = await execute(
@@ -2322,3 +2350,36 @@ export type {
 };
 
 export type { ShopwareSyncQueueEntry, ShopwareSyncQueueInsert, ShopwareSyncQueueStatus } from './shopware/queueTypes';
+
+// ── User item marks ──────────────────────────────────────────────────────────
+
+export async function getUserMarks(username: string): Promise<Array<{ ItemUUID: string; Note: string | null }>> {
+  const rows = await query<{ ItemUUID: string; Note: string | null }>(
+    `SELECT "ItemUUID", "Note" FROM user_item_marks WHERE "Username" = $1`,
+    [username]
+  );
+  return rows;
+}
+
+export async function markItem(username: string, itemUUID: string, note: string | null = null): Promise<void> {
+  await execute(
+    `INSERT INTO user_item_marks ("Username", "ItemUUID", "Note")
+     VALUES ($1, $2, $3)
+     ON CONFLICT ("Username", "ItemUUID") DO UPDATE SET "Note" = EXCLUDED."Note"`,
+    [username, itemUUID, note]
+  );
+}
+
+export async function unmarkItem(username: string, itemUUID: string): Promise<void> {
+  await execute(
+    `DELETE FROM user_item_marks WHERE "Username" = $1 AND "ItemUUID" = $2`,
+    [username, itemUUID]
+  );
+}
+
+export async function getUserMark(username: string, itemUUID: string): Promise<{ Note: string | null } | null> {
+  return queryOne<{ Note: string | null }>(
+    `SELECT "Note" FROM user_item_marks WHERE "Username" = $1 AND "ItemUUID" = $2`,
+    [username, itemUUID]
+  );
+}

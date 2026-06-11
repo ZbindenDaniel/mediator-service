@@ -6,6 +6,8 @@ const USERNAME_STORAGE_KEY = 'username';
 export function setUser(username: string): void {
   try {
     localStorage.setItem(USERNAME_STORAGE_KEY, username);
+    // Notify same-tab listeners (storage event only fires cross-tab).
+    window.dispatchEvent(new CustomEvent('mediator:username-changed'));
   } catch (err) {
     console.error('Failed to persist username', err);
   }

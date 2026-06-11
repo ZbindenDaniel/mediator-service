@@ -40,7 +40,7 @@
 
 1c. **Investigate remaining tester-reported bugs (need runtime testing):**
    - "KI lauf kann nicht geloescht werden" — `agentic-delete.ts` looks correct; check browser network tab for 400/404 response and whether `actor` is sent in request body
-   - "ki erfassung indefinite" — agentic capture stuck; likely related to item 2 below (agentic runs broken for references)
+   - "ki erfassung indefinite" — agentic capture stuck; stale-run recovery now reliably clears stuck RUNNING runs (fire-and-forget race fixed); auto-retry re-queues after backoff. If still stuck, check model service callback.
    - "bearbeiten fehler, KI-Status nicht angezeigt" — `save-item.ts` silently sets `agentic = null` on fetch error; check if `getAgenticRun` errors after migration
    - "list button broken" — unclear; may self-resolve now that box-detail is fixed
    - "artikel dupliziert nach umlagern" — likely stale frontend state; may self-resolve with box-detail fix (box item list can now reload after move)
@@ -66,6 +66,11 @@
 ---
 
 ## Priority 2 — Feature Improvements
+
+**Per-user item marking (step 779) — deferred items:**
+- CSS polish for `.mark-btn` added; amber accent color is hardcoded (`#f59e0b`) — wire to a CSS variable once a warning/accent token is established.
+- Bulk mark action in `BulkItemActionBar` not yet added.
+- Note text not shown as tooltip on the star icon in the list — keep as tab-only for now.
 
 22. ✅ **Apply tab-gating to BoxDetail.** Done — each box tab now shows only its content slice; DetailTabBar renders inside BoxDetail.
 

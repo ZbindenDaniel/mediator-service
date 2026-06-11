@@ -93,6 +93,8 @@ import ItemImagesTab from './item-tabs/ItemImagesTab';
 import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
 import ItemAccessoriesTab from './item-tabs/ItemAccessoriesTab';
 import ItemEventsTab from './item-tabs/ItemEventsTab';
+import ItemMarkierungTab from './item-tabs/ItemMarkierungTab';
+import { useUserMarks } from '../context/UserMarksContext';
 import {
   buildNormalizedReviewSpecFields,
   mergeSpecFieldSelection,
@@ -328,6 +330,7 @@ export default function ItemDetail({ itemId }: Props) {
     active: false
   });
   const { setEntity, activeTab, setMobileShowDetail } = usePanelContext();
+  const { isMarked } = useUserMarks();
 
   // Only set the entity — don't switch the main view. The detail panel shows the box
   // without displacing whatever list is currently in the left column.
@@ -2869,6 +2872,9 @@ export default function ItemDetail({ itemId }: Props) {
       case 'events':
         tabContent = <ItemEventsTab events={events} />;
         break;
+      case 'markierung':
+        tabContent = <ItemMarkierungTab itemUUID={item.ItemUUID} />;
+        break;
       default:
         tabContent = (
           <ItemReferenceTab
@@ -2884,7 +2890,7 @@ export default function ItemDetail({ itemId }: Props) {
 
     return (
       <>
-        <DetailTabBar agenticNeedsReview={agenticNeedsReview} />
+        <DetailTabBar agenticNeedsReview={agenticNeedsReview} isMarked={isMarked(item.ItemUUID)} />
         <div className="panel-tab-body">{tabContent}</div>
       </>
     );

@@ -34,6 +34,7 @@ export type ItemListFilters = {
   entityFilter: 'all' | 'instances' | 'references';
   qualityThreshold: number;
   qualityFilter: 'all' | 'rated' | 'missing';
+  myMarksOnly: boolean;
 };
 
 export type ItemListFilterChangeDetail = {
@@ -72,7 +73,8 @@ const DEFAULT_FILTERS: ItemListFilters = {
   sortDirection: 'asc',
   entityFilter: 'instances',
   qualityThreshold: QUALITY_MIN,
-  qualityFilter: 'all'
+  qualityFilter: 'all',
+  myMarksOnly: false
 };
 
 export function getDefaultItemListFilters(): ItemListFilters {
@@ -96,6 +98,7 @@ export function hasNonDefaultFilters(
     || filters.entityFilter !== defaults.entityFilter
     || filters.qualityThreshold !== defaults.qualityThreshold
     || filters.qualityFilter !== defaults.qualityFilter
+    || filters.myMarksOnly !== defaults.myMarksOnly
   );
 }
 
@@ -163,6 +166,9 @@ export function getActiveFilterDescriptions(
       references: 'Nur Referenzen'
     };
     active.push(`Typ: ${filterLabels[filters.entityFilter]}`);
+  }
+  if (filters.myMarksOnly) {
+    active.push('Meine Markierungen');
   }
   if (filters.sortKey !== defaults.sortKey || filters.sortDirection !== defaults.sortDirection) {
     active.push(
@@ -304,6 +310,10 @@ export function loadItemListFilters(
       merged.entityFilter = parsed.entityFilter;
     } else if (parsed.entityFilter !== undefined) {
       logger.warn?.('Ignoring invalid stored entity filter', parsed.entityFilter);
+    }
+
+    if (typeof parsed.myMarksOnly === 'boolean') {
+      merged.myMarksOnly = parsed.myMarksOnly;
     }
 
     return merged;
