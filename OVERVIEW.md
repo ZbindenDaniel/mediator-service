@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+800. ✅ Fix listItemsForExport: convert from object-with-.all() to plain async function
+   - **Why:** `sync-erp.ts`, `export-items.ts`, and `export-data.ts` all call `ctx.listItemsForExport(filters)` directly, but `db.ts` exported it as `{ all: async function(...) }` — a leftover SQLite-statement shape. The direct call threw "ctx.listItemsForExport is not a function" on every ERP/kivi sync and export.
+   - **Deferred:** Nothing.
 799. ✅ Add migrate service to docker-compose so migration runs on VM without the repo
    - **Why:** VM only runs Docker; operators need to migrate without cloning the repo or installing Node. The script is already in the image — adding a profiles:[migrate] service + SQLITE_PATH bind-mount makes it a single docker compose run command.
    - **Deferred:** Nothing.
