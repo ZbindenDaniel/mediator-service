@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+812. ✅ Add media reachability healthchecks + improved printer queue status
+   - **Why:** WebDAV mounts can silently fail or become stale (blocking `fs.stat` indefinitely). Added `GET /api/media/health` with timeout-protected directory probes (`Promise.race` at 3 s) plus a DB-sampled image probe (10 random item_refs checked against the fetch roots) — catches both mount failures and naming-convention drift. Replaced the dumb `printerConfigured` boolean in `/api/admin/config` with per-queue test results in `/api/printer/status` (tests all six label-type queues in parallel, deduplicates shared queues). `SystemStatusCard` now shows live media reachability + image hit-rate + per-queue printer badges. `BoxDetail` photo error handler now sets state and shows "Foto konnte nicht geladen werden." instead of silent logging.
+   - **Deferred:** Periodic background polling (currently on-demand at admin page load). Global media-down banner outside the admin page. Write-probe for writable staging dir confirmation.
 799. ✅ Add migrate service to docker-compose so migration runs on VM without the repo
    - **Why:** VM only runs Docker; operators need to migrate without cloning the repo or installing Node. The script is already in the image — adding a profiles:[migrate] service + SQLITE_PATH bind-mount makes it a single docker compose run command.
    - **Deferred:** Nothing.
