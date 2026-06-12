@@ -308,7 +308,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [compatibleAccessoryRefs, setCompatibleAccessoryRefs] = useState<any[]>([]);
   const [compatibleParentRefs, setCompatibleParentRefs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
-  const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel } | null>(null);
+  const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel; score?: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -760,7 +760,11 @@ export default function ItemDetail({ itemId }: Props) {
     );
 
     if (co2Impact && co2Impact.label !== 'irrelevant') {
-      rows.push(['CO₂ Potenzial', CO2_IMPACT_LABEL_DE[co2Impact.label]]);
+      const co2Label = CO2_IMPACT_LABEL_DE[co2Impact.label];
+      const co2Display = typeof co2Impact.score === 'number'
+        ? `${co2Label} (~${Math.round(co2Impact.score)} kg CO₂)`
+        : co2Label;
+      rows.push(['CO₂ Potenzial', co2Display]);
     }
 
     return rows;
@@ -1134,7 +1138,9 @@ export default function ItemDetail({ itemId }: Props) {
         setCompatibleParentRefs(Array.isArray((data as any).compatibleParentRefs) ? (data as any).compatibleParentRefs : []);
         setAttachments(Array.isArray((data as any).attachments) ? (data as any).attachments : []);
         const rawCo2 = (data as any).co2Impact;
-        setCo2Impact(rawCo2 && typeof rawCo2.label === 'string' ? rawCo2 : null);
+        setCo2Impact(rawCo2 && typeof rawCo2.label === 'string'
+          ? { label: rawCo2.label, score: typeof rawCo2.score === 'number' ? rawCo2.score : undefined }
+          : null);
         setAgenticError(null);
         setAgenticReviewIntent(null);
         setLoadError(null);

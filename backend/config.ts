@@ -342,6 +342,8 @@ if (ERP_IMPORT_INCLUDE_MEDIA && !ERP_MEDIA_MIRROR_ENABLED) {
 }
 // TODO(agent): Add startup healthcheck coverage for ERP_SYNC_ENABLED + ERP_IMPORT_URL combinations.
 export const ERP_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_SYNC_ENABLED, 'ERP_SYNC_ENABLED') ?? true;
+export const ERP_NIGHTLY_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_NIGHTLY_SYNC_ENABLED, 'ERP_NIGHTLY_SYNC_ENABLED') ?? false;
+export const ERP_NIGHTLY_SYNC_HOUR = parseInt(process.env.ERP_NIGHTLY_SYNC_HOUR || '2', 10);
 export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || '').trim());
 export const ERP_IMPORT_USERNAME = (process.env.ERP_IMPORT_USERNAME || '').trim();
 export const ERP_IMPORT_PASSWORD = (process.env.ERP_IMPORT_PASSWORD || '').trim();

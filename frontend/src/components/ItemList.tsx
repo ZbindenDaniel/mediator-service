@@ -11,6 +11,7 @@ import ShopBadge from './ShopBadge';
 import ZubehoerBadge from './ZubehoerBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import type { GroupedItemDisplay } from '../lib/itemGrouping';
+import type { ItemListSortKey } from '../lib/itemListFiltersStorage';
 import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Confirm item list location tags remain legible without the color metadata.
@@ -33,6 +34,7 @@ interface Props {
   allVisibleSelected: boolean;
   someVisibleSelected: boolean;
   onSelect?: (id: string) => void;
+  sortKey?: ItemListSortKey;
 }
 
 type ItemLocationSource = Pick<Item, 'ItemUUID' | 'BoxID' | 'Location' | 'ShelfLabel'>;
@@ -72,6 +74,17 @@ function resolveDisplayCount(group: GroupedItemDisplay): number {
   }
 }
 
+function formatDate(value: unknown): string {
+  if (!value || typeof value !== 'string') return '—';
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('de-CH');
+  } catch {
+    return '—';
+  }
+}
+
 export default function ItemList({
   items,
   selectedItemIds,
@@ -79,7 +92,8 @@ export default function ItemList({
   onToggleAll,
   allVisibleSelected,
   someVisibleSelected,
-  onSelect
+  onSelect,
+  sortKey
 }: Props) {
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
@@ -145,6 +159,11 @@ export default function ItemList({
             <th className="col-shop optional-column">Shop</th>
             <th className="col-zubehoer optional-column">Zub.</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
+            {(sortKey === 'entryDate' || sortKey === 'lastSynced') && (
+              <th className="col-date optional-column">
+                {sortKey === 'lastSynced' ? 'Synchronisiert' : 'Erfasst am'}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -363,6 +382,12 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   <ZubehoerBadge compact mode={zubehoerMode} />
                 </td>
                 <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
+                {sortKey === 'entryDate' && (
+                  <td className="col-date optional-column">{formatDate(representative?.Datum_erfasst)}</td>
+                )}
+                {sortKey === 'lastSynced' && (
+                  <td className="col-date optional-column">{formatDate(representative?.LastSyncedAt)}</td>
+                )}
               </tr>
             );
           })}

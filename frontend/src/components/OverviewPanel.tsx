@@ -5,6 +5,9 @@ interface OverviewData {
   counts?: { boxes: number; items: number; itemsNoBox: number };
   agentic?: { stateCounts?: Record<string, number>; enrichedItems?: number };
   totalWeightKg?: number;
+  totalPriceValue?: number;
+  co2LabelCounts?: Partial<Record<string, number>>;
+  co2ScoreSums?: Partial<Record<string, number>>;
 }
 
 export default function OverviewPanel() {
@@ -43,6 +46,9 @@ export default function OverviewPanel() {
       counts={overview?.counts}
       agentic={overview?.agentic as any}
       totalWeightKg={overview?.totalWeightKg}
+      totalPriceValue={overview?.totalPriceValue}
+      co2LabelCounts={overview?.co2LabelCounts as any}
+      co2ScoreSums={overview?.co2ScoreSums as any}
       printerOk={printerOk}
       printerReason={printerReason}
       health={health}
