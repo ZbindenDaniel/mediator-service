@@ -28,3 +28,5 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`agentic-basics.md`](./agentic-basics.md) | Agentic orchestration overview, lifecycle, guardrails |
 | [`item-flow.md`](./item-flow.md) | Agentic extraction/categorization/pricing stage contracts |
 | [`review-flow.md`](./review-flow.md) | Review lifecycle, quality assessment creation flow |
+| [`nightly-erp-sync.md`](./nightly-erp-sync.md) | Nightly ERP sync scheduler: opt-in model, timing, toggle, troubleshooting |
+| [`co2-impact.md`](./co2-impact.md) | CO₂ recovery potential: formula, label thresholds, contract, display |

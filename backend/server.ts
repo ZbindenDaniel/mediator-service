@@ -572,7 +572,9 @@ if (SHOPWARE_SYNC_ENABLED) {
   console.info('[server] SHOPWARE_SYNC_ENABLED=true but the background worker is not active because dispatchJob is not implemented.');
 }
 
-// Seed DB nightly-sync toggle from env on first startup, then run scheduler
+// ERP_NIGHTLY_SYNC_ENABLED is the env-level default; the runtime toggle lives in system_settings
+// so it persists across restarts and can be flipped from the admin page without redeploying.
+// Seed only on first startup (existing !== null means the operator has already set it).
 void (async () => {
   try {
     const existing = await getSystemSetting('erp_nightly_sync_enabled');
@@ -599,6 +601,8 @@ setInterval(() => {
       return;
     }
 
+    // listRefsChangedSinceSync only returns refs where LastSyncedAt IS NOT NULL —
+    // an item enters the cycle only after its first manual sync (opt-in model).
     const artikelNummern = await listRefsChangedSinceSync();
     if (artikelNummern.length === 0) {
       console.info('[nightly-erp-sync] No changed refs to sync');
@@ -607,6 +611,7 @@ setInterval(() => {
     }
 
     console.info('[nightly-erp-sync] Starting sync', { count: artikelNummern.length, date: today });
+    // Set date BEFORE the HTTP call so a slow sync or restart doesn't trigger a second run for the same day.
     lastErpNightlySyncDate = today;
 
     const body = JSON.stringify({ artikelNummern });

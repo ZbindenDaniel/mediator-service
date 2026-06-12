@@ -121,7 +121,10 @@ Identifier values are validated against allowlist regexes (EAN: alphanumeric; se
 | `ERP_IMPORT_TIMEOUT_MS` | `30000` | Timeout for ERP import requests. |
 | `ERP_IMPORT_CLIENT_ID` | (unset) | Optional client identifier for ERP imports. |
 | `ERP_MEDIA_MIRROR_DIR` | Derived from `MEDIA_ROOT_DIR` | Mirror destination for `/api/sync/erp` media copy stage (`<root>/shopbilder-import`). Override only for controlled maintenance windows; keep runtime configuration aligned with the fixed root contract. |
+| `ERP_NIGHTLY_SYNC_ENABLED` | `false` | Sets the initial value of the nightly sync toggle in the database on first startup. After first run, the toggle is controlled from the admin page and this variable is ignored. |
+| `ERP_NIGHTLY_SYNC_HOUR` | `2` | UTC hour at which the nightly sync scheduler fires (0–23). The scheduler polls every 60 seconds and runs at most once per UTC day. |
 
+**Nightly sync opt-in model:** Only refs where `item_refs.LastSyncedAt IS NOT NULL` are considered by the nightly scheduler. An item enters the cycle only after its first manual sync (via the admin export UI), which sets `LastSyncedAt`. This prevents unexpected items from being synced before an operator has reviewed them. The runtime toggle (admin page → "Nächtliche ERP-Synchronisation") is stored in the `system_settings` database table so it persists across server restarts.
 
 Operator check: look for `[erp-sync] media_copy_result status=success` in script output and `[sync-erp] script_finished` with `mediaCopyStatus: 'success'` in backend logs to confirm images were mirrored.
 

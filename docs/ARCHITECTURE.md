@@ -132,6 +132,34 @@ Examples:
 - `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv` updates continue to use duplicate detection and zero-stock flags.
 - `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before ingestion.
 
+## Background Schedulers
+
+The backend runs two in-process background intervals, both started unconditionally at server startup in `backend/server.ts`.
+
+### Agentic queue dispatcher
+
+Interval: `agenticQueueDispatchIntervalMs` (config-driven, typically a few seconds).
+
+Calls `dispatchQueuedRuns()`, which promotes `QUEUED` agentic runs to `RUNNING` up to the concurrency cap, and `resumeStaleAgenticRuns()` on startup to recover runs that were `RUNNING` when the process last stopped.
+
+### Nightly ERP sync scheduler
+
+Interval: **60 seconds** (wall-clock polling).
+
+Fires the actual sync at most once per UTC calendar day, at the hour configured by `ERP_NIGHTLY_SYNC_HOUR` (default: 2). Once the sync starts, `lastErpNightlySyncDate` is recorded **before** the HTTP call so a slow sync or mid-call restart cannot trigger a second run for the same day.
+
+**Opt-in model**: `listRefsChangedSinceSync()` returns only `item_refs` rows where `LastSyncedAt IS NOT NULL`. A ref enters the nightly cycle only after its first manual ERP export, which sets `LastSyncedAt`. Refs that have never been manually synced are never touched automatically.
+
+**Detection**: a ref is eligible if any of its instances has `UpdatedAt > ref.LastSyncedAt` — meaning the ref data changed since the last sync. After a successful HTTP 200 from `/api/sync/erp`, `markRefsSynced()` advances `LastSyncedAt` to the current timestamp.
+
+**Runtime toggle**: the scheduler reads `erp_nightly_sync_enabled` from the `system_settings` table on every check. The table is seeded once from `ERP_NIGHTLY_SYNC_ENABLED` env on first startup; afterwards the admin page controls it and changes survive restarts.
+
+### `system_settings` table
+
+A simple key-value store (`key TEXT PRIMARY KEY, value TEXT NOT NULL`) used for persistent runtime toggles that operators can change from the admin UI without redeploying. Currently used only for `erp_nightly_sync_enabled`. New toggles should follow the same `getSystemSetting` / `setSystemSetting` pattern rather than adding new database tables.
+
+See [`docs/detailed/nightly-erp-sync.md`](./detailed/nightly-erp-sync.md) for the full operator runbook.
+
 ## Langtext Migration Notes
 
 - `models/item.ts` still allows `Langtext` as either a legacy string or a structured payload (`Record<string, string | string[]>`), so callers must treat the field as mixed type until the legacy path is retired.
