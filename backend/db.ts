@@ -1671,14 +1671,16 @@ export async function sumInventoryPriceValue(): Promise<number> {
   return Number(row?.total ?? 0);
 }
 
-// Returns Artikel_Nummern of shop refs where any instance changed since last sync (or never synced).
+// Returns Artikel_Nummern of shop refs that have been synced before and have changed since.
+// Refs where LastSyncedAt IS NULL are excluded — they require a manual first sync to enter the cycle.
 export async function listRefsChangedSinceSync(): Promise<string[]> {
   const rows = await query<{ Artikel_Nummer: string }>(
     `SELECT DISTINCT r."Artikel_Nummer"
      FROM item_refs r
      JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
-     WHERE r."Shopartikel" = '1'
-       AND (r."LastSyncedAt" IS NULL OR i."UpdatedAt" > r."LastSyncedAt")`
+     WHERE r."Shopartikel" = 1
+       AND r."LastSyncedAt" IS NOT NULL
+       AND i."UpdatedAt" > r."LastSyncedAt"`
   );
   return rows.map((r) => r.Artikel_Nummer);
 }
