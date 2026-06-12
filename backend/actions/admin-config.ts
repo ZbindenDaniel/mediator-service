@@ -6,8 +6,6 @@ import {
   ERP_IMPORT_INCLUDE_MEDIA,
   ERP_IMPORT_URL,
   SHOPWARE_SYNC_ENABLED,
-  PRINTER_QUEUE,
-  PRINTER_SERVER,
 } from '../config';
 import { requireAdminAuth } from '../utils/admin-auth';
 
@@ -29,7 +27,6 @@ const action = defineHttpAction({
       erpImportIncludeMedia: ERP_IMPORT_INCLUDE_MEDIA,
       erpImportConfigured: Boolean(ERP_IMPORT_URL),
       shopwareSyncEnabled: SHOPWARE_SYNC_ENABLED,
-      printerConfigured: Boolean(PRINTER_QUEUE || PRINTER_SERVER),
     });
   },
   view: () => '<div class="card"><p class="muted">Admin config API</p></div>'

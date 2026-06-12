@@ -106,6 +106,7 @@ export default function BoxDetail({ boxId }: Props) {
   const [photoPreview, setPhotoPreview] = useState('');
   const [photoUpload, setPhotoUpload] = useState<string | null>(null);
   const [photoRemoved, setPhotoRemoved] = useState(false);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
   const [removalStatus, setRemovalStatus] = useState<Record<string, string>>({});
   const [showAdd, setShowAdd] = useState(false);
   const [showRelocate, setShowRelocate] = useState(false);
@@ -739,7 +740,10 @@ export default function BoxDetail({ boxId }: Props) {
 
   const handlePhotoImageError = useCallback(() => {
     console.error('Failed to render box photo preview', { boxId });
+    setPhotoLoadError(true);
   }, [boxId]);
+
+  useEffect(() => { setPhotoLoadError(false); }, [photoPreview]);
 
   // TODO: Replace client-side slicing once the activities page provides pagination.
   const displayedEvents = useMemo(() => events.slice(0, 5), [events]);
@@ -911,20 +915,24 @@ export default function BoxDetail({ boxId }: Props) {
                         <div className="note-photo-controls">
                           {photoPreview ? (
                             <div className="note-photo-preview">
-                              <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
-                                <img
-                                  src={photoPreview}
-                                  alt="Aktuelles Box-Foto"
-                                  style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
-                                  onClick={openPhotoModal}
-                                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPhotoModal(); } }}
-                                  role="button"
-                                  tabIndex={0}
-                                  aria-haspopup="dialog"
-                                  aria-label="Box-Foto vergrößern"
-                                  onError={handlePhotoImageError}
-                                />
-                              </figure>
+                              {photoLoadError ? (
+                                <p className="muted">Foto konnte nicht geladen werden.</p>
+                              ) : (
+                                <figure className="item-media-gallery__item" style={{ maxWidth: '240px' }}>
+                                  <img
+                                    src={photoPreview}
+                                    alt="Aktuelles Box-Foto"
+                                    style={{ maxWidth: '240px', maxHeight: '180px', display: 'block', cursor: 'pointer' }}
+                                    onClick={openPhotoModal}
+                                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPhotoModal(); } }}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-haspopup="dialog"
+                                    aria-label="Box-Foto vergrößern"
+                                    onError={handlePhotoImageError}
+                                  />
+                                </figure>
+                              )}
                               <div className="row">
                                 <button type="button" className="btn btn--danger" onClick={handlePhotoRemove}>Foto entfernen</button>
                               </div>
@@ -1215,12 +1223,16 @@ export default function BoxDetail({ boxId }: Props) {
               </button>
             </header>
             <div className="item-media-gallery__dialog-body">
-              <img
-                className="item-media-gallery__dialog-image"
-                src={photoPreview}
-                alt={`Foto für Behälter ${box?.BoxID ?? boxId}`}
-                onError={handlePhotoImageError}
-              />
+              {photoLoadError ? (
+                <p className="muted">Foto konnte nicht geladen werden.</p>
+              ) : (
+                <img
+                  className="item-media-gallery__dialog-image"
+                  src={photoPreview}
+                  alt={`Foto für Behälter ${box?.BoxID ?? boxId}`}
+                  onError={handlePhotoImageError}
+                />
+              )}
               <figcaption className="item-media-gallery__dialog-caption">
                 Foto für Behälter {box?.BoxID ?? boxId}
               </figcaption>

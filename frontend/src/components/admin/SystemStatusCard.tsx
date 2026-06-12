@@ -7,12 +7,29 @@ interface AdminConfig {
   erpImportIncludeMedia: boolean;
   erpImportConfigured: boolean;
   shopwareSyncEnabled: boolean;
-  printerConfigured: boolean;
 }
 
 interface OverviewCounts {
   items: number;
   boxes: number;
+}
+
+interface MediaHealth {
+  ok: boolean;
+  webdav: { accessible: boolean } | null;
+  imageProbe: { sampled: number; accessible: number } | null;
+}
+
+interface PrinterQueue {
+  label: string;
+  queue: string;
+  ok: boolean;
+  reason?: string;
+}
+
+interface PrinterStatus {
+  ok: boolean;
+  queues: PrinterQueue[];
 }
 
 interface Props {
@@ -25,6 +42,8 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
   const [config, setConfig] = useState<AdminConfig | null>(null);
   const [counts, setCounts] = useState<OverviewCounts | null>(null);
   const [co2Labels, setCo2Labels] = useState<Record<string, number> | null>(null);
+  const [mediaHealth, setMediaHealth] = useState<MediaHealth | null>(null);
+  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
 
   useEffect(() => {
     const authHeaders: Record<string, string> = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
@@ -47,6 +66,14 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
           if (d.co2LabelCounts && typeof d.co2LabelCounts === 'object') setCo2Labels(d.co2LabelCounts);
         })
         .catch(err => logError('Failed to load overview for system status', err)),
+      fetch('/api/media/health')
+        .then(r => r.json() as Promise<MediaHealth>)
+        .then(d => setMediaHealth(d))
+        .catch(err => logError('Failed to load media health', err)),
+      fetch('/api/printer/status')
+        .then(r => r.json() as Promise<PrinterStatus>)
+        .then(d => setPrinterStatus(d))
+        .catch(err => logError('Failed to load printer status', err)),
     ]);
   }, [authToken, onAuthFailure]);
 
@@ -62,6 +89,25 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
             : <span className="status-badge status-badge--error">Fehler</span>
         }
       </div>
+      {mediaHealth !== null && (
+        <>
+          <div className="admin-status-row">
+            <span>Medien erreichbar:</span>
+            {mediaHealth.ok
+              ? <span className="status-badge status-badge--ok">OK</span>
+              : <span className="status-badge status-badge--error">
+                  {mediaHealth.webdav && !mediaHealth.webdav.accessible ? 'WebDAV fehlt' : 'Fehler'}
+                </span>
+            }
+          </div>
+          {mediaHealth.imageProbe !== null && mediaHealth.imageProbe.sampled > 0 && (
+            <div className="admin-status-row">
+              <span>Bilder:</span>
+              <span>{mediaHealth.imageProbe.accessible}/{mediaHealth.imageProbe.sampled} erreichbar</span>
+            </div>
+          )}
+        </>
+      )}
       {counts !== null && (
         <>
           <div className="admin-status-row">
@@ -89,8 +135,28 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
             <li>ERP konfiguriert: <strong>{config.erpImportConfigured ? 'ja' : 'nein'}</strong></li>
             <li>ERP Medien: <strong>{config.erpImportIncludeMedia ? 'aktiv' : 'inaktiv'}</strong></li>
             <li>Shopware: <strong>{config.shopwareSyncEnabled ? 'aktiv' : 'inaktiv'}</strong></li>
-            <li>Drucker konfiguriert: <strong>{config.printerConfigured ? 'ja' : 'nein'}</strong></li>
           </ul>
+        </div>
+      )}
+      {printerStatus !== null && (
+        <div style={{ marginTop: '12px' }}>
+          <p className="muted" style={{ margin: '0 0 4px' }}>Drucker:</p>
+          {printerStatus.queues.length === 0
+            ? <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-muted, #888)' }}>Kein Drucker konfiguriert</p>
+            : (
+              <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px' }}>
+                {printerStatus.queues.map((q) => (
+                  <li key={`${q.label}-${q.queue}`}>
+                    {q.label} ({q.queue}):{' '}
+                    {q.ok
+                      ? <span className="status-badge status-badge--ok">OK</span>
+                      : <span className="status-badge status-badge--error" title={q.reason}>Fehler</span>
+                    }
+                  </li>
+                ))}
+              </ul>
+            )
+          }
         </div>
       )}
     </div>
