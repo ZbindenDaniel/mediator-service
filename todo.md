@@ -160,6 +160,7 @@
 33b. ✅ **Admin page: add password protection via ADMIN_SECRET.** If `ADMIN_SECRET` env var is set, backend rejects all `/api/admin/*` requests without a matching `Authorization: Bearer <secret>` header. Frontend shows a password gate on `/admin` that stores the entered value in `sessionStorage` and threads it through admin API calls (`/api/admin/label-queue`, `/api/admin/config`). Existing non-admin endpoints (`/api/overview`, `/api/export/items`, etc.) stay unprotected.
 
 34. **Add WebDAV folder for temporary media, transcripts, and service-related data.** Support the new transcript persistence location and other temporary media storage needs.
+34b. **Media health: periodic background check.** `/api/media/health` is currently on-demand (polled when admin page loads). A recurring server-side probe (e.g. every 5 min) that logs a warning when reachability drops would surface WebDAV failures without requiring an operator to open the admin page.
 
 35. **Create boxes from scans.** When a box is deleted but is later physically scanned, it should be recreated.
 
