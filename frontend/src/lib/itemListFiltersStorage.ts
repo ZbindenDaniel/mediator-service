@@ -15,6 +15,7 @@ export type ItemListSortKey =
   | 'artikelnummer'
   | 'box'
   | 'entryDate'
+  | 'lastSynced'
   | 'uuid'
   | 'stock'
   | 'subcategory'
@@ -52,6 +53,7 @@ const SORT_KEYS: ItemListSortKey[] = [
   'artikelnummer',
   'box',
   'entryDate',
+  'lastSynced',
   'uuid',
   'stock',
   'subcategory',

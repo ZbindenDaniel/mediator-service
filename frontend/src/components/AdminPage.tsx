@@ -5,6 +5,7 @@ import ExportCard from './admin/ExportCard';
 import PrintQueueCard from './admin/PrintQueueCard';
 import AgenticOverviewCard from './admin/AgenticOverviewCard';
 import SystemStatusCard from './admin/SystemStatusCard';
+import NightlyErpSyncCard from './admin/NightlyErpSyncCard';
 import AdminGate from './admin/AdminGate';
 
 type AuthStatus = 'checking' | 'ok' | 'locked';
@@ -72,6 +73,7 @@ export default function AdminPage() {
         <PrintQueueCard authToken={token} onAuthFailure={handleAuthFailure} />
         <AgenticOverviewCard />
         <SystemStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
+        <NightlyErpSyncCard authToken={token} onAuthFailure={handleAuthFailure} />
       </div>
     </div>
   );

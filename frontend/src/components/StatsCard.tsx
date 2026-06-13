@@ -32,7 +32,9 @@ interface Props {
   health: string;
   agentic?: AgenticOverviewStats;
   co2LabelCounts?: Partial<Record<Co2ImpactLabel, number>>;
+  co2ScoreSums?: Partial<Record<Co2ImpactLabel, number>>;
   totalWeightKg?: number;
+  totalPriceValue?: number;
   className?: string;
 }
 
@@ -70,7 +72,7 @@ function formatWeight(kg: number): string {
   return `${Math.round(kg)} kg`;
 }
 
-export default function StatsCard({ counts, printerOk, printerReason, health, agentic, totalWeightKg, co2LabelCounts, className }: Props) {
+export default function StatsCard({ counts, printerOk, printerReason, health, agentic, totalWeightKg, totalPriceValue, co2LabelCounts, co2ScoreSums, className }: Props) {
   const classes = ['card', className].filter(Boolean).join(' ');
 
   const pieSegments = useMemo<PieSegment[]>(() => {
@@ -125,9 +127,19 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
                 <div>CO₂ Potenzial:{' '}
                   {(['high', 'medium', 'low'] as Co2ImpactLabel[])
                     .filter(l => (co2LabelCounts[l] ?? 0) > 0)
-                    .map(l => (
-                      <span key={l}>{CO2_IMPACT_LABEL_DE[l]}: <b>{co2LabelCounts[l]}</b> </span>
-                    ))
+                    .map(l => {
+                      const count = co2LabelCounts[l] ?? 0;
+                      const avgScore = count > 0 && co2ScoreSums?.[l]
+                        ? Math.round(co2ScoreSums[l]! / count)
+                        : null;
+                      return (
+                        <span key={l}>
+                          {CO2_IMPACT_LABEL_DE[l]}: <b>{count}</b>
+                          {avgScore !== null && <span className="muted"> (~{avgScore} kg CO₂)</span>}
+                          {' '}
+                        </span>
+                      );
+                    })
                   }
                 </div>
               )}
@@ -139,6 +151,9 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               )}
               {typeof totalWeightKg === 'number' && totalWeightKg > 0 && (
                 <div>Gesamt-Gewicht: <b>{formatWeight(totalWeightKg)}</b></div>
+              )}
+              {typeof totalPriceValue === 'number' && totalPriceValue > 0 && (
+                <div>Gesamtwert: <b>CHF {totalPriceValue.toLocaleString('de-CH', { maximumFractionDigits: 0 })}</b></div>
               )}
             </div>
           ) : (

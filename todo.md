@@ -1,6 +1,8 @@
 # Todo
 
 ## Confirmed Decisions
+- **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
+- **Item list conditional column:** A single date column slot appears only when sorting by `entryDate` or `lastSynced`, showing the relevant date. Other sort keys show no date column.
 - **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
 - **Multi-instance agentic safety (Phase 2, deferred):** Replace `setImmediate` dispatch with a polling loop using `SELECT ... FOR UPDATE SKIP LOCKED` so multiple instances don't double-claim queued runs. SQL template is in the plan at `~/.claude/plans/okay-i-shifted-it-fluttering-sonnet.md`.
 

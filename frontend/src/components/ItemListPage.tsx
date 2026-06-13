@@ -349,6 +349,23 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       return (aValue - bValue) * direction;
     }
 
+    if (sortKey === 'lastSynced') {
+      const syncedTimestampFor = (group: GroupedItemDisplay) => {
+        const val = group.representative?.LastSyncedAt;
+        const itemId = group.summary.representativeItemId ?? group.representative?.ItemUUID ?? null;
+        return resolveEntryTimestamp(val ?? '', { field: 'LastSyncedAt' as any, itemId });
+      };
+      const aSync = syncedTimestampFor(a);
+      const bSync = syncedTimestampFor(b);
+      if (aSync === bSync) {
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
+      }
+      // null (never synced) sorts to bottom in desc, top in asc
+      const aValue = aSync ?? Number.NEGATIVE_INFINITY;
+      const bValue = bSync ?? Number.NEGATIVE_INFINITY;
+      return (aValue - bValue) * direction;
+    }
+
     const valueFor = (group: GroupedItemDisplay) => {
       switch (sortKey) {
         case 'artikelnummer':
@@ -961,6 +978,7 @@ export default function ItemListPage() {
                     <option value="artikelnummer">Artikelnummer</option>
                     <option value="box">Behälter</option>
                     <option value="entryDate">Erfasst am</option>
+                    <option value="lastSynced">Zuletzt synchronisiert</option>
                     <option value="agenticStatus">Ki-Status</option>
                     <option value="quality">Qualität</option>
                     <option value="uuid">UUID</option>
@@ -1172,6 +1190,7 @@ export default function ItemListPage() {
         onToggleItem={handleToggleItem}
         selectedItemIds={selectedIds}
         someVisibleSelected={someVisibleSelected}
+        sortKey={sortKey}
       />
     </div>
   );

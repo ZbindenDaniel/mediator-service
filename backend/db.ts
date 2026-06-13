@@ -402,6 +402,16 @@ CREATE TABLE IF NOT EXISTS user_item_marks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_item_marks_username ON user_item_marks("Username");
+
+CREATE TABLE IF NOT EXISTS system_settings (
+  "key"   TEXT PRIMARY KEY,
+  "value" TEXT NOT NULL
+);
+`);
+
+  // Additive column migrations — safe no-ops after first run
+  await execBatch(`
+ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
 `);
 
   console.info('[db] Postgres schema ready');
@@ -738,6 +748,7 @@ SELECT
   r."EntityType" AS "EntityType",
   r."EAN" AS "EAN",
   r."ShopwareProductId" AS "ShopwareProductId",
+  r."LastSyncedAt" AS "LastSyncedAt",
   CASE
     WHEN EXISTS (SELECT 1 FROM item_relations ir WHERE ir."ChildItemUUID" = i."ItemUUID") THEN 'connected'
     WHEN i."Artikel_Nummer" IS NOT NULL
@@ -1649,6 +1660,53 @@ export async function sumInventoryWeightKg(): Promise<number> {
      FROM items i LEFT JOIN item_refs r ON i."Artikel_Nummer"=r."Artikel_Nummer"`
   );
   return Number(row?.total ?? 0);
+}
+
+export async function sumInventoryPriceValue(): Promise<number> {
+  const row = await queryOne<{ total: string }>(
+    `SELECT COALESCE(SUM(COALESCE(i."Auf_Lager",0)*COALESCE(r."Verkaufspreis",0)),0) AS total
+     FROM items i LEFT JOIN item_refs r ON i."Artikel_Nummer"=r."Artikel_Nummer"
+     WHERE r."Verkaufspreis" IS NOT NULL AND r."Verkaufspreis" > 0`
+  );
+  return Number(row?.total ?? 0);
+}
+
+// Returns Artikel_Nummern of shop refs that have been synced before and have changed since.
+// Refs where LastSyncedAt IS NULL are excluded — they require a manual first sync to enter the cycle.
+export async function listRefsChangedSinceSync(): Promise<string[]> {
+  const rows = await query<{ Artikel_Nummer: string }>(
+    `SELECT DISTINCT r."Artikel_Nummer"
+     FROM item_refs r
+     JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+     WHERE r."Shopartikel" = 1
+       AND r."LastSyncedAt" IS NOT NULL
+       AND i."UpdatedAt" > r."LastSyncedAt"`
+  );
+  return rows.map((r) => r.Artikel_Nummer);
+}
+
+export async function markRefsSynced(artikelNummern: string[]): Promise<void> {
+  if (artikelNummern.length === 0) return;
+  const placeholders = artikelNummern.map((_, i) => `$${i + 1}`).join(', ');
+  await execute(
+    `UPDATE item_refs SET "LastSyncedAt"=NOW()::TEXT WHERE "Artikel_Nummer" IN (${placeholders})`,
+    artikelNummern
+  );
+}
+
+export async function getSystemSetting(key: string): Promise<string | null> {
+  const row = await queryOne<{ value: string }>(
+    `SELECT "value" FROM system_settings WHERE "key"=$1`, [key]
+  );
+  return row?.value ?? null;
+}
+
+export async function setSystemSetting(key: string, value: string): Promise<void> {
+  await execute(
+    `INSERT INTO system_settings ("key","value") VALUES ($1,$2)
+     ON CONFLICT ("key") DO UPDATE SET "value"=$2`,
+    [key, value]
+  );
 }
 
 export async function listRecentBoxes(): Promise<any[]> {

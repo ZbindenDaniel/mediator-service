@@ -47,6 +47,9 @@ const action = defineHttpAction({
       const co2LabelCounts: Record<Co2ImpactLabel, number> = {
         high: 0, medium: 0, low: 0, irrelevant: 0
       };
+      const co2ScoreSums: Record<Co2ImpactLabel, number> = {
+        high: 0, medium: 0, low: 0, irrelevant: 0
+      };
       try {
         const co2Rows = (await ctx.listItemsForCo2?.() ?? []) as Array<{ Unterkategorien_A?: unknown; Quality?: unknown }>;
         for (const row of co2Rows) {
@@ -56,6 +59,7 @@ const action = defineHttpAction({
           }, console);
           if (result) {
             co2LabelCounts[result.label]++;
+            co2ScoreSums[result.label] += result.score;
           }
         }
       } catch (err) {
@@ -79,8 +83,14 @@ const action = defineHttpAction({
       } catch (err) {
         console.error('Failed to load inventory weight aggregate', err);
       }
+      let totalPriceValue = 0;
+      try {
+        totalPriceValue = (await ctx.sumInventoryPriceValue?.()) ?? 0;
+      } catch (err) {
+        console.error('Failed to load inventory price aggregate', err);
+      }
 
-      sendJson(res, 200, { counts, recentBoxes, recentEvents, agentic: { stateCounts: agenticStateCounts, enrichedItems }, totalWeightKg, co2LabelCounts });
+      sendJson(res, 200, { counts, recentBoxes, recentEvents, agentic: { stateCounts: agenticStateCounts, enrichedItems }, totalWeightKg, totalPriceValue, co2LabelCounts, co2ScoreSums });
     } catch (err) {
       console.error('Overview endpoint failed', err);
       sendJson(res, 500, { error: (err as Error).message });

@@ -30,7 +30,10 @@ import {
   getShopwareConfig,
   logShopwareConfigIssues,
   IMPORTER_FORCE_ZERO_STOCK,
-  ALT_DOC_DIRS
+  ALT_DOC_DIRS,
+  ERP_SYNC_ENABLED,
+  ERP_NIGHTLY_SYNC_ENABLED,
+  ERP_NIGHTLY_SYNC_HOUR
 } from './config';
 import type { ShopwareConfig } from './config';
 import { ingestAgenticRunsCsv, ingestCsvFile, type IngestCsvFileOptions } from './importer';
@@ -74,6 +77,11 @@ import {
   countEnrichedItemReferences,
   listItemsForCo2,
   sumInventoryWeightKg,
+  sumInventoryPriceValue,
+  listRefsChangedSinceSync,
+  markRefsSynced,
+  getSystemSetting,
+  setSystemSetting,
   listRecentBoxes,
   getMaxShelfIndex,
   getMaxBoxId,
@@ -475,6 +483,9 @@ type ActionContext = {
   countEnrichedItemReferences: typeof countEnrichedItemReferences;
   listItemsForCo2: typeof listItemsForCo2;
   sumInventoryWeightKg: typeof sumInventoryWeightKg;
+  sumInventoryPriceValue: typeof sumInventoryPriceValue;
+  getSystemSetting: typeof getSystemSetting;
+  setSystemSetting: typeof setSystemSetting;
   listRecentBoxes: typeof listRecentBoxes;
   getMaxShelfIndex: typeof getMaxShelfIndex;
   getMaxBoxId: typeof getMaxBoxId;
@@ -560,6 +571,76 @@ if (agenticServiceEnabled) {
 if (SHOPWARE_SYNC_ENABLED) {
   console.info('[server] SHOPWARE_SYNC_ENABLED=true but the background worker is not active because dispatchJob is not implemented.');
 }
+
+// ERP_NIGHTLY_SYNC_ENABLED is the env-level default; the runtime toggle lives in system_settings
+// so it persists across restarts and can be flipped from the admin page without redeploying.
+// Seed only on first startup (existing !== null means the operator has already set it).
+void (async () => {
+  try {
+    const existing = await getSystemSetting('erp_nightly_sync_enabled');
+    if (existing === null) {
+      await setSystemSetting('erp_nightly_sync_enabled', ERP_NIGHTLY_SYNC_ENABLED ? 'true' : 'false');
+    }
+  } catch (err) {
+    console.error('[nightly-erp-sync] Failed to seed system setting', err);
+  }
+})();
+
+let lastErpNightlySyncDate: string | null = null;
+setInterval(() => {
+  void (async () => {
+    const now = new Date();
+    if (now.getUTCHours() !== ERP_NIGHTLY_SYNC_HOUR) return;
+    const today = now.toISOString().slice(0, 10);
+    if (lastErpNightlySyncDate === today) return;
+
+    const enabled = await getSystemSetting('erp_nightly_sync_enabled');
+    if (enabled !== 'true') return;
+    if (!ERP_SYNC_ENABLED) {
+      console.info('[nightly-erp-sync] Skipped: ERP_SYNC_ENABLED is false');
+      return;
+    }
+
+    // listRefsChangedSinceSync only returns refs where LastSyncedAt IS NOT NULL —
+    // an item enters the cycle only after its first manual sync (opt-in model).
+    const artikelNummern = await listRefsChangedSinceSync();
+    if (artikelNummern.length === 0) {
+      console.info('[nightly-erp-sync] No changed refs to sync');
+      lastErpNightlySyncDate = today;
+      return;
+    }
+
+    console.info('[nightly-erp-sync] Starting sync', { count: artikelNummern.length, date: today });
+    // Set date BEFORE the HTTP call so a slow sync or restart doesn't trigger a second run for the same day.
+    lastErpNightlySyncDate = today;
+
+    const body = JSON.stringify({ artikelNummern });
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: HTTP_PORT,
+        path: '/api/sync/erp',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk; });
+        res.on('end', () => {
+          console.info('[nightly-erp-sync] HTTP response', { status: res.statusCode });
+          if (res.statusCode === 200) {
+            void markRefsSynced(artikelNummern).catch(
+              (err) => console.error('[nightly-erp-sync] Failed to mark refs synced', err)
+            );
+          }
+        });
+      }
+    );
+    req.on('error', (err) => console.error('[nightly-erp-sync] Request failed', err));
+    req.write(body);
+    req.end();
+  })().catch((err) => console.error('[nightly-erp-sync] Scheduler error', err));
+}, 60_000);
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<any> {
   try {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -929,6 +1010,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           countEnrichedItemReferences,
           listItemsForCo2,
           sumInventoryWeightKg,
+          sumInventoryPriceValue,
+          getSystemSetting,
+          setSystemSetting,
           listRecentBoxes,
           getMaxShelfIndex,
           getMaxBoxId,
