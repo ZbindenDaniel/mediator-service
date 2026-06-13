@@ -466,7 +466,7 @@ export async function handleUnifiedPrintRequest(
     }
 
     let printResult: PrintFileResult = { sent: false, reason: 'print_not_attempted' };
-    const queueResolution = resolvePrinterQueue(labelType);
+    const queueResolution = await resolvePrinterQueue(labelType);
     if (queueResolution.source === 'missing') {
       console.warn('[print-unified] Printer queue missing for label type', { ...logContext });
     }

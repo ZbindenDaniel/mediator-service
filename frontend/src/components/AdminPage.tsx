@@ -3,6 +3,8 @@ import ImportCard from './ImportCard';
 import ShelfCreateForm from './ShelfCreateForm';
 import ExportCard from './admin/ExportCard';
 import PrintQueueCard from './admin/PrintQueueCard';
+import PrinterQueuesCard from './admin/PrinterQueuesCard';
+import PrinterSettingsCard from './admin/PrinterSettingsCard';
 import AgenticOverviewCard from './admin/AgenticOverviewCard';
 import SystemStatusCard from './admin/SystemStatusCard';
 import NightlyErpSyncCard from './admin/NightlyErpSyncCard';
@@ -71,6 +73,8 @@ export default function AdminPage() {
         <ExportCard />
         <ShelfCreateForm />
         <PrintQueueCard authToken={token} onAuthFailure={handleAuthFailure} />
+        <PrinterQueuesCard authToken={token} onAuthFailure={handleAuthFailure} />
+        <PrinterSettingsCard authToken={token} onAuthFailure={handleAuthFailure} />
         <AgenticOverviewCard />
         <SystemStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
         <NightlyErpSyncCard authToken={token} onAuthFailure={handleAuthFailure} />

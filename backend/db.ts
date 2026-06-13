@@ -407,6 +407,16 @@ CREATE TABLE IF NOT EXISTS system_settings (
   "key"   TEXT PRIMARY KEY,
   "value" TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS printer_queues (
+  name        TEXT PRIMARY KEY,
+  device_uri  TEXT NOT NULL DEFAULT '',
+  ppd_model   TEXT NOT NULL DEFAULT '',
+  media       TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `);
 
   // Additive column migrations — safe no-ops after first run

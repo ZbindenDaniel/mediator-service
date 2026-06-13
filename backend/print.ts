@@ -13,6 +13,7 @@ import {
   LPSTAT_COMMAND,
   PRINT_TIMEOUT_MS
 } from './config';
+import { getSetting, getAllSettings } from './utils/app-settings';
 import { renderHtmlToPdf, type HtmlToPdfOptions } from './labelpdf';
 
 // TODO(agent): Unify renderer selection with PDF preview generation once headless dependencies stabilize.
@@ -44,41 +45,40 @@ export interface PrinterQueueResolution {
   source: PrinterQueueSource;
 }
 
-export function resolvePrinterQueue(
+export async function resolvePrinterQueue(
   labelType: PrintLabelType,
   logger: Pick<Console, 'warn'> = console
-): PrinterQueueResolution {
+): Promise<PrinterQueueResolution> {
+  const settings = await getAllSettings({
+    'printer.queue.box': PRINTER_QUEUE_BOX,
+    'printer.queue.item': PRINTER_QUEUE_ITEM,
+    'printer.queue.item_small': PRINTER_QUEUE_ITEM_SMALL,
+    'printer.queue.shelf': PRINTER_QUEUE_SHELF,
+    'printer.queue.marketing': PRINTER_QUEUE_MARKETING,
+    'printer.queue.default': PRINTER_QUEUE,
+  });
+
   let queue = '';
   switch (labelType) {
-    case 'box':
-      queue = PRINTER_QUEUE_BOX;
-      break;
-    case 'item':
-      queue = PRINTER_QUEUE_ITEM;
-      break;
-    case 'smallitem':
-      queue = PRINTER_QUEUE_ITEM_SMALL;
-      break;
-    case 'shelf':
-      queue = PRINTER_QUEUE_SHELF;
-      break;
-    case 'marketingsheet':
-      queue = PRINTER_QUEUE_MARKETING;
-      break;
-    default:
-      queue = '';
+    case 'box':       queue = settings['printer.queue.box']; break;
+    case 'item':      queue = settings['printer.queue.item']; break;
+    case 'smallitem': queue = settings['printer.queue.item_small']; break;
+    case 'shelf':     queue = settings['printer.queue.shelf']; break;
+    case 'marketingsheet': queue = settings['printer.queue.marketing']; break;
+    default:          queue = '';
   }
 
   if (queue) {
     return { queue, source: 'label' };
   }
 
-  if (PRINTER_QUEUE) {
-    logger.warn(`[print] ${labelType} queue not configured; falling back to PRINTER_QUEUE.`);
-    return { queue: PRINTER_QUEUE, source: 'default' };
+  const defaultQueue = settings['printer.queue.default'];
+  if (defaultQueue) {
+    logger.warn(`[print] ${labelType} queue not configured; falling back to default queue.`);
+    return { queue: defaultQueue, source: 'default' };
   }
 
-  logger.warn(`[print] ${labelType} queue not configured and PRINTER_QUEUE is empty.`);
+  logger.warn(`[print] ${labelType} queue not configured and no default queue set.`);
   return { queue: '', source: 'missing' };
 }
 
@@ -335,9 +335,9 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
     return { sent: false, reason: 'printer_queue_not_configured' };
   }
 
-  const printerHost = (PRINTER_SERVER || '').trim();
+  const printerHost = (await getSetting('printer.server', PRINTER_SERVER)).trim();
   if (!printerHost) {
-    console.warn('[print] Printer host not configured; relying on local CUPS defaults.');
+    console.info('[print] No PRINTER_SERVER configured; using local CUPS socket.');
   }
 
   let artifactPath = path.resolve(filePath);
@@ -369,11 +369,11 @@ export async function printFile(options: PrintFileOptions): Promise<PrintFileRes
   }
 
   const absolute = artifactPath;
-  const args:string[] = [];
+  const args: string[] = [];
   if (printerHost) {
     args.push('-h', printerHost);
-    args.push('-d', effectiveQueue);
   }
+  args.push('-d', effectiveQueue);  // always specify queue; never rely on CUPS default
   // if (jobName && jobName.trim()) {
   //   args.push('-t', jobName.trim());
   // }
@@ -493,7 +493,7 @@ export async function testPrinterConnection(
     return Promise.resolve({ ok: false, reason: 'printer_queue_not_configured' });
   }
 
-  const printerHost = (PRINTER_SERVER || '').trim();
+  const printerHost = (await getSetting('printer.server', PRINTER_SERVER)).trim();
   return await runWithRetry<{ ok: boolean; reason?: string }>({
     operation: 'testPrinterConnection',
     queue: normalizedQueue,

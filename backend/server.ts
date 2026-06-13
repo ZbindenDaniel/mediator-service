@@ -108,6 +108,7 @@ import {
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
+import { syncPrinterQueuesToCups, startPrinterQueueSyncInterval } from './utils/sync-printer-queues';
 import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
@@ -393,7 +394,7 @@ async function runPrintWorker(): Promise<void> {
     }
 
     // TODO(agent): Measure render latency for label printing to keep template compatibility visible in dashboards.
-    const queueResolution = resolvePrinterQueue('item');
+    const queueResolution = await resolvePrinterQueue('item');
     if (queueResolution.source === 'missing') {
       console.warn('[print-worker] Printer queue missing for item label jobs', {
         itemId: item.ItemUUID,
@@ -1068,6 +1069,11 @@ if (process.env.NODE_ENV !== 'test') {
   initDb()
     .then(() => {
       console.info('[server] Database schema initialized.');
+      // Sync printer queues from DB to CUPS on startup, then keep in sync periodically
+      syncPrinterQueuesToCups().catch((err) => {
+        console.warn('[server] Initial printer queue sync failed (CUPS may not be ready yet)', err);
+      });
+      startPrinterQueueSyncInterval();
     })
     .catch((err) => {
       console.error('[server] Failed to initialize database schema — aborting startup.', err);
