@@ -21,9 +21,9 @@ services:
     build:
       context: ./cups
     container_name: mediator-cups
-    # USB passthrough so the CUPS container can see Brother QL printers attached to this host
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
+    # USB passthrough: only add this when a USB printer is physically attached to this host.
+    # Use: docker compose -f docker-compose.yml -f docker-compose.usb.yml up
+    # (see docker-compose.usb.yml for the devices: block)
     volumes:
       - cups-socket:/run/cups
     restart: unless-stopped

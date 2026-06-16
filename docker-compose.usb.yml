@@ -1,0 +1,14 @@
+# USB printer passthrough — include this file when a USB printer is physically connected to the host.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.usb.yml up
+#   docker compose -f docker-compose.prod.yaml -f docker-compose.usb.yml up
+#
+# After the printers are connected, find the device URI with:
+#   docker compose exec cups lpinfo -v
+# Then configure queues via Admin → Drucker-Warteschlangen.
+
+services:
+  cups:
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
