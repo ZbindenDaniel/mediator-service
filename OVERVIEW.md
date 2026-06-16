@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+816. ✅ Fix `testPrinterConnection`: `lpstat -d` → `lpstat -p` for per-queue status check
+   - **Why:** `lpstat -d` shows the system default destination and ignores the queue argument. `lpstat -p <queue>` is the correct flag to check a specific printer's idle/ready status. All queues were always returning `printer_not_ready` despite being idle in CUPS.
+   - **Deferred:** Nothing.
 815. ✅ Fix lpadmin Unauthorized: add `AuthType None` to CUPS `/admin` location
    - **Why:** Modern CUPS implicitly requires user credentials on `/admin` even without explicit config. Network-level `Allow from` passed but the auth check rejected `lpadmin` calls. `AuthType None` disables the credential requirement while IP restrictions remain.
    - **Deferred:** Nothing.
