@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+819. ✅ Printer docs: rewrite technical setup guide + new German user guide
+   - **Why:** `printer-server-setup.md` still described the old Raspberry Pi / env-var approach. No user-facing guide existed. Rewrote the technical doc to cover Docker CUPS, USB passthrough, custom PPD override, remote CUPS, and IPP Everywhere. Created `docs/user/Drucker-Einrichtung.md` (German) covering the full operator workflow step by step.
+   - **Deferred:** Nothing.
 818. ✅ Printer UX: inline setup guide, CUPS error surfacing (502), media datalist, PPD filter fix
    - **Why:** Device/PPD APIs silently returned empty arrays on CUPS error (`.catch(() => '')`), indistinguishable from "no devices found". Admin users had no guided path for first-time setup. PPD autocomplete was filtered to `?q=brother`, useless without Brother LPR packages. Added `<details>` inline guide with 7 steps + Häufige Fehler, replaced silent catch with HTTP 502.
    - **Deferred:** Nothing.

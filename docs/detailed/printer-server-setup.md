@@ -1,301 +1,259 @@
-# Printer server setup (Raspberry Pi)
+# Printer setup
 
-This guide covers everything needed to turn a Raspberry Pi into a CUPS print server
-that mediator-service can use over the network. The mediator container renders label
-HTML to PDF and submits the job via `lp -h <raspi>:631 -d <queue>`; CUPS on the Raspi
-forwards it to the physical printer.
+mediator-service can print labels and A4 sheets via any CUPS-accessible printer.
+Two modes are supported and can be combined:
 
-## Prerequisites
+| Mode | When to use |
+|------|-------------|
+| **Docker CUPS** (default) | USB printer physically attached to the server running Docker |
+| **Remote CUPS server** | Printer on a Raspberry Pi, NAS, or another machine; or IPP-capable network printer |
 
-| Item | Notes |
-|------|-------|
-| Raspberry Pi (any model with Ethernet/Wi-Fi) | Tested with Raspberry Pi OS Lite (64-bit) |
-| Physical label printer connected to the Raspi via USB | Brother QL series used at revamp-it |
-| Static IP or stable hostname for the Raspi on the LAN | Required so the mediator container can reach it reliably |
-| SSH access to the Raspi | All commands below are run on the Raspi unless stated otherwise |
+Both modes are configured at runtime via Admin → Drucker-Queues and Admin → Drucker-Einstellungen. No container restart is needed after the initial setup.
 
 ---
 
-## 1. Install CUPS
+## Mode 1 — Docker CUPS (USB printer on the Docker host)
+
+### 1.1 Start without a USB printer
+
+The `cups` service starts without a printer — useful for verifying the stack before hardware is connected.
 
 ```bash
-sudo apt update
-sudo apt install -y cups cups-client
+docker compose up
 ```
 
-Add your user to the `lpadmin` group so you can manage printers without `sudo`:
+`docker compose ps` should show `mediator-cups` as healthy within ~15 s.
+
+### 1.2 USB passthrough
+
+USB devices are not passed through by default (the stack must start on hosts without a printer).
+When a printer is physically connected, use the USB override:
 
 ```bash
-sudo usermod -aG lpadmin $USER
-# log out and back in, or: newgrp lpadmin
+docker compose -f docker-compose.yml -f docker-compose.usb.yml up -d
 ```
 
----
+`docker-compose.usb.yml` adds `devices: - /dev/bus/usb:/dev/bus/usb` to the `cups` service.
+Commit this to your deployment workflow when USB is permanently connected.
 
-## 2. Allow remote connections
+### 1.3 Install printer drivers
 
-By default CUPS only listens on localhost. Edit the configuration to accept connections
-from the local network:
+Brother QL drivers are not bundled in the image (binary `.deb` files are not committed to the repo).
 
-```bash
-sudo nano /etc/cups/cupsd.conf
-```
-
-Make these changes:
-
-```
-# Listen on all interfaces (or replace * with the Raspi's LAN IP)
-Listen *:631
-
-# Allow the web admin UI from the LAN
-<Location />
-  Order allow,deny
-  Allow @LOCAL
-</Location>
-
-<Location /admin>
-  Order allow,deny
-  Allow @LOCAL
-</Location>
-
-<Location /printers>
-  Order allow,deny
-  Allow @LOCAL
-</Location>
-```
-
-Restart CUPS to apply:
-
-```bash
-sudo systemctl restart cups
-sudo systemctl enable cups   # start on boot
-```
-
-Verify it is listening:
-
-```bash
-ss -tlnp | grep 631
-# should show 0.0.0.0:631
-```
-
-Open the web UI from another machine on the LAN: `http://<raspi-ip>:631`
-
----
-
-## 3. Install the printer driver
-
-### Brother QL series (QL-700, QL-800, QL-820NWB, etc.)
-
-Option A — `brother-ql` Python package (recommended, no proprietary driver needed):
-
-```bash
-sudo apt install -y python3-pip python3-usb
-pip3 install brother_ql
-```
-
-`brother_ql` can drive the printer directly, but to expose it as a standard CUPS queue
-the easiest path is the official Brother CUPS backend:
-
-Option B — Official Brother Linux driver (`.deb`):
-
-1. Go to Brother's support site and download the **QL-XXX CUPS wrapper** and
-   **LPR** packages for Linux (ARM `.deb` files for the Raspi).
-2. Install both packages:
+1. Download the **LPR** and **CUPS wrapper** `.deb` packages for your QL model from
+   [support.brother.com](https://support.brother.com) — choose the **Linux** / **i386** variant
+   (even on amd64 hosts; the Dockerfile enables i386 multiarch).
+   - Example: `brother-QL800lpr-1.1.3-0.i386.deb` + `cupswrapperQL800-1.1.4-0.i386.deb`
+2. Place them in `cups/drivers/`.
+3. Rebuild and restart the cups service:
    ```bash
-   sudo dpkg -i brother-ql800lpr-*.deb
-   sudo dpkg -i cupswrapperql800-*.deb   # adjust model number
+   docker compose up --build cups
    ```
-3. The driver registers itself with CUPS automatically.
 
-For other printer models install the relevant CUPS driver or PPD from the manufacturer
-or from `foomatic-db`:
+For arm64 hosts (Raspberry Pi 5, Apple Silicon Linux VM): use the **ARM** `.deb` packages from
+Brother's site instead of i386.
+
+For network/IPP printers (no USB): skip this step entirely — see Mode 2.
+
+### 1.4 Discover the device URI and available drivers
 
 ```bash
-sudo apt install -y printer-driver-foo2zjs foomatic-db foomatic-db-engine
+# List detected USB devices
+docker compose exec cups lpinfo -v
+
+# List installed drivers/PPDs
+docker compose exec cups lpinfo -m
+```
+
+Save the `usb://…` URI and the PPD path — you will enter these in the admin UI.
+
+### 1.5 Create a queue in the admin UI
+
+1. Open Admin → **Drucker-Queues**.
+2. Click **Erkennen** — populates device URI and PPD autocomplete from the live CUPS container.
+3. Fill in:
+   - **Queue-Name**: choose freely, e.g. `QL800_box` (no spaces)
+   - **Device URI**: select from autocomplete or paste from `lpinfo -v`
+   - **PPD-Modell**: select from autocomplete or paste from `lpinfo -m`
+   - **Media**: leave blank to use the PPD default, or enter a size code (see §5)
+4. Click **Hinzufügen**.
+
+The mediator calls `lpadmin` to register the queue in CUPS immediately.
+
+### 1.6 Assign queues to label types
+
+Open Admin → **Drucker-Einstellungen** and map each label type (Box, Artikel, Regal, …)
+to the queue name you just created. Changes take effect for the next print job — no restart needed.
+
+---
+
+## Mode 2 — Remote CUPS server
+
+Use this when the printer is on another machine (Raspberry Pi, dedicated print server)
+or is a network printer supporting IPP.
+
+### 2.1 Configure the print server address
+
+Open Admin → **Drucker-Einstellungen** → **Drucker-Server** and enter `<hostname-or-ip>:631`.
+
+The mediator passes `-h <server>` to every `lp`, `lpinfo`, and `lpadmin` call, so the admin
+UI's device discovery also queries the remote server.
+
+To revert to the built-in Docker CUPS container, clear the field.
+
+### 2.2 Network / IPP printers (no driver required)
+
+Modern network printers support IPP Everywhere — no PPD or driver install needed.
+
+| Field | Value |
+|-------|-------|
+| Device URI | `ipps://<printer-ip>/ipp/print` (or `ipp://` for HTTP) |
+| PPD-Modell | `everywhere` |
+
+Works for A4 laser/inkjet printers and for Brother QL-820NWB / QL-1110NWB over Wi-Fi.
+
+### 2.3 Set up a Raspberry Pi as a print server
+
+```bash
+# On the Raspberry Pi
+sudo apt update && sudo apt install -y cups cups-client
+sudo usermod -aG lpadmin $USER
+
+# Allow remote access
+sudo sed -i 's/^Listen localhost:631/Listen *:631/' /etc/cups/cupsd.conf
+sudo sed -i '/<Location \/>/{n; s/Order allow,deny/Order allow,deny\n  Allow @LOCAL/}' /etc/cups/cupsd.conf
+sudo systemctl restart cups && sudo systemctl enable cups
+```
+
+Install the Brother driver `.deb` packages (ARM variant for Raspi) and add the queue as in §1.4–1.5,
+but run `lpinfo` against the Raspi instead of the Docker container:
+
+```bash
+lpinfo -h <raspi-ip>:631 -v
 ```
 
 ---
 
-## 4. Add the printer to CUPS
+## Mode 3 — Environment variable fallback
 
-### Via the web UI
-
-1. Open `http://<raspi-ip>:631` → Administration → Add Printer.
-2. Select the USB-connected printer from the list.
-3. Name the queue (this becomes your `PRINTER_QUEUE_*` value in `.env`), e.g. `QL800`.
-4. Select the correct PPD / driver.
-5. Set the default media to match the label roll currently loaded (see label sizes below).
-
-### Via command line (`lpadmin`)
-
-```bash
-# List detected printers (find the URI)
-lpinfo -v | grep -i brother
-
-# Add a queue named QL800 (adjust URI and PPD path for your model)
-sudo lpadmin -p QL800 \
-  -E \
-  -v usb://Brother/QL-800?serial=... \
-  -m brother_ql800.ppd \
-  -o media=w62h100   # default media — see table below
-
-# Set as default queue (optional)
-sudo lpoptions -d QL800
-```
-
----
-
-## 5. Label sizes and media names
-
-mediator-service renders one PDF page per label at the exact size declared in the CSS
-`@page` rule. CUPS must accept that page size without rescaling. Set the **default media**
-of each queue to match the roll currently loaded.
-
-| Label type | PDF page size | Typical CUPS media name |
-|-----------|--------------|------------------------|
-| Box | 62 × 100 mm | `w62h100` |
-| Item | 90 × 29 mm (landscape) | `w90h29` / `w29h90` |
-| Small item | 62 × 10 mm | `w62h10` |
-| Shelf | A4 | `iso_a4_210x297mm` |
-
-Check what names your driver accepts:
-
-```bash
-lpoptions -p QL800 -l | grep -i media
-```
-
-Set the default for a queue:
-
-```bash
-sudo lpoptions -p QL800 -o media=w62h100
-```
-
-### One queue per roll (recommended)
-
-If you swap rolls manually, create a separate queue per size and point each
-`PRINTER_QUEUE_*` env var at the matching queue. This prevents CUPS from resizing
-the PDF to the wrong media.
-
-```bash
-# Example: two queues for box and item labels
-sudo lpadmin -p QL800_box  -E -v usb://Brother/QL-800?serial=... -m brother_ql800.ppd -o media=w62h100
-sudo lpadmin -p QL800_item -E -v usb://Brother/QL-800?serial=... -m brother_ql800.ppd -o media=w90h29
-```
-
----
-
-## 6. Verify from the Raspi
-
-```bash
-# List configured queues
-lpstat -p
-
-# Print a test page to a specific queue
-lp -d QL800 /usr/share/cups/data/testprint
-
-# Print a PDF file
-lp -d QL800 /path/to/label.pdf
-```
-
-Expected `lpstat -p` output when the printer is ready:
-
-```
-printer QL800 is idle.  enabled since ...
-```
-
----
-
-## 7. Configure mediator-service
-
-Edit `.env` on the server running the mediator container:
+If no DB override is set for a label type, the mediator falls back to env vars defined in
+`docker-compose.yml` (or `.env`):
 
 ```env
-# IP or hostname of the Raspi, with CUPS port
-PRINTER_SERVER=192.168.x.x:631
-
-# Queue names on the Raspi (must match lpadmin -p names exactly)
-PRINTER_QUEUE=QL800           # fallback used when label-specific queue is missing
+PRINTER_QUEUE=QL800_box         # default fallback
 PRINTER_QUEUE_BOX=QL800_box
 PRINTER_QUEUE_ITEM=QL800_item
 PRINTER_QUEUE_ITEM_SMALL=QL800_item
-PRINTER_QUEUE_SHELF=QL800     # A4 printer or a second queue if you have one
+PRINTER_QUEUE_SHELF=QL800_shelf
+PRINTER_QUEUE_MARKETING=QL800_a4
+PRINTER_SERVER=                 # empty = use Docker CUPS socket
 ```
 
-Restart the container to pick up the new env vars:
+The priority chain is: **DB setting → env var → empty** (no print attempted).
+
+---
+
+## 5. Media sizes (label rolls)
+
+Each CUPS queue has a **default media** used when a job doesn't specify a size.
+Set it either in the admin UI (Media field) or with:
 
 ```bash
-docker compose up -d --force-recreate
+docker compose exec cups lpoptions -p <queue> -o media=<code>
 ```
 
-Verify connectivity from the mediator:
+Common sizes for Brother QL printers:
 
-```
-GET /api/printer/status
-→ { "ok": true }
+| Code | Dimensions | Label type |
+|------|-----------|------------|
+| `w62` | 62 mm continuous | continuous band |
+| `w62h100` | 62 × 100 mm | box labels |
+| `w29h90` | 29 × 90 mm | item / address labels |
+| `w62h29` | 62 × 29 mm | small item |
+| `w17h54` | 17 × 54 mm | narrow labels |
+| `w62h75` | 62 × 75 mm | medium |
+| `w23h23` | 23 × 23 mm | square |
+| `w102` | 102 mm continuous | wide band |
+| `iso_a4_210x297mm` | A4 | shelf / marketing sheets |
+
+### One queue per roll size (recommended)
+
+Create a separate queue for each label roll and point the matching label type at it.
+This prevents CUPS from rescaling a 62×100 mm PDF to fit a 29×90 mm roll.
+
+### Custom / non-standard sizes
+
+1. Edit the PPD file for your printer to add a custom `*PageSize` entry.
+2. Save the modified PPD as `cups/ppds/<original-filename>.ppd` in the repo.
+   The filename must match the installed PPD exactly (e.g. `brother_ql800_printer_en.ppd`).
+3. Rebuild: `docker compose up --build cups` — the Dockerfile copies the override PPD on top
+   of the driver-installed one.
+
+To find the original PPD filename:
+```bash
+docker compose exec cups lpinfo -m | grep -i ql800
+# → lsb/usr/Brother/brother_ql800_printer_en.ppd  Brother QL-800 series
+docker compose exec cups find /usr/share/ppd -name "brother_ql800*"
 ```
 
-Check container logs if the status check fails:
+---
+
+## 6. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `lpadmin: Unauthorized` in mediator logs | CUPS `/admin` requires credentials | Rebuild cups: `docker compose up --build cups` (AuthType None in cupsd.conf) |
+| `printer_not_ready` for all queues | Queue not registered in CUPS | Check `docker compose exec cups lpstat -p`; resave the queue from admin UI |
+| Device detection returns error in UI | CUPS unreachable or Unauthorized | Check `docker compose logs cups`; ensure cups is healthy |
+| No USB devices detected | USB passthrough not active | Use `docker-compose.usb.yml`; check `docker compose exec cups ls /dev/bus/usb/` |
+| Job accepted, nothing prints | Driver/media mismatch or printer offline | `docker compose exec cups lpstat -p`; check cups logs |
+| PDF printed at wrong size | Media code mismatch | Verify Media field in admin UI matches the loaded roll |
+| `cups` service never becomes healthy | `lpstat -r` fails | `docker compose logs cups`; cupsd startup error |
+
+### Useful diagnostic commands
 
 ```bash
+# CUPS scheduler status
+docker compose exec cups lpstat -r
+
+# All configured queues + status
+docker compose exec cups lpstat -p
+
+# Print a test page to a specific queue
+docker compose exec cups lp -d <queue> /usr/share/cups/data/testprint
+
+# Raw CUPS log
+docker compose logs cups
+
+# Mediator print subsystem logs
 docker compose logs mediator | grep '\[print\]'
 ```
 
 ---
 
-## 8. Firewall
+## 7. Architecture reference
 
-If `ufw` is active on the Raspi, allow CUPS from the LAN:
-
-```bash
-sudo ufw allow from 192.168.0.0/16 to any port 631
-sudo ufw reload
+```
+┌─────────────────────────────────────────────┐
+│  mediator container                          │
+│  ─ renders label HTML → PDF                 │
+│  ─ calls lp -d <queue> [-h <server>]        │
+│  ─ calls lpadmin / lpinfo via cups-client   │
+└───────────────┬─────────────────────────────┘
+                │ Docker named volume (cups-socket)
+                │ or TCP  <server>:631
+┌───────────────▼─────────────────────────────┐
+│  CUPS (Docker service or remote server)      │
+│  ─ registers queue via lpadmin              │
+│  ─ routes job to printer via USB / IPP      │
+└───────────────┬─────────────────────────────┘
+                │ USB or network
+        ┌───────▼───────┐
+        │ Physical       │
+        │ printer        │
+        └───────────────┘
 ```
 
----
-
-## 9. Transitioning from local (socket) to network printing
-
-The current `docker-compose.yml` mounts the host CUPS socket:
-
-```yaml
-- /run/cups:/run/cups:ro
-```
-
-This is harmless when `PRINTER_SERVER` is set — the `lp -h` flag routes jobs to the
-Raspi and the local socket is ignored. You can cut over and fall back by toggling
-`PRINTER_SERVER` in `.env` without touching Compose.
-
-When you are ready to permanently remove the local-socket dependency:
-
-1. Delete the `- /run/cups:/run/cups:ro` line from `docker-compose.yml`.
-2. Run `docker compose up -d --force-recreate`.
-
----
-
-## 10. Troubleshooting
-
-| Symptom | Check |
-|---------|-------|
-| `/api/printer/status` returns `ok: false, reason: "status_timeout"` | CUPS not reachable — verify `PRINTER_SERVER`, firewall, and that `ss -tlnp` shows `*:631` on the Raspi |
-| `lpstat_exit_1` or `printer_not_ready` | Queue name wrong or printer offline — run `lpstat -h <raspi>:631 -p` from the host |
-| `lp: error - unable to connect to server` in container logs | Network routing issue — confirm the container can reach the Raspi IP (`docker compose exec mediator ping <raspi-ip>`) |
-| Job accepted but nothing prints | Driver or media mismatch — check the CUPS error log on the Raspi (`sudo journalctl -u cups -f`) |
-| PDF printed at wrong size / cropped | Default media on the CUPS queue does not match the label dimensions — update with `lpoptions -p <queue> -o media=<size>` |
-
-### Logs on the Raspi
-
-```bash
-# CUPS error log
-sudo journalctl -u cups -f
-
-# Or the traditional log file
-sudo tail -f /var/log/cups/error_log
-```
-
-### Test `lp` directly from the host server (bypasses the container)
-
-```bash
-lp -h <raspi-ip>:631 -d QL800 /path/to/test.pdf
-```
-
-If this works but the container cannot print, the issue is Docker networking, not CUPS.
+Queue definitions (device URI, PPD, media) live in the `printer_queues` DB table.
+Label-type → queue routing lives in the `system_settings` DB table.
+Both are editable at runtime via the admin UI; env vars serve as fallback defaults.
