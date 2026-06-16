@@ -1,0 +1,10 @@
+Place Brother QL driver .deb packages here before building the cups Docker image.
+
+Download from https://support.brother.com for your printer model (e.g. QL-800):
+  - brother-QL800lpr-<version>.i386.deb   (LPR driver)
+  - cupswrapperQL800-<version>.i386.deb   (CUPS wrapper)
+
+These are i386 packages that work on amd64 hosts (via multiarch support).
+For arm64 hosts, download the corresponding ARM packages instead.
+
+Files in this directory are NOT committed to git (see .gitignore).

@@ -16,6 +16,27 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - erfassung_default
+
+  cups:
+    build:
+      context: ./cups
+    container_name: mediator-cups
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    volumes:
+      - cups-socket:/run/cups
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "lpstat -H 2>/dev/null | grep -q ':'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    # Internal network only — no traefik exposure for CUPS
+    networks:
+      - erfassung_default
 
   mediator:
     image: ghcr.io/zbindendaniel/mediator-service:3.0
@@ -23,6 +44,13 @@ services:
     environment:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
+      CUPS_HOST: cups:631
+      PRINTER_QUEUE: QL800_box
+      PRINTER_QUEUE_BOX: QL800_box
+      PRINTER_QUEUE_ITEM: QL800_item
+      PRINTER_QUEUE_ITEM_SMALL: QL800_item_small
+      PRINTER_QUEUE_SHELF: QL800_shelf
+      PRINTER_QUEUE_MARKETING: QL800_marketing
     container_name: mediator
     expose:
       - "8080"
@@ -30,7 +58,7 @@ services:
       - mediator-data:/var/lib/mediator
       - mediator-media:/app/dist/backend/media
       - /mnt:/app/dist/backend/webDav
-      - /run/cups:/run/cups:ro
+      - cups-socket:/run/cups:ro
     restart: unless-stopped
     labels:
       - "traefik.enable=true"
@@ -48,9 +76,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      cups:
+        condition: service_healthy
     networks:
-      - erfassung_default   # keep internal communication
-      - traefik_proxy      # reverse proxy to allow https connections
+      - erfassung_default
+      - traefik_proxy
 
 volumes:
   mediator-data:
@@ -61,6 +91,8 @@ volumes:
     name: mediator-postgres
   nginx-logs:
     name: nginx-logs
+  cups-socket:
+    name: mediator-cups-socket
 
 secrets:
   mediator_htpasswd:
@@ -70,4 +102,3 @@ networks:
   erfassung_default:
   traefik_proxy:
      external: true
-

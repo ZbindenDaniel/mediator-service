@@ -163,6 +163,9 @@ if (!PRINTER_QUEUE_MARKETING) {
 export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
 export const ADMIN_SECRET = (process.env.ADMIN_SECRET || '').trim();
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
+// CUPS_HOST: hostname:port of the CUPS service (e.g. cups:631 for the Docker service).
+// Leave unset to use the Unix socket at /run/cups/cups.sock via libcups2.
+export const CUPS_HOST = (process.env.CUPS_HOST || '').trim();
 const parsedPrintTimeout = Number.parseInt(process.env.PRINT_TIMEOUT_MS || '', 10);
 export const PRINT_TIMEOUT_MS = Number.isFinite(parsedPrintTimeout) && parsedPrintTimeout > 0 ? parsedPrintTimeout : 15000;
 const DEFAULT_PUBLIC_HOSTNAME = 'localhost'; //10.196';

@@ -8,20 +8,21 @@ import {
   PRINTER_QUEUE_SHELF,
   PRINTER_QUEUE_MARKETING,
 } from '../config';
+import { getAllSettings } from '../utils/app-settings';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
 
-const QUEUE_DEFS = [
-  { label: 'Standard', queue: PRINTER_QUEUE },
-  { label: 'Box', queue: PRINTER_QUEUE_BOX },
-  { label: 'Artikel', queue: PRINTER_QUEUE_ITEM },
-  { label: 'Artikel klein', queue: PRINTER_QUEUE_ITEM_SMALL },
-  { label: 'Regal', queue: PRINTER_QUEUE_SHELF },
-  { label: 'Produktblatt', queue: PRINTER_QUEUE_MARKETING },
-].filter((q) => q.queue) as Array<{ label: string; queue: string }>;
+const QUEUE_LABELS: Array<{ label: string; settingKey: string; envFallback: string }> = [
+  { label: 'Standard',       settingKey: 'printer.queue.default',    envFallback: PRINTER_QUEUE },
+  { label: 'Box',            settingKey: 'printer.queue.box',        envFallback: PRINTER_QUEUE_BOX },
+  { label: 'Artikel',        settingKey: 'printer.queue.item',       envFallback: PRINTER_QUEUE_ITEM },
+  { label: 'Artikel klein',  settingKey: 'printer.queue.item_small', envFallback: PRINTER_QUEUE_ITEM_SMALL },
+  { label: 'Regal',          settingKey: 'printer.queue.shelf',      envFallback: PRINTER_QUEUE_SHELF },
+  { label: 'Produktblatt',   settingKey: 'printer.queue.marketing',  envFallback: PRINTER_QUEUE_MARKETING },
+];
 
 const action = defineHttpAction({
   key: 'printer-status',
@@ -30,13 +31,20 @@ const action = defineHttpAction({
   matches: (path, method) => path === '/api/printer/status' && method === 'GET',
   async handle(_req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      if (QUEUE_DEFS.length === 0) {
+      // Load live queue assignments from DB (falls back to env vars)
+      const envMap = Object.fromEntries(QUEUE_LABELS.map((q) => [q.settingKey, q.envFallback]));
+      const settings = await getAllSettings(envMap);
+
+      const queueDefs = QUEUE_LABELS
+        .map((q) => ({ label: q.label, queue: (settings[q.settingKey] || '').trim() }))
+        .filter((q) => q.queue);
+
+      if (queueDefs.length === 0) {
         sendJson(res, 200, { ok: false, queues: [], reason: 'printer_queue_not_configured' });
         return;
       }
 
-      // Test each unique queue name once in parallel, then map results back to labels.
-      const uniqueQueues = [...new Set(QUEUE_DEFS.map((q) => q.queue))];
+      const uniqueQueues = [...new Set(queueDefs.map((q) => q.queue))];
       const resultMap = new Map<string, { ok: boolean; reason?: string }>();
 
       await Promise.all(
@@ -46,7 +54,7 @@ const action = defineHttpAction({
         })
       );
 
-      const queues = QUEUE_DEFS.map((q) => {
+      const queues = queueDefs.map((q) => {
         const r = resultMap.get(q.queue)!;
         return { label: q.label, queue: q.queue, ok: r.ok, reason: r.reason };
       });
