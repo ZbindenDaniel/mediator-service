@@ -163,8 +163,9 @@ if (!PRINTER_QUEUE_MARKETING) {
 export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
 export const ADMIN_SECRET = (process.env.ADMIN_SECRET || '').trim();
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
-// CUPS_HOST: hostname:port of the CUPS service (e.g. cups:631 for the Docker service).
-// Leave unset to use the Unix socket at /run/cups/cups.sock via libcups2.
+// CUPS_HOST: optional explicit TCP override (e.g. cups:631). Leave unset in Docker compose —
+// CUPS_SERVER env var points cups binaries at the Unix socket instead (CUPS 2.4 dropped
+// Get-Devices/Get-PPDs over TCP, so the socket is required for lpinfo to work).
 export const CUPS_HOST = (process.env.CUPS_HOST || '').trim();
 const parsedPrintTimeout = Number.parseInt(process.env.PRINT_TIMEOUT_MS || '', 10);
 export const PRINT_TIMEOUT_MS = Number.isFinite(parsedPrintTimeout) && parsedPrintTimeout > 0 ? parsedPrintTimeout : 15000;

@@ -44,7 +44,7 @@ services:
     environment:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
-      CUPS_HOST: cups:631
+      CUPS_SERVER: /run/cups/cups.sock
       PRINTER_QUEUE: QL800_box
       PRINTER_QUEUE_BOX: QL800_box
       PRINTER_QUEUE_ITEM: QL800_item
@@ -58,7 +58,7 @@ services:
       - mediator-data:/var/lib/mediator
       - mediator-media:/app/dist/backend/media
       - /mnt:/app/dist/backend/webDav
-      - cups-socket:/run/cups:ro
+      - cups-socket:/run/cups
     restart: unless-stopped
     labels:
       - "traefik.enable=true"

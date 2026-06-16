@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+821. ✅ Fix lpinfo "Bad Request": switch Docker CUPS from TCP to Unix socket
+   - **Why:** CUPS 2.4 (Debian bookworm) removed `CUPS-Get-Devices` and `CUPS-Get-PPDs` over TCP for security reasons — `lpinfo -h cups:631 -v` returns HTTP 400 "Bad Request". Fixed by removing `CUPS_HOST: cups:631` and adding `CUPS_SERVER: /run/cups/cups.sock` to mediator env in both compose files, so cups binaries use the already-mounted Unix socket. Also removed `:ro` from the socket volume mount (lpadmin writes to the socket) and added `chmod 777 /run/cups` to entrypoint.sh so www-data can connect.
+   - **Deferred:** Remote CUPS server (`printer.server` set in admin UI) still uses TCP; if that server also runs CUPS 2.4 it will hit the same restriction for lpinfo (not fixable from our side — remote lpinfo discovery is then unavailable, print jobs still work via `lp -h`).
 820. ✅ Fix `ctx.listItemsForExport is not a function` in kivi-sync / export actions
    - **Why:** `listItemsForExport` in `backend/db.ts` was accidentally structured as `{ async all(filters) }` instead of a plain async function, breaking all three call sites (`sync-erp`, `export-items`, `export-data`) which call it as `ctx.listItemsForExport({...})`. Converted to a plain `export async function` matching every other `list*` helper; `ActionContext` type picks up the change via `typeof` automatically.
    - **Deferred:** Nothing.
