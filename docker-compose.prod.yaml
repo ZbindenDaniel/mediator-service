@@ -23,8 +23,8 @@ services:
     build:
       context: ./cups
     container_name: mediator-cups
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
+    # USB passthrough: only add this when a USB printer is physically attached to this host.
+    # Use: docker compose -f docker-compose.prod.yaml -f docker-compose.usb.yml up
     volumes:
       - cups-socket:/run/cups
     restart: unless-stopped
