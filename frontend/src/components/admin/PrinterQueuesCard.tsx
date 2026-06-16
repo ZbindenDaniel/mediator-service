@@ -373,11 +373,66 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
         </div>
       </details>
 
-      <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.8rem' }}>
-        Tipp: Device URI mit <code>docker compose exec cups lpinfo -v</code>,
-        Treiber mit <code>docker compose exec cups lpinfo -m</code>.
-        Benutzerdefinierte Mediengrössen: angepasste PPD in <code>cups/ppds/</code> ablegen und neu bauen.
-      </p>
+      <details style={{ marginTop: '1rem' }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 500, fontSize: '0.875rem' }}>Einrichtungshilfe</summary>
+        <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', lineHeight: 1.6 }}>
+          <ol style={{ paddingLeft: '1.25rem', margin: '0 0 0.75rem' }}>
+            <li>
+              <strong>USB-Drucker anschliessen</strong> — Stack mit USB-Passthrough starten:{' '}
+              <code>docker compose -f docker-compose.yml -f docker-compose.usb.yml up -d</code>
+            </li>
+            <li>
+              <strong>Device URI ermitteln</strong>:{' '}
+              <code>docker compose exec cups lpinfo -v</code>
+              {' '}→ URI in das Feld «Device URI» kopieren oder per Autocomplete wählen.
+            </li>
+            <li>
+              <strong>Treiber prüfen</strong>:{' '}
+              <code>docker compose exec cups lpinfo -m</code>
+              {' '}→ passenden Eintrag ins Feld «PPD-Modell» eintragen.
+              <div style={{ marginTop: '0.2rem', color: 'var(--color-muted, #555)' }}>
+                Treiber fehlen? <code>.deb</code>-Dateien von Brother in <code>cups/drivers/</code> ablegen, dann:{' '}
+                <code>docker compose up --build cups</code>
+              </div>
+            </li>
+            <li>
+              <strong>Queue konfigurieren</strong> — «Erkennen» klickt Autocomplete vor.
+              Queue-Name frei wählbar (z.B. <code>QL550_box</code>).
+              Mediengrösse leer lassen = CUPS-Standard (PPD-Vorgabe), oder explizit setzen (z.B. <code>w62</code>).
+            </li>
+            <li>
+              <strong>Label-Typen zuweisen</strong> — Drucker-Einstellungen-Karte: Queue-Namen den Label-Typen
+              (Box, Artikel, Regal …) zuweisen.
+            </li>
+            <li>
+              <strong>Netzwerkdrucker (A4/IPP)</strong> — Device URI: <code>ipps://IP/ipp/print</code>,
+              PPD-Modell: <code>everywhere</code>. Kein Treiber-Rebuild nötig.
+            </li>
+            <li>
+              <strong>Benutzerdefinierte Mediengrössen</strong> — angepasste PPD (z.B. mit 62×8 mm-Eintrag)
+              nach <code>cups/ppds/</code> committen (Dateiname identisch zum installierten PPD), dann{' '}
+              <code>docker compose up --build cups</code>.
+            </li>
+          </ol>
+          <strong>Häufige Probleme:</strong>
+          <dl style={{ margin: '0.4rem 0 0', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.15rem 0.75rem' }}>
+            <dt style={{ color: 'var(--color-error, #c00)' }}>«Unauthorized»</dt>
+            <dd style={{ margin: 0 }}>
+              cups-Container neu bauen: <code>docker compose up --build cups</code>
+              {' '}(AuthType None muss in cupsd.conf aktiv sein)
+            </dd>
+            <dt style={{ color: 'var(--color-error, #c00)' }}>«printer_not_ready»</dt>
+            <dd style={{ margin: 0 }}>
+              <code>docker compose exec cups lpstat -p</code> — Queue-Status prüfen
+            </dd>
+            <dt style={{ color: 'var(--color-error, #c00)' }}>Keine Geräte erkannt</dt>
+            <dd style={{ margin: 0 }}>
+              <code>docker compose exec cups ls /dev/bus/usb/</code> — USB-Passthrough prüfen;
+              ggf. mit <code>docker-compose.usb.yml</code> starten
+            </dd>
+          </dl>
+        </div>
+      </details>
     </div>
   );
 }

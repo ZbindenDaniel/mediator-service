@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+818. ✅ Printer UX: inline setup guide, CUPS error surfacing (502), media datalist, PPD filter fix
+   - **Why:** Device/PPD APIs silently returned empty arrays on CUPS error (`.catch(() => '')`), indistinguishable from "no devices found". Admin users had no guided path for first-time setup. PPD autocomplete was filtered to `?q=brother`, useless without Brother LPR packages. Added `<details>` inline guide with 7 steps + Häufige Fehler, replaced silent catch with HTTP 502.
+   - **Deferred:** Nothing.
 817. ✅ Printer queue UX improvements: detection feedback, media datalist, PPD filter fix, custom PPD override
    - **Why:** PPD autocomplete used `?q=brother` which returned nothing if drivers weren't from Brother's official LPR package. Empty device detection gave no feedback. Media field had no hints. Custom PPDs (e.g. extra label sizes) were lost on container rebuild. Fixed all four issues.
    - **Deferred:** Remote CUPS queue discovery (`lpstat -h <host> -p` endpoint). Setup guide modal.
