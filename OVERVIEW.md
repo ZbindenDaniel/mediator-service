@@ -7,6 +7,24 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+819. ✅ Printer docs: rewrite technical setup guide + new German user guide
+   - **Why:** `printer-server-setup.md` still described the old Raspberry Pi / env-var approach. No user-facing guide existed. Rewrote the technical doc to cover Docker CUPS, USB passthrough, custom PPD override, remote CUPS, and IPP Everywhere. Created `docs/user/Drucker-Einrichtung.md` (German) covering the full operator workflow step by step.
+   - **Deferred:** Nothing.
+818. ✅ Printer UX: inline setup guide, CUPS error surfacing (502), media datalist, PPD filter fix
+   - **Why:** Device/PPD APIs silently returned empty arrays on CUPS error (`.catch(() => '')`), indistinguishable from "no devices found". Admin users had no guided path for first-time setup. PPD autocomplete was filtered to `?q=brother`, useless without Brother LPR packages. Added `<details>` inline guide with 7 steps + Häufige Fehler, replaced silent catch with HTTP 502.
+   - **Deferred:** Nothing.
+817. ✅ Printer queue UX improvements: detection feedback, media datalist, PPD filter fix, custom PPD override
+   - **Why:** PPD autocomplete used `?q=brother` which returned nothing if drivers weren't from Brother's official LPR package. Empty device detection gave no feedback. Media field had no hints. Custom PPDs (e.g. extra label sizes) were lost on container rebuild. Fixed all four issues.
+   - **Deferred:** Remote CUPS queue discovery (`lpstat -h <host> -p` endpoint). Setup guide modal.
+816. ✅ Fix `testPrinterConnection`: `lpstat -d` → `lpstat -p` for per-queue status check
+   - **Why:** `lpstat -d` shows the system default destination and ignores the queue argument. `lpstat -p <queue>` is the correct flag to check a specific printer's idle/ready status. All queues were always returning `printer_not_ready` despite being idle in CUPS.
+   - **Deferred:** Nothing.
+815. ✅ Fix lpadmin Unauthorized: add `AuthType None` to CUPS `/admin` location
+   - **Why:** Modern CUPS implicitly requires user credentials on `/admin` even without explicit config. Network-level `Allow from` passed but the auth check rejected `lpadmin` calls. `AuthType None` disables the credential requirement while IP restrictions remain.
+   - **Deferred:** Nothing.
+814. ✅ Fix cups container healthcheck: `lpstat -H` → `lpstat -r | grep 'running'`
+   - **Why:** `lpstat -H` on Debian outputs "localhost" (no colon), so `grep -q ':'` always returned 1, marking the cups service permanently unhealthy after 10 retries and blocking mediator startup. `lpstat -r` checks whether the scheduler is actually running, which is the real gate.
+   - **Deferred:** Nothing.
 813. ✅ Docker CUPS service + live printer management in admin UI
    - **Why:** Printer setup required manual CUPS install, driver config, and env-var editing on every new host. Now: `docker compose up` starts a CUPS container with Brother QL drivers; queue definitions live in the DB and are editable at runtime via Admin → Drucker-Queues and Admin → Drucker-Einstellungen. No restart needed to switch printers or reassign label types. New `app_settings` and `printer_queues` DB tables; `resolvePrinterQueue` reads DB with env-var fallback. Fixed bug: `-d <queue>` was only appended to `lp` when `PRINTER_SERVER` was set, so socket mode ignored queue selection entirely.
    - **Deferred:** arm64 driver support (Brother i386 .deb won't install on Raspberry Pi — use ARM .deb or `brother-ql` Python backend when needed). The cups/drivers/ directory is a placeholder; operator must supply .deb files from Brother's support site before building the CUPS image.

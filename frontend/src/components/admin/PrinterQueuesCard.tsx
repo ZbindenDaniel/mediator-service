@@ -21,6 +21,12 @@ interface PpdModel {
   label: string;
 }
 
+interface DetectionResult {
+  devices: number;
+  ppds: number;
+  error?: string;
+}
+
 interface Props {
   authToken?: string;
   onAuthFailure?: () => void;
@@ -35,6 +41,17 @@ const EMPTY_QUEUE: Omit<PrinterQueue, 'updated_at'> = {
   enabled: true,
 };
 
+const MEDIA_SUGGESTIONS = [
+  { value: 'w62', label: '62 mm Endlosband' },
+  { value: 'w29h90', label: '29×90 mm Adressetikett' },
+  { value: 'w62h100', label: '62×100 mm' },
+  { value: 'w62h29', label: '62×29 mm' },
+  { value: 'w17h54', label: '17×54 mm' },
+  { value: 'w62h75', label: '62×75 mm' },
+  { value: 'w23h23', label: '23×23 mm' },
+  { value: 'w102', label: '102 mm Endlosband' },
+];
+
 export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
   const [queues, setQueues] = useState<PrinterQueue[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -44,6 +61,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
   const [saving, setSaving] = useState(false);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [message, setMessage] = useState('');
+  const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
 
   const authHeaders = (): Record<string, string> => ({
     'Content-Type': 'application/json',
@@ -65,15 +83,36 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
 
   async function detectDevices() {
     setLoadingDevices(true);
+    setDetectionResult(null);
     try {
       const [dRes, pRes] = await Promise.all([
         fetch('/api/admin/cups-devices', { headers: authHeaders() }),
-        fetch('/api/admin/cups-ppds?q=brother', { headers: authHeaders() }),
+        fetch('/api/admin/cups-ppds', { headers: authHeaders() }),
       ]);
-      if (dRes.ok) setDevices((await dRes.json() as { devices: Device[] }).devices);
-      if (pRes.ok) setPpds((await pRes.json() as { models: PpdModel[] }).models);
+
+      if (dRes.status === 401 || pRes.status === 401) { onAuthFailure?.(); return; }
+
+      let detectedDevices: Device[] = [];
+      let detectedPpds: PpdModel[] = [];
+      let error: string | undefined;
+
+      if (dRes.ok) {
+        detectedDevices = (await dRes.json() as { devices: Device[] }).devices;
+        setDevices(detectedDevices);
+      } else {
+        const body = await dRes.json().catch(() => ({})) as { error?: string };
+        error = body.error ?? `CUPS-Fehler (${dRes.status})`;
+      }
+
+      if (pRes.ok) {
+        detectedPpds = (await pRes.json() as { models: PpdModel[] }).models;
+        setPpds(detectedPpds);
+      }
+
+      setDetectionResult({ devices: detectedDevices.length, ppds: detectedPpds.length, error });
     } catch (err) {
       logError('Failed to detect CUPS devices', err);
+      setDetectionResult({ devices: 0, ppds: 0, error: 'Verbindungsfehler' });
     } finally {
       setLoadingDevices(false);
     }
@@ -145,6 +184,43 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
     }
   }
 
+  function DetectionFeedback() {
+    if (!detectionResult) return null;
+    const { devices: d, ppds: p, error } = detectionResult;
+    if (error) {
+      return (
+        <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--color-error, #c00)' }}>
+          {error}
+        </p>
+      );
+    }
+    return (
+      <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--color-muted, #555)' }}>
+        {d > 0
+          ? <span>{d} Gerät{d !== 1 ? 'e' : ''} erkannt — Autocomplete aktiv.</span>
+          : (
+            <>
+              <span style={{ color: 'var(--color-error, #c00)' }}>Keine USB-Geräte erkannt.</span>
+              {' '}USB-Passthrough aktiv?{' '}
+              <code style={{ fontSize: '0.75rem' }}>
+                docker compose -f docker-compose.yml -f docker-compose.usb.yml up -d cups
+              </code>
+            </>
+          )
+        }
+        {p === 0 && (
+          <div style={{ marginTop: '0.25rem' }}>
+            <span style={{ color: 'var(--color-error, #c00)' }}>Keine Treiber installiert.</span>
+            {' '}<code style={{ fontSize: '0.75rem' }}>docker compose exec cups lpinfo -m</code>
+          </div>
+        )}
+        {d > 0 && p > 0 && (
+          <span style={{ marginLeft: '0.5rem' }}>{p} Treiber verfügbar.</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <h2>CUPS-Queues verwalten</h2>
@@ -211,7 +287,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
                 type="text"
                 value={form.device_uri}
                 onChange={(e) => setForm((f) => ({ ...f, device_uri: e.target.value }))}
-                placeholder="usb://Brother/QL-800?serial=…"
+                placeholder="usb://Brother/QL-800?serial=… oder ipps://192.168.1.x/ipp/print"
                 style={{ flex: 1 }}
                 list="cups-devices-list"
               />
@@ -221,7 +297,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
                 disabled={loadingDevices}
                 style={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}
               >
-                {loadingDevices ? '…' : 'Geräte erkennen'}
+                {loadingDevices ? '…' : 'Erkennen'}
               </button>
             </div>
             {devices.length > 0 && (
@@ -229,6 +305,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
                 {devices.map((d) => <option key={d.uri} value={d.uri} />)}
               </datalist>
             )}
+            <DetectionFeedback />
           </label>
 
           <label>
@@ -237,7 +314,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
               type="text"
               value={form.ppd_model}
               onChange={(e) => setForm((f) => ({ ...f, ppd_model: e.target.value }))}
-              placeholder="Brother QL-800 series"
+              placeholder="lsb/usr/Brother/…ppd — oder: everywhere (IPP-Netzwerkdrucker)"
               style={{ display: 'block', width: '100%' }}
               list="cups-ppds-list"
             />
@@ -256,7 +333,13 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
               onChange={(e) => setForm((f) => ({ ...f, media: e.target.value }))}
               placeholder="w62h100"
               style={{ display: 'block', width: '100%' }}
+              list="cups-media-list"
             />
+            <datalist id="cups-media-list">
+              {MEDIA_SUGGESTIONS.map((s) => (
+                <option key={s.value} value={s.value} label={s.label} />
+              ))}
+            </datalist>
           </label>
 
           <label>
@@ -290,10 +373,66 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
         </div>
       </details>
 
-      <p className="muted" style={{ marginTop: '0.75rem', fontSize: '0.8rem' }}>
-        Tipp: Device URI ermitteln mit{' '}
-        <code>docker compose exec cups lpinfo -v</code>
-      </p>
+      <details style={{ marginTop: '1rem' }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 500, fontSize: '0.875rem' }}>Einrichtungshilfe</summary>
+        <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', lineHeight: 1.6 }}>
+          <ol style={{ paddingLeft: '1.25rem', margin: '0 0 0.75rem' }}>
+            <li>
+              <strong>USB-Drucker anschliessen</strong> — Stack mit USB-Passthrough starten:{' '}
+              <code>docker compose -f docker-compose.yml -f docker-compose.usb.yml up -d</code>
+            </li>
+            <li>
+              <strong>Device URI ermitteln</strong>:{' '}
+              <code>docker compose exec cups lpinfo -v</code>
+              {' '}→ URI in das Feld «Device URI» kopieren oder per Autocomplete wählen.
+            </li>
+            <li>
+              <strong>Treiber prüfen</strong>:{' '}
+              <code>docker compose exec cups lpinfo -m</code>
+              {' '}→ passenden Eintrag ins Feld «PPD-Modell» eintragen.
+              <div style={{ marginTop: '0.2rem', color: 'var(--color-muted, #555)' }}>
+                Treiber fehlen? <code>.deb</code>-Dateien von Brother in <code>cups/drivers/</code> ablegen, dann:{' '}
+                <code>docker compose up --build cups</code>
+              </div>
+            </li>
+            <li>
+              <strong>Queue konfigurieren</strong> — «Erkennen» klickt Autocomplete vor.
+              Queue-Name frei wählbar (z.B. <code>QL550_box</code>).
+              Mediengrösse leer lassen = CUPS-Standard (PPD-Vorgabe), oder explizit setzen (z.B. <code>w62</code>).
+            </li>
+            <li>
+              <strong>Label-Typen zuweisen</strong> — Drucker-Einstellungen-Karte: Queue-Namen den Label-Typen
+              (Box, Artikel, Regal …) zuweisen.
+            </li>
+            <li>
+              <strong>Netzwerkdrucker (A4/IPP)</strong> — Device URI: <code>ipps://IP/ipp/print</code>,
+              PPD-Modell: <code>everywhere</code>. Kein Treiber-Rebuild nötig.
+            </li>
+            <li>
+              <strong>Benutzerdefinierte Mediengrössen</strong> — angepasste PPD (z.B. mit 62×8 mm-Eintrag)
+              nach <code>cups/ppds/</code> committen (Dateiname identisch zum installierten PPD), dann{' '}
+              <code>docker compose up --build cups</code>.
+            </li>
+          </ol>
+          <strong>Häufige Probleme:</strong>
+          <dl style={{ margin: '0.4rem 0 0', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.15rem 0.75rem' }}>
+            <dt style={{ color: 'var(--color-error, #c00)' }}>«Unauthorized»</dt>
+            <dd style={{ margin: 0 }}>
+              cups-Container neu bauen: <code>docker compose up --build cups</code>
+              {' '}(AuthType None muss in cupsd.conf aktiv sein)
+            </dd>
+            <dt style={{ color: 'var(--color-error, #c00)' }}>«printer_not_ready»</dt>
+            <dd style={{ margin: 0 }}>
+              <code>docker compose exec cups lpstat -p</code> — Queue-Status prüfen
+            </dd>
+            <dt style={{ color: 'var(--color-error, #c00)' }}>Keine Geräte erkannt</dt>
+            <dd style={{ margin: 0 }}>
+              <code>docker compose exec cups ls /dev/bus/usb/</code> — USB-Passthrough prüfen;
+              ggf. mit <code>docker-compose.usb.yml</code> starten
+            </dd>
+          </dl>
+        </div>
+      </details>
     </div>
   );
 }

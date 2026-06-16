@@ -28,7 +28,7 @@ services:
       - cups-socket:/run/cups
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "lpstat -H 2>/dev/null | grep -q ':'"]
+      test: ["CMD-SHELL", "lpstat -r 2>/dev/null | grep -q 'running'"]
       interval: 5s
       timeout: 3s
       retries: 10

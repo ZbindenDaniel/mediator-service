@@ -26,6 +26,17 @@ RUN if ls /tmp/drivers/*.deb 1>/dev/null 2>&1; then \
     fi \
     && rm -rf /tmp/drivers/
 
+# Custom PPD overrides — drop modified PPD files (e.g. with extra paper sizes) into
+# cups/ppds/. They replace the driver-installed PPDs of the same filename after build.
+COPY ppds/ /tmp/ppds/
+RUN if ls /tmp/ppds/*.ppd 1>/dev/null 2>&1; then \
+        find /usr/share/ppd/ -name "*.ppd" | while read -r f; do \
+            base=$(basename "$f"); \
+            [ -f "/tmp/ppds/$base" ] && cp "/tmp/ppds/$base" "$f" && echo "PPD override: $base"; \
+        done; \
+    fi \
+    && rm -rf /tmp/ppds
+
 COPY cupsd.conf /etc/cups/cupsd.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

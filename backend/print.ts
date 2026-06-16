@@ -409,7 +409,7 @@ async function runPrinterConnectionAttempt(options: {
   const { queue, timeoutMs, printerHost } = options;
   const lpstatArgs: string[] = [];
   if (printerHost) lpstatArgs.push('-h', printerHost);
-  lpstatArgs.push('-d', queue)
+  lpstatArgs.push('-p', queue)
   return await new Promise((resolve) => {
     try {
       const child = spawn(LPSTAT_COMMAND, lpstatArgs, {

@@ -53,7 +53,13 @@ const action = defineHttpAction({
     try {
       // GET /api/admin/cups-devices — list physical devices detected by CUPS
       if (urlPath === '/api/admin/cups-devices' && method === 'GET') {
-        const output = await cupsLpinfo(['-v']).catch(() => '');
+        let output: string;
+        try {
+          output = await cupsLpinfo(['-v']);
+        } catch (err) {
+          sendJson(res, 502, { error: `lpinfo: ${(err as Error).message}` });
+          return;
+        }
         const devices = output
           .split('\n')
           .map((line) => line.trim())
@@ -72,7 +78,13 @@ const action = defineHttpAction({
       if (urlPath === '/api/admin/cups-ppds' && method === 'GET') {
         const rawQ = (url.split('?')[1] ?? '').split('&').find((p) => p.startsWith('q='));
         const filter = rawQ ? decodeURIComponent(rawQ.slice(2)).toLowerCase() : '';
-        const output = await cupsLpinfo(['-m']).catch(() => '');
+        let output: string;
+        try {
+          output = await cupsLpinfo(['-m']);
+        } catch (err) {
+          sendJson(res, 502, { error: `lpinfo: ${(err as Error).message}` });
+          return;
+        }
         const models = output
           .split('\n')
           .map((line) => line.trim())
