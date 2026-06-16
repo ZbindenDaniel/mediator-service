@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+815. ✅ Fix lpadmin Unauthorized: add `AuthType None` to CUPS `/admin` location
+   - **Why:** Modern CUPS implicitly requires user credentials on `/admin` even without explicit config. Network-level `Allow from` passed but the auth check rejected `lpadmin` calls. `AuthType None` disables the credential requirement while IP restrictions remain.
+   - **Deferred:** Nothing.
 814. ✅ Fix cups container healthcheck: `lpstat -H` → `lpstat -r | grep 'running'`
    - **Why:** `lpstat -H` on Debian outputs "localhost" (no colon), so `grep -q ':'` always returned 1, marking the cups service permanently unhealthy after 10 retries and blocking mediator startup. `lpstat -r` checks whether the scheduler is actually running, which is the real gate.
    - **Deferred:** Nothing.
