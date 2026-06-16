@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+814. ✅ Fix cups container healthcheck: `lpstat -H` → `lpstat -r | grep 'running'`
+   - **Why:** `lpstat -H` on Debian outputs "localhost" (no colon), so `grep -q ':'` always returned 1, marking the cups service permanently unhealthy after 10 retries and blocking mediator startup. `lpstat -r` checks whether the scheduler is actually running, which is the real gate.
+   - **Deferred:** Nothing.
 813. ✅ Docker CUPS service + live printer management in admin UI
    - **Why:** Printer setup required manual CUPS install, driver config, and env-var editing on every new host. Now: `docker compose up` starts a CUPS container with Brother QL drivers; queue definitions live in the DB and are editable at runtime via Admin → Drucker-Queues and Admin → Drucker-Einstellungen. No restart needed to switch printers or reassign label types. New `app_settings` and `printer_queues` DB tables; `resolvePrinterQueue` reads DB with env-var fallback. Fixed bug: `-d <queue>` was only appended to `lp` when `PRINTER_SERVER` was set, so socket mode ignored queue selection entirely.
    - **Deferred:** arm64 driver support (Brother i386 .deb won't install on Raspberry Pi — use ARM .deb or `brother-ql` Python backend when needed). The cups/drivers/ directory is a placeholder; operator must supply .deb files from Brother's support site before building the CUPS image.
