@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+817. ✅ Printer queue UX improvements: detection feedback, media datalist, PPD filter fix, custom PPD override
+   - **Why:** PPD autocomplete used `?q=brother` which returned nothing if drivers weren't from Brother's official LPR package. Empty device detection gave no feedback. Media field had no hints. Custom PPDs (e.g. extra label sizes) were lost on container rebuild. Fixed all four issues.
+   - **Deferred:** Remote CUPS queue discovery (`lpstat -h <host> -p` endpoint). Setup guide modal.
 816. ✅ Fix `testPrinterConnection`: `lpstat -d` → `lpstat -p` for per-queue status check
    - **Why:** `lpstat -d` shows the system default destination and ignores the queue argument. `lpstat -p <queue>` is the correct flag to check a specific printer's idle/ready status. All queues were always returning `printer_not_ready` despite being idle in CUPS.
    - **Deferred:** Nothing.
