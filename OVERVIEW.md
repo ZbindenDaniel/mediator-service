@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+826. ✅ Add "Cancel Jobs" button per queue to clear stuck print jobs
+   - **Why:** A print job (QL-1050-1) was stuck in CUPS state "now printing … Send data failed", blocking further jobs. Added `cupsCancel(queue)` to cups-client.ts (runs `cancel -a <queue>`), wired it to `POST /api/admin/cups-cancel-jobs` (already plumbed), and added a "✕ Jobs" button per row in the Drucker-Queues table.
+   - **Deferred:** Nothing.
 825. ✅ Add "Neu synchronisieren" button to Drucker-Queues card
    - **Why:** After a cups container rebuild or fixing a lpadmin error, the queue sync runs on a 2-minute interval. An explicit trigger makes the fix-and-verify loop immediate without waiting or restarting the mediator.
    - **Deferred:** Nothing.

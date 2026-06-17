@@ -106,3 +106,8 @@ export async function cupsLpinfo(args: string[]): Promise<string> {
 export async function cupsLpstat(args: string[]): Promise<string> {
   return runCupsCommand(LPSTAT_COMMAND, args);
 }
+
+/** Cancel all print jobs for a named queue. */
+export async function cupsCancel(queue: string): Promise<void> {
+  await runCupsCommand('cancel', ['-a', queue]);
+}
