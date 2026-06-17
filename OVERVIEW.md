@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+823. ✅ Fix lpadmin Forbidden + printer_not_ready: cupsd Policy block + empty ppd_model guard
+   - **Why:** CUPS has two auth layers — `<Location>` (network/IP) and `<Policy>` (operation/user). `AuthType None` on `/admin` fixed the first; the default `<Policy default>` still required `@SYSTEM` for printer management, causing 403 Forbidden from www-data even via socket. Added `<Policy default><Limit All> AuthType None</Limit></Policy>` to cupsd.conf. Also fixed sync-printer-queues.ts passing `-m ''` when ppd_model is empty, which causes a separate lpadmin error.
+   - **Deferred:** Brother QL-1050 still needs its .deb driver in cups/drivers/ + rebuild for the PPD model to be valid. Without it, lpadmin succeeds but the queue prints nothing (no raster filter). Alternative: set printer.server to the Raspi in Admin → Drucker-Einstellungen.
 822. ✅ Fix lpinfo "Bad Request" (CUPS 2.4): file-based device/PPD discovery
    - **Why:** CUPS 2.4 removed `CUPS-Get-Devices` and `CUPS-Get-PPDs` IPP operations entirely — `lpinfo` from the mediator container fails with "Bad Request" even via Unix socket because the operation no longer exists in the server. `lpinfo` inside the cups container works because it runs backends directly as root. Fix: cups entrypoint writes `devices.txt` and `ppds.txt` to the shared `/run/cups/` volume at startup and refreshes every 60 s; `cups-client.ts` reads those files for `-v`/`-m` queries. IPP fallback kept for remote CUPS ≤ 2.3 servers. Raised CUPS log level to `info`.
    - **Deferred:** Device list is at most 60 s stale. Remote CUPS 2.4 servers cannot do device/PPD discovery (CUPS 2.4 limitation).

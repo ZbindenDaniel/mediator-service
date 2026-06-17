@@ -37,8 +37,10 @@ export async function syncPrinterQueuesToCups(): Promise<void> {
 
   for (const row of rows) {
     try {
-      // -E enables the queue; -v sets device URI; -m sets PPD by model string
-      await cupsLpadmin(['-p', row.name, '-E', '-v', row.device_uri, '-m', row.ppd_model]);
+      // -E enables the queue; -v sets device URI; -m sets PPD model (omit if empty → raw/no-PPD)
+      const lpadminArgs = ['-p', row.name, '-E', '-v', row.device_uri];
+      if (row.ppd_model) lpadminArgs.push('-m', row.ppd_model);
+      await cupsLpadmin(lpadminArgs);
       if (row.media) {
         await cupsLpoptions(['-p', row.name, '-o', `media=${row.media}`]);
       }
