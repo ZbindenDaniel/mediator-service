@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+829. ✅ Make Erkennen trigger a real-time lpinfo scan instead of reading stale cache
+   - **Why:** The cups entrypoint refreshed devices.txt/ppds.txt only every 60s. Clicking "Erkennen" right after connecting a USB printer or rebuilding the container returned stale data. Fixed by: (1) entrypoint now polls every 2s for a `/run/cups/refresh-now` signal file and runs lpinfo immediately when found; (2) `cupsRefreshDiscovery()` writes the signal and polls the timestamp file until the scan completes (≤ ~3s); (3) cups-devices/cups-ppds endpoints call this before returning; (4) UI shows scan timestamp and button label changed to "Scannen".
+   - **Deferred:** Nothing.
 828. ✅ Add printer-driver-ptouch to cups Dockerfile for QL-500/550/560/570/580/700 support
    - **Why:** The existing Raspi uses `Foomatic/ptouch-ql` (open-source, from `printer-driver-ptouch` Debian package) rather than the proprietary Brother `.deb`. No binary packages needed; covers the QL-560 and the whole QL-5xx/7xx range. Confirmed from the Raspi CUPS config: `Driver: Brother QL-550 Foomatic/ptouch-ql (recommended)`.
    - **Deferred:** Models not covered by ptouch-ql (e.g. QL-800/810/1050/1100) still need the proprietary `.deb` in `cups/drivers/`.

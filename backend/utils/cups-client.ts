@@ -8,8 +8,10 @@ const CUPS_TIMEOUT_MS = 10_000;
 // CUPS 2.4 removed CUPS-Get-Devices and CUPS-Get-PPDs from IPP. The cups container's
 // entrypoint writes lpinfo output to these files so the mediator can read them without
 // going through the removed IPP operations.
-const DEVICES_FILE = '/run/cups/devices.txt';
-const PPDS_FILE    = '/run/cups/ppds.txt';
+const DEVICES_FILE  = '/run/cups/devices.txt';
+const PPDS_FILE     = '/run/cups/ppds.txt';
+const REFRESH_SIGNAL = '/run/cups/refresh-now';
+const TIMESTAMP_FILE = '/run/cups/discovery-ts.txt';
 
 async function runCupsCommand(cmd: string, args: string[], timeoutMs = CUPS_TIMEOUT_MS): Promise<string> {
   // Runtime-configured server (DB override > CUPS_HOST env > CUPS_SERVER socket via env)
@@ -110,4 +112,35 @@ export async function cupsLpstat(args: string[]): Promise<string> {
 /** Cancel all print jobs for a named queue. */
 export async function cupsCancel(queue: string): Promise<void> {
   await runCupsCommand('cancel', ['-a', queue]);
+}
+
+/**
+ * Return the Unix timestamp (seconds) of the last discovery refresh, or null.
+ * Written by the cups entrypoint alongside devices.txt / ppds.txt.
+ */
+export function cupsDiscoveryTimestamp(): number | null {
+  const raw = readFile(TIMESTAMP_FILE);
+  const n = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Signal the cups entrypoint to run a fresh lpinfo scan, then wait for it to complete.
+ * Writes /run/cups/refresh-now; the entrypoint polls every 2s and acts within ~3s.
+ * Safe to call when not using Docker CUPS — write failure is silently ignored.
+ */
+export async function cupsRefreshDiscovery(): Promise<void> {
+  const tsBefore = cupsDiscoveryTimestamp();
+  try {
+    fs.writeFileSync(REFRESH_SIGNAL, '');
+  } catch {
+    return; // not using Docker CUPS socket volume — skip
+  }
+  // Poll until the timestamp advances (cups ran lpinfo) or 6s elapses
+  const deadline = Date.now() + 6000;
+  while (Date.now() < deadline) {
+    await new Promise<void>((r) => setTimeout(r, 300));
+    const ts = cupsDiscoveryTimestamp();
+    if (ts !== null && ts !== tsBefore) return;
+  }
 }
