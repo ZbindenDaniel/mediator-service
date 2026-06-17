@@ -133,11 +133,11 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
                         ? Math.round(co2ScoreSums[l]! / count)
                         : null;
                       return (
-                        <span key={l}>
+                        <div key={l}>
                           {CO2_IMPACT_LABEL_DE[l]}: <b>{count}</b>
                           {avgScore !== null && <span className="muted"> (~{avgScore} kg CO₂)</span>}
                           {' '}
-                        </span>
+                        </div>
                       );
                     })
                   }
@@ -159,6 +159,35 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
           ) : (
             <div className="muted">Übersicht konnte nicht geladen werden</div>
           )}
+        </div>
+
+                <div className="muted status-info">
+          Drucker:{' '}
+          <span
+            style={{
+              display: 'inline-block',
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: printerOk == null ? '#999' : printerOk ? '#1cbc2c' : '#d22'
+            }}
+          ></span>
+          {printerReason ? (
+            <span className="muted" style={{ marginLeft: 8 }}>
+              {printerReason}
+            </span>
+          ) : null}
+        </div>
+        <div className="muted status-info">Ki:
+          <span
+            style={{
+              display: 'inline-block',
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: health == null ? '#999' : health === 'ok' ? '#1cbc2c' : '#d22'
+            }}
+          ></span>
         </div>
 
         <div className="stats-card-right">
@@ -190,34 +219,6 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
 
       {/* TODO(stats-card-status-row): Re-check status row wrapping once printer-reason copy is finalized. */}
       <div className="stats-card-status-row">
-        <div className="muted status-info">
-          Drucker:{' '}
-          <span
-            style={{
-              display: 'inline-block',
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: printerOk == null ? '#999' : printerOk ? '#1cbc2c' : '#d22'
-            }}
-          ></span>
-          {printerReason ? (
-            <span className="muted" style={{ marginLeft: 8 }}>
-              {printerReason}
-            </span>
-          ) : null}
-        </div>
-        <div className="muted status-info">Ki:
-          <span
-            style={{
-              display: 'inline-block',
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: health == null ? '#999' : health === 'ok' ? '#1cbc2c' : '#d22'
-            }}
-          ></span>
-        </div>
       </div>
     </div>
   );

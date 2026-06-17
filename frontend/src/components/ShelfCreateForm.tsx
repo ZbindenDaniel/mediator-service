@@ -265,8 +265,6 @@ export default function ShelfCreateForm() {
   }
 
   return (
-
-    <div className='container'>
       <div className="card shelf-create-card">
         <h3>Regal erstellen</h3>
         <form onSubmit={handleSubmit}>
@@ -343,6 +341,5 @@ export default function ShelfCreateForm() {
           </div>
         </form>
       </div>
-    </div>
   );
 }

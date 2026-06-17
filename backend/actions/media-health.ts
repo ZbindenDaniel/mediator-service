@@ -21,7 +21,7 @@ const action = defineHttpAction({
     try {
       const dirs = await checkMediaDirectories();
       const fetchRoots = resolveFetchMediaRoots();
-      let imageProbe = null;
+      let imageProbe: null | { sampled: number; accessible: number; unreachable: string[] } = null;
 
       try {
         const rows = await query<{ Grafikname: string; Artikel_Nummer: string | null }>(
@@ -32,7 +32,7 @@ const action = defineHttpAction({
         );
 
         const probeResults = await Promise.all(
-          rows.rows.map(async (row) => {
+          rows.map(async (row) => {
             const folder = formatArtikelNummerForMedia(row.Artikel_Nummer);
             const relativePath = folder
               ? path.posix.join(folder, row.Grafikname)

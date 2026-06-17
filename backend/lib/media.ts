@@ -117,8 +117,5 @@ export function resolveMediaFolder(
     return formatted;
   }
 
-  logger.warn?.('[media] Missing Artikel_Nummer for media folder; using legacy ItemUUID fallback during migration window', {
-    itemId
-  });
   return itemId;
 }

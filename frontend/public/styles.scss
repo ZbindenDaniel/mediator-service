@@ -263,6 +263,17 @@ body {
     opacity: 0.8;
 }
 
+button {
+      border-radius: 0% 0% 50% 50%;
+    max-width: 220px;
+    align-self: center;
+    background-color: #bce0a3;
+    border: 1px solid var(--acc);
+    padding: 10px 12px;
+    margin: 0px;
+    cursor: pointer;
+}
+
 /* === Detail panel tab bar === */
 .detail-tab-bar {
     display: flex;
@@ -1479,10 +1490,6 @@ div {
 #btnAddItem {
     margin: auto;
     margin-top: 30px;
-
-    button {
-        border-radius: 50%;
-    }
 }
 
 #BoxID {
@@ -1505,8 +1512,7 @@ div {
 /* Inputs & tap targets: min-height 44px (Apple HIG) */
 input,
 textarea,
-select,
-button {
+select {
     font: inherit;
     color: inherit;
     background: transparent;
@@ -1634,12 +1640,13 @@ input[type="checkbox"] {
 .stats-card-main {
     margin-top: 10px;
     display: grid;
-    grid-template-columns: 1fr;
+    // grid-template-columns: 1fr;
     gap: 12px;
 }
 
 .stats-card-right {
     display: grid;
+    justify-content: center;
     gap: 10px;
 }
 
@@ -1678,18 +1685,13 @@ input[type="checkbox"] {
     border: 1px solid rgba(0, 0, 0, 0.12);
 }
 
-button {
-    background: #f6f7f9;
-    cursor: pointer;
-}
-
 button a {
     text-decoration: none;
     color: inherit
 }
 
 button:hover {
-    background: #eef1f5;
+    background: var(--nav);
     animation: whobble .5s ease-out forwards;
 }
 
@@ -2135,7 +2137,7 @@ button:focus {
 }
 
 .bulk-item-action-bar__button:hover {
-    background: #eef1f5;
+    background: var(--nav);
     transform: translateY(-1px);
 }
 
@@ -2938,11 +2940,6 @@ button:focus {
 
 
 @media (min-width: 960px) {
-    .stats-card-main {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        align-items: start;
-    }
-
     .stats-card-right {
         border-left: 1px solid var(--line);
         padding-left: 12px;

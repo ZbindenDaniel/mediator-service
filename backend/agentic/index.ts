@@ -800,10 +800,6 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         }
         const latestRun = await fetchAgenticRun(payload.artikelNummer, deps, logger);
         if (!latestRun || latestRun.Status !== AGENTIC_RUN_STATUS_QUEUED) {
-          logger.info?.('[agentic-service] Run no longer queued at promotion; skipping invocation', {
-            artikelNummer: payload.artikelNummer,
-            status: latestRun?.Status ?? 'not-found'
-          });
           return false;
         }
         const updateResult = await deps.updateAgenticRunStatus(
