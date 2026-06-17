@@ -2,7 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import { defineHttpAction } from './index';
 import { query, execute, insert } from '../db-client';
-import { cupsLpinfo, cupsLpstat } from '../utils/cups-client';
+import { cupsLpinfo, cupsLpstat, cupsCancel } from '../utils/cups-client';
+
+const runCupsCancel = cupsCancel;
 import { syncPrinterQueuesToCups, removePrinterQueueFromCups } from '../utils/sync-printer-queues';
 import { requireAdminAuth } from '../utils/admin-auth';
 
@@ -46,6 +48,7 @@ const action = defineHttpAction({
            path === '/api/admin/cups-ppds' ||
            path === '/api/admin/cups-diagnostics' ||
            path === '/api/admin/cups-sync' ||
+           path === '/api/admin/cups-cancel-jobs' ||
            /^\/api\/admin\/printer-queues\/[^/]+$/.test(path);
   },
   async handle(req: IncomingMessage, res: ServerResponse) {
@@ -57,6 +60,16 @@ const action = defineHttpAction({
       // POST /api/admin/cups-sync — manually trigger queue sync to CUPS
       if (urlPath === '/api/admin/cups-sync' && method === 'POST') {
         await syncPrinterQueuesToCups();
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      // POST /api/admin/cups-cancel-jobs — cancel all jobs for a queue (clears stuck jobs)
+      if (urlPath === '/api/admin/cups-cancel-jobs' && method === 'POST') {
+        const raw = await readBody(req);
+        const { queue } = JSON.parse(raw) as { queue?: string };
+        if (!queue?.trim()) { sendJson(res, 400, { error: 'queue is required' }); return; }
+        await runCupsCancel(queue.trim());
         sendJson(res, 200, { ok: true });
         return;
       }

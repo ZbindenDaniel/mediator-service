@@ -66,6 +66,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
   const [loadingDiag, setLoadingDiag] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [cancelingQueue, setCancelingQueue] = useState<string | null>(null);
 
   const authHeaders = (): Record<string, string> => ({
     'Content-Type': 'application/json',
@@ -206,6 +207,26 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
     }
   }
 
+  async function cancelJobs(name: string) {
+    setCancelingQueue(name);
+    try {
+      const res = await fetch('/api/admin/cups-cancel-jobs', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ queue: name }),
+      });
+      if (res.status === 401) { onAuthFailure?.(); return; }
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        setMessage(err.error ?? 'Fehler beim Abbrechen');
+      }
+    } catch (err) {
+      logError('Failed to cancel jobs', err);
+    } finally {
+      setCancelingQueue(null);
+    }
+  }
+
   async function toggleEnabled(q: PrinterQueue) {
     try {
       await fetch(`/api/admin/printer-queues/${encodeURIComponent(q.name)}`, {
@@ -301,6 +322,14 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
                 </td>
                 <td style={{ padding: '0.3rem 0.5rem', whiteSpace: 'nowrap' }}>
                   <button onClick={() => startEdit(q)} style={{ marginRight: '0.3rem', fontSize: '0.8rem' }}>Bearbeiten</button>
+                  <button
+                    onClick={() => void cancelJobs(q.name)}
+                    disabled={cancelingQueue === q.name}
+                    title="Alle offenen Jobs für diese Queue abbrechen (stuck jobs)"
+                    style={{ marginRight: '0.3rem', fontSize: '0.8rem', color: 'var(--color-warning, #a60)' }}
+                  >
+                    {cancelingQueue === q.name ? '…' : '✕ Jobs'}
+                  </button>
                   <button onClick={() => void deleteQueue(q.name)} style={{ fontSize: '0.8rem', color: 'var(--color-error, #c00)' }}>Löschen</button>
                 </td>
               </tr>
