@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+820. ✅ Fix `ctx.listItemsForExport is not a function` in kivi-sync / export actions
+   - **Why:** `listItemsForExport` in `backend/db.ts` was accidentally structured as `{ async all(filters) }` instead of a plain async function, breaking all three call sites (`sync-erp`, `export-items`, `export-data`) which call it as `ctx.listItemsForExport({...})`. Converted to a plain `export async function` matching every other `list*` helper; `ActionContext` type picks up the change via `typeof` automatically.
+   - **Deferred:** Nothing.
 819. ✅ Printer docs: rewrite technical setup guide + new German user guide
    - **Why:** `printer-server-setup.md` still described the old Raspberry Pi / env-var approach. No user-facing guide existed. Rewrote the technical doc to cover Docker CUPS, USB passthrough, custom PPD override, remote CUPS, and IPP Everywhere. Created `docs/user/Drucker-Einrichtung.md` (German) covering the full operator workflow step by step.
    - **Deferred:** Nothing.

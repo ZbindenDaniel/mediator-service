@@ -1195,33 +1195,31 @@ function normalizeItemIdFilters(rawItemIds: unknown): string[] {
   return normalized;
 }
 
-export const listItemsForExport = {
-  async all(filters: Partial<ListItemsForExportFilters>): Promise<any[]> {
-    const createdAfter = filters?.createdAfter ?? null;
-    const updatedAfter = filters?.updatedAfter ?? null;
-    const itemIds = normalizeItemIdFilters(filters?.itemIds);
+export async function listItemsForExport(filters: Partial<ListItemsForExportFilters>): Promise<any[]> {
+  const createdAfter = filters?.createdAfter ?? null;
+  const updatedAfter = filters?.updatedAfter ?? null;
+  const itemIds = normalizeItemIdFilters(filters?.itemIds);
 
-    let sql = `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
-      "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
-    ])}${ITEM_JOIN_WITH_BOX}
-     LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
-     WHERE ($1::TEXT IS NULL OR i."Datum_erfasst" >= $1)
-       AND ($2::TEXT IS NULL OR i."UpdatedAt" >= $2)`;
+  let sql = `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
+    "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
+    "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+  ])}${ITEM_JOIN_WITH_BOX}
+   LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
+   WHERE ($1::TEXT IS NULL OR i."Datum_erfasst" >= $1)
+     AND ($2::TEXT IS NULL OR i."UpdatedAt" >= $2)`;
 
-    const params: unknown[] = [createdAfter, updatedAfter];
+  const params: unknown[] = [createdAfter, updatedAfter];
 
-    if (itemIds.length > 0) {
-      const placeholders = itemIds.map((_, idx) => `$${idx + 3}`).join(', ');
-      sql += ` AND i."ItemUUID" IN (${placeholders})`;
-      params.push(...itemIds);
-    }
-
-    sql += ` ORDER BY COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID"), i."ItemUUID"`;
-    const rows = await query(sql, params);
-    return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsForExport');
+  if (itemIds.length > 0) {
+    const placeholders = itemIds.map((_, idx) => `$${idx + 3}`).join(', ');
+    sql += ` AND i."ItemUUID" IN (${placeholders})`;
+    params.push(...itemIds);
   }
-};
+
+  sql += ` ORDER BY COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID"), i."ItemUUID"`;
+  const rows = await query(sql, params);
+  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsForExport');
+}
 
 // ---------------------------------------------------------------------------
 // Item mutations
