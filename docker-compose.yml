@@ -41,8 +41,9 @@ services:
     environment:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav
       DATABASE_URL: postgres://mediator:mediator@postgres:5432/mediator
-      # CUPS service address — mediator calls lpadmin/lpinfo here for queue management
-      CUPS_HOST: cups:631
+      # CUPS 2.4 removed CUPS-Get-Devices/CUPS-Get-PPDs over TCP. Use the Unix socket
+      # (shared volume) for lpinfo/lpadmin. Set printer.server in Admin UI for a remote server.
+      CUPS_SERVER: /run/cups/cups.sock
       # Default queue assignments; overridden at runtime via Admin → Printer Settings
       PRINTER_QUEUE: QL800_box
       PRINTER_QUEUE_BOX: QL800_box
@@ -57,8 +58,8 @@ services:
       - mediator-data:/var/lib/mediator
       - mediator-media:/app/dist/backend/media
       - /mnt:/app/dist/backend/webDav
-      # Shared CUPS socket from the cups service (replaces the old host bind mount)
-      - cups-socket:/run/cups:ro
+      # Shared CUPS socket from the cups service — not :ro because lpadmin writes to socket
+      - cups-socket:/run/cups
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

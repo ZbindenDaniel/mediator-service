@@ -1,11 +1,18 @@
+import fs from 'fs';
 import { spawn } from 'child_process';
 import { CUPS_HOST, LPSTAT_COMMAND } from '../config';
 import { getSetting } from './app-settings';
 
 const CUPS_TIMEOUT_MS = 10_000;
 
+// CUPS 2.4 removed CUPS-Get-Devices and CUPS-Get-PPDs from IPP. The cups container's
+// entrypoint writes lpinfo output to these files so the mediator can read them without
+// going through the removed IPP operations.
+const DEVICES_FILE = '/run/cups/devices.txt';
+const PPDS_FILE    = '/run/cups/ppds.txt';
+
 async function runCupsCommand(cmd: string, args: string[], timeoutMs = CUPS_TIMEOUT_MS): Promise<string> {
-  // Runtime-configured server (DB override > CUPS_HOST env > Unix socket)
+  // Runtime-configured server (DB override > CUPS_HOST env > CUPS_SERVER socket via env)
   const host = await getSetting('printer.server', CUPS_HOST);
   return new Promise((resolve, reject) => {
     const fullArgs = host ? ['-h', host, ...args] : args;
@@ -37,6 +44,15 @@ async function runCupsCommand(cmd: string, args: string[], timeoutMs = CUPS_TIME
   });
 }
 
+function readFile(path: string): string | null {
+  try {
+    const content = fs.readFileSync(path, 'utf8').trim();
+    return content.length > 0 ? content : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Run lpadmin with the given args (host flag prepended automatically). */
 export async function cupsLpadmin(args: string[]): Promise<void> {
   await runCupsCommand('lpadmin', args);
@@ -65,8 +81,24 @@ export async function cupsAccept(queue: string): Promise<void> {
   }
 }
 
-/** Run lpinfo with the given args and return parsed lines. */
+/**
+ * Run lpinfo with the given args and return stdout.
+ *
+ * CUPS 2.4 removed CUPS-Get-Devices (-v) and CUPS-Get-PPDs (-m) from IPP.
+ * For these two operations we first try the pre-written discovery files
+ * (cups/entrypoint.sh writes them at startup and refreshes every 60 s).
+ * The IPP path is kept as fallback for remote CUPS 2.3 servers.
+ */
 export async function cupsLpinfo(args: string[]): Promise<string> {
+  if (args.includes('-v')) {
+    const cached = readFile(DEVICES_FILE);
+    if (cached !== null) return cached;
+  }
+  if (args.includes('-m')) {
+    const cached = readFile(PPDS_FILE);
+    if (cached !== null) return cached;
+  }
+  // Fallback: try IPP (works for remote CUPS ≤ 2.3, fails on CUPS 2.4)
   return runCupsCommand('lpinfo', args);
 }
 
