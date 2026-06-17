@@ -64,6 +64,8 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
   const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
   const [diagnostics, setDiagnostics] = useState<Record<string, string | null> | null>(null);
   const [loadingDiag, setLoadingDiag] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
 
   const authHeaders = (): Record<string, string> => ({
     'Content-Type': 'application/json',
@@ -121,6 +123,21 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
   }
 
   useEffect(() => { void loadQueues(); }, []);
+
+  async function resync() {
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const res = await fetch('/api/admin/cups-sync', { method: 'POST', headers: authHeaders() });
+      if (res.status === 401) { onAuthFailure?.(); return; }
+      setSyncMessage(res.ok ? 'Sync abgeschlossen' : 'Fehler beim Sync');
+    } catch (err) {
+      logError('Failed to resync', err);
+      setSyncMessage('Verbindungsfehler');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function fetchDiagnostics() {
     setLoadingDiag(true);
@@ -241,7 +258,21 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
 
   return (
     <div className="card">
-      <h2>CUPS-Queues verwalten</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
+        <h2 style={{ margin: 0 }}>CUPS-Queues verwalten</h2>
+        <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {syncMessage && <span className="muted" style={{ fontSize: '0.8rem' }}>{syncMessage}</span>}
+          <button
+            type="button"
+            onClick={() => void resync()}
+            disabled={syncing}
+            style={{ fontSize: '0.8rem' }}
+            title="Alle Queues aus DB erneut in CUPS eintragen (nach Treiber-Rebuild oder Fehlerbehebung)"
+          >
+            {syncing ? '…' : '↺ Neu synchronisieren'}
+          </button>
+        </span>
+      </div>
 
       {/* Queue list */}
       {queues.length === 0 ? (

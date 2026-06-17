@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+825. ✅ Add "Neu synchronisieren" button to Drucker-Queues card
+   - **Why:** After a cups container rebuild or fixing a lpadmin error, the queue sync runs on a 2-minute interval. An explicit trigger makes the fix-and-verify loop immediate without waiting or restarting the mediator.
+   - **Deferred:** Nothing.
 824. ✅ Add CUPS diagnostics panel to admin UI
    - **Why:** Print jobs appear to succeed in mediator logs but nothing prints, and there are no accessible CUPS logs in the browser. Added `GET /api/admin/cups-diagnostics` endpoint (lpstat -p -l, lpstat -v, lpstat -o, USB cache) and a collapsible «CUPS-Diagnose» section in the Drucker-Queues card with an Aktualisieren button.
    - **Deferred:** Nothing.

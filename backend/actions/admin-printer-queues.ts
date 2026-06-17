@@ -45,6 +45,7 @@ const action = defineHttpAction({
            path === '/api/admin/cups-devices' ||
            path === '/api/admin/cups-ppds' ||
            path === '/api/admin/cups-diagnostics' ||
+           path === '/api/admin/cups-sync' ||
            /^\/api\/admin\/printer-queues\/[^/]+$/.test(path);
   },
   async handle(req: IncomingMessage, res: ServerResponse) {
@@ -53,6 +54,13 @@ const action = defineHttpAction({
     const urlPath = url.split('?')[0];
 
     try {
+      // POST /api/admin/cups-sync — manually trigger queue sync to CUPS
+      if (urlPath === '/api/admin/cups-sync' && method === 'POST') {
+        await syncPrinterQueuesToCups();
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
       // GET /api/admin/cups-diagnostics — full CUPS state dump for debugging
       if (urlPath === '/api/admin/cups-diagnostics' && method === 'GET') {
         const run = async (args: string[]) => cupsLpstat(args).catch((e: Error) => `error: ${e.message}`);
