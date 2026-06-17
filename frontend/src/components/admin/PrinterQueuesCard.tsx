@@ -62,6 +62,8 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [message, setMessage] = useState('');
   const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Record<string, string | null> | null>(null);
+  const [loadingDiag, setLoadingDiag] = useState(false);
 
   const authHeaders = (): Record<string, string> => ({
     'Content-Type': 'application/json',
@@ -119,6 +121,22 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
   }
 
   useEffect(() => { void loadQueues(); }, []);
+
+  async function fetchDiagnostics() {
+    setLoadingDiag(true);
+    setDiagnostics(null);
+    try {
+      const res = await fetch('/api/admin/cups-diagnostics', { headers: authHeaders() });
+      if (res.status === 401) { onAuthFailure?.(); return; }
+      const data = await res.json() as Record<string, string | null>;
+      setDiagnostics(data);
+    } catch (err) {
+      logError('Failed to fetch CUPS diagnostics', err);
+      setDiagnostics({ error: 'Verbindungsfehler' });
+    } finally {
+      setLoadingDiag(false);
+    }
+  }
 
   function startEdit(q: PrinterQueue) {
     setEditingName(q.name);
@@ -374,6 +392,53 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
       </details>
 
       <details style={{ marginTop: '1rem' }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 500, fontSize: '0.875rem' }}>
+          CUPS-Diagnose
+          {' '}
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); void fetchDiagnostics(); }}
+            disabled={loadingDiag}
+            style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}
+          >
+            {loadingDiag ? '…' : 'Aktualisieren'}
+          </button>
+        </summary>
+        {diagnostics && (
+          <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+            {(['printers', 'devices', 'jobs'] as const).map((key) => (
+              diagnostics[key] != null && (
+                <div key={key} style={{ marginBottom: '0.75rem' }}>
+                  <strong style={{ fontFamily: 'sans-serif', fontSize: '0.8rem' }}>
+                    {key === 'printers' ? 'Drucker (lpstat -p -l)' : key === 'devices' ? 'Device URIs (lpstat -v)' : 'Jobs (lpstat -o)'}
+                  </strong>
+                  <pre style={{ margin: '0.2rem 0 0', padding: '0.4rem 0.5rem', background: 'var(--bg-alt, #f5f5f5)', borderRadius: '3px', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                    {diagnostics[key] || '(leer)'}
+                  </pre>
+                </div>
+              )
+            ))}
+            {diagnostics['devicesCache'] != null && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <strong style={{ fontFamily: 'sans-serif', fontSize: '0.8rem' }}>USB-Cache (devices.txt)</strong>
+                <pre style={{ margin: '0.2rem 0 0', padding: '0.4rem 0.5rem', background: 'var(--bg-alt, #f5f5f5)', borderRadius: '3px', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  {diagnostics['devicesCache'] || '(leer — kein USB-Gerät oder Passthrough fehlt)'}
+                </pre>
+              </div>
+            )}
+            {diagnostics['error'] && (
+              <p style={{ color: 'var(--color-error, #c00)', margin: 0 }}>{diagnostics['error']}</p>
+            )}
+          </div>
+        )}
+        {!diagnostics && !loadingDiag && (
+          <p style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted, #555)' }}>
+            Klick auf «Aktualisieren» um den aktuellen CUPS-Zustand zu laden.
+          </p>
+        )}
+      </details>
+
+      <details style={{ marginTop: '0.5rem' }}>
         <summary style={{ cursor: 'pointer', fontWeight: 500, fontSize: '0.875rem' }}>Einrichtungshilfe</summary>
         <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', lineHeight: 1.6 }}>
           <ol style={{ paddingLeft: '1.25rem', margin: '0 0 0.75rem' }}>
