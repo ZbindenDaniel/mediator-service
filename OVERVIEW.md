@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+827. ✅ Warn explicitly when a raw queue (no PPD model) will silently discard QL print jobs
+   - **Why:** `lp` always returns success when the job is accepted by the spooler. A raw queue sends raw PDF to the QL printer which discards it — CUPS marks the job done and nothing prints. Added log warning in sync-printer-queues.ts, ⚠ raw badge in queue table, and inline warning in PPD field when empty. Also added it to the Einrichtungshilfe as the most common failure mode.
+   - **Deferred:** Actual driver fix requires user to place `.deb` files in `cups/drivers/` and rebuild, or set `printer.server` to a Raspi with existing drivers.
 826. ✅ Add "Cancel Jobs" button per queue to clear stuck print jobs
    - **Why:** A print job (QL-1050-1) was stuck in CUPS state "now printing … Send data failed", blocking further jobs. Added `cupsCancel(queue)` to cups-client.ts (runs `cancel -a <queue>`), wired it to `POST /api/admin/cups-cancel-jobs` (already plumbed), and added a "✕ Jobs" button per row in the Drucker-Queues table.
    - **Deferred:** Nothing.

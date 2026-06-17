@@ -315,7 +315,9 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
               <tr key={q.name} style={{ borderBottom: '1px solid var(--border, #eee)' }}>
                 <td style={{ padding: '0.3rem 0.5rem', fontWeight: 500 }}>{q.name}</td>
                 <td style={{ padding: '0.3rem 0.5rem', wordBreak: 'break-all', maxWidth: '18rem' }}>{q.device_uri || <span className="muted">—</span>}</td>
-                <td style={{ padding: '0.3rem 0.5rem' }}>{q.ppd_model || <span className="muted">—</span>}</td>
+                <td style={{ padding: '0.3rem 0.5rem' }}>
+                  {q.ppd_model || <span style={{ color: 'var(--color-warning, #a60)' }} title="Raw-Queue: kein Raster-Filter → QL-Drucker drucken nichts">⚠ raw</span>}
+                </td>
                 <td style={{ padding: '0.3rem 0.5rem' }}>{q.media || <span className="muted">—</span>}</td>
                 <td style={{ padding: '0.3rem 0.5rem' }}>
                   <input type="checkbox" checked={q.enabled} onChange={() => void toggleEnabled(q)} />
@@ -400,6 +402,12 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
               <datalist id="cups-ppds-list">
                 {ppds.map((p) => <option key={p.id} value={p.id} label={p.label} />)}
               </datalist>
+            )}
+            {!form.ppd_model && (
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: 'var(--color-warning, #a60)' }}>
+                Ohne PPD-Modell wird eine Raw-Queue erstellt — Brother QL-Drucker verwerfen rohe PDF-Dateien lautlos.
+                Treiber in <code>cups/drivers/</code> ablegen und neu bauen.
+              </p>
             )}
           </label>
 
@@ -549,6 +557,12 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
             <dt style={{ color: 'var(--color-error, #c00)' }}>«printer_not_ready»</dt>
             <dd style={{ margin: 0 }}>
               <code>docker compose exec cups lpstat -p</code> — Queue-Status prüfen
+            </dd>
+            <dt style={{ color: 'var(--color-warning, #a60)' }}>Druckt laut Log, aber nichts kommt raus</dt>
+            <dd style={{ margin: 0 }}>
+              Raw-Queue (PPD-Modell leer): Brother QL-Drucker verwerfen rohe PDF-Dateien lautlos.
+              Treiber (<code>.deb</code>) in <code>cups/drivers/</code> ablegen, dann{' '}
+              <code>docker compose up --build cups</code>; anschliessend PPD-Modell in der Queue setzen.
             </dd>
             <dt style={{ color: 'var(--color-error, #c00)' }}>Keine Geräte erkannt</dt>
             <dd style={{ margin: 0 }}>
