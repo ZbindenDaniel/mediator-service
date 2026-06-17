@@ -2451,3 +2451,10 @@ export async function getUserMark(username: string, itemUUID: string): Promise<{
     [username, itemUUID]
   );
 }
+
+export async function getItemMarks(itemUUID: string): Promise<Array<{ Username: string; Note: string | null; CreatedAt: string }>> {
+  return query<{ Username: string; Note: string | null; CreatedAt: string }>(
+    `SELECT "Username", "Note", "CreatedAt" FROM user_item_marks WHERE "ItemUUID" = $1 ORDER BY "CreatedAt" ASC`,
+    [itemUUID]
+  );
+}
