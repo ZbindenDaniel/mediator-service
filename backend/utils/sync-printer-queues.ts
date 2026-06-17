@@ -39,7 +39,14 @@ export async function syncPrinterQueuesToCups(): Promise<void> {
     try {
       // -E enables the queue; -v sets device URI; -m sets PPD model (omit if empty → raw/no-PPD)
       const lpadminArgs = ['-p', row.name, '-E', '-v', row.device_uri];
-      if (row.ppd_model) lpadminArgs.push('-m', row.ppd_model);
+      if (row.ppd_model) {
+        lpadminArgs.push('-m', row.ppd_model);
+      } else {
+        // Raw queue: PDF bytes sent unfiltered to the device. Brother QL printers require a
+        // raster filter (install LPR .deb in cups/drivers/ + rebuild) — they will silently
+        // discard raw PDF while CUPS still reports the job as successful.
+        console.warn(`[sync-printer-queues] Queue ${row.name} has no PPD model — raw queue; Brother QL printers will silently discard raw PDF`);
+      }
       await cupsLpadmin(lpadminArgs);
       if (row.media) {
         await cupsLpoptions(['-p', row.name, '-o', `media=${row.media}`]);
