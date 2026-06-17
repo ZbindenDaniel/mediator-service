@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import fs from 'fs';
 import { defineHttpAction } from './index';
 import { query, execute, insert } from '../db-client';
-import { cupsLpinfo } from '../utils/cups-client';
+import { cupsLpinfo, cupsLpstat } from '../utils/cups-client';
 import { syncPrinterQueuesToCups, removePrinterQueueFromCups } from '../utils/sync-printer-queues';
 import { requireAdminAuth } from '../utils/admin-auth';
 
@@ -43,6 +44,8 @@ const action = defineHttpAction({
     return path === '/api/admin/printer-queues' ||
            path === '/api/admin/cups-devices' ||
            path === '/api/admin/cups-ppds' ||
+           path === '/api/admin/cups-diagnostics' ||
+           path === '/api/admin/cups-sync' ||
            /^\/api\/admin\/printer-queues\/[^/]+$/.test(path);
   },
   async handle(req: IncomingMessage, res: ServerResponse) {
@@ -51,6 +54,35 @@ const action = defineHttpAction({
     const urlPath = url.split('?')[0];
 
     try {
+      // POST /api/admin/cups-sync — manually trigger queue sync to CUPS
+      if (urlPath === '/api/admin/cups-sync' && method === 'POST') {
+        await syncPrinterQueuesToCups();
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      // GET /api/admin/cups-diagnostics — full CUPS state dump for debugging
+      if (urlPath === '/api/admin/cups-diagnostics' && method === 'GET') {
+        const run = async (args: string[]) => cupsLpstat(args).catch((e: Error) => `error: ${e.message}`);
+        const readCache = (path: string) => { try { return fs.readFileSync(path, 'utf8').trim(); } catch { return null; } };
+
+        const [printers, devices, jobs] = await Promise.all([
+          run(['-p', '-l']),   // printer state + details
+          run(['-v']),          // device URIs per queue
+          run(['-o']),          // pending / active jobs
+        ]);
+
+        sendJson(res, 200, {
+          printers,
+          devices,
+          jobs: jobs || '(no jobs)',
+          devicesCache: readCache('/run/cups/devices.txt'),
+          ppdsCache: readCache('/run/cups/ppds.txt'),
+          note: 'rebuild cups container if lpadmin errors persist: docker compose up --build cups',
+        });
+        return;
+      }
+
       // GET /api/admin/cups-devices — list physical devices detected by CUPS
       if (urlPath === '/api/admin/cups-devices' && method === 'GET') {
         let output: string;
