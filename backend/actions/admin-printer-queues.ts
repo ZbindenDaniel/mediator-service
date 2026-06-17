@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import { defineHttpAction } from './index';
 import { query, execute, insert } from '../db-client';
-import { cupsLpinfo, cupsLpstat, cupsCancel } from '../utils/cups-client';
+import { cupsLpinfo, cupsLpstat, cupsCancel, cupsRefreshDiscovery, cupsDiscoveryTimestamp } from '../utils/cups-client';
 
 const runCupsCancel = cupsCancel;
 import { syncPrinterQueuesToCups, removePrinterQueueFromCups } from '../utils/sync-printer-queues';
@@ -96,8 +96,9 @@ const action = defineHttpAction({
         return;
       }
 
-      // GET /api/admin/cups-devices — list physical devices detected by CUPS
+      // GET /api/admin/cups-devices — trigger fresh lpinfo scan, then return device list
       if (urlPath === '/api/admin/cups-devices' && method === 'GET') {
+        await cupsRefreshDiscovery();
         let output: string;
         try {
           output = await cupsLpinfo(['-v']);
@@ -115,12 +116,13 @@ const action = defineHttpAction({
               ? { type: line.slice(0, spaceIdx), uri: line.slice(spaceIdx + 1) }
               : { type: 'unknown', uri: line };
           });
-        sendJson(res, 200, { devices });
+        sendJson(res, 200, { devices, discoveryTs: cupsDiscoveryTimestamp() });
         return;
       }
 
-      // GET /api/admin/cups-ppds — list available PPD/driver models
+      // GET /api/admin/cups-ppds — trigger fresh lpinfo scan, then return PPD list
       if (urlPath === '/api/admin/cups-ppds' && method === 'GET') {
+        await cupsRefreshDiscovery();
         const rawQ = (url.split('?')[1] ?? '').split('&').find((p) => p.startsWith('q='));
         const filter = rawQ ? decodeURIComponent(rawQ.slice(2)).toLowerCase() : '';
         let output: string;
@@ -140,7 +142,7 @@ const action = defineHttpAction({
               ? { id: line.slice(0, spaceIdx), label: line.slice(spaceIdx + 1) }
               : { id: line, label: line };
           });
-        sendJson(res, 200, { models });
+        sendJson(res, 200, { models, discoveryTs: cupsDiscoveryTimestamp() });
         return;
       }
 

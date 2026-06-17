@@ -25,6 +25,7 @@ interface DetectionResult {
   devices: number;
   ppds: number;
   error?: string;
+  discoveryTs?: number; // Unix seconds from cups entrypoint
 }
 
 interface Props {
@@ -101,8 +102,12 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
       let detectedPpds: PpdModel[] = [];
       let error: string | undefined;
 
+      let discoveryTs: number | undefined;
+
       if (dRes.ok) {
-        detectedDevices = (await dRes.json() as { devices: Device[] }).devices;
+        const body = await dRes.json() as { devices: Device[]; discoveryTs?: number };
+        detectedDevices = body.devices;
+        discoveryTs = body.discoveryTs;
         setDevices(detectedDevices);
       } else {
         const body = await dRes.json().catch(() => ({})) as { error?: string };
@@ -110,11 +115,11 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
       }
 
       if (pRes.ok) {
-        detectedPpds = (await pRes.json() as { models: PpdModel[] }).models;
+        detectedPpds = (await pRes.json() as { models: PpdModel[]; discoveryTs?: number }).models;
         setPpds(detectedPpds);
       }
 
-      setDetectionResult({ devices: detectedDevices.length, ppds: detectedPpds.length, error });
+      setDetectionResult({ devices: detectedDevices.length, ppds: detectedPpds.length, error, discoveryTs });
     } catch (err) {
       logError('Failed to detect CUPS devices', err);
       setDetectionResult({ devices: 0, ppds: 0, error: 'Verbindungsfehler' });
@@ -242,7 +247,10 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
 
   function DetectionFeedback() {
     if (!detectionResult) return null;
-    const { devices: d, ppds: p, error } = detectionResult;
+    const { devices: d, ppds: p, error, discoveryTs } = detectionResult;
+    const tsLabel = discoveryTs
+      ? `Scan: ${new Date(discoveryTs * 1000).toLocaleTimeString()}`
+      : null;
     if (error) {
       return (
         <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--color-error, #c00)' }}>
@@ -252,6 +260,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
     }
     return (
       <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--color-muted, #555)' }}>
+        {tsLabel && <span style={{ marginRight: '0.5rem', opacity: 0.7 }}>{tsLabel}</span>}
         {d > 0
           ? <span>{d} Gerät{d !== 1 ? 'e' : ''} erkannt — Autocomplete aktiv.</span>
           : (
@@ -267,7 +276,7 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
         {p === 0 && (
           <div style={{ marginTop: '0.25rem' }}>
             <span style={{ color: 'var(--color-error, #c00)' }}>Keine Treiber installiert.</span>
-            {' '}<code style={{ fontSize: '0.75rem' }}>docker compose exec cups lpinfo -m</code>
+            {' '}Image mit <code style={{ fontSize: '0.75rem' }}>docker compose up --build cups</code> neu bauen.
           </div>
         )}
         {d > 0 && p > 0 && (
@@ -376,8 +385,9 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
                 onClick={() => void detectDevices()}
                 disabled={loadingDevices}
                 style={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}
+                title="Löst einen frischen lpinfo-Scan im CUPS-Container aus (~3 s)"
               >
-                {loadingDevices ? '…' : 'Erkennen'}
+                {loadingDevices ? 'Scanne…' : 'Scannen'}
               </button>
             </div>
             {devices.length > 0 && (
