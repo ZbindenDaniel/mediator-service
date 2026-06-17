@@ -524,8 +524,10 @@ export default function PrinterQueuesCard({ authToken, onAuthFailure }: Props) {
               <code>docker compose exec cups lpinfo -m</code>
               {' '}→ passenden Eintrag ins Feld «PPD-Modell» eintragen.
               <div style={{ marginTop: '0.2rem', color: 'var(--color-muted, #555)' }}>
-                Treiber fehlen? <code>.deb</code>-Dateien von Brother in <code>cups/drivers/</code> ablegen, dann:{' '}
-                <code>docker compose up --build cups</code>
+                QL-500/550/560/570/580/700 → <code>printer-driver-ptouch</code> ist bereits im Image enthalten,
+                suche nach «ql» in der Autocomplete-Liste.
+                Andere Modelle: <code>.deb</code>-Dateien von Brother in <code>cups/drivers/</code> ablegen,
+                dann <code>docker compose up --build cups</code>.
               </div>
             </li>
             <li>

@@ -1,6 +1,8 @@
 FROM debian:bookworm-slim
 
-# i386 multiarch required: Brother QL official .deb packages are i386-only on amd64 hosts
+# printer-driver-ptouch provides open-source Foomatic/ptouch-ql driver for Brother QL series.
+# Covers QL-500/550/560/570/580/700/710W/720NW and others without proprietary .deb packages.
+# i386 multiarch kept for optional proprietary Brother LPR .deb packages (additional models).
 RUN dpkg --add-architecture i386 \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -11,13 +13,11 @@ RUN dpkg --add-architecture i386 \
         libc6:i386 \
         usbutils \
         ca-certificates \
+        printer-driver-ptouch \
     && rm -rf /var/lib/apt/lists/*
 
-# Brother QL driver .deb packages — place in cups/drivers/ before building.
-# Download from support.brother.com for your QL model (e.g. QL-800):
-#   brother-QL800lpr-<ver>.i386.deb
-#   cupswrapperQL800-<ver>.i386.deb
-# On arm64 hosts, use the ARM .deb or the brother-ql Python backend instead.
+# Optional: proprietary Brother LPR .deb packages for models not covered by ptouch-ql.
+# Download from support.brother.com and place in cups/drivers/ before building.
 COPY drivers/ /tmp/drivers/
 RUN if ls /tmp/drivers/*.deb 1>/dev/null 2>&1; then \
         dpkg -i /tmp/drivers/*.deb && echo "Brother QL drivers installed"; \
