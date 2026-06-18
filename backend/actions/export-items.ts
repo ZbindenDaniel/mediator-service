@@ -141,7 +141,6 @@ const boxColumns = [
 
 // TODO(agent): Replace CSV-specific Langtext serialization once exports move to typed clients.
 // TODO(langtext-export): Align CSV Langtext serialization with downstream channel requirements when available.
-// TODO(export-items-langtext-mode): Confirm ERP markdown Langtext output with downstream importers after go-live.
 
 const metadataColumnSet = new Set<ExportColumn>(metadataColumns as readonly ExportColumn[]);
 const categoryFieldTypes: Record<string, CategoryFieldType> = {
@@ -766,10 +765,12 @@ function resolveLangtextExportFormat(
   logger: Pick<Console, 'error' | 'info' | 'warn'> = console
 ): LangtextExportFormat {
   try {
-    if (exportMode === 'erp') {
-      return 'markdown';
+    const envFormat = process.env.LANGTEXT_EXPORT_FORMAT?.toLowerCase();
+    if (envFormat === 'json' || envFormat === 'markdown' || envFormat === 'html') {
+      return envFormat;
     }
-    return 'json';
+    // ERP downstream importer expects HTML; backup exports use JSON
+    return exportMode === 'erp' ? 'html' : 'json';
   } catch (error) {
     logger.error?.('[export-items] Failed to resolve Langtext export format from mode; defaulting to JSON.', {
       exportMode,
