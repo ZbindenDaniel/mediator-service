@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+830. ✅ Add delete stub endpoint and UI controls
+   - **Why:** Stubs had create+list but no delete. Hard-delete via `POST /api/stubs/:id/delete` (requires `actor` + `confirm: true`) following the existing delete-entity pattern. Delete button added to stub rows in both StubListPage and BoxDetail stubs tab.
+   - **Deferred:** Soft-delete / resolve (marking `IsActive=0`) remains deferred until transport completion feature is built.
 829. ✅ Make Erkennen trigger a real-time lpinfo scan instead of reading stale cache
    - **Why:** The cups entrypoint refreshed devices.txt/ppds.txt only every 60s. Clicking "Erkennen" right after connecting a USB printer or rebuilding the container returned stale data. Fixed by: (1) entrypoint now polls every 2s for a `/run/cups/refresh-now` signal file and runs lpinfo immediately when found; (2) `cupsRefreshDiscovery()` writes the signal and polls the timestamp file until the scan completes (≤ ~3s); (3) cups-devices/cups-ppds endpoints call this before returning; (4) UI shows scan timestamp and button label changed to "Scannen".
    - **Deferred:** Nothing.

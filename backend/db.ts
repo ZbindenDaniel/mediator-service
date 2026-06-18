@@ -2401,6 +2401,15 @@ export async function createStub(params: {
   );
 }
 
+export async function getStub(id: string): Promise<BoxStub | null> {
+  const rows = await query<BoxStub>(`SELECT * FROM box_stubs WHERE "Id" = $1`, [id]);
+  return rows[0] ?? null;
+}
+
+export async function deleteStub(id: string): Promise<void> {
+  await execute(`DELETE FROM box_stubs WHERE "Id" = $1`, [id]);
+}
+
 // ---------------------------------------------------------------------------
 // Type re-exports
 // ---------------------------------------------------------------------------

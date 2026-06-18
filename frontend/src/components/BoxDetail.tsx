@@ -123,6 +123,7 @@ export default function BoxDetail({ boxId }: Props) {
   const [stubNotes, setStubNotes] = useState('');
   const [isAddingStub, setIsAddingStub] = useState(false);
   const [addStubFeedback, setAddStubFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [deleteStubError, setDeleteStubError] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const photoModalRef = useRef<HTMLDivElement | null>(null);
@@ -493,6 +494,28 @@ export default function BoxDetail({ boxId }: Props) {
       setIsAddingStub(false);
     }
   }, [box?.BoxID, stubDescription, stubLooseItems, stubNotes, loadStubs]);
+
+  const handleDeleteStub = useCallback(async (stub: BoxStub) => {
+    if (!window.confirm(`Fund löschen: "${stub.Description}"?`)) return;
+    const actor = await ensureUser();
+    if (!actor) { setDeleteStubError('Bitte zuerst Benutzer setzen.'); return; }
+    try {
+      const res = await fetch(`/api/stubs/${encodeURIComponent(stub.Id)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor, confirm: true }),
+      });
+      if (res.ok) {
+        setDeleteStubError(null);
+        await loadStubs();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setDeleteStubError(j.error ?? 'Löschen fehlgeschlagen.');
+      }
+    } catch {
+      setDeleteStubError('Löschen fehlgeschlagen.');
+    }
+  }, [loadStubs]);
 
   useEffect(() => {
     void load({ showSpinner: true });
@@ -1124,6 +1147,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <h2>In den Lagern</h2>
                 {stubsLoading && <p className="muted">Wird geladen…</p>}
                 {stubsError && <p className="muted" role="alert" style={{ color: '#b3261e' }}>{stubsError}</p>}
+                {deleteStubError && <p className="muted" role="alert" style={{ color: '#b3261e' }}>{deleteStubError}</p>}
                 {!stubsLoading && stubs.length === 0 && !stubsError && (
                   <p className="muted">nüüt für dieses Regal.</p>
                 )}
@@ -1135,6 +1159,7 @@ export default function BoxDetail({ boxId }: Props) {
                         <th>Lose Artikel</th>
                         <th>Erstellt von</th>
                         <th>Datum</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1144,6 +1169,14 @@ export default function BoxDetail({ boxId }: Props) {
                           <td>{stub.NumberLooseItems}</td>
                           <td>{stub.CreatedBy}</td>
                           <td>{formatDateTime(stub.CreatedAt)}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              onClick={() => { void handleDeleteStub(stub); }}
+                              aria-label="Löschen"
+                            >✕</button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

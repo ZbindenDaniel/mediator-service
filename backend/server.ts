@@ -103,6 +103,8 @@ import {
   insertAgenticRunReviewHistoryEntry,
   listStubs,
   createStub,
+  getStub,
+  deleteStub,
   initDb
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
@@ -497,6 +499,8 @@ type ActionContext = {
   updateAgenticReview: typeof updateAgenticReview;
   listStubs: typeof listStubs;
   createStub: typeof createStub;
+  getStub: typeof getStub;
+  deleteStub: typeof deleteStub;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
@@ -1027,6 +1031,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           insertAgenticRunReviewHistoryEntry,
           listStubs,
           createStub,
+          getStub,
+          deleteStub,
           INBOX_DIR,
           PUBLIC_DIR,
           PREVIEW_DIR,

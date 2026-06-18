@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { GoPlus, GoX } from 'react-icons/go';
+import { GoPlus, GoTrash, GoX } from 'react-icons/go';
 import { getUser } from '../lib/user';
 import { usePanelContext } from '../context/PanelContext';
 
@@ -24,6 +24,7 @@ export default function StubListPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function loadStubs() {
     fetch('/api/stubs')
@@ -33,6 +34,28 @@ export default function StubListPage() {
   }
 
   useEffect(() => { loadStubs(); }, []);
+
+  async function handleDelete(stub: BoxStub) {
+    if (!window.confirm(`Fund löschen: "${stub.Description}"?`)) return;
+    const actor = getUser();
+    if (!actor) { setDeleteError('Bitte zuerst Benutzer setzen.'); return; }
+    try {
+      const res = await fetch(`/api/stubs/${encodeURIComponent(stub.Id)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor, confirm: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setDeleteError((err as any).error ?? 'Löschen fehlgeschlagen.');
+        return;
+      }
+      setDeleteError(null);
+      loadStubs();
+    } catch {
+      setDeleteError('Löschen fehlgeschlagen.');
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -142,6 +165,7 @@ export default function StubListPage() {
       )}
 
       {error && <div className="muted">{error}</div>}
+      {deleteError && <div className="error-text" style={{ marginBottom: '0.5rem' }}>{deleteError}</div>}
 
       {!error && stubs.length === 0 && (
         <div className="muted">Keine aktiven Stubs vorhanden.</div>
@@ -156,6 +180,7 @@ export default function StubListPage() {
               <th>Lose Artikel</th>
               <th>Erstellt von</th>
               <th>Datum</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -174,6 +199,16 @@ export default function StubListPage() {
                 <td>{stub.NumberLooseItems || '—'}</td>
                 <td>{stub.CreatedBy}</td>
                 <td className="muted">{new Date(stub.CreatedAt).toLocaleDateString('de-CH')}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => { void handleDelete(stub); }}
+                    aria-label="Löschen"
+                  >
+                    <GoTrash />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
