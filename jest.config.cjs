@@ -65,13 +65,11 @@ module.exports = {
     // Uses old topic-filter module cache invalidation approach — unreliable in Jest
     '/test/event-log-topics.test.ts',
     // Uses old AgenticServiceDependencies interface (pre-Postgres refactor) — needs rewrite
-    '/backend/agentic/__tests__/dispatch-queue-concurrency.test.ts',
     '/backend/agentic/__tests__/invoker-adapter.test.ts',
     '/backend/agentic/__tests__/item-flow-planner-control.test.ts',
     '/backend/agentic/__tests__/item-flow-search-sanitization.test.ts',
     '/backend/agentic/__tests__/item-flow-search-transcript.test.ts',
     '/backend/agentic/__tests__/item-flow-trigger-fragments.test.ts',
-    '/backend/agentic/__tests__/restart-review-metadata.test.ts',
     // Use SQLite directly — need Postgres rewrite before running in CI
     '/test/export-items.test.ts',
     '/test/csv-ingest-datum-erfasst.test.ts',
